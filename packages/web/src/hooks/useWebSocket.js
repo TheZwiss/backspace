@@ -11,12 +11,12 @@ let isInitialized = false;
 function handleEvent(event) {
     const { setUser } = useAuthStore.getState();
     const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
-    const { addMessage, updateMessage, removeMessage, setTyping } = useChatStore.getState();
+    const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
     const { addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
     switch (event.type) {
         case 'ready':
             setUser(event.user);
-            populateFromReady(event.servers);
+            populateFromReady(event.servers, event.folders, event.dmChannels);
             if (currentServerId) {
                 loadServerDetail(currentServerId);
             }
@@ -51,6 +51,13 @@ function handleEvent(event) {
             removeMember(event.userId);
             break;
         case 'dm_message_created':
+            addMessage(event.message.dmChannelId, event.message);
+            break;
+        case 'reaction_added':
+            onReactionAdded(event.messageId, event.reaction);
+            break;
+        case 'reaction_removed':
+            onReactionRemoved(event.messageId, event.userId, event.emoji);
             break;
         case 'error':
             console.error('WebSocket error:', event.message);

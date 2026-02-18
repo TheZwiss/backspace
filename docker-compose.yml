@@ -6,7 +6,7 @@ services:
     container_name: opencord
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     volumes:
       - opencord-data:/app/data
     env_file:
@@ -16,7 +16,7 @@ services:
       - DB_PATH=/app/data/opencord.db
       - UPLOAD_DIR=/app/data/uploads
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:${PORT:-3000}/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

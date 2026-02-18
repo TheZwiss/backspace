@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
+import { connectionManager } from '../ws/handler.js';
 import type { User, UpdateUserRequest } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -29,7 +30,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, customStatus } = request.body;
+    const { displayName, avatar, customStatus, status } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -62,6 +63,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    if (status !== undefined) {
+      if (!['online', 'idle', 'dnd', 'offline'].includes(status)) {
+        return reply.code(400).send({ error: 'Invalid status', statusCode: 400 });
+      }
+      updateData.status = status;
+    }
+
     if (Object.keys(updateData).length === 0) {
       return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
     }
@@ -73,7 +81,26 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    return reply.code(200).send(sanitizeUser(updatedUser));
+    const sanitized = sanitizeUser(updatedUser);
+
+    // Broadcast presence update if status changed
+    if (status !== undefined) {
+      const userServers = connectionManager.getUserServers(sanitized.id);
+      for (const serverId of userServers) {
+        connectionManager.sendToServer(serverId, {
+          type: 'presence_update',
+          userId: sanitized.id,
+          status: status,
+        }, sanitized.id);
+      }
+      connectionManager.sendToUser(sanitized.id, {
+        type: 'presence_update',
+        userId: sanitized.id,
+        status: status,
+      });
+    }
+
+    return reply.code(200).send(sanitized);
   });
 
   app.get<{ Params: { id: string } }>('/api/users/:id', { preHandler: authenticate }, async (request, reply) => {

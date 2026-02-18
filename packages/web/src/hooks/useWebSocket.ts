@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useSocialStore } from '../stores/socialStore';
 import type { ServerEvent, ClientEvent } from '@opencord/shared';
 
 let globalWs: WebSocket | null = null;
@@ -14,13 +15,13 @@ let isInitialized = false;
 function handleEvent(event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
-  const { addMessage, updateMessage, removeMessage, setTyping } = useChatStore.getState();
+  const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
   const { addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
 
   switch (event.type) {
     case 'ready':
       setUser(event.user);
-      populateFromReady(event.servers);
+      populateFromReady(event.servers, event.folders, event.dmChannels);
       if (currentServerId) {
         loadServerDetail(currentServerId);
       }
@@ -63,7 +64,28 @@ function handleEvent(event: ServerEvent): void {
       break;
 
     case 'dm_message_created':
+      addMessage(event.message.dmChannelId, event.message as any);
       break;
+
+    case 'reaction_added':
+      onReactionAdded(event.messageId, event.reaction);
+      break;
+
+    case 'reaction_removed':
+      onReactionRemoved(event.messageId, event.userId, event.emoji);
+      break;
+
+    case 'friend_request_received': {
+      const { addIncomingRequest } = useSocialStore.getState();
+      addIncomingRequest(event.request);
+      break;
+    }
+
+    case 'friend_request_accepted': {
+      const { addFriendFromAccepted } = useSocialStore.getState();
+      addFriendFromAccepted(event.friend, event.requestId);
+      break;
+    }
 
     case 'error':
       console.error('WebSocket error:', event.message);

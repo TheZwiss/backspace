@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
@@ -40,15 +40,54 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     createdAt: a.createdAt,
   }));
 
+  const reactionRows = db.select()
+    .from(schema.reactions)
+    .where(eq(schema.reactions.messageId, messageId))
+    .all();
+
+  const reactions = reactionRows.map(r => ({
+    id: r.id,
+    messageId: r.messageId,
+    userId: r.userId,
+    emoji: r.emoji,
+    createdAt: r.createdAt,
+  }));
+
+  let replyTo: MessageWithUser | null = null;
+  if (message.replyToId) {
+    // Simple fetch for replyTo (one level deep to avoid recursion loops)
+    const replyMsg = db.select().from(schema.messages).where(eq(schema.messages.id, message.replyToId)).get();
+    if (replyMsg) {
+      const replyUser = db.select().from(schema.users).where(eq(schema.users.id, replyMsg.userId)).get();
+      if (replyUser) {
+        replyTo = {
+          id: replyMsg.id,
+          channelId: replyMsg.channelId,
+          userId: replyMsg.userId,
+          replyToId: replyMsg.replyToId,
+          content: replyMsg.content,
+          editedAt: replyMsg.editedAt,
+          createdAt: replyMsg.createdAt,
+          user: sanitizeUser(replyUser),
+          attachments: [], // Don't fetch attachments for replies to save bandwidth
+          reactions: [], // Don't fetch reactions for replies
+        };
+      }
+    }
+  }
+
   return {
     id: message.id,
     channelId: message.channelId,
     userId: message.userId,
+    replyToId: message.replyToId,
     content: message.content,
     editedAt: message.editedAt,
     createdAt: message.createdAt,
     user: sanitizeUser(user),
     attachments,
+    reactions,
+    replyTo,
   };
 }
 
@@ -87,6 +126,12 @@ export function handleClientEvent(
     case 'dm_message_create':
       handleDmMessageCreate(event, userId);
       break;
+    case 'reaction_add':
+      handleReactionAdd(event, userId);
+      break;
+    case 'reaction_remove':
+      handleReactionRemove(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -98,6 +143,7 @@ export function handleClientEvent(
 function handleMessageCreate(event: Record<string, unknown>, userId: string): void {
   const channelId = event.channelId as string;
   const content = event.content as string;
+  const replyToId = event.replyToId as string | undefined;
 
   if (!channelId || typeof channelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'channelId is required' });
@@ -128,6 +174,7 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
     id: messageId,
     channelId,
     userId,
+    replyToId: replyToId || null,
     content: content.trim(),
     createdAt: now,
   }).run();
@@ -404,6 +451,76 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     connectionManager.sendToUser(member.userId, {
       type: 'dm_message_created',
       message: dmMessage,
+    });
+  }
+}
+
+function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  const db = getDb();
+  const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
+  if (!message) return;
+
+  const serverId = getChannelServerId(message.channelId);
+  if (!serverId || !isMember(serverId, userId)) return;
+
+  const reactionId = generateSnowflake();
+  try {
+    db.insert(schema.reactions).values({
+      id: reactionId,
+      messageId,
+      userId,
+      emoji,
+      createdAt: Date.now(),
+    }).run();
+
+    connectionManager.sendToServer(serverId, {
+      type: 'reaction_added',
+      messageId,
+      reaction: {
+        id: reactionId,
+        messageId,
+        userId,
+        emoji,
+        createdAt: Date.now(),
+      },
+    });
+  } catch (err) {
+    // Unique constraint violation (already reacted)
+  }
+}
+
+function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const emoji = event.emoji as string;
+
+  if (!messageId || !emoji) return;
+
+  const db = getDb();
+  const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
+  if (!message) return;
+
+  const serverId = getChannelServerId(message.channelId);
+  if (!serverId || !isMember(serverId, userId)) return;
+
+  const result = db.delete(schema.reactions)
+    .where(and(
+      eq(schema.reactions.messageId, messageId),
+      eq(schema.reactions.userId, userId),
+      eq(schema.reactions.emoji, emoji)
+    ))
+    .run();
+
+  if (result.changes > 0) {
+    connectionManager.sendToServer(serverId, {
+      type: 'reaction_removed',
+      messageId,
+      userId,
+      emoji,
     });
   }
 }

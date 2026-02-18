@@ -5,6 +5,7 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isOwner, isAdmin } from '../utils/permissions.js';
 import crypto from 'crypto';
+import { connectionManager } from '../ws/handler.js';
 import type {
   CreateServerRequest,
   UpdateServerRequest,
@@ -15,6 +16,7 @@ import type {
   Channel,
   MemberWithUser,
   ServerWithChannelsAndMembers,
+  Role,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -159,6 +161,12 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.channels.serverId, id))
       .all();
 
+    const roles = db.select()
+      .from(schema.roles)
+      .where(eq(schema.roles.serverId, id))
+      .orderBy(schema.roles.position)
+      .all();
+
     const memberRows = db.select()
       .from(schema.serverMembers)
       .where(eq(schema.serverMembers.serverId, id))
@@ -171,10 +179,31 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const userMap = new Map(users.map(u => [u.id, u]));
 
+    const memberRoleRows = db.select()
+      .from(schema.memberRoles)
+      .where(eq(schema.memberRoles.serverId, id))
+      .all();
+
     const members: MemberWithUser[] = memberRows
       .map(m => {
         const user = userMap.get(m.userId);
         if (!user) return null;
+
+        const assignedRoleIds = memberRoleRows
+          .filter(mr => mr.userId === m.userId)
+          .map(mr => mr.roleId);
+        
+        const memberRoles = roles
+          .filter(r => assignedRoleIds.includes(r.id))
+          .map(r => ({
+            id: r.id,
+            serverId: r.serverId,
+            name: r.name,
+            color: r.color ?? '#b9bbbe',
+            position: r.position ?? 0,
+            createdAt: r.createdAt,
+          }));
+
         return {
           serverId: m.serverId,
           userId: m.userId,
@@ -182,6 +211,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
+          roles: memberRoles,
         };
       })
       .filter((m): m is MemberWithUser => m !== null);
@@ -190,6 +220,14 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       ...rowToServer(server),
       channels: channels.map(rowToChannel),
       members,
+      roles: roles.map(r => ({
+        id: r.id,
+        serverId: r.serverId,
+        name: r.name,
+        color: r.color ?? '#b9bbbe',
+        position: r.position ?? 0,
+        createdAt: r.createdAt,
+      })),
     };
 
     return reply.code(200).send(result);
@@ -278,6 +316,11 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     if (!isAdmin(id, request.userId)) {
       return reply.code(403).send({ error: 'Only admins can generate invite codes', statusCode: 403 });
+    }
+
+    // Return existing invite code if one exists, otherwise generate a new one
+    if (server.inviteCode) {
+      return reply.code(200).send({ inviteCode: server.inviteCode });
     }
 
     const inviteCode = generateInviteCode();
@@ -394,6 +437,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
+          roles: [] as Role[], // TODO: Fetch member roles
         };
       })
       .filter((m): m is MemberWithUser => m !== null);
@@ -470,6 +514,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       nickname: updatedMember.nickname,
       joinedAt: updatedMember.joinedAt,
       user: sanitizeUser(user),
+      roles: [] as Role[], // TODO: Fetch member roles
     };
 
     return reply.code(200).send(result);
@@ -522,6 +567,114 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
         eq(schema.serverMembers.userId, uid),
       ))
       .run();
+
+    // Broadcast member_left event
+    connectionManager.sendToServer(id, {
+      type: 'member_left',
+      serverId: id,
+      userId: uid,
+    });
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // Role Management
+  
+  // POST /api/servers/:id/roles - Create a new role
+  app.post<{ Params: { id: string }; Body: { name: string; color?: string } }>('/api/servers/:id/roles', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { name, color } = request.body;
+    const db = getDb();
+
+    if (!isAdmin(id, request.userId)) {
+      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    }
+
+    const roleId = generateSnowflake();
+    db.insert(schema.roles).values({
+      id: roleId,
+      serverId: id,
+      name: name || 'new role',
+      color: color || '#b9bbbe',
+      position: 0,
+      createdAt: Date.now(),
+    }).run();
+
+    const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+    return reply.code(201).send(role);
+  });
+
+  // PATCH /api/servers/:id/roles/:roleId - Update a role
+  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number } }>('/api/servers/:id/roles/:roleId', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id, roleId } = request.params;
+    const updates = request.body;
+    const db = getDb();
+
+    if (!isAdmin(id, request.userId)) {
+      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    }
+
+    db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
+    const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+    return reply.code(200).send(updated);
+  });
+
+  // DELETE /api/servers/:id/roles/:roleId - Delete a role
+  app.delete<{ Params: { id: string; roleId: string } }>('/api/servers/:id/roles/:roleId', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id, roleId } = request.params;
+    const db = getDb();
+
+    if (!isAdmin(id, request.userId)) {
+      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    }
+
+    db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
+    return reply.code(200).send({ success: true });
+  });
+
+  // POST /api/servers/:id/members/:uid/roles - Add role to member
+  app.post<{ Params: { id: string; uid: string }; Body: { roleId: string } }>('/api/servers/:id/members/:uid/roles', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id, uid } = request.params;
+    const { roleId } = request.body;
+    const db = getDb();
+
+    if (!isAdmin(id, request.userId)) {
+      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    }
+
+    db.insert(schema.memberRoles).values({
+      serverId: id,
+      userId: uid,
+      roleId,
+    }).run();
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // DELETE /api/servers/:id/members/:uid/roles/:roleId - Remove role from member
+  app.delete<{ Params: { id: string; uid: string; roleId: string } }>('/api/servers/:id/members/:uid/roles/:roleId', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id, uid, roleId } = request.params;
+    const db = getDb();
+
+    if (!isAdmin(id, request.userId)) {
+      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    }
+
+    db.delete(schema.memberRoles).where(and(
+      eq(schema.memberRoles.serverId, id),
+      eq(schema.memberRoles.userId, uid),
+      eq(schema.memberRoles.roleId, roleId)
+    )).run();
 
     return reply.code(200).send({ success: true });
   });

@@ -12,6 +12,7 @@ export function InviteModal() {
     const generateInvite = useServerStore((s) => s.generateInvite);
     const currentServerId = useServerStore((s) => s.currentServerId);
     const isOpen = activeModal === 'invite';
+    const inviteUrl = inviteCode ? `${window.location.origin}/join/${inviteCode}` : '';
     useEffect(() => {
         if (isOpen && currentServerId) {
             setIsLoading(true);
@@ -24,8 +25,10 @@ export function InviteModal() {
         }
     }, [isOpen, currentServerId, generateInvite]);
     const handleCopy = async () => {
+        if (!inviteUrl)
+            return;
         try {
-            await navigator.clipboard.writeText(inviteCode);
+            await navigator.clipboard.writeText(inviteUrl);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
@@ -40,7 +43,7 @@ export function InviteModal() {
             }
         }
     };
-    return (_jsxs(Modal, { isOpen: isOpen, onClose: closeModal, title: "Invite Friends", children: [_jsx("p", { className: "text-discord-text-secondary text-sm mb-4", children: "Share this invite code with friends to let them join your server." }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("input", { type: "text", value: isLoading ? 'Generating...' : inviteCode, readOnly: true, className: "invite-code-input flex-1 px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none font-mono text-sm" }), _jsx("button", { onClick: handleCopy, disabled: isLoading, className: `px-4 py-2 text-sm font-medium rounded transition-colors ${copied
+    return (_jsxs(Modal, { isOpen: isOpen, onClose: closeModal, title: "Invite Friends", children: [_jsx("p", { className: "text-discord-text-secondary text-sm mb-4", children: "Share this invite link with friends to let them join your server." }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("input", { type: "text", value: isLoading ? 'Generating...' : inviteUrl, readOnly: true, className: "invite-code-input flex-1 px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none font-mono text-xs" }), _jsx("button", { onClick: handleCopy, disabled: isLoading || !inviteUrl, className: `px-4 py-2 text-sm font-medium rounded transition-colors ${copied
                             ? 'bg-discord-green text-white'
                             : 'bg-discord-blurple hover:bg-discord-blurple-hover text-white'}`, children: copied ? 'Copied!' : 'Copy' })] })] }));
 }

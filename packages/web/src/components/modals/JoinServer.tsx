@@ -1,48 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useServerStore } from '../../stores/serverStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export function JoinServerModal() {
+  const { inviteCode: urlInviteCode } = useParams<{ inviteCode?: string }>();
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const loadServers = useServerStore((s) => s.loadServers);
+  const joinByCode = useServerStore((s) => s.joinByCode);
   const navigate = useNavigate();
 
   const isOpen = activeModal === 'joinServer';
+
+  useEffect(() => {
+    if (isOpen && urlInviteCode) {
+      setInviteCode(urlInviteCode);
+    }
+  }, [isOpen, urlInviteCode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!inviteCode.trim()) {
+    const code = inviteCode.trim();
+    if (!code) {
       setError('Invite code is required');
       return;
     }
 
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('opencord_token');
-      const response = await fetch('/api/servers/join', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ inviteCode: inviteCode.trim() }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json() as { error: string };
-        throw new Error(data.error || 'Failed to join server');
-      }
-
-      const server = await response.json() as { id: string };
-      await loadServers();
+      const server = await joinByCode(code);
       closeModal();
       setInviteCode('');
       navigate(`/channels/${server.id}`);
@@ -60,7 +52,7 @@ export function JoinServerModal() {
           Enter an invite code to join an existing server.
         </p>
         {error && (
-          <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-red text-sm">
+          <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">
             {error}
           </div>
         )}

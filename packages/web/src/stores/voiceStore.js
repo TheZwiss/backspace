@@ -6,6 +6,7 @@ export const useVoiceStore = create((set, get) => ({
     isDeafened: false,
     isCameraOn: false,
     isScreenSharing: false,
+    participants: [],
     setVoiceUsers: (channelId, userIds) => {
         set((state) => {
             const newMap = new Map(state.voiceUsers);
@@ -32,7 +33,8 @@ export const useVoiceStore = create((set, get) => ({
         });
     },
     setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
-    toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+    setParticipants: (participants) => set({ participants }),
+    toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
     toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
     toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
     toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),

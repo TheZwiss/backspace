@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import type { MessageWithUser } from '@opencord/shared';
+import type { MessageWithUser, Reaction } from '@opencord/shared';
 import { api } from '../api/client';
+import { wsSend } from '../hooks/useWebSocket';
+import { useUIStore } from './uiStore';
 
 interface TypingUser {
   userId: string;
@@ -14,7 +16,10 @@ interface ChatState {
   typingUsers: Map<string, TypingUser[]>;
   hasMore: Map<string, boolean>;
   isLoading: boolean;
+  loadError: string | null;
+  replyTo: MessageWithUser | null;
   setCurrentChannel: (channelId: string | null) => void;
+  setReplyTo: (message: MessageWithUser | null) => void;
   loadMessages: (channelId: string) => Promise<void>;
   loadMoreMessages: (channelId: string) => Promise<boolean>;
   sendMessage: (channelId: string, content: string, attachmentIds?: string[]) => Promise<void>;
@@ -23,6 +28,10 @@ interface ChatState {
   addMessage: (channelId: string, message: MessageWithUser) => void;
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
+  addReaction: (messageId: string, emoji: string) => void;
+  removeReaction: (messageId: string, emoji: string) => void;
+  onReactionAdded: (messageId: string, reaction: any) => void;
+  onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
   setTyping: (channelId: string, userId: string, username: string) => void;
   clearTyping: (channelId: string, userId: string) => void;
   getMessages: (channelId: string) => MessageWithUser[];
@@ -35,23 +44,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingUsers: new Map(),
   hasMore: new Map(),
   isLoading: false,
+  loadError: null,
+  replyTo: null,
 
   setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
+  setReplyTo: (message) => set({ replyTo: message }),
 
   loadMessages: async (channelId: string) => {
     if (get().messages.has(channelId)) return;
-    set({ isLoading: true });
+    set({ isLoading: true, loadError: null });
     try {
-      const messages = await api.channels.messages(channelId);
+      const isDm = useUIStore.getState().showDms;
+      const messages = isDm
+        ? await api.dm.messages(channelId)
+        : await api.channels.messages(channelId);
+
       set((state) => {
         const newMessages = new Map(state.messages);
-        newMessages.set(channelId, messages);
+        newMessages.set(channelId, messages as MessageWithUser[]);
         const newHasMore = new Map(state.hasMore);
         newHasMore.set(channelId, messages.length >= 50);
-        return { messages: newMessages, hasMore: newHasMore, isLoading: false };
+        return { messages: newMessages, hasMore: newHasMore, isLoading: false, loadError: null };
       });
-    } catch {
-      set({ isLoading: false });
+    } catch (err) {
+      set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
     }
   },
 
@@ -64,11 +80,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!oldestMessage) return false;
 
     try {
-      const olderMessages = await api.channels.messages(channelId, oldestMessage.id);
+      const isDm = useUIStore.getState().showDms;
+      const olderMessages = isDm
+        ? await api.dm.messages(channelId, oldestMessage.id)
+        : await api.channels.messages(channelId, oldestMessage.id);
+
       set((state) => {
         const newMessages = new Map(state.messages);
         const current = newMessages.get(channelId) ?? [];
-        newMessages.set(channelId, [...olderMessages, ...current]);
+        newMessages.set(channelId, [...(olderMessages as MessageWithUser[]), ...current]);
         const newHasMore = new Map(state.hasMore);
         newHasMore.set(channelId, olderMessages.length >= 50);
         return { messages: newMessages, hasMore: newHasMore };
@@ -80,7 +100,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (channelId: string, content: string, attachmentIds?: string[]) => {
-    await api.channels.sendMessage(channelId, { content, attachments: attachmentIds });
+    const replyToId = get().replyTo?.id;
+    const isDm = useUIStore.getState().showDms;
+    
+    if (isDm) {
+      await api.dm.sendMessage(channelId, { content });
+    } else {
+      await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+    }
+    
+    set({ replyTo: null });
     // Message will arrive via WebSocket
   },
 
@@ -124,6 +153,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId);
       if (!current) return state;
       newMessages.set(channelId, current.filter(m => m.id !== messageId));
+      return { messages: newMessages };
+    });
+  },
+
+  addReaction: (messageId: string, emoji: string) => {
+    wsSend({ type: 'reaction_add', messageId, emoji });
+  },
+
+  removeReaction: (messageId: string, emoji: string) => {
+    wsSend({ type: 'reaction_remove', messageId, emoji });
+  },
+
+  onReactionAdded: (messageId: string, reaction: Reaction) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      for (const [channelId, msgs] of newMessages.entries()) {
+        const msgIndex = msgs.findIndex(m => m.id === messageId);
+        if (msgIndex !== -1) {
+          const newMsgs = [...msgs];
+          const oldMsg = newMsgs[msgIndex]!;
+          newMsgs[msgIndex] = {
+            ...oldMsg,
+            reactions: [...(oldMsg.reactions || []), reaction],
+          };
+          newMessages.set(channelId, newMsgs);
+          break;
+        }
+      }
+      return { messages: newMessages };
+    });
+  },
+
+  onReactionRemoved: (messageId: string, userId: string, emoji: string) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      for (const [channelId, msgs] of newMessages.entries()) {
+        const msgIndex = msgs.findIndex(m => m.id === messageId);
+        if (msgIndex !== -1) {
+          const newMsgs = [...msgs];
+          const oldMsg = newMsgs[msgIndex]!;
+          newMsgs[msgIndex] = {
+            ...oldMsg,
+            reactions: (oldMsg.reactions || []).filter(r => !(r.userId === userId && r.emoji === emoji)),
+          };
+          newMessages.set(channelId, newMsgs);
+          break;
+        }
+      }
       return { messages: newMessages };
     });
   },

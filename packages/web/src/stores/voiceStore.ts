@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ParticipantInfo } from '../hooks/useLiveKit';
 
 interface VoiceState {
   voiceUsers: Map<string, string[]>; // channelId → userIds
@@ -7,14 +8,16 @@ interface VoiceState {
   isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  participants: ParticipantInfo[];
   setVoiceUsers: (channelId: string, userIds: string[]) => void;
   addVoiceUser: (channelId: string, userId: string) => void;
   removeVoiceUser: (channelId: string, userId: string) => void;
   setCurrentVoiceChannel: (channelId: string | null) => void;
-  toggleMute: () => void;
-  toggleDeafen: () => void;
+  setParticipants: (participants: ParticipantInfo[]) => void;
+  toggleMic: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
+  toggleDeafen: () => void;
   getVoiceUsers: (channelId: string) => string[];
   reset: () => void;
 }
@@ -26,6 +29,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   isDeafened: false,
   isCameraOn: false,
   isScreenSharing: false,
+  participants: [],
 
   setVoiceUsers: (channelId, userIds) => {
     set((state) => {
@@ -57,7 +61,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
 
-  toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+  setParticipants: (participants) => set({ participants }),
+
+  toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
   toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
   toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
   toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),

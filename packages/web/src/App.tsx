@@ -44,6 +44,22 @@ export function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/channels/@me/:channelId?"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/join/:inviteCode"
+        element={
+          <ProtectedRoute>
+            <AppLayout />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<Navigate to="/channels/@me" replace />} />
       <Route path="*" element={<Navigate to="/channels/@me" replace />} />
     </Routes>

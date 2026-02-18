@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, foreignKey } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -44,10 +44,16 @@ export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
   channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id),
+  replyToId: text('reply_to_id'),
   content: text('content'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  replyToFk: foreignKey({
+    columns: [table.replyToId],
+    foreignColumns: [table.id],
+  }).onDelete('set null'),
+}));
 
 export const attachments = sqliteTable('attachments', {
   id: text('id').primaryKey(),
@@ -78,3 +84,61 @@ export const dmMessages = sqliteTable('dm_messages', {
   content: text('content'),
   createdAt: integer('created_at').notNull(),
 });
+
+export const friends = sqliteTable('friends', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  friendId: text('friend_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.friendId] }),
+}));
+
+export const friendRequests = sqliteTable('friend_requests', {
+  id: text('id').primaryKey(),
+  fromId: text('from_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  toId: text('to_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: text('status').default('pending'), // 'pending', 'accepted', 'declined'
+  createdAt: integer('created_at').notNull(),
+});
+
+export const reactions = sqliteTable('reactions', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  emoji: text('emoji').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const roles = sqliteTable('roles', {
+  id: text('id').primaryKey(),
+  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color').default('#b9bbbe'),
+  position: integer('position').default(0),
+  permissions: text('permissions'), // JSON string of permission keys
+  createdAt: integer('created_at').notNull(),
+});
+
+export const memberRoles = sqliteTable('member_roles', {
+  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  roleId: text('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.serverId, table.userId, table.roleId] }),
+}));
+
+export const serverFolders = sqliteTable('server_folders', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name'),
+  color: text('color'),
+  position: integer('position').default(0),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const serverFolderMembers = sqliteTable('server_folder_members', {
+  folderId: text('folder_id').notNull().references(() => serverFolders.id, { onDelete: 'cascade' }),
+  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.folderId, table.serverId] }),
+}));

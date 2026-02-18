@@ -1,10 +1,11 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useServerStore } from '../../stores/serverStore';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 export function JoinServerModal() {
+    const { inviteCode: urlInviteCode } = useParams();
     const [inviteCode, setInviteCode] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -13,6 +14,11 @@ export function JoinServerModal() {
     const loadServers = useServerStore((s) => s.loadServers);
     const navigate = useNavigate();
     const isOpen = activeModal === 'joinServer';
+    useEffect(() => {
+        if (isOpen && urlInviteCode) {
+            setInviteCode(urlInviteCode);
+        }
+    }, [isOpen, urlInviteCode]);
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');

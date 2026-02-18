@@ -11,6 +11,7 @@ import type {
   Channel,
   DmChannel,
   ServerEvent,
+  ServerFolder,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -185,6 +186,7 @@ function buildReadyPayload(userId: string): {
   user: User;
   servers: ServerWithChannelsAndMembers[];
   dmChannels: DmChannel[];
+  folders: ServerFolder[];
 } {
   const db = getDb();
 
@@ -217,6 +219,12 @@ function buildReadyPayload(userId: string): {
         .where(eq(schema.channels.serverId, serverRow.id))
         .all();
 
+      const roles = db.select()
+        .from(schema.roles)
+        .where(eq(schema.roles.serverId, serverRow.id))
+        .orderBy(schema.roles.position)
+        .all();
+
       const memberRows = db.select()
         .from(schema.serverMembers)
         .where(eq(schema.serverMembers.serverId, serverRow.id))
@@ -228,10 +236,31 @@ function buildReadyPayload(userId: string): {
         : [];
       const userMap = new Map(users.map(u => [u.id, u]));
 
+      const memberRoleRows = db.select()
+        .from(schema.memberRoles)
+        .where(eq(schema.memberRoles.serverId, serverRow.id))
+        .all();
+
       const members: MemberWithUser[] = memberRows
         .map(m => {
           const u = userMap.get(m.userId);
           if (!u) return null;
+          
+          const assignedRoleIds = memberRoleRows
+            .filter(mr => mr.userId === m.userId)
+            .map(mr => mr.roleId);
+          
+          const memberRoles = roles
+            .filter(r => assignedRoleIds.includes(r.id))
+            .map(r => ({
+              id: r.id,
+              serverId: r.serverId,
+              name: r.name,
+              color: r.color ?? '#b9bbbe',
+              position: r.position ?? 0,
+              createdAt: r.createdAt,
+            }));
+
           return {
             serverId: m.serverId,
             userId: m.userId,
@@ -239,6 +268,7 @@ function buildReadyPayload(userId: string): {
             nickname: m.nickname,
             joinedAt: m.joinedAt,
             user: sanitizeUser(u),
+            roles: memberRoles,
           };
         })
         .filter((m): m is MemberWithUser => m !== null);
@@ -260,6 +290,14 @@ function buildReadyPayload(userId: string): {
           createdAt: ch.createdAt,
         })),
         members,
+        roles: roles.map(r => ({
+          id: r.id,
+          serverId: r.serverId,
+          name: r.name,
+          color: r.color ?? '#b9bbbe',
+          position: r.position ?? 0,
+          createdAt: r.createdAt,
+        })),
       });
     }
   }
@@ -316,7 +354,32 @@ function buildReadyPayload(userId: string): {
     });
   }
 
-  return { user, servers, dmChannels };
+  // Get Server Folders
+  const folderRows = db.select()
+    .from(schema.serverFolders)
+    .where(eq(schema.serverFolders.userId, userId))
+    .orderBy(schema.serverFolders.position)
+    .all();
+
+  const folders: any[] = [];
+  for (const folder of folderRows) {
+    const serverIds = db.select()
+      .from(schema.serverFolderMembers)
+      .where(eq(schema.serverFolderMembers.folderId, folder.id))
+      .all()
+      .map(m => m.serverId);
+    
+    folders.push({
+      id: folder.id,
+      userId: folder.userId,
+      name: folder.name,
+      color: folder.color,
+      position: folder.position,
+      serverIds,
+    });
+  }
+
+  return { user, servers, dmChannels, folders };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

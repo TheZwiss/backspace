@@ -1,18 +1,25 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { wsSend } from '../hooks/useWebSocket';
+import { useUIStore } from './uiStore';
 export const useChatStore = create((set, get) => ({
     messages: new Map(),
     currentChannelId: null,
     typingUsers: new Map(),
     hasMore: new Map(),
     isLoading: false,
+    replyTo: null,
     setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
+    setReplyTo: (message) => set({ replyTo: message }),
     loadMessages: async (channelId) => {
         if (get().messages.has(channelId))
             return;
         set({ isLoading: true });
         try {
-            const messages = await api.channels.messages(channelId);
+            const isDm = useUIStore.getState().showDms;
+            const messages = isDm
+                ? await api.dm.messages(channelId)
+                : await api.channels.messages(channelId);
             set((state) => {
                 const newMessages = new Map(state.messages);
                 newMessages.set(channelId, messages);
@@ -35,7 +42,10 @@ export const useChatStore = create((set, get) => ({
         if (!oldestMessage)
             return false;
         try {
-            const olderMessages = await api.channels.messages(channelId, oldestMessage.id);
+            const isDm = useUIStore.getState().showDms;
+            const olderMessages = isDm
+                ? await api.dm.messages(channelId, oldestMessage.id)
+                : await api.channels.messages(channelId, oldestMessage.id);
             set((state) => {
                 const newMessages = new Map(state.messages);
                 const current = newMessages.get(channelId) ?? [];
@@ -51,7 +61,15 @@ export const useChatStore = create((set, get) => ({
         }
     },
     sendMessage: async (channelId, content, attachmentIds) => {
-        await api.channels.sendMessage(channelId, { content, attachments: attachmentIds });
+        const replyToId = get().replyTo?.id;
+        const isDm = useUIStore.getState().showDms;
+        if (isDm) {
+            await api.dm.sendMessage(channelId, { content });
+        }
+        else {
+            await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+        }
+        set({ replyTo: null });
         // Message will arrive via WebSocket
     },
     editMessage: async (messageId, content) => {
@@ -90,6 +108,50 @@ export const useChatStore = create((set, get) => ({
             if (!current)
                 return state;
             newMessages.set(channelId, current.filter(m => m.id !== messageId));
+            return { messages: newMessages };
+        });
+    },
+    addReaction: (messageId, emoji) => {
+        wsSend({ type: 'reaction_add', messageId, emoji });
+    },
+    removeReaction: (messageId, emoji) => {
+        wsSend({ type: 'reaction_remove', messageId, emoji });
+    },
+    onReactionAdded: (messageId, reaction) => {
+        set((state) => {
+            const newMessages = new Map(state.messages);
+            for (const [channelId, msgs] of newMessages.entries()) {
+                const msgIndex = msgs.findIndex(m => m.id === messageId);
+                if (msgIndex !== -1) {
+                    const newMsgs = [...msgs];
+                    const oldMsg = newMsgs[msgIndex];
+                    newMsgs[msgIndex] = {
+                        ...oldMsg,
+                        reactions: [...(oldMsg.reactions || []), reaction],
+                    };
+                    newMessages.set(channelId, newMsgs);
+                    break;
+                }
+            }
+            return { messages: newMessages };
+        });
+    },
+    onReactionRemoved: (messageId, userId, emoji) => {
+        set((state) => {
+            const newMessages = new Map(state.messages);
+            for (const [channelId, msgs] of newMessages.entries()) {
+                const msgIndex = msgs.findIndex(m => m.id === messageId);
+                if (msgIndex !== -1) {
+                    const newMsgs = [...msgs];
+                    const oldMsg = newMsgs[msgIndex];
+                    newMsgs[msgIndex] = {
+                        ...oldMsg,
+                        reactions: (oldMsg.reactions || []).filter(r => !(r.userId === userId && r.emoji === emoji)),
+                    };
+                    newMessages.set(channelId, newMsgs);
+                    break;
+                }
+            }
             return { messages: newMessages };
         });
     },

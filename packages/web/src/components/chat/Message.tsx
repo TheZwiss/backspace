@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
+import { Embed } from './Embed';
 
 interface MessageProps {
   message: MessageWithUser;
@@ -42,11 +43,48 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const members = useServerStore((s) => s.members);
   const openImagePreview = useUIStore((s) => s.openImagePreview);
+  const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const isAuthor = currentUser?.id === message.userId;
   const memberRole = members.find(m => m.userId === currentUser?.id)?.role;
   const isAdminUser = memberRole === 'admin' || memberRole === 'owner';
   const canDelete = isAuthor || isAdminUser;
+
+  const addReaction = useChatStore((s) => s.addReaction);
+  const removeReaction = useChatStore((s) => s.removeReaction);
+  const setReplyTo = useChatStore((s) => s.setReplyTo);
+
+  const toggleReaction = (emoji: string) => {
+    const hasReacted = message.reactions?.some(r => r.userId === currentUser?.id && r.emoji === emoji);
+    if (hasReacted) {
+      removeReaction(message.id, emoji);
+    } else {
+      addReaction(message.id, emoji);
+    }
+  };
+
+  const reactionGroups = (message.reactions || []).reduce((acc, r) => {
+    const group = acc[r.emoji] || { count: 0, me: false };
+    group.count++;
+    if (r.userId === currentUser?.id) {
+      group.me = true;
+    }
+    acc[r.emoji] = group;
+    return acc;
+  }, {} as Record<string, { count: number; me: boolean }>);
+
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const firstUrl = message.content?.match(urlRegex)?.[0];
+
+  const handleUsernameClick = (e: React.MouseEvent) => {
+    if (!message.user) return;
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    openUserProfile(message.user, {
+      top: Math.min(rect.top, window.innerHeight - 450),
+      left: rect.right + 16,
+    });
+  };
 
   const contextMenuItems = [];
   if (isAuthor) {
@@ -84,112 +122,175 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const roleColor = (() => {
     const member = members.find(m => m.userId === message.userId);
-    if (member?.role === 'owner') return 'text-discord-red';
-    if (member?.role === 'admin') return 'text-discord-blurple';
-    return 'text-white';
+    if (member?.roles && member.roles.length > 0) {
+      return { color: member.roles[0]!.color };
+    }
+    if (member?.role === 'owner') return { color: '#da373c' };
+    if (member?.role === 'admin') return { color: '#5865f2' };
+    return { color: '#dbdee1' };
   })();
+
+  const replyRoleColor = (msg: any) => {
+    const member = members.find(m => m.userId === msg.userId);
+    if (member?.roles && member.roles.length > 0) {
+      return { color: member.roles[0]!.color };
+    }
+    if (member?.role === 'owner') return { color: '#da373c' };
+    if (member?.role === 'admin') return { color: '#5865f2' };
+    return { color: '#dbdee1' };
+  };
 
   const content = (
     <div
-      className={`group relative flex px-4 py-0.5 hover:bg-discord-bg-hover/30 ${isFirstInGroup ? 'mt-4' : ''}`}
+      className={`group relative flex px-4 py-0.5 hover:bg-[#2e3035]/30 transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Reply Line */}
+      {message.replyTo && (
+        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-[#4e5058] rounded-tl-[6px] opacity-60" />
+      )}
+
       {/* Avatar or timestamp column */}
-      <div className="w-[72px] flex-shrink-0 flex items-start justify-center">
-        {isFirstInGroup ? (
-          <Avatar
-            src={message.user.avatar}
-            name={displayName}
-            size={40}
-            className="mt-0.5 cursor-pointer"
-          />
+      <div className="w-[72px] flex-shrink-0 flex items-start justify-start pl-0.5">
+        {isFirstInGroup || message.replyTo ? (
+          <div className="mt-1">
+            <Avatar
+              src={message.user.avatar}
+              name={displayName}
+              size={40}
+              user={message.user}
+              className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
+            />
+          </div>
         ) : (
-          <span className={`text-[11px] text-discord-text-muted opacity-0 group-hover:opacity-100 mt-1 select-none`}>
+          <span className={`text-[11px] text-discord-text-muted opacity-0 group-hover:opacity-100 mt-2 select-none w-full text-center leading-[1.375rem] font-medium`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        {isFirstInGroup && (
-          <div className="flex items-baseline gap-2">
-            <span className={`font-medium cursor-pointer hover:underline ${roleColor}`}>
+      <div className="flex-1 min-w-0 pr-4">
+        {message.replyTo && (
+          <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
+            <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} />
+            <span 
+              className="text-[14px] font-bold text-discord-text-header hover:underline"
+              style={message.replyTo ? replyRoleColor(message.replyTo) : undefined}
+            >
+              {message.replyTo.user.displayName ?? message.replyTo.user.username}
+            </span>
+            <span className="text-[14px] text-discord-text-normal truncate max-w-[400px] hover:text-white">
+              {message.replyTo.content}
+            </span>
+          </div>
+        )}
+
+        {(isFirstInGroup || message.replyTo) && (
+          <div className="flex items-baseline gap-2 mb-0.5">
+            <span 
+              onClick={handleUsernameClick}
+              className="font-bold cursor-pointer hover:underline text-[16px] leading-tight"
+              style={roleColor}
+            >
               {displayName}
             </span>
-            <span className="text-xs text-discord-text-muted">
+            <span className="text-[12px] text-discord-text-muted leading-tight font-medium hover:cursor-default">
               {formatTime(message.createdAt)}
             </span>
           </div>
         )}
 
         {isEditing ? (
-          <div className="mt-1">
+          <div className="mt-1 w-full">
             <textarea
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
-              className="w-full p-2 bg-discord-bg-input rounded text-discord-text-primary outline-none resize-none text-sm"
+              className="w-full p-3 bg-discord-bg-input rounded-lg text-discord-text-primary outline-none resize-none text-[16px] leading-[1.375rem] shadow-inner"
               rows={2}
               autoFocus
             />
-            <p className="text-xs text-discord-text-muted mt-1">
-              escape to <button onClick={() => setIsEditing(false)} className="text-[#00aff4] hover:underline">cancel</button>
+            <p className="text-[12px] text-discord-text-muted mt-1.5 ml-1">
+              escape to <button onClick={() => setIsEditing(false)} className="text-discord-text-link hover:underline">cancel</button>
               {' '}&bull; enter to <button onClick={() => {
                 if (editContent.trim()) {
                   editMessage(message.id, editContent.trim());
                   setIsEditing(false);
                 }
-              }} className="text-[#00aff4] hover:underline">save</button>
+              }} className="text-discord-text-link hover:underline">save</button>
             </p>
           </div>
         ) : (
-          <>
+          <div className="flex flex-col gap-1">
             {message.content && (
-              <div className="text-discord-text-primary text-sm leading-[1.375rem] break-words">
+              <div className="text-discord-text-normal text-[16px] leading-[1.375rem] break-words whitespace-pre-wrap selection:bg-discord-blurple/30">
                 <ReactMarkdown
                   components={{
                     p: ({ children }) => <span>{children}</span>,
                     a: ({ href, children }) => (
-                      <a href={href} target="_blank" rel="noopener noreferrer" className="text-[#00aff4] hover:underline">
+                      <a href={href} target="_blank" rel="noopener noreferrer" className="text-discord-text-link hover:underline">
                         {children}
                       </a>
                     ),
                     code: ({ children }) => (
-                      <code className="px-1 py-0.5 bg-discord-bg-tertiary rounded text-sm font-mono">
+                      <code className="px-1 py-0.5 bg-discord-bg-tertiary rounded text-[14px] font-mono">
                         {children}
                       </code>
                     ),
                     pre: ({ children }) => (
-                      <pre className="mt-1 p-3 bg-discord-bg-tertiary rounded text-sm font-mono overflow-x-auto">
+                      <pre className="mt-1 p-3 bg-discord-bg-tertiary border border-discord-bg-tertiary/50 rounded-md text-[14px] font-mono overflow-x-auto">
                         {children}
                       </pre>
                     ),
-                    strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                    strong: ({ children }) => <strong className="font-bold text-discord-text-primary">{children}</strong>,
                     em: ({ children }) => <em className="italic">{children}</em>,
                   }}
                 >
                   {message.content}
                 </ReactMarkdown>
                 {message.editedAt && (
-                  <span className="text-[10px] text-discord-text-muted ml-1">(edited)</span>
+                  <span className="text-[10px] text-discord-text-muted ml-1 select-none font-medium">(edited)</span>
                 )}
               </div>
             )}
 
+            {/* Reactions */}
+            {Object.keys(reactionGroups).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {Object.entries(reactionGroups).map(([emoji, { count, me }]) => (
+                  <button
+                    key={emoji}
+                    onClick={() => toggleReaction(emoji)}
+                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[14px] font-medium border transition-colors ${
+                      me 
+                        ? 'bg-discord-blurple/15 border-discord-blurple text-discord-blurple' 
+                        : 'bg-discord-bg-secondary border-transparent text-discord-text-muted hover:border-discord-text-muted/30'
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span className={me ? 'text-discord-blurple' : 'text-discord-text-normal'}>{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Embeds */}
+            {!isEditing && firstUrl && <Embed url={firstUrl} />}
+
             {/* Attachments */}
             {message.attachments.length > 0 && (
-              <div className="mt-1 space-y-1">
+              <div className="mt-1 grid gap-2">
                 {message.attachments.map((att) => {
                   const isImage = att.mimetype.startsWith('image/');
                   if (isImage) {
                     return (
-                      <div key={att.id} className="max-w-[400px]">
+                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-discord-bg-tertiary/50 bg-discord-bg-tertiary/20">
                         <img
                           src={`/api/uploads/${att.filename}`}
                           alt={att.originalName}
-                          className="max-w-full max-h-[300px] rounded cursor-pointer hover:shadow-lg transition-shadow"
+                          className="max-w-full max-h-[350px] object-contain cursor-pointer hover:brightness-95 transition-all"
                           onClick={() => openImagePreview(`/api/uploads/${att.filename}`)}
                           loading="lazy"
                         />
@@ -201,14 +302,16 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                       key={att.id}
                       href={`/api/uploads/${att.filename}`}
                       download={att.originalName}
-                      className="flex items-center gap-2 p-3 bg-discord-bg-secondary rounded border border-discord-bg-tertiary hover:bg-discord-bg-hover transition-colors max-w-[400px]"
+                      className="flex items-center gap-3 p-4 bg-discord-bg-secondary/50 rounded-lg border border-discord-bg-tertiary hover:bg-discord-bg-hover transition-all max-w-[400px] mt-1 group/att"
                     >
-                      <svg className="w-6 h-6 text-discord-text-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                      </svg>
+                      <div className="p-2 bg-discord-bg-tertiary rounded text-discord-text-muted group-hover/att:text-discord-text-primary transition-colors">
+                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
                       <div className="min-w-0">
-                        <p className="text-[#00aff4] text-sm truncate hover:underline">{att.originalName}</p>
-                        <p className="text-xs text-discord-text-muted">
+                        <p className="text-discord-text-link text-[15px] font-medium truncate hover:underline">{att.originalName}</p>
+                        <p className="text-[12px] text-discord-text-muted font-medium">
                           {att.size < 1024 ? `${att.size} B` :
                            att.size < 1048576 ? `${(att.size / 1024).toFixed(1)} KB` :
                            `${(att.size / 1048576).toFixed(1)} MB`}
@@ -219,35 +322,55 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                 })}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
 
       {/* Action buttons on hover */}
-      {isHovered && !isEditing && contextMenuItems.length > 0 && (
-        <div className="absolute -top-3 right-4 flex items-center bg-discord-bg-secondary border border-discord-bg-tertiary rounded shadow-md">
+      {isHovered && !isEditing && (
+        <div className="absolute -top-[18px] right-4 flex items-center bg-discord-bg-primary border border-discord-bg-tertiary/50 rounded-[4px] shadow-elevation-low overflow-hidden z-10 h-8">
+          <div className="flex items-center px-1 border-r border-discord-bg-tertiary/50 h-full">
+            {['👍', '❤️', '😂', '😮'].map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => toggleReaction(emoji)}
+                className="p-1 hover:bg-discord-modifier-hover rounded transition-colors text-[16px] leading-none"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setReplyTo(message)}
+            className="px-2 h-full text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
+            title="Reply"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M10 9V5L3 12L10 19V14.9C15 14.9 18.5 16.5 21 20C20 15 17 10 10 9Z" />
+            </svg>
+          </button>
           {isAuthor && (
             <button
               onClick={() => {
                 setEditContent(message.content ?? '');
                 setIsEditing(true);
               }}
-              className="p-1.5 text-discord-text-muted hover:text-discord-text-primary transition-colors"
+              className="px-2 h-full text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
               title="Edit"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M13.293 1.293a1 1 0 011.414 1.414l-9 9a1 1 0 01-.39.242l-3 1a1 1 0 01-1.266-1.265l1-3a1 1 0 01.242-.391l9-9zM12 3l1 1-8 8-1.5.5.5-1.5L12 3z" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
               </svg>
             </button>
           )}
           {canDelete && (
             <button
               onClick={() => deleteMessage(message.id)}
-              className="p-1.5 text-discord-text-muted hover:text-discord-red transition-colors"
+              className="px-2 h-full text-discord-text-muted hover:text-discord-red hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
               title="Delete"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
               </svg>
             </button>
           )}

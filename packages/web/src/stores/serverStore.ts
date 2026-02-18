@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers } from '@opencord/shared';
+import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel } from '@opencord/shared';
 import { api } from '../api/client';
 
 interface ServerState {
@@ -7,16 +7,24 @@ interface ServerState {
   currentServerId: string | null;
   channels: Channel[];
   members: MemberWithUser[];
+  roles: Role[];
+  folders: ServerFolder[];
+  dmChannels: DmChannel[];
   setServers: (servers: Server[]) => void;
   setCurrentServer: (serverId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
   setMembers: (members: MemberWithUser[]) => void;
+  setRoles: (roles: Role[]) => void;
+  setDmChannels: (channels: DmChannel[]) => void;
+  addDmChannel: (channel: DmChannel) => void;
   loadServers: () => Promise<void>;
   loadServerDetail: (serverId: string) => Promise<void>;
+  loadDmChannels: () => Promise<void>;
   createServer: (name: string, icon?: string) => Promise<Server>;
   updateServer: (serverId: string, data: { name?: string; icon?: string }) => Promise<void>;
   deleteServer: (serverId: string) => Promise<void>;
   joinServer: (serverId: string, inviteCode: string) => Promise<void>;
+  joinByCode: (inviteCode: string) => Promise<Server>;
   generateInvite: (serverId: string) => Promise<string>;
   createChannel: (serverId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
@@ -25,7 +33,7 @@ interface ServerState {
   updateMemberPresence: (userId: string, status: string) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
-  populateFromReady: (servers: ServerWithChannelsAndMembers[]) => void;
+  populateFromReady: (servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
 }
 
 export const useServerStore = create<ServerState>((set, get) => ({
@@ -33,11 +41,20 @@ export const useServerStore = create<ServerState>((set, get) => ({
   currentServerId: null,
   channels: [],
   members: [],
+  roles: [],
+  folders: [],
+  dmChannels: [],
 
   setServers: (servers) => set({ servers }),
   setCurrentServer: (serverId) => set({ currentServerId: serverId }),
   setChannels: (channels) => set({ channels }),
   setMembers: (members) => set({ members }),
+  setRoles: (roles) => set({ roles }),
+  setDmChannels: (dmChannels) => set({ dmChannels }),
+  
+  addDmChannel: (channel) => set((state) => ({
+    dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
+  })),
 
   loadServers: async () => {
     try {
@@ -55,7 +72,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
         currentServerId: serverId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         members: detail.members,
+        roles: detail.roles.sort((a, b) => b.position - a.position), // Higher position = higher in list
       });
+    } catch {
+      // Handle error silently
+    }
+  },
+
+  loadDmChannels: async () => {
+    try {
+      const dmChannels = await api.dm.list();
+      set({ dmChannels });
     } catch {
       // Handle error silently
     }
@@ -88,6 +115,15 @@ export const useServerStore = create<ServerState>((set, get) => ({
       if (state.servers.find(s => s.id === server.id)) return state;
       return { servers: [...state.servers, server] };
     });
+  },
+
+  joinByCode: async (inviteCode: string) => {
+    const server = await api.servers.joinByCode(inviteCode);
+    set((state) => {
+      if (state.servers.find(s => s.id === server.id)) return state;
+      return { servers: [...state.servers, server] };
+    });
+    return server;
   },
 
   generateInvite: async (serverId: string) => {
@@ -144,7 +180,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  populateFromReady: (servers: ServerWithChannelsAndMembers[]) => {
+  populateFromReady: (servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => {
     const simpleServers: Server[] = servers.map(s => ({
       id: s.id,
       name: s.name,
@@ -153,6 +189,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
       inviteCode: s.inviteCode,
       createdAt: s.createdAt,
     }));
-    set({ servers: simpleServers });
+    set({ 
+      servers: simpleServers, 
+      folders: folders || [],
+      dmChannels: dmChannels || []
+    });
   },
 }));

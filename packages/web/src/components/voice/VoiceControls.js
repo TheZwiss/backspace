@@ -7,7 +7,7 @@ export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onTog
     const isDeafened = useVoiceStore((s) => s.isDeafened);
     const isCameraOn = useVoiceStore((s) => s.isCameraOn);
     const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-    const toggleMute = useVoiceStore((s) => s.toggleMute);
+    const toggleMic = useVoiceStore((s) => s.toggleMic);
     const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
     const toggleCamera = useVoiceStore((s) => s.toggleCamera);
     const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
@@ -17,7 +17,7 @@ export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onTog
     const channel = channels.find(c => c.id === currentVoiceChannelId);
     const channelName = channel?.name ?? 'Voice Channel';
     const handleMic = () => {
-        toggleMute();
+        toggleMic();
         onToggleMic();
     };
     const handleDeafen = () => {

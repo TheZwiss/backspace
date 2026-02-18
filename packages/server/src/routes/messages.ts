@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, lt, desc, inArray } from 'drizzle-orm';
+import { eq, desc, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -11,7 +11,7 @@ import type {
   PaginatedQuery,
   User,
   MessageWithUser,
-  Attachment,
+  Reaction,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -26,15 +26,123 @@ function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   };
 }
 
+/**
+ * Fetch reactions for a set of message IDs.
+ * Returns a map from messageId to Reaction[].
+ */
+function fetchReactionsForMessages(messageIds: string[]): Map<string, Reaction[]> {
+  if (messageIds.length === 0) return new Map();
+  const db = getDb();
+  const reactionRows = db.select()
+    .from(schema.reactions)
+    .where(inArray(schema.reactions.messageId, messageIds))
+    .all();
+
+  // Batch fetch users for reactions
+  const reactionUserIds = [...new Set(reactionRows.map(r => r.userId))];
+  const reactionUsers = reactionUserIds.length > 0
+    ? db.select().from(schema.users).where(inArray(schema.users.id, reactionUserIds)).all()
+    : [];
+  const reactionUserMap = new Map(reactionUsers.map(u => [u.id, u]));
+
+  const map = new Map<string, Reaction[]>();
+  for (const r of reactionRows) {
+    const user = reactionUserMap.get(r.userId);
+    const reaction: Reaction = {
+      id: r.id,
+      messageId: r.messageId,
+      userId: r.userId,
+      emoji: r.emoji,
+      createdAt: r.createdAt,
+      user: user ? sanitizeUser(user) : undefined,
+    };
+    if (!map.has(r.messageId)) {
+      map.set(r.messageId, []);
+    }
+    map.get(r.messageId)!.push(reaction);
+  }
+  return map;
+}
+
+/**
+ * Fetch reply-to messages for a set of message IDs.
+ * Returns a map from messageId to its reply parent MessageWithUser.
+ */
+function fetchReplyToMessages(messages: (typeof schema.messages.$inferSelect)[]): Map<string, MessageWithUser> {
+  const replyToIds = messages
+    .map(m => m.replyToId)
+    .filter((id): id is string => id !== null && id !== undefined);
+
+  if (replyToIds.length === 0) return new Map();
+
+  const db = getDb();
+  const uniqueReplyIds = [...new Set(replyToIds)];
+  const replyMessages = db.select()
+    .from(schema.messages)
+    .where(inArray(schema.messages.id, uniqueReplyIds))
+    .all();
+
+  // Fetch users for reply messages
+  const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
+  const replyUsers = replyUserIds.length > 0
+    ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
+    : [];
+  const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
+
+  // Fetch attachments for reply messages
+  const replyMsgIds = replyMessages.map(m => m.id);
+  const replyAttachments = replyMsgIds.length > 0
+    ? db.select().from(schema.attachments).where(inArray(schema.attachments.messageId, replyMsgIds)).all()
+    : [];
+  const replyAttMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
+  for (const att of replyAttachments) {
+    const mid = att.messageId ?? '';
+    if (!replyAttMap.has(mid)) replyAttMap.set(mid, []);
+    replyAttMap.get(mid)!.push(att);
+  }
+
+  const map = new Map<string, MessageWithUser>();
+  for (const rm of replyMessages) {
+    const user = replyUserMap.get(rm.userId);
+    if (!user) continue;
+    const atts = replyAttMap.get(rm.id) ?? [];
+    map.set(rm.id, {
+      id: rm.id,
+      channelId: rm.channelId,
+      userId: rm.userId,
+      replyToId: rm.replyToId,
+      content: rm.content,
+      editedAt: rm.editedAt,
+      createdAt: rm.createdAt,
+      user: sanitizeUser(user),
+      attachments: atts.map(a => ({
+        id: a.id,
+        messageId: a.messageId ?? rm.id,
+        filename: a.filename,
+        originalName: a.originalName,
+        mimetype: a.mimetype,
+        size: a.size,
+        createdAt: a.createdAt,
+      })),
+      reactions: [],
+      replyTo: null,
+    });
+  }
+  return map;
+}
+
 function buildMessageWithUser(
   message: typeof schema.messages.$inferSelect,
   user: typeof schema.users.$inferSelect,
   attachmentRows: (typeof schema.attachments.$inferSelect)[],
+  reactions: Reaction[] = [],
+  replyTo: MessageWithUser | null = null,
 ): MessageWithUser {
   return {
     id: message.id,
     channelId: message.channelId,
     userId: message.userId,
+    replyToId: message.replyToId,
     content: message.content,
     editedAt: message.editedAt,
     createdAt: message.createdAt,
@@ -48,6 +156,8 @@ function buildMessageWithUser(
       size: a.size,
       createdAt: a.createdAt,
     })),
+    reactions,
+    replyTo,
   };
 }
 
@@ -118,11 +228,19 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       attachmentMap.get(mid)!.push(att);
     }
 
+    // Batch fetch reactions for all messages
+    const reactionsMap = fetchReactionsForMessages(messageIds);
+
+    // Batch fetch reply-to messages
+    const replyToMap = fetchReplyToMessages(messageRows);
+
     const messages: MessageWithUser[] = messageRows
       .map(m => {
         const user = userMap.get(m.userId);
         if (!user) return null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? []);
+        const reactions = reactionsMap.get(m.id) ?? [];
+        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
+        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
       })
       .filter((m): m is MessageWithUser => m !== null);
 
@@ -134,7 +252,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { content, attachments: attachmentIds } = request.body;
+    const { content, attachments: attachmentIds, replyToId } = request.body;
 
     const serverId = getChannelServerId(id);
     if (!serverId) {
@@ -158,6 +276,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       id: messageId,
       channelId: id,
       userId: request.userId,
+      replyToId: replyToId || null,
       content: content?.trim() || null,
       createdAt: now,
     }).run();
@@ -187,7 +306,14 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to create message', statusCode: 500 });
     }
 
-    const messageWithUser = buildMessageWithUser(message, user, attachmentRows);
+    // Hydrate the reply-to message if present
+    let replyTo: MessageWithUser | null = null;
+    if (message.replyToId) {
+      const replyToMap = fetchReplyToMessages([message]);
+      replyTo = replyToMap.get(message.replyToId) ?? null;
+    }
+
+    const messageWithUser = buildMessageWithUser(message, user, attachmentRows, [], replyTo);
 
     // Broadcast via WebSocket
     connectionManager.sendToServer(serverId, {
@@ -240,7 +366,16 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.attachments.messageId, id))
       .all();
 
-    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows);
+    // Hydrate reactions and reply-to
+    const reactionsMap = fetchReactionsForMessages([id]);
+    const reactions = reactionsMap.get(id) ?? [];
+    let replyTo: MessageWithUser | null = null;
+    if (updatedMessage.replyToId) {
+      const replyToMap = fetchReplyToMessages([updatedMessage]);
+      replyTo = replyToMap.get(updatedMessage.replyToId) ?? null;
+    }
+
+    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo);
 
     // Broadcast edit
     const serverId = getChannelServerId(message.channelId);

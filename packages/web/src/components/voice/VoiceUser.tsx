@@ -8,6 +8,7 @@ interface VoiceUserProps {
 
 export function VoiceUser({ participant }: VoiceUserProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -22,7 +23,16 @@ export function VoiceUser({ participant }: VoiceUserProps) {
     }
   }, [participant.videoTrack, participant.screenTrack]);
 
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl || !participant.audioTrack) return;
+
+    const stream = new MediaStream([participant.audioTrack]);
+    audioEl.srcObject = stream;
+  }, [participant.audioTrack]);
+
   const hasVideo = participant.isCameraOn || participant.isScreenSharing;
+  const isLocal = participant.isLocal;
 
   return (
     <div
@@ -31,12 +41,15 @@ export function VoiceUser({ participant }: VoiceUserProps) {
       }`}
       style={{ aspectRatio: '16/9', minHeight: '200px' }}
     >
+      {/* Audio element for remote participants */}
+      {!isLocal && <audio ref={audioRef} autoPlay />}
+
       {hasVideo ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          muted={participant.userId === 'local'}
+          muted={isLocal}
           className="w-full h-full object-cover"
         />
       ) : (

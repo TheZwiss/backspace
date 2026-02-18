@@ -15,6 +15,8 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const replyTo = useChatStore((s) => s.replyTo);
+  const setReplyTo = useChatStore((s) => s.setReplyTo);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const handleTyping = useCallback(() => {
@@ -103,52 +105,72 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   };
 
   return (
-    <div className="px-4 pb-6">
+    <div className="px-4 pb-6 flex-shrink-0">
+      {replyTo && (
+        <div className="bg-[#2e3035] rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-discord-bg-tertiary/50">
+          <div className="flex items-center gap-1 text-[14px] text-discord-text-normal truncate">
+            <span className="opacity-60">Replying to</span>
+            <span className="font-bold">{replyTo.user.displayName ?? replyTo.user.username}</span>
+          </div>
+          <button 
+            onClick={() => setReplyTo(null)}
+            className="text-discord-text-muted hover:text-discord-text-primary transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
+            </svg>
+          </button>
+        </div>
+      )}
       <div
-        className="bg-discord-bg-input rounded-lg"
+        className={`bg-discord-bg-input ${replyTo ? 'rounded-b-lg' : 'rounded-lg'} overflow-hidden`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
         {/* File previews */}
         {files.length > 0 && (
-          <div className="p-2 border-b border-discord-bg-tertiary flex flex-wrap gap-2">
+          <div className="p-4 flex flex-wrap gap-4 bg-discord-bg-secondary/30">
             {files.map((file, i) => (
-              <div key={i} className="relative group bg-discord-bg-secondary rounded p-2 max-w-[200px]">
+              <div key={i} className="relative group bg-discord-bg-secondary rounded-lg p-2 max-w-[200px] shadow-sm border border-discord-bg-tertiary">
                 {file.type.startsWith('image/') ? (
                   <img
                     src={URL.createObjectURL(file)}
                     alt={file.name}
-                    className="max-h-[100px] rounded object-cover"
+                    className="max-h-[150px] rounded object-cover"
                   />
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-discord-text-secondary">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="flex items-center gap-2 text-sm text-discord-text-secondary py-4 px-2">
+                    <svg className="w-8 h-8 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <span className="truncate">{file.name}</span>
+                    <span className="truncate max-w-[120px] font-medium">{file.name}</span>
                   </div>
                 )}
                 <button
                   onClick={() => removeFile(i)}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-discord-red rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-2 -right-2 w-7 h-7 bg-discord-red hover:bg-discord-red-hover shadow-lg rounded-lg flex items-center justify-center text-white transition-colors z-10"
                 >
-                  ✕
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
+                  </svg>
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        <div className="flex items-end">
+        <div className="flex items-start px-1">
           {/* File attach button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-3 text-discord-text-muted hover:text-discord-text-primary transition-colors"
+            className="p-3 text-discord-text-muted hover:text-discord-text-secondary transition-colors sticky top-0"
             title="Attach file"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-            </svg>
+            <div className="bg-discord-text-muted/20 hover:bg-discord-text-muted/40 rounded-full p-0.5 transition-colors">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+              </svg>
+            </div>
           </button>
           <input
             ref={fileInputRef}
@@ -172,7 +194,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={`Message #${channelName}`}
-            className="flex-1 py-3 bg-transparent text-discord-text-primary placeholder-discord-text-muted outline-none resize-none text-sm leading-[1.375rem] max-h-[300px]"
+            className="flex-1 py-[11px] px-1 bg-transparent text-discord-text-primary placeholder-discord-text-muted/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
             disabled={isUploading}
           />
@@ -186,6 +208,24 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
               </svg>
             </div>
           )}
+
+          {/* Emoji button placeholder */}
+          <button className="p-3 text-discord-text-muted hover:text-discord-text-secondary transition-colors">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+            </svg>
+          </button>
+
+          {/* Send Button */}
+          <button 
+            onClick={handleSubmit}
+            disabled={!content.trim() && files.length === 0}
+            className="p-3 text-discord-text-muted hover:text-discord-text-primary transition-colors disabled:opacity-30 disabled:hover:text-discord-text-muted"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>

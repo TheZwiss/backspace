@@ -41,7 +41,10 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     const jwt = await token.toJwt();
 
-    const response: LiveKitTokenResponse = { token: jwt };
+    const response: LiveKitTokenResponse = { 
+      token: jwt,
+      url: config.livekit.url
+    };
     return reply.code(200).send(response);
   });
 }

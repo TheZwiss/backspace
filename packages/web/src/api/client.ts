@@ -23,6 +23,8 @@ import type {
   LiveKitTokenResponse,
   CreateDmRequest,
   CreateDmMessageRequest,
+  Friend,
+  FriendRequest,
 } from '@opencord/shared';
 
 const BASE_URL = '/api';
@@ -110,6 +112,7 @@ export const api = {
     delete: (id: string) => request<{ success: boolean }>('DELETE', `/servers/${id}`),
     invite: (id: string) => request<{ inviteCode: string }>('POST', `/servers/${id}/invite`),
     join: (id: string, data: JoinServerRequest) => request<Server>('POST', `/servers/${id}/join`, data),
+    joinByCode: (inviteCode: string) => request<Server>('POST', '/servers/join', { inviteCode }),
     members: (id: string) => request<MemberWithUser[]>('GET', `/servers/${id}/members`),
     updateMember: (serverId: string, userId: string, data: UpdateMemberRequest) =>
       request<MemberWithUser>('PATCH', `/servers/${serverId}/members/${userId}`, data),
@@ -154,6 +157,17 @@ export const api = {
     },
     sendMessage: (id: string, data: CreateDmMessageRequest) =>
       request<DmMessageWithUser>('POST', `/dm/${id}/messages`, data),
+  },
+
+  social: {
+    friends: () => request<Friend[]>('GET', '/social/friends'),
+    requests: () => request<FriendRequest[]>('GET', '/social/requests'),
+    sendRequest: (username: string) => request<{ success: boolean }>('POST', '/social/requests', { username }),
+    updateRequest: (id: string, status: 'accepted' | 'declined') =>
+      request<{ success: boolean }>('PATCH', `/social/requests/${id}`, { status }),
+    removeFriend: (id: string) => request<{ success: boolean }>('DELETE', `/social/friends/${id}`),
+    cancelRequest: (id: string) => request<{ success: boolean }>('DELETE', `/social/requests/${id}`),
+    search: (q: string) => request<User[]>('GET', `/social/search?q=${encodeURIComponent(q)}`),
   },
 
   livekit: {

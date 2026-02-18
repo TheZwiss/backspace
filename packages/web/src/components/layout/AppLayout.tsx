@@ -12,14 +12,17 @@ import { CreateChannelModal } from '../modals/CreateChannel';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { ServerSettingsModal } from '../modals/ServerSettings';
+import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useLiveKit } from '../../hooks/useLiveKit';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 export function AppLayout() {
-  const { serverId, channelId } = useParams<{ serverId?: string; channelId?: string }>();
+  const { serverId, channelId, inviteCode } = useParams<{ serverId?: string; channelId?: string; inviteCode?: string }>();
   const { user, isLoading } = useAuth();
   const setCurrentServer = useServerStore((s) => s.setCurrentServer);
   const loadServerDetail = useServerStore((s) => s.loadServerDetail);
@@ -27,11 +30,39 @@ export function AppLayout() {
   const loadMessages = useChatStore((s) => s.loadMessages);
   const setIsMobile = useUIStore((s) => s.setIsMobile);
   const setShowDms = useUIStore((s) => s.setShowDms);
+  const openModal = useUIStore((s) => s.openModal);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
+  const userProfilePopout = useUIStore((s) => s.userProfilePopout);
+  const closeUserProfile = useUIStore((s) => s.closeUserProfile);
+  
+  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const setParticipants = useVoiceStore((s) => s.setParticipants);
+  const { 
+    connect: connectVoice, 
+    disconnect: disconnectVoice, 
+    participants: voiceParticipants,
+    toggleMic,
+    toggleCamera,
+    toggleScreenShare
+  } = useLiveKit();
 
   // Initialize WebSocket
   useWebSocket();
+
+  // Sync participants to store
+  useEffect(() => {
+    setParticipants(voiceParticipants);
+  }, [voiceParticipants, setParticipants]);
+
+  // Manage voice connection
+  useEffect(() => {
+    if (currentVoiceChannelId) {
+      connectVoice(currentVoiceChannelId);
+    } else {
+      disconnectVoice();
+    }
+  }, [currentVoiceChannelId, connectVoice, disconnectVoice]);
 
   // Responsive detection
   useEffect(() => {
@@ -52,6 +83,12 @@ export function AppLayout() {
       loadServerDetail(serverId);
     }
   }, [serverId, setCurrentServer, loadServerDetail, setShowDms]);
+
+  useEffect(() => {
+    if (inviteCode) {
+      openModal('joinServer');
+    }
+  }, [inviteCode, openModal]);
 
   useEffect(() => {
     if (channelId) {
@@ -77,21 +114,35 @@ export function AppLayout() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      <MobileNav />
-
+    <div className="h-screen flex bg-discord-bg-tertiary overflow-hidden">
       {/* Server sidebar - always visible on desktop, toggled on mobile */}
-      <div className={`${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : ''}`}>
-        <div className="flex h-full">
-          <ServerSidebar />
-          <ChannelSidebar />
-        </div>
+      <div className={`${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : 'flex h-full'}`}>
+        <ServerSidebar />
+        <ChannelSidebar 
+          onToggleMic={toggleMic}
+          onToggleCamera={toggleCamera}
+          onToggleScreenShare={toggleScreenShare}
+        />
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-w-0">
+      <div className="flex-1 flex min-w-0 bg-discord-bg-primary relative">
         <MainContent />
-        <MemberSidebar />
+        {serverId === '@me' ? (
+          <div className="w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col">
+            <div className="p-4">
+              <h3 className="text-[20px] font-bold text-discord-text-header mb-4">Active Now</h3>
+              <div className="text-center py-8">
+                <div className="text-[16px] font-bold text-discord-text-header mb-1 text-center">It's quiet for now...</div>
+                <div className="text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto">
+                  When a friend starts an activity—like playing a game or hanging out on voice—we’ll show it here!
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <MemberSidebar />
+        )}
       </div>
 
       {/* Modals */}
@@ -102,6 +153,21 @@ export function AppLayout() {
       <UserSettingsModal />
       <ServerSettingsModal />
       <ImagePreview />
+
+      {/* User Profile Popout */}
+      {userProfilePopout.user && userProfilePopout.position && (
+        <>
+          <div 
+            className="fixed inset-0 z-[45]" 
+            onClick={closeUserProfile}
+          />
+          <UserProfilePopout 
+            user={userProfilePopout.user} 
+            onClose={closeUserProfile}
+            position={userProfilePopout.position}
+          />
+        </>
+      )}
     </div>
   );
 }

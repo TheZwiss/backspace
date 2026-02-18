@@ -7,6 +7,10 @@ export const useUIStore = create((set) => ({
     isMobile: false,
     showDms: false,
     imagePreviewUrl: null,
+    userProfilePopout: {
+        user: null,
+        position: null,
+    },
     toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     toggleMemberList: () => set((state) => ({ memberListOpen: !state.memberListOpen })),
     openModal: (modal, data = {}) => set({ activeModal: modal, modalData: data }),
@@ -19,4 +23,10 @@ export const useUIStore = create((set) => ({
     setShowDms: (show) => set({ showDms: show }),
     openImagePreview: (url) => set({ activeModal: 'imagePreview', imagePreviewUrl: url }),
     closeImagePreview: () => set({ activeModal: null, imagePreviewUrl: null }),
+    openUserProfile: (user, position) => set({
+        userProfilePopout: { user, position }
+    }),
+    closeUserProfile: () => set({
+        userProfilePopout: { user: null, position: null }
+    }),
 }));

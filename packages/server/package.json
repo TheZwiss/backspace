@@ -21,7 +21,8 @@
     "drizzle-orm": "^0.33.0",
     "fastify": "^4.28.1",
     "jsonwebtoken": "^9.0.2",
-    "livekit-server-sdk": "^2.6.1"
+    "livekit-server-sdk": "^2.6.1",
+    "cheerio": "^1.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

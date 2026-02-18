@@ -30,6 +30,7 @@ export interface Server {
 export interface ServerWithChannelsAndMembers extends Server {
   channels: Channel[];
   members: MemberWithUser[];
+  roles: Role[];
 }
 
 // ─── Member Types ───────────────────────────────────────────────────────────
@@ -46,6 +47,30 @@ export interface Member {
 
 export interface MemberWithUser extends Member {
   user: User;
+  roles: Role[];
+}
+
+// ─── Role Types ─────────────────────────────────────────────────────────────
+
+export interface Role {
+  id: string;
+  serverId: string;
+  name: string;
+  color: string;
+  position: number;
+  permissions?: string[];
+  createdAt: number;
+}
+
+// ─── Folder Types ───────────────────────────────────────────────────────────
+
+export interface ServerFolder {
+  id: string;
+  userId: string;
+  name: string | null;
+  color: string | null;
+  position: number;
+  serverIds: string[];
 }
 
 // ─── Channel Types ──────────────────────────────────────────────────────────
@@ -68,6 +93,7 @@ export interface Message {
   id: string;
   channelId: string;
   userId: string;
+  replyToId: string | null;
   content: string | null;
   editedAt: number | null;
   createdAt: number;
@@ -76,6 +102,19 @@ export interface Message {
 export interface MessageWithUser extends Message {
   user: User;
   attachments: Attachment[];
+  reactions: Reaction[];
+  replyTo?: MessageWithUser | null;
+}
+
+// ─── Reaction Types ────────────────────────────────────────────────────────
+
+export interface Reaction {
+  id: string;
+  messageId: string;
+  userId: string;
+  emoji: string;
+  createdAt: number;
+  user?: User;
 }
 
 // ─── Attachment Types ───────────────────────────────────────────────────────
@@ -105,10 +144,17 @@ export interface DmMessage {
   userId: string;
   content: string | null;
   createdAt: number;
+  // Compatibility fields
+  channelId?: string;
+  replyToId?: string | null;
+  editedAt?: number | null;
 }
 
 export interface DmMessageWithUser extends DmMessage {
   user: User;
+  attachments?: Attachment[];
+  reactions?: Reaction[];
+  replyTo?: MessageWithUser | null;
 }
 
 // ─── WebSocket Event Types ──────────────────────────────────────────────────
@@ -116,18 +162,20 @@ export interface DmMessageWithUser extends DmMessage {
 // Client → Server Events
 export type ClientEvent =
   | { type: 'auth'; token: string }
-  | { type: 'message_create'; channelId: string; content: string }
+  | { type: 'message_create'; channelId: string; content: string; replyToId?: string }
   | { type: 'message_edit'; messageId: string; content: string }
   | { type: 'message_delete'; messageId: string }
   | { type: 'typing_start'; channelId: string }
   | { type: 'presence_update'; status: 'online' | 'idle' | 'dnd' }
   | { type: 'voice_join'; channelId: string }
   | { type: 'voice_leave' }
-  | { type: 'dm_message_create'; dmChannelId: string; content: string };
+  | { type: 'dm_message_create'; dmChannelId: string; content: string }
+  | { type: 'reaction_add'; messageId: string; emoji: string }
+  | { type: 'reaction_remove'; messageId: string; emoji: string };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[] }
+  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[] }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -137,6 +185,10 @@ export type ServerEvent =
   | { type: 'member_joined'; serverId: string; member: MemberWithUser }
   | { type: 'member_left'; serverId: string; userId: string }
   | { type: 'dm_message_created'; message: DmMessageWithUser }
+  | { type: 'reaction_added'; messageId: string; reaction: Reaction }
+  | { type: 'reaction_removed'; messageId: string; userId: string; emoji: string }
+  | { type: 'friend_request_received'; request: FriendRequest }
+  | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
   | { type: 'error'; message: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
@@ -183,6 +235,7 @@ export interface UpdateUserRequest {
   displayName?: string;
   avatar?: string;
   customStatus?: string;
+  status?: UserStatus;
 }
 
 export interface UpdateMemberRequest {
@@ -192,6 +245,7 @@ export interface UpdateMemberRequest {
 export interface CreateMessageRequest {
   content: string;
   attachments?: string[];
+  replyToId?: string;
 }
 
 export interface UpdateMessageRequest {
@@ -208,6 +262,7 @@ export interface LiveKitTokenRequest {
 
 export interface LiveKitTokenResponse {
   token: string;
+  url: string;
 }
 
 export interface CreateDmRequest {
@@ -226,4 +281,36 @@ export interface PaginatedQuery {
 export interface ApiError {
   error: string;
   statusCode: number;
+}
+
+// ─── Social Types ────────────────────────────────────────────────────────────
+
+export interface Friend {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  status: UserStatus;
+  customStatus: string | null;
+  createdAt: number;
+  addedAt: number;
+}
+
+export type FriendRequestStatus = 'pending' | 'accepted' | 'declined';
+
+export interface FriendRequest {
+  id: string;
+  fromId: string;
+  toId: string;
+  status: FriendRequestStatus;
+  createdAt: number;
+  user?: User; // The other user (if it's an incoming request, the sender; if outgoing, the recipient)
+}
+
+export interface SendFriendRequest {
+  username: string;
+}
+
+export interface UpdateFriendRequest {
+  status: 'accepted' | 'declined';
 }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { User } from '@opencord/shared';
 
 type ModalType =
   | 'createServer'
@@ -18,6 +19,10 @@ interface UIState {
   isMobile: boolean;
   showDms: boolean;
   imagePreviewUrl: string | null;
+  userProfilePopout: {
+    user: User | null;
+    position: { top: number; left: number } | null;
+  };
   toggleSidebar: () => void;
   toggleMemberList: () => void;
   openModal: (modal: ModalType, data?: Record<string, unknown>) => void;
@@ -26,6 +31,8 @@ interface UIState {
   setShowDms: (show: boolean) => void;
   openImagePreview: (url: string) => void;
   closeImagePreview: () => void;
+  openUserProfile: (user: User, position: { top: number; left: number }) => void;
+  closeUserProfile: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -36,6 +43,10 @@ export const useUIStore = create<UIState>((set) => ({
   isMobile: false,
   showDms: false,
   imagePreviewUrl: null,
+  userProfilePopout: {
+    user: null,
+    position: null,
+  },
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleMemberList: () => set((state) => ({ memberListOpen: !state.memberListOpen })),
@@ -53,4 +64,11 @@ export const useUIStore = create<UIState>((set) => ({
 
   openImagePreview: (url) => set({ activeModal: 'imagePreview', imagePreviewUrl: url }),
   closeImagePreview: () => set({ activeModal: null, imagePreviewUrl: null }),
+
+  openUserProfile: (user, position) => set({
+    userProfilePopout: { user, position }
+  }),
+  closeUserProfile: () => set({
+    userProfilePopout: { user: null, position: null }
+  }),
 }));

@@ -5,10 +5,18 @@ export const useServerStore = create((set, get) => ({
     currentServerId: null,
     channels: [],
     members: [],
+    roles: [],
+    folders: [],
+    dmChannels: [],
     setServers: (servers) => set({ servers }),
     setCurrentServer: (serverId) => set({ currentServerId: serverId }),
     setChannels: (channels) => set({ channels }),
     setMembers: (members) => set({ members }),
+    setRoles: (roles) => set({ roles }),
+    setDmChannels: (dmChannels) => set({ dmChannels }),
+    addDmChannel: (channel) => set((state) => ({
+        dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
+    })),
     loadServers: async () => {
         try {
             const servers = await api.servers.list();
@@ -25,7 +33,17 @@ export const useServerStore = create((set, get) => ({
                 currentServerId: serverId,
                 channels: detail.channels.sort((a, b) => a.position - b.position),
                 members: detail.members,
+                roles: detail.roles.sort((a, b) => b.position - a.position), // Higher position = higher in list
             });
+        }
+        catch {
+            // Handle error silently
+        }
+    },
+    loadDmChannels: async () => {
+        try {
+            const dmChannels = await api.dm.list();
+            set({ dmChannels });
         }
         catch {
             // Handle error silently
@@ -102,7 +120,7 @@ export const useServerStore = create((set, get) => ({
             members: state.members.filter(m => m.userId !== userId),
         }));
     },
-    populateFromReady: (servers) => {
+    populateFromReady: (servers, folders, dmChannels) => {
         const simpleServers = servers.map(s => ({
             id: s.id,
             name: s.name,
@@ -111,6 +129,10 @@ export const useServerStore = create((set, get) => ({
             inviteCode: s.inviteCode,
             createdAt: s.createdAt,
         }));
-        set({ servers: simpleServers });
+        set({
+            servers: simpleServers,
+            folders: folders || [],
+            dmChannels: dmChannels || []
+        });
     },
 }));

@@ -4,7 +4,7 @@ import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
-import { initDatabase } from './db/index.js';
+import { getDb } from './db/index.js';
 import { seedDatabase } from './db/seed.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -14,6 +14,8 @@ import { messageRoutes } from './routes/messages.js';
 import { uploadRoutes } from './routes/uploads.js';
 import { dmRoutes } from './routes/dm.js';
 import { livekitRoutes } from './routes/livekit.js';
+import { socialRoutes } from './routes/social.js';
+import { utilRoutes } from './routes/utils.js';
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
 import fs from 'fs';
@@ -50,7 +52,8 @@ async function main(): Promise<void> {
     });
   }
 
-  initDatabase();
+  // Initialize database
+  getDb();
   await seedDatabase();
 
   await app.register(authRoutes);
@@ -61,6 +64,8 @@ async function main(): Promise<void> {
   await app.register(uploadRoutes);
   await app.register(dmRoutes);
   await app.register(livekitRoutes);
+  await app.register(socialRoutes);
+  await app.register(utilRoutes);
   await app.register(registerWebSocket);
 
   app.get('/api/health', async () => {

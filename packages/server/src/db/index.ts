@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { config } from '../config.js';
 import * as schema from './schema.js';
+import { runMigrations } from './migrate.js';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -57,6 +58,7 @@ function createTables(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id),
+      reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
       content TEXT,
       edited_at INTEGER,
       created_at INTEGER NOT NULL
@@ -90,6 +92,62 @@ function createTables(db: Database.Database): void {
       content TEXT,
       created_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS friends (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      friend_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, friend_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id TEXT PRIMARY KEY,
+      from_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT DEFAULT 'pending',
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reactions (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(message_id, user_id, emoji)
+    );
+
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#b9bbbe',
+      position INTEGER DEFAULT 0,
+      permissions TEXT,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS member_roles (
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+      PRIMARY KEY (server_id, user_id, role_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS server_folders (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT,
+      color TEXT,
+      position INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS server_folder_members (
+      folder_id TEXT NOT NULL REFERENCES server_folders(id) ON DELETE CASCADE,
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      PRIMARY KEY (folder_id, server_id)
+    );
   `);
 }
 
@@ -99,6 +157,7 @@ export function initDatabase() {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   createTables(sqlite);
+  runMigrations(sqlite);
   console.log(`Database initialized at ${config.dbPath}`);
   return drizzle(sqlite, { schema });
 }

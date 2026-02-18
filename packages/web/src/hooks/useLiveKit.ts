@@ -21,6 +21,7 @@ export interface ParticipantInfo {
   isMuted: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  isLocal: boolean;
   audioTrack: MediaStreamTrack | null;
   videoTrack: MediaStreamTrack | null;
   screenTrack: MediaStreamTrack | null;
@@ -50,7 +51,7 @@ export function useLiveKit() {
 
     const allParticipants: ParticipantInfo[] = [];
 
-    const processParticipant = (p: Participant) => {
+    const processParticipant = (p: Participant, isLocal: boolean) => {
       const { userId, username } = parseIdentity(p.identity);
       let audioTrack: MediaStreamTrack | null = null;
       let videoTrack: MediaStreamTrack | null = null;
@@ -76,14 +77,15 @@ export function useLiveKit() {
         isMuted: !p.isMicrophoneEnabled,
         isCameraOn: p.isCameraEnabled,
         isScreenSharing: p.isScreenShareEnabled,
+        isLocal,
         audioTrack,
         videoTrack,
         screenTrack,
       });
     };
 
-    processParticipant(r.localParticipant);
-    r.remoteParticipants.forEach(processParticipant);
+    processParticipant(r.localParticipant, true);
+    r.remoteParticipants.forEach((p) => processParticipant(p, false));
 
     setParticipants(allParticipants);
   }, []);
@@ -95,8 +97,7 @@ export function useLiveKit() {
 
     setIsConnecting(true);
     try {
-      const { token } = await api.livekit.token(channelId);
-      const livekitUrl = 'wss://nova.ddns.net/livekit';
+      const { token, url } = await api.livekit.token(channelId);
 
       const newRoom = new Room({
         adaptiveStream: true,
@@ -118,7 +119,7 @@ export function useLiveKit() {
         setParticipants([]);
       });
 
-      await newRoom.connect(livekitUrl, token);
+      await newRoom.connect(url, token);
       await newRoom.localParticipant.enableCameraAndMicrophone();
 
       roomRef.current = newRoom;

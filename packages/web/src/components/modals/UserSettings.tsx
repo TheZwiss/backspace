@@ -13,6 +13,7 @@ export function UserSettingsModal() {
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [customStatus, setCustomStatus] = useState(user?.customStatus ?? '');
+  const [status, setStatus] = useState(user?.status ?? 'online');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +28,8 @@ export function UserSettingsModal() {
       await updateProfile({
         displayName: displayName.trim() || undefined,
         customStatus: customStatus.trim() || undefined,
-      });
+        status: status as any,
+      } as any);
       setSuccess('Profile updated!');
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
@@ -70,6 +72,21 @@ export function UserSettingsModal() {
         {success && (
           <div className="p-2 bg-discord-green/10 border border-discord-green/30 rounded text-discord-green text-sm">{success}</div>
         )}
+
+        <div>
+          <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+            Status
+          </label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as any)}
+            className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple appearance-none"
+          >
+            <option value="online">Online</option>
+            <option value="idle">Idle</option>
+            <option value="dnd">Do Not Disturb</option>
+          </select>
+        </div>
 
         <div>
           <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">

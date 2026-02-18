@@ -99,6 +99,14 @@ export const api = {
         },
         sendMessage: (id, data) => request('POST', `/dm/${id}/messages`, data),
     },
+    social: {
+        friends: () => request('GET', '/social/friends'),
+        requests: () => request('GET', '/social/requests'),
+        sendRequest: (username) => request('POST', '/social/requests', { username }),
+        updateRequest: (id, status) => request('PATCH', `/social/requests/${id}`, { status }),
+        removeFriend: (id) => request('DELETE', `/social/friends/${id}`),
+        search: (q) => request('GET', `/social/search?q=${encodeURIComponent(q)}`),
+    },
     livekit: {
         token: (channelId) => request('POST', '/livekit/token', { channelId }),
     },

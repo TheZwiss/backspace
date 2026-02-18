@@ -23,7 +23,7 @@ export function useLiveKit() {
         if (!r)
             return;
         const allParticipants = [];
-        const processParticipant = (p) => {
+        const processParticipant = (p, isLocal) => {
             const { userId, username } = parseIdentity(p.identity);
             let audioTrack = null;
             let videoTrack = null;
@@ -50,13 +50,14 @@ export function useLiveKit() {
                 isMuted: !p.isMicrophoneEnabled,
                 isCameraOn: p.isCameraEnabled,
                 isScreenSharing: p.isScreenShareEnabled,
+                isLocal,
                 audioTrack,
                 videoTrack,
                 screenTrack,
             });
         };
-        processParticipant(r.localParticipant);
-        r.remoteParticipants.forEach(processParticipant);
+        processParticipant(r.localParticipant, true);
+        r.remoteParticipants.forEach((p) => processParticipant(p, false));
         setParticipants(allParticipants);
     }, []);
     const connect = useCallback(async (channelId) => {
@@ -65,8 +66,7 @@ export function useLiveKit() {
         }
         setIsConnecting(true);
         try {
-            const { token } = await api.livekit.token(channelId);
-            const livekitUrl = 'wss://nova.ddns.net/livekit';
+            const { token, url } = await api.livekit.token(channelId);
             const newRoom = new Room({
                 adaptiveStream: true,
                 dynacast: true,
@@ -85,7 +85,7 @@ export function useLiveKit() {
                 setIsConnected(false);
                 setParticipants([]);
             });
-            await newRoom.connect(livekitUrl, token);
+            await newRoom.connect(url, token);
             await newRoom.localParticipant.enableCameraAndMicrophone();
             roomRef.current = newRoom;
             setRoom(newRoom);
