@@ -1,0 +1,193 @@
+import React, { useState, useRef, useCallback } from 'react';
+import { useChatStore } from '../../stores/chatStore';
+import { wsSend } from '../../hooks/useWebSocket';
+import { api } from '../../api/client';
+
+interface MessageInputProps {
+  channelId: string;
+  channelName: string;
+}
+
+export function MessageInput({ channelId, channelName }: MessageInputProps) {
+  const [content, setContent] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleTyping = useCallback(() => {
+    if (typingTimeoutRef.current) return;
+    wsSend({ type: 'typing_start', channelId });
+    typingTimeoutRef.current = setTimeout(() => {
+      typingTimeoutRef.current = undefined;
+    }, 3000);
+  }, [channelId]);
+
+  const handleSubmit = async () => {
+    const trimmed = content.trim();
+    if (!trimmed && files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      // Upload files first
+      const attachmentIds: string[] = [];
+      for (const file of files) {
+        const attachment = await api.uploads.upload(file);
+        attachmentIds.push(attachment.id);
+      }
+
+      await sendMessage(channelId, trimmed || '', attachmentIds.length > 0 ? attachmentIds : undefined);
+      setContent('');
+      setFiles([]);
+
+      // Clear typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = undefined;
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    const pastedFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) pastedFiles.push(file);
+      }
+    }
+    if (pastedFiles.length > 0) {
+      setFiles((prev) => [...prev, ...pastedFiles]);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      setFiles((prev) => [...prev, ...droppedFiles]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+    handleTyping();
+
+    // Auto-resize textarea
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 300) + 'px';
+  };
+
+  return (
+    <div className="px-4 pb-6">
+      <div
+        className="bg-discord-bg-input rounded-lg"
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+      >
+        {/* File previews */}
+        {files.length > 0 && (
+          <div className="p-2 border-b border-discord-bg-tertiary flex flex-wrap gap-2">
+            {files.map((file, i) => (
+              <div key={i} className="relative group bg-discord-bg-secondary rounded p-2 max-w-[200px]">
+                {file.type.startsWith('image/') ? (
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="max-h-[100px] rounded object-cover"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-discord-text-secondary">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span className="truncate">{file.name}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => removeFile(i)}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-discord-red rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-end">
+          {/* File attach button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-3 text-discord-text-muted hover:text-discord-text-primary transition-colors"
+            title="Attach file"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+            </svg>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files ?? []);
+              if (selected.length > 0) {
+                setFiles((prev) => [...prev, ...selected]);
+              }
+              e.target.value = '';
+            }}
+          />
+
+          {/* Text input */}
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            placeholder={`Message #${channelName}`}
+            className="flex-1 py-3 bg-transparent text-discord-text-primary placeholder-discord-text-muted outline-none resize-none text-sm leading-[1.375rem] max-h-[300px]"
+            rows={1}
+            disabled={isUploading}
+          />
+
+          {/* Send indicator */}
+          {isUploading && (
+            <div className="p-3 text-discord-text-muted">
+              <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

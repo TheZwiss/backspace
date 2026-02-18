@@ -1,0 +1,22 @@
+{
+  "name": "opencord",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Open-source, self-hosted Discord alternative",
+  "scripts": {
+    "dev:server": "pnpm --filter @opencord/server dev",
+    "dev:web": "pnpm --filter @opencord/web dev",
+    "dev": "pnpm --filter @opencord/server dev & pnpm --filter @opencord/web dev",
+    "build:shared": "pnpm --filter @opencord/shared build",
+    "build:server": "pnpm --filter @opencord/server build",
+    "build:web": "pnpm --filter @opencord/web build",
+    "build": "pnpm --filter @opencord/shared build && pnpm --filter @opencord/server build & pnpm --filter @opencord/web build"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

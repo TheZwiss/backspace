@@ -1,0 +1,98 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
+import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import { config } from './config.js';
+import { initDatabase } from './db/index.js';
+import { seedDatabase } from './db/seed.js';
+import { authRoutes } from './routes/auth.js';
+import { userRoutes } from './routes/users.js';
+import { serverRoutes } from './routes/servers.js';
+import { channelRoutes } from './routes/channels.js';
+import { messageRoutes } from './routes/messages.js';
+import { uploadRoutes } from './routes/uploads.js';
+import { dmRoutes } from './routes/dm.js';
+import { livekitRoutes } from './routes/livekit.js';
+import { registerWebSocket } from './ws/handler.js';
+import path from 'path';
+import fs from 'fs';
+
+async function main(): Promise<void> {
+  const app = Fastify({
+    logger: {
+      level: 'info',
+    },
+  });
+
+  await app.register(cors, {
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  await app.register(websocket);
+
+  await app.register(multipart, {
+    limits: {
+      fileSize: config.maxUploadSize,
+    },
+  });
+
+  // Serve built frontend in production
+  const webDistPath = path.resolve(import.meta.dirname ?? '.', '../../web/dist');
+  if (fs.existsSync(webDistPath)) {
+    await app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+      wildcard: false,
+    });
+  }
+
+  initDatabase();
+  await seedDatabase();
+
+  await app.register(authRoutes);
+  await app.register(userRoutes);
+  await app.register(serverRoutes);
+  await app.register(channelRoutes);
+  await app.register(messageRoutes);
+  await app.register(uploadRoutes);
+  await app.register(dmRoutes);
+  await app.register(livekitRoutes);
+  await app.register(registerWebSocket);
+
+  app.get('/api/health', async () => {
+    return { status: 'ok', timestamp: Date.now() };
+  });
+
+  // SPA fallback - serve index.html for non-API routes
+  if (fs.existsSync(webDistPath)) {
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api/') || request.url.startsWith('/ws')) {
+        return reply.code(404).send({ error: 'Not found', statusCode: 404 });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
+
+  try {
+    await app.listen({ port: config.port, host: config.host });
+    console.log(`Opencord server running at http://${config.host}:${config.port}`);
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+
+  const shutdown = async () => {
+    console.log('Shutting down...');
+    await app.close();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+main();

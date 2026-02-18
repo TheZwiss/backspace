@@ -1,0 +1,26 @@
+appId: com.opencord.desktop
+productName: Opencord
+directories:
+  output: dist-electron
+files:
+  - dist/**/*
+  - "!node_modules"
+mac:
+  category: public.app-category.social-networking
+  target:
+    - dmg
+    - zip
+  icon: null
+win:
+  target:
+    - nsis
+  icon: null
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Network
+  icon: null
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

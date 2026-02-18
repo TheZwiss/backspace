@@ -1,0 +1,20 @@
+{
+  "name": "@opencord/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build:ts": "tsc",
+    "dev": "tsc && electron .",
+    "build": "tsc && electron-builder",
+    "clean": "rm -rf dist dist-electron"
+  },
+  "dependencies": {
+    "electron-is-dev": "^3.0.1"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2"
+  }
+}

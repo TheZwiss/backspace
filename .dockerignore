@@ -1,0 +1,16 @@
+node_modules
+.git
+.gitignore
+.env
+.env.local
+data
+dist
+dist-electron
+*.md
+*.log
+.DS_Store
+.idea
+.vscode
+packages/desktop
+npm
+livekit

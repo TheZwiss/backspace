@@ -1,0 +1,18 @@
+{
+  "name": "@opencord/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/types.ts",
+  "types": "./src/types.ts",
+  "exports": {
+    ".": "./src/types.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
