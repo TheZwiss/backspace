@@ -61,6 +61,7 @@ export const api = {
         delete: (id) => request('DELETE', `/servers/${id}`),
         invite: (id) => request('POST', `/servers/${id}/invite`),
         join: (id, data) => request('POST', `/servers/${id}/join`, data),
+        joinByCode: (inviteCode) => request('POST', '/servers/join', { inviteCode }),
         members: (id) => request('GET', `/servers/${id}/members`),
         updateMember: (serverId, userId, data) => request('PATCH', `/servers/${serverId}/members/${userId}`, data),
         removeMember: (serverId, userId) => request('DELETE', `/servers/${serverId}/members/${userId}`),
@@ -105,6 +106,7 @@ export const api = {
         sendRequest: (username) => request('POST', '/social/requests', { username }),
         updateRequest: (id, status) => request('PATCH', `/social/requests/${id}`, { status }),
         removeFriend: (id) => request('DELETE', `/social/friends/${id}`),
+        cancelRequest: (id) => request('DELETE', `/social/requests/${id}`),
         search: (q) => request('GET', `/social/search?q=${encodeURIComponent(q)}`),
     },
     livekit: {

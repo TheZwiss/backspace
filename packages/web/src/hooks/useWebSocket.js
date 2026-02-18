@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useSocialStore } from '../stores/socialStore';
 let globalWs = null;
 let reconnectAttempts = 0;
 let reconnectTimer;
@@ -19,6 +20,14 @@ function handleEvent(event) {
             populateFromReady(event.servers, event.folders, event.dmChannels);
             if (currentServerId) {
                 loadServerDetail(currentServerId);
+            }
+            // Populate voice channel state so users see who's in voice on load
+            if (event.voiceStates) {
+                const vs = event.voiceStates;
+                const { setVoiceUsers } = useVoiceStore.getState();
+                for (const [channelId, userIds] of Object.entries(vs)) {
+                    setVoiceUsers(channelId, userIds);
+                }
             }
             break;
         case 'message_created':
@@ -59,6 +68,16 @@ function handleEvent(event) {
         case 'reaction_removed':
             onReactionRemoved(event.messageId, event.userId, event.emoji);
             break;
+        case 'friend_request_received': {
+            const { addIncomingRequest } = useSocialStore.getState();
+            addIncomingRequest(event.request);
+            break;
+        }
+        case 'friend_request_accepted': {
+            const { addFriendFromAccepted } = useSocialStore.getState();
+            addFriendFromAccepted(event.friend, event.requestId);
+            break;
+        }
         case 'error':
             console.error('WebSocket error:', event.message);
             break;

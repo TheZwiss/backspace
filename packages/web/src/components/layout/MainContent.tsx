@@ -8,6 +8,7 @@ import { TypingIndicator } from '../chat/TypingIndicator';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { FriendsPage } from '../chat/FriendsPage';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { wsSend } from '../../hooks/useWebSocket';
 
 export function MainContent() {
   const channels = useServerStore((s) => s.channels);
@@ -16,6 +17,7 @@ export function MainContent() {
   const toggleMemberList = useUIStore((s) => s.toggleMemberList);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const participants = useVoiceStore((s) => s.participants);
+  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const showDms = useUIStore((s) => s.showDms);
 
   const channel = channels.find(c => c.id === currentChannelId);
@@ -58,6 +60,11 @@ export function MainContent() {
 
   // Voice/Video channel view
   if (isVoiceChannel) {
+    const isInThisChannel = currentVoiceChannelId === currentChannelId;
+    const isMuted = useVoiceStore.getState().isMuted;
+    const isCameraOn = useVoiceStore.getState().isCameraOn;
+    const isScreenSharing = useVoiceStore.getState().isScreenSharing;
+
     return (
       <div className="flex-1 flex flex-col bg-discord-bg-primary">
         <div className="h-12 px-4 flex items-center justify-between shadow-header">
@@ -66,9 +73,33 @@ export function MainContent() {
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
             </svg>
             <span className="font-bold text-discord-text-primary">{channel.name}</span>
+            {isInThisChannel && (
+              <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
+            )}
           </div>
         </div>
-        <VoiceGrid participants={participants} />
+        {isInThisChannel ? (
+          <VoiceGrid participants={participants} />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center gap-6">
+            <div className="text-center">
+              <svg width="80" height="80" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted mx-auto mb-4 opacity-40">
+                <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
+              </svg>
+              <h2 className="text-[24px] font-bold text-discord-text-header mb-2">{channel.name}</h2>
+              <p className="text-discord-text-muted text-[14px]">No one is currently in this voice channel.</p>
+            </div>
+            <button
+              onClick={() => {
+                useVoiceStore.getState().setCurrentVoiceChannel(currentChannelId);
+                wsSend({ type: 'voice_join', channelId: currentChannelId });
+              }}
+              className="px-8 py-3 bg-discord-green hover:bg-discord-green/80 text-white font-medium rounded-[3px] transition-colors text-[14px]"
+            >
+              Join Voice
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -75,6 +75,15 @@ export const useServerStore = create((set, get) => ({
             return { servers: [...state.servers, server] };
         });
     },
+    joinByCode: async (inviteCode) => {
+        const server = await api.servers.joinByCode(inviteCode);
+        set((state) => {
+            if (state.servers.find(s => s.id === server.id))
+                return state;
+            return { servers: [...state.servers, server] };
+        });
+        return server;
+    },
     generateInvite: async (serverId) => {
         const result = await api.servers.invite(serverId);
         return result.inviteCode;

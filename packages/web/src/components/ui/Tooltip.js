@@ -23,5 +23,5 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }) 
         bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
         left: 'right-full top-1/2 -translate-y-1/2 mr-2',
     };
-    return (_jsxs("div", { className: "relative inline-flex", onMouseEnter: show, onMouseLeave: hide, children: [children, isVisible && (_jsx("div", { className: `absolute z-50 px-3 py-1.5 text-sm font-medium text-white bg-gray-900 rounded-md shadow-lg whitespace-nowrap pointer-events-none ${positionClasses[position]}`, children: content }))] }));
+    return (_jsxs("div", { className: "relative inline-flex", onMouseEnter: show, onMouseLeave: hide, children: [children, isVisible && (_jsx("div", { className: `absolute z-50 px-3 py-1.5 text-sm font-medium text-white bg-discord-bg-floating rounded-md shadow-elevation-high whitespace-nowrap pointer-events-none ${positionClasses[position]}`, children: content }))] }));
 }

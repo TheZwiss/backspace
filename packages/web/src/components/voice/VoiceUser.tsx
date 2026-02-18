@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Avatar } from '../ui/Avatar';
+import { useVoiceStore } from '../../stores/voiceStore';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
@@ -9,6 +10,7 @@ interface VoiceUserProps {
 export function VoiceUser({ participant }: VoiceUserProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const isDeafened = useVoiceStore((s) => s.isDeafened);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -30,6 +32,14 @@ export function VoiceUser({ participant }: VoiceUserProps) {
     const stream = new MediaStream([participant.audioTrack]);
     audioEl.srcObject = stream;
   }, [participant.audioTrack]);
+
+  // Mute remote audio when deafened
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (audioEl) {
+      audioEl.muted = isDeafened;
+    }
+  }, [isDeafened]);
 
   const hasVideo = participant.isCameraOn || participant.isScreenSharing;
   const isLocal = participant.isLocal;

@@ -38,13 +38,10 @@ export function AppLayout() {
   
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const setParticipants = useVoiceStore((s) => s.setParticipants);
-  const { 
-    connect: connectVoice, 
-    disconnect: disconnectVoice, 
+  const {
+    connect: connectVoice,
+    disconnect: disconnectVoice,
     participants: voiceParticipants,
-    toggleMic,
-    toggleCamera,
-    toggleScreenShare
   } = useLiveKit();
 
   // Initialize WebSocket
@@ -118,11 +115,7 @@ export function AppLayout() {
       {/* Server sidebar - always visible on desktop, toggled on mobile */}
       <div className={`${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : 'flex h-full'}`}>
         <ServerSidebar />
-        <ChannelSidebar 
-          onToggleMic={toggleMic}
-          onToggleCamera={toggleCamera}
-          onToggleScreenShare={toggleScreenShare}
-        />
+        <ChannelSidebar />
       </div>
 
       {/* Main content area */}

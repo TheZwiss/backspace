@@ -1,15 +1,10 @@
 import React from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useServerStore } from '../../stores/serverStore';
+import { getActiveRoom } from '../../hooks/useLiveKit';
+import { wsSend } from '../../hooks/useWebSocket';
 
-interface VoiceControlsProps {
-  onDisconnect: () => void;
-  onToggleMic: () => void;
-  onToggleCamera: () => void;
-  onToggleScreenShare: () => void;
-}
-
-export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onToggleScreenShare }: VoiceControlsProps) {
+export function VoiceControls() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
@@ -19,6 +14,8 @@ export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onTog
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
+  const connectionError = useVoiceStore((s) => s.connectionError);
+  const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const channels = useServerStore((s) => s.channels);
 
   if (!currentVoiceChannelId) return null;
@@ -26,37 +23,74 @@ export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onTog
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? 'Voice Channel';
 
-  const handleMic = () => {
-    toggleMic();
-    onToggleMic();
+  const handleMic = async () => {
+    const room = getActiveRoom();
+    if (!room) {
+      console.warn('[VoiceControls] handleMic: no active room');
+      return;
+    }
+    try {
+      // isMuted is the pre-toggle value: if true → we want to unmute → enable mic
+      await room.localParticipant.setMicrophoneEnabled(isMuted);
+      toggleMic();
+    } catch (err) {
+      console.error('[VoiceControls] Failed to toggle mic:', err);
+    }
   };
 
   const handleDeafen = () => {
     toggleDeafen();
   };
 
-  const handleCamera = () => {
-    toggleCamera();
-    onToggleCamera();
+  const handleCamera = async () => {
+    const room = getActiveRoom();
+    if (!room) {
+      console.warn('[VoiceControls] handleCamera: no active room');
+      return;
+    }
+    try {
+      // isCameraOn is pre-toggle: if false → enable camera
+      await room.localParticipant.setCameraEnabled(!isCameraOn);
+      toggleCamera();
+    } catch (err) {
+      console.error('[VoiceControls] Failed to toggle camera:', err);
+    }
   };
 
-  const handleScreenShare = () => {
-    toggleScreenShare();
-    onToggleScreenShare();
+  const handleScreenShare = async () => {
+    const room = getActiveRoom();
+    if (!room) {
+      console.warn('[VoiceControls] handleScreenShare: no active room');
+      return;
+    }
+    try {
+      await room.localParticipant.setScreenShareEnabled(!isScreenSharing);
+      toggleScreenShare();
+    } catch (err) {
+      console.error('[VoiceControls] Failed to toggle screen share:', err);
+    }
+  };
+
+  const handleDisconnect = () => {
+    // Send WS leave event
+    wsSend({ type: 'voice_leave' });
+    // Reset the entire voice store (sets currentVoiceChannelId to null,
+    // which triggers AppLayout's useEffect to call useLiveKit.disconnect)
+    useVoiceStore.getState().reset();
   };
 
   return (
     <div className="bg-discord-bg-secondary border-t border-discord-bg-tertiary p-2">
       <div className="flex items-center justify-between px-1 mb-2">
-        <div>
-          <div className="text-xs font-medium text-discord-green flex items-center gap-1">
+        <div className="min-w-0">
+          <div className={`text-xs font-medium flex items-center gap-1 ${connectionError ? 'text-discord-red' : isLiveKitConnected ? 'text-discord-green' : 'text-yellow-500'}`}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
             </svg>
-            Voice Connected
+            {connectionError ? 'Connection Failed' : isLiveKitConnected ? 'Voice Connected' : 'Connecting...'}
           </div>
           <div className="text-xs text-discord-text-muted truncate">
-            {channelName}
+            {connectionError ? connectionError : channelName}
           </div>
         </div>
       </div>
@@ -131,7 +165,7 @@ export function VoiceControls({ onDisconnect, onToggleMic, onToggleCamera, onTog
 
         {/* Disconnect */}
         <button
-          onClick={onDisconnect}
+          onClick={handleDisconnect}
           className="p-2 rounded-full bg-discord-red/20 text-discord-red hover:bg-discord-red/30 transition-colors"
           title="Disconnect"
         >

@@ -10,13 +10,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 import { wsSend } from '../../hooks/useWebSocket';
 
-interface ChannelSidebarProps {
-  onToggleMic: () => void;
-  onToggleCamera: () => void;
-  onToggleScreenShare: () => void;
-}
-
-export function ChannelSidebar({ onToggleMic, onToggleCamera, onToggleScreenShare }: ChannelSidebarProps) {
+export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
   const currentServerId = useServerStore((s) => s.currentServerId);
   const channels = useServerStore((s) => s.channels);
@@ -48,13 +42,14 @@ export function ChannelSidebar({ onToggleMic, onToggleCamera, onToggleScreenShar
   };
 
   const handleVoiceJoin = (channelId: string) => {
+    // Don't re-join the same channel — prevents duplicate LiveKit connections
+    if (currentVoiceChannelId === channelId) {
+      navigate(`/channels/${currentServerId}/${channelId}`);
+      return;
+    }
     setCurrentVoiceChannel(channelId);
     wsSend({ type: 'voice_join', channelId });
-  };
-
-  const handleVoiceDisconnect = () => {
-    setCurrentVoiceChannel(null);
-    wsSend({ type: 'voice_leave' });
+    navigate(`/channels/${currentServerId}/${channelId}`);
   };
 
   if (!server) {
@@ -262,15 +257,8 @@ export function ChannelSidebar({ onToggleMic, onToggleCamera, onToggleScreenShar
         </div>
       </div>
 
-      {/* Voice controls */}
-      {currentVoiceChannelId && (
-        <VoiceControls
-          onDisconnect={handleVoiceDisconnect}
-          onToggleMic={onToggleMic}
-          onToggleCamera={onToggleCamera}
-          onToggleScreenShare={onToggleScreenShare}
-        />
-      )}
+      {/* Voice controls — VoiceControls reads state and calls LiveKit SDK directly */}
+      {currentVoiceChannelId && <VoiceControls />}
 
       {/* User area */}
       {user && (

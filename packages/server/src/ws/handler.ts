@@ -379,7 +379,21 @@ function buildReadyPayload(userId: string): {
     });
   }
 
-  return { user, servers, dmChannels, folders };
+  // Build voice states — tell the client who is currently in voice channels
+  // across all their servers
+  const voiceStates: Record<string, string[]> = {};
+  for (const srv of servers) {
+    for (const ch of srv.channels) {
+      if (ch.type === 'voice' || ch.type === 'video') {
+        const users = connectionManager.getVoiceUsers(ch.id);
+        if (users.size > 0) {
+          voiceStates[ch.id] = Array.from(users);
+        }
+      }
+    }
+  }
+
+  return { user, servers, dmChannels, folders, voiceStates };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

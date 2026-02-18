@@ -9,11 +9,15 @@ interface VoiceState {
   isCameraOn: boolean;
   isScreenSharing: boolean;
   participants: ParticipantInfo[];
+  connectionError: string | null;
+  isLiveKitConnected: boolean;
   setVoiceUsers: (channelId: string, userIds: string[]) => void;
   addVoiceUser: (channelId: string, userId: string) => void;
   removeVoiceUser: (channelId: string, userId: string) => void;
   setCurrentVoiceChannel: (channelId: string | null) => void;
   setParticipants: (participants: ParticipantInfo[]) => void;
+  setConnectionError: (error: string | null) => void;
+  setIsLiveKitConnected: (connected: boolean) => void;
   toggleMic: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
@@ -30,6 +34,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   isCameraOn: false,
   isScreenSharing: false,
   participants: [],
+  connectionError: null,
+  isLiveKitConnected: false,
 
   setVoiceUsers: (channelId, userIds) => {
     set((state) => {
@@ -62,6 +68,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
 
   setParticipants: (participants) => set({ participants }),
+  setConnectionError: (error) => set({ connectionError: error }),
+  setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
 
   toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
   toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
@@ -77,5 +85,8 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     isDeafened: false,
     isCameraOn: false,
     isScreenSharing: false,
+    participants: [],
+    connectionError: null,
+    isLiveKitConnected: false,
   }),
 }));

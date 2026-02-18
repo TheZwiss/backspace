@@ -50,6 +50,20 @@ export const useSocialStore = create((set, get) => ({
             throw err;
         }
     },
+    cancelFriendRequest: async (id) => {
+        set({ isLoading: true, error: null });
+        try {
+            await api.social.cancelRequest(id);
+            set((state) => ({
+                requests: state.requests.filter(r => r.id !== id),
+                isLoading: false,
+            }));
+        }
+        catch (err) {
+            set({ error: err.message, isLoading: false });
+            throw err;
+        }
+    },
     removeFriend: async (id) => {
         set({ isLoading: true, error: null });
         try {
@@ -72,5 +86,20 @@ export const useSocialStore = create((set, get) => ({
             console.error('Failed to search users:', err);
             return [];
         }
+    },
+    // Called from WS handler when another user sends you a friend request
+    addIncomingRequest: (request) => {
+        set((state) => {
+            if (state.requests.find(r => r.id === request.id))
+                return state;
+            return { requests: [...state.requests, request] };
+        });
+    },
+    // Called from WS handler when someone accepts your friend request
+    addFriendFromAccepted: (friend, requestId) => {
+        set((state) => ({
+            friends: state.friends.find(f => f.id === friend.id) ? state.friends : [...state.friends, friend],
+            requests: state.requests.filter(r => r.id !== requestId),
+        }));
     },
 }));

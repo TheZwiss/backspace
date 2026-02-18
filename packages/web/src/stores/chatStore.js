@@ -8,13 +8,14 @@ export const useChatStore = create((set, get) => ({
     typingUsers: new Map(),
     hasMore: new Map(),
     isLoading: false,
+    loadError: null,
     replyTo: null,
     setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
     setReplyTo: (message) => set({ replyTo: message }),
     loadMessages: async (channelId) => {
         if (get().messages.has(channelId))
             return;
-        set({ isLoading: true });
+        set({ isLoading: true, loadError: null });
         try {
             const isDm = useUIStore.getState().showDms;
             const messages = isDm
@@ -25,11 +26,11 @@ export const useChatStore = create((set, get) => ({
                 newMessages.set(channelId, messages);
                 const newHasMore = new Map(state.hasMore);
                 newHasMore.set(channelId, messages.length >= 50);
-                return { messages: newMessages, hasMore: newHasMore, isLoading: false };
+                return { messages: newMessages, hasMore: newHasMore, isLoading: false, loadError: null };
             });
         }
-        catch {
-            set({ isLoading: false });
+        catch (err) {
+            set({ isLoading: false, loadError: err.message || 'Failed to load messages' });
         }
     },
     loadMoreMessages: async (channelId) => {

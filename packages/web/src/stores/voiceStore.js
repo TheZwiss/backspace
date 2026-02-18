@@ -7,6 +7,8 @@ export const useVoiceStore = create((set, get) => ({
     isCameraOn: false,
     isScreenSharing: false,
     participants: [],
+    connectionError: null,
+    isLiveKitConnected: false,
     setVoiceUsers: (channelId, userIds) => {
         set((state) => {
             const newMap = new Map(state.voiceUsers);
@@ -34,6 +36,8 @@ export const useVoiceStore = create((set, get) => ({
     },
     setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
     setParticipants: (participants) => set({ participants }),
+    setConnectionError: (error) => set({ connectionError: error }),
+    setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
     toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
     toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
     toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
@@ -46,5 +50,8 @@ export const useVoiceStore = create((set, get) => ({
         isDeafened: false,
         isCameraOn: false,
         isScreenSharing: false,
+        participants: [],
+        connectionError: null,
+        isLiveKitConnected: false,
     }),
 }));

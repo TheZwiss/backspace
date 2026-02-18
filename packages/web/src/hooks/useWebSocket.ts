@@ -25,6 +25,14 @@ function handleEvent(event: ServerEvent): void {
       if (currentServerId) {
         loadServerDetail(currentServerId);
       }
+      // Populate voice channel state so users see who's in voice on load
+      if ((event as any).voiceStates) {
+        const vs = (event as any).voiceStates as Record<string, string[]>;
+        const { setVoiceUsers } = useVoiceStore.getState();
+        for (const [channelId, userIds] of Object.entries(vs)) {
+          setVoiceUsers(channelId, userIds);
+        }
+      }
       break;
 
     case 'message_created':
