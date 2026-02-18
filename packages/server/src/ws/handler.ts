@@ -187,6 +187,7 @@ function buildReadyPayload(userId: string): {
   servers: ServerWithChannelsAndMembers[];
   dmChannels: DmChannel[];
   folders: ServerFolder[];
+  voiceStates: Record<string, string[]>;
 } {
   const db = getDb();
 

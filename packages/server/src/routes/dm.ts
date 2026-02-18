@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -147,11 +147,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         const memberUserIds = dmMemberRows.map(m => m.userId);
         const users = db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all();
 
+        // Fetch actual last message
+        const lastMsgRows = db.select()
+          .from(schema.dmMessages)
+          .where(eq(schema.dmMessages.dmChannelId, myDm.dmChannelId))
+          .orderBy(desc(schema.dmMessages.createdAt))
+          .limit(1)
+          .all();
+        const lastMsg = lastMsgRows[0] ?? null;
+
         const result: DmChannel = {
           id: dmChannel.id,
           createdAt: dmChannel.createdAt,
           members: users.map(sanitizeUser),
-          lastMessage: null,
+          lastMessage: lastMsg ? {
+            id: lastMsg.id,
+            dmChannelId: lastMsg.dmChannelId,
+            userId: lastMsg.userId,
+            content: lastMsg.content,
+            createdAt: lastMsg.createdAt,
+          } : null,
         };
 
         return reply.code(200).send(result);
@@ -211,11 +226,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     if (before) {
       messageRows = db.select()
         .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, id))
+        .where(and(
+          eq(schema.dmMessages.dmChannelId, id),
+          lt(schema.dmMessages.id, before)
+        ))
         .orderBy(desc(schema.dmMessages.createdAt))
-        .all()
-        .filter(m => m.id < before)
-        .slice(0, limit);
+        .limit(limit)
+        .all();
     } else {
       messageRows = db.select()
         .from(schema.dmMessages)
@@ -309,5 +326,112 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(201).send(message);
+  });
+
+  // PATCH /api/dm/messages/:id - Edit a DM message
+  app.patch<{ Params: { id: string }; Body: { content: string } }>('/api/dm/messages/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { content } = request.body;
+
+    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+      return reply.code(400).send({ error: 'Message content is required', statusCode: 400 });
+    }
+
+    const db = getDb();
+
+    const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
+    if (!msg) {
+      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+    }
+
+    if (msg.userId !== request.userId) {
+      return reply.code(403).send({ error: 'You can only edit your own messages', statusCode: 403 });
+    }
+
+    const now = Date.now();
+    db.update(schema.dmMessages)
+      .set({ content: content.trim(), editedAt: now })
+      .where(eq(schema.dmMessages.id, id))
+      .run();
+
+    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!user) {
+      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+    }
+
+    const updated: DmMessageWithUser = {
+      id: msg.id,
+      dmChannelId: msg.dmChannelId,
+      userId: msg.userId,
+      content: content.trim(),
+      editedAt: now,
+      createdAt: msg.createdAt,
+      user: sanitizeUser(user),
+    };
+
+    // Broadcast to all DM members
+    const dmMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, msg.dmChannelId))
+      .all();
+
+    for (const member of dmMembers) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_message_updated',
+        message: updated,
+      });
+    }
+
+    return reply.code(200).send(updated);
+  });
+
+  // DELETE /api/dm/messages/:id - Delete a DM message
+  app.delete<{ Params: { id: string } }>('/api/dm/messages/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, id)).get();
+    if (!msg) {
+      return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
+    }
+
+    if (msg.userId !== request.userId) {
+      return reply.code(403).send({ error: 'You can only delete your own messages', statusCode: 403 });
+    }
+
+    // Delete attachments linked to this DM message
+    db.delete(schema.attachments)
+      .where(eq(schema.attachments.dmMessageId, id))
+      .run();
+
+    // Delete reactions
+    db.delete(schema.dmReactions)
+      .where(eq(schema.dmReactions.dmMessageId, id))
+      .run();
+
+    // Delete message
+    db.delete(schema.dmMessages)
+      .where(eq(schema.dmMessages.id, id))
+      .run();
+
+    // Broadcast to all DM members
+    const dmMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, msg.dmChannelId))
+      .all();
+
+    for (const member of dmMembers) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_message_deleted',
+        messageId: id,
+        dmChannelId: msg.dmChannelId,
+      });
+    }
+
+    return reply.code(200).send({ success: true });
   });
 }

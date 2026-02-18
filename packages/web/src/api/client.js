@@ -99,6 +99,8 @@ export const api = {
             return request('GET', `/dm/${id}/messages?${params}`);
         },
         sendMessage: (id, data) => request('POST', `/dm/${id}/messages`, data),
+        updateMessage: (id, data) => request('PATCH', `/dm/messages/${id}`, data),
+        deleteMessage: (id) => request('DELETE', `/dm/messages/${id}`),
     },
     social: {
         friends: () => request('GET', '/social/friends'),

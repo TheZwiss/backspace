@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useChatStore } from '../../stores/chatStore';
+import { useUIStore } from '../../stores/uiStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 
@@ -21,7 +22,12 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
   const handleTyping = useCallback(() => {
     if (typingTimeoutRef.current) return;
-    wsSend({ type: 'typing_start', channelId });
+    const isDm = useUIStore.getState().showDms;
+    if (isDm) {
+      wsSend({ type: 'dm_typing_start', dmChannelId: channelId });
+    } else {
+      wsSend({ type: 'typing_start', channelId });
+    }
     typingTimeoutRef.current = setTimeout(() => {
       typingTimeoutRef.current = undefined;
     }, 3000);
@@ -107,7 +113,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   return (
     <div className="px-4 pb-6 flex-shrink-0">
       {replyTo && (
-        <div className="bg-[#2e3035] rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-discord-bg-tertiary/50">
+        <div className="bg-discord-bg-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-discord-bg-tertiary/50">
           <div className="flex items-center gap-1 text-[14px] text-discord-text-normal truncate">
             <span className="opacity-60">Replying to</span>
             <span className="font-bold">{replyTo.user.displayName ?? replyTo.user.username}</span>
@@ -131,7 +137,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         {files.length > 0 && (
           <div className="p-4 flex flex-wrap gap-4 bg-discord-bg-secondary/30">
             {files.map((file, i) => (
-              <div key={i} className="relative group bg-discord-bg-secondary rounded-lg p-2 max-w-[200px] shadow-sm border border-discord-bg-tertiary">
+              <div key={i} className="relative group bg-discord-bg-secondary rounded-lg p-2 max-w-[200px] shadow-elevation-low border border-discord-bg-tertiary">
                 {file.type.startsWith('image/') ? (
                   <img
                     src={URL.createObjectURL(file)}
@@ -148,7 +154,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
                 )}
                 <button
                   onClick={() => removeFile(i)}
-                  className="absolute -top-2 -right-2 w-7 h-7 bg-discord-red hover:bg-discord-red-hover shadow-lg rounded-lg flex items-center justify-center text-white transition-colors z-10"
+                  className="absolute -top-2 -right-2 w-7 h-7 bg-discord-red hover:bg-discord-red-hover shadow-elevation-high rounded-lg flex items-center justify-center text-white transition-colors z-10"
                 >
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
@@ -193,7 +199,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={`Message #${channelName}`}
+            placeholder={`Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
             className="flex-1 py-[11px] px-1 bg-transparent text-discord-text-primary placeholder-discord-text-muted/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
             disabled={isUploading}

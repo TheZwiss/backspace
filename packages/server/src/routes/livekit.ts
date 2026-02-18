@@ -41,9 +41,16 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     const jwt = await token.toJwt();
 
-    const response: LiveKitTokenResponse = { 
+    // Use the request's Host header so the LiveKit WSS URL matches however
+    // the client reached us (domain or direct IP).
+    const requestHost = request.headers.host?.replace(/:\d+$/, '') || '';
+    const livekitUrl = requestHost
+      ? `wss://${requestHost}/livekit`
+      : config.livekit.url;
+
+    const response: LiveKitTokenResponse = {
       token: jwt,
-      url: config.livekit.url
+      url: livekitUrl
     };
     return reply.code(200).send(response);
   });

@@ -2,11 +2,13 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TypingIndicator } from '../chat/TypingIndicator';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { FriendsPage } from '../chat/FriendsPage';
+import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 export function MainContent() {
@@ -18,6 +20,8 @@ export function MainContent() {
     const participants = useVoiceStore((s) => s.participants);
     const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
     const showDms = useUIStore((s) => s.showDms);
+    const dmChannels = useServerStore((s) => s.dmChannels);
+    const authUser = useAuthStore((s) => s.user);
     const channel = channels.find(c => c.id === currentChannelId);
     const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
     // DM view or no server selected
@@ -25,7 +29,11 @@ export function MainContent() {
         if (!currentChannelId) {
             return _jsx(FriendsPage, {});
         }
-        return (_jsxs("div", { className: "flex-1 flex flex-col bg-discord-bg-primary min-w-0 relative", children: [_jsx("div", { className: "h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10", children: _jsxs("div", { className: "flex items-center gap-2 min-w-0", children: [_jsx("span", { className: "text-discord-text-muted font-bold text-lg", children: "@" }), _jsx("span", { className: "font-bold text-discord-text-primary truncate", children: "Direct Message" })] }) }), _jsx(MessageList, { channelId: currentChannelId }), _jsx(TypingIndicator, { channelId: currentChannelId }), _jsx(MessageInput, { channelId: currentChannelId, channelName: "Direct Message" })] }));
+        const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
+        const otherUser = dmChannel?.members.find(m => m.id !== authUser?.id);
+        const dmName = otherUser?.displayName ?? otherUser?.username ?? 'Direct Message';
+        const dmStatus = otherUser?.status;
+        return (_jsxs("div", { className: "flex-1 flex flex-col bg-discord-bg-primary min-w-0 relative", children: [_jsx("div", { className: "h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10", children: _jsxs("div", { className: "flex items-center gap-2 min-w-0", children: [_jsx("span", { className: "text-discord-text-muted font-bold text-lg", children: "@" }), otherUser && _jsx(Avatar, { src: otherUser.avatar, name: dmName, size: 24, status: dmStatus }), _jsx("span", { className: "font-bold text-discord-text-primary truncate", children: dmName }), otherUser?.status && otherUser.status !== 'offline' && _jsx("span", { className: "text-xs text-discord-text-muted capitalize", children: otherUser.status })] }) }), _jsx(MessageList, { channelId: currentChannelId }), _jsx(TypingIndicator, { channelId: currentChannelId }), _jsx(MessageInput, { channelId: currentChannelId, channelName: `@${dmName}` })] }));
     }
     // No channel selected
     if (!currentChannelId || !channel) {

@@ -4,7 +4,7 @@ import type { User } from '@opencord/shared';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
-import { useChatStore } from '../../stores/chatStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface UserProfilePopoutProps {
   user: User;
@@ -15,14 +15,13 @@ interface UserProfilePopoutProps {
 export function UserProfilePopout({ user, onClose, position }: UserProfilePopoutProps) {
   const navigate = useNavigate();
   const addDmChannel = useServerStore((s) => s.addDmChannel);
-  const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const displayName = user.displayName ?? user.username;
 
   const handleSendMessage = async () => {
     try {
       const channel = await api.dm.create({ userId: user.id });
       addDmChannel(channel);
-      setCurrentChannel(channel.id);
+      useUIStore.getState().setShowDms(true);
       onClose();
       navigate(`/channels/@me/${channel.id}`);
     } catch (err) {

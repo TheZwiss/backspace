@@ -13,7 +13,7 @@ function handleEvent(event) {
     const { setUser } = useAuthStore.getState();
     const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
     const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-    const { addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
+    const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers } = useVoiceStore.getState();
     switch (event.type) {
         case 'ready':
             setUser(event.user);
@@ -21,11 +21,10 @@ function handleEvent(event) {
             if (currentServerId) {
                 loadServerDetail(currentServerId);
             }
-            // Populate voice channel state so users see who's in voice on load
+            // Clear stale voice state, then populate from server truth
+            clearAllVoiceUsers();
             if (event.voiceStates) {
-                const vs = event.voiceStates;
-                const { setVoiceUsers } = useVoiceStore.getState();
-                for (const [channelId, userIds] of Object.entries(vs)) {
+                for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
                     setVoiceUsers(channelId, userIds);
                 }
             }
@@ -59,8 +58,31 @@ function handleEvent(event) {
         case 'member_left':
             removeMember(event.userId);
             break;
-        case 'dm_message_created':
+        case 'dm_message_created': {
             addMessage(event.message.dmChannelId, event.message);
+            // Update lastMessage on the DM channel so the sidebar sorts correctly
+            const { dmChannels, setDmChannels } = useServerStore.getState();
+            const updatedDms = dmChannels.map(dm =>
+                dm.id === event.message.dmChannelId
+                    ? { ...dm, lastMessage: event.message }
+                    : dm
+            );
+            updatedDms.sort((a, b) => {
+                const aTime = a.lastMessage?.createdAt ?? a.createdAt;
+                const bTime = b.lastMessage?.createdAt ?? b.createdAt;
+                return bTime - aTime;
+            });
+            setDmChannels(updatedDms);
+            break;
+        }
+        case 'dm_message_updated':
+            updateMessage(event.message);
+            break;
+        case 'dm_message_deleted':
+            removeMessage(event.messageId, event.dmChannelId);
+            break;
+        case 'dm_typing':
+            setTyping(event.dmChannelId, event.userId, event.username);
             break;
         case 'reaction_added':
             onReactionAdded(event.messageId, event.reaction);

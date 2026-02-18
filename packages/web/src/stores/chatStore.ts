@@ -114,12 +114,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   editMessage: async (messageId: string, content: string) => {
-    await api.messages.update(messageId, { content });
+    const isDm = useUIStore.getState().showDms;
+    if (isDm) {
+      await api.dm.updateMessage(messageId, { content });
+    } else {
+      await api.messages.update(messageId, { content });
+    }
     // Update will arrive via WebSocket
   },
 
   deleteMessage: async (messageId: string) => {
-    await api.messages.delete(messageId);
+    const isDm = useUIStore.getState().showDms;
+    if (isDm) {
+      await api.dm.deleteMessage(messageId);
+    } else {
+      await api.messages.delete(messageId);
+    }
     // Deletion will arrive via WebSocket
   },
 
@@ -135,12 +145,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   updateMessage: (message: MessageWithUser) => {
+    // DM messages have dmChannelId instead of channelId — check both
+    const channelKey = message.channelId || (message as any).dmChannelId;
+    if (!channelKey) return;
     set((state) => {
       const newMessages = new Map(state.messages);
-      const current = newMessages.get(message.channelId);
+      const current = newMessages.get(channelKey);
       if (!current) return state;
       newMessages.set(
-        message.channelId,
+        channelKey,
         current.map(m => m.id === message.id ? message : m),
       );
       return { messages: newMessages };

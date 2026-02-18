@@ -74,11 +74,21 @@ export const useChatStore = create((set, get) => ({
         // Message will arrive via WebSocket
     },
     editMessage: async (messageId, content) => {
-        await api.messages.update(messageId, { content });
+        const isDm = useUIStore.getState().showDms;
+        if (isDm) {
+            await api.dm.updateMessage(messageId, { content });
+        } else {
+            await api.messages.update(messageId, { content });
+        }
         // Update will arrive via WebSocket
     },
     deleteMessage: async (messageId) => {
-        await api.messages.delete(messageId);
+        const isDm = useUIStore.getState().showDms;
+        if (isDm) {
+            await api.dm.deleteMessage(messageId);
+        } else {
+            await api.messages.delete(messageId);
+        }
         // Deletion will arrive via WebSocket
     },
     addMessage: (channelId, message) => {
@@ -93,12 +103,14 @@ export const useChatStore = create((set, get) => ({
         });
     },
     updateMessage: (message) => {
+        const channelKey = message.channelId || message.dmChannelId;
+        if (!channelKey) return;
         set((state) => {
             const newMessages = new Map(state.messages);
-            const current = newMessages.get(message.channelId);
+            const current = newMessages.get(channelKey);
             if (!current)
                 return state;
-            newMessages.set(message.channelId, current.map(m => m.id === message.id ? message : m));
+            newMessages.set(channelKey, current.map(m => m.id === message.id ? message : m));
             return { messages: newMessages };
         });
     },

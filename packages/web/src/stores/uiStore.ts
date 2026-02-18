@@ -9,6 +9,7 @@ type ModalType =
   | 'userSettings'
   | 'serverSettings'
   | 'imagePreview'
+  | 'newDm'
   | null;
 
 interface UIState {

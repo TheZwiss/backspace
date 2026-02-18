@@ -58,6 +58,7 @@ export const messages = sqliteTable('messages', {
 export const attachments = sqliteTable('attachments', {
   id: text('id').primaryKey(),
   messageId: text('message_id').references(() => messages.id, { onDelete: 'cascade' }),
+  dmMessageId: text('dm_message_id'),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
   mimetype: text('mimetype').notNull(),
@@ -81,7 +82,9 @@ export const dmMessages = sqliteTable('dm_messages', {
   id: text('id').primaryKey(),
   dmChannelId: text('dm_channel_id').notNull().references(() => dmChannels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id),
+  replyToId: text('reply_to_id'),
   content: text('content'),
+  editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -104,6 +107,14 @@ export const friendRequests = sqliteTable('friend_requests', {
 export const reactions = sqliteTable('reactions', {
   id: text('id').primaryKey(),
   messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  emoji: text('emoji').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const dmReactions = sqliteTable('dm_reactions', {
+  id: text('id').primaryKey(),
+  dmMessageId: text('dm_message_id').notNull(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
   createdAt: integer('created_at').notNull(),

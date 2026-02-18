@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -186,11 +186,13 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     if (before) {
       messageRows = db.select()
         .from(schema.messages)
-        .where(eq(schema.messages.channelId, id))
+        .where(and(
+          eq(schema.messages.channelId, id),
+          lt(schema.messages.id, before)
+        ))
         .orderBy(desc(schema.messages.createdAt))
-        .all()
-        .filter(m => m.id < before)
-        .slice(0, limit);
+        .limit(limit)
+        .all();
     } else {
       messageRows = db.select()
         .from(schema.messages)

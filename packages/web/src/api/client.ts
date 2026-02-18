@@ -157,6 +157,10 @@ export const api = {
     },
     sendMessage: (id: string, data: CreateDmMessageRequest) =>
       request<DmMessageWithUser>('POST', `/dm/${id}/messages`, data),
+    updateMessage: (id: string, data: UpdateMessageRequest) =>
+      request<DmMessageWithUser>('PATCH', `/dm/messages/${id}`, data),
+    deleteMessage: (id: string) =>
+      request<{ success: boolean }>('DELETE', `/dm/messages/${id}`),
   },
 
   social: {

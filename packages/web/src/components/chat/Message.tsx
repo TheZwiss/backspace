@@ -125,9 +125,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     if (member?.roles && member.roles.length > 0) {
       return { color: member.roles[0]!.color };
     }
-    if (member?.role === 'owner') return { color: '#da373c' };
+    if (member?.role === 'owner') return { color: '#f23f43' };
     if (member?.role === 'admin') return { color: '#5865f2' };
-    return { color: '#dbdee1' };
+    return { color: '#dcdcdf' };
   })();
 
   const replyRoleColor = (msg: any) => {
@@ -135,20 +135,20 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     if (member?.roles && member.roles.length > 0) {
       return { color: member.roles[0]!.color };
     }
-    if (member?.role === 'owner') return { color: '#da373c' };
+    if (member?.role === 'owner') return { color: '#f23f43' };
     if (member?.role === 'admin') return { color: '#5865f2' };
-    return { color: '#dbdee1' };
+    return { color: '#dcdcdf' };
   };
 
   const content = (
     <div
-      className={`group relative flex px-4 py-0.5 hover:bg-[#2e3035]/30 transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''}`}
+      className={`group relative flex px-4 py-0.5 hover:bg-discord-modifier-hover transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Reply Line */}
       {message.replyTo && (
-        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-[#4e5058] rounded-tl-[6px] opacity-60" />
+        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-discord-interactive-muted rounded-tl-[6px] opacity-60" />
       )}
 
       {/* Avatar or timestamp column */}
@@ -181,7 +181,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             >
               {message.replyTo.user.displayName ?? message.replyTo.user.username}
             </span>
-            <span className="text-[14px] text-discord-text-normal truncate max-w-[400px] hover:text-white">
+            <span className="text-[14px] text-discord-text-normal truncate max-w-[400px] hover:text-discord-text-primary">
               {message.replyTo.content}
             </span>
           </div>
@@ -280,7 +280,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             {!isEditing && firstUrl && <Embed url={firstUrl} />}
 
             {/* Attachments */}
-            {message.attachments.length > 0 && (
+            {message.attachments && message.attachments.length > 0 && (
               <div className="mt-1 grid gap-2">
                 {message.attachments.map((att) => {
                   const isImage = att.mimetype.startsWith('image/');

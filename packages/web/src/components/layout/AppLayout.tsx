@@ -12,6 +12,7 @@ import { CreateChannelModal } from '../modals/CreateChannel';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { ServerSettingsModal } from '../modals/ServerSettings';
+import { NewDmModal } from '../modals/NewDmModal';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -145,6 +146,7 @@ export function AppLayout() {
       <InviteModal />
       <UserSettingsModal />
       <ServerSettingsModal />
+      <NewDmModal />
       <ImagePreview />
 
       {/* User Profile Popout */}

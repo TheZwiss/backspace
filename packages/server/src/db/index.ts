@@ -117,6 +117,15 @@ function createTables(db: Database.Database): void {
       UNIQUE(message_id, user_id, emoji)
     );
 
+    CREATE TABLE IF NOT EXISTS dm_reactions (
+      id TEXT PRIMARY KEY,
+      dm_message_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(dm_message_id, user_id, emoji)
+    );
+
     CREATE TABLE IF NOT EXISTS roles (
       id TEXT PRIMARY KEY,
       server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,

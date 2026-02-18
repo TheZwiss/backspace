@@ -43,6 +43,18 @@ export const useVoiceStore = create((set, get) => ({
     toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
     toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
     getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
+    clearAllVoiceUsers: () => set({ voiceUsers: new Map() }),
+    // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
+    leaveVoice: () => set({
+        currentVoiceChannelId: null,
+        isMuted: false,
+        isDeafened: false,
+        isCameraOn: false,
+        isScreenSharing: false,
+        participants: [],
+        connectionError: null,
+        isLiveKitConnected: false,
+    }),
     reset: () => set({
         voiceUsers: new Map(),
         currentVoiceChannelId: null,

@@ -22,6 +22,19 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'permissions', type: 'TEXT' }
       ]
+    },
+    {
+      name: 'dm_messages',
+      columns: [
+        { name: 'edited_at', type: 'INTEGER' },
+        { name: 'reply_to_id', type: 'TEXT' }
+      ]
+    },
+    {
+      name: 'attachments',
+      columns: [
+        { name: 'dm_message_id', type: 'TEXT' }
+      ]
     }
   ];
 

@@ -126,6 +126,15 @@ export function handleClientEvent(
     case 'dm_message_create':
       handleDmMessageCreate(event, userId);
       break;
+    case 'dm_typing_start':
+      handleDmTypingStart(event, userId, username);
+      break;
+    case 'dm_message_edit':
+      handleDmMessageEdit(event, userId);
+      break;
+    case 'dm_message_delete':
+      handleDmMessageDelete(event, userId);
+      break;
     case 'reaction_add':
       handleReactionAdd(event, userId);
       break;
@@ -451,6 +460,150 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     connectionManager.sendToUser(member.userId, {
       type: 'dm_message_created',
       message: dmMessage,
+    });
+  }
+}
+
+function handleDmTypingStart(event: Record<string, unknown>, userId: string, username: string): void {
+  const dmChannelId = event.dmChannelId as string;
+
+  if (!dmChannelId || typeof dmChannelId !== 'string') return;
+
+  if (!isDmMember(dmChannelId, userId)) return;
+
+  const key = `dm:${userId}:${dmChannelId}`;
+  const existing = typingTimeouts.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  // Send to all other DM members
+  const db = getDb();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    if (member.userId !== userId) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_typing',
+        dmChannelId,
+        userId,
+        username,
+      });
+    }
+  }
+
+  const timeout = setTimeout(() => {
+    typingTimeouts.delete(key);
+  }, 5000);
+  typingTimeouts.set(key, timeout);
+}
+
+function handleDmMessageEdit(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+  const content = event.content as string;
+
+  if (!messageId || typeof messageId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'messageId is required' });
+    return;
+  }
+
+  if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'content is required' });
+    return;
+  }
+
+  const db = getDb();
+  const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
+  if (!msg) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Message not found' });
+    return;
+  }
+
+  if (msg.userId !== userId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You can only edit your own messages' });
+    return;
+  }
+
+  const now = Date.now();
+  db.update(schema.dmMessages)
+    .set({ content: content.trim(), editedAt: now })
+    .where(eq(schema.dmMessages.id, messageId))
+    .run();
+
+  const user = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (!user) return;
+
+  const updated: DmMessageWithUser = {
+    id: msg.id,
+    dmChannelId: msg.dmChannelId,
+    userId: msg.userId,
+    content: content.trim(),
+    editedAt: now,
+    createdAt: msg.createdAt,
+    user: sanitizeUser(user),
+  };
+
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, msg.dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_message_updated',
+      message: updated,
+    });
+  }
+}
+
+function handleDmMessageDelete(event: Record<string, unknown>, userId: string): void {
+  const messageId = event.messageId as string;
+
+  if (!messageId || typeof messageId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'messageId is required' });
+    return;
+  }
+
+  const db = getDb();
+  const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
+  if (!msg) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Message not found' });
+    return;
+  }
+
+  if (msg.userId !== userId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You can only delete your own messages' });
+    return;
+  }
+
+  // Delete attachments linked to this DM message
+  db.delete(schema.attachments)
+    .where(eq(schema.attachments.dmMessageId, messageId))
+    .run();
+
+  // Delete reactions
+  db.delete(schema.dmReactions)
+    .where(eq(schema.dmReactions.dmMessageId, messageId))
+    .run();
+
+  // Delete message
+  db.delete(schema.dmMessages)
+    .where(eq(schema.dmMessages.id, messageId))
+    .run();
+
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, msg.dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_message_deleted',
+      messageId,
+      dmChannelId: msg.dmChannelId,
     });
   }
 }

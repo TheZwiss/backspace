@@ -2,11 +2,13 @@ import React from 'react';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TypingIndicator } from '../chat/TypingIndicator';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { FriendsPage } from '../chat/FriendsPage';
+import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 
@@ -24,22 +26,36 @@ export function MainContent() {
   const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
 
   // DM view or no server selected
+  const dmChannels = useServerStore((s) => s.dmChannels);
+  const authUser = useAuthStore((s) => s.user);
+
   if (showDms || !currentServerId) {
     if (!currentChannelId) {
       return <FriendsPage />;
     }
-    
+
+    const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
+    const otherUser = dmChannel?.members.find(m => m.id !== authUser?.id);
+    const dmName = otherUser?.displayName ?? otherUser?.username ?? 'Direct Message';
+    const dmStatus = otherUser?.status as any;
+
     return (
       <div className="flex-1 flex flex-col bg-discord-bg-primary min-w-0 relative">
         <div className="h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-discord-text-muted font-bold text-lg">@</span>
-            <span className="font-bold text-discord-text-primary truncate">Direct Message</span>
+            {otherUser && (
+              <Avatar src={otherUser.avatar} name={dmName} size={24} status={dmStatus} />
+            )}
+            <span className="font-bold text-discord-text-primary truncate">{dmName}</span>
+            {otherUser?.status && otherUser.status !== 'offline' && (
+              <span className="text-xs text-discord-text-muted capitalize">{otherUser.status}</span>
+            )}
           </div>
         </div>
         <MessageList channelId={currentChannelId} />
         <TypingIndicator channelId={currentChannelId} />
-        <MessageInput channelId={currentChannelId} channelName="Direct Message" />
+        <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} />
       </div>
     );
   }

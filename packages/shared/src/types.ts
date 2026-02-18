@@ -169,13 +169,16 @@ export type ClientEvent =
   | { type: 'presence_update'; status: 'online' | 'idle' | 'dnd' }
   | { type: 'voice_join'; channelId: string }
   | { type: 'voice_leave' }
-  | { type: 'dm_message_create'; dmChannelId: string; content: string }
+  | { type: 'dm_message_create'; dmChannelId: string; content: string; replyToId?: string }
+  | { type: 'dm_typing_start'; dmChannelId: string }
+  | { type: 'dm_message_edit'; messageId: string; content: string }
+  | { type: 'dm_message_delete'; messageId: string }
   | { type: 'reaction_add'; messageId: string; emoji: string }
   | { type: 'reaction_remove'; messageId: string; emoji: string };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[] }
+  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -185,6 +188,9 @@ export type ServerEvent =
   | { type: 'member_joined'; serverId: string; member: MemberWithUser }
   | { type: 'member_left'; serverId: string; userId: string }
   | { type: 'dm_message_created'; message: DmMessageWithUser }
+  | { type: 'dm_message_updated'; message: DmMessageWithUser }
+  | { type: 'dm_message_deleted'; messageId: string; dmChannelId: string }
+  | { type: 'dm_typing'; dmChannelId: string; userId: string; username: string }
   | { type: 'reaction_added'; messageId: string; reaction: Reaction }
   | { type: 'reaction_removed'; messageId: string; userId: string; emoji: string }
   | { type: 'friend_request_received'; request: FriendRequest }
