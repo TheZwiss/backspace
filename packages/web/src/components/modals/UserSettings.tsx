@@ -67,10 +67,10 @@ export function UserSettingsModal() {
         </div>
 
         {error && (
-          <div className="p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-red text-sm">{error}</div>
+          <div className="p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{error}</div>
         )}
         {success && (
-          <div className="p-2 bg-discord-green/10 border border-discord-green/30 rounded text-discord-green text-sm">{success}</div>
+          <div className="p-2 bg-discord-green/10 border border-discord-green/30 rounded text-discord-text-positive text-sm">{success}</div>
         )}
 
         <div>

@@ -27,10 +27,10 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center animate-fade-in">
       <div
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0 bg-discord-bg-overlay"
         onClick={onClose}
       />
-      <div className={`relative ${maxWidth} w-full mx-4 bg-discord-bg-primary rounded-lg shadow-xl animate-slide-up`}>
+      <div className={`relative ${maxWidth} w-full mx-4 bg-discord-bg-surface rounded-lg shadow-xl animate-slide-up`}>
         {title && (
           <div className="flex items-center justify-between px-4 pt-4">
             <h2 className="text-xl font-bold text-discord-text-primary">{title}</h2>

@@ -141,6 +141,9 @@ export function handleClientEvent(
     case 'reaction_remove':
       handleReactionRemove(event, userId);
       break;
+    case 'channel_ack':
+      handleChannelAck(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -676,4 +679,49 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       emoji,
     });
   }
+}
+
+function handleChannelAck(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId as string;
+  const messageId = event.messageId as string;
+  if (!channelId || !messageId) return;
+
+  const db = getDb();
+
+  const existing = db.select()
+    .from(schema.readStates)
+    .where(and(
+      eq(schema.readStates.userId, userId),
+      eq(schema.readStates.channelId, channelId),
+    ))
+    .get();
+
+  const now = Date.now();
+
+  if (existing) {
+    // Only update if the new messageId is newer (larger snowflake)
+    if (BigInt(messageId) > BigInt(existing.lastReadMessageId)) {
+      db.update(schema.readStates)
+        .set({ lastReadMessageId: messageId, updatedAt: now })
+        .where(and(
+          eq(schema.readStates.userId, userId),
+          eq(schema.readStates.channelId, channelId),
+        ))
+        .run();
+    }
+  } else {
+    db.insert(schema.readStates).values({
+      userId,
+      channelId,
+      lastReadMessageId: messageId,
+      updatedAt: now,
+    }).run();
+  }
+
+  // Echo ack back to all of this user's connections (multi-tab sync)
+  connectionManager.sendToUser(userId, {
+    type: 'channel_ack',
+    channelId,
+    messageId,
+  });
 }

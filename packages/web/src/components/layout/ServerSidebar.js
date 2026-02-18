@@ -1,10 +1,11 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useServerStore } from '../../stores/serverStore';
+import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Tooltip } from '../ui/Tooltip';
-function SidebarItem({ name, icon, active, onClick, type = 'server', actionType }) {
+function SidebarItem({ name, icon, active, onClick, type = 'server', actionType, hasUnread }) {
     const [isHovered, setIsHovered] = useState(false);
     const firstLetter = name.charAt(0).toUpperCase();
     const getPillHeight = () => {
@@ -12,6 +13,8 @@ function SidebarItem({ name, icon, active, onClick, type = 'server', actionType 
             return 'h-10';
         if (isHovered)
             return 'h-5';
+        if (hasUnread && !active)
+            return 'h-2';
         return 'h-2 scale-0';
     };
     const getButtonClasses = () => {
@@ -30,10 +33,27 @@ export function ServerSidebar() {
     const servers = useServerStore((s) => s.servers);
     const currentServerId = useServerStore((s) => s.currentServerId);
     const setCurrentServer = useServerStore((s) => s.setCurrentServer);
+    const channelToServerMap = useServerStore((s) => s.channelToServerMap);
+    const dmChannels = useServerStore((s) => s.dmChannels);
     const showDms = useUIStore((s) => s.showDms);
     const setShowDms = useUIStore((s) => s.setShowDms);
     const openModal = useUIStore((s) => s.openModal);
+    const unreadChannels = useChatStore((s) => s.unreadChannels);
     const navigate = useNavigate();
+    const unreadServerIds = useMemo(() => {
+        const ids = new Set();
+        for (const channelId of unreadChannels) {
+            const serverId = channelToServerMap.get(channelId);
+            if (serverId) ids.add(serverId);
+        }
+        return ids;
+    }, [unreadChannels, channelToServerMap]);
+    const hasDmUnread = useMemo(() => {
+        for (const dm of dmChannels) {
+            if (unreadChannels.has(dm.id)) return true;
+        }
+        return false;
+    }, [unreadChannels, dmChannels]);
     const handleServerClick = (serverId) => {
         setCurrentServer(serverId);
         setShowDms(false);
@@ -44,5 +64,5 @@ export function ServerSidebar() {
         setCurrentServer(null);
         navigate('/channels/@me');
     };
-    return (_jsxs("nav", { className: "w-[72px] bg-discord-bg-tertiary flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none", children: [_jsx(SidebarItem, { id: "@me", name: "Direct Messages", active: showDms, onClick: handleDmClick, type: "dm" }), _jsx("div", { className: "w-8 h-[2px] bg-discord-modifier-accent rounded-full mb-2" }), servers.map((server) => (_jsx(SidebarItem, { id: server.id, name: server.name, icon: server.icon, active: currentServerId === server.id, onClick: () => handleServerClick(server.id) }, server.id))), _jsx(SidebarItem, { id: "add-server", name: "Add a Server", active: false, onClick: () => openModal('createServer'), type: "action", actionType: "add" }), _jsx(SidebarItem, { id: "join-server", name: "Join a Server", active: false, onClick: () => openModal('joinServer'), type: "action", actionType: "join" })] }));
+    return (_jsxs("nav", { className: "w-[72px] bg-discord-bg-server flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none", children: [_jsx(SidebarItem, { id: "@me", name: "Direct Messages", active: showDms, onClick: handleDmClick, type: "dm", hasUnread: hasDmUnread }), _jsx("div", { className: "w-8 h-[2px] bg-discord-modifier-accent rounded-full mb-2" }), servers.map((server) => (_jsx(SidebarItem, { id: server.id, name: server.name, icon: server.icon, active: currentServerId === server.id, onClick: () => handleServerClick(server.id), hasUnread: unreadServerIds.has(server.id) }, server.id))), _jsx(SidebarItem, { id: "add-server", name: "Add a Server", active: false, onClick: () => openModal('createServer'), type: "action", actionType: "add" }), _jsx(SidebarItem, { id: "join-server", name: "Join a Server", active: false, onClick: () => openModal('joinServer'), type: "action", actionType: "join" })] }));
 }

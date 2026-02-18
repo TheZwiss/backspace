@@ -10,7 +10,7 @@ export function ImagePreview() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 animate-fade-in cursor-pointer"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-discord-bg-overlay animate-fade-in cursor-pointer"
       onClick={closeImagePreview}
     >
       <button
@@ -24,7 +24,7 @@ export function ImagePreview() {
       <img
         src={imageUrl}
         alt="Preview"
-        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
+        className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-elevation-high"
         onClick={(e) => e.stopPropagation()}
       />
     </div>

@@ -85,6 +85,12 @@ export interface Channel {
   topic: string | null;
   position: number;
   createdAt: number;
+  lastMessageId?: string | null;
+}
+
+export interface ReadState {
+  channelId: string;
+  lastReadMessageId: string;
 }
 
 // ─── Message Types ──────────────────────────────────────────────────────────
@@ -174,11 +180,12 @@ export type ClientEvent =
   | { type: 'dm_message_edit'; messageId: string; content: string }
   | { type: 'dm_message_delete'; messageId: string }
   | { type: 'reaction_add'; messageId: string; emoji: string }
-  | { type: 'reaction_remove'; messageId: string; emoji: string };
+  | { type: 'reaction_remove'; messageId: string; emoji: string }
+  | { type: 'channel_ack'; channelId: string; messageId: string };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]> }
+  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; readStates?: ReadState[] }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -193,6 +200,7 @@ export type ServerEvent =
   | { type: 'dm_typing'; dmChannelId: string; userId: string; username: string }
   | { type: 'reaction_added'; messageId: string; reaction: Reaction }
   | { type: 'reaction_removed'; messageId: string; userId: string; emoji: string }
+  | { type: 'channel_ack'; channelId: string; messageId: string }
   | { type: 'friend_request_received'; request: FriendRequest }
   | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
   | { type: 'error'; message: string };

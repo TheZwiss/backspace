@@ -15,6 +15,6 @@ export function VoiceChannel({ channelId, channelName, onClick }) {
                     if (!member)
                         return null;
                     const displayName = member.user.displayName ?? member.user.username;
-                    return (_jsxs("div", { className: "flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-bg-hover", children: [_jsx(Avatar, { src: member.user.avatar, name: displayName, size: 20, status: member.user.status }), _jsx("span", { className: "text-xs text-discord-text-secondary truncate", children: displayName })] }, userId));
+                    return (_jsxs("div", { className: "flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-bg-hover transition-colors", children: [_jsx(Avatar, { src: member.user.avatar, name: displayName, size: 20, status: member.user.status }), _jsx("span", { className: "text-xs text-discord-text-secondary truncate", children: displayName })] }, userId));
                 }) }))] }));
 }

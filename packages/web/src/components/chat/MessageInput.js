@@ -1,7 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useState, useRef, useCallback } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { useUIStore } from '../../stores/uiStore';
+import { isDmChannel } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 export function MessageInput({ channelId, channelName }) {
@@ -17,7 +17,7 @@ export function MessageInput({ channelId, channelName }) {
     const handleTyping = useCallback(() => {
         if (typingTimeoutRef.current)
             return;
-        const isDm = useUIStore.getState().showDms;
+        const isDm = isDmChannel(channelId);
         if (isDm) {
             wsSend({ type: 'dm_typing_start', dmChannelId: channelId });
         } else {

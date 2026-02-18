@@ -26,13 +26,13 @@ class ErrorBoundary extends React.Component<
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: '#313338',
-          color: '#f2f3f5',
+          color: '#ffffff',
           fontFamily: 'sans-serif',
           flexDirection: 'column',
           gap: '16px',
         }}>
           <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Something went wrong</h1>
-          <p style={{ color: '#949ba4' }}>{this.state.error?.message}</p>
+          <p style={{ color: '#abacb2' }}>{this.state.error?.message}</p>
           <button
             onClick={() => window.location.reload()}
             style={{

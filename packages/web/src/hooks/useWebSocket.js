@@ -21,6 +21,18 @@ function handleEvent(event) {
             if (currentServerId) {
                 loadServerDetail(currentServerId);
             }
+            // Clear stale message cache on reconnect, then re-fetch current channel
+            {
+                const { clearAllMessages, loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
+                clearAllMessages();
+                if (currentChannelId) {
+                    reloadMessages(currentChannelId, true);
+                }
+                const { channelLastMessageIds } = useServerStore.getState();
+                if (event.readStates) {
+                    setReadStates(event.readStates, channelLastMessageIds);
+                }
+            }
             // Clear stale voice state, then populate from server truth
             clearAllVoiceUsers();
             if (event.voiceStates) {
@@ -31,6 +43,12 @@ function handleEvent(event) {
             break;
         case 'message_created':
             addMessage(event.message.channelId, event.message);
+            {
+                const { currentChannelId, markChannelUnread } = useChatStore.getState();
+                if (event.message.channelId !== currentChannelId) {
+                    markChannelUnread(event.message.channelId);
+                }
+            }
             break;
         case 'message_updated':
             updateMessage(event.message);
@@ -73,6 +91,12 @@ function handleEvent(event) {
                 return bTime - aTime;
             });
             setDmChannels(updatedDms);
+            {
+                const { currentChannelId, markChannelUnread } = useChatStore.getState();
+                if (event.message.dmChannelId !== currentChannelId) {
+                    markChannelUnread(event.message.dmChannelId);
+                }
+            }
             break;
         }
         case 'dm_message_updated':
@@ -98,6 +122,11 @@ function handleEvent(event) {
         case 'friend_request_accepted': {
             const { addFriendFromAccepted } = useSocialStore.getState();
             addFriendFromAccepted(event.friend, event.requestId);
+            break;
+        }
+        case 'channel_ack': {
+            const { onChannelAck } = useChatStore.getState();
+            onChannelAck(event.channelId, event.messageId);
             break;
         }
         case 'error':

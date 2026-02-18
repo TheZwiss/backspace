@@ -39,15 +39,26 @@ export function MessageList({ channelId }: MessageListProps) {
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
   const isLoading = useChatStore((s) => s.isLoading);
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
+  const ackChannel = useChatStore((s) => s.ackChannel);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const prevMessagesLength = useRef(0);
+  const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     loadMessages(channelId);
   }, [channelId, loadMessages]);
+
+  // Ack channel when messages load or when new messages arrive while near bottom
+  useEffect(() => {
+    if (messages.length > 0 && isNearBottom) {
+      clearTimeout(ackTimerRef.current);
+      ackTimerRef.current = setTimeout(() => ackChannel(channelId), 200);
+    }
+    return () => clearTimeout(ackTimerRef.current);
+  }, [channelId, messages.length, isNearBottom, ackChannel]);
 
   // Auto-scroll to bottom on new messages (if near bottom)
   useEffect(() => {
@@ -98,7 +109,7 @@ export function MessageList({ channelId }: MessageListProps) {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden"
+      className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin"
       onScroll={handleScroll}
     >
       {isLoadingMore && (

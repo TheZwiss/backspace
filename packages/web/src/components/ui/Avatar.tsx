@@ -66,7 +66,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       </div>
       {status && (
         <div
-          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-[#2b2d31] ${statusColors[status] ?? 'bg-discord-text-muted'}`}
+          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-discord-bg-secondary ${statusColors[status] ?? 'bg-discord-text-muted'}`}
           style={{
             width: size * 0.35,
             height: size * 0.35,

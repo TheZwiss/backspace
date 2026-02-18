@@ -8,6 +8,8 @@ export const useServerStore = create((set, get) => ({
     roles: [],
     folders: [],
     dmChannels: [],
+    channelToServerMap: new Map(),
+    channelLastMessageIds: new Map(),
     setServers: (servers) => set({ servers }),
     setCurrentServer: (serverId) => set({ currentServerId: serverId }),
     setChannels: (channels) => set({ channels }),
@@ -138,10 +140,40 @@ export const useServerStore = create((set, get) => ({
             inviteCode: s.inviteCode,
             createdAt: s.createdAt,
         }));
+        const channelToServerMap = new Map();
+        const channelLastMessageIds = new Map();
+        for (const srv of servers) {
+            for (const ch of srv.channels) {
+                channelToServerMap.set(ch.id, srv.id);
+                if (ch.lastMessageId) {
+                    channelLastMessageIds.set(ch.id, ch.lastMessageId);
+                }
+            }
+        }
+        const dms = dmChannels || [];
+        for (const dm of dms) {
+            if (dm.lastMessage?.id) {
+                channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+            }
+        }
         set({
             servers: simpleServers,
             folders: folders || [],
-            dmChannels: dmChannels || []
+            dmChannels: dms,
+            channelToServerMap,
+            channelLastMessageIds,
         });
     },
 }));
+
+export function isDmChannel(channelId) {
+    const dmChannels = useServerStore.getState().dmChannels;
+    if (dmChannels.length > 0) {
+        return dmChannels.some(dm => dm.id === channelId);
+    }
+    // Before WS ready populates dmChannels, fall back to URL path
+    if (typeof window !== 'undefined') {
+        return window.location.pathname.startsWith('/channels/@me/');
+    }
+    return false;
+}

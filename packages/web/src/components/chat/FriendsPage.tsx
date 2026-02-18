@@ -160,7 +160,7 @@ export function FriendsPage() {
               </button>
             </form>
             {addStatus && (
-              <div className={`text-sm p-3 rounded-lg border ${addStatus.type === 'success' ? 'text-discord-green border-discord-green/20 bg-discord-green/5' : 'text-discord-red border-discord-red/20 bg-discord-red/5'}`}>
+              <div className={`text-sm p-3 rounded-lg border ${addStatus.type === 'success' ? 'text-discord-text-positive border-discord-green/20 bg-discord-green/5' : 'text-discord-text-danger border-discord-red/20 bg-discord-red/5'}`}>
                 {addStatus.message}
               </div>
             )}

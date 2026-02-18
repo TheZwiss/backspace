@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { MessageWithUser, Reaction } from '@opencord/shared';
+import type { MessageWithUser, Reaction, ReadState } from '@opencord/shared';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
-import { useUIStore } from './uiStore';
+import { isDmChannel } from './serverStore';
 
 interface TypingUser {
   userId: string;
@@ -18,13 +18,16 @@ interface ChatState {
   isLoading: boolean;
   loadError: string | null;
   replyTo: MessageWithUser | null;
+  readStates: Map<string, string>;
+  unreadChannels: Set<string>;
   setCurrentChannel: (channelId: string | null) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
-  loadMessages: (channelId: string) => Promise<void>;
+  loadMessages: (channelId: string, force?: boolean) => Promise<void>;
+  clearAllMessages: () => void;
   loadMoreMessages: (channelId: string) => Promise<boolean>;
   sendMessage: (channelId: string, content: string, attachmentIds?: string[]) => Promise<void>;
-  editMessage: (messageId: string, content: string) => Promise<void>;
-  deleteMessage: (messageId: string) => Promise<void>;
+  editMessage: (messageId: string, content: string, channelId: string) => Promise<void>;
+  deleteMessage: (messageId: string, channelId: string) => Promise<void>;
   addMessage: (channelId: string, message: MessageWithUser) => void;
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
@@ -36,6 +39,10 @@ interface ChatState {
   clearTyping: (channelId: string, userId: string) => void;
   getMessages: (channelId: string) => MessageWithUser[];
   getTypingUsers: (channelId: string) => TypingUser[];
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>) => void;
+  markChannelUnread: (channelId: string) => void;
+  ackChannel: (channelId: string) => void;
+  onChannelAck: (channelId: string, messageId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -46,15 +53,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   isLoading: false,
   loadError: null,
   replyTo: null,
+  readStates: new Map(),
+  unreadChannels: new Set(),
 
   setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
   setReplyTo: (message) => set({ replyTo: message }),
 
-  loadMessages: async (channelId: string) => {
-    if (get().messages.has(channelId)) return;
+  clearAllMessages: () => set({ messages: new Map(), hasMore: new Map() }),
+
+  loadMessages: async (channelId: string, force?: boolean) => {
+    if (!force && get().messages.has(channelId)) return;
     set({ isLoading: true, loadError: null });
     try {
-      const isDm = useUIStore.getState().showDms;
+      const isDm = isDmChannel(channelId);
       const messages = isDm
         ? await api.dm.messages(channelId)
         : await api.channels.messages(channelId);
@@ -80,7 +91,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!oldestMessage) return false;
 
     try {
-      const isDm = useUIStore.getState().showDms;
+      const isDm = isDmChannel(channelId);
       const olderMessages = isDm
         ? await api.dm.messages(channelId, oldestMessage.id)
         : await api.channels.messages(channelId, oldestMessage.id);
@@ -101,7 +112,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (channelId: string, content: string, attachmentIds?: string[]) => {
     const replyToId = get().replyTo?.id;
-    const isDm = useUIStore.getState().showDms;
+    const isDm = isDmChannel(channelId);
     
     if (isDm) {
       await api.dm.sendMessage(channelId, { content });
@@ -113,8 +124,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Message will arrive via WebSocket
   },
 
-  editMessage: async (messageId: string, content: string) => {
-    const isDm = useUIStore.getState().showDms;
+  editMessage: async (messageId: string, content: string, channelId: string) => {
+    const isDm = isDmChannel(channelId);
     if (isDm) {
       await api.dm.updateMessage(messageId, { content });
     } else {
@@ -123,8 +134,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Update will arrive via WebSocket
   },
 
-  deleteMessage: async (messageId: string) => {
-    const isDm = useUIStore.getState().showDms;
+  deleteMessage: async (messageId: string, channelId: string) => {
+    const isDm = isDmChannel(channelId);
     if (isDm) {
       await api.dm.deleteMessage(messageId);
     } else {
@@ -252,5 +263,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const users = get().typingUsers.get(channelId) ?? [];
     const now = Date.now();
     return users.filter(t => now - t.timestamp < 5000);
+  },
+
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>) => {
+    const rsMap = new Map<string, string>();
+    for (const rs of readStates) {
+      rsMap.set(rs.channelId, rs.lastReadMessageId);
+    }
+    const unread = new Set<string>();
+    for (const [channelId, lastMsgId] of channelLastMessageIds) {
+      const lastRead = rsMap.get(channelId);
+      if (!lastRead || BigInt(lastMsgId) > BigInt(lastRead)) {
+        unread.add(channelId);
+      }
+    }
+    set({ readStates: rsMap, unreadChannels: unread });
+  },
+
+  markChannelUnread: (channelId: string) => {
+    set((state) => {
+      if (state.unreadChannels.has(channelId)) return state;
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.add(channelId);
+      return { unreadChannels: newUnread };
+    });
+  },
+
+  ackChannel: (channelId: string) => {
+    const msgs = get().messages.get(channelId);
+    if (!msgs || msgs.length === 0) return;
+    const lastMsg = msgs[msgs.length - 1];
+    if (!lastMsg) return;
+    const messageId = lastMsg.id;
+
+    // Update local state immediately
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      newReadStates.set(channelId, messageId);
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.delete(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+
+    // Send to server
+    wsSend({ type: 'channel_ack', channelId, messageId });
+  },
+
+  onChannelAck: (channelId: string, messageId: string) => {
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      newReadStates.set(channelId, messageId);
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.delete(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
   },
 }));

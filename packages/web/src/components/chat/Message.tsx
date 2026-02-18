@@ -45,6 +45,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const openImagePreview = useUIStore((s) => s.openImagePreview);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
+  const channelKey = message.channelId || (message as any).dmChannelId;
   const isAuthor = currentUser?.id === message.userId;
   const memberRole = members.find(m => m.userId === currentUser?.id)?.role;
   const isAdminUser = memberRole === 'admin' || memberRole === 'owner';
@@ -99,7 +100,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   if (canDelete) {
     contextMenuItems.push({
       label: 'Delete Message',
-      onClick: () => deleteMessage(message.id),
+      onClick: () => deleteMessage(message.id, channelKey),
       danger: true,
     });
   }
@@ -108,7 +109,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (editContent.trim()) {
-        await editMessage(message.id, editContent.trim());
+        await editMessage(message.id, editContent.trim(), channelKey);
         setIsEditing(false);
       }
     }
@@ -216,7 +217,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               escape to <button onClick={() => setIsEditing(false)} className="text-discord-text-link hover:underline">cancel</button>
               {' '}&bull; enter to <button onClick={() => {
                 if (editContent.trim()) {
-                  editMessage(message.id, editContent.trim());
+                  editMessage(message.id, editContent.trim(), channelKey);
                   setIsEditing(false);
                 }
               }} className="text-discord-text-link hover:underline">save</button>
@@ -365,7 +366,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           )}
           {canDelete && (
             <button
-              onClick={() => deleteMessage(message.id)}
+              onClick={() => deleteMessage(message.id, channelKey)}
               className="px-2 h-full text-discord-text-muted hover:text-discord-red hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
               title="Delete"
             >

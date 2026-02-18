@@ -8,32 +8,57 @@ export default {
     extend: {
       colors: {
         discord: {
-          'bg-primary': '#313338',
-          'bg-secondary': '#2b2d31',
-          'bg-tertiary': '#1e1f22',
-          'bg-user-area': '#232428',
-          'bg-floating': '#111214',
-          'bg-overlay': 'rgba(0, 0, 0, 0.85)',
-          'bg-input': '#383a40',
-          'bg-accent': '#404249',
-          'text-primary': '#f2f3f5',
-          'text-normal': '#dbdee1',
-          'text-secondary': '#b5bac1',
-          'text-muted': '#949ba4',
-          'text-link': '#00a8fc',
-          'text-positive': '#23a559',
-          'text-warning': '#f0b232',
-          'text-danger': '#fa777c',
-          'blurple': '#5865f2',
-          'blurple-hover': '#4752c4',
-          'green': '#23a559',
-          'yellow': '#f0b232',
-          'red': '#da373c',
-          'red-hover': '#a12d31',
-          'modifier-hover': '#35373c',
-          'modifier-active': '#3b3d42',
-          'modifier-selected': '#404249',
-          'modifier-accent': 'hsla(0, 0%, 100%, 0.06)',
+          // Backgrounds (darkest → lightest)
+          'bg-tertiary':       '#1e1f22',
+          'bg-server':         '#25262a',
+          'bg-secondary':      '#2b2d31',
+          'bg-primary':        '#313338',
+          'bg-input':          '#383a40',
+          'bg-surface':        '#393a41',
+          'bg-surface-higher': '#3f4048',
+          'bg-floating':       '#111214',
+          'bg-overlay':        'rgba(0, 0, 0, 0.85)',
+          'bg-user-area':      '#232428',
+          'bg-accent':         '#41434a',
+          'bg-hover':          '#2e3035',
+          'bg-active':         '#404249',
+          'bg-members':        '#2b2d31',
+          'bg-home':           '#282a2e',
+
+          // Text
+          'text-primary':   '#ffffff',
+          'text-normal':    '#dcdcdf',
+          'text-secondary': '#c5c6ca',
+          'text-muted':     '#abacb2',
+          'text-header':    '#ffffff',
+          'text-link':      '#76aff6',
+          'text-positive':  '#73c48b',
+          'text-warning':   '#faa900',
+          'text-danger':    '#ff938e',
+
+          // Channel/Interactive
+          'channels-default':  '#999aa1',
+          'interactive-muted': '#4e5058',
+
+          // Brand
+          'blurple':        '#5865f2',
+          'blurple-hover':  '#4452bb',
+          'blurple-active': '#3a48a3',
+
+          // Status
+          'green':      '#23a55a',
+          'yellow':     '#f0b232',
+          'red':        '#f23f43',
+          'red-hover':  '#a9232e',
+
+          // Notification badge
+          'notification': '#da3e44',
+
+          // Modifiers (semi-transparent — works on any background)
+          'modifier-hover':    'rgba(255,255,255,0.08)',
+          'modifier-active':   'rgba(255,255,255,0.16)',
+          'modifier-selected': 'rgba(255,255,255,0.20)',
+          'modifier-accent':   'rgba(255,255,255,0.12)',
         },
       },
       boxShadow: {

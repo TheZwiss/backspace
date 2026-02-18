@@ -25,6 +25,19 @@ function handleEvent(event: ServerEvent): void {
       if (currentServerId) {
         loadServerDetail(currentServerId);
       }
+      // Clear stale message cache on reconnect, then re-fetch current channel
+      {
+        const { clearAllMessages, loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
+        clearAllMessages();
+        if (currentChannelId) {
+          reloadMessages(currentChannelId, true);
+        }
+        // Initialize unread tracking from ready payload
+        const { channelLastMessageIds } = useServerStore.getState();
+        if (event.readStates) {
+          setReadStates(event.readStates, channelLastMessageIds);
+        }
+      }
       // Clear stale voice state, then populate from server truth
       clearAllVoiceUsers();
       if (event.voiceStates) {
@@ -36,6 +49,12 @@ function handleEvent(event: ServerEvent): void {
 
     case 'message_created':
       addMessage(event.message.channelId, event.message);
+      {
+        const { currentChannelId, markChannelUnread } = useChatStore.getState();
+        if (event.message.channelId !== currentChannelId) {
+          markChannelUnread(event.message.channelId);
+        }
+      }
       break;
 
     case 'message_updated':
@@ -86,6 +105,13 @@ function handleEvent(event: ServerEvent): void {
         return bTime - aTime;
       });
       setDmChannels(updatedDms);
+      // Mark DM as unread if not currently viewing it
+      {
+        const { currentChannelId, markChannelUnread } = useChatStore.getState();
+        if (event.message.dmChannelId !== currentChannelId) {
+          markChannelUnread(event.message.dmChannelId);
+        }
+      }
       break;
     }
 
@@ -118,6 +144,12 @@ function handleEvent(event: ServerEvent): void {
     case 'friend_request_accepted': {
       const { addFriendFromAccepted } = useSocialStore.getState();
       addFriendFromAccepted(event.friend, event.requestId);
+      break;
+    }
+
+    case 'channel_ack': {
+      const { onChannelAck } = useChatStore.getState();
+      onChannelAck(event.channelId, event.messageId);
       break;
     }
 

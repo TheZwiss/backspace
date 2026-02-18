@@ -48,7 +48,7 @@ export function CreateChannelModal() {
     <Modal isOpen={isOpen} onClose={closeModal} title="Create Channel">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-red text-sm">
+          <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">
             {error}
           </div>
         )}

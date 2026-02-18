@@ -41,7 +41,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
             if (!member) return null;
             const displayName = member.user.displayName ?? member.user.username;
             return (
-              <div key={userId} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-bg-hover">
+              <div key={userId} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-bg-hover transition-colors">
                 <Avatar
                   src={member.user.avatar}
                   name={displayName}

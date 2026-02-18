@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, desc } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import type {
   User,
@@ -12,6 +12,7 @@ import type {
   DmChannel,
   ServerEvent,
   ServerFolder,
+  ReadState,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -188,6 +189,7 @@ function buildReadyPayload(userId: string): {
   dmChannels: DmChannel[];
   folders: ServerFolder[];
   voiceStates: Record<string, string[]>;
+  readStates: ReadState[];
 } {
   const db = getDb();
 
@@ -281,15 +283,24 @@ function buildReadyPayload(userId: string): {
         ownerId: serverRow.ownerId,
         inviteCode: serverRow.inviteCode,
         createdAt: serverRow.createdAt,
-        channels: channels.map(ch => ({
-          id: ch.id,
-          serverId: ch.serverId,
-          name: ch.name,
-          type: ch.type as Channel['type'],
-          topic: ch.topic,
-          position: ch.position ?? 0,
-          createdAt: ch.createdAt,
-        })),
+        channels: channels.map(ch => {
+          const lastMsg = db.select({ id: schema.messages.id })
+            .from(schema.messages)
+            .where(eq(schema.messages.channelId, ch.id))
+            .orderBy(desc(schema.messages.createdAt))
+            .limit(1)
+            .get();
+          return {
+            id: ch.id,
+            serverId: ch.serverId,
+            name: ch.name,
+            type: ch.type as Channel['type'],
+            topic: ch.topic,
+            position: ch.position ?? 0,
+            createdAt: ch.createdAt,
+            lastMessageId: lastMsg?.id ?? null,
+          };
+        }),
         members,
         roles: roles.map(r => ({
           id: r.id,
@@ -394,7 +405,18 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  return { user, servers, dmChannels, folders, voiceStates };
+  // Fetch read states for unread tracking
+  const readStateRows = db.select()
+    .from(schema.readStates)
+    .where(eq(schema.readStates.userId, userId))
+    .all();
+
+  const readStates: ReadState[] = readStateRows.map(rs => ({
+    channelId: rs.channelId,
+    lastReadMessageId: rs.lastReadMessageId,
+  }));
+
+  return { user, servers, dmChannels, folders, voiceStates, readStates };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

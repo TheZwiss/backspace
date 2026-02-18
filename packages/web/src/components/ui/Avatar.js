@@ -31,7 +31,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
                         if (fallback)
                             fallback.style.display = 'flex';
                     }
-                } })) : null, _jsx("div", { className: `avatar-fallback w-full h-full rounded-full bg-discord-blurple flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`, style: src ? { display: 'none' } : undefined, children: initials }), status && (_jsx("div", { className: `absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-[#2b2d31] ${statusColors[status] ?? 'bg-discord-text-muted'}`, style: {
+                } })) : null, _jsx("div", { className: `avatar-fallback w-full h-full rounded-full bg-discord-blurple flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`, style: src ? { display: 'none' } : undefined, children: initials }), status && (_jsx("div", { className: `absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-discord-bg-secondary ${statusColors[status] ?? 'bg-discord-text-muted'}`, style: {
                     width: size * 0.35,
                     height: size * 0.35,
                     minWidth: 12,

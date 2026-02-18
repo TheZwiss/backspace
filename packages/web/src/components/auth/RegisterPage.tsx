@@ -46,14 +46,14 @@ export function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-discord-bg-tertiary">
-      <div className="w-full max-w-[480px] bg-discord-bg-primary rounded-md p-8 shadow-2xl">
+      <div className="w-full max-w-[480px] bg-discord-bg-surface rounded-md p-8 shadow-elevation-high">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-discord-text-primary">Create an account</h1>
         </div>
 
         <form onSubmit={handleSubmit}>
           {error && (
-            <div className="mb-4 p-3 bg-discord-red/10 border border-discord-red/30 rounded text-discord-red text-sm">
+            <div className="mb-4 p-3 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">
               {error}
             </div>
           )}
@@ -108,7 +108,7 @@ export function RegisterPage() {
 
           <p className="mt-3 text-sm text-discord-text-muted">
             Already have an account?{' '}
-            <Link to="/login" className="text-[#00aff4] hover:underline">
+            <Link to="/login" className="text-discord-text-link hover:underline">
               Log In
             </Link>
           </p>

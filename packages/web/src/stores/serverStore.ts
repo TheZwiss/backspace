@@ -10,6 +10,8 @@ interface ServerState {
   roles: Role[];
   folders: ServerFolder[];
   dmChannels: DmChannel[];
+  channelToServerMap: Map<string, string>;
+  channelLastMessageIds: Map<string, string>;
   setServers: (servers: Server[]) => void;
   setCurrentServer: (serverId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
@@ -44,6 +46,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
   roles: [],
   folders: [],
   dmChannels: [],
+  channelToServerMap: new Map(),
+  channelLastMessageIds: new Map(),
 
   setServers: (servers) => set({ servers }),
   setCurrentServer: (serverId) => set({ currentServerId: serverId }),
@@ -189,10 +193,49 @@ export const useServerStore = create<ServerState>((set, get) => ({
       inviteCode: s.inviteCode,
       createdAt: s.createdAt,
     }));
-    set({ 
-      servers: simpleServers, 
+
+    // Build channel→server map and channel→lastMessageId map
+    const channelToServerMap = new Map<string, string>();
+    const channelLastMessageIds = new Map<string, string>();
+    for (const srv of servers) {
+      for (const ch of srv.channels) {
+        channelToServerMap.set(ch.id, srv.id);
+        if (ch.lastMessageId) {
+          channelLastMessageIds.set(ch.id, ch.lastMessageId);
+        }
+      }
+    }
+    // Also map DM channels
+    const dms = dmChannels || [];
+    for (const dm of dms) {
+      if (dm.lastMessage?.id) {
+        channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+      }
+    }
+
+    set({
+      servers: simpleServers,
       folders: folders || [],
-      dmChannels: dmChannels || []
+      dmChannels: dms,
+      channelToServerMap,
+      channelLastMessageIds,
     });
   },
 }));
+
+/**
+ * Data-driven DM channel detection. Returns true if the given channelId
+ * belongs to a DM channel. Authoritative because dmChannels is populated
+ * from the WS ready event and DM/server channel IDs never overlap.
+ */
+export function isDmChannel(channelId: string): boolean {
+  const dmChannels = useServerStore.getState().dmChannels;
+  if (dmChannels.length > 0) {
+    return dmChannels.some(dm => dm.id === channelId);
+  }
+  // Before WS ready populates dmChannels, fall back to URL path
+  if (typeof window !== 'undefined') {
+    return window.location.pathname.startsWith('/channels/@me/');
+  }
+  return false;
+}

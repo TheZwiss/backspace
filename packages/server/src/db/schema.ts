@@ -138,6 +138,15 @@ export const memberRoles = sqliteTable('member_roles', {
   pk: primaryKey({ columns: [table.serverId, table.userId, table.roleId] }),
 }));
 
+export const readStates = sqliteTable('read_states', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id').notNull(),
+  lastReadMessageId: text('last_read_message_id').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.channelId] }),
+}));
+
 export const serverFolders = sqliteTable('server_folders', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

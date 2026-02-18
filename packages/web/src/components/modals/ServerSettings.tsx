@@ -89,16 +89,16 @@ export function ServerSettingsModal() {
         <div className="w-32 flex-shrink-0 space-y-1">
           <button
             onClick={() => setTab('overview')}
-            className={`w-full text-left px-3 py-1.5 rounded text-sm ${
-              tab === 'overview' ? 'bg-discord-bg-active text-white' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+            className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+              tab === 'overview' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
             }`}
           >
             Overview
           </button>
           <button
             onClick={() => setTab('members')}
-            className={`w-full text-left px-3 py-1.5 rounded text-sm ${
-              tab === 'members' ? 'bg-discord-bg-active text-white' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+            className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+              tab === 'members' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
             }`}
           >
             Members
@@ -108,7 +108,7 @@ export function ServerSettingsModal() {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {error && (
-            <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-red text-sm">{error}</div>
+            <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{error}</div>
           )}
 
           {tab === 'overview' && (
@@ -151,7 +151,7 @@ export function ServerSettingsModal() {
           )}
 
           {tab === 'members' && (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
               {members.map((member) => {
                 const displayName = member.user.displayName ?? member.user.username;
                 return (

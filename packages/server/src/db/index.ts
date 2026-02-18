@@ -143,6 +143,14 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (server_id, user_id, role_id)
     );
 
+    CREATE TABLE IF NOT EXISTS read_states (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL,
+      last_read_message_id TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, channel_id)
+    );
+
     CREATE TABLE IF NOT EXISTS server_folders (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
