@@ -81,12 +81,15 @@ export function useLiveKit() {
                 const track = pub.track;
                 if (!track)
                     return;
+                const mt = track.mediaStreamTrack;
+                if (!mt || mt.readyState !== 'live')
+                    return;
                 if (pub.source === Track.Source.Microphone)
-                    audioTrack = track.mediaStreamTrack;
+                    audioTrack = mt;
                 else if (pub.source === Track.Source.Camera)
-                    videoTrack = track.mediaStreamTrack;
+                    videoTrack = mt;
                 else if (pub.source === Track.Source.ScreenShare)
-                    screenTrack = track.mediaStreamTrack;
+                    screenTrack = mt;
             });
             allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
         };
@@ -122,6 +125,9 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
             newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
             newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+            newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
+            newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;
@@ -192,6 +198,9 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
             newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
             newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+            newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
+            newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;

@@ -93,6 +93,7 @@ export function PictureInPicture() {
         return 'Call';
     }, [currentVoiceChannelId, channels]);
     // Video track attachment
+    // shouldShow in deps ensures re-run when PiP becomes visible (videoRef was null before)
     useEffect(() => {
         const videoEl = videoRef.current;
         if (!videoEl)
@@ -103,7 +104,7 @@ export function PictureInPicture() {
         else {
             videoEl.srcObject = null;
         }
-    }, [selectedStream?.track]);
+    }, [selectedStream?.track, shouldShow]);
     // Initialize position to bottom-right
     useEffect(() => {
         if (shouldShow && position.x === -1) {

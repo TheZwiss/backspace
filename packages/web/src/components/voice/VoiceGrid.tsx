@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
@@ -10,40 +10,83 @@ interface VoiceGridProps {
 export function VoiceGrid({ participants }: VoiceGridProps) {
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
+  const prevScreenSharerRef = useRef<string | null>(null);
+
+  // Auto-focus when someone starts screen sharing
+  useEffect(() => {
+    const screenSharer = participants.find(
+      (p) => p.screenTrack?.readyState === 'live',
+    );
+    const screenSharerId = screenSharer?.identity ?? null;
+
+    if (screenSharerId && screenSharerId !== prevScreenSharerRef.current) {
+      // New screen share started — auto-focus
+      setFocusedParticipant(screenSharerId);
+    } else if (!screenSharerId && prevScreenSharerRef.current) {
+      // Screen share ended — unfocus if we were focused on the sharer
+      if (focusedParticipantId === prevScreenSharerRef.current) {
+        setFocusedParticipant(null);
+      }
+    }
+    prevScreenSharerRef.current = screenSharerId;
+  }, [participants, focusedParticipantId, setFocusedParticipant]);
 
   if (participants.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-discord-text-muted">
-        <p>No one is in this voice channel</p>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="text-discord-text-muted/40 mx-auto mb-3"
+          >
+            <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
+          </svg>
+          <p className="text-discord-text-muted text-sm">
+            Waiting for others to join...
+          </p>
+        </div>
       </div>
     );
   }
 
   const focusedParticipant = focusedParticipantId
-    ? participants.find(p => p.identity === focusedParticipantId)
+    ? participants.find((p) => p.identity === focusedParticipantId)
     : null;
 
   // Focus mode: one large tile + sidebar strip
   if (focusedParticipant) {
-    const otherParticipants = participants.filter(p => p.identity !== focusedParticipantId);
+    const otherParticipants = participants.filter(
+      (p) => p.identity !== focusedParticipantId,
+    );
     return (
       <div className="flex-1 flex overflow-hidden">
         {/* Main focused view */}
-        <div
-          className="flex-1 p-2"
-          onDoubleClick={() => setFocusedParticipant(null)}
-        >
+        <div className="flex-1 p-2 relative">
           <VoiceUser participant={focusedParticipant} large />
+          {/* Back to grid button */}
+          <button
+            onClick={() => setFocusedParticipant(null)}
+            className="absolute top-4 right-4 z-10 px-3 py-1.5 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
+            title="Back to grid view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z" />
+            </svg>
+            <span className="text-xs font-medium">Grid</span>
+          </button>
         </div>
 
         {/* Side strip of other participants */}
         {otherParticipants.length > 0 && (
-          <div className="w-[200px] flex-shrink-0 overflow-y-auto p-2 space-y-2">
+          <div className="w-[200px] flex-shrink-0 overflow-y-auto p-2 space-y-2 bg-[#111214]/50">
             {otherParticipants.map((p) => (
               <div
                 key={p.identity}
                 onClick={() => setFocusedParticipant(p.identity)}
-                className="cursor-pointer"
+                className="cursor-pointer hover:opacity-80 transition-opacity"
               >
                 <VoiceUser participant={p} />
               </div>
@@ -64,13 +107,13 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
   })();
 
   return (
-    <div className="flex-1 p-4 overflow-auto">
-      <div className={`grid ${gridClass} gap-2 h-full`}>
+    <div className="flex-1 p-3 overflow-auto flex items-center">
+      <div className={`grid ${gridClass} gap-2 w-full`}>
         {participants.map((p) => (
           <div
             key={p.identity}
             onClick={() => setFocusedParticipant(p.identity)}
-            className="cursor-pointer"
+            className="cursor-pointer hover:opacity-90 transition-opacity"
           >
             <VoiceUser participant={p} />
           </div>
