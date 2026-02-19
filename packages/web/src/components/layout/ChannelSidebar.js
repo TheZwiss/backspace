@@ -40,6 +40,8 @@ export function ChannelSidebar() {
             }
         }
         toggleMic();
+        // Broadcast via WebSocket
+        wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened });
     };
     const handleDeafenToggle = async () => {
         const room = getActiveRoom();
@@ -52,8 +54,6 @@ export function ChannelSidebar() {
                     room.remoteParticipants.forEach((p) => p.setVolume(0));
                     if (!isMuted)
                         toggleMic();
-                    // Broadcast deafened state via metadata
-                    await room.localParticipant.setMetadata(JSON.stringify({ deafened: true }));
                 }
                 else {
                     // Undeafen: restore mic + restore remote audio
@@ -63,7 +63,6 @@ export function ChannelSidebar() {
                     await room.localParticipant.setMicrophoneEnabled(true);
                     if (isMuted)
                         toggleMic();
-                    await room.localParticipant.setMetadata(JSON.stringify({ deafened: false }));
                 }
             }
             catch (err) {
@@ -71,6 +70,8 @@ export function ChannelSidebar() {
             }
         }
         toggleDeafen();
+        // Broadcast via WebSocket
+        wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen });
     };
     const server = servers.find(s => s.id === currentServerId);
     const currentMember = members.find(m => m.userId === user?.id);
@@ -93,6 +94,8 @@ export function ChannelSidebar() {
         }
         setCurrentVoiceChannel(channelId);
         wsSend({ type: 'voice_join', channelId });
+        // Also broadcast current status immediately after joining
+        wsSend({ type: 'voice_status', isMuted: useVoiceStore.getState().isMuted, isDeafened: useVoiceStore.getState().isDeafened });
         navigate(`/channels/${currentServerId}/${channelId}`);
     };
     // Floating bottom panel — shared between DM view and server view

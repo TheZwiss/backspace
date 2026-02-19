@@ -408,6 +408,18 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     userId,
     action: 'join',
   });
+
+  // Also broadcast current voice status if it exists (persisted during moves)
+  const status = connectionManager.getVoiceUserStatus(userId);
+  if (status) {
+    connectionManager.sendToServer(serverId, {
+      type: 'voice_status_update',
+      userId,
+      channelId,
+      isMuted: status.isMuted,
+      isDeafened: status.isDeafened,
+    });
+  }
 }
 
 function handleVoiceLeave(userId: string): void {

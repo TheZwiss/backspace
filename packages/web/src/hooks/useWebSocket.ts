@@ -93,7 +93,6 @@ function handleEvent(event: ServerEvent): void {
         addVoiceUser(event.channelId, event.userId);
       } else {
         removeVoiceUser(event.channelId, event.userId);
-        clearVoiceUserStatus(event.userId);
       }
       break;
 

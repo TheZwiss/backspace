@@ -112,11 +112,9 @@ class ConnectionManager {
         this.voiceStates.delete(channelId);
       }
     }
-    this.voiceUserStates.delete(userId);
   }
 
   leaveAllVoice(userId: string): string | null {
-    this.voiceUserStates.delete(userId);
     for (const [channelId, users] of this.voiceStates) {
       if (users.has(userId)) {
         users.delete(userId);
@@ -560,6 +558,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
 
           // Leave voice if in one
           const leftChannel = connectionManager.leaveAllVoice(removedUserId);
+          connectionManager.clearVoiceUserStatus(removedUserId);
           if (leftChannel) {
             // Get channel's server to broadcast
             const channel = db.select().from(schema.channels).where(eq(schema.channels.id, leftChannel)).get();

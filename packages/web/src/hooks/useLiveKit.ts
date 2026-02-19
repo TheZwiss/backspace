@@ -103,6 +103,7 @@ export function useLiveKit() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const videoQuality = useVoiceStore((s) => s.videoQuality);
+  const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
 
   const updateParticipants = useCallback(() => {
     const r = roomRef.current;
@@ -122,13 +123,21 @@ export function useLiveKit() {
         else if (pub.source === Track.Source.Camera && p.isCameraEnabled) videoTrack = mt;
         else if (pub.source === Track.Source.ScreenShare && p.isScreenShareEnabled) screenTrack = mt;
       });
+      const userState = useVoiceStore.getState().voiceUserStates.get(userId);
       let isDeafened = false;
+      let isMuted = !p.isMicrophoneEnabled;
+      
       if (isLocal) {
         isDeafened = useVoiceStore.getState().isDeafened;
+        isMuted = useVoiceStore.getState().isMuted;
       } else {
-        isDeafened = useVoiceStore.getState().deafenedUserIds.has(userId);
+        isDeafened = userState?.isDeafened ?? useVoiceStore.getState().deafenedUserIds.has(userId);
+        if (userState) {
+          isMuted = userState.isMuted;
+        }
       }
-      allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isDeafened, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
+
+      allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted, isDeafened, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
     };
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
@@ -317,6 +326,10 @@ export function useLiveKit() {
       updateParticipants();
     }
   }, [isScreenSharing, videoQuality, updateParticipants]);
+
+  useEffect(() => {
+    updateParticipants();
+  }, [voiceUserStates, isMuted, isDeafened, updateParticipants]);
 
   // Sync quality changes
   useEffect(() => {
