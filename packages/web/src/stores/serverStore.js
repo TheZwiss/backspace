@@ -140,6 +140,7 @@ export const useServerStore = create((set, get) => ({
             inviteCode: s.inviteCode,
             createdAt: s.createdAt,
         }));
+        // Build channel→server map and channel→lastMessageId map
         const channelToServerMap = new Map();
         const channelLastMessageIds = new Map();
         for (const srv of servers) {
@@ -150,6 +151,7 @@ export const useServerStore = create((set, get) => ({
                 }
             }
         }
+        // Also map DM channels
         const dms = dmChannels || [];
         for (const dm of dms) {
             if (dm.lastMessage?.id) {
@@ -165,7 +167,11 @@ export const useServerStore = create((set, get) => ({
         });
     },
 }));
-
+/**
+ * Data-driven DM channel detection. Returns true if the given channelId
+ * belongs to a DM channel. Authoritative because dmChannels is populated
+ * from the WS ready event and DM/server channel IDs never overlap.
+ */
 export function isDmChannel(channelId) {
     const dmChannels = useServerStore.getState().dmChannels;
     if (dmChannels.length > 0) {

@@ -153,6 +153,40 @@ function handleEvent(event: ServerEvent): void {
       break;
     }
 
+    case 'dm_call_incoming': {
+      const { setIncomingCall } = useVoiceStore.getState();
+      setIncomingCall({
+        dmChannelId: event.dmChannelId,
+        callerId: event.callerId,
+        callerName: event.callerName,
+      });
+      break;
+    }
+
+    case 'dm_call_accepted': {
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setActiveDmCall({ dmChannelId: event.dmChannelId });
+      break;
+    }
+
+    case 'dm_call_rejected': {
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setActiveDmCall(null);
+      break;
+    }
+
+    case 'dm_call_ended': {
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setActiveDmCall(null);
+      break;
+    }
+
     case 'error':
       console.error('WebSocket error:', event.message);
       break;

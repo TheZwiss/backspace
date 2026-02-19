@@ -13,6 +13,19 @@ interface VoiceState {
   isLiveKitConnected: boolean;
   inputVolume: number;  // 0-200 (100 = default)
   outputVolume: number; // 0-200 (100 = default)
+  focusedParticipantId: string | null;
+  videoQuality: 'auto' | '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p';
+  // Per-participant volume (userId → 0-200, 100 = default)
+  participantVolumes: Map<string, number>;
+  setParticipantVolume: (userId: string, volume: number) => void;
+  getParticipantVolume: (userId: string) => number;
+  // DM call state
+  incomingCall: { dmChannelId: string; callerId: string; callerName: string } | null;
+  outgoingCall: { dmChannelId: string } | null;
+  activeDmCall: { dmChannelId: string } | null;
+  setIncomingCall: (call: { dmChannelId: string; callerId: string; callerName: string } | null) => void;
+  setOutgoingCall: (call: { dmChannelId: string } | null) => void;
+  setActiveDmCall: (call: { dmChannelId: string } | null) => void;
   setVoiceUsers: (channelId: string, userIds: string[]) => void;
   addVoiceUser: (channelId: string, userId: string) => void;
   removeVoiceUser: (channelId: string, userId: string) => void;
@@ -26,6 +39,8 @@ interface VoiceState {
   toggleCamera: () => void;
   toggleScreenShare: () => void;
   toggleDeafen: () => void;
+  setFocusedParticipant: (id: string | null) => void;
+  setVideoQuality: (quality: 'auto' | '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
   leaveVoice: () => void;
@@ -44,6 +59,25 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   isLiveKitConnected: false,
   inputVolume: 100,
   outputVolume: 100,
+  focusedParticipantId: null,
+  videoQuality: 'auto',
+  participantVolumes: new Map(),
+  setParticipantVolume: (userId, volume) => {
+    set((state) => {
+      const newMap = new Map(state.participantVolumes);
+      newMap.set(userId, volume);
+      return { participantVolumes: newMap };
+    });
+  },
+  getParticipantVolume: (userId) => get().participantVolumes.get(userId) ?? 100,
+
+  incomingCall: null,
+  outgoingCall: null,
+  activeDmCall: null,
+
+  setIncomingCall: (call) => set({ incomingCall: call }),
+  setOutgoingCall: (call) => set({ outgoingCall: call }),
+  setActiveDmCall: (call) => set({ activeDmCall: call }),
 
   setVoiceUsers: (channelId, userIds) => {
     set((state) => {
@@ -87,6 +121,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
   toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
+  setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
+  setVideoQuality: (quality) => set({ videoQuality: quality }),
+
   getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
   clearAllVoiceUsers: () => set({ voiceUsers: new Map() }),
@@ -103,6 +140,9 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     isLiveKitConnected: false,
     inputVolume: 100,
     outputVolume: 100,
+    focusedParticipantId: null,
+    activeDmCall: null,
+    outgoingCall: null,
   }),
 
   reset: () => set({
@@ -117,5 +157,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     isLiveKitConnected: false,
     inputVolume: 100,
     outputVolume: 100,
+    focusedParticipantId: null,
+    participantVolumes: new Map(),
+    incomingCall: null,
+    outgoingCall: null,
+    activeDmCall: null,
   }),
 }));

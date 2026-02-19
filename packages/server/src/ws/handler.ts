@@ -42,6 +42,8 @@ class ConnectionManager {
   private voiceStates: Map<string, Set<string>> = new Map();
   // ws → userId (reverse lookup)
   private wsToUser: Map<WebSocket, string> = new Map();
+  // dmChannelId → { callerId, startedAt } — active DM calls
+  private activeCalls: Map<string, { callerId: string; startedAt: number }> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -134,6 +136,21 @@ class ConnectionManager {
       }
     }
     return null;
+  }
+
+  // DM call management
+  startCall(dmChannelId: string, callerId: string): boolean {
+    if (this.activeCalls.has(dmChannelId)) return false; // Already in a call
+    this.activeCalls.set(dmChannelId, { callerId, startedAt: Date.now() });
+    return true;
+  }
+
+  endCall(dmChannelId: string): void {
+    this.activeCalls.delete(dmChannelId);
+  }
+
+  getActiveCall(dmChannelId: string): { callerId: string; startedAt: number } | undefined {
+    return this.activeCalls.get(dmChannelId);
   }
 
   // Send to a specific user (all their connections)

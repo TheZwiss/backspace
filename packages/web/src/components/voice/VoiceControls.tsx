@@ -6,10 +6,14 @@ import { wsSend } from '../../hooks/useWebSocket';
 
 export function VoiceControls() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const isMuted = useVoiceStore((s) => s.isMuted);
+  const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
+  const toggleMic = useVoiceStore((s) => s.toggleMic);
+  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const channels = useServerStore((s) => s.channels);
@@ -18,6 +22,47 @@ export function VoiceControls() {
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? 'Voice Channel';
+
+  const handleMute = async () => {
+    const room = getActiveRoom();
+    if (room) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(isMuted);
+      } catch (err) {
+        console.error('[VoiceControls] Failed to toggle mic:', err);
+      }
+    }
+    toggleMic();
+  };
+
+  const handleDeafen = async () => {
+    const room = getActiveRoom();
+    if (room) {
+      try {
+        const willDeafen = !isDeafened;
+        if (willDeafen) {
+          // Deafen: mute mic + mute all remote audio
+          await room.localParticipant.setMicrophoneEnabled(false);
+          room.remoteParticipants.forEach((p) => {
+            p.setVolume(0);
+          });
+          if (!isMuted) toggleMic(); // Also mute mic when deafening
+        } else {
+          // Undeafen: restore remote audio, unmute mic
+          const outputVolume = useVoiceStore.getState().outputVolume;
+          const scaled = outputVolume / 100;
+          room.remoteParticipants.forEach((p) => {
+            p.setVolume(scaled);
+          });
+          await room.localParticipant.setMicrophoneEnabled(true);
+          if (isMuted) toggleMic(); // Unmute mic when undeafening
+        }
+      } catch (err) {
+        console.error('[VoiceControls] Failed to toggle deafen:', err);
+      }
+    }
+    toggleDeafen();
+  };
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -60,16 +105,14 @@ export function VoiceControls() {
 
   return (
     <div className="bg-[#232428] border-t border-discord-bg-tertiary">
-      {/* Row 1: Signal icon + status text + right icons */}
+      {/* Row 1: Signal icon + status text + disconnect */}
       <div className="flex items-center gap-2 px-2 pt-[10px] pb-1">
-        {/* Signal icon */}
         <div className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0`}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={statusColor}>
             <path d="M1.5 21.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3.14 15.75a.75.75 0 01-.09-1.06A8.46 8.46 0 0112 11a8.46 8.46 0 018.95 3.69.75.75 0 01-1.15.97A6.96 6.96 0 0012 12.5a6.96 6.96 0 00-7.8 3.16.75.75 0 01-1.06.09zM6.37 18.3a.75.75 0 01-.08-1.06A5.46 5.46 0 0112 15a5.46 5.46 0 015.71 2.24.75.75 0 01-1.14.97A3.96 3.96 0 0012 16.5a3.96 3.96 0 00-4.57 1.71.75.75 0 01-1.06.09z" />
           </svg>
         </div>
 
-        {/* Status text */}
         <div className="min-w-0 flex-1">
           <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
             {connectionError ? 'Connection Failed' : isLiveKitConnected ? 'Voice Connected' : 'Connecting...'}
@@ -79,15 +122,12 @@ export function VoiceControls() {
           </div>
         </div>
 
-        {/* Right icons */}
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          {/* Signal quality */}
           <button className="w-7 h-7 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded" title="Connection Info">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M2 20h2V8H2v12zm5 0h2V4H7v16zm5 0h2v-8h-2v8zm5 0h2V12h-2v8z" />
             </svg>
           </button>
-          {/* Disconnect */}
           <button
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded"
@@ -100,8 +140,41 @@ export function VoiceControls() {
         </div>
       </div>
 
-      {/* Row 2: Media control buttons */}
+      {/* Row 2: Mute, Deafen, Camera, Screen Share */}
       <div className="flex items-center gap-1 px-2 pb-[10px] pt-1">
+        {/* Mute */}
+        <button
+          onClick={handleMute}
+          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+            isMuted || isDeafened
+              ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
+              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+          }`}
+          title={isMuted ? 'Unmute' : 'Mute'}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            {(isMuted || isDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+          </svg>
+        </button>
+
+        {/* Deafen */}
+        <button
+          onClick={handleDeafen}
+          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+            isDeafened
+              ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
+              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+          }`}
+          title={isDeafened ? 'Undeafen' : 'Deafen'}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
+            {isDeafened && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+          </svg>
+        </button>
+
         {/* Camera */}
         <button
           onClick={handleCamera}
@@ -137,26 +210,6 @@ export function VoiceControls() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
             <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
-          </svg>
-        </button>
-
-        {/* Noise Suppression */}
-        <button
-          className="flex-1 h-[34px] flex items-center justify-center rounded-[4px] bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary transition-colors"
-          title="Noise Suppression"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L9.19 8.63L2 9.24L7.46 13.97L5.82 21L12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.63L12 2Z" />
-          </svg>
-        </button>
-
-        {/* Activities */}
-        <button
-          className="flex-1 h-[34px] flex items-center justify-center rounded-[4px] bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary transition-colors"
-          title="Activities"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7.5 2C5.01 2 3 4.01 3 6.5C3 8.99 5.01 11 7.5 11S12 8.99 12 6.5C12 4.01 9.99 2 7.5 2ZM16.5 2C14.01 2 12 4.01 12 6.5C12 8.99 14.01 11 16.5 11S21 8.99 21 6.5C21 4.01 18.99 2 16.5 2ZM7.5 13C5.01 13 3 15.01 3 17.5S5.01 22 7.5 22 12 19.99 12 17.5 9.99 13 7.5 13ZM16.5 13C14.01 13 12 15.01 12 17.5S14.01 22 16.5 22 21 19.99 21 17.5 18.99 13 16.5 13Z" />
           </svg>
         </button>
       </div>

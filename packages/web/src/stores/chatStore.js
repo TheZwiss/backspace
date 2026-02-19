@@ -80,7 +80,8 @@ export const useChatStore = create((set, get) => ({
         const isDm = isDmChannel(channelId);
         if (isDm) {
             await api.dm.updateMessage(messageId, { content });
-        } else {
+        }
+        else {
             await api.messages.update(messageId, { content });
         }
         // Update will arrive via WebSocket
@@ -89,7 +90,8 @@ export const useChatStore = create((set, get) => ({
         const isDm = isDmChannel(channelId);
         if (isDm) {
             await api.dm.deleteMessage(messageId);
-        } else {
+        }
+        else {
             await api.messages.delete(messageId);
         }
         // Deletion will arrive via WebSocket
@@ -106,8 +108,10 @@ export const useChatStore = create((set, get) => ({
         });
     },
     updateMessage: (message) => {
+        // DM messages have dmChannelId instead of channelId — check both
         const channelKey = message.channelId || message.dmChannelId;
-        if (!channelKey) return;
+        if (!channelKey)
+            return;
         set((state) => {
             const newMessages = new Map(state.messages);
             const current = newMessages.get(channelKey);
@@ -219,7 +223,8 @@ export const useChatStore = create((set, get) => ({
     },
     markChannelUnread: (channelId) => {
         set((state) => {
-            if (state.unreadChannels.has(channelId)) return state;
+            if (state.unreadChannels.has(channelId))
+                return state;
             const newUnread = new Set(state.unreadChannels);
             newUnread.add(channelId);
             return { unreadChannels: newUnread };
@@ -227,10 +232,13 @@ export const useChatStore = create((set, get) => ({
     },
     ackChannel: (channelId) => {
         const msgs = get().messages.get(channelId);
-        if (!msgs || msgs.length === 0) return;
+        if (!msgs || msgs.length === 0)
+            return;
         const lastMsg = msgs[msgs.length - 1];
-        if (!lastMsg) return;
+        if (!lastMsg)
+            return;
         const messageId = lastMsg.id;
+        // Update local state immediately
         set((state) => {
             const newReadStates = new Map(state.readStates);
             newReadStates.set(channelId, messageId);
@@ -238,6 +246,7 @@ export const useChatStore = create((set, get) => ({
             newUnread.delete(channelId);
             return { readStates: newReadStates, unreadChannels: newUnread };
         });
+        // Send to server
         wsSend({ type: 'channel_ack', channelId, messageId });
     },
     onChannelAck: (channelId, messageId) => {

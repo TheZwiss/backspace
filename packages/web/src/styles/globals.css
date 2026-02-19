@@ -8,6 +8,10 @@
     outline: none !important;
   }
 
+  ::selection {
+    background: rgba(88, 101, 242, 0.3);
+  }
+
   html, body, #root {
     @apply h-full w-full overflow-hidden bg-discord-bg-tertiary text-discord-text-normal;
     font-family: 'Inter', 'gg sans', 'Noto Sans', sans-serif;

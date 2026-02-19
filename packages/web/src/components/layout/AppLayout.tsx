@@ -13,6 +13,7 @@ import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { ServerSettingsModal } from '../modals/ServerSettings';
 import { NewDmModal } from '../modals/NewDmModal';
+import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -38,9 +39,11 @@ export function AppLayout() {
   const closeUserProfile = useUIStore((s) => s.closeUserProfile);
   
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const setParticipants = useVoiceStore((s) => s.setParticipants);
   const {
     connect: connectVoice,
+    connectDm: connectDmVoice,
     disconnect: disconnectVoice,
     participants: voiceParticipants,
   } = useLiveKit();
@@ -53,14 +56,23 @@ export function AppLayout() {
     setParticipants(voiceParticipants);
   }, [voiceParticipants, setParticipants]);
 
-  // Manage voice connection
+  // Manage voice connection (server voice channels)
   useEffect(() => {
     if (currentVoiceChannelId) {
       connectVoice(currentVoiceChannelId);
-    } else {
+    } else if (!activeDmCall) {
       disconnectVoice();
     }
-  }, [currentVoiceChannelId, connectVoice, disconnectVoice]);
+  }, [currentVoiceChannelId, connectVoice, disconnectVoice, activeDmCall]);
+
+  // Manage DM call connection
+  useEffect(() => {
+    if (activeDmCall) {
+      connectDmVoice(activeDmCall.dmChannelId);
+    } else if (!currentVoiceChannelId) {
+      disconnectVoice();
+    }
+  }, [activeDmCall, connectDmVoice, disconnectVoice, currentVoiceChannelId]);
 
   // Responsive detection
   useEffect(() => {
@@ -147,6 +159,7 @@ export function AppLayout() {
       <UserSettingsModal />
       <ServerSettingsModal />
       <NewDmModal />
+      <IncomingCallModal />
       <ImagePreview />
 
       {/* User Profile Popout */}

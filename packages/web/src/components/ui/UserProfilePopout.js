@@ -3,17 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
-import { useChatStore } from '../../stores/chatStore';
+import { useUIStore } from '../../stores/uiStore';
 export function UserProfilePopout({ user, onClose, position }) {
     const navigate = useNavigate();
     const addDmChannel = useServerStore((s) => s.addDmChannel);
-    const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
     const displayName = user.displayName ?? user.username;
     const handleSendMessage = async () => {
         try {
             const channel = await api.dm.create({ userId: user.id });
             addDmChannel(channel);
-            setCurrentChannel(channel.id);
+            useUIStore.getState().setShowDms(true);
             onClose();
             navigate(`/channels/@me/${channel.id}`);
         }

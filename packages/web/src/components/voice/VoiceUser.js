@@ -1,11 +1,14 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-export function VoiceUser({ participant }) {
+export function VoiceUser({ participant, large }) {
     const videoRef = useRef(null);
     const audioRef = useRef(null);
     const isDeafened = useVoiceStore((s) => s.isDeafened);
+    const outputVolume = useVoiceStore((s) => s.outputVolume);
+    const participantVolumes = useVoiceStore((s) => s.participantVolumes);
+    const perUserVolume = participantVolumes.get(participant.userId) ?? 100;
     useEffect(() => {
         const videoEl = videoRef.current;
         if (!videoEl)
@@ -26,14 +29,42 @@ export function VoiceUser({ participant }) {
         const stream = new MediaStream([participant.audioTrack]);
         audioEl.srcObject = stream;
     }, [participant.audioTrack]);
-    // Mute remote audio when deafened
+    // Apply volume: combine outputVolume and per-participant volume, or mute if deafened
     useEffect(() => {
         const audioEl = audioRef.current;
-        if (audioEl) {
-            audioEl.muted = isDeafened;
+        if (!audioEl)
+            return;
+        if (isDeafened) {
+            audioEl.volume = 0;
         }
-    }, [isDeafened]);
+        else {
+            // Both are 0-200 scale with 100 = default. Combine as fractions.
+            const combined = (outputVolume / 100) * (perUserVolume / 100);
+            audioEl.volume = Math.min(Math.max(combined, 0), 1);
+        }
+        audioEl.muted = isDeafened;
+    }, [isDeafened, outputVolume, perUserVolume]);
     const hasVideo = participant.isCameraOn || participant.isScreenSharing;
     const isLocal = participant.isLocal;
-    return (_jsxs("div", { className: `relative bg-discord-bg-secondary rounded-xl overflow-hidden flex items-center justify-center ${participant.isSpeaking ? 'ring-2 ring-discord-green' : ''}`, style: { aspectRatio: '16/9', minHeight: '200px' }, children: [!isLocal && _jsx("audio", { ref: audioRef, autoPlay: true }), hasVideo ? (_jsx("video", { ref: videoRef, autoPlay: true, playsInline: true, muted: isLocal, className: "w-full h-full object-cover" })) : (_jsx(Avatar, { src: null, name: participant.username, size: 80 })), _jsx("div", { className: "absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsx("span", { className: "text-sm font-medium text-white", children: participant.username }), _jsx("div", { className: "flex items-center gap-1", children: participant.isMuted && (_jsx("div", { className: "w-5 h-5 bg-discord-red/80 rounded-full flex items-center justify-center", children: _jsxs("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "white", children: [_jsx("path", { d: "M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" }), _jsx("line", { x1: "3", y1: "3", x2: "21", y2: "21", stroke: "white", strokeWidth: "2" })] }) })) })] }) }), participant.isSpeaking && (_jsx("div", { className: "absolute inset-0 rounded-xl ring-2 ring-discord-green animate-pulse pointer-events-none" }))] }));
+    // Volume context menu
+    const [volumeMenu, setVolumeMenu] = useState(null);
+    const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
+    const handleContextMenu = useCallback((e) => {
+        if (isLocal)
+            return; // No volume control for self
+        e.preventDefault();
+        setVolumeMenu({ x: e.clientX, y: e.clientY });
+    }, [isLocal]);
+    // Close volume menu on click outside
+    useEffect(() => {
+        if (!volumeMenu)
+            return;
+        const close = () => setVolumeMenu(null);
+        window.addEventListener('click', close);
+        return () => window.removeEventListener('click', close);
+    }, [volumeMenu]);
+    return (_jsxs("div", { className: `relative bg-discord-bg-secondary rounded-xl overflow-hidden flex items-center justify-center transition-all ${participant.isSpeaking ? 'ring-[3px] ring-discord-green' : 'ring-1 ring-transparent'} ${large ? 'h-full' : ''}`, style: large ? undefined : { aspectRatio: '16/9', minHeight: '140px' }, onContextMenu: handleContextMenu, children: [!isLocal && _jsx("audio", { ref: audioRef, autoPlay: true }), hasVideo ? (_jsx("video", { ref: videoRef, autoPlay: true, playsInline: true, muted: isLocal, className: `w-full h-full ${large ? 'object-contain' : 'object-cover'}`, style: {
+                    imageRendering: 'crisp-edges',
+                    WebkitFontSmoothing: 'antialiased'
+                } })) : (_jsx("div", { className: "flex flex-col items-center justify-center gap-2", children: _jsx(Avatar, { src: null, name: participant.username, size: large ? 100 : 80 }) })), _jsx("div", { className: "absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent", children: _jsxs("div", { className: "flex items-center justify-between", children: [_jsxs("div", { className: "flex items-center gap-1.5", children: [_jsx("span", { className: `font-medium text-white ${large ? 'text-base' : 'text-sm'}`, children: participant.username }), isLocal && (_jsx("span", { className: "text-[10px] text-white/50 font-medium", children: "(you)" }))] }), _jsxs("div", { className: "flex items-center gap-1", children: [participant.isMuted && (_jsx("div", { className: "w-5 h-5 bg-discord-red/80 rounded-full flex items-center justify-center", children: _jsxs("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "white", children: [_jsx("path", { d: "M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" }), _jsx("line", { x1: "3", y1: "3", x2: "21", y2: "21", stroke: "white", strokeWidth: "2" })] }) })), participant.isScreenSharing && (_jsx("div", { className: "w-5 h-5 bg-discord-blurple/80 rounded-full flex items-center justify-center", children: _jsx("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "white", children: _jsx("path", { d: "M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20Z" }) }) }))] })] }) }), volumeMenu && !isLocal && (_jsxs("div", { className: "fixed z-[60] bg-[#111214] rounded-lg shadow-2xl p-3 min-w-[200px]", style: { left: volumeMenu.x, top: volumeMenu.y }, onClick: (e) => e.stopPropagation(), children: [_jsx("div", { className: "text-xs text-discord-text-muted mb-2 font-medium uppercase tracking-wider", children: "User Volume" }), _jsxs("div", { className: "flex items-center gap-2", children: [_jsx("svg", { width: "16", height: "16", viewBox: "0 0 24 24", fill: "currentColor", className: "text-discord-text-muted flex-shrink-0", children: _jsx("path", { d: "M3 9v6h4l5 5V4L7 9H3z" }) }), _jsx("input", { type: "range", min: "0", max: "200", value: perUserVolume, onChange: (e) => setParticipantVolume(participant.userId, parseInt(e.target.value)), className: "flex-1 accent-discord-blurple h-1" }), _jsxs("span", { className: "text-xs text-discord-text-secondary min-w-[32px] text-right", children: [perUserVolume, "%"] })] })] }))] }));
 }

@@ -215,21 +215,24 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             </div>
           )}
 
-          {/* Emoji button placeholder */}
-          <button className="p-3 text-discord-text-muted hover:text-discord-text-secondary transition-colors">
+          {/* GIF button */}
+          <button className="p-2 text-discord-text-muted hover:text-discord-text-secondary transition-colors" title="GIF">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+              <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
             </svg>
           </button>
 
-          {/* Send Button */}
-          <button 
-            onClick={handleSubmit}
-            disabled={!content.trim() && files.length === 0}
-            className="p-3 text-discord-text-muted hover:text-discord-text-primary transition-colors disabled:opacity-30 disabled:hover:text-discord-text-muted"
-          >
+          {/* Sticker button */}
+          <button className="p-2 text-discord-text-muted hover:text-discord-text-secondary transition-colors" title="Stickers">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+              <path d="M12.5 2C6.81 2 2 6.81 2 12.5S6.81 23 12.5 23c1.31 0 2.56-.25 3.73-.7l5.07-5.07c.45-1.17.7-2.42.7-3.73C22 7.81 17.19 2 12.5 2Zm0 19c-4.69 0-8.5-3.81-8.5-8.5S7.81 4 12.5 4 21 7.81 21 12.5c0 .89-.14 1.74-.4 2.54l-3.56 3.56c-.8.26-1.65.4-2.54.4ZM8 11.5c.83 0 1.5-.67 1.5-1.5S8.83 8.5 8 8.5 6.5 9.17 6.5 10s.67 1.5 1.5 1.5Zm6 0c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5Zm-1 3.5c-2.33 0-4.31-1.46-5.11-3.5h10.22c-.8 2.04-2.78 3.5-5.11 3.5Z" />
+            </svg>
+          </button>
+
+          {/* Emoji button */}
+          <button className="p-2 text-discord-text-muted hover:text-discord-text-secondary transition-colors" title="Emoji">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
             </svg>
           </button>
         </div>

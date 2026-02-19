@@ -29,4 +29,9 @@ export const useUIStore = create((set) => ({
     closeUserProfile: () => set({
         userProfilePopout: { user: null, position: null }
     }),
+    voiceChatOpen: false,
+    voiceFullscreen: false,
+    toggleVoiceChat: () => set((state) => ({ voiceChatOpen: !state.voiceChatOpen })),
+    toggleVoiceFullscreen: () => set((state) => ({ voiceFullscreen: !state.voiceFullscreen })),
+    setVoiceFullscreen: (fullscreen) => set({ voiceFullscreen: fullscreen }),
 }));

@@ -10,7 +10,7 @@ export default {
         discord: {
           // Backgrounds (darkest → lightest)
           'bg-tertiary':       '#1e1f22',
-          'bg-server':         '#25262a',
+          'bg-server':         '#1e1f22',
           'bg-secondary':      '#2b2d31',
           'bg-primary':        '#313338',
           'bg-input':          '#383a40',

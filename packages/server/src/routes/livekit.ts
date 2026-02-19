@@ -2,26 +2,36 @@ import type { FastifyInstance } from 'fastify';
 import { AccessToken } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
-import { getChannelServerId, isMember } from '../utils/permissions.js';
+import { getChannelServerId, isMember, isDmMember } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@opencord/shared';
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Body: LiveKitTokenRequest }>('/api/livekit/token', {
+  app.post<{ Body: LiveKitTokenRequest & { dmChannelId?: string } }>('/api/livekit/token', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { channelId } = request.body;
+    const { channelId, dmChannelId } = request.body as { channelId?: string; dmChannelId?: string };
 
-    if (!channelId || typeof channelId !== 'string') {
-      return reply.code(400).send({ error: 'channelId is required', statusCode: 400 });
-    }
+    // Determine room name based on channel type
+    let roomName: string;
 
-    const serverId = getChannelServerId(channelId);
-    if (!serverId) {
-      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
-    }
-
-    if (!isMember(serverId, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+    if (dmChannelId && typeof dmChannelId === 'string') {
+      // DM call token
+      if (!isDmMember(dmChannelId, request.userId)) {
+        return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+      }
+      roomName = `dm-${dmChannelId}`;
+    } else if (channelId && typeof channelId === 'string') {
+      // Server voice channel token
+      const serverId = getChannelServerId(channelId);
+      if (!serverId) {
+        return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      }
+      if (!isMember(serverId, request.userId)) {
+        return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+      }
+      roomName = channelId;
+    } else {
+      return reply.code(400).send({ error: 'channelId or dmChannelId is required', statusCode: 400 });
     }
 
     const identity = `${request.userId}:${request.username}`;
@@ -32,7 +42,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     });
 
     token.addGrant({
-      room: channelId,
+      room: roomName,
       roomJoin: true,
       canPublish: true,
       canSubscribe: true,
@@ -41,8 +51,6 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     const jwt = await token.toJwt();
 
-    // Use the request's Host header so the LiveKit WSS URL matches however
-    // the client reached us (domain or direct IP).
     const requestHost = request.headers.host?.replace(/:\d+$/, '') || '';
     const livekitUrl = requestHost
       ? `wss://${requestHost}/livekit`

@@ -177,5 +177,7 @@ export const api = {
   livekit: {
     token: (channelId: string) =>
       request<LiveKitTokenResponse>('POST', '/livekit/token', { channelId }),
+    dmToken: (dmChannelId: string) =>
+      request<LiveKitTokenResponse>('POST', '/livekit/token', { dmChannelId }),
   },
 };

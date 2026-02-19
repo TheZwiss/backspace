@@ -34,6 +34,11 @@ interface UIState {
   closeImagePreview: () => void;
   openUserProfile: (user: User, position: { top: number; left: number }) => void;
   closeUserProfile: () => void;
+  voiceChatOpen: boolean;
+  voiceFullscreen: boolean;
+  toggleVoiceChat: () => void;
+  toggleVoiceFullscreen: () => void;
+  setVoiceFullscreen: (fullscreen: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -72,4 +77,10 @@ export const useUIStore = create<UIState>((set) => ({
   closeUserProfile: () => set({
     userProfilePopout: { user: null, position: null }
   }),
+
+  voiceChatOpen: false,
+  voiceFullscreen: false,
+  toggleVoiceChat: () => set((state) => ({ voiceChatOpen: !state.voiceChatOpen })),
+  toggleVoiceFullscreen: () => set((state) => ({ voiceFullscreen: !state.voiceFullscreen })),
+  setVoiceFullscreen: (fullscreen) => set({ voiceFullscreen: fullscreen }),
 }));

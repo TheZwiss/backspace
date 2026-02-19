@@ -144,6 +144,18 @@ export function handleClientEvent(
     case 'channel_ack':
       handleChannelAck(event, userId);
       break;
+    case 'dm_call_start':
+      handleDmCallStart(event, userId, username);
+      break;
+    case 'dm_call_accept':
+      handleDmCallAccept(event, userId);
+      break;
+    case 'dm_call_reject':
+      handleDmCallReject(event, userId);
+      break;
+    case 'dm_call_end':
+      handleDmCallEnd(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -724,4 +736,147 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
     channelId,
     messageId,
   });
+}
+
+// ─── DM Call Handlers ──────────────────────────────────────────────────────────
+
+function handleDmCallStart(event: Record<string, unknown>, userId: string, username: string): void {
+  const dmChannelId = event.dmChannelId as string;
+  if (!dmChannelId || typeof dmChannelId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
+    return;
+  }
+
+  if (!isDmMember(dmChannelId, userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
+    return;
+  }
+
+  // Try to start the call (fails if already active)
+  const started = connectionManager.startCall(dmChannelId, userId);
+  if (!started) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'A call is already active in this DM channel' });
+    return;
+  }
+
+  // Find the other DM member(s) and send incoming call notification
+  const db = getDb();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    if (member.userId !== userId) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_call_incoming',
+        dmChannelId,
+        callerId: userId,
+        callerName: username,
+      });
+    }
+  }
+}
+
+function handleDmCallAccept(event: Record<string, unknown>, userId: string): void {
+  const dmChannelId = event.dmChannelId as string;
+  if (!dmChannelId || typeof dmChannelId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
+    return;
+  }
+
+  if (!isDmMember(dmChannelId, userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
+    return;
+  }
+
+  const activeCall = connectionManager.getActiveCall(dmChannelId);
+  if (!activeCall) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
+    return;
+  }
+
+  // Notify all DM members that the call was accepted
+  const db = getDb();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_call_accepted',
+      dmChannelId,
+    });
+  }
+}
+
+function handleDmCallReject(event: Record<string, unknown>, userId: string): void {
+  const dmChannelId = event.dmChannelId as string;
+  if (!dmChannelId || typeof dmChannelId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
+    return;
+  }
+
+  if (!isDmMember(dmChannelId, userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
+    return;
+  }
+
+  const activeCall = connectionManager.getActiveCall(dmChannelId);
+  if (!activeCall) {
+    return; // No active call, silently ignore
+  }
+
+  // End the call since it was rejected
+  connectionManager.endCall(dmChannelId);
+
+  // Notify all DM members that the call was rejected
+  const db = getDb();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_call_rejected',
+      dmChannelId,
+    });
+  }
+}
+
+function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
+  const dmChannelId = event.dmChannelId as string;
+  if (!dmChannelId || typeof dmChannelId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
+    return;
+  }
+
+  if (!isDmMember(dmChannelId, userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
+    return;
+  }
+
+  const activeCall = connectionManager.getActiveCall(dmChannelId);
+  if (!activeCall) {
+    return; // No active call, silently ignore
+  }
+
+  // End the call
+  connectionManager.endCall(dmChannelId);
+
+  // Notify all DM members that the call ended
+  const db = getDb();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  for (const member of dmMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_call_ended',
+      dmChannelId,
+    });
+  }
 }

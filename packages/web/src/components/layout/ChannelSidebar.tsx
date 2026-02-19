@@ -77,26 +77,49 @@ export function ChannelSidebar() {
   if (!server) {
     return (
       <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
-        <div className="h-12 px-4 flex items-center shadow-header z-10">
-          <button className="flex-1 bg-discord-bg-tertiary text-discord-text-muted text-[14px] font-medium py-1 px-2 rounded-[4px] text-left hover:bg-discord-bg-tertiary/80 transition-colors">
+        <div className="h-12 px-[10px] flex items-center shadow-header z-10">
+          <button className="flex-1 bg-discord-bg-tertiary text-discord-text-muted text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-discord-bg-tertiary/80 transition-colors">
             Find or start a conversation
           </button>
         </div>
         <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar">
-          <div 
+          <div
             onClick={handleHomeClick}
-            className={`flex items-center gap-3 px-2 h-10 rounded-[4px] cursor-pointer mb-0.5 transition-colors group ${
-              !currentChannelId 
-                ? 'bg-discord-modifier-selected text-white' 
+            className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
+              !currentChannelId
+                ? 'bg-discord-modifier-selected text-white'
                 : 'text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary'
             }`}
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`${!currentChannelId ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${!currentChannelId ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
+              <path d="M13 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-2-4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
+              <path d="M3 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1c0-2.76-5.37-4-8-4s-8 1.24-8 4v1Z" />
+              <path d="M3.5 13.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" opacity=".5" />
             </svg>
             <span className="font-medium text-[16px]">Friends</span>
           </div>
-          
+
+          {/* Nitro */}
+          <div
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
+              <path d="M2.98966977,9.35789159 C2.98966977,9.77582472 2.63542482,10.1300697 2.21749169,10.1300697 L2.21749169,10.1300697 C1.79955856,10.1300697 1.44531361,9.77582472 1.44531361,9.35789159 L1.44531361,9.35789159 C1.44531361,8.93995846 1.79955856,8.58571351 2.21749169,8.58571351 L2.21749169,8.58571351 C2.63542482,8.58571351 2.98966977,8.93995846 2.98966977,9.35789159 Z" transform="translate(12, 12) scale(1.2) translate(-12, -12)" />
+              <path d="M21.7,9.358 L12.957,2.46 C12.396,2.014 11.604,2.014 11.043,2.46 L2.3,9.358 C2.113,9.507 2,9.734 2,9.975 L2,19.5 C2,20.881 3.119,22 4.5,22 L19.5,22 C20.881,22 22,20.881 22,19.5 L22,9.975 C22,9.734 21.887,9.507 21.7,9.358 Z M12,17.5 C10.619,17.5 9.5,16.381 9.5,15 C9.5,13.619 10.619,12.5 12,12.5 C13.381,12.5 14.5,13.619 14.5,15 C14.5,16.381 13.381,17.5 12,17.5 Z" />
+            </svg>
+            <span className="font-medium text-[16px]">Nitro</span>
+          </div>
+
+          {/* Shop */}
+          <div
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
+              <path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h17A1.5 1.5 0 0 1 22 5.5V7H2V5.5ZM2 9v9.5A1.5 1.5 0 0 0 3.5 20h17a1.5 1.5 0 0 0 1.5-1.5V9H2Zm9.5 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5Zm-4-1h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1Z" />
+            </svg>
+            <span className="font-medium text-[16px]">Shop</span>
+          </div>
+
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">
             <span className="text-[12px] font-bold text-discord-text-muted uppercase tracking-wider">Direct Messages</span>
             <button
@@ -133,14 +156,28 @@ export function ChannelSidebar() {
                   )}
                   <Avatar src={otherUser.avatar} name={otherUser.displayName ?? otherUser.username} size={32} status={otherUser.status as any} />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[16px] truncate ${
+                    <div className={`text-[15px] truncate leading-tight ${
                       currentChannelId === dm.id ? 'text-white font-medium'
                         : isDmUnread ? 'text-white font-bold'
                         : 'text-discord-text-muted group-hover:text-discord-text-secondary font-medium'
                     }`}>
                       {otherUser.displayName ?? otherUser.username}
                     </div>
+                    {dm.lastMessage && (
+                      <div className="text-[12px] text-discord-channels-default truncate leading-tight mt-0.5">
+                        {dm.lastMessage.content}
+                      </div>
+                    )}
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); }}
+                    className="opacity-0 group-hover:opacity-100 text-discord-text-muted hover:text-discord-text-primary transition-opacity flex-shrink-0 ml-1"
+                    title="Close DM"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
+                    </svg>
+                  </button>
                 </div>
               );
             })}
@@ -149,7 +186,10 @@ export function ChannelSidebar() {
             )}
           </div>
         </div>
-        
+
+        {/* Voice controls — visible when in a call, even in DM view */}
+        {currentVoiceChannelId && <VoiceControls />}
+
         {/* User area at bottom */}
         {user && (
           <UserAreaPanel
@@ -225,7 +265,7 @@ export function ChannelSidebar() {
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-60">
                     <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
                   </svg>
-                  <span className={`truncate text-[16px] ${isUnread ? 'font-bold' : 'font-medium'}`}>{channel.name}</span>
+                  <span className={`truncate text-[15px] ${isUnread ? 'font-bold' : 'font-medium'}`}>{channel.name}</span>
                 </button>
               );
             })}

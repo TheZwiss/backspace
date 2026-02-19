@@ -12,7 +12,7 @@ interface SidebarItemProps {
   active: boolean;
   onClick: () => void;
   type?: 'server' | 'dm' | 'action';
-  actionType?: 'add' | 'join';
+  actionType?: 'add' | 'join' | 'explore';
   hasUnread?: boolean;
 }
 
@@ -66,6 +66,10 @@ function SidebarItem({ name, icon, active, onClick, type = 'server', actionType,
             actionType === 'add' ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+              </svg>
+            ) : actionType === 'explore' ? (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-3.146-5.351l2.78-1.042 1.042-2.78-2.78 1.042-1.042 2.78zM14.5 7.5l-2.5 5-5 2.5 2.5-5 5-2.5z" />
               </svg>
             ) : (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -170,6 +174,15 @@ export function ServerSidebar() {
         onClick={() => openModal('joinServer')}
         type="action"
         actionType="join"
+      />
+
+      <SidebarItem
+        id="explore"
+        name="Explore Discoverable Servers"
+        active={false}
+        onClick={() => {}}
+        type="action"
+        actionType="explore"
       />
     </nav>
   );

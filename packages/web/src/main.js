@@ -20,11 +20,11 @@ class ErrorBoundary extends React.Component {
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: '#313338',
-                    color: '#f2f3f5',
+                    color: '#ffffff',
                     fontFamily: 'sans-serif',
                     flexDirection: 'column',
                     gap: '16px',
-                }, children: [_jsx("h1", { style: { fontSize: '24px', fontWeight: 'bold' }, children: "Something went wrong" }), _jsx("p", { style: { color: '#949ba4' }, children: this.state.error?.message }), _jsx("button", { onClick: () => window.location.reload(), style: {
+                }, children: [_jsx("h1", { style: { fontSize: '24px', fontWeight: 'bold' }, children: "Something went wrong" }), _jsx("p", { style: { color: '#abacb2' }, children: this.state.error?.message }), _jsx("button", { onClick: () => window.location.reload(), style: {
                             padding: '8px 24px',
                             backgroundColor: '#5865f2',
                             color: 'white',

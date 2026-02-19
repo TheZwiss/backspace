@@ -28,6 +28,7 @@ function handleEvent(event) {
                 if (currentChannelId) {
                     reloadMessages(currentChannelId, true);
                 }
+                // Initialize unread tracking from ready payload
                 const { channelLastMessageIds } = useServerStore.getState();
                 if (event.readStates) {
                     setReadStates(event.readStates, channelLastMessageIds);
@@ -80,17 +81,17 @@ function handleEvent(event) {
             addMessage(event.message.dmChannelId, event.message);
             // Update lastMessage on the DM channel so the sidebar sorts correctly
             const { dmChannels, setDmChannels } = useServerStore.getState();
-            const updatedDms = dmChannels.map(dm =>
-                dm.id === event.message.dmChannelId
-                    ? { ...dm, lastMessage: event.message }
-                    : dm
-            );
+            const updatedDms = dmChannels.map(dm => dm.id === event.message.dmChannelId
+                ? { ...dm, lastMessage: event.message }
+                : dm);
+            // Re-sort by most recent message
             updatedDms.sort((a, b) => {
                 const aTime = a.lastMessage?.createdAt ?? a.createdAt;
                 const bTime = b.lastMessage?.createdAt ?? b.createdAt;
                 return bTime - aTime;
             });
             setDmChannels(updatedDms);
+            // Mark DM as unread if not currently viewing it
             {
                 const { currentChannelId, markChannelUnread } = useChatStore.getState();
                 if (event.message.dmChannelId !== currentChannelId) {
@@ -127,6 +128,36 @@ function handleEvent(event) {
         case 'channel_ack': {
             const { onChannelAck } = useChatStore.getState();
             onChannelAck(event.channelId, event.messageId);
+            break;
+        }
+        case 'dm_call_incoming': {
+            const { setIncomingCall } = useVoiceStore.getState();
+            setIncomingCall({
+                dmChannelId: event.dmChannelId,
+                callerId: event.callerId,
+                callerName: event.callerName,
+            });
+            break;
+        }
+        case 'dm_call_accepted': {
+            const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+            setIncomingCall(null);
+            setOutgoingCall(null);
+            setActiveDmCall({ dmChannelId: event.dmChannelId });
+            break;
+        }
+        case 'dm_call_rejected': {
+            const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+            setIncomingCall(null);
+            setOutgoingCall(null);
+            setActiveDmCall(null);
+            break;
+        }
+        case 'dm_call_ended': {
+            const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+            setIncomingCall(null);
+            setOutgoingCall(null);
+            setActiveDmCall(null);
             break;
         }
         case 'error':
