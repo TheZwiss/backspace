@@ -131,13 +131,6 @@ export function VoiceControlBar() {
   };
 
   const handleFullscreen = () => {
-    if (!voiceFullscreen) {
-      document.documentElement.requestFullscreen?.().catch(() => {});
-    } else {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
     toggleVoiceFullscreen();
   };
 

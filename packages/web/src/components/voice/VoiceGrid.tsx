@@ -56,15 +56,15 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     ? participants.find((p) => p.identity === focusedParticipantId)
     : null;
 
-  // Focus mode: one large tile + sidebar strip
+  // Focus mode: one large tile + bottom strip
   if (focusedParticipant) {
     const otherParticipants = participants.filter(
       (p) => p.identity !== focusedParticipantId,
     );
     return (
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
-        <div className="flex-1 p-2 relative">
+        <div className="flex-1 p-2 min-h-0">
           <VoiceUser participant={focusedParticipant} large />
           {/* Back to grid button */}
           <button
@@ -79,14 +79,14 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
           </button>
         </div>
 
-        {/* Side strip of other participants */}
+        {/* Bottom strip of other participants */}
         {otherParticipants.length > 0 && (
-          <div className="w-[200px] flex-shrink-0 overflow-y-auto p-2 space-y-2 bg-[#111214]/50">
+          <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-[#111214]/50 overflow-x-auto no-scrollbar">
             {otherParticipants.map((p) => (
               <div
                 key={p.identity}
                 onClick={() => setFocusedParticipant(p.identity)}
-                className="cursor-pointer hover:opacity-80 transition-opacity"
+                className="h-full aspect-video flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               >
                 <VoiceUser participant={p} />
               </div>
@@ -107,13 +107,13 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
   })();
 
   return (
-    <div className="flex-1 p-3 overflow-auto flex items-center">
-      <div className={`grid ${gridClass} gap-2 w-full`}>
+    <div className="flex-1 p-3 overflow-auto flex items-center min-h-0">
+      <div className={`grid ${gridClass} gap-2 w-full max-h-full`}>
         {participants.map((p) => (
           <div
             key={p.identity}
             onClick={() => setFocusedParticipant(p.identity)}
-            className="cursor-pointer hover:opacity-90 transition-opacity"
+            className="cursor-pointer hover:opacity-90 transition-opacity h-full"
           >
             <VoiceUser participant={p} />
           </div>

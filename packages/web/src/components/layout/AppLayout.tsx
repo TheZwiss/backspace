@@ -50,7 +50,7 @@ export function AppLayout() {
   } = useLiveKit();
 
   // Initialize WebSocket
-  useWebSocket();
+  const { isConnected: isWsConnected } = useWebSocket();
 
   // Sync participants to store
   useEffect(() => {
@@ -59,12 +59,13 @@ export function AppLayout() {
 
   // Manage voice connection (server voice channels)
   useEffect(() => {
-    if (currentVoiceChannelId) {
+    if (!isLoading && user && isWsConnected && currentVoiceChannelId) {
+      console.log('[AppLayout] Auto-rejoining voice channel:', currentVoiceChannelId);
       connectVoice(currentVoiceChannelId);
-    } else if (!activeDmCall) {
+    } else if (!isLoading && user && !currentVoiceChannelId && !activeDmCall) {
       disconnectVoice();
     }
-  }, [currentVoiceChannelId, connectVoice, disconnectVoice, activeDmCall]);
+  }, [currentVoiceChannelId, connectVoice, disconnectVoice, activeDmCall, isLoading, user, isWsConnected]);
 
   // Manage DM call connection
   useEffect(() => {

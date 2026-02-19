@@ -542,129 +542,121 @@ function UserAreaPanel({
 
           <div className="mx-4 border-t border-[#2b2d31]" />
 
-          {/* Input Volume */}
-          <div className="px-4 py-3">
-            <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Input Volume</div>
-            <input
-              type="range"
-              min={0}
-              max={200}
-              value={inputVolume}
-              onChange={(e) => {
-                const vol = Number(e.target.value);
-                storeSetInputVolume(vol);
-                // Apply gain to mic: at 0 = mute, 100 = normal, 200 = 2x boost
-                const room = getActiveRoom();
-                if (room && room.localParticipant.isMicrophoneEnabled) {
-                  if (vol === 0) {
-                    room.localParticipant.setMicrophoneEnabled(false).catch(() => {});
-                  } else {
-                    // Re-enable mic if it was muted by volume slider
-                    room.localParticipant.setMicrophoneEnabled(true).catch(() => {});
-                  }
-                }
-              }}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-discord-blurple bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
-              style={{
-                background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${inputVolume / 2}%, #4e5058 ${inputVolume / 2}%, #4e5058 100%)`,
-              }}
-            />
-            {/* Mic level meter */}
-            <div className="flex items-center gap-[3px] mt-2.5">
-              {Array.from({ length: micBars }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`flex-1 h-[6px] rounded-[1px] transition-colors duration-75 ${
-                    i < activeBars ? 'bg-discord-text-muted' : 'bg-[#313338]'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mx-4 border-t border-[#2b2d31]" />
-
-          {/* Voice Settings link */}
-          <button
-            onClick={onSettingsClick}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
-          >
-            <span className="text-[15px] font-semibold text-discord-text-primary">Voice Settings</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
-              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {/* Output settings panel */}
-      {openPanel === 'output' && (
-        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
-          {/* Output Device */}
-          <div className="relative">
-            <button
-              onClick={() => setShowOutputDeviceList(!showOutputDeviceList)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold text-discord-text-primary text-left">Output Device</div>
-                <div className="text-[13px] text-discord-text-muted truncate text-left">{selectedOutputLabel}</div>
-              </div>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted flex-shrink-0 ml-2">
-                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-              </svg>
-            </button>
-            {showOutputDeviceList && (
-              <div className="bg-discord-bg-floating rounded-lg shadow-lg mx-2 mb-2 py-1 border border-discord-bg-tertiary">
-                {outputDevices.map(d => (
-                  <button
-                    key={d.deviceId}
-                    onClick={() => selectOutput(d)}
-                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
-                      selectedOutput === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
-                    }`}
-                  >
-                    {selectedOutput === d.deviceId && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                      </svg>
-                    )}
-                    <span className={selectedOutput === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mx-4 border-t border-[#2b2d31]" />
-
-          {/* Output Volume */}
-          <div className="px-4 py-3">
-            <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Output Volume</div>
-            <input
-              type="range"
-              min={0}
-              max={200}
-              value={outputVolume}
-              onChange={(e) => {
-                const vol = Number(e.target.value);
-                storeSetOutputVolume(vol);
-                // Apply volume to all remote participants
-                const room = getActiveRoom();
-                if (room) {
-                  const scaled = vol / 100; // 0-2 range (0%=0, 100%=1, 200%=2)
-                  room.remoteParticipants.forEach((participant) => {
-                    participant.setVolume(scaled);
-                  });
-                }
-              }}
-              className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
-              style={{
-                background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${outputVolume / 2}%, #4e5058 ${outputVolume / 2}%, #4e5058 100%)`,
-              }}
-            />
-          </div>
-
+                      {/* Input Volume */}
+                      <div className="px-4 py-3">
+                        <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Input Volume</div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={200}
+                          value={inputVolume}
+                                                          onChange={(e) => {
+                                                            const vol = Number(e.target.value);
+                                                            storeSetInputVolume(vol);
+                                                            
+                                                            const room = getActiveRoom();
+                                                            if (room) {
+                                                              const { isMuted: manuallyMuted, isDeafened: manuallyDeafened } = useVoiceStore.getState();
+                                                              // If user is manually muted, hardware should stay off regardless of volume.
+                                                              // If user is NOT manually muted and volume is 0, we can keep hardware ON 
+                                                              // (Web Audio handles silence) or turn it OFF for battery/privacy.
+                                                              // Discord keeps it ON (green ring) but silent. We'll follow that.
+                                                              if (!manuallyMuted && !manuallyDeafened && !room.localParticipant.isMicrophoneEnabled && vol > 0) {
+                                                                room.localParticipant.setMicrophoneEnabled(true).catch(() => {});
+                                                              }
+                                                            }
+                                                          }}                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-discord-blurple bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+                          style={{
+                            background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${inputVolume / 2}%, #4e5058 ${inputVolume / 2}%, #4e5058 100%)`,
+                          }}
+                        />
+                        {/* Mic level meter */}
+                        <div className="flex items-center gap-[3px] mt-2.5">
+                          {Array.from({ length: micBars }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`flex-1 h-[6px] rounded-[1px] transition-colors duration-75 ${
+                                i < activeBars ? 'bg-discord-text-muted' : 'bg-[#313338]'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+          
+                      <div className="mx-4 border-t border-[#2b2d31]" />
+          
+                      {/* Voice Settings link */}
+                      <button
+                        onClick={onSettingsClick}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+                      >
+                        <span className="text-[15px] font-semibold text-discord-text-primary">Voice Settings</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
+                          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+          
+                  {/* Output settings panel */}
+                  {openPanel === 'output' && (
+                    <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
+                      {/* Output Device */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowOutputDeviceList(!showOutputDeviceList)}
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[15px] font-semibold text-discord-text-primary text-left">Output Device</div>
+                            <div className="text-[13px] text-discord-text-muted truncate text-left">{selectedOutputLabel}</div>
+                          </div>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted flex-shrink-0 ml-2">
+                            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                          </svg>
+                        </button>
+                        {showOutputDeviceList && (
+                          <div className="bg-discord-bg-floating rounded-lg shadow-lg mx-2 mb-2 py-1 border border-discord-bg-tertiary">
+                            {outputDevices.map(d => (
+                              <button
+                                key={d.deviceId}
+                                onClick={() => selectOutput(d)}
+                                className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
+                                  selectedOutput === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
+                                }`}
+                              >
+                                {selectedOutput === d.deviceId && (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                                  </svg>
+                                )}
+                                <span className={selectedOutput === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+          
+                      <div className="mx-4 border-t border-[#2b2d31]" />
+          
+                      {/* Output Volume */}
+                      <div className="px-4 py-3">
+                        <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Output Volume</div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={200}
+                          value={outputVolume}
+                          onChange={(e) => {
+                            const vol = Number(e.target.value);
+                            storeSetOutputVolume(vol);
+                          }}
+                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+                          style={{
+                            background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${outputVolume / 2}%, #4e5058 ${outputVolume / 2}%, #4e5058 100%)`,
+                          }}
+                        />
+                      </div>
           <div className="mx-4 border-t border-[#2b2d31]" />
 
           {/* Voice Settings link */}

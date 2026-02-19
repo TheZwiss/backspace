@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
@@ -280,6 +280,7 @@ export function wsSend(event: ClientEvent): void {
 export function useWebSocket() {
   const token = useAuthStore((s) => s.token);
   const prevToken = useRef(token);
+  const [isConnected, setIsConnected] = React.useState(false);
 
   useEffect(() => {
     if (token && (!isInitialized || token !== prevToken.current)) {
@@ -293,10 +294,14 @@ export function useWebSocket() {
   }, [token]);
 
   useEffect(() => {
+    const checkStatus = setInterval(() => {
+      setIsConnected(!!globalWs && globalWs.readyState === WebSocket.OPEN);
+    }, 500);
     return () => {
+      clearInterval(checkStatus);
       disconnect();
     };
   }, []);
 
-  return { send: wsSend };
+  return { send: wsSend, isConnected };
 }
