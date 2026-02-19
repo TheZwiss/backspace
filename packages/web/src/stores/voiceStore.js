@@ -65,6 +65,8 @@ export const useVoiceStore = create((set, get) => ({
     toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
     setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
     setVideoQuality: (quality) => set({ videoQuality: quality }),
+    noiseSuppression: true,
+    toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
     getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
     clearAllVoiceUsers: () => set({ voiceUsers: new Map() }),
     // Leave voice without wiping the voiceUsers map (so sidebar still shows others)

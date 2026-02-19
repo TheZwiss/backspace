@@ -198,8 +198,18 @@ export function useLiveKit() {
       _activeRoom = newRoom; connectedChannelRef.current = channelId; setRoom(newRoom); setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
       updateParticipants();
-      useVoiceStore.setState({ isMuted: false, isCameraOn: false, isScreenSharing: false });
-      try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
+      // Preserve mute/deafen state across channel switches, only reset camera/screen
+      const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
+      useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
+      if (!wasMuted && !wasDeafened) {
+        try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
+      } else {
+        // Keep mic disabled — user was muted or deafened
+        if (wasDeafened) {
+          newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
+        }
+        updateParticipants();
+      }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);
@@ -235,8 +245,16 @@ export function useLiveKit() {
       _activeRoom = newRoom; connectedChannelRef.current = `dm-${dmChannelId}`; setRoom(newRoom); setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
       updateParticipants();
-      useVoiceStore.setState({ isMuted: false, isCameraOn: false, isScreenSharing: false });
-      try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
+      const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
+      useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
+      if (!wasMuted && !wasDeafened) {
+        try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
+      } else {
+        if (wasDeafened) {
+          newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
+        }
+        updateParticipants();
+      }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);

@@ -45,28 +45,39 @@ export function VoiceControlBar() {
       }
     }
     toggleMic();
-  }, [isMuted, toggleMic]);
+    // Broadcast via WebSocket so sidebar shows status without joining
+    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened });
+  }, [isMuted, isDeafened, toggleMic]);
 
   const handleDeafen = React.useCallback(async () => {
     const room = getActiveRoom();
+    const willDeafen = !isDeafened;
+    // Update store FIRST so updateParticipants reads correct state
+    toggleDeafen();
+    if (willDeafen && !isMuted) toggleMic();
+    if (!willDeafen && isMuted) toggleMic();
+    // Broadcast via WebSocket
+    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen });
     if (room) {
       try {
-        const willDeafen = !isDeafened;
         if (willDeafen) {
           await room.localParticipant.setMicrophoneEnabled(false);
           room.remoteParticipants.forEach((p) => p.setVolume(0));
-          if (!isMuted) toggleMic();
         } else {
           const outputVolume = useVoiceStore.getState().outputVolume;
           room.remoteParticipants.forEach((p) => p.setVolume(outputVolume / 100));
           await room.localParticipant.setMicrophoneEnabled(true);
-          if (isMuted) toggleMic();
         }
+        // Broadcast deafen state via LiveKit data channel for in-room users
+        const encoder = new TextEncoder();
+        room.localParticipant.publishData(
+          encoder.encode(JSON.stringify({ type: 'deafen', deafened: willDeafen })),
+          { reliable: true }
+        ).catch(() => {});
       } catch (err) {
         console.error('[VoiceControlBar] Failed to toggle deafen:', err);
       }
     }
-    toggleDeafen();
   }, [isDeafened, isMuted, toggleDeafen, toggleMic]);
 
   const handleCamera = async () => {

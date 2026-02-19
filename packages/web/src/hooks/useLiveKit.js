@@ -86,12 +86,20 @@ export function useLiveKit() {
                     return;
                 if (pub.source === Track.Source.Microphone)
                     audioTrack = mt;
-                else if (pub.source === Track.Source.Camera)
+                else if (pub.source === Track.Source.Camera && p.isCameraEnabled)
                     videoTrack = mt;
-                else if (pub.source === Track.Source.ScreenShare)
+                else if (pub.source === Track.Source.ScreenShare && p.isScreenShareEnabled)
                     screenTrack = mt;
             });
-            allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
+            let isDeafened = false;
+            try {
+                if (p.metadata) {
+                    const meta = JSON.parse(p.metadata);
+                    isDeafened = meta.deafened === true;
+                }
+            }
+            catch { }
+            allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isDeafened, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
         };
         processParticipant(r.localParticipant, true);
         r.remoteParticipants.forEach((p) => processParticipant(p, false));
@@ -128,6 +136,7 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
             newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
             newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
+            newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;
