@@ -117,11 +117,15 @@ export function useLiveKit() {
       p.trackPublications.forEach((pub) => {
         const track = pub.track;
         if (!track) return;
+        // Strict check: Track must be subscribed AND not muted to be considered "active"
+        if (pub.isMuted || !pub.isSubscribed) return;
+        
         const mt = track.mediaStreamTrack;
         if (!mt || mt.readyState !== 'live') return;
+        
         if (pub.source === Track.Source.Microphone) audioTrack = mt;
         else if (pub.source === Track.Source.Camera && p.isCameraEnabled) videoTrack = mt;
-        else if (pub.source === Track.Source.ScreenShare && p.isScreenShareEnabled) screenTrack = mt;
+        else if (pub.source === Track.Source.ScreenShare) screenTrack = mt; // Removed isScreenShareEnabled check to rely on track presence
       });
       
       const userState = useVoiceStore.getState().voiceUserStates.get(userId);
@@ -136,7 +140,20 @@ export function useLiveKit() {
         if (userState) isPartMuted = userState.isMuted;
       }
 
-      allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: isPartMuted, isDeafened: isPartDeafened, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
+      allParticipants.push({ 
+        identity: p.identity, 
+        userId, 
+        username, 
+        isSpeaking: p.isSpeaking, 
+        isMuted: isPartMuted, 
+        isDeafened: isPartDeafened, 
+        isCameraOn: !!videoTrack, // Strictly derived from active track
+        isScreenSharing: !!screenTrack, // Strictly derived from active track
+        isLocal, 
+        audioTrack, 
+        videoTrack, 
+        screenTrack 
+      });
     };
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
