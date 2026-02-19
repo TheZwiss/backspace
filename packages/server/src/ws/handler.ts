@@ -115,16 +115,18 @@ class ConnectionManager {
   }
 
   leaveAllVoice(userId: string): string | null {
+    let leftChannelId: string | null = null;
     for (const [channelId, users] of this.voiceStates) {
       if (users.has(userId)) {
         users.delete(userId);
         if (users.size === 0) {
           this.voiceStates.delete(channelId);
         }
-        return channelId;
+        leftChannelId = channelId;
+        break;
       }
     }
-    return null;
+    return leftChannelId;
   }
 
   getVoiceUsers(channelId: string): Set<string> {

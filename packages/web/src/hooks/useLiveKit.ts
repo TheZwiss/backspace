@@ -222,7 +222,7 @@ export function useLiveKit() {
       }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived]);
+  }, [updateParticipants, handleDataReceived, isMuted, isDeafened]);
 
   const connectDm = useCallback(async (dmChannelId: string) => {
     const gen = ++_connectGeneration;
@@ -267,7 +267,7 @@ export function useLiveKit() {
       }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived]);
+  }, [updateParticipants, handleDataReceived, isMuted, isDeafened]);
 
   const disconnect = useCallback(async () => {
     _connectGeneration++;

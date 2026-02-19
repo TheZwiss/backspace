@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 
 interface VoiceState {
@@ -55,149 +56,163 @@ interface VoiceState {
   reset: () => void;
 }
 
-export const useVoiceStore = create<VoiceState>((set, get) => ({
-  voiceUsers: new Map(),
-  currentVoiceChannelId: null,
-  isMuted: false,
-  isDeafened: false,
-  isCameraOn: false,
-  isScreenSharing: false,
-  participants: [],
-  connectionError: null,
-  isLiveKitConnected: false,
-  inputVolume: 100,
-  outputVolume: 100,
-  focusedParticipantId: null,
-  videoQuality: '720p60',
-  participantVolumes: new Map(),
-  setParticipantVolume: (userId, volume) => {
-    set((state) => {
-      const newMap = new Map(state.participantVolumes);
-      newMap.set(userId, volume);
-      return { participantVolumes: newMap };
-    });
-  },
-  getParticipantVolume: (userId) => get().participantVolumes.get(userId) ?? 100,
+export const useVoiceStore = create<VoiceState>()(
+  persist(
+    (set, get) => ({
+      voiceUsers: new Map(),
+      currentVoiceChannelId: null,
+      isMuted: false,
+      isDeafened: false,
+      isCameraOn: false,
+      isScreenSharing: false,
+      participants: [],
+      connectionError: null,
+      isLiveKitConnected: false,
+      inputVolume: 100,
+      outputVolume: 100,
+      focusedParticipantId: null,
+      videoQuality: '720p60',
+      participantVolumes: new Map(),
+      setParticipantVolume: (userId, volume) => {
+        set((state) => {
+          const newMap = new Map(state.participantVolumes);
+          newMap.set(userId, volume);
+          return { participantVolumes: newMap };
+        });
+      },
+      getParticipantVolume: (userId) => get().participantVolumes.get(userId) ?? 100,
 
-  incomingCall: null,
-  outgoingCall: null,
-  activeDmCall: null,
+      incomingCall: null,
+      outgoingCall: null,
+      activeDmCall: null,
 
-  setIncomingCall: (call) => set({ incomingCall: call }),
-  setOutgoingCall: (call) => set({ outgoingCall: call }),
-  setActiveDmCall: (call) => set({ activeDmCall: call }),
+      setIncomingCall: (call) => set({ incomingCall: call }),
+      setOutgoingCall: (call) => set({ outgoingCall: call }),
+      setActiveDmCall: (call) => set({ activeDmCall: call }),
 
-  setVoiceUsers: (channelId, userIds) => {
-    set((state) => {
-      const newMap = new Map(state.voiceUsers);
-      newMap.set(channelId, userIds);
-      return { voiceUsers: newMap };
-    });
-  },
+      setVoiceUsers: (channelId, userIds) => {
+        set((state) => {
+          const newMap = new Map(state.voiceUsers);
+          newMap.set(channelId, userIds);
+          return { voiceUsers: newMap };
+        });
+      },
 
-  addVoiceUser: (channelId, userId) => {
-    set((state) => {
-      const newMap = new Map(state.voiceUsers);
-      const current = newMap.get(channelId) ?? [];
-      if (!current.includes(userId)) {
-        newMap.set(channelId, [...current, userId]);
-      }
-      return { voiceUsers: newMap };
-    });
-  },
+      addVoiceUser: (channelId, userId) => {
+        set((state) => {
+          const newMap = new Map(state.voiceUsers);
+          const current = newMap.get(channelId) ?? [];
+          if (!current.includes(userId)) {
+            newMap.set(channelId, [...current, userId]);
+          }
+          return { voiceUsers: newMap };
+        });
+      },
 
-  removeVoiceUser: (channelId, userId) => {
-    set((state) => {
-      const newMap = new Map(state.voiceUsers);
-      const current = newMap.get(channelId) ?? [];
-      newMap.set(channelId, current.filter(id => id !== userId));
-      return { voiceUsers: newMap };
-    });
-  },
+      removeVoiceUser: (channelId, userId) => {
+        set((state) => {
+          const newMap = new Map(state.voiceUsers);
+          const current = newMap.get(channelId) ?? [];
+          newMap.set(channelId, current.filter(id => id !== userId));
+          return { voiceUsers: newMap };
+        });
+      },
 
-  setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
+      setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
 
-  setParticipants: (participants) => set({ participants }),
-  setConnectionError: (error) => set({ connectionError: error }),
-  setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
+      setParticipants: (participants) => set({ participants }),
+      setConnectionError: (error) => set({ connectionError: error }),
+      setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
 
-  setInputVolume: (volume) => set({ inputVolume: volume }),
-  setOutputVolume: (volume) => set({ outputVolume: volume }),
+      setInputVolume: (volume) => set({ inputVolume: volume }),
+      setOutputVolume: (volume) => set({ outputVolume: volume }),
 
-  toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
-  toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
-  toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
-  toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
+      toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
+      toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
+      toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
+      toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
-  setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
-  setVideoQuality: (quality) => set({ videoQuality: quality }),
-  noiseSuppression: true,
-  toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
-  deafenedUserIds: new Set(),
-  setUserDeafened: (userId, deafened) => {
-    set((state) => {
-      const newSet = new Set(state.deafenedUserIds);
-      if (deafened) newSet.add(userId); else newSet.delete(userId);
-      return { deafenedUserIds: newSet };
-    });
-  },
+      setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
+      setVideoQuality: (quality) => set({ videoQuality: quality }),
+      noiseSuppression: true,
+      toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+      deafenedUserIds: new Set(),
+      setUserDeafened: (userId, deafened) => {
+        set((state) => {
+          const newSet = new Set(state.deafenedUserIds);
+          if (deafened) newSet.add(userId); else newSet.delete(userId);
+          return { deafenedUserIds: newSet };
+        });
+      },
 
-  voiceUserStates: new Map(),
-  setVoiceUserStatus: (userId, isMuted, isDeafened) => {
-    set((state) => {
-      const newMap = new Map(state.voiceUserStates);
-      newMap.set(userId, { isMuted, isDeafened });
-      return { voiceUserStates: newMap };
-    });
-  },
-  clearVoiceUserStatus: (userId) => {
-    set((state) => {
-      const newMap = new Map(state.voiceUserStates);
-      newMap.delete(userId);
-      return { voiceUserStates: newMap };
-    });
-  },
+      voiceUserStates: new Map(),
+      setVoiceUserStatus: (userId, isMuted, isDeafened) => {
+        set((state) => {
+          const newMap = new Map(state.voiceUserStates);
+          newMap.set(userId, { isMuted, isDeafened });
+          return { voiceUserStates: newMap };
+        });
+      },
+      clearVoiceUserStatus: (userId) => {
+        set((state) => {
+          const newMap = new Map(state.voiceUserStates);
+          newMap.delete(userId);
+          return { voiceUserStates: newMap };
+        });
+      },
 
-  getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
+      getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
-  clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
+      clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
 
-  // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
-  leaveVoice: () => set({
-    currentVoiceChannelId: null,
-    isMuted: false,
-    isDeafened: false,
-    isCameraOn: false,
-    isScreenSharing: false,
-    participants: [],
-    connectionError: null,
-    isLiveKitConnected: false,
-    inputVolume: 100,
-    outputVolume: 100,
-    focusedParticipantId: null,
-    activeDmCall: null,
-    outgoingCall: null,
-    deafenedUserIds: new Set(),
-  }),
+      // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
+      leaveVoice: () => set({
+        currentVoiceChannelId: null,
+        isCameraOn: false,
+        isScreenSharing: false,
+        participants: [],
+        connectionError: null,
+        isLiveKitConnected: false,
+        focusedParticipantId: null,
+        activeDmCall: null,
+        outgoingCall: null,
+        deafenedUserIds: new Set(),
+      }),
 
-  reset: () => set({
-    voiceUsers: new Map(),
-    currentVoiceChannelId: null,
-    isMuted: false,
-    isDeafened: false,
-    isCameraOn: false,
-    isScreenSharing: false,
-    participants: [],
-    connectionError: null,
-    isLiveKitConnected: false,
-    inputVolume: 100,
-    outputVolume: 100,
-    focusedParticipantId: null,
-    participantVolumes: new Map(),
-    incomingCall: null,
-    outgoingCall: null,
-    activeDmCall: null,
-    deafenedUserIds: new Set(),
-    voiceUserStates: new Map(),
-  }),
-}));
+      reset: () => set({
+        voiceUsers: new Map(),
+        currentVoiceChannelId: null,
+        isMuted: false,
+        isDeafened: false,
+        isCameraOn: false,
+        isScreenSharing: false,
+        participants: [],
+        connectionError: null,
+        isLiveKitConnected: false,
+        inputVolume: 100,
+        outputVolume: 100,
+        focusedParticipantId: null,
+        participantVolumes: new Map(),
+        incomingCall: null,
+        outgoingCall: null,
+        activeDmCall: null,
+        deafenedUserIds: new Set(),
+        voiceUserStates: new Map(),
+      }),
+    }),
+    {
+      name: 'opencord-voice-settings',
+      storage: createJSONStorage(() => localStorage),
+      // Only persist these keys. Maps and Sets are complex to serialize.
+      partialize: (state) => ({
+        currentVoiceChannelId: state.currentVoiceChannelId,
+        isMuted: state.isMuted,
+        isDeafened: state.isDeafened,
+        inputVolume: state.inputVolume,
+        outputVolume: state.outputVolume,
+        videoQuality: state.videoQuality,
+        noiseSuppression: state.noiseSuppression,
+      }),
+    }
+  )
+);

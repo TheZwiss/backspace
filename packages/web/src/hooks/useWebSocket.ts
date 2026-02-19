@@ -56,6 +56,7 @@ function handleEvent(event: ServerEvent): void {
       {
         const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened } = useVoiceStore.getState();
         if (currentVoiceChannelId) {
+          console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened });
           wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
           wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened });
         }
