@@ -4,6 +4,10 @@ import { useServerStore } from '../../stores/serverStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
 
+/**
+ * VoiceControls renders the voice status + button rows.
+ * It has NO wrapper/card styling — the parent provides the container.
+ */
 export function VoiceControls() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isMuted = useVoiceStore((s) => s.isMuted);
@@ -41,21 +45,19 @@ export function VoiceControls() {
       try {
         const willDeafen = !isDeafened;
         if (willDeafen) {
-          // Deafen: mute mic + mute all remote audio
           await room.localParticipant.setMicrophoneEnabled(false);
           room.remoteParticipants.forEach((p) => {
             p.setVolume(0);
           });
-          if (!isMuted) toggleMic(); // Also mute mic when deafening
+          if (!isMuted) toggleMic();
         } else {
-          // Undeafen: restore remote audio, unmute mic
           const outputVolume = useVoiceStore.getState().outputVolume;
           const scaled = outputVolume / 100;
           room.remoteParticipants.forEach((p) => {
             p.setVolume(scaled);
           });
           await room.localParticipant.setMicrophoneEnabled(true);
-          if (isMuted) toggleMic(); // Unmute mic when undeafening
+          if (isMuted) toggleMic();
         }
       } catch (err) {
         console.error('[VoiceControls] Failed to toggle deafen:', err);
@@ -103,10 +105,13 @@ export function VoiceControls() {
       ? 'bg-discord-green/20'
       : 'bg-discord-yellow/20';
 
+  const btnBase = 'flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors';
+  const btnDefaultStyle = 'bg-[#111214] text-discord-text-muted hover:bg-[#1a1b1e] hover:text-discord-text-secondary';
+
   return (
-    <div className="bg-[#1a1b1e] border-t border-discord-bg-tertiary">
+    <>
       {/* Row 1: Signal icon + status text + disconnect */}
-      <div className="flex items-center gap-2 px-2 pt-[10px] pb-1">
+      <div className="flex items-center gap-2 px-3 pt-3 pb-1">
         <div className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0`}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={statusColor}>
             <path d="M1.5 21.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3.14 15.75a.75.75 0 01-.09-1.06A8.46 8.46 0 0112 11a8.46 8.46 0 018.95 3.69.75.75 0 01-1.15.97A6.96 6.96 0 0012 12.5a6.96 6.96 0 00-7.8 3.16.75.75 0 01-1.06.09zM6.37 18.3a.75.75 0 01-.08-1.06A5.46 5.46 0 0112 15a5.46 5.46 0 015.71 2.24.75.75 0 01-1.14.97A3.96 3.96 0 0012 16.5a3.96 3.96 0 00-4.57 1.71.75.75 0 01-1.06.09z" />
@@ -141,14 +146,13 @@ export function VoiceControls() {
       </div>
 
       {/* Row 2: Mute, Deafen, Camera, Screen Share */}
-      <div className="flex items-center gap-1 px-2 pb-[10px] pt-1">
-        {/* Mute */}
+      <div className="flex items-center gap-1 px-3 pb-2 pt-1">
         <button
           onClick={handleMute}
-          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+          className={`${btnBase} ${
             isMuted || isDeafened
               ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
-              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+              : btnDefaultStyle
           }`}
           title={isMuted ? 'Unmute' : 'Mute'}
         >
@@ -159,13 +163,12 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Deafen */}
         <button
           onClick={handleDeafen}
-          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+          className={`${btnBase} ${
             isDeafened
               ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
-              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+              : btnDefaultStyle
           }`}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
         >
@@ -175,13 +178,12 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Camera */}
         <button
           onClick={handleCamera}
-          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+          className={`${btnBase} ${
             isCameraOn
-              ? 'bg-discord-bg-tertiary text-discord-green hover:bg-discord-bg-tertiary/80'
-              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              : btnDefaultStyle
           }`}
           title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
         >
@@ -197,13 +199,12 @@ export function VoiceControls() {
           )}
         </button>
 
-        {/* Screen Share */}
         <button
           onClick={handleScreenShare}
-          className={`flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors ${
+          className={`${btnBase} ${
             isScreenSharing
-              ? 'bg-discord-bg-tertiary text-discord-green hover:bg-discord-bg-tertiary/80'
-              : 'bg-discord-bg-tertiary text-discord-text-muted hover:bg-discord-bg-tertiary/80 hover:text-discord-text-secondary'
+              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              : btnDefaultStyle
           }`}
           title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
         >
@@ -213,6 +214,6 @@ export function VoiceControls() {
           </svg>
         </button>
       </div>
-    </div>
+    </>
   );
 }

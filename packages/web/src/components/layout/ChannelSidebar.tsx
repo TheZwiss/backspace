@@ -74,15 +74,37 @@ export function ChannelSidebar() {
     navigate(`/channels/${currentServerId}/${channelId}`);
   };
 
+  // Floating bottom panel — shared between DM view and server view
+  const floatingPanel = user ? (
+    <div className="fixed bottom-2 left-2 z-30 w-[296px]">
+      <div className="bg-[#1a1b1e] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] ring-1 ring-white/[0.06]">
+        {/* Voice controls (expands when connected) */}
+        {currentVoiceChannelId && <VoiceControls />}
+        {/* Separator between voice and user area */}
+        {currentVoiceChannelId && <div className="mx-3 border-t border-white/[0.06]" />}
+        {/* User area (always visible) */}
+        <UserAreaPanel
+          user={user}
+          isMuted={isMuted}
+          isDeafened={isDeafened}
+          onMicToggle={handleMicToggle}
+          onDeafenToggle={handleDeafenToggle}
+          onSettingsClick={() => openModal('userSettings')}
+        />
+      </div>
+    </div>
+  ) : null;
+
   if (!server) {
     return (
+      <>
       <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
         <div className="h-12 px-[10px] flex items-center shadow-header z-10">
           <button className="flex-1 bg-discord-bg-tertiary text-discord-text-muted text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-discord-bg-tertiary/80 transition-colors">
             Find or start a conversation
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar">
+        <div className="flex-1 overflow-y-auto pt-4 px-2 pb-[140px] no-scrollbar">
           <div
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
@@ -187,25 +209,14 @@ export function ChannelSidebar() {
           </div>
         </div>
 
-        {/* Voice controls — visible when in a call, even in DM view */}
-        {currentVoiceChannelId && <VoiceControls />}
-
-        {/* User area at bottom */}
-        {user && (
-          <UserAreaPanel
-            user={user}
-            isMuted={isMuted}
-            isDeafened={isDeafened}
-            onMicToggle={handleMicToggle}
-            onDeafenToggle={handleDeafenToggle}
-            onSettingsClick={() => openModal('userSettings')}
-          />
-        )}
       </div>
+      {floatingPanel}
+      </>
     );
   }
 
   return (
+    <>
     <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
       {/* Server header */}
       <div className="h-12 flex items-center shadow-header z-10 group/header">
@@ -230,7 +241,7 @@ export function ChannelSidebar() {
       </div>
 
       {/* Channels */}
-      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[21px] no-scrollbar">
+      <div className="flex-1 overflow-y-auto pt-3 px-2 pb-[140px] space-y-[21px] no-scrollbar">
         {/* Text Channels */}
         <div>
           <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
@@ -321,21 +332,9 @@ export function ChannelSidebar() {
 
       </div>
 
-      {/* Voice controls — VoiceControls reads state and calls LiveKit SDK directly */}
-      {currentVoiceChannelId && <VoiceControls />}
-
-      {/* User area */}
-      {user && (
-        <UserAreaPanel
-          user={user}
-          isMuted={isMuted}
-          isDeafened={isDeafened}
-          onMicToggle={handleMicToggle}
-          onDeafenToggle={handleDeafenToggle}
-          onSettingsClick={() => openModal('userSettings')}
-        />
-      )}
     </div>
+    {floatingPanel}
+    </>
   );
 }
 
@@ -650,7 +649,7 @@ function UserAreaPanel({
       )}
 
       {/* User area bar */}
-      <div className="h-[52px] px-2 bg-discord-bg-user-area flex items-center select-none">
+      <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
         <div className="p-1 hover:bg-discord-modifier-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
           <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={user.status as any} user={user} />
