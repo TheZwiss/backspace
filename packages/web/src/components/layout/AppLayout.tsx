@@ -75,6 +75,9 @@ export function AppLayout() {
     connectDm: connectDmVoice,
     disconnect: disconnectVoice,
     participants: voiceParticipants,
+    isConnected: isVoiceConnected,
+    isConnecting: isVoiceConnecting,
+    connectedChannelId,
   } = useLiveKit();
 
   // Initialize WebSocket
@@ -85,24 +88,67 @@ export function AppLayout() {
     setParticipants(voiceParticipants);
   }, [voiceParticipants, setParticipants]);
 
-  // Manage voice connection (server voice channels)
-  useEffect(() => {
-    if (!isLoading && user && isWsConnected && currentVoiceChannelId) {
-      console.log('[AppLayout] Auto-rejoining voice channel:', currentVoiceChannelId);
-      connectVoice(currentVoiceChannelId);
-    } else if (!isLoading && user && !currentVoiceChannelId && !activeDmCall) {
-      disconnectVoice();
-    }
-  }, [currentVoiceChannelId, connectVoice, disconnectVoice, activeDmCall, isLoading, user, isWsConnected]);
+  // Track the last channel we attempted to connect to, to prevent effect loops
+  const lastAttemptedRef = React.useRef<string | null>(null);
 
-  // Manage DM call connection
+  // Manage voice connection
   useEffect(() => {
-    if (activeDmCall) {
-      connectDmVoice(activeDmCall.dmChannelId);
-    } else if (!currentVoiceChannelId) {
-      disconnectVoice();
-    }
-  }, [activeDmCall, connectDmVoice, disconnectVoice, currentVoiceChannelId]);
+    if (isLoading || !user || !isWsConnected) return;
+
+    const manageConnection = async () => {
+      // Determine what we SHOULD be connected to
+      const targetChannelId = activeDmCall 
+        ? `dm-${activeDmCall.dmChannelId}` 
+        : currentVoiceChannelId;
+
+      // 1. If we have a target
+      if (targetChannelId) {
+        // If we're not connected to the RIGHT place, trigger connect.
+        // We IGNORE isVoiceConnecting here to allow "interrupting" a connection
+        // or switching rooms immediately.
+        if (connectedChannelId !== targetChannelId) {
+          // Prevent spamming the same connection attempt if React re-renders
+          if (lastAttemptedRef.current === targetChannelId && isVoiceConnecting) {
+            return;
+          }
+          
+          console.log(`[AppLayout] Switching/Connecting to: ${targetChannelId}`);
+          lastAttemptedRef.current = targetChannelId;
+          
+          if (activeDmCall) {
+            await connectDmVoice(activeDmCall.dmChannelId);
+          } else {
+            await connectVoice(targetChannelId);
+          }
+        } else {
+          // We are connected to the right place. Reset ref.
+          lastAttemptedRef.current = null;
+        }
+        return;
+      }
+
+      // 2. No target — ensure disconnected
+      if (connectedChannelId !== null || isVoiceConnected || isVoiceConnecting) {
+        console.log('[AppLayout] Leaving voice (no target)');
+        lastAttemptedRef.current = null;
+        await disconnectVoice();
+      }
+    };
+
+    manageConnection();
+  }, [
+    currentVoiceChannelId, 
+    activeDmCall, 
+    connectedChannelId,
+    isVoiceConnected, 
+    isVoiceConnecting, 
+    isWsConnected, 
+    isLoading, 
+    user, 
+    connectVoice, 
+    connectDmVoice, 
+    disconnectVoice
+  ]);
 
   // Responsive detection
   useEffect(() => {

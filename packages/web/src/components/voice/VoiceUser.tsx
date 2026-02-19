@@ -117,6 +117,14 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
         audioEl.play().catch(() => {});
       }
     }
+
+    return () => {
+      if (boostSourceRef.current) {
+        boostSourceRef.current.disconnect();
+        boostSourceRef.current = null;
+        boostGainRef.current = null;
+      }
+    };
   }, [outputVolume, perUserVolume, isDeafened, isLocal, participant.audioTrack]);
 
 

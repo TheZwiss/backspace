@@ -125,7 +125,10 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
 
-      setCurrentVoiceChannel: (channelId) => set({ currentVoiceChannelId: channelId }),
+      setCurrentVoiceChannel: (channelId) => set({ 
+        currentVoiceChannelId: channelId,
+        activeDmCall: null // Clear active DM call when joining a server channel
+      }),
 
       setParticipants: (participants) => set({ participants }),
       setConnectionError: (error) => set({ connectionError: error }),

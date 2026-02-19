@@ -89,6 +89,8 @@ export function useLiveKit() {
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
+  const [connectedChannelId, setConnectedChannelId] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
   const connectedChannelRef = useRef<string | null>(null);
@@ -212,14 +214,38 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, room]);
+  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected]);
 
   const connect = useCallback(async (channelId: string) => {
-    if (connectedChannelRef.current === channelId && roomRef.current) return;
+    if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected) return;
     const gen = ++_connectGeneration;
-    if (roomRef.current) { try { roomRef.current.disconnect(); } catch { } roomRef.current = null; }
+    
+    // 1. Reset state immediately to reflect "Loading/Switching" in UI
+    setRoom(null);
+    setParticipants([]);
+    setIsConnected(false);
     setIsConnecting(true);
+    setConnectionState(ConnectionState.Connecting);
+    setConnectionError(null);
+    setConnectedChannelId(null); // Clear this so AppLayout knows we are transitioning
+    
     useVoiceStore.getState().setIsLiveKitConnected(false);
+
+    // 2. Strictly disconnect previous room (Local Ref OR Global Ref)
+    // This handles cases where AppLayout might have remounted, losing roomRef but leaving _activeRoom alive.
+    const roomToDisconnect = roomRef.current || _activeRoom;
+    
+    if (roomToDisconnect) {
+      try {
+        console.log('[LiveKit] Disconnecting previous room:', roomToDisconnect.name);
+        await roomToDisconnect.disconnect();
+      } catch (err) {
+        console.warn('Error disconnecting from previous room:', err);
+      }
+      roomRef.current = null;
+      _activeRoom = null;
+    }
+    
     try {
       const { token, url } = await api.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
@@ -227,6 +253,7 @@ export function useLiveKit() {
       roomRef.current = newRoom;
       
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
+      // ... existing event listeners ...
       newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
         guardedUpdate();
         if (useVoiceStore.getState().isDeafened) {
@@ -249,20 +276,35 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.DataReceived, handleDataReceived);
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
+          setConnectionState(state);
           const connected = state === ConnectionState.Connected;
+          const connecting = state === ConnectionState.Connecting || state === ConnectionState.Reconnecting;
+          
           setIsConnected(connected);
+          setIsConnecting(connecting);
+          
           useVoiceStore.getState().setIsLiveKitConnected(connected);
+          
+          if (connected) {
+            updateParticipants();
+          }
         }
       });
       newRoom.on(RoomEvent.Disconnected, () => {
         if (roomRef.current !== newRoom) return;
+        setConnectionState(ConnectionState.Disconnected);
+        setConnectedChannelId(null);
         roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null); setParticipants([]);
         useVoiceStore.getState().setIsLiveKitConnected(false);
       });
 
       await newRoom.connect(url, token);
       if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
-      _activeRoom = newRoom; connectedChannelRef.current = channelId; setRoom(newRoom); setIsConnected(true);
+      _activeRoom = newRoom; 
+      connectedChannelRef.current = channelId; 
+      setConnectedChannelId(channelId);
+      setRoom(newRoom); 
+      setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
       
       updateParticipants();
@@ -270,8 +312,6 @@ export function useLiveKit() {
       // Initial mute state check
       const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
       useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
-      
-      // Mic handling is now done by useEffect
       
       if (wasDeafened) {
         newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
@@ -284,8 +324,30 @@ export function useLiveKit() {
 
   const connectDm = useCallback(async (dmChannelId: string) => {
     const gen = ++_connectGeneration;
-    if (roomRef.current) { try { roomRef.current.disconnect(); } catch { } roomRef.current = null; }
+    
+    // 1. Reset state immediately
+    setRoom(null);
+    setParticipants([]);
+    setIsConnected(false);
     setIsConnecting(true);
+    setConnectionState(ConnectionState.Connecting);
+    setConnectionError(null);
+    setConnectedChannelId(null);
+
+    // 2. Strictly disconnect previous room (Local Ref OR Global Ref)
+    const roomToDisconnect = roomRef.current || _activeRoom;
+
+    if (roomToDisconnect) {
+      try {
+        console.log('[LiveKit] Disconnecting previous room (DM):', roomToDisconnect.name);
+        await roomToDisconnect.disconnect();
+      } catch (err) {
+        console.warn('Error disconnecting from previous room:', err);
+      }
+      roomRef.current = null;
+      _activeRoom = null;
+    }
+
     try {
       const { token, url } = await api.livekit.dmToken(dmChannelId);
       if (gen !== _connectGeneration) return;
@@ -303,21 +365,33 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
+          setConnectionState(state);
           const connected = state === ConnectionState.Connected;
+          const connecting = state === ConnectionState.Connecting || state === ConnectionState.Reconnecting;
+          
           setIsConnected(connected);
+          setIsConnecting(connecting);
+          
           useVoiceStore.getState().setIsLiveKitConnected(connected);
+          
+          if (connected) {
+            updateParticipants();
+          }
         }
       });
       await newRoom.connect(url, token);
       if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
-      _activeRoom = newRoom; connectedChannelRef.current = `dm-${dmChannelId}`; setRoom(newRoom); setIsConnected(true);
+      const fullId = `dm-${dmChannelId}`;
+      _activeRoom = newRoom; 
+      connectedChannelRef.current = fullId; 
+      setConnectedChannelId(fullId);
+      setRoom(newRoom); 
+      setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
       updateParticipants();
       const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
       useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
       
-      // Mic handling is now done by useEffect
-
       if (wasDeafened) {
         newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
       }
@@ -328,12 +402,22 @@ export function useLiveKit() {
 
   const disconnect = useCallback(async () => {
     _connectGeneration++;
-    if (roomRef.current) { await roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; connectedChannelRef.current = null; setRoom(null); setIsConnected(false); setParticipants([]); useVoiceStore.getState().setIsLiveKitConnected(false); }
+    connectedChannelRef.current = null;
+    setConnectedChannelId(null);
+    if (roomRef.current) { 
+      await roomRef.current.disconnect(); 
+      roomRef.current = null; 
+      _activeRoom = null; 
+      setRoom(null); 
+      setIsConnected(false); 
+      setIsConnecting(false);
+      setConnectionState(ConnectionState.Disconnected);
+      setParticipants([]); 
+      useVoiceStore.getState().setIsLiveKitConnected(false); 
+    }
   }, []);
 
   const toggleMic = useCallback(async () => { 
-    // This is now purely a UI helper, actual toggling logic is in the store and useEffect
-    // But we might want to manually trigger resume here just in case
     await AudioManager.getInstance().resumeContext();
     useVoiceStore.getState().toggleMic();
   }, []);
@@ -432,5 +516,5 @@ export function useLiveKit() {
     return () => { _connectGeneration++; if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
-  return { room, participants, isConnected, isConnecting, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
+  return { room, participants, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
 }
