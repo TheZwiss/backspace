@@ -23,9 +23,37 @@ import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { AudioManager } from '../../audio/AudioManager';
 
 export function AppLayout() {
   const { serverId, channelId, inviteCode } = useParams<{ serverId?: string; channelId?: string; inviteCode?: string }>();
+  
+  // Global interaction handler to resume AudioContext
+  useEffect(() => {
+    const resume = () => {
+      AudioManager.getInstance().resumeContext().then(() => {
+        // Wake up all audio/video elements that might be blocked by Autoplay
+        document.querySelectorAll('audio, video').forEach(el => {
+          (el as HTMLMediaElement).play().catch(() => {
+            // Silently fail if still blocked or no source
+          });
+        });
+
+        window.removeEventListener('click', resume);
+        window.removeEventListener('keydown', resume);
+        window.removeEventListener('touchstart', resume);
+      });
+    };
+    window.addEventListener('click', resume);
+    window.addEventListener('keydown', resume);
+    window.addEventListener('touchstart', resume);
+    return () => {
+      window.removeEventListener('click', resume);
+      window.removeEventListener('keydown', resume);
+      window.removeEventListener('touchstart', resume);
+    };
+  }, []);
+
   const { user, isLoading } = useAuth();
   const setCurrentServer = useServerStore((s) => s.setCurrentServer);
   const loadServerDetail = useServerStore((s) => s.loadServerDetail);

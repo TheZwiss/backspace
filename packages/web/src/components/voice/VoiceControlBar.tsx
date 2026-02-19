@@ -36,14 +36,6 @@ export function VoiceControlBar() {
   const [qualityOpen, setQualityOpen] = useState(false);
 
   const handleMute = React.useCallback(async () => {
-    const room = getActiveRoom();
-    if (room) {
-      try {
-        await room.localParticipant.setMicrophoneEnabled(isMuted);
-      } catch (err) {
-        console.error('[VoiceControlBar] Failed to toggle mic:', err);
-      }
-    }
     toggleMic();
     // Broadcast via WebSocket so sidebar shows status without joining
     wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened });
@@ -60,14 +52,6 @@ export function VoiceControlBar() {
     wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen });
     if (room) {
       try {
-        if (willDeafen) {
-          await room.localParticipant.setMicrophoneEnabled(false);
-          room.remoteParticipants.forEach((p) => p.setVolume(0));
-        } else {
-          const outputVolume = useVoiceStore.getState().outputVolume;
-          room.remoteParticipants.forEach((p) => p.setVolume(outputVolume / 100));
-          await room.localParticipant.setMicrophoneEnabled(true);
-        }
         // Broadcast deafen state via LiveKit data channel for in-room users
         const encoder = new TextEncoder();
         room.localParticipant.publishData(

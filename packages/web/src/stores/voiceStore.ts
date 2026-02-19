@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
+import { AudioManager } from '../audio/AudioManager';
 
 interface VoiceState {
   voiceUsers: Map<string, string[]>; // channelId → userIds
@@ -14,6 +15,8 @@ interface VoiceState {
   isLiveKitConnected: boolean;
   inputVolume: number;  // 0-200 (100 = default)
   outputVolume: number; // 0-200 (100 = default)
+  inputDeviceId: string;
+  outputDeviceId: string;
   focusedParticipantId: string | null;
   videoQuality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p';
   // Per-participant volume (userId → 0-200, 100 = default)
@@ -36,6 +39,8 @@ interface VoiceState {
   setIsLiveKitConnected: (connected: boolean) => void;
   setInputVolume: (volume: number) => void;
   setOutputVolume: (volume: number) => void;
+  setInputDevice: (deviceId: string) => Promise<void>;
+  setOutputDevice: (deviceId: string) => void;
   toggleMic: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
@@ -70,6 +75,8 @@ export const useVoiceStore = create<VoiceState>()(
       isLiveKitConnected: false,
       inputVolume: 100,
       outputVolume: 100,
+      inputDeviceId: 'default',
+      outputDeviceId: 'default',
       focusedParticipantId: null,
       videoQuality: '720p60',
       participantVolumes: new Map(),
@@ -124,8 +131,18 @@ export const useVoiceStore = create<VoiceState>()(
       setConnectionError: (error) => set({ connectionError: error }),
       setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
 
-      setInputVolume: (volume) => set({ inputVolume: volume }),
+      setInputVolume: (volume) => {
+        set({ inputVolume: volume });
+        AudioManager.getInstance().setInputVolume(volume);
+      },
       setOutputVolume: (volume) => set({ outputVolume: volume }),
+      
+      setInputDevice: async (deviceId) => {
+        set({ inputDeviceId: deviceId });
+        await AudioManager.getInstance().setInputDevice(deviceId);
+      },
+      
+      setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
       toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
       toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
@@ -191,6 +208,8 @@ export const useVoiceStore = create<VoiceState>()(
         isLiveKitConnected: false,
         inputVolume: 100,
         outputVolume: 100,
+        inputDeviceId: 'default',
+        outputDeviceId: 'default',
         focusedParticipantId: null,
         participantVolumes: new Map(),
         incomingCall: null,
@@ -210,6 +229,8 @@ export const useVoiceStore = create<VoiceState>()(
         isDeafened: state.isDeafened,
         inputVolume: state.inputVolume,
         outputVolume: state.outputVolume,
+        inputDeviceId: state.inputDeviceId,
+        outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
         noiseSuppression: state.noiseSuppression,
       }),

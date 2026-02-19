@@ -10,6 +10,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getActiveRoom } from '../../hooks/useLiveKit';
+import { AudioManager } from '../../audio/AudioManager';
 
 export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
@@ -31,14 +32,6 @@ export function ChannelSidebar() {
   const navigate = useNavigate();
 
   const handleMicToggle = async () => {
-    const room = getActiveRoom();
-    if (room) {
-      try {
-        await room.localParticipant.setMicrophoneEnabled(isMuted);
-      } catch (err) {
-        console.error('[ChannelSidebar] Failed to toggle mic:', err);
-      }
-    }
     toggleMic();
     // Broadcast mute status via WebSocket so non-joined users can see it
     const willBeMuted = !isMuted;
@@ -57,15 +50,6 @@ export function ChannelSidebar() {
     wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen });
     if (room) {
       try {
-        if (willDeafen) {
-          await room.localParticipant.setMicrophoneEnabled(false);
-          room.remoteParticipants.forEach((p) => p.setVolume(0));
-        } else {
-          const outputVolume = useVoiceStore.getState().outputVolume;
-          const scaled = outputVolume / 100;
-          room.remoteParticipants.forEach((p) => p.setVolume(scaled));
-          await room.localParticipant.setMicrophoneEnabled(true);
-        }
         // Broadcast deafen state to other participants via LiveKit data channel
         const encoder = new TextEncoder();
         room.localParticipant.publishData(
@@ -390,10 +374,14 @@ function UserAreaPanel({
   const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedInput, setSelectedInput] = useState<string>('default');
-  const [selectedOutput, setSelectedOutput] = useState<string>('default');
+  const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
+  const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
+  const setInputDevice = useVoiceStore((s) => s.setInputDevice);
+  const setOutputDevice = useVoiceStore((s) => s.setOutputDevice);
+  
   const [selectedInputLabel, setSelectedInputLabel] = useState<string>('Default');
   const [selectedOutputLabel, setSelectedOutputLabel] = useState<string>('Default');
+
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const storeSetInputVolume = useVoiceStore((s) => s.setInputVolume);
   const outputVolume = useVoiceStore((s) => s.outputVolume);
@@ -408,14 +396,24 @@ function UserAreaPanel({
   const loadDevices = useCallback(async () => {
     try {
       // Need to request permission first to get labels
-      await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+      if (!AudioManager.getInstance().getContext()) {
+        await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+      }
       const devices = await navigator.mediaDevices.enumerateDevices();
-      setInputDevices(devices.filter(d => d.kind === 'audioinput'));
-      setOutputDevices(devices.filter(d => d.kind === 'audiooutput'));
+      const inputs = devices.filter(d => d.kind === 'audioinput');
+      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      setInputDevices(inputs);
+      setOutputDevices(outputs);
+      
+      const currentInput = inputs.find(d => d.deviceId === inputDeviceId);
+      if (currentInput) setSelectedInputLabel(currentInput.label || 'Default');
+      
+      const currentOutput = outputs.find(d => d.deviceId === outputDeviceId);
+      if (currentOutput) setSelectedOutputLabel(currentOutput.label || 'Default');
     } catch {
       // permission denied
     }
-  }, []);
+  }, [inputDeviceId, outputDeviceId]);
 
   // Start mic level monitoring when input panel opens
   useEffect(() => {
@@ -425,17 +423,14 @@ function UserAreaPanel({
       setMicLevel(0);
       return;
     }
-    let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
+
     const start = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedInput !== 'default' ? selectedInput : undefined } });
-        ctx = new AudioContext();
-        const source = ctx.createMediaStreamSource(stream);
-        const analyser = ctx.createAnalyser();
+        await AudioManager.getInstance().resumeContext();
+        const analyser = AudioManager.getInstance().getAnalyserNode();
         analyser.fftSize = 256;
-        source.connect(analyser);
         analyserRef.current = analyser;
+        
         const data = new Uint8Array(analyser.frequencyBinCount);
         const tick = () => {
           if (!analyserRef.current) return;
@@ -451,10 +446,8 @@ function UserAreaPanel({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       analyserRef.current = null;
-      stream?.getTracks().forEach(t => t.stop());
-      ctx?.close();
     };
-  }, [openPanel, selectedInput]);
+  }, [openPanel]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -476,19 +469,19 @@ function UserAreaPanel({
       setOpenPanel(panel);
       setShowInputDeviceList(false);
       setShowOutputDeviceList(false);
+      // Explicitly resume on interaction
+      AudioManager.getInstance().resumeContext();
     }
   };
 
   const selectInput = (device: MediaDeviceInfo) => {
-    setSelectedInput(device.deviceId);
+    setInputDevice(device.deviceId);
     setSelectedInputLabel(device.label || 'Default');
     setShowInputDeviceList(false);
-    const room = getActiveRoom();
-    if (room) room.switchActiveDevice('audioinput', device.deviceId).catch(() => {});
   };
 
   const selectOutput = (device: MediaDeviceInfo) => {
-    setSelectedOutput(device.deviceId);
+    setOutputDevice(device.deviceId);
     setSelectedOutputLabel(device.label || 'Default');
     setShowOutputDeviceList(false);
     const room = getActiveRoom();
@@ -525,15 +518,15 @@ function UserAreaPanel({
                     key={d.deviceId}
                     onClick={() => selectInput(d)}
                     className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
-                      selectedInput === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
+                      inputDeviceId === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
                     }`}
                   >
-                    {selectedInput === d.deviceId && (
+                    {inputDeviceId === d.deviceId && (
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                       </svg>
                     )}
-                    <span className={selectedInput === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
+                    <span className={inputDeviceId === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
                   </button>
                 ))}
               </div>
@@ -550,22 +543,11 @@ function UserAreaPanel({
                           min={0}
                           max={200}
                           value={inputVolume}
-                                                          onChange={(e) => {
-                                                            const vol = Number(e.target.value);
-                                                            storeSetInputVolume(vol);
-                                                            
-                                                            const room = getActiveRoom();
-                                                            if (room) {
-                                                              const { isMuted: manuallyMuted, isDeafened: manuallyDeafened } = useVoiceStore.getState();
-                                                              // If user is manually muted, hardware should stay off regardless of volume.
-                                                              // If user is NOT manually muted and volume is 0, we can keep hardware ON 
-                                                              // (Web Audio handles silence) or turn it OFF for battery/privacy.
-                                                              // Discord keeps it ON (green ring) but silent. We'll follow that.
-                                                              if (!manuallyMuted && !manuallyDeafened && !room.localParticipant.isMicrophoneEnabled && vol > 0) {
-                                                                room.localParticipant.setMicrophoneEnabled(true).catch(() => {});
-                                                              }
-                                                            }
-                                                          }}                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-discord-blurple bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+                          onChange={(e) => {
+                            const vol = Number(e.target.value);
+                            storeSetInputVolume(vol);
+                          }}
+                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-discord-blurple bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
                           style={{
                             background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${inputVolume / 2}%, #4e5058 ${inputVolume / 2}%, #4e5058 100%)`,
                           }}
@@ -622,15 +604,15 @@ function UserAreaPanel({
                                 key={d.deviceId}
                                 onClick={() => selectOutput(d)}
                                 className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
-                                  selectedOutput === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
+                                  outputDeviceId === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
                                 }`}
                               >
-                                {selectedOutput === d.deviceId && (
+                                {outputDeviceId === d.deviceId && (
                                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
                                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                                   </svg>
                                 )}
-                                <span className={selectedOutput === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
+                                <span className={outputDeviceId === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
                               </button>
                             ))}
                           </div>

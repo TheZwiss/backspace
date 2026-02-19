@@ -9,9 +9,11 @@ import {
   VideoPresets,
   VideoPreset,
   LocalAudioTrack,
+  LocalTrackPublication,
 } from 'livekit-client';
 import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
+import { AudioManager } from '../audio/AudioManager';
 
 /**
  * OPENCORD NATIVE OVERDRIVE PIPELINE v32
@@ -29,31 +31,6 @@ const QUALITY_MAP: Record<string, VideoPreset> = {
 const AUTO_PRESET = QUALITY_MAP['720p60']!;
 
 let _activeRoom: Room | null = null;
-let _sharedAudioCtx: AudioContext | null = null;
-
-export function getSharedAudioCtx() {
-  if (typeof window === 'undefined') return null;
-  if (!_sharedAudioCtx) {
-    _sharedAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-  }
-  return _sharedAudioCtx;
-}
-
-// Global gesture resumer
-if (typeof window !== 'undefined') {
-  const resume = () => {
-    const ctx = getSharedAudioCtx();
-    if (ctx && ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        console.log('[Audio] Shared context resumed via interaction');
-        window.removeEventListener('click', resume);
-        window.removeEventListener('keydown', resume);
-      });
-    }
-  };
-  window.addEventListener('click', resume);
-  window.addEventListener('keydown', resume);
-}
 
 export function getActiveRoom(): Room | null {
   return _activeRoom;
@@ -123,11 +100,7 @@ export function useLiveKit() {
   const videoQuality = useVoiceStore((s) => s.videoQuality);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
-
-  // Web Audio for Local Input Gain
-  const localGainNodeRef = useRef<GainNode | null>(null);
-  const localSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const localDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
 
   const updateParticipants = useCallback(() => {
     const r = roomRef.current;
@@ -168,14 +141,6 @@ export function useLiveKit() {
     setParticipants(allParticipants);
   }, []);
 
-  // Sync Input Gain value
-  useEffect(() => {
-    if (localGainNodeRef.current) {
-      const ctx = getSharedAudioCtx();
-      localGainNodeRef.current.gain.setTargetAtTime(inputVolume / 100, ctx?.currentTime || 0, 0.01);
-    }
-  }, [inputVolume]);
-
   const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
     try {
       const text = new TextDecoder().decode(payload);
@@ -188,39 +153,66 @@ export function useLiveKit() {
     } catch { }
   }, [updateParticipants]);
 
-  const setupLocalGainPipeline = useCallback(async (room: Room, audioTrack: LocalAudioTrack) => {
-    try {
-      const ctx = getSharedAudioCtx();
-      if (!ctx || !audioTrack.mediaStreamTrack) return;
-      
-      if (!localGainNodeRef.current) {
-        localGainNodeRef.current = ctx.createGain();
-        localDestRef.current = ctx.createMediaStreamDestination();
-        localGainNodeRef.current.connect(localDestRef.current);
-      }
-      
-      if (localSourceRef.current) localSourceRef.current.disconnect();
-      localSourceRef.current = ctx.createMediaStreamSource(new MediaStream([audioTrack.mediaStreamTrack]));
-      localSourceRef.current.connect(localGainNodeRef.current!);
-      
-      // Set gain from store
-      localGainNodeRef.current!.gain.value = useVoiceStore.getState().inputVolume / 100;
-      
-      const processedTrack = localDestRef.current!.stream.getAudioTracks()[0];
-      const engine = (room as any).engine;
-      const pc = engine?.pcManager?.publisher?.pc || engine?.publisher?.pc || engine?.pc;
-      if (pc && processedTrack) {
-        const senders = (pc as RTCPeerConnection).getSenders();
-        const sender = senders.find(s => s.track?.id === audioTrack.mediaStreamTrack.id);
-        if (sender) {
-          console.log('[LiveKit] Swapping raw mic for gain-processed track');
-          await sender.replaceTrack(processedTrack);
+  // Handle Input Device & Mute Logic via AudioManager
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected) return;
+
+    const syncMic = async () => {
+      try {
+        const audioManager = AudioManager.getInstance();
+        
+        // If muted or deafened, unpublish mic
+        if (isMuted || isDeafened) {
+          const pub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
+          if (pub) {
+            await r.localParticipant.unpublishTrack(pub.track as LocalAudioTrack);
+          }
+          return;
         }
+
+        // Ensure device is set and volume is sync'd
+        await audioManager.setInputDevice(inputDeviceId);
+        audioManager.setInputVolume(inputVolume);
+        
+        // Check if already published
+        const existingPub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
+        
+        if (existingPub && existingPub.track) {
+          // If track is alive, we are good.
+          if (existingPub.track.mediaStreamTrack?.readyState === 'live') {
+            return;
+          }
+          // If track died, unpublish so we can republish
+          await r.localParticipant.unpublishTrack(existingPub.track as LocalAudioTrack);
+        }
+
+        // Get a FRESH track (clone) for this specific publication
+        const audioTrack = audioManager.getFreshTrack();
+        if (!audioTrack) return;
+
+        console.log('[LiveKit] Publishing fresh microphone track');
+        await r.localParticipant.publishTrack(audioTrack, {
+          name: 'microphone',
+          source: Track.Source.Microphone,
+        });
+        
+      } catch (err) {
+        console.error('[LiveKit] Failed to sync mic state:', err);
       }
-    } catch (err) {
-      console.error('[LiveKit] Local gain setup failed:', err);
-    }
-  }, []);
+    };
+
+    syncMic();
+
+    // Re-sync when AudioManager resumes
+    const unsubscribe = AudioManager.getInstance().onResumed(() => {
+      syncMic();
+    });
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, room]);
 
   const connect = useCallback(async (channelId: string) => {
     if (connectedChannelRef.current === channelId && roomRef.current) return;
@@ -248,12 +240,7 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
       newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackPublished, (pub) => {
-        guardedUpdate();
-        if (pub.source === Track.Source.Microphone && pub.track instanceof LocalAudioTrack) {
-          setupLocalGainPipeline(newRoom, pub.track);
-        }
-      });
+      newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
       newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
@@ -279,22 +266,21 @@ export function useLiveKit() {
       useVoiceStore.getState().setIsLiveKitConnected(true);
       
       updateParticipants();
-
+      
+      // Initial mute state check
       const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
       useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
       
-      if (!wasMuted && !wasDeafened) {
-        await newRoom.localParticipant.setMicrophoneEnabled(true);
-      } else {
-        await newRoom.localParticipant.setMicrophoneEnabled(false);
-        if (wasDeafened) {
-          newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
-        }
+      // Mic handling is now done by useEffect
+      
+      if (wasDeafened) {
+        newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
       }
+      
       updateParticipants();
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived, setupLocalGainPipeline]);
+  }, [updateParticipants, handleDataReceived]);
 
   const connectDm = useCallback(async (dmChannelId: string) => {
     const gen = ++_connectGeneration;
@@ -310,12 +296,7 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
       newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackPublished, (pub) => {
-        guardedUpdate();
-        if (pub.source === Track.Source.Microphone && pub.track instanceof LocalAudioTrack) {
-          setupLocalGainPipeline(newRoom, pub.track);
-        }
-      });
+      newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
       newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
@@ -334,18 +315,16 @@ export function useLiveKit() {
       updateParticipants();
       const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
       useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
-      if (!wasMuted && !wasDeafened) {
-        await newRoom.localParticipant.setMicrophoneEnabled(true);
-      } else {
-        await newRoom.localParticipant.setMicrophoneEnabled(false);
-        if (wasDeafened) {
-          newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
-        }
+      
+      // Mic handling is now done by useEffect
+
+      if (wasDeafened) {
+        newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
       }
       updateParticipants();
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived, setupLocalGainPipeline]);
+  }, [updateParticipants, handleDataReceived]);
 
   const disconnect = useCallback(async () => {
     _connectGeneration++;
@@ -353,11 +332,11 @@ export function useLiveKit() {
   }, []);
 
   const toggleMic = useCallback(async () => { 
-    if (roomRef.current) { 
-      await roomRef.current.localParticipant.setMicrophoneEnabled(!isMuted);
-      updateParticipants(); 
-    } 
-  }, [isMuted, updateParticipants]);
+    // This is now purely a UI helper, actual toggling logic is in the store and useEffect
+    // But we might want to manually trigger resume here just in case
+    await AudioManager.getInstance().resumeContext();
+    useVoiceStore.getState().toggleMic();
+  }, []);
 
   const toggleCamera = useCallback(async () => {
     if (roomRef.current) {
@@ -453,5 +432,5 @@ export function useLiveKit() {
     return () => { _connectGeneration++; if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
-  return { room, participants, isConnected, isConnecting, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare, getSharedAudioCtx };
+  return { room, participants, isConnected, isConnecting, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
 }
