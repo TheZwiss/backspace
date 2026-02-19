@@ -14,7 +14,7 @@ import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
 
 /**
- * OPENCORD NATIVE OVERDRIVE PIPELINE v30
+ * OPENCORD NATIVE OVERDRIVE PIPELINE v32
  */
 
 const QUALITY_MAP: Record<string, VideoPreset> = {
@@ -191,7 +191,7 @@ export function useLiveKit() {
   const setupLocalGainPipeline = useCallback(async (room: Room, audioTrack: LocalAudioTrack) => {
     try {
       const ctx = getSharedAudioCtx();
-      if (!ctx) return;
+      if (!ctx || !audioTrack.mediaStreamTrack) return;
       
       if (!localGainNodeRef.current) {
         localGainNodeRef.current = ctx.createGain();
@@ -203,7 +203,7 @@ export function useLiveKit() {
       localSourceRef.current = ctx.createMediaStreamSource(new MediaStream([audioTrack.mediaStreamTrack]));
       localSourceRef.current.connect(localGainNodeRef.current!);
       
-      // Initialize gain from store
+      // Set gain from store
       localGainNodeRef.current!.gain.value = useVoiceStore.getState().inputVolume / 100;
       
       const processedTrack = localDestRef.current!.stream.getAudioTracks()[0];
@@ -275,10 +275,7 @@ export function useLiveKit() {
 
       await newRoom.connect(url, token);
       if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
-      _activeRoom = newRoom; 
-      connectedChannelRef.current = channelId; 
-      setRoom(newRoom); 
-      setIsConnected(true);
+      _activeRoom = newRoom; connectedChannelRef.current = channelId; setRoom(newRoom); setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
       
       updateParticipants();
