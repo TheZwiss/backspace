@@ -119,6 +119,9 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
             newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
             newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;
@@ -181,6 +184,14 @@ export function useLiveKit() {
                 return;
             const newRoom = new Room({ adaptiveStream: false, dynacast: false, publishDefaults: { videoCodec: 'h264', simulcast: false } });
             roomRef.current = newRoom;
+            const guardedUpdate = () => { if (roomRef.current === newRoom)
+                updateParticipants(); };
+            newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
+            newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
+            newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;

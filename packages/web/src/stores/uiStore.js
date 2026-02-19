@@ -31,7 +31,9 @@ export const useUIStore = create((set) => ({
     }),
     voiceChatOpen: false,
     voiceFullscreen: false,
+    pipCollapsed: false,
     toggleVoiceChat: () => set((state) => ({ voiceChatOpen: !state.voiceChatOpen })),
     toggleVoiceFullscreen: () => set((state) => ({ voiceFullscreen: !state.voiceFullscreen })),
     setVoiceFullscreen: (fullscreen) => set({ voiceFullscreen: fullscreen }),
+    setPipCollapsed: (collapsed) => set({ pipCollapsed: collapsed }),
 }));

@@ -44,7 +44,7 @@ export function VoiceUser({ participant, large }) {
         }
         audioEl.muted = isDeafened;
     }, [isDeafened, outputVolume, perUserVolume]);
-    const hasVideo = participant.isCameraOn || participant.isScreenSharing;
+    const hasVideo = !!(participant.videoTrack || participant.screenTrack);
     const isLocal = participant.isLocal;
     // Volume context menu
     const [volumeMenu, setVolumeMenu] = useState(null);
