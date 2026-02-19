@@ -172,11 +172,9 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             className="p-3 text-discord-text-muted hover:text-discord-text-secondary transition-colors sticky top-0"
             title="Attach file"
           >
-            <div className="bg-discord-text-muted/20 hover:bg-discord-text-muted/40 rounded-full p-0.5 transition-colors">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-              </svg>
-            </div>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+            </svg>
           </button>
           <input
             ref={fileInputRef}

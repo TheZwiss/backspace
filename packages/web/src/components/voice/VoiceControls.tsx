@@ -104,7 +104,7 @@ export function VoiceControls() {
       : 'bg-discord-yellow/20';
 
   return (
-    <div className="bg-[#232428] border-t border-discord-bg-tertiary">
+    <div className="bg-[#1a1b1e] border-t border-discord-bg-tertiary">
       {/* Row 1: Signal icon + status text + disconnect */}
       <div className="flex items-center gap-2 px-2 pt-[10px] pb-1">
         <div className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0`}>

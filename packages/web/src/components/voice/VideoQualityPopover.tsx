@@ -54,9 +54,9 @@ export function VideoQualityPopover({ open, onClose, anchorRect }: VideoQualityP
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[240px] bg-[#2b2d31] rounded-lg shadow-lg border border-[#1e1f22] z-50 overflow-hidden"
+      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[240px] bg-[#1e1f22] rounded-lg shadow-lg border border-[#111214] z-50 overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-[#1e1f22]">
+      <div className="px-3 py-2 border-b border-[#111214]">
         <span className="text-[14px] font-bold text-discord-text-primary">Video Quality</span>
       </div>
       <div className="py-1">

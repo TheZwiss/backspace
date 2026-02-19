@@ -181,11 +181,11 @@ export function MainContent() {
   if (isVoiceChannel) {
     const isInThisChannel = currentVoiceChannelId === currentChannelId;
 
-    // Not connected — show "Join Voice" prompt
+    // Not connected — show "Join Voice" prompt with gradient
     if (!isInThisChannel) {
       return (
-        <div className="flex-1 flex flex-col bg-discord-bg-primary">
-          <div className="h-12 px-4 flex items-center justify-between shadow-header">
+        <div className="flex-1 flex flex-col bg-[#0b0c0e]">
+          <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#0b0c0e]">
             <div className="flex items-center gap-2">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
@@ -193,20 +193,19 @@ export function MainContent() {
               <span className="font-bold text-discord-text-primary">{channel.name}</span>
             </div>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center gap-6">
-            <div className="text-center">
-              <svg width="80" height="80" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted mx-auto mb-4 opacity-40">
-                <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
-              </svg>
-              <h2 className="text-[24px] font-bold text-discord-text-header mb-2">{channel.name}</h2>
-              <p className="text-discord-text-muted text-[14px]">No one is currently in this voice channel.</p>
+          <div className="flex-1 flex flex-col items-center justify-center gap-8 relative">
+            {/* Radial gradient glow */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(88,101,242,0.12)_0%,transparent_70%)] animate-gradient-pulse pointer-events-none" />
+            <div className="text-center relative z-10">
+              <h2 className="text-[28px] font-bold text-white mb-3">{channel.name}</h2>
+              <p className="text-discord-text-muted text-[15px]">No one is currently in this voice channel.</p>
             </div>
             <button
               onClick={() => {
                 useVoiceStore.getState().setCurrentVoiceChannel(currentChannelId);
                 wsSend({ type: 'voice_join', channelId: currentChannelId });
               }}
-              className="px-8 py-3 bg-discord-green hover:bg-discord-green/80 text-white font-medium rounded-[3px] transition-colors text-[14px]"
+              className="relative z-10 px-8 py-3 bg-gradient-to-r from-[#5865f2] to-[#7b6cf6] hover:brightness-110 text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(88,101,242,0.3)]"
             >
               Join Voice
             </button>
@@ -215,29 +214,30 @@ export function MainContent() {
       );
     }
 
-    // Connected — full voice view with grid + chat panel + control bar
+    // Connected — full voice view with grid + floating control bar
     const voiceView = (
-      <div className={`flex-1 flex flex-col bg-[#111214] min-w-0 ${voiceFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      <div className={`flex-1 flex flex-col bg-[#0b0c0e] min-w-0 ${voiceFullscreen ? 'fixed inset-0 z-50' : ''} group/voice relative`}>
         {/* Voice header */}
-        <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#111214]">
+        <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#0b0c0e]">
           <div className="flex items-center gap-2">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
             </svg>
             <span className="font-bold text-discord-text-primary">{channel.name}</span>
             <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
+            <span className="text-xs text-discord-text-muted ml-1">{participants.length} connected</span>
           </div>
         </div>
 
         {/* Main content: grid + optional chat */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden pb-20">
           <VoiceGrid participants={participants} />
           {voiceChatOpen && (
             <VoiceChatPanel channelId={currentChannelId} channelName={channel.name} />
           )}
         </div>
 
-        {/* Control bar at bottom */}
+        {/* Floating control bar */}
         <VoiceControlBar />
       </div>
     );

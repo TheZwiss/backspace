@@ -123,9 +123,9 @@ export function DmCallView() {
   const remoteParticipant = participants.find(p => !p.isLocal);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#111214] min-w-0">
+    <div className="flex-1 flex flex-col bg-[#0b0c0e] min-w-0">
       {/* Header */}
-      <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#111214]">
+      <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#0b0c0e]">
         <div className="flex items-center gap-2">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-discord-green">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
@@ -140,7 +140,7 @@ export function DmCallView() {
         {/* Remote participant (or waiting) */}
         <div className="flex flex-col items-center gap-4">
           {remoteParticipant?.videoTrack ? (
-            <div className="w-[360px] h-[270px] rounded-xl overflow-hidden bg-[#2b2d31] relative">
+            <div className="w-[360px] h-[270px] rounded-xl overflow-hidden bg-[#111214] relative">
               <video
                 id={`dm-video-${remoteParticipant.userId}`}
                 autoPlay
@@ -153,7 +153,7 @@ export function DmCallView() {
               </div>
             </div>
           ) : (
-            <div className="w-[200px] h-[200px] rounded-full bg-[#2b2d31] flex items-center justify-center relative">
+            <div className="w-[200px] h-[200px] rounded-full bg-[#111214] flex items-center justify-center relative">
               <div className="w-24 h-24 rounded-full bg-discord-blurple flex items-center justify-center text-white text-4xl font-bold">
                 {otherName.charAt(0).toUpperCase()}
               </div>
@@ -178,7 +178,7 @@ export function DmCallView() {
         {/* Local participant */}
         <div className="flex flex-col items-center gap-4">
           {localParticipant?.videoTrack ? (
-            <div className="w-[360px] h-[270px] rounded-xl overflow-hidden bg-[#2b2d31] relative">
+            <div className="w-[360px] h-[270px] rounded-xl overflow-hidden bg-[#111214] relative">
               <video
                 id={`dm-video-${localParticipant.userId}`}
                 autoPlay
@@ -192,7 +192,7 @@ export function DmCallView() {
               </div>
             </div>
           ) : (
-            <div className="w-[200px] h-[200px] rounded-full bg-[#2b2d31] flex items-center justify-center relative">
+            <div className="w-[200px] h-[200px] rounded-full bg-[#111214] flex items-center justify-center relative">
               <div className="w-24 h-24 rounded-full bg-discord-blurple flex items-center justify-center text-white text-4xl font-bold">
                 {(authUser?.displayName ?? authUser?.username ?? 'Y').charAt(0).toUpperCase()}
               </div>
@@ -208,12 +208,12 @@ export function DmCallView() {
       </div>
 
       {/* Control bar */}
-      <div className="h-[72px] bg-[#1e1f22] flex items-center justify-center gap-4 px-4 flex-shrink-0">
+      <div className="h-[72px] bg-[#111214] flex items-center justify-center gap-4 px-4 flex-shrink-0">
         {/* Mute */}
         <button
           onClick={handleMute}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-            isMuted ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30' : 'bg-[#2b2d31] text-discord-text-primary hover:bg-[#36373d]'
+            isMuted ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30' : 'bg-[#111214] text-discord-text-primary hover:bg-[#2b2d31]'
           }`}
           title={isMuted ? 'Unmute' : 'Mute'}
         >
@@ -232,7 +232,7 @@ export function DmCallView() {
         <button
           onClick={handleDeafen}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-            isDeafened ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30' : 'bg-[#2b2d31] text-discord-text-primary hover:bg-[#36373d]'
+            isDeafened ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30' : 'bg-[#111214] text-discord-text-primary hover:bg-[#2b2d31]'
           }`}
           title={isDeafened ? 'Undeafen' : 'Deafen'}
         >
@@ -251,7 +251,7 @@ export function DmCallView() {
         <button
           onClick={handleCamera}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-            isCameraOn ? 'bg-discord-blurple/20 text-discord-blurple hover:bg-discord-blurple/30' : 'bg-[#2b2d31] text-discord-text-primary hover:bg-[#36373d]'
+            isCameraOn ? 'bg-discord-blurple/20 text-discord-blurple hover:bg-discord-blurple/30' : 'bg-[#111214] text-discord-text-primary hover:bg-[#2b2d31]'
           }`}
           title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
         >
@@ -270,7 +270,7 @@ export function DmCallView() {
         <button
           onClick={handleScreenShare}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
-            isScreenSharing ? 'bg-discord-blurple/20 text-discord-blurple hover:bg-discord-blurple/30' : 'bg-[#2b2d31] text-discord-text-primary hover:bg-[#36373d]'
+            isScreenSharing ? 'bg-discord-blurple/20 text-discord-blurple hover:bg-discord-blurple/30' : 'bg-[#111214] text-discord-text-primary hover:bg-[#2b2d31]'
           }`}
           title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
         >
@@ -280,7 +280,7 @@ export function DmCallView() {
         </button>
 
         {/* Spacer */}
-        <div className="w-[1px] h-8 bg-[#3f4147] mx-2" />
+        <div className="w-[1px] h-8 bg-[#2b2d31] mx-2" />
 
         {/* End Call */}
         <button

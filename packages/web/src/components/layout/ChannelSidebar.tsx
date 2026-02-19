@@ -208,15 +208,26 @@ export function ChannelSidebar() {
   return (
     <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
       {/* Server header */}
-      <button
-        onClick={() => openModal('serverSettings')}
-        className="h-12 px-4 flex items-center justify-between shadow-header z-10 hover:bg-discord-modifier-hover transition-colors group"
-      >
-        <span className="font-bold text-[16px] text-discord-text-primary truncate leading-tight">{server.name}</span>
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-discord-text-muted flex-shrink-0 group-hover:text-discord-text-secondary">
-          <path d="M5.293 7.293a1 1 0 011.414 0L9 9.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
-        </svg>
-      </button>
+      <div className="h-12 flex items-center shadow-header z-10 group/header">
+        <button
+          onClick={() => openModal('serverSettings')}
+          className="flex-1 h-full px-4 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors min-w-0"
+        >
+          <span className="font-bold text-[16px] text-discord-text-primary truncate leading-tight">{server.name}</span>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-discord-text-muted flex-shrink-0">
+            <path d="M5.293 7.293a1 1 0 011.414 0L9 9.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => openModal('invite')}
+          className="w-10 h-full flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex-shrink-0"
+          title="Invite People"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
+          </svg>
+        </button>
+      </div>
 
       {/* Channels */}
       <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[21px] no-scrollbar">
@@ -308,18 +319,6 @@ export function ChannelSidebar() {
           </div>
         </div>
 
-        {/* Restore Invite Button */}
-        <div className="pt-2">
-          <button
-            onClick={() => openModal('invite')}
-            className="w-full flex items-center gap-2 px-2 h-8 rounded-[4px] text-[15px] font-medium text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-modifier-hover transition-colors"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
-              <path d="M13 13v5h-2v-5H6v-2h5V6h2v5h5v2h-5z" />
-            </svg>
-            Invite People
-          </button>
-        </div>
       </div>
 
       {/* Voice controls — VoiceControls reads state and calls LiveKit SDK directly */}
@@ -473,7 +472,7 @@ function UserAreaPanel({
     <div className="relative" ref={panelRef}>
       {/* Input settings panel */}
       {openPanel === 'input' && (
-        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#2b2d31] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
+        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
           {/* Input Device */}
           <div className="relative">
             <button
@@ -510,7 +509,7 @@ function UserAreaPanel({
             )}
           </div>
 
-          <div className="mx-4 border-t border-[#3f4147]" />
+          <div className="mx-4 border-t border-[#2b2d31]" />
 
           {/* Input Volume */}
           <div className="px-4 py-3">
@@ -545,14 +544,14 @@ function UserAreaPanel({
                 <div
                   key={i}
                   className={`flex-1 h-[6px] rounded-[1px] transition-colors duration-75 ${
-                    i < activeBars ? 'bg-discord-text-muted' : 'bg-[#3f4147]'
+                    i < activeBars ? 'bg-discord-text-muted' : 'bg-[#313338]'
                   }`}
                 />
               ))}
             </div>
           </div>
 
-          <div className="mx-4 border-t border-[#3f4147]" />
+          <div className="mx-4 border-t border-[#2b2d31]" />
 
           {/* Voice Settings link */}
           <button
@@ -569,7 +568,7 @@ function UserAreaPanel({
 
       {/* Output settings panel */}
       {openPanel === 'output' && (
-        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#2b2d31] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
+        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
           {/* Output Device */}
           <div className="relative">
             <button
@@ -606,7 +605,7 @@ function UserAreaPanel({
             )}
           </div>
 
-          <div className="mx-4 border-t border-[#3f4147]" />
+          <div className="mx-4 border-t border-[#2b2d31]" />
 
           {/* Output Volume */}
           <div className="px-4 py-3">
@@ -635,7 +634,7 @@ function UserAreaPanel({
             />
           </div>
 
-          <div className="mx-4 border-t border-[#3f4147]" />
+          <div className="mx-4 border-t border-[#2b2d31]" />
 
           {/* Voice Settings link */}
           <button

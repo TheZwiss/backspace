@@ -91,7 +91,7 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
 
   return (
     <div
-      className={`relative bg-[#1e1f22] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
+      className={`relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         participant.isSpeaking
           ? 'ring-[3px] ring-discord-green shadow-[0_0_12px_rgba(35,165,90,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
@@ -111,7 +111,7 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
           className={`w-full h-full ${large || isScreenShare ? 'object-contain bg-black' : 'object-cover'}`}
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#2b2d31]">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1e1f22]">
           <div className="relative">
             <Avatar
               src={null}

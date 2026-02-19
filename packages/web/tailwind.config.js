@@ -8,22 +8,22 @@ export default {
     extend: {
       colors: {
         discord: {
-          // Backgrounds (darkest → lightest)
-          'bg-tertiary':       '#1e1f22',
-          'bg-server':         '#1e1f22',
-          'bg-secondary':      '#2b2d31',
-          'bg-primary':        '#313338',
-          'bg-input':          '#383a40',
-          'bg-surface':        '#393a41',
-          'bg-surface-higher': '#3f4048',
-          'bg-floating':       '#111214',
-          'bg-overlay':        'rgba(0, 0, 0, 0.85)',
-          'bg-user-area':      '#232428',
-          'bg-accent':         '#41434a',
-          'bg-hover':          '#2e3035',
-          'bg-active':         '#404249',
-          'bg-members':        '#2b2d31',
-          'bg-home':           '#282a2e',
+          // Backgrounds (darkest → lightest) — Discord "Dark" theme
+          'bg-floating':       '#080a0b',
+          'bg-tertiary':       '#111214',
+          'bg-server':         '#111214',
+          'bg-user-area':      '#1a1b1e',
+          'bg-secondary':      '#1e1f22',
+          'bg-members':        '#1e1f22',
+          'bg-home':           '#1a1d20',
+          'bg-hover':          '#232428',
+          'bg-primary':        '#232428',
+          'bg-input':          '#2b2d31',
+          'bg-surface':        '#2b2d31',
+          'bg-surface-higher': '#313338',
+          'bg-active':         '#313338',
+          'bg-accent':         '#353840',
+          'bg-overlay':        'rgba(0, 0, 0, 0.90)',
 
           // Text
           'text-primary':   '#ffffff',

@@ -32,8 +32,9 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-discord-bg-tertiary">
-      <div className="w-full max-w-[480px] bg-discord-bg-surface rounded-md p-8 shadow-elevation-high">
+    <div className="min-h-screen flex items-center justify-center bg-[#080a0b] relative">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(88,101,242,0.06)_0%,transparent_50%)]" />
+      <div className="w-full max-w-[480px] bg-discord-bg-surface rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-discord-text-primary">Welcome back!</h1>
           <p className="text-discord-text-muted mt-1">We're so excited to see you again!</p>

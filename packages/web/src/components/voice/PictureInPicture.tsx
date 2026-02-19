@@ -223,7 +223,7 @@ export function PictureInPicture() {
   return (
     <div
       ref={containerRef}
-      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-[#111214] select-none ${
+      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-[#080a0b] select-none ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
       style={{
@@ -249,7 +249,7 @@ export function PictureInPicture() {
           style={{ imageRendering: 'auto' }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-[#2b2d31]">
+        <div className="w-full h-full flex items-center justify-center bg-[#1e1f22]">
           {displayParticipant ? (
             <div className="relative">
               <Avatar
