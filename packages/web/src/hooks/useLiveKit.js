@@ -3,18 +3,17 @@ import { Room, RoomEvent, Track, ConnectionState, VideoPresets, VideoPreset, } f
 import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
 /**
- * OPENCORD NATIVE OVERDRIVE PIPELINE v16 (Golden Config)
- * Restored exact v4 logic + Auto 720p60 default.
+ * OPENCORD NATIVE OVERDRIVE PIPELINE v18 (Golden Lock)
+ * Forces strict 3.5Mbps - 5Mbps window to prevent Chrome bandwidth panic.
  */
 const QUALITY_MAP = {
-    '1080p60': new VideoPreset(1920, 1080, 10_000_000, 60),
+    '1080p60': new VideoPreset(1920, 1080, 8_000_000, 60),
     '1080p': new VideoPreset(1920, 1080, 5_000_000, 30),
-    '720p60': new VideoPreset(1280, 720, 5_000_000, 60), // v4 Golden Value
+    '720p60': new VideoPreset(1280, 720, 5_000_000, 60), // Golden Value
     '720p': new VideoPreset(1280, 720, 3_000_000, 30),
     '540p': new VideoPreset(960, 540, 1_500_000, 30),
     '360p': new VideoPreset(640, 360, 800_000, 30),
 };
-// AUTO defaults to the stable 720p60 preset
 const AUTO_PRESET = QUALITY_MAP['720p60'];
 let _activeRoom = null;
 export function getActiveRoom() {
@@ -25,7 +24,6 @@ function parseIdentity(identity) {
     return { userId: parts[0] ?? identity, username: parts[1] ?? identity };
 }
 let _connectGeneration = 0;
-// The v4 "Triple-Kick" Hammer
 async function applyOverdriveHammer(room, source, preset) {
     try {
         const pub = room.localParticipant.getTrackPublications().find(p => p.source === source);
@@ -39,9 +37,12 @@ async function applyOverdriveHammer(room, source, preset) {
             if (sender) {
                 const params = sender.getParameters();
                 if (params.encodings && params.encodings[0]) {
-                    console.log(`[Overdrive] Kicking ${source} to ${preset.encoding.maxBitrate}bps`);
+                    console.log(`[Overdrive] Locking ${source} to 3.5M - ${preset.encoding.maxBitrate}bps`);
                     params.encodings[0].maxBitrate = preset.encoding.maxBitrate;
+                    // STRICT FLOOR: 3.5 Mbps. Prevents the 0.2 Mbps drop.
+                    params.encodings[0].minBitrate = 3_500_000;
                     params.encodings[0].maxFramerate = preset.encoding.maxFramerate;
+                    params.encodings[0].networkPriority = 'high';
                     // @ts-ignore
                     params.degradationPreference = 'maintain-framerate';
                     await sender.setParameters(params);
@@ -115,6 +116,9 @@ export function useLiveKit() {
             roomRef.current = newRoom;
             const guardedUpdate = () => { if (roomRef.current === newRoom)
                 updateParticipants(); };
+            newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
+            newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
+            newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
             newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
                 if (roomRef.current === newRoom) {
                     const connected = state === ConnectionState.Connected;
@@ -250,7 +254,7 @@ export function useLiveKit() {
         if (roomRef.current) {
             if (!isScreenSharing) {
                 const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
-                console.log('[LiveKit] Starting v4 Golden screen share...');
+                console.log('[LiveKit] Starting screen share (Golden Lock)...');
                 const track = await roomRef.current.localParticipant.setScreenShareEnabled(true, {
                     resolution: preset.resolution,
                     // @ts-ignore
@@ -259,12 +263,18 @@ export function useLiveKit() {
                     videoCodec: 'h264', videoEncoding: preset.encoding, simulcast: false, priority: 'very-high'
                 });
                 if (track) {
-                    const hammer = () => { if (roomRef.current)
-                        applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset); };
-                    // Restore exact v4 timing: 0.5s, 2s, 5s
-                    setTimeout(hammer, 500);
-                    setTimeout(hammer, 2000);
-                    setTimeout(hammer, 5000);
+                    // Retry hammer to ensure parameters stick
+                    let hits = 0;
+                    const interval = setInterval(async () => {
+                        if (roomRef.current) {
+                            await applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset);
+                            hits++;
+                            if (hits > 10 || !isScreenSharing)
+                                clearInterval(interval);
+                        }
+                        else
+                            clearInterval(interval);
+                    }, 500);
                 }
             }
             else {

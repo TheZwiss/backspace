@@ -14,7 +14,7 @@ interface VoiceState {
   inputVolume: number;  // 0-200 (100 = default)
   outputVolume: number; // 0-200 (100 = default)
   focusedParticipantId: string | null;
-  videoQuality: 'auto' | '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p';
+  videoQuality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p';
   // Per-participant volume (userId → 0-200, 100 = default)
   participantVolumes: Map<string, number>;
   setParticipantVolume: (userId: string, volume: number) => void;
@@ -40,7 +40,7 @@ interface VoiceState {
   toggleScreenShare: () => void;
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
-  setVideoQuality: (quality: 'auto' | '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
+  setVideoQuality: (quality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
   leaveVoice: () => void;
@@ -60,7 +60,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
   inputVolume: 100,
   outputVolume: 100,
   focusedParticipantId: null,
-  videoQuality: 'auto',
+  videoQuality: '720p60',
   participantVolumes: new Map(),
   setParticipantVolume: (userId, volume) => {
     set((state) => {

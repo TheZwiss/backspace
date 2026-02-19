@@ -12,7 +12,7 @@ export const useVoiceStore = create((set, get) => ({
     inputVolume: 100,
     outputVolume: 100,
     focusedParticipantId: null,
-    videoQuality: 'auto',
+    videoQuality: '720p60',
     participantVolumes: new Map(),
     setParticipantVolume: (userId, volume) => {
         set((state) => {

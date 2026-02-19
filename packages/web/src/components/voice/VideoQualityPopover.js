@@ -3,13 +3,12 @@ import { useRef, useEffect } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { VideoPreset } from 'livekit-client';
 const PRESETS = [
-    { value: 'auto', label: 'Auto', desc: 'Adjusts to your connection' },
-    { value: '1080p60', label: '1080p 60fps', desc: '1920x1080, 15000 kbps' },
-    { value: '1080p', label: '1080p 30fps', desc: '1920x1080, 8000 kbps' },
-    { value: '720p60', label: '720p 60fps', desc: '1280x720, 8000 kbps' },
-    { value: '720p', label: '720p 30fps', desc: '1280x720, 5000 kbps' },
-    { value: '540p', label: '540p 30fps', desc: '960x540, 2000 kbps' },
-    { value: '360p', label: '360p 30fps', desc: '640x360, 1000 kbps' },
+    { value: '1080p60', label: '1080p 60fps', desc: '1920x1080, 10000 kbps' },
+    { value: '1080p', label: '1080p 30fps', desc: '1920x1080, 5000 kbps' },
+    { value: '720p60', label: '720p 60fps', desc: '1280x720, 5000 kbps' },
+    { value: '720p', label: '720p 30fps', desc: '1280x720, 3000 kbps' },
+    { value: '540p', label: '540p 30fps', desc: '960x540, 1500 kbps' },
+    { value: '360p', label: '360p 30fps', desc: '640x360, 800 kbps' },
 ];
 const QUALITY_MAP = {
     '1080p60': new VideoPreset(1920, 1080, 15_000_000, 60),
