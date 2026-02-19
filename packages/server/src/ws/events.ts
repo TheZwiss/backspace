@@ -156,6 +156,9 @@ export function handleClientEvent(
     case 'dm_call_end':
       handleDmCallEnd(event, userId);
       break;
+    case 'voice_status':
+      handleVoiceStatus(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -735,6 +738,27 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
     type: 'channel_ack',
     channelId,
     messageId,
+  });
+}
+
+function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
+  const isMuted = event.isMuted === true;
+  const isDeafened = event.isDeafened === true;
+
+  const channelId = connectionManager.getUserVoiceChannel(userId);
+  if (!channelId) return;
+
+  const serverId = getChannelServerId(channelId);
+  if (!serverId) return;
+
+  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened);
+
+  connectionManager.sendToServer(serverId, {
+    type: 'voice_status_update',
+    userId,
+    channelId,
+    isMuted,
+    isDeafened,
   });
 }
 

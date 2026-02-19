@@ -41,6 +41,14 @@ interface VoiceState {
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
   setVideoQuality: (quality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
+  noiseSuppression: boolean;
+  toggleNoiseSuppression: () => void;
+  deafenedUserIds: Set<string>;
+  setUserDeafened: (userId: string, deafened: boolean) => void;
+  // WebSocket-based voice user status (visible without joining LiveKit)
+  voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean }>;
+  setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean) => void;
+  clearVoiceUserStatus: (userId: string) => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
   leaveVoice: () => void;
@@ -123,10 +131,36 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
 
   setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
   setVideoQuality: (quality) => set({ videoQuality: quality }),
+  noiseSuppression: true,
+  toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+  deafenedUserIds: new Set(),
+  setUserDeafened: (userId, deafened) => {
+    set((state) => {
+      const newSet = new Set(state.deafenedUserIds);
+      if (deafened) newSet.add(userId); else newSet.delete(userId);
+      return { deafenedUserIds: newSet };
+    });
+  },
+
+  voiceUserStates: new Map(),
+  setVoiceUserStatus: (userId, isMuted, isDeafened) => {
+    set((state) => {
+      const newMap = new Map(state.voiceUserStates);
+      newMap.set(userId, { isMuted, isDeafened });
+      return { voiceUserStates: newMap };
+    });
+  },
+  clearVoiceUserStatus: (userId) => {
+    set((state) => {
+      const newMap = new Map(state.voiceUserStates);
+      newMap.delete(userId);
+      return { voiceUserStates: newMap };
+    });
+  },
 
   getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
-  clearAllVoiceUsers: () => set({ voiceUsers: new Map() }),
+  clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
 
   // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
   leaveVoice: () => set({
@@ -143,6 +177,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     focusedParticipantId: null,
     activeDmCall: null,
     outgoingCall: null,
+    deafenedUserIds: new Set(),
   }),
 
   reset: () => set({
@@ -162,5 +197,7 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     incomingCall: null,
     outgoingCall: null,
     activeDmCall: null,
+    deafenedUserIds: new Set(),
+    voiceUserStates: new Map(),
   }),
 }));

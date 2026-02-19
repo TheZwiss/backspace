@@ -44,6 +44,8 @@ class ConnectionManager {
   private wsToUser: Map<WebSocket, string> = new Map();
   // dmChannelId → { callerId, startedAt } — active DM calls
   private activeCalls: Map<string, { callerId: string; startedAt: number }> = new Map();
+  // userId → { isMuted, isDeafened } — voice user status (mute/deafen state)
+  private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean }> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -110,9 +112,11 @@ class ConnectionManager {
         this.voiceStates.delete(channelId);
       }
     }
+    this.voiceUserStates.delete(userId);
   }
 
   leaveAllVoice(userId: string): string | null {
+    this.voiceUserStates.delete(userId);
     for (const [channelId, users] of this.voiceStates) {
       if (users.has(userId)) {
         users.delete(userId);
@@ -136,6 +140,23 @@ class ConnectionManager {
       }
     }
     return null;
+  }
+
+  // Voice user status management
+  setVoiceUserStatus(userId: string, isMuted: boolean, isDeafened: boolean): void {
+    this.voiceUserStates.set(userId, { isMuted, isDeafened });
+  }
+
+  getVoiceUserStatus(userId: string): { isMuted: boolean; isDeafened: boolean } | undefined {
+    return this.voiceUserStates.get(userId);
+  }
+
+  clearVoiceUserStatus(userId: string): void {
+    this.voiceUserStates.delete(userId);
+  }
+
+  getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean }> {
+    return this.voiceUserStates;
   }
 
   // DM call management
@@ -206,6 +227,7 @@ function buildReadyPayload(userId: string): {
   dmChannels: DmChannel[];
   folders: ServerFolder[];
   voiceStates: Record<string, string[]>;
+  voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean }>;
   readStates: ReadState[];
 } {
   const db = getDb();
@@ -422,6 +444,20 @@ function buildReadyPayload(userId: string): {
     }
   }
 
+  // Build voice user states — tell the client mute/deafen status of voice users
+  const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean }> = {};
+  for (const chId of Object.keys(voiceStates)) {
+    const usersInChannel = voiceStates[chId];
+    if (usersInChannel) {
+      for (const uid of usersInChannel) {
+        const status = connectionManager.getVoiceUserStatus(uid);
+        if (status) {
+          voiceUserStates[uid] = status;
+        }
+      }
+    }
+  }
+
   // Fetch read states for unread tracking
   const readStateRows = db.select()
     .from(schema.readStates)
@@ -433,7 +469,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, servers, dmChannels, folders, voiceStates, readStates };
+  return { user, servers, dmChannels, folders, voiceStates, voiceUserStates, readStates };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

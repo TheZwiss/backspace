@@ -185,11 +185,12 @@ export type ClientEvent =
   | { type: 'dm_call_start'; dmChannelId: string }
   | { type: 'dm_call_accept'; dmChannelId: string }
   | { type: 'dm_call_reject'; dmChannelId: string }
-  | { type: 'dm_call_end'; dmChannelId: string };
+  | { type: 'dm_call_end'; dmChannelId: string }
+  | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; readStates?: ReadState[] }
+  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean }>; readStates?: ReadState[] }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -211,6 +212,7 @@ export type ServerEvent =
   | { type: 'dm_call_accepted'; dmChannelId: string }
   | { type: 'dm_call_rejected'; dmChannelId: string }
   | { type: 'dm_call_ended'; dmChannelId: string }
+  | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean }
   | { type: 'error'; message: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────

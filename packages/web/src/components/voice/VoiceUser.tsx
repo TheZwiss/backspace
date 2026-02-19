@@ -19,9 +19,9 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
   const perUserVolume = participantVolumes.get(participant.userId) ?? 100;
   const isLocal = participant.isLocal;
 
-  // Determine active video track — prioritize screen share, check readyState
-  const liveScreen = participant.screenTrack?.readyState === 'live' ? participant.screenTrack : null;
-  const liveCamera = participant.videoTrack?.readyState === 'live' ? participant.videoTrack : null;
+  // Determine active video track — prioritize screen share, check both enabled flag and readyState
+  const liveScreen = participant.isScreenSharing && participant.screenTrack?.readyState === 'live' ? participant.screenTrack : null;
+  const liveCamera = participant.isCameraOn && participant.videoTrack?.readyState === 'live' ? participant.videoTrack : null;
   const activeVideoTrack = liveScreen ?? liveCamera;
   const hasVideo = activeVideoTrack !== null;
   const isScreenShare = liveScreen !== null;
@@ -150,6 +150,14 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
               <div className="w-5 h-5 bg-discord-red/90 rounded-full flex items-center justify-center">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
                   <path d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" />
+                  <line x1="3" y1="3" x2="21" y2="21" stroke="white" strokeWidth="2" />
+                </svg>
+              </div>
+            )}
+            {(isLocal ? isDeafened : participant.isDeafened) && (
+              <div className="w-5 h-5 bg-discord-red/90 rounded-full flex items-center justify-center">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                   <line x1="3" y1="3" x2="21" y2="21" stroke="white" strokeWidth="2" />
                 </svg>
               </div>

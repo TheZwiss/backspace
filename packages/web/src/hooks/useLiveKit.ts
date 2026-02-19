@@ -44,6 +44,7 @@ export interface ParticipantInfo {
   username: string;
   isSpeaking: boolean;
   isMuted: boolean;
+  isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
   isLocal: boolean;
@@ -118,15 +119,33 @@ export function useLiveKit() {
         const mt = track.mediaStreamTrack;
         if (!mt || mt.readyState !== 'live') return;
         if (pub.source === Track.Source.Microphone) audioTrack = mt;
-        else if (pub.source === Track.Source.Camera) videoTrack = mt;
-        else if (pub.source === Track.Source.ScreenShare) screenTrack = mt;
+        else if (pub.source === Track.Source.Camera && p.isCameraEnabled) videoTrack = mt;
+        else if (pub.source === Track.Source.ScreenShare && p.isScreenShareEnabled) screenTrack = mt;
       });
-      allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
+      let isDeafened = false;
+      if (isLocal) {
+        isDeafened = useVoiceStore.getState().isDeafened;
+      } else {
+        isDeafened = useVoiceStore.getState().deafenedUserIds.has(userId);
+      }
+      allParticipants.push({ identity: p.identity, userId, username, isSpeaking: p.isSpeaking, isMuted: !p.isMicrophoneEnabled, isDeafened, isCameraOn: p.isCameraEnabled, isScreenSharing: p.isScreenShareEnabled, isLocal, audioTrack, videoTrack, screenTrack });
     };
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
     setParticipants(allParticipants);
   }, []);
+
+  const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
+    try {
+      const text = new TextDecoder().decode(payload);
+      const msg = JSON.parse(text);
+      if (msg.type === 'deafen' && participant) {
+        const { userId } = parseIdentity(participant.identity);
+        useVoiceStore.getState().setUserDeafened(userId, msg.deafened === true);
+        updateParticipants();
+      }
+    } catch {}
+  }, [updateParticipants]);
 
   const connect = useCallback(async (channelId: string) => {
     if (connectedChannelRef.current === channelId && roomRef.current) return;
@@ -141,7 +160,17 @@ export function useLiveKit() {
       const newRoom = new Room({ adaptiveStream: false, dynacast: false, publishDefaults: { videoCodec: 'h264', simulcast: false } });
       roomRef.current = newRoom;
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
-      newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
+      newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
+        guardedUpdate();
+        // Re-broadcast local deafen state to newly connected participant
+        if (useVoiceStore.getState().isDeafened) {
+          const encoder = new TextEncoder();
+          newRoom.localParticipant.publishData(
+            encoder.encode(JSON.stringify({ type: 'deafen', deafened: true })),
+            { reliable: true }
+          ).catch(() => {});
+        }
+      });
       newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
       newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
@@ -150,6 +179,8 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
+      newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
+      newRoom.on(RoomEvent.DataReceived, handleDataReceived);
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
           const connected = state === ConnectionState.Connected;
@@ -171,7 +202,7 @@ export function useLiveKit() {
       try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants]);
+  }, [updateParticipants, handleDataReceived]);
 
   const connectDm = useCallback(async (dmChannelId: string) => {
     const gen = ++_connectGeneration;
@@ -208,7 +239,7 @@ export function useLiveKit() {
       try { await newRoom.localParticipant.setMicrophoneEnabled(true); updateParticipants(); } catch { useVoiceStore.setState({ isMuted: true }); }
     } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants]);
+  }, [updateParticipants, handleDataReceived]);
 
   const disconnect = useCallback(async () => {
     _connectGeneration++;

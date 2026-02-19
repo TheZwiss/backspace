@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useServerStore } from '../../stores/serverStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
+import { VideoQualityPopover } from './VideoQualityPopover';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -10,61 +11,21 @@ import { wsSend } from '../../hooks/useWebSocket';
  */
 export function VoiceControls() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
-  const isMuted = useVoiceStore((s) => s.isMuted);
-  const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const toggleMic = useVoiceStore((s) => s.toggleMic);
-  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
+  const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
+  const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const channels = useServerStore((s) => s.channels);
+  const [showVideoQuality, setShowVideoQuality] = useState(false);
 
   if (!currentVoiceChannelId) return null;
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? 'Voice Channel';
-
-  const handleMute = async () => {
-    const room = getActiveRoom();
-    if (room) {
-      try {
-        await room.localParticipant.setMicrophoneEnabled(isMuted);
-      } catch (err) {
-        console.error('[VoiceControls] Failed to toggle mic:', err);
-      }
-    }
-    toggleMic();
-  };
-
-  const handleDeafen = async () => {
-    const room = getActiveRoom();
-    if (room) {
-      try {
-        const willDeafen = !isDeafened;
-        if (willDeafen) {
-          await room.localParticipant.setMicrophoneEnabled(false);
-          room.remoteParticipants.forEach((p) => {
-            p.setVolume(0);
-          });
-          if (!isMuted) toggleMic();
-        } else {
-          const outputVolume = useVoiceStore.getState().outputVolume;
-          const scaled = outputVolume / 100;
-          room.remoteParticipants.forEach((p) => {
-            p.setVolume(scaled);
-          });
-          await room.localParticipant.setMicrophoneEnabled(true);
-          if (isMuted) toggleMic();
-        }
-      } catch (err) {
-        console.error('[VoiceControls] Failed to toggle deafen:', err);
-      }
-    }
-    toggleDeafen();
-  };
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -86,6 +47,28 @@ export function VoiceControls() {
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);
     }
+  };
+
+  const handleNoiseSuppression = async () => {
+    const room = getActiveRoom();
+    if (room) {
+      try {
+        const micPub = room.localParticipant.getTrackPublications().find(
+          p => p.source === 'microphone'
+        );
+        const mediaTrack = micPub?.track?.mediaStreamTrack;
+        if (mediaTrack) {
+          await mediaTrack.applyConstraints({
+            noiseSuppression: !noiseSuppression,
+            echoCancellation: true,
+            autoGainControl: true,
+          });
+        }
+      } catch (err) {
+        console.error('[VoiceControls] Failed to toggle noise suppression:', err);
+      }
+    }
+    toggleNoiseSuppression();
   };
 
   const handleDisconnect = () => {
@@ -145,39 +128,8 @@ export function VoiceControls() {
         </div>
       </div>
 
-      {/* Row 2: Mute, Deafen, Camera, Screen Share */}
-      <div className="flex items-center gap-1 px-3 pb-2 pt-1">
-        <button
-          onClick={handleMute}
-          className={`${btnBase} ${
-            isMuted || isDeafened
-              ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
-              : btnDefaultStyle
-          }`}
-          title={isMuted ? 'Unmute' : 'Mute'}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-            {(isMuted || isDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
-          </svg>
-        </button>
-
-        <button
-          onClick={handleDeafen}
-          className={`${btnBase} ${
-            isDeafened
-              ? 'bg-discord-red/20 text-discord-red hover:bg-discord-red/30'
-              : btnDefaultStyle
-          }`}
-          title={isDeafened ? 'Undeafen' : 'Deafen'}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-            {isDeafened && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
-          </svg>
-        </button>
-
+      {/* Row 2: Camera, Screen Share, Video Quality, Noise Suppression */}
+      <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         <button
           onClick={handleCamera}
           className={`${btnBase} ${
@@ -213,6 +165,51 @@ export function VoiceControls() {
             <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
           </svg>
         </button>
+
+        {/* Video Quality */}
+        <button
+          onClick={() => setShowVideoQuality(!showVideoQuality)}
+          className={`${btnBase} ${
+            showVideoQuality
+              ? 'bg-[#111214] text-discord-blurple hover:bg-[#1a1b1e]'
+              : btnDefaultStyle
+          }`}
+          title="Video Quality"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 5v14h18V5H3zm16 12H5V7h14v10z" />
+            <path d="M8 15l2.5-3.21L13 15l2-2.5L18 17H6z" />
+          </svg>
+        </button>
+
+        {/* Noise Suppression */}
+        <button
+          onClick={handleNoiseSuppression}
+          className={`${btnBase} ${
+            noiseSuppression
+              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              : btnDefaultStyle
+          }`}
+          title={noiseSuppression ? 'Disable Noise Suppression' : 'Enable Noise Suppression'}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7 9v6h4l5 5V4l-5 5H7z" />
+            {noiseSuppression ? (
+              <>
+                <path d="M19 12c0-1.66-.68-3.16-1.76-4.24l-1.42 1.42C16.55 9.9 17 10.9 17 12c0 1.1-.45 2.1-1.18 2.82l1.42 1.42C18.32 15.16 19 13.66 19 12z" />
+                <path d="M21 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42C18.2 7.9 19 9.85 19 12c0 2.15-.8 4.1-2.35 5.65l1.42 1.42C19.88 17.26 21 14.76 21 12z" opacity="0.6" />
+              </>
+            ) : (
+              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+            )}
+          </svg>
+        </button>
+
+        {/* Video Quality Popover */}
+        <VideoQualityPopover
+          open={showVideoQuality}
+          onClose={() => setShowVideoQuality(false)}
+        />
       </div>
     </>
   );

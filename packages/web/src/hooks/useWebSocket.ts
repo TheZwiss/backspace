@@ -16,7 +16,7 @@ function handleEvent(event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
   const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-  const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers } = useVoiceStore.getState();
+  const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
     case 'ready':
@@ -43,6 +43,21 @@ function handleEvent(event: ServerEvent): void {
       if (event.voiceStates) {
         for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
           setVoiceUsers(channelId, userIds);
+        }
+      }
+      // Populate voice user statuses (mute/deafen) from server
+      if (event.voiceUserStates) {
+        for (const [uid, status] of Object.entries(event.voiceUserStates)) {
+          setVoiceUserStatus(uid, status.isMuted, status.isDeafened);
+        }
+      }
+      // Re-register in voice channel if we're still connected to LiveKit
+      // (WebSocket reconnect causes server to drop our voice tracking)
+      {
+        const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened } = useVoiceStore.getState();
+        if (currentVoiceChannelId) {
+          wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
+          wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened });
         }
       }
       break;
@@ -78,7 +93,12 @@ function handleEvent(event: ServerEvent): void {
         addVoiceUser(event.channelId, event.userId);
       } else {
         removeVoiceUser(event.channelId, event.userId);
+        clearVoiceUserStatus(event.userId);
       }
+      break;
+
+    case 'voice_status_update':
+      setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened);
       break;
 
     case 'member_joined':

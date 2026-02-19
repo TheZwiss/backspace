@@ -1,5 +1,6 @@
 import React from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAuthStore } from '../../stores/authStore';
 
 const EMPTY_VOICE_USERS: string[] = [];
 import { useServerStore } from '../../stores/serverStore';
@@ -15,6 +16,10 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
   const voiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
+  const localIsDeafened = useVoiceStore((s) => s.isDeafened);
+  const localIsMuted = useVoiceStore((s) => s.isMuted);
+  const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const members = useServerStore((s) => s.members);
   const isActive = currentVoiceChannel === channelId;
 
@@ -39,22 +44,29 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
         <div className="ml-6 mt-0.5 space-y-0.5">
           {voiceUsers.map((userId) => {
             const member = members.find(m => m.userId === userId);
-            if (!member) return null;
-            const displayName = member.user.displayName ?? member.user.username;
-
-            // Find participant for status badges
-            const participant = participants.find(p => p.identity === userId || p.username === member.user.username);
-            const isMuted = participant ? !participant.audioTrack : false;
-            const hasCamera = participant ? participant.videoTrack !== null : false;
-            const isScreenSharing = participant ? participant.screenTrack !== null : false;
+            const participant = participants.find(p => p.userId === userId);
+            const displayName = member?.user.displayName ?? member?.user.username ?? participant?.username ?? userId;
+            const avatar = member?.user.avatar ?? null;
+            const status = member?.user.status;
+            // Resolve status: for local user use store directly, for remote users
+            // try LiveKit participant first, then fall back to WebSocket voiceUserStates
+            const wsStatus = voiceUserStates.get(userId);
+            const isParticipantDeafened = userId === currentUserId
+              ? localIsDeafened
+              : (participant?.isDeafened ?? wsStatus?.isDeafened ?? false);
+            const isMuted = userId === currentUserId
+              ? localIsMuted
+              : (participant?.isMuted ?? wsStatus?.isMuted ?? false);
+            const hasCamera = participant?.isCameraOn ?? false;
+            const isScreenSharing = participant?.isScreenSharing ?? false;
 
             return (
               <div key={userId} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-modifier-hover transition-colors">
                 <Avatar
-                  src={member.user.avatar}
+                  src={avatar}
                   name={displayName}
                   size={20}
-                  status={member.user.status}
+                  status={status}
                 />
                 <span className="text-[13px] text-discord-text-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}
@@ -63,6 +75,12 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-discord-red">
                       <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                       <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                      <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                    </svg>
+                  )}
+                  {isParticipantDeafened && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-discord-red">
+                      <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                   )}
