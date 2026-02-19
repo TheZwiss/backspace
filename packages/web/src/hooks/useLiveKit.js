@@ -3,16 +3,16 @@ import { Room, RoomEvent, Track, ConnectionState, VideoPresets, VideoPreset, } f
 import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
 /**
- * OPENCORD NATIVE OVERDRIVE PIPELINE v18 (Golden Lock)
- * Forces strict 3.5Mbps - 5Mbps window to prevent Chrome bandwidth panic.
+ * OPENCORD NATIVE OVERDRIVE PIPELINE v22
+ * "Soft-Launch Protocol": Always starts low to clear handshake, then upgrades to target.
  */
 const QUALITY_MAP = {
-    '1080p60': new VideoPreset(1920, 1080, 8_000_000, 60),
-    '1080p': new VideoPreset(1920, 1080, 5_000_000, 30),
-    '720p60': new VideoPreset(1280, 720, 5_000_000, 60), // Golden Value
-    '720p': new VideoPreset(1280, 720, 3_000_000, 30),
-    '540p': new VideoPreset(960, 540, 1_500_000, 30),
-    '360p': new VideoPreset(640, 360, 800_000, 30),
+    '1080p60': new VideoPreset(1920, 1080, 12_000_000, 60),
+    '1080p': new VideoPreset(1920, 1080, 8_000_000, 30),
+    '720p60': new VideoPreset(1280, 720, 8_000_000, 60),
+    '720p': new VideoPreset(1280, 720, 4_000_000, 30),
+    '540p': new VideoPreset(960, 540, 2_000_000, 30),
+    '360p': new VideoPreset(640, 360, 1_000_000, 30),
 };
 const AUTO_PRESET = QUALITY_MAP['720p60'];
 let _activeRoom = null;
@@ -37,10 +37,10 @@ async function applyOverdriveHammer(room, source, preset) {
             if (sender) {
                 const params = sender.getParameters();
                 if (params.encodings && params.encodings[0]) {
-                    console.log(`[Overdrive] Locking ${source} to 3.5M - ${preset.encoding.maxBitrate}bps`);
+                    console.log(`[Overdrive] Upgrading ${source} to ${preset.encoding.maxBitrate}bps`);
                     params.encodings[0].maxBitrate = preset.encoding.maxBitrate;
-                    // STRICT FLOOR: 3.5 Mbps. Prevents the 0.2 Mbps drop.
-                    params.encodings[0].minBitrate = 3_500_000;
+                    // Gentle floor to keep stable
+                    params.encodings[0].minBitrate = 2_000_000;
                     params.encodings[0].maxFramerate = preset.encoding.maxFramerate;
                     params.encodings[0].networkPriority = 'high';
                     // @ts-ignore
@@ -106,12 +106,12 @@ export function useLiveKit() {
             roomRef.current = null;
         }
         setIsConnecting(true);
-        useVoiceStore.getState().setConnectionError(null);
         useVoiceStore.getState().setIsLiveKitConnected(false);
         try {
             const { token, url } = await api.livekit.token(channelId);
             if (gen !== _connectGeneration)
                 return;
+            // Disable simulcast for better 60fps stability on local networks
             const newRoom = new Room({ adaptiveStream: false, dynacast: false, publishDefaults: { videoCodec: 'h264', simulcast: false } });
             roomRef.current = newRoom;
             const guardedUpdate = () => { if (roomRef.current === newRoom)
@@ -157,10 +157,8 @@ export function useLiveKit() {
             }
         }
         catch (err) {
-            if (gen === _connectGeneration) {
+            if (gen === _connectGeneration)
                 setConnectionError('Failed to connect');
-                useVoiceStore.getState().setConnectionError('Failed to connect');
-            }
         }
         finally {
             if (gen === _connectGeneration)
@@ -241,8 +239,9 @@ export function useLiveKit() {
             if (!isCameraOn) {
                 const preset = QUALITY_MAP[videoQuality] || VideoPresets.h720;
                 await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: preset.resolution, frameRate: preset.encoding.maxFramerate }, { videoCodec: 'h264', videoEncoding: preset.encoding, simulcast: false });
+                // Soft Start Camera
                 setTimeout(() => { if (roomRef.current)
-                    applyOverdriveHammer(roomRef.current, Track.Source.Camera, preset); }, 1000);
+                    applyOverdriveHammer(roomRef.current, Track.Source.Camera, preset); }, 2000);
             }
             else {
                 await roomRef.current.localParticipant.setCameraEnabled(false);
@@ -254,27 +253,33 @@ export function useLiveKit() {
         if (roomRef.current) {
             if (!isScreenSharing) {
                 const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
-                console.log('[LiveKit] Starting screen share (Golden Lock)...');
+                console.log('[LiveKit] Soft-Launching Screen Share (360p start)...');
+                // SOFT LAUNCH: Start at 360p 30fps to clear handshake
                 const track = await roomRef.current.localParticipant.setScreenShareEnabled(true, {
-                    resolution: preset.resolution,
+                    resolution: VideoPresets.h360.resolution,
                     // @ts-ignore
-                    frameRate: 60,
+                    frameRate: 30,
                 }, {
-                    videoCodec: 'h264', videoEncoding: preset.encoding, simulcast: false, priority: 'very-high'
+                    videoCodec: 'h264', videoEncoding: VideoPresets.h360.encoding, simulcast: false, priority: 'very-high'
                 });
                 if (track) {
-                    // Retry hammer to ensure parameters stick
-                    let hits = 0;
-                    const interval = setInterval(async () => {
-                        if (roomRef.current) {
-                            await applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset);
-                            hits++;
-                            if (hits > 10 || !isScreenSharing)
-                                clearInterval(interval);
+                    // UPGRADE: After 2 seconds, switch to full 60fps quality
+                    setTimeout(async () => {
+                        if (roomRef.current && isScreenSharing) {
+                            console.log('[LiveKit] Upgrading to Target Quality...');
+                            const screenPub = roomRef.current.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
+                            if (screenPub?.track?.mediaStreamTrack) {
+                                await screenPub.track.mediaStreamTrack.applyConstraints({
+                                    width: { ideal: preset.resolution.width },
+                                    height: { ideal: preset.resolution.height },
+                                    frameRate: { ideal: preset.encoding.maxFramerate, min: 30 }
+                                });
+                                await applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset);
+                            }
                         }
-                        else
-                            clearInterval(interval);
-                    }, 500);
+                    }, 2000);
+                    // Re-apply hammer
+                    setTimeout(() => applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset), 5000);
                 }
             }
             else {
@@ -294,7 +299,7 @@ export function useLiveKit() {
                 if (screenPub?.videoTrack) {
                     const mediaTrack = screenPub.videoTrack.mediaStreamTrack;
                     if (mediaTrack) {
-                        await mediaTrack.applyConstraints({ width: { ideal: preset.resolution.width }, height: { ideal: preset.resolution.height }, frameRate: { ideal: preset.encoding.maxFramerate, min: 30 } });
+                        await mediaTrack.applyConstraints({ width: { ideal: preset.resolution.width }, height: { ideal: preset.resolution.height }, frameRate: { ideal: preset.encoding.maxFramerate } });
                     }
                     await applyOverdriveHammer(room, Track.Source.ScreenShare, preset);
                 }
@@ -322,7 +327,7 @@ export function useLiveKit() {
                         const lastBytes = window[key] || report.bytesSent;
                         const bitrate = (((report.bytesSent - lastBytes) * 8) / 5000 / 1000).toFixed(2);
                         window[key] = report.bytesSent;
-                        console.log(`[Overdrive Diagnostic] ${report.frameWidth}x${report.frameHeight} @ ${fps} FPS (~${bitrate} Mbps) | ${report.qualityLimitationReason}`);
+                        console.log(`[Soft-Launch Diagnostic] ${report.frameWidth}x${report.frameHeight} @ ${fps} FPS (~${bitrate} Mbps) | ${report.qualityLimitationReason}`);
                     }
                 });
             }
