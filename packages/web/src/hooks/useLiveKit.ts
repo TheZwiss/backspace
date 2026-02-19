@@ -100,6 +100,7 @@ export function useLiveKit() {
   const roomRef = useRef<Room | null>(null);
   const connectedChannelRef = useRef<string | null>(null);
   const isMuted = useVoiceStore((s) => s.isMuted);
+  const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const videoQuality = useVoiceStore((s) => s.videoQuality);
