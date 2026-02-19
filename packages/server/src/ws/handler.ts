@@ -46,6 +46,8 @@ class ConnectionManager {
   private activeCalls: Map<string, { callerId: string; startedAt: number }> = new Map();
   // userId → { isMuted, isDeafened } — voice user status (mute/deafen state)
   private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean }> = new Map();
+  // userId → Timeout
+  private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -53,6 +55,9 @@ class ConnectionManager {
     }
     this.connections.get(userId)!.add(ws);
     this.wsToUser.set(ws, userId);
+    
+    // If they were pending offline, cancel it!
+    this.cancelDisconnect(userId);
   }
 
   removeConnection(ws: WebSocket): string | undefined {
@@ -65,9 +70,66 @@ class ConnectionManager {
       userConnections.delete(ws);
       if (userConnections.size === 0) {
         this.connections.delete(userId);
+        // Schedule disconnect cleanup
+        this.scheduleDisconnect(userId);
       }
     }
     return userId;
+  }
+
+  private scheduleDisconnect(userId: string) {
+    if (this.pendingOfflineTimeouts.has(userId)) return;
+
+    const timeout = setTimeout(() => {
+      this.finalizeDisconnect(userId);
+      this.pendingOfflineTimeouts.delete(userId);
+    }, 5000); // 5 second grace period
+
+    this.pendingOfflineTimeouts.set(userId, timeout);
+  }
+
+  private cancelDisconnect(userId: string) {
+    const timeout = this.pendingOfflineTimeouts.get(userId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingOfflineTimeouts.delete(userId);
+      console.log(`[ConnectionManager] Rescued session for user ${userId}`);
+    }
+  }
+
+  private finalizeDisconnect(userId: string) {
+    // Double check they are still offline
+    if (this.isUserOnline(userId)) return;
+
+    console.log(`[ConnectionManager] Finalizing disconnect for user ${userId}`);
+    const db = getDb();
+    db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
+
+    // Leave voice if in one
+    const leftChannel = this.leaveAllVoice(userId);
+    this.clearVoiceUserStatus(userId);
+    if (leftChannel) {
+      // Get channel's server to broadcast
+      const channel = db.select().from(schema.channels).where(eq(schema.channels.id, leftChannel)).get();
+      if (channel) {
+        this.sendToServer(channel.serverId, {
+          type: 'voice_state_update',
+          channelId: leftChannel,
+          userId: userId,
+          action: 'leave',
+        });
+      }
+    }
+
+    // Broadcast offline to all servers
+    const userServers = this.getUserServers(userId);
+    for (const serverId of userServers) {
+      this.sendToServer(serverId, {
+        type: 'presence_update',
+        userId: userId,
+        status: 'offline',
+      });
+    }
   }
 
   getUserConnections(userId: string): Set<WebSocket> {
@@ -551,39 +613,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
     ws.on('close', () => {
       clearTimeout(authTimeout);
       if (userId) {
-        const removedUserId = connectionManager.removeConnection(ws);
-
-        // If user has no more connections, set offline
-        if (removedUserId && !connectionManager.isUserOnline(removedUserId)) {
-          const db = getDb();
-          db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, removedUserId)).run();
-
-          // Leave voice if in one
-          const leftChannel = connectionManager.leaveAllVoice(removedUserId);
-          connectionManager.clearVoiceUserStatus(removedUserId);
-          if (leftChannel) {
-            // Get channel's server to broadcast
-            const channel = db.select().from(schema.channels).where(eq(schema.channels.id, leftChannel)).get();
-            if (channel) {
-              connectionManager.sendToServer(channel.serverId, {
-                type: 'voice_state_update',
-                channelId: leftChannel,
-                userId: removedUserId,
-                action: 'leave',
-              });
-            }
-          }
-
-          // Broadcast offline to all servers
-          const userServers = connectionManager.getUserServers(removedUserId);
-          for (const serverId of userServers) {
-            connectionManager.sendToServer(serverId, {
-              type: 'presence_update',
-              userId: removedUserId,
-              status: 'offline',
-            });
-          }
-        }
+        connectionManager.removeConnection(ws);
       }
     });
 

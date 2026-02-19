@@ -12,6 +12,7 @@ export class AudioManager {
   private isInitialized = false;
   
   private listeners: Set<() => void> = new Set();
+  private soundBuffers: Map<string, AudioBuffer> = new Map();
 
   private constructor() {}
 
@@ -71,6 +72,45 @@ export class AudioManager {
         console.error('[AudioManager] Failed to resume context:', err);
       }
     }
+  }
+
+  async loadSound(name: string): Promise<AudioBuffer | null> {
+    if (this.soundBuffers.has(name)) {
+      return this.soundBuffers.get(name)!;
+    }
+
+    if (!this.ctx) this.initContext();
+    
+    try {
+      const response = await fetch(`/sounds/${name}.mp3`);
+      if (!response.ok) throw new Error(`Failed to load sound: ${name}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer);
+      this.soundBuffers.set(name, audioBuffer);
+      return audioBuffer;
+    } catch (err) {
+      console.error(`[AudioManager] Error loading sound ${name}:`, err);
+      return null;
+    }
+  }
+
+  async playSound(name: string, options: { loop?: boolean; volume?: number } = {}): Promise<AudioBufferSourceNode | null> {
+    await this.resumeContext();
+    const buffer = await this.loadSound(name);
+    if (!buffer || !this.ctx) return null;
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = options.loop || false;
+
+    const gainNode = this.ctx.createGain();
+    gainNode.gain.value = options.volume ?? 0.5;
+
+    source.connect(gainNode);
+    gainNode.connect(this.ctx.destination);
+    
+    source.start(0);
+    return source;
   }
 
   async setInputDevice(deviceId: string) {
