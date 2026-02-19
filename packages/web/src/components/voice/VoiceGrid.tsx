@@ -64,11 +64,18 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
-        <div className="flex-1 p-2 min-h-0">
+        <div 
+          className="flex-1 p-2 min-h-0 cursor-pointer"
+          onClick={() => setFocusedParticipant(null)}
+          title="Click to return to grid view"
+        >
           <VoiceUser participant={focusedParticipant} large />
           {/* Back to grid button */}
           <button
-            onClick={() => setFocusedParticipant(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setFocusedParticipant(null);
+            }}
             className="absolute top-4 right-4 z-10 px-3 py-1.5 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
             title="Back to grid view"
           >
