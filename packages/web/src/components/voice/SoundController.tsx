@@ -68,9 +68,13 @@ export function SoundController() {
         prevIsScreenSharing.current = state.isScreenSharing;
       }
 
-      // Disconnect
+      // Disconnect (Self)
       if (prevIsConnected.current && !state.isLiveKitConnected) {
         audioManager.playSound('disconnect');
+      }
+      // Connect (Self)
+      if (!prevIsConnected.current && state.isLiveKitConnected) {
+        audioManager.playSound('user_join');
       }
       prevIsConnected.current = state.isLiveKitConnected;
 
@@ -79,28 +83,28 @@ export function SoundController() {
       const currentScreenShareUserIds = new Set(state.participants.filter(p => p.isScreenSharing).map(p => p.userId));
       
       if (state.isLiveKitConnected) {
-        // Someone joined voice
+        // Someone joined voice (Others only)
         state.participants.forEach(p => {
           if (!prevParticipantIds.current.has(p.userId) && p.userId !== currentUser?.id) {
             audioManager.playSound('user_join');
           }
         });
 
-        // Someone left voice
+        // Someone left voice (Others only)
         prevParticipantIds.current.forEach(userId => {
           if (!currentParticipantIds.has(userId) && userId !== currentUser?.id) {
             audioManager.playSound('user_leave');
           }
         });
 
-        // Someone started screen sharing
+        // Someone started screen sharing (Others only)
         state.participants.forEach(p => {
           if (p.isScreenSharing && !prevScreenShareUserIds.current.has(p.userId) && p.userId !== currentUser?.id) {
             audioManager.playSound('stream_user_joined');
           }
         });
 
-        // Someone stopped screen sharing
+        // Someone stopped screen sharing (Others only)
         prevScreenShareUserIds.current.forEach(userId => {
           if (!currentScreenShareUserIds.has(userId) && userId !== currentUser?.id) {
             audioManager.playSound('stream_user_left');
