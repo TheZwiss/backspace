@@ -4,8 +4,9 @@ import { useAudioTrackPlayer } from '../../hooks/useAudioTrackPlayer';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
 
 /**
- * Renders an invisible <audio> element for a single audio track.
- * Uses the shared useAudioTrackPlayer hook for the hybrid native/Web Audio pipeline.
+ * Manages a Web Audio pipeline for a single audio track.
+ * Renders a muted <audio> element as a Chrome keep-alive for the WebRTC track.
+ * All actual audio output goes through Web Audio (GainNode -> ctx.destination).
  */
 function AudioTrackElement({
   track,
@@ -45,16 +46,23 @@ function AudioTrackElement({
     muted: shouldMute,
   });
 
-  return <audio ref={audioRef} autoPlay playsInline />;
+  // The <audio> element is always muted — it serves only as a Chrome
+  // keep-alive so Chrome continues processing the WebRTC track.
+  // Real audio output goes through the Web Audio pipeline.
+  return <audio ref={audioRef} autoPlay playsInline data-opencord="keepalive" />;
 }
 
 /**
- * Always-mounted component that renders invisible <audio> elements
+ * Always-mounted component that manages Web Audio pipelines
  * for every remote participant's mic and screen audio tracks.
  *
  * Rendered in AppLayout alongside PictureInPicture and SoundController.
  * Never unmounts during navigation, so audio persists even when
  * VoiceGrid / VoiceUser / StreamTile are not rendered.
+ *
+ * All audio is routed through the Web Audio API (GainNodes connected
+ * to a shared AudioContext.destination). Muted <audio> elements serve
+ * as Chrome keep-alives for WebRTC tracks but produce no sound.
  */
 export function GlobalAudioRenderer() {
   const participants = useVoiceStore((s) => s.participants);
@@ -63,6 +71,7 @@ export function GlobalAudioRenderer() {
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
   const streamVolumes = useVoiceStore((s) => s.streamVolumes);
   const streamMutes = useVoiceStore((s) => s.streamMutes);
+  const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
   const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
 
@@ -96,8 +105,8 @@ export function GlobalAudioRenderer() {
               />
             )}
 
-            {/* Screen share audio */}
-            {p.screenAudioTrack && (
+            {/* Screen share audio — only when user opted in to watch */}
+            {p.screenAudioTrack && watchingStreams.has(p.userId) && (
               <AudioTrackElement
                 track={p.screenAudioTrack}
                 globalVolume={outputVolume}

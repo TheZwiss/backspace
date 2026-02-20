@@ -32,12 +32,6 @@ export function AppLayout() {
     useEffect(() => {
         const resume = () => {
             AudioManager.getInstance().resumeContext().then(() => {
-                // Wake up all audio/video elements that might be blocked by Autoplay
-                document.querySelectorAll('audio, video').forEach(el => {
-                    el.play().catch(() => {
-                        // Silently fail if still blocked or no source
-                    });
-                });
                 window.removeEventListener('click', resume);
                 window.removeEventListener('keydown', resume);
                 window.removeEventListener('touchstart', resume);
@@ -52,6 +46,25 @@ export function AppLayout() {
             window.removeEventListener('touchstart', resume);
         };
     }, []);
+    // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
+    // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback
+    // that ignores our volume/mute controls. Any <audio> without data-opencord is immediately killed.
+    useEffect(() => {
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                mutation.addedNodes.forEach((node) => {
+                    if (node instanceof HTMLAudioElement && !node.dataset.opencord) {
+                        node.muted = true;
+                        node.volume = 0;
+                        node.pause();
+                        node.srcObject = null;
+                    }
+                });
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        return () => observer.disconnect();
+    }, []);
     const { user, isLoading } = useAuth();
     const setCurrentServer = useServerStore((s) => s.setCurrentServer);
     const loadServerDetail = useServerStore((s) => s.loadServerDetail);
@@ -60,6 +73,7 @@ export function AppLayout() {
     const setIsMobile = useUIStore((s) => s.setIsMobile);
     const setShowDms = useUIStore((s) => s.setShowDms);
     const openModal = useUIStore((s) => s.openModal);
+    const memberListOpen = useUIStore((s) => s.memberListOpen);
     const sidebarOpen = useUIStore((s) => s.sidebarOpen);
     const isMobile = useUIStore((s) => s.isMobile);
     const userProfilePopout = useUIStore((s) => s.userProfilePopout);
@@ -167,5 +181,5 @@ export function AppLayout() {
     if (isLoading || !user) {
         return (_jsx("div", { className: "h-screen flex items-center justify-center bg-discord-bg-primary", children: _jsxs("div", { className: "text-center", children: [_jsxs("svg", { className: "animate-spin w-10 h-10 text-discord-blurple mx-auto mb-4", viewBox: "0 0 24 24", fill: "none", children: [_jsx("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), _jsx("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" })] }), _jsx("p", { className: "text-discord-text-muted", children: "Loading Opencord..." })] }) }));
     }
-    return (_jsxs("div", { className: "h-screen flex bg-discord-bg-tertiary overflow-hidden", children: [_jsxs("div", { className: `${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : 'flex h-full'}`, children: [_jsx(ServerSidebar, {}), _jsx(ChannelSidebar, {})] }), _jsxs("div", { className: "flex-1 flex min-w-0 bg-discord-bg-primary relative", children: [_jsx(MainContent, {}), serverId === '@me' ? (_jsx("div", { className: "w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col", children: _jsxs("div", { className: "p-4", children: [_jsx("h3", { className: "text-[20px] font-bold text-discord-text-header mb-4", children: "Active Now" }), _jsxs("div", { className: "text-center py-8", children: [_jsx("div", { className: "text-[16px] font-bold text-discord-text-header mb-1 text-center", children: "It's quiet for now..." }), _jsx("div", { className: "text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto", children: "When a friend starts an activity\u2014like playing a game or hanging out on voice\u2014we\u2019ll show it here!" })] })] }) })) : (_jsx(MemberSidebar, {}))] }), _jsx(CreateServerModal, {}), _jsx(JoinServerModal, {}), _jsx(CreateChannelModal, {}), _jsx(InviteModal, {}), _jsx(UserSettingsModal, {}), _jsx(ServerSettingsModal, {}), _jsx(NewDmModal, {}), _jsx(IncomingCallModal, {}), _jsx(ImagePreview, {}), _jsx(PictureInPicture, {}), _jsx(SoundController, {}), _jsx(GlobalAudioRenderer, {}), userProfilePopout.user && userProfilePopout.position && (_jsxs(_Fragment, { children: [_jsx("div", { className: "fixed inset-0 z-[45]", onClick: closeUserProfile }), _jsx(UserProfilePopout, { user: userProfilePopout.user, onClose: closeUserProfile, position: userProfilePopout.position })] }))] }));
+    return (_jsxs("div", { className: "h-screen flex bg-discord-bg-tertiary overflow-hidden", children: [_jsxs("div", { className: `${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : 'flex h-full'}`, children: [_jsx(ServerSidebar, {}), _jsx(ChannelSidebar, {})] }), _jsxs("div", { className: "flex-1 flex min-w-0 bg-discord-bg-primary relative", children: [_jsx(MainContent, {}), serverId === '@me' ? (memberListOpen ? (_jsx("div", { className: "w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col", children: _jsxs("div", { className: "p-4", children: [_jsx("h3", { className: "text-[20px] font-bold text-discord-text-header mb-4", children: "Active Now" }), _jsxs("div", { className: "text-center py-8", children: [_jsx("div", { className: "text-[16px] font-bold text-discord-text-header mb-1 text-center", children: "It's quiet for now..." }), _jsx("div", { className: "text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto", children: "When a friend starts an activity\u2014like playing a game or hanging out on voice\u2014we'll show it here!" })] })] }) })) : null) : (_jsx(MemberSidebar, {}))] }), _jsx(CreateServerModal, {}), _jsx(JoinServerModal, {}), _jsx(CreateChannelModal, {}), _jsx(InviteModal, {}), _jsx(UserSettingsModal, {}), _jsx(ServerSettingsModal, {}), _jsx(NewDmModal, {}), _jsx(IncomingCallModal, {}), _jsx(ImagePreview, {}), _jsx(PictureInPicture, {}), _jsx(SoundController, {}), _jsx(GlobalAudioRenderer, {}), userProfilePopout.user && userProfilePopout.position && (_jsxs(_Fragment, { children: [_jsx("div", { className: "fixed inset-0 z-[45]", onClick: closeUserProfile }), _jsx(UserProfilePopout, { user: userProfilePopout.user, onClose: closeUserProfile, position: userProfilePopout.position })] }))] }));
 }

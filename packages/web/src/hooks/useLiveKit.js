@@ -240,6 +240,8 @@ export function useLiveKit() {
         if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected)
             return;
         const gen = ++_connectGeneration;
+        // Ensure AudioContext is created and resumed before tracks arrive
+        await AudioManager.getInstance().resumeContext();
         // 1. Reset state immediately to reflect "Loading/Switching" in UI
         setRoom(null);
         setParticipants([]);
@@ -289,7 +291,12 @@ export function useLiveKit() {
                 }
                 guardedUpdate();
             });
-            newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
+                if (track.kind === Track.Kind.Audio) {
+                    track.detach();
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
                 if (publication.source === Track.Source.ScreenShare) {
                     const { userId } = parseIdentity(newRoom.localParticipant.identity);
@@ -309,9 +316,9 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
             newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
             newRoom.on(RoomEvent.TrackPublished, (publication, participant) => {
-                if (publication.source === Track.Source.ScreenShare) {
-                    const { userId } = parseIdentity(participant.identity);
-                    useVoiceStore.getState().watchStream(userId);
+                if (publication.source === Track.Source.ScreenShare ||
+                    publication.source === Track.Source.ScreenShareAudio) {
+                    publication.setSubscribed(false);
                 }
                 guardedUpdate();
             });
@@ -363,6 +370,15 @@ export function useLiveKit() {
             setIsConnected(true);
             useVoiceStore.getState().setIsLiveKitConnected(true);
             updateParticipants();
+            // Unsubscribe from any remote screen share tracks that auto-subscribed during connect
+            newRoom.remoteParticipants.forEach((rp) => {
+                rp.trackPublications.forEach((pub) => {
+                    if ((pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) &&
+                        pub.isSubscribed) {
+                        pub.setSubscribed(false);
+                    }
+                });
+            });
             // Initial mute state check
             const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
             useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
@@ -382,6 +398,8 @@ export function useLiveKit() {
     }, [updateParticipants, handleDataReceived]);
     const connectDm = useCallback(async (dmChannelId) => {
         const gen = ++_connectGeneration;
+        // Ensure AudioContext is created and resumed before tracks arrive
+        await AudioManager.getInstance().resumeContext();
         // 1. Reset state immediately
         setRoom(null);
         setParticipants([]);
@@ -419,7 +437,12 @@ export function useLiveKit() {
                 }
                 guardedUpdate();
             });
-            newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
+                if (track.kind === Track.Kind.Audio) {
+                    track.detach();
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
                 if (publication.source === Track.Source.ScreenShare) {
                     const { userId } = parseIdentity(newRoom.localParticipant.identity);
@@ -438,9 +461,9 @@ export function useLiveKit() {
             newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
             newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
             newRoom.on(RoomEvent.TrackPublished, (publication, participant) => {
-                if (publication.source === Track.Source.ScreenShare) {
-                    const { userId } = parseIdentity(participant.identity);
-                    useVoiceStore.getState().watchStream(userId);
+                if (publication.source === Track.Source.ScreenShare ||
+                    publication.source === Track.Source.ScreenShareAudio) {
+                    publication.setSubscribed(false);
                 }
                 guardedUpdate();
             });
@@ -480,6 +503,15 @@ export function useLiveKit() {
             setIsConnected(true);
             useVoiceStore.getState().setIsLiveKitConnected(true);
             updateParticipants();
+            // Unsubscribe from any remote screen share tracks that auto-subscribed during connect
+            newRoom.remoteParticipants.forEach((rp) => {
+                rp.trackPublications.forEach((pub) => {
+                    if ((pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) &&
+                        pub.isSubscribed) {
+                        pub.setSubscribed(false);
+                    }
+                });
+            });
             const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
             useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
             if (wasDeafened) {

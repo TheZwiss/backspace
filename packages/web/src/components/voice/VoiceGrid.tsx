@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -12,8 +12,14 @@ interface VoiceGridProps {
 export function VoiceGrid({ participants }: VoiceGridProps) {
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
+  const [stripHidden, setStripHidden] = useState(false);
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
+
+  // Reset strip visibility when focus target changes
+  useEffect(() => {
+    setStripHidden(false);
+  }, [focusedParticipantId]);
 
   // Unfocus if the focused stream tile no longer exists
   useEffect(() => {
@@ -75,12 +81,12 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
         <div
-          className="flex-1 p-2 min-h-0 cursor-pointer"
+          className="flex-1 p-2 min-h-0 cursor-pointer relative"
           onClick={() => setFocusedParticipant(null)}
           title="Click to return to grid view"
         >
           {renderTile(focusedTile, true)}
-          {/* Back to grid button */}
+          {/* Grid button — top-right */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -101,8 +107,33 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
           </button>
         </div>
 
-        {/* Bottom strip of other tiles */}
+        {/* Centered Hide/Show Members button — divider between focused tile and strip */}
         {otherTiles.length > 0 && (
+          <div className="flex justify-center flex-shrink-0 py-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setStripHidden(!stripHidden);
+              }}
+              className="px-4 py-1 bg-black/50 hover:bg-black/70 rounded-full flex items-center gap-2 text-white/60 hover:text-white transition-colors text-xs"
+              title={stripHidden ? 'Show Members' : 'Hide Members'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                {stripHidden
+                  ? <path d="M7 14l5-5 5 5z" />
+                  : <path d="M7 10l5 5 5-5z" />
+                }
+              </svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
+              </svg>
+              <span>{stripHidden ? 'Show Members' : 'Hide Members'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Bottom strip of other tiles */}
+        {!stripHidden && otherTiles.length > 0 && (
           <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-[#111214]/50 overflow-x-auto no-scrollbar">
             {otherTiles.map((t) => (
               <div

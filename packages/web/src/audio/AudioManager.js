@@ -6,6 +6,7 @@ export class AudioManager {
     inputDestination = null;
     silentGain = null;
     analyser = null;
+    masterCompressor = null;
     currentInputDeviceId = 'default';
     currentStream = null;
     isInitialized = false;
@@ -29,6 +30,15 @@ export class AudioManager {
         this.analyser.fftSize = 256;
         this.silentGain = this.ctx.createGain();
         this.silentGain.gain.value = 0;
+        // Master compressor/limiter — prevents clipping when multiple
+        // audio sources (voice + stream) sum at the output.
+        this.masterCompressor = this.ctx.createDynamicsCompressor();
+        this.masterCompressor.threshold.value = -1; // only engage near digital clipping
+        this.masterCompressor.knee.value = 0.5; // hard knee — transparent below threshold
+        this.masterCompressor.ratio.value = 4; // gentle limiting, no ducking
+        this.masterCompressor.attack.value = 0.0005; // 0.5ms — catch transient peaks
+        this.masterCompressor.release.value = 0.01; // 10ms — recover quickly
+        this.masterCompressor.connect(this.ctx.destination);
         this.inputGain.connect(this.inputDestination);
         this.inputGain.connect(this.analyser);
         this.inputGain.connect(this.silentGain);
@@ -93,7 +103,7 @@ export class AudioManager {
         const gainNode = this.ctx.createGain();
         gainNode.gain.value = options.volume ?? 0.5;
         source.connect(gainNode);
-        gainNode.connect(this.ctx.destination);
+        gainNode.connect(this.masterCompressor);
         source.start(0);
         return source;
     }
@@ -157,6 +167,30 @@ export class AudioManager {
         if (!this.isInitialized)
             this.initContext();
         return this.analyser;
+    }
+    /**
+     * Ensures the AudioContext exists and returns it.
+     * Unlike getContext(), this will never return null — it lazily
+     * creates the context if it hasn't been initialised yet.
+     * The context may be in 'suspended' state but Web Audio nodes
+     * can be created and connected regardless; audio will flow
+     * once the context resumes.
+     */
+    ensureContext() {
+        if (!this.ctx)
+            this.initContext();
+        return this.ctx;
+    }
+    /**
+     * Returns the master output bus (DynamicsCompressorNode).
+     * All remote audio (voice, stream) should connect their GainNodes
+     * to this node instead of directly to ctx.destination. The compressor
+     * prevents clipping when multiple sources sum together.
+     */
+    getMasterOutput() {
+        if (!this.ctx)
+            this.initContext();
+        return this.masterCompressor;
     }
     getContext() {
         return this.ctx;

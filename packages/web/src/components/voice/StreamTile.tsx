@@ -143,7 +143,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           ref={videoRef}
           autoPlay
           playsInline
-          muted={isLocal}
+          muted
           className="w-full h-full object-contain bg-black"
         />
       ) : (

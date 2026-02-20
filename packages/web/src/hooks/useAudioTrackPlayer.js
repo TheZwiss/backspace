@@ -1,101 +1,88 @@
 import { useRef, useEffect } from 'react';
 import { AudioManager } from '../audio/AudioManager';
 /**
- * Shared hybrid audio pipeline hook.
+ * Hybrid audio pipeline for a single remote audio track.
  *
- * Manages an <audio> element ref with two modes:
- *   - Standard mode (volume <= 1.0): uses native HTMLAudioElement volume
- *   - Boost mode (volume > 1.0): routes through Web Audio GainNode for amplification
+ * Architecture:
+ *   1. A MUTED <audio> element keeps Chrome's WebRTC audio pipeline alive
+ *      for the track. Chrome requires an HTML media element consuming a
+ *      WebRTC MediaStreamTrack or it stops processing it. The element is
+ *      always muted (volume=0, muted=true) — it never produces audible output.
  *
- * The caller must render: <audio ref={audioRef} autoPlay playsInline />
+ *   2. A Web Audio pipeline handles ALL actual audio output:
+ *      MediaStreamTrack -> MediaStream -> MediaStreamAudioSourceNode -> GainNode -> ctx.destination
+ *
+ * This gives us:
+ *   - Chrome compatibility (muted <audio> keep-alive)
+ *   - No ducking (all elements are muted, only Web Audio produces sound)
+ *   - Clean mixing (single ctx.destination for all tracks)
+ *   - Full volume range (0.0 – 4.0+) via GainNode
+ *   - Smooth transitions via setTargetAtTime (no clicks/pops)
  */
 export function useAudioTrackPlayer(opts) {
-    const audioRef = useRef(null);
-    const boostGainRef = useRef(null);
-    const boostSourceRef = useRef(null);
     const { track, volume, muted } = opts;
-    // Effect 1: Track attachment
+    const audioRef = useRef(null);
+    const sourceRef = useRef(null);
+    const gainRef = useRef(null);
+    // Keep current volume/muted in refs so Effect 1 can read them
+    // for the initial ramp without depending on them
+    const volumeRef = useRef(volume);
+    const mutedRef = useRef(muted);
+    volumeRef.current = volume;
+    mutedRef.current = muted;
+    // Effect 1: Track attachment (keep-alive) + Web Audio pipeline build
     useEffect(() => {
         const audioEl = audioRef.current;
-        if (!audioEl || !track) {
+        // Tear down previous Web Audio graph
+        if (sourceRef.current) {
+            sourceRef.current.disconnect();
+            sourceRef.current = null;
+        }
+        if (gainRef.current) {
+            gainRef.current.disconnect();
+            gainRef.current = null;
+        }
+        if (!track) {
             if (audioEl)
                 audioEl.srcObject = null;
             return;
         }
+        // --- Keep-alive: attach track to <audio> element (always muted) ---
+        // Chrome needs an HTML element consuming the WebRTC track or it
+        // stops the audio pipeline for that track entirely.
+        if (audioEl) {
+            audioEl.srcObject = new MediaStream([track]);
+            audioEl.muted = true;
+            audioEl.volume = 0;
+            audioEl.play().catch(() => { });
+        }
+        // --- Web Audio pipeline for actual output ---
+        const ctx = AudioManager.getInstance().ensureContext();
         const stream = new MediaStream([track]);
-        // Only update if the stream actually changed to prevent interruptions
-        if (audioEl.srcObject?.id !== stream.id) {
-            audioEl.srcObject = stream;
-            const tryPlay = async () => {
-                try {
-                    await audioEl.play();
-                }
-                catch (err) {
-                    console.warn('[Audio] Autoplay blocked, retrying...', err);
-                }
-            };
-            tryPlay();
-        }
-    }, [track]);
-    // Effect 2: Volume management (hybrid native/Web Audio)
-    useEffect(() => {
-        const audioEl = audioRef.current;
-        if (!audioEl || !track)
-            return;
-        if (muted) {
-            audioEl.muted = true;
-            return;
-        }
-        const audioManager = AudioManager.getInstance();
-        const ctx = audioManager.getContext();
-        const isBoosting = volume > 1.0;
-        const isContextReady = ctx && ctx.state === 'running';
-        if (isBoosting && isContextReady) {
-            // --- BOOST MODE (>100%) ---
-            // Setup pipeline if missing
-            if (!boostGainRef.current && ctx) {
-                const gain = ctx.createGain();
-                const source = ctx.createMediaStreamSource(new MediaStream([track]));
-                source.connect(gain);
-                gain.connect(ctx.destination);
-                boostGainRef.current = gain;
-                boostSourceRef.current = source;
-            }
-            // Apply boosted gain
-            if (boostGainRef.current && ctx) {
-                boostGainRef.current.gain.setTargetAtTime(volume, ctx.currentTime, 0.01);
-            }
-            // MUTE the element so we don't double audio
-            audioEl.muted = true;
-        }
-        else {
-            // --- STANDARD MODE (0% - 100%) ---
-            // Clean up boost pipeline if it exists
-            if (boostGainRef.current) {
-                boostGainRef.current.disconnect();
-                boostGainRef.current = null;
-            }
-            if (boostSourceRef.current) {
-                boostSourceRef.current.disconnect();
-                boostSourceRef.current = null;
-            }
-            audioEl.muted = false;
-            audioEl.volume = Math.min(volume, 1.0);
-            // Ensure it's playing (in case it was paused/blocked earlier)
-            if (audioEl.paused) {
-                audioEl.play().catch(() => { });
-            }
-        }
+        const source = ctx.createMediaStreamSource(stream);
+        const gain = ctx.createGain();
+        // Start gain at 0 to prevent pop, then ramp to target
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        const targetGain = mutedRef.current ? 0 : volumeRef.current;
+        gain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.015);
+        source.connect(gain);
+        gain.connect(AudioManager.getInstance().getMasterOutput());
+        sourceRef.current = source;
+        gainRef.current = gain;
         return () => {
-            if (boostGainRef.current) {
-                boostGainRef.current.disconnect();
-                boostGainRef.current = null;
-            }
-            if (boostSourceRef.current) {
-                boostSourceRef.current.disconnect();
-                boostSourceRef.current = null;
-            }
+            source.disconnect();
+            gain.disconnect();
+            sourceRef.current = null;
+            gainRef.current = null;
         };
-    }, [volume, muted, track]);
+    }, [track]);
+    // Effect 2: Update gain when volume or muted changes (no graph rebuild)
+    useEffect(() => {
+        if (!gainRef.current)
+            return;
+        const ctx = AudioManager.getInstance().ensureContext();
+        const targetGain = muted ? 0 : volume;
+        gainRef.current.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.015);
+    }, [volume, muted]);
     return audioRef;
 }

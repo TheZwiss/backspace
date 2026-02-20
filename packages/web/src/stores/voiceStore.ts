@@ -107,7 +107,7 @@ export const useVoiceStore = create<VoiceState>()(
       streamVolumes: new Map(),
       streamMutes: new Map(),
       watchingStreams: new Set(),
-      streamAttenuationEnabled: true,
+      streamAttenuationEnabled: false,
       streamAttenuationStrength: 50,
 
       setStreamVolume: (userId, volume) => {
@@ -296,6 +296,13 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+          persistedState.streamAttenuationEnabled = false;
+        }
+        return persistedState;
+      },
       storage: createJSONStorage(() => localStorage),
       // Only persist these keys. Maps and Sets are complex to serialize.
       partialize: (state) => ({

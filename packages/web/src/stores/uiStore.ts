@@ -43,7 +43,7 @@ interface UIState {
   setPipCollapsed: (collapsed: boolean) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set, get) => ({
   sidebarOpen: true,
   memberListOpen: true,
   activeModal: null,
@@ -62,11 +62,11 @@ export const useUIStore = create<UIState>((set) => ({
   openModal: (modal, data = {}) => set({ activeModal: modal, modalData: data }),
   closeModal: () => set({ activeModal: null, modalData: {} }),
 
-  setIsMobile: (isMobile) => set({
-    isMobile,
-    sidebarOpen: !isMobile,
-    memberListOpen: !isMobile,
-  }),
+  setIsMobile: (isMobile) => {
+    const prev = get().isMobile;
+    if (prev === isMobile) return;
+    set({ isMobile, sidebarOpen: !isMobile, memberListOpen: !isMobile });
+  },
 
   setShowDms: (show) => set({ showDms: show }),
 

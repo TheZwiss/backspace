@@ -34,13 +34,6 @@ export function AppLayout() {
   useEffect(() => {
     const resume = () => {
       AudioManager.getInstance().resumeContext().then(() => {
-        // Wake up all audio/video elements that might be blocked by Autoplay
-        document.querySelectorAll('audio, video').forEach(el => {
-          (el as HTMLMediaElement).play().catch(() => {
-            // Silently fail if still blocked or no source
-          });
-        });
-
         window.removeEventListener('click', resume);
         window.removeEventListener('keydown', resume);
         window.removeEventListener('touchstart', resume);
@@ -56,6 +49,26 @@ export function AppLayout() {
     };
   }, []);
 
+  // MutationObserver: neutralize rogue LiveKit <audio> elements that bypass our Web Audio pipeline.
+  // LiveKit can re-attach hidden <audio> elements after .detach(), causing full-volume playback
+  // that ignores our volume/mute controls. Any <audio> without data-opencord is immediately killed.
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLAudioElement && !node.dataset.opencord) {
+            node.muted = true;
+            node.volume = 0;
+            node.pause();
+            node.srcObject = null;
+          }
+        });
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   const { user, isLoading } = useAuth();
   const setCurrentServer = useServerStore((s) => s.setCurrentServer);
   const loadServerDetail = useServerStore((s) => s.loadServerDetail);
@@ -64,6 +77,7 @@ export function AppLayout() {
   const setIsMobile = useUIStore((s) => s.setIsMobile);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
+  const memberListOpen = useUIStore((s) => s.memberListOpen);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
   const userProfilePopout = useUIStore((s) => s.userProfilePopout);
@@ -213,17 +227,19 @@ export function AppLayout() {
       <div className="flex-1 flex min-w-0 bg-discord-bg-primary relative">
         <MainContent />
         {serverId === '@me' ? (
-          <div className="w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col">
-            <div className="p-4">
-              <h3 className="text-[20px] font-bold text-discord-text-header mb-4">Active Now</h3>
-              <div className="text-center py-8">
-                <div className="text-[16px] font-bold text-discord-text-header mb-1 text-center">It's quiet for now...</div>
-                <div className="text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto">
-                  When a friend starts an activity—like playing a game or hanging out on voice—we’ll show it here!
+          memberListOpen ? (
+            <div className="w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col">
+              <div className="p-4">
+                <h3 className="text-[20px] font-bold text-discord-text-header mb-4">Active Now</h3>
+                <div className="text-center py-8">
+                  <div className="text-[16px] font-bold text-discord-text-header mb-1 text-center">It's quiet for now...</div>
+                  <div className="text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto">
+                    When a friend starts an activity&#8212;like playing a game or hanging out on voice&#8212;we'll show it here!
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : null
         ) : (
           <MemberSidebar />
         )}
