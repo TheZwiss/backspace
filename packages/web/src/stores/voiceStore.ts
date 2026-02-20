@@ -23,6 +23,20 @@ interface VoiceState {
   participantVolumes: Map<string, number>;
   setParticipantVolume: (userId: string, volume: number) => void;
   getParticipantVolume: (userId: string) => number;
+  // Stream widget state
+  streamVolumes: Map<string, number>;       // userId → 0-200 (100 default)
+  streamMutes: Map<string, boolean>;        // userId → muted?
+  watchingStreams: Set<string>;             // userIds we're watching
+  streamAttenuationEnabled: boolean;        // global toggle, default true
+  streamAttenuationStrength: number;        // 0-100, default 50
+  setStreamVolume: (userId: string, volume: number) => void;
+  setStreamMute: (userId: string, muted: boolean) => void;
+  watchStream: (userId: string) => void;
+  unwatchStream: (userId: string) => void;
+  clearStreamVolume: (userId: string) => void;
+  clearStreamMute: (userId: string) => void;
+  setStreamAttenuationEnabled: (enabled: boolean) => void;
+  setStreamAttenuationStrength: (strength: number) => void;
   // DM call state
   incomingCall: { dmChannelId: string; callerId: string; callerName: string } | null;
   outgoingCall: { dmChannelId: string } | null;
@@ -88,6 +102,58 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
       getParticipantVolume: (userId) => get().participantVolumes.get(userId) ?? 100,
+
+      // Stream widget state
+      streamVolumes: new Map(),
+      streamMutes: new Map(),
+      watchingStreams: new Set(),
+      streamAttenuationEnabled: true,
+      streamAttenuationStrength: 50,
+
+      setStreamVolume: (userId, volume) => {
+        set((state) => {
+          const newMap = new Map(state.streamVolumes);
+          newMap.set(userId, volume);
+          return { streamVolumes: newMap };
+        });
+      },
+      setStreamMute: (userId, muted) => {
+        set((state) => {
+          const newMap = new Map(state.streamMutes);
+          newMap.set(userId, muted);
+          return { streamMutes: newMap };
+        });
+      },
+      watchStream: (userId) => {
+        set((state) => {
+          const newSet = new Set(state.watchingStreams);
+          newSet.add(userId);
+          return { watchingStreams: newSet };
+        });
+      },
+      unwatchStream: (userId) => {
+        set((state) => {
+          const newSet = new Set(state.watchingStreams);
+          newSet.delete(userId);
+          return { watchingStreams: newSet };
+        });
+      },
+      clearStreamVolume: (userId) => {
+        set((state) => {
+          const newMap = new Map(state.streamVolumes);
+          newMap.delete(userId);
+          return { streamVolumes: newMap };
+        });
+      },
+      clearStreamMute: (userId) => {
+        set((state) => {
+          const newMap = new Map(state.streamMutes);
+          newMap.delete(userId);
+          return { streamMutes: newMap };
+        });
+      },
+      setStreamAttenuationEnabled: (enabled) => set({ streamAttenuationEnabled: enabled }),
+      setStreamAttenuationStrength: (strength) => set({ streamAttenuationStrength: strength }),
 
       incomingCall: null,
       outgoingCall: null,
@@ -197,6 +263,9 @@ export const useVoiceStore = create<VoiceState>()(
         activeDmCall: null,
         outgoingCall: null,
         deafenedUserIds: new Set(),
+        streamVolumes: new Map(),
+        streamMutes: new Map(),
+        watchingStreams: new Set(),
       }),
 
       reset: () => set({
@@ -220,6 +289,9 @@ export const useVoiceStore = create<VoiceState>()(
         activeDmCall: null,
         deafenedUserIds: new Set(),
         voiceUserStates: new Map(),
+        streamVolumes: new Map(),
+        streamMutes: new Map(),
+        watchingStreams: new Set(),
       }),
     }),
     {
@@ -236,6 +308,8 @@ export const useVoiceStore = create<VoiceState>()(
         outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
         noiseSuppression: state.noiseSuppression,
+        streamAttenuationEnabled: state.streamAttenuationEnabled,
+        streamAttenuationStrength: state.streamAttenuationStrength,
       }),
     }
   )

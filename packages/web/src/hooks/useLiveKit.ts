@@ -5,6 +5,7 @@ import {
   Track,
   Participant,
   RemoteParticipant,
+  RemoteTrackPublication,
   ConnectionState,
   VideoPresets,
   VideoPreset,
@@ -50,6 +51,58 @@ export interface ParticipantInfo {
   videoTrack: MediaStreamTrack | null;
   screenTrack: MediaStreamTrack | null;
   screenAudioTrack: MediaStreamTrack | null;
+}
+
+export interface UserTile {
+  kind: 'user';
+  key: string;                        // participant.identity
+  participant: ParticipantInfo;
+  videoTrack: MediaStreamTrack | null; // camera only
+  audioTrack: MediaStreamTrack | null; // mic
+}
+
+export interface StreamTile {
+  kind: 'stream';
+  key: string;                        // `${identity}:stream`
+  participant: ParticipantInfo;
+  screenTrack: MediaStreamTrack | null;
+  screenAudioTrack: MediaStreamTrack | null;
+}
+
+export type GridTile = UserTile | StreamTile;
+
+export function deriveGridTiles(participants: ParticipantInfo[]): GridTile[] {
+  const tiles: GridTile[] = [];
+  for (const p of participants) {
+    tiles.push({
+      kind: 'user',
+      key: p.identity,
+      participant: p,
+      videoTrack: (p.isCameraOn && p.videoTrack?.readyState === 'live') ? p.videoTrack : null,
+      audioTrack: p.audioTrack,
+    });
+    if (p.isScreenSharing) {
+      tiles.push({
+        kind: 'stream',
+        key: `${p.identity}:stream`,
+        participant: p,
+        screenTrack: p.screenTrack,
+        screenAudioTrack: p.screenAudioTrack,
+      });
+    }
+  }
+  return tiles;
+}
+
+export function setStreamSubscription(room: Room | null, targetIdentity: string, subscribed: boolean) {
+  if (!room) return;
+  const rp = room.remoteParticipants.get(targetIdentity);
+  if (!rp) return;
+  rp.trackPublications.forEach((pub) => {
+    if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+      (pub as RemoteTrackPublication).setSubscribed(subscribed);
+    }
+  });
 }
 
 function parseIdentity(identity: string): { userId: string; username: string } {
@@ -116,7 +169,11 @@ export function useLiveKit() {
       let videoTrack: MediaStreamTrack | null = null;
       let screenTrack: MediaStreamTrack | null = null;
       let screenAudioTrack: MediaStreamTrack | null = null;
+      let hasScreenSharePublication = false;
       p.trackPublications.forEach((pub) => {
+        // Detect screen share publication even if unsubscribed
+        if (pub.source === Track.Source.ScreenShare) hasScreenSharePublication = true;
+
         const track = pub.track;
         if (!track) return;
         // Strict check: Track must be subscribed AND not muted to be considered "active"
@@ -130,11 +187,11 @@ export function useLiveKit() {
         else if (pub.source === Track.Source.ScreenShare) screenTrack = mt;
         else if (pub.source === Track.Source.ScreenShareAudio) screenAudioTrack = mt;
       });
-      
+
       const userState = useVoiceStore.getState().voiceUserStates.get(userId);
       let isPartDeafened = false;
       let isPartMuted = !p.isMicrophoneEnabled;
-      
+
       if (isLocal) {
         isPartDeafened = useVoiceStore.getState().isDeafened;
         isPartMuted = useVoiceStore.getState().isMuted;
@@ -150,8 +207,8 @@ export function useLiveKit() {
         isSpeaking: p.isSpeaking,
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
-        isCameraOn: !!videoTrack, // Strictly derived from active track
-        isScreenSharing: !!screenTrack, // Strictly derived from active track
+        isCameraOn: !!videoTrack,
+        isScreenSharing: hasScreenSharePublication, // True even when unsubscribed
         isLocal,
         audioTrack,
         videoTrack,
@@ -294,6 +351,23 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
       newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
+      newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(participant.identity);
+          useVoiceStore.getState().watchStream(userId);
+        }
+        guardedUpdate();
+      });
+      newRoom.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(participant.identity);
+          const state = useVoiceStore.getState();
+          state.unwatchStream(userId);
+          state.clearStreamVolume(userId);
+          state.clearStreamMute(userId);
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.DataReceived, handleDataReceived);
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
@@ -384,17 +458,34 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
+      newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(participant.identity);
+          useVoiceStore.getState().watchStream(userId);
+        }
+        guardedUpdate();
+      });
+      newRoom.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(participant.identity);
+          const state = useVoiceStore.getState();
+          state.unwatchStream(userId);
+          state.clearStreamVolume(userId);
+          state.clearStreamMute(userId);
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
           setConnectionState(state);
           const connected = state === ConnectionState.Connected;
           const connecting = state === ConnectionState.Connecting || state === ConnectionState.Reconnecting;
-          
+
           setIsConnected(connected);
           setIsConnecting(connecting);
-          
+
           useVoiceStore.getState().setIsLiveKitConnected(connected);
-          
+
           if (connected) {
             updateParticipants();
           }

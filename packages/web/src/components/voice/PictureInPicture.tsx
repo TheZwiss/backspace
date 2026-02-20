@@ -21,9 +21,12 @@ interface SelectedStream {
 function selectPipStream(
   participants: ParticipantInfo[],
   focusedId: string | null,
+  watchingStreams: Set<string>,
 ): SelectedStream | null {
-  // Priority 1: Screen share (highest value content)
-  const screenSharer = participants.find(p => p.screenTrack !== null);
+  // Priority 1: Screen share from a user we're watching
+  const screenSharer = participants.find(
+    p => p.screenTrack !== null && watchingStreams.has(p.userId),
+  );
   if (screenSharer?.screenTrack) {
     return { participant: screenSharer, track: screenSharer.screenTrack, type: 'screen' };
   }
@@ -61,6 +64,7 @@ export function PictureInPicture() {
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
+  const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
@@ -95,8 +99,8 @@ export function PictureInPicture() {
 
   // Stream selection
   const selectedStream = useMemo(
-    () => selectPipStream(participants, focusedParticipantId),
-    [participants, focusedParticipantId],
+    () => selectPipStream(participants, focusedParticipantId, watchingStreams),
+    [participants, focusedParticipantId, watchingStreams],
   );
 
   // Fallback participant for avatar (most relevant remote, or first participant)

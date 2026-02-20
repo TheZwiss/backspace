@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { VoiceUser } from './VoiceUser';
+import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
-import type { ParticipantInfo } from '../../hooks/useLiveKit';
+import { deriveGridTiles } from '../../hooks/useLiveKit';
+import type { ParticipantInfo, GridTile } from '../../hooks/useLiveKit';
 
 interface VoiceGridProps {
   participants: ParticipantInfo[];
@@ -10,28 +12,43 @@ interface VoiceGridProps {
 export function VoiceGrid({ participants }: VoiceGridProps) {
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
-  const prevScreenSharerRef = useRef<string | null>(null);
+  const prevStreamKeysRef = useRef<Set<string>>(new Set());
 
-  // Auto-focus when someone starts screen sharing
+  const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
+
+  // Auto-focus when a new stream tile appears
   useEffect(() => {
-    const screenSharer = participants.find(
-      (p) => p.screenTrack?.readyState === 'live',
+    const currentStreamKeys = new Set(
+      tiles
+        .filter(
+          (t): t is GridTile & { kind: 'stream' } =>
+            t.kind === 'stream' && t.screenTrack?.readyState === 'live',
+        )
+        .map((t) => t.key),
     );
-    const screenSharerId = screenSharer?.identity ?? null;
 
-    if (screenSharerId && screenSharerId !== prevScreenSharerRef.current) {
-      // New screen share started — auto-focus
-      setFocusedParticipant(screenSharerId);
-    } else if (!screenSharerId && prevScreenSharerRef.current) {
-      // Screen share ended — unfocus if we were focused on the sharer
-      if (focusedParticipantId === prevScreenSharerRef.current) {
-        setFocusedParticipant(null);
+    // Find newly appeared stream keys
+    for (const key of currentStreamKeys) {
+      if (!prevStreamKeysRef.current.has(key)) {
+        // New stream tile — auto-focus it
+        setFocusedParticipant(key);
+        break;
       }
     }
-    prevScreenSharerRef.current = screenSharerId;
-  }, [participants, focusedParticipantId, setFocusedParticipant]);
 
-  if (participants.length === 0) {
+    // If the focused tile was a stream tile that no longer exists, unfocus
+    if (
+      focusedParticipantId &&
+      focusedParticipantId.endsWith(':stream') &&
+      !currentStreamKeys.has(focusedParticipantId)
+    ) {
+      setFocusedParticipant(null);
+    }
+
+    prevStreamKeysRef.current = currentStreamKeys;
+  }, [tiles, focusedParticipantId, setFocusedParticipant]);
+
+  if (tiles.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
@@ -52,24 +69,30 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     );
   }
 
-  const focusedParticipant = focusedParticipantId
-    ? participants.find((p) => p.identity === focusedParticipantId)
+  const focusedTile = focusedParticipantId
+    ? tiles.find((t) => t.key === focusedParticipantId)
     : null;
 
-  // Focus mode: one large tile + bottom strip
-  if (focusedParticipant) {
-    const otherParticipants = participants.filter(
-      (p) => p.identity !== focusedParticipantId,
+  // Render a single tile polymorphically
+  const renderTile = (tile: GridTile, large?: boolean) =>
+    tile.kind === 'user' ? (
+      <VoiceUser tile={tile} large={large} />
+    ) : (
+      <StreamTile tile={tile} large={large} />
     );
+
+  // Focus mode: one large tile + bottom strip
+  if (focusedTile) {
+    const otherTiles = tiles.filter((t) => t.key !== focusedParticipantId);
     return (
       <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Main focused view */}
-        <div 
+        <div
           className="flex-1 p-2 min-h-0 cursor-pointer"
           onClick={() => setFocusedParticipant(null)}
           title="Click to return to grid view"
         >
-          <VoiceUser participant={focusedParticipant} large />
+          {renderTile(focusedTile, true)}
           {/* Back to grid button */}
           <button
             onClick={(e) => {
@@ -79,23 +102,28 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
             className="absolute top-4 right-4 z-10 px-3 py-1.5 bg-black/60 hover:bg-black/80 rounded-lg flex items-center gap-2 text-white/70 hover:text-white transition-colors"
             title="Back to grid view"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
               <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z" />
             </svg>
             <span className="text-xs font-medium">Grid</span>
           </button>
         </div>
 
-        {/* Bottom strip of other participants */}
-        {otherParticipants.length > 0 && (
+        {/* Bottom strip of other tiles */}
+        {otherTiles.length > 0 && (
           <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-[#111214]/50 overflow-x-auto no-scrollbar">
-            {otherParticipants.map((p) => (
+            {otherTiles.map((t) => (
               <div
-                key={p.identity}
-                onClick={() => setFocusedParticipant(p.identity)}
+                key={t.key}
+                onClick={() => setFocusedParticipant(t.key)}
                 className="h-full aspect-video flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
               >
-                <VoiceUser participant={p} />
+                {renderTile(t)}
               </div>
             ))}
           </div>
@@ -106,23 +134,23 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
   // Default grid mode
   const gridClass = (() => {
-    if (participants.length === 1) return 'grid-cols-1 max-w-2xl mx-auto';
-    if (participants.length === 2) return 'grid-cols-2 max-w-4xl mx-auto';
-    if (participants.length <= 4) return 'grid-cols-2';
-    if (participants.length <= 9) return 'grid-cols-3';
+    if (tiles.length === 1) return 'grid-cols-1 max-w-2xl mx-auto';
+    if (tiles.length === 2) return 'grid-cols-2 max-w-4xl mx-auto';
+    if (tiles.length <= 4) return 'grid-cols-2';
+    if (tiles.length <= 9) return 'grid-cols-3';
     return 'grid-cols-4';
   })();
 
   return (
     <div className="flex-1 p-3 overflow-auto flex items-center min-h-0">
       <div className={`grid ${gridClass} gap-2 w-full max-h-full`}>
-        {participants.map((p) => (
+        {tiles.map((t) => (
           <div
-            key={p.identity}
-            onClick={() => setFocusedParticipant(p.identity)}
+            key={t.key}
+            onClick={() => setFocusedParticipant(t.key)}
             className="cursor-pointer hover:opacity-90 transition-opacity h-full"
           >
-            <VoiceUser participant={p} />
+            {renderTile(t)}
           </div>
         ))}
       </div>

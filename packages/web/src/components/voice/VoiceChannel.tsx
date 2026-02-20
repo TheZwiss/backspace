@@ -90,7 +90,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
                     </svg>
                   )}
                   {isScreenSharing && (
-                    <span className="bg-discord-green text-white text-[9px] font-bold px-1 rounded leading-[14px]">LIVE</span>
+                    <span className="bg-discord-red text-white text-[9px] font-bold px-1 rounded leading-[14px]">LIVE</span>
                   )}
                 </div>
               </div>

@@ -10,9 +10,9 @@ const PIP_WIDTH = 320;
 const PIP_HEIGHT = 180;
 const PIP_MARGIN = 16;
 const DRAG_THRESHOLD = 5;
-function selectPipStream(participants, focusedId) {
-    // Priority 1: Screen share (highest value content)
-    const screenSharer = participants.find(p => p.screenTrack !== null);
+function selectPipStream(participants, focusedId, watchingStreams) {
+    // Priority 1: Screen share from a user we're watching
+    const screenSharer = participants.find(p => p.screenTrack !== null && watchingStreams.has(p.userId));
     if (screenSharer?.screenTrack) {
         return { participant: screenSharer, track: screenSharer.screenTrack, type: 'screen' };
     }
@@ -44,6 +44,7 @@ export function PictureInPicture() {
     const activeDmCall = useVoiceStore((s) => s.activeDmCall);
     const participants = useVoiceStore((s) => s.participants);
     const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
+    const watchingStreams = useVoiceStore((s) => s.watchingStreams);
     const currentChannelId = useChatStore((s) => s.currentChannelId);
     const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
     const pipCollapsed = useUIStore((s) => s.pipCollapsed);
@@ -73,7 +74,7 @@ export function PictureInPicture() {
     const isInDmCall = activeDmCall !== null && currentChannelId !== activeDmCall.dmChannelId;
     const shouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && !pipCollapsed;
     // Stream selection
-    const selectedStream = useMemo(() => selectPipStream(participants, focusedParticipantId), [participants, focusedParticipantId]);
+    const selectedStream = useMemo(() => selectPipStream(participants, focusedParticipantId, watchingStreams), [participants, focusedParticipantId, watchingStreams]);
     // Fallback participant for avatar (most relevant remote, or first participant)
     const fallbackParticipant = useMemo(() => {
         const speaking = participants.find(p => !p.isLocal && p.isSpeaking);

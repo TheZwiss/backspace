@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
@@ -13,7 +13,7 @@ function handleEvent(event) {
     const { setUser } = useAuthStore.getState();
     const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
     const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-    const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers } = useVoiceStore.getState();
+    const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
     switch (event.type) {
         case 'ready':
             setUser(event.user);
@@ -39,6 +39,22 @@ function handleEvent(event) {
             if (event.voiceStates) {
                 for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
                     setVoiceUsers(channelId, userIds);
+                }
+            }
+            // Populate voice user statuses (mute/deafen) from server
+            if (event.voiceUserStates) {
+                for (const [uid, status] of Object.entries(event.voiceUserStates)) {
+                    setVoiceUserStatus(uid, status.isMuted, status.isDeafened);
+                }
+            }
+            // Re-register in voice channel if we're still connected to LiveKit
+            // (WebSocket reconnect causes server to drop our voice tracking)
+            {
+                const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened } = useVoiceStore.getState();
+                if (currentVoiceChannelId) {
+                    console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened });
+                    wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
+                    wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened });
                 }
             }
             break;
@@ -70,6 +86,9 @@ function handleEvent(event) {
             else {
                 removeVoiceUser(event.channelId, event.userId);
             }
+            break;
+        case 'voice_status_update':
+            setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened);
             break;
         case 'member_joined':
             addMember(event.member);
@@ -226,6 +245,7 @@ export function wsSend(event) {
 export function useWebSocket() {
     const token = useAuthStore((s) => s.token);
     const prevToken = useRef(token);
+    const [isConnected, setIsConnected] = React.useState(false);
     useEffect(() => {
         if (token && (!isInitialized || token !== prevToken.current)) {
             currentToken = token;
@@ -238,9 +258,13 @@ export function useWebSocket() {
         prevToken.current = token;
     }, [token]);
     useEffect(() => {
+        const checkStatus = setInterval(() => {
+            setIsConnected(!!globalWs && globalWs.readyState === WebSocket.OPEN);
+        }, 500);
         return () => {
+            clearInterval(checkStatus);
             disconnect();
         };
     }, []);
-    return { send: wsSend };
+    return { send: wsSend, isConnected };
 }

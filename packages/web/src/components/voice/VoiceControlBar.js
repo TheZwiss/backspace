@@ -33,41 +33,31 @@ export function VoiceControlBar() {
     const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
     const [qualityOpen, setQualityOpen] = useState(false);
     const handleMute = React.useCallback(async () => {
-        const room = getActiveRoom();
-        if (room) {
-            try {
-                await room.localParticipant.setMicrophoneEnabled(isMuted);
-            }
-            catch (err) {
-                console.error('[VoiceControlBar] Failed to toggle mic:', err);
-            }
-        }
         toggleMic();
-    }, [isMuted, toggleMic]);
+        // Broadcast via WebSocket so sidebar shows status without joining
+        wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened });
+    }, [isMuted, isDeafened, toggleMic]);
     const handleDeafen = React.useCallback(async () => {
         const room = getActiveRoom();
+        const willDeafen = !isDeafened;
+        // Update store FIRST so updateParticipants reads correct state
+        toggleDeafen();
+        if (willDeafen && !isMuted)
+            toggleMic();
+        if (!willDeafen && isMuted)
+            toggleMic();
+        // Broadcast via WebSocket
+        wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen });
         if (room) {
             try {
-                const willDeafen = !isDeafened;
-                if (willDeafen) {
-                    await room.localParticipant.setMicrophoneEnabled(false);
-                    room.remoteParticipants.forEach((p) => p.setVolume(0));
-                    if (!isMuted)
-                        toggleMic();
-                }
-                else {
-                    const outputVolume = useVoiceStore.getState().outputVolume;
-                    room.remoteParticipants.forEach((p) => p.setVolume(outputVolume / 100));
-                    await room.localParticipant.setMicrophoneEnabled(true);
-                    if (isMuted)
-                        toggleMic();
-                }
+                // Broadcast deafen state via LiveKit data channel for in-room users
+                const encoder = new TextEncoder();
+                room.localParticipant.publishData(encoder.encode(JSON.stringify({ type: 'deafen', deafened: willDeafen })), { reliable: true }).catch(() => { });
             }
             catch (err) {
                 console.error('[VoiceControlBar] Failed to toggle deafen:', err);
             }
         }
-        toggleDeafen();
     }, [isDeafened, isMuted, toggleDeafen, toggleMic]);
     const handleCamera = async () => {
         const room = getActiveRoom();
@@ -102,7 +92,12 @@ export function VoiceControlBar() {
         if (!room)
             return;
         try {
-            await room.localParticipant.setScreenShareEnabled(!isScreenSharing);
+            if (!isScreenSharing) {
+                await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+            }
+            else {
+                await room.localParticipant.setScreenShareEnabled(false);
+            }
             toggleScreenShare();
         }
         catch (err) {
@@ -120,14 +115,6 @@ export function VoiceControlBar() {
         }
     };
     const handleFullscreen = () => {
-        if (!voiceFullscreen) {
-            document.documentElement.requestFullscreen?.().catch(() => { });
-        }
-        else {
-            if (document.fullscreenElement) {
-                document.exitFullscreen().catch(() => { });
-            }
-        }
         toggleVoiceFullscreen();
     };
     // Keyboard shortcuts

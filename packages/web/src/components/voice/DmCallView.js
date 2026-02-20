@@ -82,12 +82,22 @@ export function DmCallView() {
         }
         toggleCamera();
     };
-    const handleScreenShare = () => {
+    const handleScreenShare = async () => {
         const room = getActiveRoom();
-        if (room) {
-            room.localParticipant.setScreenShareEnabled(!isScreenSharing);
+        if (!room)
+            return;
+        try {
+            if (!isScreenSharing) {
+                await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+            }
+            else {
+                await room.localParticipant.setScreenShareEnabled(false);
+            }
+            toggleScreenShare();
         }
-        toggleScreenShare();
+        catch (err) {
+            console.error('[DmCallView] Failed to toggle screen share:', err);
+        }
     };
     const handleEndCall = () => {
         if (activeDmCall) {
