@@ -49,6 +49,7 @@ export interface ParticipantInfo {
   audioTrack: MediaStreamTrack | null;
   videoTrack: MediaStreamTrack | null;
   screenTrack: MediaStreamTrack | null;
+  screenAudioTrack: MediaStreamTrack | null;
 }
 
 function parseIdentity(identity: string): { userId: string; username: string } {
@@ -114,18 +115,20 @@ export function useLiveKit() {
       let audioTrack: MediaStreamTrack | null = null;
       let videoTrack: MediaStreamTrack | null = null;
       let screenTrack: MediaStreamTrack | null = null;
+      let screenAudioTrack: MediaStreamTrack | null = null;
       p.trackPublications.forEach((pub) => {
         const track = pub.track;
         if (!track) return;
         // Strict check: Track must be subscribed AND not muted to be considered "active"
         if (pub.isMuted || !pub.isSubscribed) return;
-        
+
         const mt = track.mediaStreamTrack;
         if (!mt || mt.readyState !== 'live') return;
-        
+
         if (pub.source === Track.Source.Microphone) audioTrack = mt;
         else if (pub.source === Track.Source.Camera && p.isCameraEnabled) videoTrack = mt;
-        else if (pub.source === Track.Source.ScreenShare) screenTrack = mt; // Removed isScreenShareEnabled check to rely on track presence
+        else if (pub.source === Track.Source.ScreenShare) screenTrack = mt;
+        else if (pub.source === Track.Source.ScreenShareAudio) screenAudioTrack = mt;
       });
       
       const userState = useVoiceStore.getState().voiceUserStates.get(userId);
@@ -140,19 +143,20 @@ export function useLiveKit() {
         if (userState) isPartMuted = userState.isMuted;
       }
 
-      allParticipants.push({ 
-        identity: p.identity, 
-        userId, 
-        username, 
-        isSpeaking: p.isSpeaking, 
-        isMuted: isPartMuted, 
-        isDeafened: isPartDeafened, 
+      allParticipants.push({
+        identity: p.identity,
+        userId,
+        username,
+        isSpeaking: p.isSpeaking,
+        isMuted: isPartMuted,
+        isDeafened: isPartDeafened,
         isCameraOn: !!videoTrack, // Strictly derived from active track
         isScreenSharing: !!screenTrack, // Strictly derived from active track
-        isLocal, 
-        audioTrack, 
-        videoTrack, 
-        screenTrack 
+        isLocal,
+        audioTrack,
+        videoTrack,
+        screenTrack,
+        screenAudioTrack,
       });
     };
     processParticipant(r.localParticipant, true);
@@ -455,6 +459,7 @@ export function useLiveKit() {
       if (!isScreenSharing) {
         const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
         const track = await roomRef.current.localParticipant.setScreenShareEnabled(true, {
+          audio: true,
           resolution: VideoPresets.h360.resolution,
           // @ts-ignore
           frameRate: 30,

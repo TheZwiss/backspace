@@ -42,7 +42,11 @@ export function VoiceControls() {
     const room = getActiveRoom();
     if (!room) return;
     try {
-      await room.localParticipant.setScreenShareEnabled(!isScreenSharing);
+      if (!isScreenSharing) {
+        await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+      } else {
+        await room.localParticipant.setScreenShareEnabled(false);
+      }
       toggleScreenShare();
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);

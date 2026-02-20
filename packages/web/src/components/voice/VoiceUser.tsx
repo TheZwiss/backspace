@@ -12,6 +12,7 @@ interface VoiceUserProps {
 export function VoiceUser({ participant, large }: VoiceUserProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const screenAudioRef = useRef<HTMLAudioElement>(null);
   
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const outputVolume = useVoiceStore((s) => s.outputVolume);
@@ -128,6 +129,80 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
   }, [outputVolume, perUserVolume, isDeafened, isLocal, participant.audioTrack]);
 
 
+  // --- SCREEN SHARE AUDIO PIPELINE ---
+
+  const screenBoostGainRef = useRef<GainNode | null>(null);
+  const screenBoostSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+
+  // Screen share audio: track attachment
+  useEffect(() => {
+    const audioEl = screenAudioRef.current;
+    if (isLocal || !audioEl || !participant.screenAudioTrack) {
+      if (audioEl) audioEl.srcObject = null;
+      return;
+    }
+
+    const stream = new MediaStream([participant.screenAudioTrack]);
+    if ((audioEl.srcObject as MediaStream)?.id !== stream.id) {
+      audioEl.srcObject = stream;
+      audioEl.play().catch(() => {});
+    }
+  }, [participant.screenAudioTrack, isLocal]);
+
+  // Screen share audio: volume management (mirrors mic audio pipeline)
+  useEffect(() => {
+    const audioEl = screenAudioRef.current;
+    if (isLocal || !audioEl || !participant.screenAudioTrack) return;
+
+    const globalScale = outputVolume / 100;
+    const userScale = perUserVolume / 100;
+    const finalVolume = globalScale * userScale;
+
+    if (isDeafened) {
+      audioEl.muted = true;
+      return;
+    }
+
+    const audioManager = AudioManager.getInstance();
+    const ctx = audioManager.getContext();
+    const isBoosting = finalVolume > 1.0;
+    const isContextReady = ctx && ctx.state === 'running';
+
+    if (isBoosting && isContextReady) {
+      if (!screenBoostGainRef.current && ctx) {
+        const gain = ctx.createGain();
+        const source = ctx.createMediaStreamSource(new MediaStream([participant.screenAudioTrack]));
+        source.connect(gain);
+        gain.connect(ctx.destination);
+        screenBoostGainRef.current = gain;
+        screenBoostSourceRef.current = source;
+      }
+      if (screenBoostGainRef.current && ctx) {
+        screenBoostGainRef.current.gain.setTargetAtTime(finalVolume, ctx.currentTime, 0.01);
+      }
+      audioEl.muted = true;
+    } else {
+      if (screenBoostSourceRef.current) {
+        screenBoostSourceRef.current.disconnect();
+        screenBoostSourceRef.current = null;
+        screenBoostGainRef.current = null;
+      }
+      audioEl.muted = false;
+      audioEl.volume = Math.min(finalVolume, 1.0);
+      if (audioEl.paused) {
+        audioEl.play().catch(() => {});
+      }
+    }
+
+    return () => {
+      if (screenBoostSourceRef.current) {
+        screenBoostSourceRef.current.disconnect();
+        screenBoostSourceRef.current = null;
+        screenBoostGainRef.current = null;
+      }
+    };
+  }, [outputVolume, perUserVolume, isDeafened, isLocal, participant.screenAudioTrack]);
+
   // --- VIDEO & UI ---
 
   const liveScreen = participant.isScreenSharing && participant.screenTrack?.readyState === 'live' ? participant.screenTrack : null;
@@ -188,6 +263,7 @@ export function VoiceUser({ participant, large }: VoiceUserProps) {
         - PlaysInline is critical for mobile
       */}
       {!isLocal && <audio ref={audioRef} autoPlay playsInline />}
+      {!isLocal && <audio ref={screenAudioRef} autoPlay playsInline />}
 
       {hasVideo ? (
         <video
