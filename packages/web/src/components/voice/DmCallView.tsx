@@ -4,6 +4,7 @@ import { useServerStore } from '../../stores/serverStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
+import { AudioManager } from '../../audio/AudioManager';
 import { VideoPresets, VideoPreset } from 'livekit-client';
 
 const QUALITY_MAP: Record<string, any> = {
@@ -94,9 +95,11 @@ export function DmCallView() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
+        AudioManager.getInstance().setScreenShareActive(true);
         await room.localParticipant.setScreenShareEnabled(true, { audio: true });
       } else {
         await room.localParticipant.setScreenShareEnabled(false);
+        AudioManager.getInstance().setScreenShareActive(false);
       }
       toggleScreenShare();
     } catch (err) {

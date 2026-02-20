@@ -251,6 +251,8 @@ export function useLiveKit() {
 
         // Sync voice processing settings to AudioManager
         audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
+        // Keep screen share state in sync (handles edge cases like remounts)
+        audioManager.setScreenShareActive(isScreenSharing);
 
         // If muted or deafened, unpublish mic
         if (isMuted || isDeafened) {
@@ -305,7 +307,7 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl]);
+  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, isScreenSharing]);
 
   const connect = useCallback(async (channelId: string) => {
     if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected) return;
@@ -643,6 +645,10 @@ export function useLiveKit() {
   const toggleScreenShare = useCallback(async () => {
     if (roomRef.current) {
       if (!isScreenSharing) {
+        // Notify AudioManager BEFORE enabling screen share so the mic track
+        // gets republished with AEC off, preventing Chrome's ducking.
+        AudioManager.getInstance().setScreenShareActive(true);
+
         const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
         const track = await roomRef.current.localParticipant.setScreenShareEnabled(true, {
           audio: true,
@@ -669,7 +675,11 @@ export function useLiveKit() {
           }, 2000);
           setTimeout(() => applyOverdriveHammer(roomRef.current!, Track.Source.ScreenShare, preset), 5000);
         }
-      } else { await roomRef.current.localParticipant.setScreenShareEnabled(false); }
+      } else {
+        await roomRef.current.localParticipant.setScreenShareEnabled(false);
+        // Restore user's AEC preference after screen share ends
+        AudioManager.getInstance().setScreenShareActive(false);
+      }
       updateParticipants();
     }
   }, [isScreenSharing, videoQuality, updateParticipants]);

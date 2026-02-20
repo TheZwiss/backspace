@@ -127,13 +127,13 @@ export function UserSettingsModal() {
             Voice Processing
           </h3>
           <p className="text-xs text-discord-text-muted mb-3">
-            Disable Auto Gain Control when streaming to prevent your browser from ducking your microphone.
+            Echo Cancellation is automatically disabled while you screen share to prevent Chrome from ducking your mic volume.
           </p>
 
           <div className="flex items-center justify-between py-2">
             <div>
               <div className="text-sm text-discord-text-primary">Echo Cancellation</div>
-              <div className="text-xs text-discord-text-muted">Removes echo when using speakers</div>
+              <div className="text-xs text-discord-text-muted">Removes echo when using speakers (auto-disabled during screen share)</div>
             </div>
             <button
               onClick={() => setEchoCancellation(!echoCancellation)}

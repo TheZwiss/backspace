@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
+import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
 
@@ -107,6 +108,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
     const room = getActiveRoom();
     if (room) {
       await room.localParticipant.setScreenShareEnabled(false);
+      AudioManager.getInstance().setScreenShareActive(false);
       useVoiceStore.getState().toggleScreenShare();
     }
   }, []);

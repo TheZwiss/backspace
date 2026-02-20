@@ -17,6 +17,7 @@ export class AudioManager {
   private voiceEchoCancellation = true;
   private voiceNoiseSuppression = true;
   private voiceAutoGainControl = false;
+  private screenShareActive = false;
   private streamGeneration = 0;
 
   private constructor() {}
@@ -141,13 +142,25 @@ export class AudioManager {
         this.currentStream.getTracks().forEach(t => t.stop());
       }
 
+      // When screen sharing with audio, Chrome's AEC uses the getDisplayMedia
+      // audio as a reference signal and ducks the mic — even with headphones.
+      // Force AEC off during screen share to prevent this.
+      const effectiveEchoCancellation = this.screenShareActive ? false : this.voiceEchoCancellation;
+
       const constraints = {
         audio: {
           deviceId: deviceId === 'default' ? undefined : { exact: deviceId },
-          echoCancellation: this.voiceEchoCancellation,
+          echoCancellation: effectiveEchoCancellation,
           noiseSuppression: this.voiceNoiseSuppression,
           autoGainControl: this.voiceAutoGainControl,
-        }
+          // Chromium-specific constraints — belt-and-suspenders to ensure
+          // Chrome's internal audio engine respects the standard constraints.
+          googEchoCancellation: effectiveEchoCancellation,
+          googAutoGainControl: this.voiceAutoGainControl,
+          googNoiseSuppression: this.voiceNoiseSuppression,
+          googHighpassFilter: false,
+          googTypingNoiseDetection: false,
+        } as any
       };
 
       this.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -192,6 +205,22 @@ export class AudioManager {
       changed = true;
     }
     if (changed && this.currentStream) {
+      this.currentStream.getTracks().forEach(t => t.stop());
+      this.currentStream = null;
+    }
+  }
+
+  /**
+   * When screen sharing with audio is active, Chrome's AEC uses the screen
+   * share audio as a reference signal and aggressively ducks the microphone.
+   * Setting this flag forces echoCancellation OFF regardless of user preference,
+   * severing the software link that causes the ducking.
+   */
+  setScreenShareActive(active: boolean) {
+    if (this.screenShareActive === active) return;
+    this.screenShareActive = active;
+    console.log(`[AudioManager] Screen share active: ${active} — ${active ? 'forcing AEC off' : 'restoring user AEC preference'}`);
+    if (this.currentStream) {
       this.currentStream.getTracks().forEach(t => t.stop());
       this.currentStream = null;
     }

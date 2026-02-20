@@ -3,6 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
+import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
 import { VideoPresets, VideoPreset } from 'livekit-client';
 
@@ -97,9 +98,11 @@ export function VoiceControlBar() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
+        AudioManager.getInstance().setScreenShareActive(true);
         await room.localParticipant.setScreenShareEnabled(true, { audio: true });
       } else {
         await room.localParticipant.setScreenShareEnabled(false);
+        AudioManager.getInstance().setScreenShareActive(false);
       }
       toggleScreenShare();
     } catch (err) {
