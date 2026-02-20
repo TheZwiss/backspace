@@ -24,11 +24,14 @@ export function SoundController() {
   const incomingCallLoop = useRef<AudioBufferSourceNode | null>(null);
   const outgoingCallLoop = useRef<AudioBufferSourceNode | null>(null);
 
-  // WebSocket Reconnect Sound
+  // WebSocket Reconnect Sound — suppress during active voice (LiveKit handles its own reconnection)
   useEffect(() => {
     if (isInitialMount.current) return;
     if (isWsConnected && !prevIsWsConnected.current) {
-      audioManager.playSound('reconnect');
+      const isInActiveVoice = useVoiceStore.getState().isLiveKitConnected;
+      if (!isInActiveVoice) {
+        audioManager.playSound('reconnect');
+      }
     }
     prevIsWsConnected.current = isWsConnected;
   }, [isWsConnected, audioManager]);

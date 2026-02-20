@@ -384,6 +384,23 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
+  // If the user is already in this exact channel (e.g. WS reconnect re-registration),
+  // skip the leave+join broadcast to avoid visual flicker for other users.
+  const currentChannel = connectionManager.getUserVoiceChannel(userId);
+  if (currentChannel === channelId) {
+    const status = connectionManager.getVoiceUserStatus(userId);
+    if (status) {
+      connectionManager.sendToServer(serverId, {
+        type: 'voice_status_update',
+        userId,
+        channelId,
+        isMuted: status.isMuted,
+        isDeafened: status.isDeafened,
+      });
+    }
+    return;
+  }
+
   // Leave any current voice channel
   const previousChannel = connectionManager.leaveAllVoice(userId);
   if (previousChannel) {
