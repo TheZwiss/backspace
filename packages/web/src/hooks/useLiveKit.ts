@@ -6,6 +6,7 @@ import {
   Participant,
   RemoteParticipant,
   RemoteTrackPublication,
+  RemoteAudioTrack,
   ConnectionState,
   VideoPresets,
   VideoPreset,
@@ -177,7 +178,8 @@ export function useLiveKit() {
         const track = pub.track;
         if (!track) return;
         // Strict check: Track must be subscribed AND not muted to be considered "active"
-        if (pub.isMuted || !pub.isSubscribed) return;
+        if (pub.isMuted) return;
+        if (!isLocal && !pub.isSubscribed) return;
 
         const mt = track.mediaStreamTrack;
         if (!mt || mt.readyState !== 'live') return;
@@ -343,10 +345,30 @@ export function useLiveKit() {
         }
       });
       newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
-      newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+      newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        // LiveKit auto-attaches a hidden <audio> element for subscribed audio tracks.
+        // GlobalAudioRenderer is the sole audio playback path with volume/attenuation/boost.
+        // Detach LiveKit's internal element to prevent double-playback.
+        if (track.kind === Track.Kind.Audio) {
+          (track as RemoteAudioTrack).detach();
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+      newRoom.on(RoomEvent.LocalTrackPublished, (publication: LocalTrackPublication) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(newRoom.localParticipant.identity);
+          useVoiceStore.getState().watchStream(userId);
+        }
+        guardedUpdate();
+      });
+      newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(newRoom.localParticipant.identity);
+          useVoiceStore.getState().unwatchStream(userId);
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
@@ -451,10 +473,27 @@ export function useLiveKit() {
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
       newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
       newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
-      newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+      newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        if (track.kind === Track.Kind.Audio) {
+          (track as RemoteAudioTrack).detach();
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
-      newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+      newRoom.on(RoomEvent.LocalTrackPublished, (publication: LocalTrackPublication) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(newRoom.localParticipant.identity);
+          useVoiceStore.getState().watchStream(userId);
+        }
+        guardedUpdate();
+      });
+      newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
+        if (publication.source === Track.Source.ScreenShare) {
+          const { userId } = parseIdentity(newRoom.localParticipant.identity);
+          useVoiceStore.getState().unwatchStream(userId);
+        }
+        guardedUpdate();
+      });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
       newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);

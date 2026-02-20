@@ -124,7 +124,9 @@ export function useLiveKit() {
                 if (!track)
                     return;
                 // Strict check: Track must be subscribed AND not muted to be considered "active"
-                if (pub.isMuted || !pub.isSubscribed)
+                if (pub.isMuted)
+                    return;
+                if (!isLocal && !pub.isSubscribed)
                     return;
                 const mt = track.mediaStreamTrack;
                 if (!mt || mt.readyState !== 'live')
@@ -278,10 +280,30 @@ export function useLiveKit() {
                 }
             });
             newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
-            newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                // LiveKit auto-attaches a hidden <audio> element for subscribed audio tracks.
+                // GlobalAudioRenderer is the sole audio playback path with volume/attenuation/boost.
+                // Detach LiveKit's internal element to prevent double-playback.
+                if (track.kind === Track.Kind.Audio) {
+                    track.detach();
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-            newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
-            newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
+                if (publication.source === Track.Source.ScreenShare) {
+                    const { userId } = parseIdentity(newRoom.localParticipant.identity);
+                    useVoiceStore.getState().watchStream(userId);
+                }
+                guardedUpdate();
+            });
+            newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+                if (publication.source === Track.Source.ScreenShare) {
+                    const { userId } = parseIdentity(newRoom.localParticipant.identity);
+                    useVoiceStore.getState().unwatchStream(userId);
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
             newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
             newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
@@ -391,10 +413,27 @@ export function useLiveKit() {
                 updateParticipants(); };
             newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
             newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
-            newRoom.on(RoomEvent.TrackSubscribed, guardedUpdate);
+            newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                if (track.kind === Track.Kind.Audio) {
+                    track.detach();
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.TrackUnsubscribed, guardedUpdate);
-            newRoom.on(RoomEvent.LocalTrackPublished, guardedUpdate);
-            newRoom.on(RoomEvent.LocalTrackUnpublished, guardedUpdate);
+            newRoom.on(RoomEvent.LocalTrackPublished, (publication) => {
+                if (publication.source === Track.Source.ScreenShare) {
+                    const { userId } = parseIdentity(newRoom.localParticipant.identity);
+                    useVoiceStore.getState().watchStream(userId);
+                }
+                guardedUpdate();
+            });
+            newRoom.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+                if (publication.source === Track.Source.ScreenShare) {
+                    const { userId } = parseIdentity(newRoom.localParticipant.identity);
+                    useVoiceStore.getState().unwatchStream(userId);
+                }
+                guardedUpdate();
+            });
             newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
             newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
             newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);

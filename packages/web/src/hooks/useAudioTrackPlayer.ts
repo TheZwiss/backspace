@@ -87,10 +87,13 @@ export function useAudioTrackPlayer(
     } else {
       // --- STANDARD MODE (0% - 100%) ---
       // Clean up boost pipeline if it exists
+      if (boostGainRef.current) {
+        boostGainRef.current.disconnect();
+        boostGainRef.current = null;
+      }
       if (boostSourceRef.current) {
         boostSourceRef.current.disconnect();
         boostSourceRef.current = null;
-        boostGainRef.current = null;
       }
 
       audioEl.muted = false;
@@ -103,10 +106,13 @@ export function useAudioTrackPlayer(
     }
 
     return () => {
+      if (boostGainRef.current) {
+        boostGainRef.current.disconnect();
+        boostGainRef.current = null;
+      }
       if (boostSourceRef.current) {
         boostSourceRef.current.disconnect();
         boostSourceRef.current = null;
-        boostGainRef.current = null;
       }
     };
   }, [volume, muted, track]);
