@@ -131,7 +131,11 @@ export const useVoiceStore = create()(persist((set, get) => ({
     setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
     setVideoQuality: (quality) => set({ videoQuality: quality }),
     noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: false,
     toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+    setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
+    setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
     deafenedUserIds: new Set(),
     setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -203,10 +207,14 @@ export const useVoiceStore = create()(persist((set, get) => ({
     }),
 }), {
     name: 'opencord-voice-settings',
-    version: 1,
+    version: 2,
     migrate: (persistedState, version) => {
         if (version === 0) {
             persistedState.streamAttenuationEnabled = false;
+        }
+        if (version < 2) {
+            persistedState.echoCancellation = true;
+            persistedState.autoGainControl = false;
         }
         return persistedState;
     },
@@ -222,6 +230,8 @@ export const useVoiceStore = create()(persist((set, get) => ({
         outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
         noiseSuppression: state.noiseSuppression,
+        echoCancellation: state.echoCancellation,
+        autoGainControl: state.autoGainControl,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
     }),

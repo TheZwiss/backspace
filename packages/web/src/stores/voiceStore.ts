@@ -62,7 +62,11 @@ interface VoiceState {
   setFocusedParticipant: (id: string | null) => void;
   setVideoQuality: (quality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
   noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
   toggleNoiseSuppression: () => void;
+  setEchoCancellation: (enabled: boolean) => void;
+  setAutoGainControl: (enabled: boolean) => void;
   deafenedUserIds: Set<string>;
   setUserDeafened: (userId: string, deafened: boolean) => void;
   // WebSocket-based voice user status (visible without joining LiveKit)
@@ -221,7 +225,11 @@ export const useVoiceStore = create<VoiceState>()(
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
       setVideoQuality: (quality) => set({ videoQuality: quality }),
       noiseSuppression: true,
+      echoCancellation: true,
+      autoGainControl: false,
       toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+      setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
+      setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
       deafenedUserIds: new Set(),
       setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -296,10 +304,14 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
-      version: 1,
+      version: 2,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
+        }
+        if (version < 2) {
+          persistedState.echoCancellation = true;
+          persistedState.autoGainControl = false;
         }
         return persistedState;
       },
@@ -315,6 +327,8 @@ export const useVoiceStore = create<VoiceState>()(
         outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
         noiseSuppression: state.noiseSuppression,
+        echoCancellation: state.echoCancellation,
+        autoGainControl: state.autoGainControl,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
       }),

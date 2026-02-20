@@ -12,6 +12,10 @@ export class AudioManager {
     isInitialized = false;
     listeners = new Set();
     soundBuffers = new Map();
+    voiceEchoCancellation = true;
+    voiceNoiseSuppression = true;
+    voiceAutoGainControl = false;
+    streamGeneration = 0;
     constructor() { }
     static getInstance() {
         if (!AudioManager.instance) {
@@ -121,13 +125,14 @@ export class AudioManager {
             const constraints = {
                 audio: {
                     deviceId: deviceId === 'default' ? undefined : { exact: deviceId },
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
+                    echoCancellation: this.voiceEchoCancellation,
+                    noiseSuppression: this.voiceNoiseSuppression,
+                    autoGainControl: this.voiceAutoGainControl,
                 }
             };
             this.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
             this.currentInputDeviceId = deviceId;
+            this.streamGeneration++;
             if (this.ctx && this.inputGain) {
                 if (this.inputSource) {
                     this.inputSource.disconnect();
@@ -149,6 +154,28 @@ export class AudioManager {
             const gainValue = volume / 100;
             this.inputGain.gain.setTargetAtTime(gainValue, this.ctx.currentTime, 0.1);
         }
+    }
+    setVoiceProcessing(opts) {
+        let changed = false;
+        if (opts.echoCancellation !== undefined && opts.echoCancellation !== this.voiceEchoCancellation) {
+            this.voiceEchoCancellation = opts.echoCancellation;
+            changed = true;
+        }
+        if (opts.noiseSuppression !== undefined && opts.noiseSuppression !== this.voiceNoiseSuppression) {
+            this.voiceNoiseSuppression = opts.noiseSuppression;
+            changed = true;
+        }
+        if (opts.autoGainControl !== undefined && opts.autoGainControl !== this.voiceAutoGainControl) {
+            this.voiceAutoGainControl = opts.autoGainControl;
+            changed = true;
+        }
+        if (changed && this.currentStream) {
+            this.currentStream.getTracks().forEach(t => t.stop());
+            this.currentStream = null;
+        }
+    }
+    getStreamGeneration() {
+        return this.streamGeneration;
     }
     /**
      * CRITICAL: Always returns a CLONE of the destination track.
@@ -190,7 +217,7 @@ export class AudioManager {
     getMasterOutput() {
         if (!this.ctx)
             this.initContext();
-        return this.masterCompressor;
+        return this.ctx.destination;
     }
     getContext() {
         return this.ctx;

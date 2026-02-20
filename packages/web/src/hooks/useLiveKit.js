@@ -102,6 +102,10 @@ export function useLiveKit() {
     const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
     const inputVolume = useVoiceStore((s) => s.inputVolume);
     const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
+    const echoCancellation = useVoiceStore((s) => s.echoCancellation);
+    const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
+    const autoGainControl = useVoiceStore((s) => s.autoGainControl);
+    const lastMicGenRef = useRef(0);
     const updateParticipants = useCallback(() => {
         const r = roomRef.current;
         if (!r)
@@ -192,6 +196,8 @@ export function useLiveKit() {
         const syncMic = async () => {
             try {
                 const audioManager = AudioManager.getInstance();
+                // Sync voice processing settings to AudioManager
+                audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
                 // If muted or deafened, unpublish mic
                 if (isMuted || isDeafened) {
                     const pub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
@@ -203,25 +209,27 @@ export function useLiveKit() {
                 // Ensure device is set and volume is sync'd
                 await audioManager.setInputDevice(inputDeviceId);
                 audioManager.setInputVolume(inputVolume);
+                const currentGen = audioManager.getStreamGeneration();
                 // Check if already published
                 const existingPub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
                 if (existingPub && existingPub.track) {
-                    // If track is alive, we are good.
-                    if (existingPub.track.mediaStreamTrack?.readyState === 'live') {
+                    // If track is alive AND settings haven't changed, we are good.
+                    if (existingPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
                         return;
                     }
-                    // If track died, unpublish so we can republish
+                    // Settings changed or track died — unpublish so we can republish
                     await r.localParticipant.unpublishTrack(existingPub.track);
                 }
                 // Get a FRESH track (clone) for this specific publication
                 const audioTrack = audioManager.getFreshTrack();
                 if (!audioTrack)
                     return;
-                console.log('[LiveKit] Publishing fresh microphone track');
+                console.log('[LiveKit] Publishing fresh microphone track (gen:', currentGen, ')');
                 await r.localParticipant.publishTrack(audioTrack, {
                     name: 'microphone',
                     source: Track.Source.Microphone,
                 });
+                lastMicGenRef.current = currentGen;
             }
             catch (err) {
                 console.error('[LiveKit] Failed to sync mic state:', err);
@@ -235,7 +243,7 @@ export function useLiveKit() {
         return () => {
             unsubscribe();
         };
-    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected]);
+    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl]);
     const connect = useCallback(async (channelId) => {
         if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected)
             return;

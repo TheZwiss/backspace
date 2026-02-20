@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 
 export function UserSettingsModal() {
@@ -17,6 +18,13 @@ export function UserSettingsModal() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const echoCancellation = useVoiceStore((s) => s.echoCancellation);
+  const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
+  const autoGainControl = useVoiceStore((s) => s.autoGainControl);
+  const setEchoCancellation = useVoiceStore((s) => s.setEchoCancellation);
+  const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
+  const setAutoGainControl = useVoiceStore((s) => s.setAutoGainControl);
 
   const isOpen = activeModal === 'userSettings';
 
@@ -111,6 +119,55 @@ export function UserSettingsModal() {
             className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
             placeholder="What are you up to?"
           />
+        </div>
+
+        {/* Voice Processing */}
+        <div className="border-t border-white/[0.06] pt-4">
+          <h3 className="text-xs font-bold text-discord-text-secondary uppercase mb-3">
+            Voice Processing
+          </h3>
+          <p className="text-xs text-discord-text-muted mb-3">
+            Disable Auto Gain Control when streaming to prevent your browser from ducking your microphone.
+          </p>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-discord-text-primary">Echo Cancellation</div>
+              <div className="text-xs text-discord-text-muted">Removes echo when using speakers</div>
+            </div>
+            <button
+              onClick={() => setEchoCancellation(!echoCancellation)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${echoCancellation ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${echoCancellation ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-discord-text-primary">Noise Suppression</div>
+              <div className="text-xs text-discord-text-muted">Filters background noise from your mic</div>
+            </div>
+            <button
+              onClick={toggleNoiseSuppression}
+              className={`relative w-10 h-5 rounded-full transition-colors ${noiseSuppression ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${noiseSuppression ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-discord-text-primary">Auto Gain Control</div>
+              <div className="text-xs text-discord-text-muted">Auto-adjusts mic volume — can cause voice ducking during streams</div>
+            </div>
+            <button
+              onClick={() => setAutoGainControl(!autoGainControl)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${autoGainControl ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${autoGainControl ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">
