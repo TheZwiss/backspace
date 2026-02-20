@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { AudioManager } from '../../audio/AudioManager';
 import type { UserTile } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
@@ -11,125 +10,15 @@ interface VoiceUserProps {
 
 export function VoiceUser({ tile, large }: VoiceUserProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
-  const outputVolume = useVoiceStore((s) => s.outputVolume);
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
 
   const [, forceUpdate] = useState(0);
 
   const perUserVolume = participantVolumes.get(participant.userId) ?? 100;
   const isLocal = participant.isLocal;
-
-  // --- AUDIO PIPELINE: NATIVE FIRST ---
-
-  // Refs for the optional boost pipeline
-  const boostGainRef = useRef<GainNode | null>(null);
-  const boostSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-
-  // 1. Basic Track Attachment (The Rock-Solid Foundation)
-  useEffect(() => {
-    const audioEl = audioRef.current;
-    if (isLocal || !audioEl || !tile.audioTrack) return;
-
-    // Direct attachment.
-    const stream = new MediaStream([tile.audioTrack]);
-
-    // Only update if changed to prevent interruptions
-    if ((audioEl.srcObject as MediaStream)?.id !== stream.id) {
-      audioEl.srcObject = stream;
-
-      // Aggressive play attempt for Chrome
-      const tryPlay = async () => {
-        try {
-          await audioEl.play();
-        } catch (err) {
-          console.warn('[Audio] Autoplay blocked, retrying...', err);
-        }
-      };
-      tryPlay();
-    }
-  }, [tile.audioTrack, isLocal]);
-
-  // 2. Volume Management (Hybrid)
-  useEffect(() => {
-    const audioEl = audioRef.current;
-    if (isLocal || !audioEl || !tile.audioTrack) return;
-
-    const globalScale = outputVolume / 100;
-    const userScale = perUserVolume / 100;
-    const finalVolume = globalScale * userScale;
-
-    if (isDeafened) {
-      audioEl.muted = true;
-      return;
-    }
-
-    // Logic:
-    // If we are boosting (>100%) AND context is running, use Web Audio.
-    // Otherwise, stick to the native element for maximum reliability.
-
-    const audioManager = AudioManager.getInstance();
-    const ctx = audioManager.getContext();
-    const isBoosting = finalVolume > 1.0;
-    const isContextReady = ctx && ctx.state === 'running';
-
-    if (isBoosting && isContextReady) {
-      // --- BOOST MODE (>100%) ---
-      // Setup pipeline if missing
-      if (!boostGainRef.current && ctx) {
-        const gain = ctx.createGain();
-        const source = ctx.createMediaStreamSource(
-          new MediaStream([tile.audioTrack]),
-        );
-
-        source.connect(gain);
-        gain.connect(ctx.destination);
-
-        boostGainRef.current = gain;
-        boostSourceRef.current = source;
-      }
-
-      // Apply boosted gain
-      if (boostGainRef.current && ctx) {
-        boostGainRef.current.gain.setTargetAtTime(
-          finalVolume,
-          ctx.currentTime,
-          0.01,
-        );
-      }
-
-      // MUTE the element so we don't double audio
-      audioEl.muted = true;
-    } else {
-      // --- STANDARD MODE (0% - 100%) ---
-      // Clean up boost pipeline if it exists
-      if (boostSourceRef.current) {
-        boostSourceRef.current.disconnect();
-        boostSourceRef.current = null;
-        boostGainRef.current = null;
-      }
-
-      // Use the element
-      audioEl.muted = false;
-      audioEl.volume = Math.min(finalVolume, 1.0);
-
-      // Ensure it's playing (in case it was paused/blocked earlier)
-      if (audioEl.paused) {
-        audioEl.play().catch(() => {});
-      }
-    }
-
-    return () => {
-      if (boostSourceRef.current) {
-        boostSourceRef.current.disconnect();
-        boostSourceRef.current = null;
-        boostGainRef.current = null;
-      }
-    };
-  }, [outputVolume, perUserVolume, isDeafened, isLocal, tile.audioTrack]);
 
   // --- VIDEO & UI ---
 
@@ -187,13 +76,6 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       } ${large ? 'h-full w-full' : 'h-full aspect-video'}`}
       onContextMenu={handleContextMenu}
     >
-      {/*
-        Native Audio Element
-        - AutoPlay is critical
-        - PlaysInline is critical for mobile
-      */}
-      {!isLocal && <audio ref={audioRef} autoPlay playsInline />}
-
       {hasVideo ? (
         <video
           ref={videoRef}

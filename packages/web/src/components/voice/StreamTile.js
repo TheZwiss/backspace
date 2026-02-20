@@ -2,20 +2,15 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { AudioManager } from '../../audio/AudioManager';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { VideoQualityPopover } from './VideoQualityPopover';
 export function StreamTile({ tile, large }) {
     const videoRef = useRef(null);
-    const screenAudioRef = useRef(null);
-    const isDeafened = useVoiceStore((s) => s.isDeafened);
-    const outputVolume = useVoiceStore((s) => s.outputVolume);
     const streamVolumes = useVoiceStore((s) => s.streamVolumes);
     const streamMutes = useVoiceStore((s) => s.streamMutes);
     const watchingStreams = useVoiceStore((s) => s.watchingStreams);
     const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
     const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
-    const participants = useVoiceStore((s) => s.participants);
     const { participant } = tile;
     const isLocal = participant.isLocal;
     const userId = participant.userId;
@@ -28,90 +23,6 @@ export function StreamTile({ tile, large }) {
     // Context menu state
     const [contextMenu, setContextMenu] = useState(null);
     const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
-    // --- AUDIO PIPELINE ---
-    const screenBoostGainRef = useRef(null);
-    const screenBoostSourceRef = useRef(null);
-    // Track attachment
-    useEffect(() => {
-        const audioEl = screenAudioRef.current;
-        if (isLocal || !audioEl || !tile.screenAudioTrack) {
-            if (audioEl)
-                audioEl.srcObject = null;
-            return;
-        }
-        const stream = new MediaStream([tile.screenAudioTrack]);
-        if (audioEl.srcObject?.id !== stream.id) {
-            audioEl.srcObject = stream;
-            audioEl.play().catch(() => { });
-        }
-    }, [tile.screenAudioTrack, isLocal]);
-    // Volume management with stream attenuation
-    useEffect(() => {
-        const audioEl = screenAudioRef.current;
-        if (isLocal || !audioEl || !tile.screenAudioTrack)
-            return;
-        const globalScale = outputVolume / 100;
-        const userScale = streamVolume / 100;
-        let finalVolume = globalScale * userScale;
-        if (isDeafened || isStreamMuted) {
-            audioEl.muted = true;
-            return;
-        }
-        // Stream attenuation: duck when someone is speaking
-        if (streamAttenuationEnabled) {
-            const someoneIsSpeaking = participants.some((p) => !p.isLocal && p.isSpeaking);
-            if (someoneIsSpeaking) {
-                finalVolume *= 1 - streamAttenuationStrength / 100;
-            }
-        }
-        const audioManager = AudioManager.getInstance();
-        const ctx = audioManager.getContext();
-        const isBoosting = finalVolume > 1.0;
-        const isContextReady = ctx && ctx.state === 'running';
-        if (isBoosting && isContextReady) {
-            if (!screenBoostGainRef.current && ctx) {
-                const gain = ctx.createGain();
-                const source = ctx.createMediaStreamSource(new MediaStream([tile.screenAudioTrack]));
-                source.connect(gain);
-                gain.connect(ctx.destination);
-                screenBoostGainRef.current = gain;
-                screenBoostSourceRef.current = source;
-            }
-            if (screenBoostGainRef.current && ctx) {
-                screenBoostGainRef.current.gain.setTargetAtTime(finalVolume, ctx.currentTime, 0.01);
-            }
-            audioEl.muted = true;
-        }
-        else {
-            if (screenBoostSourceRef.current) {
-                screenBoostSourceRef.current.disconnect();
-                screenBoostSourceRef.current = null;
-                screenBoostGainRef.current = null;
-            }
-            audioEl.muted = false;
-            audioEl.volume = Math.min(finalVolume, 1.0);
-            if (audioEl.paused) {
-                audioEl.play().catch(() => { });
-            }
-        }
-        return () => {
-            if (screenBoostSourceRef.current) {
-                screenBoostSourceRef.current.disconnect();
-                screenBoostSourceRef.current = null;
-                screenBoostGainRef.current = null;
-            }
-        };
-    }, [
-        outputVolume,
-        streamVolume,
-        isStreamMuted,
-        isDeafened,
-        isLocal,
-        tile.screenAudioTrack,
-        streamAttenuationEnabled,
-        streamAttenuationStrength,
-        participants,
-    ]);
     // --- VIDEO ---
     useEffect(() => {
         const videoEl = videoRef.current;
@@ -198,7 +109,7 @@ export function StreamTile({ tile, large }) {
     const setAttenuationEnabled = useVoiceStore((s) => s.setStreamAttenuationEnabled);
     const setAttenuationStrength = useVoiceStore((s) => s.setStreamAttenuationStrength);
     const hasVideo = liveScreenTrack !== null;
-    return (_jsxs("div", { className: `relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${large ? 'h-full w-full' : 'h-full aspect-video'}`, onContextMenu: handleContextMenu, children: [!isLocal && _jsx("audio", { ref: screenAudioRef, autoPlay: true, playsInline: true }), hasVideo && isWatching ? (_jsx("video", { ref: videoRef, autoPlay: true, playsInline: true, muted: isLocal, className: "w-full h-full object-contain bg-black" })) : (_jsxs("div", { className: "w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1e1f22]", children: [_jsx("div", { className: "relative", children: _jsx(Avatar, { src: null, name: participant.username, size: large ? 80 : 48 }) }), _jsxs("div", { className: "text-center px-4", children: [_jsxs("p", { className: "text-discord-text-primary text-sm font-semibold", children: [participant.username, " is streaming"] }), !isLocal && (_jsx("button", { onClick: handleWatch, className: "mt-2 px-4 py-1.5 bg-discord-blurple hover:bg-discord-blurple/80 rounded text-white text-xs font-semibold transition-colors", children: "Watch Stream" }))] })] })), _jsx("div", { className: "absolute top-2 left-2 px-1.5 py-0.5 bg-discord-red rounded text-[11px] font-bold text-white uppercase tracking-wide", children: "LIVE" }), qualityBadge && hasVideo && (_jsx("div", { className: "absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white/70 uppercase tracking-wide", children: qualityBadge })), _jsx("div", { className: "absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent", children: _jsxs("div", { className: "flex items-center gap-1.5 min-w-0", children: [_jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor", className: "text-white/70 flex-shrink-0", children: _jsx("path", { d: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" }) }), _jsx("span", { className: `font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`, children: participant.username }), isLocal && (_jsx("span", { className: "text-[10px] text-white/40 font-medium", children: "(you)" }))] }) }), contextMenu && (_jsx("div", { className: "fixed z-[60] bg-[#111214] rounded-lg shadow-2xl p-2 min-w-[220px] border border-white/[0.06]", style: { left: contextMenu.x, top: contextMenu.y }, onClick: (e) => e.stopPropagation(), children: isLocal ? (
+    return (_jsxs("div", { className: `relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${large ? 'h-full w-full' : 'h-full aspect-video'}`, onContextMenu: handleContextMenu, children: [hasVideo && isWatching ? (_jsx("video", { ref: videoRef, autoPlay: true, playsInline: true, muted: isLocal, className: "w-full h-full object-contain bg-black" })) : (_jsxs("div", { className: "w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1e1f22]", children: [_jsx("div", { className: "relative", children: _jsx(Avatar, { src: null, name: participant.username, size: large ? 80 : 48 }) }), _jsxs("div", { className: "text-center px-4", children: [_jsxs("p", { className: "text-discord-text-primary text-sm font-semibold", children: [participant.username, " is streaming"] }), !isLocal && (_jsx("button", { onClick: handleWatch, className: "mt-2 px-4 py-1.5 bg-discord-blurple hover:bg-discord-blurple/80 rounded text-white text-xs font-semibold transition-colors", children: "Watch Stream" }))] })] })), _jsx("div", { className: "absolute top-2 left-2 px-1.5 py-0.5 bg-discord-red rounded text-[11px] font-bold text-white uppercase tracking-wide", children: "LIVE" }), qualityBadge && hasVideo && (_jsx("div", { className: "absolute top-2 right-2 px-1.5 py-0.5 bg-black/60 rounded text-[10px] font-bold text-white/70 uppercase tracking-wide", children: qualityBadge })), _jsx("div", { className: "absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent", children: _jsxs("div", { className: "flex items-center gap-1.5 min-w-0", children: [_jsx("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "currentColor", className: "text-white/70 flex-shrink-0", children: _jsx("path", { d: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" }) }), _jsx("span", { className: `font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`, children: participant.username }), isLocal && (_jsx("span", { className: "text-[10px] text-white/40 font-medium", children: "(you)" }))] }) }), contextMenu && (_jsx("div", { className: "fixed z-[60] bg-[#111214] rounded-lg shadow-2xl p-2 min-w-[220px] border border-white/[0.06]", style: { left: contextMenu.x, top: contextMenu.y }, onClick: (e) => e.stopPropagation(), children: isLocal ? (
                 /* Streamer context menu (own stream) */
                 _jsxs(_Fragment, { children: [_jsxs("button", { onClick: () => {
                                 handleStopStreaming();

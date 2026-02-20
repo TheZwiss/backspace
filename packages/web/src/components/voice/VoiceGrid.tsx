@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -12,11 +12,10 @@ interface VoiceGridProps {
 export function VoiceGrid({ participants }: VoiceGridProps) {
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
-  const prevStreamKeysRef = useRef<Set<string>>(new Set());
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
 
-  // Auto-focus when a new stream tile appears
+  // Unfocus if the focused stream tile no longer exists
   useEffect(() => {
     const currentStreamKeys = new Set(
       tiles
@@ -27,16 +26,6 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
         .map((t) => t.key),
     );
 
-    // Find newly appeared stream keys
-    for (const key of currentStreamKeys) {
-      if (!prevStreamKeysRef.current.has(key)) {
-        // New stream tile — auto-focus it
-        setFocusedParticipant(key);
-        break;
-      }
-    }
-
-    // If the focused tile was a stream tile that no longer exists, unfocus
     if (
       focusedParticipantId &&
       focusedParticipantId.endsWith(':stream') &&
@@ -44,8 +33,6 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     ) {
       setFocusedParticipant(null);
     }
-
-    prevStreamKeysRef.current = currentStreamKeys;
   }, [tiles, focusedParticipantId, setFocusedParticipant]);
 
   if (tiles.length === 0) {

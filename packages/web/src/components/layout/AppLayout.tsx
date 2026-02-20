@@ -16,6 +16,7 @@ import { NewDmModal } from '../modals/NewDmModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
+import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -240,6 +241,7 @@ export function AppLayout() {
       <ImagePreview />
       <PictureInPicture />
       <SoundController />
+      <GlobalAudioRenderer />
 
       {/* User Profile Popout */}
       {userProfilePopout.user && userProfilePopout.position && (

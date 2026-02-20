@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { AudioManager } from '../../audio/AudioManager';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { VideoQualityPopover } from './VideoQualityPopover';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
@@ -13,16 +12,12 @@ interface StreamTileProps {
 
 export function StreamTile({ tile, large }: StreamTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const screenAudioRef = useRef<HTMLAudioElement>(null);
 
-  const isDeafened = useVoiceStore((s) => s.isDeafened);
-  const outputVolume = useVoiceStore((s) => s.outputVolume);
   const streamVolumes = useVoiceStore((s) => s.streamVolumes);
   const streamMutes = useVoiceStore((s) => s.streamMutes);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
   const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
-  const participants = useVoiceStore((s) => s.participants);
 
   const { participant } = tile;
   const isLocal = participant.isLocal;
@@ -40,105 +35,6 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
-
-  // --- AUDIO PIPELINE ---
-  const screenBoostGainRef = useRef<GainNode | null>(null);
-  const screenBoostSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-
-  // Track attachment
-  useEffect(() => {
-    const audioEl = screenAudioRef.current;
-    if (isLocal || !audioEl || !tile.screenAudioTrack) {
-      if (audioEl) audioEl.srcObject = null;
-      return;
-    }
-
-    const stream = new MediaStream([tile.screenAudioTrack]);
-    if ((audioEl.srcObject as MediaStream)?.id !== stream.id) {
-      audioEl.srcObject = stream;
-      audioEl.play().catch(() => {});
-    }
-  }, [tile.screenAudioTrack, isLocal]);
-
-  // Volume management with stream attenuation
-  useEffect(() => {
-    const audioEl = screenAudioRef.current;
-    if (isLocal || !audioEl || !tile.screenAudioTrack) return;
-
-    const globalScale = outputVolume / 100;
-    const userScale = streamVolume / 100;
-    let finalVolume = globalScale * userScale;
-
-    if (isDeafened || isStreamMuted) {
-      audioEl.muted = true;
-      return;
-    }
-
-    // Stream attenuation: duck when someone is speaking
-    if (streamAttenuationEnabled) {
-      const someoneIsSpeaking = participants.some(
-        (p) => !p.isLocal && p.isSpeaking,
-      );
-      if (someoneIsSpeaking) {
-        finalVolume *= 1 - streamAttenuationStrength / 100;
-      }
-    }
-
-    const audioManager = AudioManager.getInstance();
-    const ctx = audioManager.getContext();
-    const isBoosting = finalVolume > 1.0;
-    const isContextReady = ctx && ctx.state === 'running';
-
-    if (isBoosting && isContextReady) {
-      if (!screenBoostGainRef.current && ctx) {
-        const gain = ctx.createGain();
-        const source = ctx.createMediaStreamSource(
-          new MediaStream([tile.screenAudioTrack]),
-        );
-        source.connect(gain);
-        gain.connect(ctx.destination);
-        screenBoostGainRef.current = gain;
-        screenBoostSourceRef.current = source;
-      }
-      if (screenBoostGainRef.current && ctx) {
-        screenBoostGainRef.current.gain.setTargetAtTime(
-          finalVolume,
-          ctx.currentTime,
-          0.01,
-        );
-      }
-      audioEl.muted = true;
-    } else {
-      if (screenBoostSourceRef.current) {
-        screenBoostSourceRef.current.disconnect();
-        screenBoostSourceRef.current = null;
-        screenBoostGainRef.current = null;
-      }
-      audioEl.muted = false;
-      audioEl.volume = Math.min(finalVolume, 1.0);
-      if (audioEl.paused) {
-        audioEl.play().catch(() => {});
-      }
-    }
-
-    return () => {
-      if (screenBoostSourceRef.current) {
-        screenBoostSourceRef.current.disconnect();
-        screenBoostSourceRef.current = null;
-        screenBoostGainRef.current = null;
-      }
-    };
-  }, [
-    outputVolume,
-    streamVolume,
-    isStreamMuted,
-    isDeafened,
-    isLocal,
-    tile.screenAudioTrack,
-    streamAttenuationEnabled,
-    streamAttenuationStrength,
-    participants,
-  ]);
 
   // --- VIDEO ---
   useEffect(() => {
@@ -242,9 +138,6 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       }`}
       onContextMenu={handleContextMenu}
     >
-      {/* Screen share audio (remote only) */}
-      {!isLocal && <audio ref={screenAudioRef} autoPlay playsInline />}
-
       {hasVideo && isWatching ? (
         <video
           ref={videoRef}

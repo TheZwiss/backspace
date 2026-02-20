@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -7,28 +7,17 @@ import { deriveGridTiles } from '../../hooks/useLiveKit';
 export function VoiceGrid({ participants }) {
     const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
     const setFocusedParticipant = useVoiceStore((s) => s.setFocusedParticipant);
-    const prevStreamKeysRef = useRef(new Set());
     const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
-    // Auto-focus when a new stream tile appears
+    // Unfocus if the focused stream tile no longer exists
     useEffect(() => {
         const currentStreamKeys = new Set(tiles
             .filter((t) => t.kind === 'stream' && t.screenTrack?.readyState === 'live')
             .map((t) => t.key));
-        // Find newly appeared stream keys
-        for (const key of currentStreamKeys) {
-            if (!prevStreamKeysRef.current.has(key)) {
-                // New stream tile — auto-focus it
-                setFocusedParticipant(key);
-                break;
-            }
-        }
-        // If the focused tile was a stream tile that no longer exists, unfocus
         if (focusedParticipantId &&
             focusedParticipantId.endsWith(':stream') &&
             !currentStreamKeys.has(focusedParticipantId)) {
             setFocusedParticipant(null);
         }
-        prevStreamKeysRef.current = currentStreamKeys;
     }, [tiles, focusedParticipantId, setFocusedParticipant]);
     if (tiles.length === 0) {
         return (_jsx("div", { className: "flex-1 flex items-center justify-center", children: _jsxs("div", { className: "text-center", children: [_jsx("svg", { width: "48", height: "48", viewBox: "0 0 24 24", fill: "currentColor", className: "text-discord-text-muted/40 mx-auto mb-3", children: _jsx("path", { d: "M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" }) }), _jsx("p", { className: "text-discord-text-muted text-sm", children: "Waiting for others to join..." })] }) }));
