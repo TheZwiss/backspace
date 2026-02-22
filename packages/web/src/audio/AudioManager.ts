@@ -27,6 +27,7 @@ export class AudioManager {
   private streamGeneration = 0;
   private inputSwitchChain: Promise<MediaStream | null> = Promise.resolve(null);
   private rnnoiseNode: AudioWorkletNode | null = null;
+  private stereoMerger: ChannelMergerNode | null = null;
   private rnnoiseEnabled = false;
   private rnnoiseReady = false;
 
@@ -45,11 +46,6 @@ export class AudioManager {
     this.ctx = new AudioContextClass({ sampleRate: 48000 });
     
     this.inputGain = this.ctx.createGain();
-    // Force stereo up-mix so mono sources (e.g. RNNoise worklet output)
-    // are duplicated to both L+R channels instead of left-only.
-    this.inputGain.channelCount = 2;
-    this.inputGain.channelCountMode = 'explicit';
-    this.inputGain.channelInterpretation = 'speakers';
     this.inputDestination = this.ctx.createMediaStreamDestination();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
@@ -258,9 +254,18 @@ export class AudioManager {
           wasmBinary,
           maxChannels: 1,
         });
-        this.rnnoiseNode.connect(this.inputGain!);
+
+        // Explicit mono→stereo: RNNoise outputs 1 channel, so duplicate it
+        // to both L and R via a ChannelMergerNode. This is spec-guaranteed
+        // stereo, unlike relying on automatic up-mixing which fails in some
+        // browsers when the source is an AudioWorkletNode.
+        this.stereoMerger = this.ctx!.createChannelMerger(2);
+        this.rnnoiseNode.connect(this.stereoMerger, 0, 0); // mono → left
+        this.rnnoiseNode.connect(this.stereoMerger, 0, 1); // mono → right
+        this.stereoMerger.connect(this.inputGain!);
+
         this.rnnoiseReady = true;
-        console.log('[AudioManager] RNNoise worklet loaded and connected');
+        console.log('[AudioManager] RNNoise worklet loaded and connected (mono→stereo via ChannelMerger)');
       } catch (err) {
         console.error('[AudioManager] Failed to load RNNoise worklet:', err);
         this.rnnoiseReady = false;
