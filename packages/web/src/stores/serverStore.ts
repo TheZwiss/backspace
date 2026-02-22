@@ -19,6 +19,8 @@ interface ServerState {
   setRoles: (roles: Role[]) => void;
   setDmChannels: (channels: DmChannel[]) => void;
   addDmChannel: (channel: DmChannel) => void;
+  removeDmChannel: (id: string) => void;
+  closeDm: (id: string) => Promise<void>;
   loadServers: () => Promise<void>;
   loadServerDetail: (serverId: string) => Promise<void>;
   loadDmChannels: () => Promise<void>;
@@ -59,6 +61,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
   addDmChannel: (channel) => set((state) => ({
     dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
   })),
+
+  removeDmChannel: (id) => set((state) => ({
+    dmChannels: state.dmChannels.filter(c => c.id !== id)
+  })),
+
+  closeDm: async (id) => {
+    await api.dm.close(id);
+    set((state) => ({
+      dmChannels: state.dmChannels.filter(c => c.id !== id)
+    }));
+  },
 
   loadServers: async () => {
     try {

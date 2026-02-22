@@ -213,6 +213,13 @@ export type ServerEvent =
   | { type: 'dm_call_rejected'; dmChannelId: string }
   | { type: 'dm_call_ended'; dmChannelId: string }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean }
+  | { type: 'dm_channel_created'; dmChannel: DmChannel }
+  | { type: 'dm_channel_closed'; dmChannelId: string }
+  | { type: 'friend_removed'; userId: string }
+  | { type: 'channel_created'; channel: Channel; serverId: string }
+  | { type: 'channel_updated'; channel: Channel; serverId: string }
+  | { type: 'channel_deleted'; channelId: string; serverId: string }
+  | { type: 'server_updated'; server: Server }
   | { type: 'error'; message: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────

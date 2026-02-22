@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocialStore } from '../../stores/socialStore';
 import { useServerStore } from '../../stores/serverStore';
-import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
+import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { api } from '../../api/client';
 import type { Friend, FriendRequest } from '@opencord/shared';
@@ -16,8 +16,6 @@ export function FriendsPage() {
   const [addStatus, setAddStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useServerStore((s) => s.addDmChannel);
-  const toggleMemberList = useUIStore((s) => s.toggleMemberList);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
 
   const {
     friends,
@@ -207,17 +205,7 @@ export function FriendsPage() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={toggleMemberList}
-            className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-discord-modifier-hover ${
-              memberListOpen ? 'text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary'
-            }`}
-            title="Toggle Activity Panel"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
-            </svg>
-          </button>
+          <MemberListToggleButton />
         </div>
       </div>
 

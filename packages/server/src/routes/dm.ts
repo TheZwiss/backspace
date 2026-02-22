@@ -115,7 +115,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    // Check if DM channel already exists between these two users
+    // Check if DM channel already exists between these two users (both are members)
     const myDms = db.select()
       .from(schema.dmMembers)
       .where(eq(schema.dmMembers.userId, request.userId))
@@ -131,7 +131,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         .get();
 
       if (otherMember) {
-        // DM channel already exists
+        // DM channel already exists, both users are members
         const dmChannel = db.select()
           .from(schema.dmChannels)
           .where(eq(schema.dmChannels.id, myDm.dmChannelId))
@@ -173,6 +173,79 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // Check if the other user has a DM channel with us that we left (closed)
+    // If so, re-add ourselves to it instead of creating a new one
+    const theirDms = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.userId, userId))
+      .all();
+
+    for (const theirDm of theirDms) {
+      // Check if any messages exist between us on this channel (indicates a previous DM)
+      const dmChannel = db.select()
+        .from(schema.dmChannels)
+        .where(eq(schema.dmChannels.id, theirDm.dmChannelId))
+        .get();
+
+      if (!dmChannel) continue;
+
+      // Check total members — a DM channel should only have the other user if we left
+      const allMembers = db.select()
+        .from(schema.dmMembers)
+        .where(eq(schema.dmMembers.dmChannelId, theirDm.dmChannelId))
+        .all();
+
+      // If it's a 1-member channel (just them) or we see past messages from us, re-join
+      const onlyOtherUser = allMembers.length === 1 && allMembers[0]!.userId === userId;
+      if (onlyOtherUser) {
+        // Check if there are any messages from us in this channel (confirms it was our DM)
+        const ourOldMessages = db.select()
+          .from(schema.dmMessages)
+          .where(and(
+            eq(schema.dmMessages.dmChannelId, theirDm.dmChannelId),
+            eq(schema.dmMessages.userId, request.userId),
+          ))
+          .limit(1)
+          .all();
+
+        if (ourOldMessages.length > 0) {
+          // Re-add ourselves to this existing DM channel
+          db.insert(schema.dmMembers).values({
+            dmChannelId: theirDm.dmChannelId,
+            userId: request.userId,
+          }).run();
+
+          const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+          const members = [currentUserRow, targetUser]
+            .filter((u): u is NonNullable<typeof u> => u !== undefined)
+            .map(sanitizeUser);
+
+          const lastMsgRows = db.select()
+            .from(schema.dmMessages)
+            .where(eq(schema.dmMessages.dmChannelId, theirDm.dmChannelId))
+            .orderBy(desc(schema.dmMessages.createdAt))
+            .limit(1)
+            .all();
+          const lastMsg = lastMsgRows[0] ?? null;
+
+          const result: DmChannel = {
+            id: dmChannel.id,
+            createdAt: dmChannel.createdAt,
+            members,
+            lastMessage: lastMsg ? {
+              id: lastMsg.id,
+              dmChannelId: lastMsg.dmChannelId,
+              userId: lastMsg.userId,
+              content: lastMsg.content,
+              createdAt: lastMsg.createdAt,
+            } : null,
+          };
+
+          return reply.code(200).send(result);
+        }
+      }
+    }
+
     // Create new DM channel
     const dmChannelId = generateSnowflake();
     const now = Date.now();
@@ -204,7 +277,50 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       lastMessage: null,
     };
 
+    // Broadcast dm_channel_created to the other user so their sidebar updates
+    connectionManager.sendToUser(userId, {
+      type: 'dm_channel_created',
+      dmChannel: result,
+    });
+
     return reply.code(201).send(result);
+  });
+
+  // DELETE /api/dm/:id - Close (hide) a DM channel for the requesting user
+  app.delete<{ Params: { id: string } }>('/api/dm/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    // Verify the user is a member of this DM channel
+    const membership = db.select()
+      .from(schema.dmMembers)
+      .where(and(
+        eq(schema.dmMembers.dmChannelId, id),
+        eq(schema.dmMembers.userId, request.userId),
+      ))
+      .get();
+
+    if (!membership) {
+      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+    }
+
+    // Soft close: remove the user's membership row (Discord-style hide)
+    db.delete(schema.dmMembers)
+      .where(and(
+        eq(schema.dmMembers.dmChannelId, id),
+        eq(schema.dmMembers.userId, request.userId),
+      ))
+      .run();
+
+    // Broadcast dm_channel_closed to self for multi-tab sync
+    connectionManager.sendToUser(request.userId, {
+      type: 'dm_channel_closed',
+      dmChannelId: id,
+    });
+
+    return reply.code(200).send({ success: true });
   });
 
   // GET /api/dm/:id/messages - Get DM messages with pagination

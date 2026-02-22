@@ -14,8 +14,8 @@ let isInitialized = false;
 
 function handleEvent(event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
-  const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember } = useServerStore.getState();
-  const { addMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
+  const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useServerStore.getState();
+  const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
   const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
@@ -25,10 +25,9 @@ function handleEvent(event: ServerEvent): void {
       if (currentServerId) {
         loadServerDetail(currentServerId);
       }
-      // Clear stale message cache on reconnect, then re-fetch current channel
+      // Only force-reload the current channel on reconnect; other channels keep their cache
       {
-        const { clearAllMessages, loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
-        clearAllMessages();
+        const { loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
         if (currentChannelId) {
           reloadMessages(currentChannelId, true);
         }
@@ -64,7 +63,7 @@ function handleEvent(event: ServerEvent): void {
       break;
 
     case 'message_created':
-      addMessage(event.message.channelId, event.message);
+      addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
         if (event.message.channelId !== currentChannelId) {
@@ -87,6 +86,7 @@ function handleEvent(event: ServerEvent): void {
 
     case 'presence_update':
       updateMemberPresence(event.userId, event.status);
+      useSocialStore.getState().updateFriendPresence(event.userId, event.status);
       break;
 
     case 'voice_state_update':
@@ -110,21 +110,33 @@ function handleEvent(event: ServerEvent): void {
       break;
 
     case 'dm_message_created': {
-      addMessage(event.message.dmChannelId, event.message as any);
-      // Update lastMessage on the DM channel so the sidebar sorts correctly
-      const { dmChannels, setDmChannels } = useServerStore.getState();
-      const updatedDms = dmChannels.map(dm =>
-        dm.id === event.message.dmChannelId
-          ? { ...dm, lastMessage: event.message }
-          : dm
-      );
-      // Re-sort by most recent message
-      updatedDms.sort((a, b) => {
-        const aTime = a.lastMessage?.createdAt ?? a.createdAt;
-        const bTime = b.lastMessage?.createdAt ?? b.createdAt;
-        return bTime - aTime;
-      });
-      setDmChannels(updatedDms);
+      addRealtimeMessage(event.message.dmChannelId, event.message as any);
+      // If DM channel is unknown (first-ever message safety net), add a minimal one
+      const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useServerStore.getState();
+      const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
+      if (!knownDm) {
+        // Construct a minimal DmChannel from the message so the sidebar shows it
+        addDmCh({
+          id: event.message.dmChannelId,
+          createdAt: event.message.createdAt,
+          members: event.message.user ? [event.message.user] : [],
+          lastMessage: event.message,
+        });
+      } else {
+        // Update lastMessage on the DM channel so the sidebar sorts correctly
+        const updatedDms = currentDmChannels.map(dm =>
+          dm.id === event.message.dmChannelId
+            ? { ...dm, lastMessage: event.message }
+            : dm
+        );
+        // Re-sort by most recent message
+        updatedDms.sort((a, b) => {
+          const aTime = a.lastMessage?.createdAt ?? a.createdAt;
+          const bTime = b.lastMessage?.createdAt ?? b.createdAt;
+          return bTime - aTime;
+        });
+        setDms(updatedDms);
+      }
       // Mark DM as unread if not currently viewing it
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
@@ -204,6 +216,67 @@ function handleEvent(event: ServerEvent): void {
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall(null);
+      break;
+    }
+
+    case 'dm_channel_created':
+      addDmChannel(event.dmChannel);
+      break;
+
+    case 'dm_channel_closed':
+      removeDmChannel(event.dmChannelId);
+      break;
+
+    case 'friend_removed': {
+      const { removeFriendLocally } = useSocialStore.getState();
+      removeFriendLocally(event.userId);
+      break;
+    }
+
+    case 'channel_created': {
+      const { currentServerId: curServerId, channels: curChannels, setChannels } = useServerStore.getState();
+      if (event.serverId === curServerId) {
+        // Deduplicate: only add if not already present
+        if (!curChannels.find(c => c.id === event.channel.id)) {
+          setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
+        }
+      }
+      break;
+    }
+
+    case 'channel_updated': {
+      const { currentServerId: curServerId2, channels: curChannels2, setChannels: setChannels2 } = useServerStore.getState();
+      if (event.serverId === curServerId2) {
+        setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
+      }
+      break;
+    }
+
+    case 'channel_deleted': {
+      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3 } = useServerStore.getState();
+      if (event.serverId === curServerId3) {
+        setChannels3(curChannels3.filter(c => c.id !== event.channelId));
+      }
+      // If the user is currently viewing this channel, navigate away
+      {
+        const { currentChannelId } = useChatStore.getState();
+        if (currentChannelId === event.channelId) {
+          // Find the first remaining text channel to navigate to
+          const { channels: remainingChannels } = useServerStore.getState();
+          const firstText = remainingChannels.find(c => c.type === 'text');
+          if (firstText) {
+            useChatStore.getState().setCurrentChannel(firstText.id);
+          } else {
+            useChatStore.getState().setCurrentChannel(null);
+          }
+        }
+      }
+      break;
+    }
+
+    case 'server_updated': {
+      const { servers: currentServers, setServers } = useServerStore.getState();
+      setServers(currentServers.map(s => s.id === event.server.id ? { ...s, ...event.server } : s));
       break;
     }
 

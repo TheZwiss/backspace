@@ -19,6 +19,15 @@ export const useServerStore = create((set, get) => ({
     addDmChannel: (channel) => set((state) => ({
         dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
     })),
+    removeDmChannel: (id) => set((state) => ({
+        dmChannels: state.dmChannels.filter(c => c.id !== id)
+    })),
+    closeDm: async (id) => {
+        await api.dm.close(id);
+        set((state) => ({
+            dmChannels: state.dmChannels.filter(c => c.id !== id)
+        }));
+    },
     loadServers: async () => {
         try {
             const servers = await api.servers.list();

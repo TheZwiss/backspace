@@ -279,6 +279,12 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       and(eq(schema.friends.userId, id), eq(schema.friends.friendId, request.userId))
     )).run();
 
+    // Broadcast friend_removed to the other user so their friends list updates
+    connectionManager.sendToUser(id, {
+      type: 'friend_removed',
+      userId: request.userId,
+    });
+
     return reply.code(200).send({ success: true });
   });
 

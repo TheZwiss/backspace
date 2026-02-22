@@ -16,6 +16,8 @@ interface SocialState {
   searchUsers: (query: string) => Promise<User[]>;
   addIncomingRequest: (request: FriendRequest) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string) => void;
+  updateFriendPresence: (userId: string, status: string) => void;
+  removeFriendLocally: (userId: string) => void;
 }
 
 export const useSocialStore = create<SocialState>((set, get) => ({
@@ -119,6 +121,22 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     set((state) => ({
       friends: state.friends.find(f => f.id === friend.id) ? state.friends : [...state.friends, friend],
       requests: state.requests.filter(r => r.id !== requestId),
+    }));
+  },
+
+  // Called from WS handler when the other user removes us as a friend
+  removeFriendLocally: (userId: string) => {
+    set((state) => ({
+      friends: state.friends.filter(f => f.id !== userId),
+    }));
+  },
+
+  // Called from WS handler on presence_update to keep friend status live
+  updateFriendPresence: (userId: string, status: string) => {
+    set((state) => ({
+      friends: state.friends.map(f =>
+        f.id === userId ? { ...f, status: status as Friend['status'] } : f
+      ),
     }));
   },
 }));

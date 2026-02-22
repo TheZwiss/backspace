@@ -208,7 +208,15 @@ export function ChannelSidebar() {
                     )}
                   </div>
                   <button
-                    onClick={(e) => { e.stopPropagation(); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Navigate away if currently viewing this DM
+                      if (currentChannelId === dm.id) {
+                        navigate('/channels/@me');
+                        setCurrentChannel(null);
+                      }
+                      useServerStore.getState().closeDm(dm.id);
+                    }}
                     className="opacity-0 group-hover:opacity-100 text-discord-text-muted hover:text-discord-text-primary transition-opacity flex-shrink-0 ml-1"
                     title="Close DM"
                   >

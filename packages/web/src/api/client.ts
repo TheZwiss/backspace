@@ -149,6 +149,7 @@ export const api = {
   dm: {
     list: () => request<DmChannel[]>('GET', '/dm'),
     create: (data: CreateDmRequest) => request<DmChannel>('POST', '/dm', data),
+    close: (id: string) => request<{ success: boolean }>('DELETE', `/dm/${id}`),
     messages: (id: string, before?: string, limit = 50) => {
       const params = new URLSearchParams();
       if (before) params.set('before', before);

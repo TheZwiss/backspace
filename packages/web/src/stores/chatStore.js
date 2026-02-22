@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
-import { isDmChannel } from './serverStore';
+import { isDmChannel, useServerStore } from './serverStore';
+import { useAuthStore } from './authStore';
 export const useChatStore = create((set, get) => ({
     messages: new Map(),
     currentChannelId: null,
@@ -12,6 +13,7 @@ export const useChatStore = create((set, get) => ({
     replyTo: null,
     readStates: new Map(),
     unreadChannels: new Set(),
+    realtimeMessageEvents: [],
     setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
     setReplyTo: (message) => set({ replyTo: message }),
     clearAllMessages: () => set({ messages: new Map(), hasMore: new Map() }),
@@ -67,34 +69,98 @@ export const useChatStore = create((set, get) => ({
     sendMessage: async (channelId, content, attachmentIds) => {
         const replyToId = get().replyTo?.id;
         const isDm = isDmChannel(channelId);
-        if (isDm) {
-            await api.dm.sendMessage(channelId, { content });
+        const currentUser = useAuthStore.getState().user;
+
+        // Generate optimistic message
+        const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        if (currentUser) {
+            const optimisticMessage = {
+                id: tempId,
+                channelId: isDm ? '' : channelId,
+                userId: currentUser.id,
+                content,
+                replyToId: replyToId ?? null,
+                editedAt: null,
+                createdAt: Date.now(),
+                user: currentUser,
+                attachments: [],
+                reactions: [],
+            };
+            if (isDm) {
+                optimisticMessage.dmChannelId = channelId;
+            }
+            // Add optimistic message immediately
+            get().addMessage(channelId, optimisticMessage);
+
+            // For DMs, update lastMessage on the DM channel so sidebar re-sorts
+            if (isDm) {
+                const { dmChannels, setDmChannels } = useServerStore.getState();
+                const updatedDms = dmChannels.map(dm =>
+                    dm.id === channelId
+                        ? { ...dm, lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() } }
+                        : dm
+                );
+                updatedDms.sort((a, b) => {
+                    const aTime = a.lastMessage?.createdAt ?? a.createdAt;
+                    const bTime = b.lastMessage?.createdAt ?? b.createdAt;
+                    return bTime - aTime;
+                });
+                setDmChannels(updatedDms);
+            }
         }
-        else {
-            await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
-        }
+
         set({ replyTo: null });
-        // Message will arrive via WebSocket
+
+        try {
+            if (isDm) {
+                await api.dm.sendMessage(channelId, { content });
+            } else {
+                await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+            }
+        } catch {
+            // Rollback: remove the optimistic message on failure
+            get().removeMessage(tempId, channelId);
+        }
     },
     editMessage: async (messageId, content, channelId) => {
         const isDm = isDmChannel(channelId);
-        if (isDm) {
-            await api.dm.updateMessage(messageId, { content });
+        // Optimistic: update content locally first
+        const messages = get().messages.get(channelId);
+        const originalMessage = messages?.find(m => m.id === messageId);
+        if (originalMessage) {
+            get().updateMessage({ ...originalMessage, content, editedAt: Date.now() });
         }
-        else {
-            await api.messages.update(messageId, { content });
+        try {
+            if (isDm) {
+                await api.dm.updateMessage(messageId, { content });
+            } else {
+                await api.messages.update(messageId, { content });
+            }
+        } catch {
+            // Rollback: restore the original message on failure
+            if (originalMessage) {
+                get().updateMessage(originalMessage);
+            }
         }
-        // Update will arrive via WebSocket
     },
     deleteMessage: async (messageId, channelId) => {
         const isDm = isDmChannel(channelId);
-        if (isDm) {
-            await api.dm.deleteMessage(messageId);
+        // Optimistic: remove locally first
+        const messages = get().messages.get(channelId);
+        const savedMessage = messages?.find(m => m.id === messageId);
+        get().removeMessage(messageId, channelId);
+        try {
+            if (isDm) {
+                await api.dm.deleteMessage(messageId);
+            } else {
+                await api.messages.delete(messageId);
+            }
+        } catch {
+            // Rollback: re-add the message on failure
+            if (savedMessage) {
+                get().addMessage(channelId, savedMessage);
+            }
         }
-        else {
-            await api.messages.delete(messageId);
-        }
-        // Deletion will arrive via WebSocket
     },
     addMessage: (channelId, message) => {
         set((state) => {
@@ -103,8 +169,32 @@ export const useChatStore = create((set, get) => ({
             // Avoid duplicates
             if (current.find(m => m.id === message.id))
                 return state;
-            newMessages.set(channelId, [...current, message]);
+            // Remove any optimistic temp message from same user with same content
+            const filtered = current.filter(m => {
+                if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
+                return m.content !== message.content;
+            });
+            newMessages.set(channelId, [...filtered, message]);
             return { messages: newMessages };
+        });
+    },
+    addRealtimeMessage: (channelId, message) => {
+        set((state) => {
+            const newMessages = new Map(state.messages);
+            const current = newMessages.get(channelId) ?? [];
+            // Avoid duplicates
+            if (current.find(m => m.id === message.id))
+                return state;
+            // Remove any optimistic temp message from same user with same content
+            const filtered = current.filter(m => {
+                if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
+                return m.content !== message.content;
+            });
+            newMessages.set(channelId, [...filtered, message]);
+            // Append to realtimeMessageEvents (capped at 50)
+            const newEvents = [...state.realtimeMessageEvents, { channelId, message }];
+            if (newEvents.length > 50) newEvents.splice(0, newEvents.length - 50);
+            return { messages: newMessages, realtimeMessageEvents: newEvents };
         });
     },
     updateMessage: (message) => {

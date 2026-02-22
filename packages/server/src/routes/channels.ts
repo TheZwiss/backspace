@@ -4,6 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isAdmin, getChannelServerId } from '../utils/permissions.js';
+import { connectionManager } from '../ws/handler.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -106,7 +107,16 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to create channel', statusCode: 500 });
     }
 
-    return reply.code(201).send(rowToChannel(channel));
+    const channelData = rowToChannel(channel);
+
+    // Broadcast channel_created to all server members
+    connectionManager.sendToServer(id, {
+      type: 'channel_created',
+      channel: channelData,
+      serverId: id,
+    });
+
+    return reply.code(201).send(channelData);
   });
 
   // PATCH /api/channels/:id - Update a channel (admin+)
@@ -159,7 +169,16 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to update channel', statusCode: 500 });
     }
 
-    return reply.code(200).send(rowToChannel(updated));
+    const channelData = rowToChannel(updated);
+
+    // Broadcast channel_updated to all server members
+    connectionManager.sendToServer(serverId, {
+      type: 'channel_updated',
+      channel: channelData,
+      serverId,
+    });
+
+    return reply.code(200).send(channelData);
   });
 
   // DELETE /api/channels/:id - Delete a channel (admin+)
@@ -182,6 +201,13 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     // Delete messages in channel (attachments cascade), then channel
     db.delete(schema.messages).where(eq(schema.messages.channelId, id)).run();
     db.delete(schema.channels).where(eq(schema.channels.id, id)).run();
+
+    // Broadcast channel_deleted to all server members
+    connectionManager.sendToServer(serverId, {
+      type: 'channel_deleted',
+      channelId: id,
+      serverId,
+    });
 
     return reply.code(200).send({ success: true });
   });

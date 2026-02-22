@@ -91,6 +91,7 @@ export const api = {
     dm: {
         list: () => request('GET', '/dm'),
         create: (data) => request('POST', '/dm', data),
+        close: (id) => request('DELETE', `/dm/${id}`),
         messages: (id, before, limit = 50) => {
             const params = new URLSearchParams();
             if (before)

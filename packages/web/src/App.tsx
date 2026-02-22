@@ -45,14 +45,6 @@ export function App() {
         }
       />
       <Route
-        path="/channels/@me/:channelId?"
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/join/:inviteCode"
         element={
           <ProtectedRoute>

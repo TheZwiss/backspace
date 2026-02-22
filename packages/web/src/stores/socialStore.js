@@ -102,4 +102,18 @@ export const useSocialStore = create((set, get) => ({
             requests: state.requests.filter(r => r.id !== requestId),
         }));
     },
+    // Called from WS handler when the other user removes us as a friend
+    removeFriendLocally: (userId) => {
+        set((state) => ({
+            friends: state.friends.filter(f => f.id !== userId),
+        }));
+    },
+    // Called from WS handler on presence_update to keep friend status live
+    updateFriendPresence: (userId, status) => {
+        set((state) => ({
+            friends: state.friends.map(f =>
+                f.id === userId ? { ...f, status } : f
+            ),
+        }));
+    },
 }));

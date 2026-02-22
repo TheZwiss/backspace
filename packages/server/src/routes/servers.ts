@@ -275,7 +275,15 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to update server', statusCode: 500 });
     }
 
-    return reply.code(200).send(rowToServer(updated));
+    const serverData = rowToServer(updated);
+
+    // Broadcast server_updated to all server members
+    connectionManager.sendToServer(id, {
+      type: 'server_updated',
+      server: serverData,
+    });
+
+    return reply.code(200).send(serverData);
   });
 
   // DELETE /api/servers/:id - Delete server (owner only)
@@ -363,6 +371,9 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       joinedAt: now,
     }).run();
 
+    // Register the user in connectionManager so they receive WS broadcasts for this server
+    connectionManager.addUserServer(request.userId, id);
+
     return reply.code(200).send(rowToServer(server));
   });
 
@@ -394,6 +405,9 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       role: 'member',
       joinedAt: now,
     }).run();
+
+    // Register the user in connectionManager so they receive WS broadcasts for this server
+    connectionManager.addUserServer(request.userId, server.id);
 
     return reply.code(200).send(rowToServer(server));
   });

@@ -123,19 +123,17 @@ export function SoundController() {
                 outgoingCallLoop.current = null;
             }
         });
-        // 2. Listen to Chat State Changes (New Messages)
+        // 2. Listen to Chat State Changes (New Real-Time Messages from any channel)
         const unsubscribeChat = useChatStore.subscribe((state, prevState) => {
             if (isInitialMount.current)
                 return;
-            // Check for new messages in the current channel
-            if (state.currentChannelId) {
-                const messages = state.messages.get(state.currentChannelId) || [];
-                const prevMessages = prevState.messages.get(state.currentChannelId) || [];
-                if (messages.length > prevMessages.length) {
-                    const lastMessage = messages[messages.length - 1];
-                    // Don't play sound for our own messages
-                    if (lastMessage && lastMessage.userId !== currentUser?.id) {
+            // Only trigger on NEW realtimeMessageEvents entries (not API loads)
+            if (state.realtimeMessageEvents.length > prevState.realtimeMessageEvents.length) {
+                const newEvents = state.realtimeMessageEvents.slice(prevState.realtimeMessageEvents.length);
+                for (const { message } of newEvents) {
+                    if (message.userId !== currentUser?.id) {
                         audioManager.playSound('message');
+                        break; // one sound per batch
                     }
                 }
             }

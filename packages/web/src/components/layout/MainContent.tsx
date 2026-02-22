@@ -14,14 +14,13 @@ import { FriendsPage } from '../chat/FriendsPage';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
+import { MemberListToggleButton } from './MemberListToggleButton';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
   const channels = useServerStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const currentServerId = useServerStore((s) => s.currentServerId);
-  const toggleMemberList = useUIStore((s) => s.toggleMemberList);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
@@ -147,17 +146,7 @@ export function MainContent() {
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>
             </button>
-            <button
-              onClick={toggleMemberList}
-              className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-discord-modifier-hover ${
-                memberListOpen ? 'text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary'
-              }`}
-              title="Toggle Activity Panel"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
-              </svg>
-            </button>
+            <MemberListToggleButton />
             <div className="w-[1px] h-6 bg-discord-modifier-accent mx-1" />
             <button className="w-8 h-8 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded-[4px] hover:bg-discord-modifier-hover" title="Search">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -186,8 +175,11 @@ export function MainContent() {
   if (!currentChannelId || !channel) {
     return (
       <div className="flex-1 flex flex-col bg-discord-bg-primary">
-        <div className="h-12 px-4 flex items-center shadow-header">
+        <div className="h-12 px-4 flex items-center justify-between shadow-header">
           <span className="text-discord-text-muted">Select a channel</span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <MemberListToggleButton />
+          </div>
         </div>
         <div className="flex-1 flex items-center justify-center text-discord-text-muted">
           <p>Select a text or voice channel to get started</p>
@@ -208,6 +200,9 @@ export function MainContent() {
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
               </svg>
               <span className="font-bold text-discord-text-primary">{channel.name}</span>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <MemberListToggleButton />
             </div>
           </div>
           <div className="flex-1 flex flex-col items-center justify-center gap-8 relative">
@@ -243,6 +238,9 @@ export function MainContent() {
             <span className="font-bold text-discord-text-primary">{channel.name}</span>
             <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
             <span className="text-xs text-discord-text-muted ml-1">{participants.length} connected</span>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <MemberListToggleButton />
           </div>
         </div>
 
@@ -289,17 +287,7 @@ export function MainContent() {
               <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
             </svg>
           </button>
-          <button
-            onClick={toggleMemberList}
-            className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-discord-modifier-hover ${
-              memberListOpen ? 'text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary'
-            }`}
-            title="Toggle Member List"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
-            </svg>
-          </button>
+          <MemberListToggleButton />
           <div className="w-[1px] h-6 bg-discord-modifier-accent mx-1" />
           <button className="w-8 h-8 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded-[4px] hover:bg-discord-modifier-hover" title="Search">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">

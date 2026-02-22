@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ServerSidebar } from './ServerSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
-import { MemberSidebar } from './MemberSidebar';
+import { RightPanel } from './RightPanel';
 import { MobileNav } from './MobileNav';
 import { ImagePreview } from '../chat/ImagePreview';
 import { CreateServerModal } from '../modals/CreateServer';
@@ -77,7 +77,7 @@ export function AppLayout() {
   const setIsMobile = useUIStore((s) => s.setIsMobile);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
-  const memberListOpen = useUIStore((s) => s.memberListOpen);
+
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
   const userProfilePopout = useUIStore((s) => s.userProfilePopout);
@@ -226,23 +226,7 @@ export function AppLayout() {
       {/* Main content area */}
       <div className="flex-1 flex min-w-0 bg-discord-bg-primary relative">
         <MainContent />
-        {serverId === '@me' ? (
-          memberListOpen ? (
-            <div className="w-[358px] bg-discord-bg-secondary flex-shrink-0 hidden xl:flex flex-col">
-              <div className="p-4">
-                <h3 className="text-[20px] font-bold text-discord-text-header mb-4">Active Now</h3>
-                <div className="text-center py-8">
-                  <div className="text-[16px] font-bold text-discord-text-header mb-1 text-center">It's quiet for now...</div>
-                  <div className="text-[14px] text-discord-text-muted text-center max-w-[200px] mx-auto">
-                    When a friend starts an activity&#8212;like playing a game or hanging out on voice&#8212;we'll show it here!
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null
-        ) : (
-          <MemberSidebar />
-        )}
+        <RightPanel />
       </div>
 
       {/* Modals */}
