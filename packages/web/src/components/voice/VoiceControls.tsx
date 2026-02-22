@@ -18,6 +18,8 @@ export function VoiceControls() {
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
   const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
+  const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
+  const toggleRnnoise = useVoiceStore((s) => s.toggleRnnoise);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const channels = useServerStore((s) => s.channels);
@@ -172,7 +174,7 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Noise Suppression */}
+        {/* Browser Noise Suppression */}
         <button
           onClick={handleNoiseSuppression}
           className={`${btnBase} ${
@@ -180,7 +182,7 @@ export function VoiceControls() {
               ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
               : btnDefaultStyle
           }`}
-          title={noiseSuppression ? 'Disable Noise Suppression' : 'Enable Noise Suppression'}
+          title={noiseSuppression ? 'Disable Browser Noise Suppression' : 'Enable Browser Noise Suppression'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M7 9v6h4l5 5V4l-5 5H7z" />
@@ -191,6 +193,34 @@ export function VoiceControls() {
               </>
             ) : (
               <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+            )}
+          </svg>
+        </button>
+
+        {/* AI Noise Suppression (RNNoise) */}
+        <button
+          onClick={toggleRnnoise}
+          className={`${btnBase} ${
+            rnnoiseEnabled
+              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              : btnDefaultStyle
+          }`}
+          title={rnnoiseEnabled ? 'Disable AI Noise Suppression' : 'Enable AI Noise Suppression'}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity={rnnoiseEnabled ? 0.15 : 0.08} />
+            <path d="M12 1a2 2 0 012 2v1a2 2 0 01-4 0V3a2 2 0 012-2z" />
+            <path d="M12 7c-1.66 0-3 1.34-3 3v2c0 1.66 1.34 3 3 3s3-1.34 3-3v-2c0-1.66-1.34-3-3-3z" />
+            <path d="M17 11v1c0 2.76-2.24 5-5 5s-5-2.24-5-5v-1H5v1c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92v-1h-2z" />
+            {rnnoiseEnabled ? (
+              <>
+                <circle cx="18" cy="5" r="1.2" fill="currentColor" />
+                <circle cx="20" cy="8" r="0.9" fill="currentColor" opacity="0.7" />
+                <circle cx="6" cy="5" r="1.2" fill="currentColor" />
+                <circle cx="4" cy="8" r="0.9" fill="currentColor" opacity="0.7" />
+              </>
+            ) : (
+              <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
             )}
           </svg>
         </button>

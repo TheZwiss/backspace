@@ -65,6 +65,10 @@ export function AppLayout() {
         observer.observe(document.body, { childList: true, subtree: true });
         return () => observer.disconnect();
     }, []);
+    const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
+    useEffect(() => {
+        AudioManager.getInstance().setOutputDevice(outputDeviceId);
+    }, [outputDeviceId]);
     const { user, isLoading } = useAuth();
     const setCurrentServer = useServerStore((s) => s.setCurrentServer);
     const loadServerDetail = useServerStore((s) => s.loadServerDetail);

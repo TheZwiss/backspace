@@ -53,7 +53,7 @@ interface VoiceState {
   setIsLiveKitConnected: (connected: boolean) => void;
   setInputVolume: (volume: number) => void;
   setOutputVolume: (volume: number) => void;
-  setInputDevice: (deviceId: string) => Promise<void>;
+  setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
   toggleMic: () => void;
   toggleCamera: () => void;
@@ -64,9 +64,11 @@ interface VoiceState {
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
+  rnnoiseEnabled: boolean;
   toggleNoiseSuppression: () => void;
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
+  toggleRnnoise: () => void;
   deafenedUserIds: Set<string>;
   setUserDeafened: (userId: string, deafened: boolean) => void;
   // WebSocket-based voice user status (visible without joining LiveKit)
@@ -210,10 +212,7 @@ export const useVoiceStore = create<VoiceState>()(
       },
       setOutputVolume: (volume) => set({ outputVolume: volume }),
       
-      setInputDevice: async (deviceId) => {
-        set({ inputDeviceId: deviceId });
-        await AudioManager.getInstance().setInputDevice(deviceId);
-      },
+      setInputDevice: (deviceId) => set({ inputDeviceId: deviceId }),
       
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
@@ -227,9 +226,11 @@ export const useVoiceStore = create<VoiceState>()(
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: false,
+      rnnoiseEnabled: false,
       toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
       setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
       setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
+      toggleRnnoise: () => set((state) => ({ rnnoiseEnabled: !state.rnnoiseEnabled })),
       deafenedUserIds: new Set(),
       setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -304,7 +305,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -312,6 +313,9 @@ export const useVoiceStore = create<VoiceState>()(
         if (version < 2) {
           persistedState.echoCancellation = true;
           persistedState.autoGainControl = false;
+        }
+        if (version < 3) {
+          persistedState.rnnoiseEnabled = false;
         }
         return persistedState;
       },
@@ -329,6 +333,7 @@ export const useVoiceStore = create<VoiceState>()(
         noiseSuppression: state.noiseSuppression,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
+        rnnoiseEnabled: state.rnnoiseEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
       }),

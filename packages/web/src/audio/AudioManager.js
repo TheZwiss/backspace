@@ -1,3 +1,8 @@
+import { RnnoiseWorkletNode, loadRnnoise } from '@sapphi-red/web-noise-suppressor';
+import rnnoiseWorkletPath from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
+import rnnoiseWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
+import rnnoiseWasmSimdPath from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
+
 export class AudioManager {
     static instance = null;
     ctx = null;
@@ -8,6 +13,7 @@ export class AudioManager {
     analyser = null;
     masterCompressor = null;
     currentInputDeviceId = 'default';
+    desiredOutputDeviceId = 'default';
     currentStream = null;
     isInitialized = false;
     listeners = new Set();
@@ -15,7 +21,12 @@ export class AudioManager {
     voiceEchoCancellation = true;
     voiceNoiseSuppression = true;
     voiceAutoGainControl = false;
+    screenShareActive = false;
     streamGeneration = 0;
+    inputSwitchChain = Promise.resolve(null);
+    rnnoiseNode = null;
+    rnnoiseEnabled = false;
+    rnnoiseReady = false;
     constructor() { }
     static getInstance() {
         if (!AudioManager.instance) {
@@ -27,8 +38,13 @@ export class AudioManager {
         if (this.ctx)
             return;
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AudioContextClass();
+        this.ctx = new AudioContextClass({ sampleRate: 48000 });
         this.inputGain = this.ctx.createGain();
+        // Force stereo up-mix so mono sources (e.g. RNNoise worklet output)
+        // are duplicated to both L+R channels instead of left-only.
+        this.inputGain.channelCount = 2;
+        this.inputGain.channelCountMode = 'explicit';
+        this.inputGain.channelInterpretation = 'speakers';
         this.inputDestination = this.ctx.createMediaStreamDestination();
         this.analyser = this.ctx.createAnalyser();
         this.analyser.fftSize = 256;
@@ -55,6 +71,22 @@ export class AudioManager {
             }
         };
         this.isInitialized = true;
+        this.applyOutputDevice();
+    }
+    async setOutputDevice(deviceId) {
+        this.desiredOutputDeviceId = deviceId;
+        await this.applyOutputDevice();
+    }
+    async applyOutputDevice() {
+        if (!this.ctx || !('setSinkId' in this.ctx)) return;
+        try {
+            const sinkId = this.desiredOutputDeviceId === 'default' ? '' : this.desiredOutputDeviceId;
+            await this.ctx.setSinkId(sinkId);
+            console.log(`[AudioManager] Output device set to: ${this.desiredOutputDeviceId}`);
+        }
+        catch (err) {
+            console.error('[AudioManager] Failed to set output device:', err);
+        }
     }
     onResumed(cb) {
         this.listeners.add(cb);
@@ -112,6 +144,11 @@ export class AudioManager {
         return source;
     }
     async setInputDevice(deviceId) {
+        const job = this.inputSwitchChain.then(() => this._setInputDeviceImpl(deviceId));
+        this.inputSwitchChain = job.catch(() => null);
+        return job;
+    }
+    async _setInputDeviceImpl(deviceId) {
         if (!this.isInitialized)
             this.initContext();
         // Skip if already set and stream is active
@@ -122,12 +159,20 @@ export class AudioManager {
             if (this.currentStream) {
                 this.currentStream.getTracks().forEach(t => t.stop());
             }
+            const effectiveEchoCancellation = this.screenShareActive ? false : this.voiceEchoCancellation;
+            // When RNNoise is active, force browser NS off — running both degrades quality.
+            const effectiveNoiseSuppression = this.rnnoiseEnabled ? false : this.voiceNoiseSuppression;
             const constraints = {
                 audio: {
                     deviceId: deviceId === 'default' ? undefined : { exact: deviceId },
-                    echoCancellation: this.voiceEchoCancellation,
-                    noiseSuppression: this.voiceNoiseSuppression,
+                    echoCancellation: effectiveEchoCancellation,
+                    noiseSuppression: effectiveNoiseSuppression,
                     autoGainControl: this.voiceAutoGainControl,
+                    googEchoCancellation: effectiveEchoCancellation,
+                    googAutoGainControl: this.voiceAutoGainControl,
+                    googNoiseSuppression: effectiveNoiseSuppression,
+                    googHighpassFilter: false,
+                    googTypingNoiseDetection: false,
                 }
             };
             this.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -138,7 +183,7 @@ export class AudioManager {
                     this.inputSource.disconnect();
                 }
                 this.inputSource = this.ctx.createMediaStreamSource(this.currentStream);
-                this.inputSource.connect(this.inputGain);
+                this.inputSource.connect(this.getInputTarget());
             }
             return this.currentStream;
         }
@@ -146,6 +191,56 @@ export class AudioManager {
             console.error('[AudioManager] Failed to set input device:', err);
             throw err;
         }
+    }
+    getInputTarget() {
+        return (this.rnnoiseEnabled && this.rnnoiseNode) ? this.rnnoiseNode : this.inputGain;
+    }
+    async setRnnoiseEnabled(enabled) {
+        if (enabled === this.rnnoiseEnabled && this.rnnoiseReady)
+            return;
+        if (!this.isInitialized)
+            this.initContext();
+        if (enabled && !this.rnnoiseReady) {
+            try {
+                console.log('[AudioManager] Loading RNNoise worklet...');
+                await this.ctx.audioWorklet.addModule(rnnoiseWorkletPath);
+                // loadRnnoise handles SIMD feature detection and returns the right binary
+                const wasmBinary = await loadRnnoise({ url: rnnoiseWasmPath, simdUrl: rnnoiseWasmSimdPath });
+                this.rnnoiseNode = new RnnoiseWorkletNode(this.ctx, {
+                    wasmBinary,
+                    maxChannels: 1,
+                });
+                this.rnnoiseNode.connect(this.inputGain);
+                this.rnnoiseReady = true;
+                console.log('[AudioManager] RNNoise worklet loaded and connected');
+            }
+            catch (err) {
+                console.error('[AudioManager] Failed to load RNNoise worklet:', err);
+                this.rnnoiseReady = false;
+                this.rnnoiseEnabled = false;
+                if (this.inputSource && this.inputGain) {
+                    this.inputSource.disconnect();
+                    this.inputSource.connect(this.inputGain);
+                }
+                return;
+            }
+        }
+        this.rnnoiseEnabled = enabled;
+        // Rewire the graph
+        if (this.inputSource) {
+            this.inputSource.disconnect();
+            this.inputSource.connect(this.getInputTarget());
+            console.log(`[AudioManager] RNNoise ${enabled ? 'enabled' : 'bypassed'} — inputSource → ${enabled ? 'rnnoiseNode' : 'inputGain'}`);
+        }
+        // Force track re-publish so LiveKit picks up the new pipeline
+        this.streamGeneration++;
+        if (this.currentStream) {
+            this.currentStream.getTracks().forEach(t => t.stop());
+            this.currentStream = null;
+        }
+    }
+    isRnnoiseEnabled() {
+        return this.rnnoiseEnabled;
     }
     setInputVolume(volume) {
         if (!this.isInitialized)
@@ -170,6 +265,15 @@ export class AudioManager {
             changed = true;
         }
         if (changed && this.currentStream) {
+            this.currentStream.getTracks().forEach(t => t.stop());
+            this.currentStream = null;
+        }
+    }
+    setScreenShareActive(active) {
+        if (this.screenShareActive === active) return;
+        this.screenShareActive = active;
+        console.log(`[AudioManager] Screen share active: ${active} — ${active ? 'forcing AEC off' : 'restoring user AEC preference'}`);
+        if (this.currentStream) {
             this.currentStream.getTracks().forEach(t => t.stop());
             this.currentStream = null;
         }
@@ -208,16 +312,10 @@ export class AudioManager {
             this.initContext();
         return this.ctx;
     }
-    /**
-     * Returns the master output bus (DynamicsCompressorNode).
-     * All remote audio (voice, stream) should connect their GainNodes
-     * to this node instead of directly to ctx.destination. The compressor
-     * prevents clipping when multiple sources sum together.
-     */
     getMasterOutput() {
         if (!this.ctx)
             this.initContext();
-        return this.ctx.destination;
+        return this.masterCompressor;
     }
     getContext() {
         return this.ctx;

@@ -161,6 +161,7 @@ export function useLiveKit() {
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
   const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
   const autoGainControl = useVoiceStore((s) => s.autoGainControl);
+  const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
 
   const lastMicGenRef = useRef(0);
 
@@ -254,6 +255,7 @@ export function useLiveKit() {
 
         // Sync voice processing settings to AudioManager
         audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
+        await audioManager.setRnnoiseEnabled(rnnoiseEnabled);
         // Keep screen share state in sync (handles edge cases like remounts)
         audioManager.setScreenShareActive(isScreenSharing);
 
@@ -313,7 +315,7 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, isScreenSharing]);
+  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, isScreenSharing]);
 
   const connect = useCallback(async (channelId: string) => {
     if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected) return;

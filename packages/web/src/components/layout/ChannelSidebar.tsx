@@ -408,8 +408,18 @@ function UserAreaPanel({
         await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
       }
       const devices = await navigator.mediaDevices.enumerateDevices();
-      const inputs = devices.filter(d => d.kind === 'audioinput');
-      const outputs = devices.filter(d => d.kind === 'audiooutput');
+      // Deduplicate by deviceId — USB devices sharing the same audio chipset
+      // (e.g. C-Media 0d8c:0134) appear as multiple entries with identical IDs.
+      const dedup = (list: MediaDeviceInfo[]): MediaDeviceInfo[] => {
+        const seen = new Set<string>();
+        return list.filter(d => {
+          if (seen.has(d.deviceId)) return false;
+          seen.add(d.deviceId);
+          return true;
+        });
+      };
+      const inputs = dedup(devices.filter(d => d.kind === 'audioinput'));
+      const outputs = dedup(devices.filter(d => d.kind === 'audiooutput'));
       setInputDevices(inputs);
       setOutputDevices(outputs);
       
@@ -483,7 +493,8 @@ function UserAreaPanel({
   };
 
   const selectInput = (device: MediaDeviceInfo) => {
-    setInputDevice(device.deviceId);
+    setInputDevice(device.deviceId); // Pure state update → triggers syncMic if in voice call
+    AudioManager.getInstance().setInputDevice(device.deviceId); // Immediate preview for mic level meter
     setSelectedInputLabel(device.label || 'Default');
     setShowInputDeviceList(false);
   };
@@ -492,8 +503,7 @@ function UserAreaPanel({
     setOutputDevice(device.deviceId);
     setSelectedOutputLabel(device.label || 'Default');
     setShowOutputDeviceList(false);
-    const room = getActiveRoom();
-    if (room) room.switchActiveDevice('audiooutput', device.deviceId).catch(() => {});
+    AudioManager.getInstance().setOutputDevice(device.deviceId);
   };
 
   // Generate mic level bars (20 bars like Discord)

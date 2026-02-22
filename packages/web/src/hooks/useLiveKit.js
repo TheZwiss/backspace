@@ -105,6 +105,7 @@ export function useLiveKit() {
     const echoCancellation = useVoiceStore((s) => s.echoCancellation);
     const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
     const autoGainControl = useVoiceStore((s) => s.autoGainControl);
+    const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
     const lastMicGenRef = useRef(0);
     const updateParticipants = useCallback(() => {
         const r = roomRef.current;
@@ -199,6 +200,7 @@ export function useLiveKit() {
             try {
                 const audioManager = AudioManager.getInstance();
                 audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
+                await audioManager.setRnnoiseEnabled(rnnoiseEnabled);
                 audioManager.setScreenShareActive(isScreenSharing);
                 const micPub = r.localParticipant.getTrackPublications()
                     .find(p => p.source === Track.Source.Microphone);
@@ -247,7 +249,7 @@ export function useLiveKit() {
         return () => {
             unsubscribe();
         };
-    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, isScreenSharing]);
+    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, isScreenSharing]);
     const connect = useCallback(async (channelId) => {
         if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected)
             return;

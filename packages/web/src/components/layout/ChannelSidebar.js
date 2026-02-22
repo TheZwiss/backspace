@@ -144,8 +144,16 @@ function UserAreaPanel({ user, isMuted, isDeafened, onMicToggle, onDeafenToggle,
                 await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
             }
             const devices = await navigator.mediaDevices.enumerateDevices();
-            const inputs = devices.filter(d => d.kind === 'audioinput');
-            const outputs = devices.filter(d => d.kind === 'audiooutput');
+            const dedup = (list) => {
+                const seen = new Set();
+                return list.filter(d => {
+                    if (seen.has(d.deviceId)) return false;
+                    seen.add(d.deviceId);
+                    return true;
+                });
+            };
+            const inputs = dedup(devices.filter(d => d.kind === 'audioinput'));
+            const outputs = dedup(devices.filter(d => d.kind === 'audiooutput'));
             setInputDevices(inputs);
             setOutputDevices(outputs);
             const currentInput = inputs.find(d => d.deviceId === inputDeviceId);
@@ -220,6 +228,7 @@ function UserAreaPanel({ user, isMuted, isDeafened, onMicToggle, onDeafenToggle,
     };
     const selectInput = (device) => {
         setInputDevice(device.deviceId);
+        AudioManager.getInstance().setInputDevice(device.deviceId);
         setSelectedInputLabel(device.label || 'Default');
         setShowInputDeviceList(false);
     };
@@ -227,9 +236,7 @@ function UserAreaPanel({ user, isMuted, isDeafened, onMicToggle, onDeafenToggle,
         setOutputDevice(device.deviceId);
         setSelectedOutputLabel(device.label || 'Default');
         setShowOutputDeviceList(false);
-        const room = getActiveRoom();
-        if (room)
-            room.switchActiveDevice('audiooutput', device.deviceId).catch(() => { });
+        AudioManager.getInstance().setOutputDevice(device.deviceId);
     };
     // Generate mic level bars (20 bars like Discord)
     const micBars = 20;

@@ -69,6 +69,14 @@ export function AppLayout() {
     return () => observer.disconnect();
   }, []);
 
+  // Sync persisted output device preference to AudioManager.
+  // AudioManager defers setSinkId until the AudioContext is actually created,
+  // so this is safe to call before any user interaction.
+  const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
+  useEffect(() => {
+    AudioManager.getInstance().setOutputDevice(outputDeviceId);
+  }, [outputDeviceId]);
+
   const { user, isLoading } = useAuth();
   const setCurrentServer = useServerStore((s) => s.setCurrentServer);
   const loadServerDetail = useServerStore((s) => s.loadServerDetail);

@@ -119,10 +119,7 @@ export const useVoiceStore = create()(persist((set, get) => ({
         AudioManager.getInstance().setInputVolume(volume);
     },
     setOutputVolume: (volume) => set({ outputVolume: volume }),
-    setInputDevice: async (deviceId) => {
-        set({ inputDeviceId: deviceId });
-        await AudioManager.getInstance().setInputDevice(deviceId);
-    },
+    setInputDevice: (deviceId) => set({ inputDeviceId: deviceId }),
     setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
     toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
     toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
@@ -133,9 +130,11 @@ export const useVoiceStore = create()(persist((set, get) => ({
     noiseSuppression: true,
     echoCancellation: true,
     autoGainControl: false,
+    rnnoiseEnabled: false,
     toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
     setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
     setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
+    toggleRnnoise: () => set((state) => ({ rnnoiseEnabled: !state.rnnoiseEnabled })),
     deafenedUserIds: new Set(),
     setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -207,7 +206,7 @@ export const useVoiceStore = create()(persist((set, get) => ({
     }),
 }), {
     name: 'opencord-voice-settings',
-    version: 2,
+    version: 3,
     migrate: (persistedState, version) => {
         if (version === 0) {
             persistedState.streamAttenuationEnabled = false;
@@ -215,6 +214,9 @@ export const useVoiceStore = create()(persist((set, get) => ({
         if (version < 2) {
             persistedState.echoCancellation = true;
             persistedState.autoGainControl = false;
+        }
+        if (version < 3) {
+            persistedState.rnnoiseEnabled = false;
         }
         return persistedState;
     },
@@ -232,6 +234,7 @@ export const useVoiceStore = create()(persist((set, get) => ({
         noiseSuppression: state.noiseSuppression,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
+        rnnoiseEnabled: state.rnnoiseEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
     }),

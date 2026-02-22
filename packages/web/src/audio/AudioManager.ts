@@ -1,3 +1,8 @@
+import { RnnoiseWorkletNode, loadRnnoise } from '@sapphi-red/web-noise-suppressor';
+import rnnoiseWorkletPath from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
+import rnnoiseWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
+import rnnoiseWasmSimdPath from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
+
 export class AudioManager {
   private static instance: AudioManager | null = null;
   private ctx: AudioContext | null = null;
@@ -9,6 +14,7 @@ export class AudioManager {
   private masterCompressor: DynamicsCompressorNode | null = null;
   
   private currentInputDeviceId: string = 'default';
+  private desiredOutputDeviceId: string = 'default';
   private currentStream: MediaStream | null = null;
   private isInitialized = false;
   
@@ -19,6 +25,10 @@ export class AudioManager {
   private voiceAutoGainControl = false;
   private screenShareActive = false;
   private streamGeneration = 0;
+  private inputSwitchChain: Promise<MediaStream | null> = Promise.resolve(null);
+  private rnnoiseNode: AudioWorkletNode | null = null;
+  private rnnoiseEnabled = false;
+  private rnnoiseReady = false;
 
   private constructor() {}
 
@@ -32,9 +42,14 @@ export class AudioManager {
   private initContext() {
     if (this.ctx) return;
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    this.ctx = new AudioContextClass();
+    this.ctx = new AudioContextClass({ sampleRate: 48000 });
     
     this.inputGain = this.ctx.createGain();
+    // Force stereo up-mix so mono sources (e.g. RNNoise worklet output)
+    // are duplicated to both L+R channels instead of left-only.
+    this.inputGain.channelCount = 2;
+    this.inputGain.channelCountMode = 'explicit';
+    this.inputGain.channelInterpretation = 'speakers';
     this.inputDestination = this.ctx.createMediaStreamDestination();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 256;
@@ -67,6 +82,31 @@ export class AudioManager {
     };
 
     this.isInitialized = true;
+
+    // Apply pending output device selection (user preference loaded before context creation)
+    this.applyOutputDevice();
+  }
+
+  /**
+   * Routes all Web Audio output to the specified device via AudioContext.setSinkId().
+   * This is the ONLY correct way to switch output devices when using a custom Web Audio
+   * pipeline — LiveKit's switchActiveDevice('audiooutput') targets <audio> elements
+   * which we deliberately kill via MutationObserver.
+   */
+  async setOutputDevice(deviceId: string): Promise<void> {
+    this.desiredOutputDeviceId = deviceId;
+    await this.applyOutputDevice();
+  }
+
+  private async applyOutputDevice(): Promise<void> {
+    if (!this.ctx || !('setSinkId' in this.ctx)) return;
+    try {
+      const sinkId = this.desiredOutputDeviceId === 'default' ? '' : this.desiredOutputDeviceId;
+      await (this.ctx as any).setSinkId(sinkId);
+      console.log(`[AudioManager] Output device set to: ${this.desiredOutputDeviceId}`);
+    } catch (err) {
+      console.error('[AudioManager] Failed to set output device:', err);
+    }
   }
 
   onResumed(cb: () => void) {
@@ -129,9 +169,21 @@ export class AudioManager {
     return source;
   }
 
-  async setInputDevice(deviceId: string) {
+  /**
+   * Serialized input device switch.
+   * Multiple callers (store, syncMic, UI) may trigger this concurrently.
+   * Chaining ensures only one getUserMedia runs at a time, and the second
+   * call short-circuits if the first already set the same device.
+   */
+  async setInputDevice(deviceId: string): Promise<MediaStream | null> {
+    const job = this.inputSwitchChain.then(() => this._setInputDeviceImpl(deviceId));
+    this.inputSwitchChain = job.catch(() => null);
+    return job;
+  }
+
+  private async _setInputDeviceImpl(deviceId: string): Promise<MediaStream | null> {
     if (!this.isInitialized) this.initContext();
-    
+
     // Skip if already set and stream is active
     if (this.currentInputDeviceId === deviceId && this.currentStream?.active) {
       return this.currentStream;
@@ -147,17 +199,21 @@ export class AudioManager {
       // Force AEC off during screen share to prevent this.
       const effectiveEchoCancellation = this.screenShareActive ? false : this.voiceEchoCancellation;
 
+      // When RNNoise is active, force browser NS off — running both degrades quality.
+      // The user's noiseSuppression preference is preserved in the store for when RNNoise is disabled.
+      const effectiveNoiseSuppression = this.rnnoiseEnabled ? false : this.voiceNoiseSuppression;
+
       const constraints = {
         audio: {
           deviceId: deviceId === 'default' ? undefined : { exact: deviceId },
           echoCancellation: effectiveEchoCancellation,
-          noiseSuppression: this.voiceNoiseSuppression,
+          noiseSuppression: effectiveNoiseSuppression,
           autoGainControl: this.voiceAutoGainControl,
           // Chromium-specific constraints — belt-and-suspenders to ensure
           // Chrome's internal audio engine respects the standard constraints.
           googEchoCancellation: effectiveEchoCancellation,
           googAutoGainControl: this.voiceAutoGainControl,
-          googNoiseSuppression: this.voiceNoiseSuppression,
+          googNoiseSuppression: effectiveNoiseSuppression,
           googHighpassFilter: false,
           googTypingNoiseDetection: false,
         } as any
@@ -172,14 +228,71 @@ export class AudioManager {
           this.inputSource.disconnect();
         }
         this.inputSource = this.ctx.createMediaStreamSource(this.currentStream);
-        this.inputSource.connect(this.inputGain);
+        this.inputSource.connect(this.getInputTarget());
       }
-      
+
       return this.currentStream;
     } catch (err) {
       console.error('[AudioManager] Failed to set input device:', err);
       throw err;
     }
+  }
+
+  private getInputTarget(): AudioNode {
+    return (this.rnnoiseEnabled && this.rnnoiseNode) ? this.rnnoiseNode : this.inputGain!;
+  }
+
+  async setRnnoiseEnabled(enabled: boolean): Promise<void> {
+    if (enabled === this.rnnoiseEnabled && this.rnnoiseReady) return;
+    if (!this.isInitialized) this.initContext();
+
+    if (enabled && !this.rnnoiseReady) {
+      try {
+        console.log('[AudioManager] Loading RNNoise worklet...');
+        await this.ctx!.audioWorklet.addModule(rnnoiseWorkletPath);
+
+        // loadRnnoise handles SIMD feature detection and returns the right binary
+        const wasmBinary = await loadRnnoise({ url: rnnoiseWasmPath, simdUrl: rnnoiseWasmSimdPath });
+
+        this.rnnoiseNode = new RnnoiseWorkletNode(this.ctx!, {
+          wasmBinary,
+          maxChannels: 1,
+        });
+        this.rnnoiseNode.connect(this.inputGain!);
+        this.rnnoiseReady = true;
+        console.log('[AudioManager] RNNoise worklet loaded and connected');
+      } catch (err) {
+        console.error('[AudioManager] Failed to load RNNoise worklet:', err);
+        this.rnnoiseReady = false;
+        this.rnnoiseEnabled = false;
+        // Fall back to direct wiring
+        if (this.inputSource && this.inputGain) {
+          this.inputSource.disconnect();
+          this.inputSource.connect(this.inputGain);
+        }
+        return;
+      }
+    }
+
+    this.rnnoiseEnabled = enabled;
+
+    // Rewire the graph
+    if (this.inputSource) {
+      this.inputSource.disconnect();
+      this.inputSource.connect(this.getInputTarget());
+      console.log(`[AudioManager] RNNoise ${enabled ? 'enabled' : 'bypassed'} — inputSource → ${enabled ? 'rnnoiseNode' : 'inputGain'}`);
+    }
+
+    // Force track re-publish so LiveKit picks up the new pipeline
+    this.streamGeneration++;
+    if (this.currentStream) {
+      this.currentStream.getTracks().forEach(t => t.stop());
+      this.currentStream = null;
+    }
+  }
+
+  isRnnoiseEnabled(): boolean {
+    return this.rnnoiseEnabled;
   }
 
   setInputVolume(volume: number) {
@@ -261,14 +374,14 @@ export class AudioManager {
   }
 
   /**
-   * Returns the master output bus (DynamicsCompressorNode).
-   * All remote audio (voice, stream) should connect their GainNodes
-   * to this node instead of directly to ctx.destination. The compressor
-   * prevents clipping when multiple sources sum together.
+   * Returns the master output bus (DynamicsCompressorNode → ctx.destination).
+   * All audio (remote voice, streams, effects) routes through this node.
+   * The compressor prevents clipping when multiple sources sum together.
+   * Output device is controlled via setSinkId on the underlying AudioContext.
    */
   getMasterOutput(): AudioNode {
     if (!this.ctx) this.initContext();
-    return this.ctx!.destination;
+    return this.masterCompressor!;
   }
 
   getContext(): AudioContext | null {
