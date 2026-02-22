@@ -40,6 +40,8 @@ pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+# tsc emit artifacts — Vite handles compilation, tsc is type-check only
+packages/web/src/**/*.js
 
 # Misc
 .cache/
