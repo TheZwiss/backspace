@@ -37,32 +37,29 @@ export function DmCallView() {
   const otherUser = dmChannel?.members.find(m => m.id !== authUser?.id);
   const otherName = otherUser?.displayName ?? otherUser?.username ?? 'User';
 
+  // Mute/deafen toggling is handled by syncMic in useLiveKit via store state.
+  // DmCallView only needs to toggle store + handle remote audio silencing for deafen.
   const handleMute = () => {
-    const room = getActiveRoom();
-    if (room) {
-      room.localParticipant.setMicrophoneEnabled(isMuted);
-    }
     toggleMic();
   };
 
   const handleDeafen = () => {
     const room = getActiveRoom();
+    const willDeafen = !isDeafened;
+    // Silence/restore remote participant audio for deafen
     if (room) {
-      const newDeafened = !isDeafened;
       room.remoteParticipants.forEach((p) => {
         p.audioTrackPublications.forEach((pub) => {
           if (pub.track) {
-            (pub.track as any).setVolume?.(newDeafened ? 0 : 1);
+            (pub.track as any).setVolume?.(willDeafen ? 0 : 1);
           }
         });
       });
-      if (newDeafened) {
-        room.localParticipant.setMicrophoneEnabled(false);
-      } else if (!isMuted) {
-        room.localParticipant.setMicrophoneEnabled(true);
-      }
     }
     toggleDeafen();
+    // Auto-mute on deafen, auto-unmute on undeafen
+    if (willDeafen && !isMuted) toggleMic();
+    if (!willDeafen && isMuted) toggleMic();
   };
 
   const handleCamera = async () => {

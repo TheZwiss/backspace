@@ -33,31 +33,23 @@ export function DmCallView() {
     const otherUser = dmChannel?.members.find(m => m.id !== authUser?.id);
     const otherName = otherUser?.displayName ?? otherUser?.username ?? 'User';
     const handleMute = () => {
-        const room = getActiveRoom();
-        if (room) {
-            room.localParticipant.setMicrophoneEnabled(isMuted);
-        }
         toggleMic();
     };
     const handleDeafen = () => {
         const room = getActiveRoom();
+        const willDeafen = !isDeafened;
         if (room) {
-            const newDeafened = !isDeafened;
             room.remoteParticipants.forEach((p) => {
                 p.audioTrackPublications.forEach((pub) => {
                     if (pub.track) {
-                        pub.track.setVolume?.(newDeafened ? 0 : 1);
+                        pub.track.setVolume?.(willDeafen ? 0 : 1);
                     }
                 });
             });
-            if (newDeafened) {
-                room.localParticipant.setMicrophoneEnabled(false);
-            }
-            else if (!isMuted) {
-                room.localParticipant.setMicrophoneEnabled(true);
-            }
         }
         toggleDeafen();
+        if (willDeafen && !isMuted) toggleMic();
+        if (!willDeafen && isMuted) toggleMic();
     };
     const handleCamera = async () => {
         const room = getActiveRoom();

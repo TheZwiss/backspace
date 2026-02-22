@@ -56,25 +56,8 @@ export function VoiceControls() {
     }
   };
 
-  const handleNoiseSuppression = async () => {
-    const room = getActiveRoom();
-    if (room) {
-      try {
-        const micPub = room.localParticipant.getTrackPublications().find(
-          p => p.source === 'microphone'
-        );
-        const mediaTrack = micPub?.track?.mediaStreamTrack;
-        if (mediaTrack) {
-          await mediaTrack.applyConstraints({
-            noiseSuppression: !noiseSuppression,
-            echoCancellation: true,
-            autoGainControl: true,
-          });
-        }
-      } catch (err) {
-        console.error('[VoiceControls] Failed to toggle noise suppression:', err);
-      }
-    }
+  const handleNoiseSuppression = () => {
+    // Store toggle triggers syncMic → AudioManager re-acquires stream with correct constraints
     toggleNoiseSuppression();
   };
 

@@ -241,6 +241,9 @@ export function useLiveKit() {
   }, [updateParticipants]);
 
   // Handle Input Device & Mute Logic via AudioManager
+  // Mute uses setMicrophoneEnabled(false) to keep the track published (silence frames)
+  // instead of unpublishTrack() which tears down the WebRTC transport.
+  // This preserves the Web Audio pipeline for future AudioWorklet nodes (e.g. RNNoise).
   useEffect(() => {
     const r = roomRef.current;
     if (!r || !isConnected) return;
@@ -254,34 +257,37 @@ export function useLiveKit() {
         // Keep screen share state in sync (handles edge cases like remounts)
         audioManager.setScreenShareActive(isScreenSharing);
 
-        // If muted or deafened, unpublish mic
+        const micPub = r.localParticipant.getTrackPublications()
+          .find(p => p.source === Track.Source.Microphone);
+
+        // If muted or deafened, mute the track in-place (keep it published)
         if (isMuted || isDeafened) {
-          const pub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
-          if (pub) {
-            await r.localParticipant.unpublishTrack(pub.track as LocalAudioTrack);
+          if (micPub?.track && !micPub.isMuted) {
+            await r.localParticipant.setMicrophoneEnabled(false);
           }
           return;
         }
 
-        // Ensure device is set and volume is sync'd
+        // Not muted — ensure mic is published and live
         await audioManager.setInputDevice(inputDeviceId);
         audioManager.setInputVolume(inputVolume);
 
         const currentGen = audioManager.getStreamGeneration();
 
-        // Check if already published
-        const existingPub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
-
-        if (existingPub && existingPub.track) {
-          // If track is alive AND settings haven't changed, we are good.
-          if (existingPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
+        if (micPub?.track) {
+          // Track already published — check if it's still current
+          if (micPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
+            // Current and live — just unmute if needed
+            if (micPub.isMuted) {
+              await r.localParticipant.setMicrophoneEnabled(true);
+            }
             return;
           }
-          // Settings changed or track died — unpublish so we can republish
-          await r.localParticipant.unpublishTrack(existingPub.track as LocalAudioTrack);
+          // Track is stale (device or constraint change) — replace it
+          await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack);
         }
 
-        // Get a FRESH track (clone) for this specific publication
+        // Publish fresh track from AudioManager pipeline
         const audioTrack = audioManager.getFreshTrack();
         if (!audioTrack) return;
 

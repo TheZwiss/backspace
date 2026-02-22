@@ -189,6 +189,8 @@ export function useLiveKit() {
         catch { }
     }, [updateParticipants]);
     // Handle Input Device & Mute Logic via AudioManager
+    // Mute uses setMicrophoneEnabled(false) to keep the track published (silence frames)
+    // instead of unpublishTrack() which tears down the WebRTC transport.
     useEffect(() => {
         const r = roomRef.current;
         if (!r || !isConnected)
@@ -196,31 +198,34 @@ export function useLiveKit() {
         const syncMic = async () => {
             try {
                 const audioManager = AudioManager.getInstance();
-                // Sync voice processing settings to AudioManager
                 audioManager.setVoiceProcessing({ echoCancellation, noiseSuppression, autoGainControl });
-                // If muted or deafened, unpublish mic
+                audioManager.setScreenShareActive(isScreenSharing);
+                const micPub = r.localParticipant.getTrackPublications()
+                    .find(p => p.source === Track.Source.Microphone);
+                // If muted or deafened, mute the track in-place (keep it published)
                 if (isMuted || isDeafened) {
-                    const pub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
-                    if (pub) {
-                        await r.localParticipant.unpublishTrack(pub.track);
+                    if (micPub?.track && !micPub.isMuted) {
+                        await r.localParticipant.setMicrophoneEnabled(false);
                     }
                     return;
                 }
-                // Ensure device is set and volume is sync'd
+                // Not muted — ensure mic is published and live
                 await audioManager.setInputDevice(inputDeviceId);
                 audioManager.setInputVolume(inputVolume);
                 const currentGen = audioManager.getStreamGeneration();
-                // Check if already published
-                const existingPub = r.localParticipant.getTrackPublications().find(p => p.source === Track.Source.Microphone);
-                if (existingPub && existingPub.track) {
-                    // If track is alive AND settings haven't changed, we are good.
-                    if (existingPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
+                if (micPub?.track) {
+                    // Track already published — check if it's still current
+                    if (micPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
+                        // Current and live — just unmute if needed
+                        if (micPub.isMuted) {
+                            await r.localParticipant.setMicrophoneEnabled(true);
+                        }
                         return;
                     }
-                    // Settings changed or track died — unpublish so we can republish
-                    await r.localParticipant.unpublishTrack(existingPub.track);
+                    // Track is stale (device or constraint change) — replace it
+                    await r.localParticipant.unpublishTrack(micPub.track);
                 }
-                // Get a FRESH track (clone) for this specific publication
+                // Publish fresh track from AudioManager pipeline
                 const audioTrack = audioManager.getFreshTrack();
                 if (!audioTrack)
                     return;
@@ -236,14 +241,13 @@ export function useLiveKit() {
             }
         };
         syncMic();
-        // Re-sync when AudioManager resumes
         const unsubscribe = AudioManager.getInstance().onResumed(() => {
             syncMic();
         });
         return () => {
             unsubscribe();
         };
-    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl]);
+    }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, isScreenSharing]);
     const connect = useCallback(async (channelId) => {
         if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected)
             return;
