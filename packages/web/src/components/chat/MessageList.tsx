@@ -3,6 +3,7 @@ import { Message } from './Message';
 import { useChatStore } from '../../stores/chatStore';
 import { useServerStore, isDmChannel } from '../../stores/serverStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import type { MessageWithUser } from '@opencord/shared';
@@ -158,6 +159,8 @@ export function MessageList({ channelId }: MessageListProps) {
 function WelcomeHeader({ channelId }: { channelId: string }) {
   const dmChannels = useServerStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
+  const removeFriend = useSocialStore((s) => s.removeFriend);
+  const friends = useSocialStore((s) => s.friends);
   const isDm = isDmChannel(channelId);
 
   if (isDm) {
@@ -165,6 +168,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const otherUser = dm?.members.find(m => m.id !== authUser?.id);
     const displayName = otherUser?.displayName ?? otherUser?.username ?? 'Unknown';
     const username = otherUser?.username ?? 'unknown';
+    const isFriend = otherUser ? friends.some(f => f.id === otherUser.id) : false;
 
     return (
       <div className="px-4 pt-8 pb-4">
@@ -175,11 +179,16 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         <p className="text-discord-text-secondary text-[14px] mt-1">
           This is the beginning of your direct message history with <strong>@{username}</strong>.
         </p>
-        <div className="mt-4">
-          <button className="px-4 py-1.5 bg-discord-bg-accent hover:bg-discord-bg-surface-higher text-[14px] font-medium text-discord-text-primary rounded-[3px] transition-colors">
-            Remove Friend
-          </button>
-        </div>
+        {isFriend && otherUser && (
+          <div className="mt-4">
+            <button
+              onClick={() => removeFriend(otherUser.id)}
+              className="px-4 py-1.5 bg-discord-bg-accent hover:bg-discord-bg-surface-higher text-[14px] font-medium text-discord-text-primary rounded-[3px] transition-colors"
+            >
+              Remove Friend
+            </button>
+          </div>
+        )}
         <div className="mt-6 border-b border-discord-modifier-accent" />
       </div>
     );

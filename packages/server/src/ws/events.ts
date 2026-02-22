@@ -3,6 +3,7 @@ import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import { isMember, getChannelServerId, isDmMember } from '../utils/permissions.js';
+import { broadcastDmMessage } from '../routes/dm.js';
 import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -497,18 +498,8 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     user: sanitizeUser(user),
   };
 
-  // Send to all DM members
-  const dmMembers = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
-
-  for (const member of dmMembers) {
-    connectionManager.sendToUser(member.userId, {
-      type: 'dm_message_created',
-      message: dmMessage,
-    });
-  }
+  // Broadcast to all DM members (including those who closed the channel)
+  broadcastDmMessage(dmChannelId, dmMessage);
 }
 
 function handleDmTypingStart(event: Record<string, unknown>, userId: string, username: string): void {

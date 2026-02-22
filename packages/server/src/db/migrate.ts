@@ -35,6 +35,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'dm_message_id', type: 'TEXT' }
       ]
+    },
+    {
+      name: 'dm_members',
+      columns: [
+        { name: 'closed', type: 'INTEGER DEFAULT 0' }
+      ]
     }
   ];
 

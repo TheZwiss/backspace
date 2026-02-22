@@ -74,6 +74,7 @@ export const dmChannels = sqliteTable('dm_channels', {
 export const dmMembers = sqliteTable('dm_members', {
   dmChannelId: text('dm_channel_id').notNull().references(() => dmChannels.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  closed: integer('closed').default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.dmChannelId, table.userId] }),
 }));
