@@ -130,11 +130,10 @@ export const useVoiceStore = create()(persist((set, get) => ({
     noiseSuppression: true,
     echoCancellation: true,
     autoGainControl: false,
-    rnnoiseEnabled: false,
-    toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+    rnnoiseEnabled: true,
     setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
     setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
-    toggleRnnoise: () => set((state) => ({ rnnoiseEnabled: !state.rnnoiseEnabled })),
+    setRnnoiseEnabled: (enabled) => set({ rnnoiseEnabled: enabled }),
     deafenedUserIds: new Set(),
     setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -206,7 +205,7 @@ export const useVoiceStore = create()(persist((set, get) => ({
     }),
 }), {
     name: 'opencord-voice-settings',
-    version: 3,
+    version: 4,
     migrate: (persistedState, version) => {
         if (version === 0) {
             persistedState.streamAttenuationEnabled = false;
@@ -215,13 +214,16 @@ export const useVoiceStore = create()(persist((set, get) => ({
             persistedState.echoCancellation = true;
             persistedState.autoGainControl = false;
         }
-        if (version < 3) {
-            persistedState.rnnoiseEnabled = false;
+        if (version < 4) {
+            // v4: RNNoise on by default, browser NS is no longer user-configurable
+            persistedState.rnnoiseEnabled = true;
+            persistedState.noiseSuppression = true;
         }
         return persistedState;
     },
     storage: createJSONStorage(() => localStorage),
     // Only persist these keys. Maps and Sets are complex to serialize.
+    // noiseSuppression intentionally excluded — always true, managed by AudioManager.
     partialize: (state) => ({
         currentVoiceChannelId: state.currentVoiceChannelId,
         isMuted: state.isMuted,
@@ -231,7 +233,6 @@ export const useVoiceStore = create()(persist((set, get) => ({
         inputDeviceId: state.inputDeviceId,
         outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
-        noiseSuppression: state.noiseSuppression,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,

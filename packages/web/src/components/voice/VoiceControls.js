@@ -15,10 +15,8 @@ export function VoiceControls() {
     const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
     const toggleCamera = useVoiceStore((s) => s.toggleCamera);
     const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-    const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
-    const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
     const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
-    const toggleRnnoise = useVoiceStore((s) => s.toggleRnnoise);
+    const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
     const connectionError = useVoiceStore((s) => s.connectionError);
     const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
     const channels = useServerStore((s) => s.channels);
@@ -56,9 +54,6 @@ export function VoiceControls() {
             console.error('[VoiceControls] Failed to toggle screen share:', err);
         }
     };
-    const handleNoiseSuppression = () => {
-        toggleNoiseSuppression();
-    };
     const handleDisconnect = () => {
         wsSend({ type: 'voice_leave' });
         useVoiceStore.getState().leaveVoice();
@@ -81,9 +76,7 @@ export function VoiceControls() {
                             ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
                             : btnDefaultStyle}`, title: isScreenSharing ? 'Stop Sharing' : 'Share Screen', children: _jsxs("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", children: [_jsx("path", { d: "M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" }), _jsx("path", { d: "M15 11L11 14V12H9V10H11V8L15 11Z" })] }) }), _jsx("button", { onClick: () => setShowVideoQuality(!showVideoQuality), className: `${btnBase} ${showVideoQuality
                             ? 'bg-[#111214] text-discord-blurple hover:bg-[#1a1b1e]'
-                            : btnDefaultStyle}`, title: "Video Quality", children: _jsxs("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", children: [_jsx("path", { d: "M3 5v14h18V5H3zm16 12H5V7h14v10z" }), _jsx("path", { d: "M8 15l2.5-3.21L13 15l2-2.5L18 17H6z" })] }) }), _jsx("button", { onClick: handleNoiseSuppression, className: `${btnBase} ${noiseSuppression
-                            ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
-                            : btnDefaultStyle}`, title: noiseSuppression ? 'Disable Browser Noise Suppression' : 'Enable Browser Noise Suppression', children: _jsxs("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", children: [_jsx("path", { d: "M7 9v6h4l5 5V4l-5 5H7z" }), noiseSuppression ? (_jsxs(_Fragment, { children: [_jsx("path", { d: "M19 12c0-1.66-.68-3.16-1.76-4.24l-1.42 1.42C16.55 9.9 17 10.9 17 12c0 1.1-.45 2.1-1.18 2.82l1.42 1.42C18.32 15.16 19 13.66 19 12z" }), _jsx("path", { d: "M21 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42C18.2 7.9 19 9.85 19 12c0 2.15-.8 4.1-2.35 5.65l1.42 1.42C19.88 17.26 21 14.76 21 12z", opacity: "0.6" })] })) : (_jsx("line", { x1: "19", y1: "5", x2: "19", y2: "19", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", opacity: "0.4" }))] }) }), _jsx("button", { onClick: toggleRnnoise, className: `${btnBase} ${rnnoiseEnabled
+                            : btnDefaultStyle}`, title: "Video Quality", children: _jsxs("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", children: [_jsx("path", { d: "M3 5v14h18V5H3zm16 12H5V7h14v10z" }), _jsx("path", { d: "M8 15l2.5-3.21L13 15l2-2.5L18 17H6z" })] }) }), _jsx("button", { onClick: () => setRnnoiseEnabled(!rnnoiseEnabled), className: `${btnBase} ${rnnoiseEnabled
                             ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
                             : btnDefaultStyle}`, title: rnnoiseEnabled ? 'Disable AI Noise Suppression' : 'Enable AI Noise Suppression', children: _jsxs("svg", { width: "20", height: "20", viewBox: "0 0 24 24", fill: "currentColor", children: [_jsx("path", { d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z", opacity: rnnoiseEnabled ? 0.15 : 0.08 }), _jsx("path", { d: "M12 1a2 2 0 012 2v1a2 2 0 01-4 0V3a2 2 0 012-2z" }), _jsx("path", { d: "M12 7c-1.66 0-3 1.34-3 3v2c0 1.66 1.34 3 3 3s3-1.34 3-3v-2c0-1.66-1.34-3-3-3z" }), _jsx("path", { d: "M17 11v1c0 2.76-2.24 5-5 5s-5-2.24-5-5v-1H5v1c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92v-1h-2z" }), rnnoiseEnabled ? (_jsxs(_Fragment, { children: [_jsx("circle", { cx: "18", cy: "5", r: "1.2", fill: "currentColor" }), _jsx("circle", { cx: "20", cy: "8", r: "0.9", fill: "currentColor", opacity: "0.7" }), _jsx("circle", { cx: "6", cy: "5", r: "1.2", fill: "currentColor" }), _jsx("circle", { cx: "4", cy: "8", r: "0.9", fill: "currentColor", opacity: "0.7" })] })) : (_jsx("line", { x1: "4", y1: "4", x2: "20", y2: "20", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", opacity: "0.4" }))] }) }), _jsx(VideoQualityPopover, { open: showVideoQuality, onClose: () => setShowVideoQuality(false) })] })] }));
 }

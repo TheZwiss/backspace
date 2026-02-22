@@ -16,10 +16,8 @@ export function VoiceControls() {
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
-  const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
-  const toggleRnnoise = useVoiceStore((s) => s.toggleRnnoise);
+  const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const channels = useServerStore((s) => s.channels);
@@ -56,11 +54,6 @@ export function VoiceControls() {
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);
     }
-  };
-
-  const handleNoiseSuppression = () => {
-    // Store toggle triggers syncMic → AudioManager re-acquires stream with correct constraints
-    toggleNoiseSuppression();
   };
 
   const handleDisconnect = () => {
@@ -174,32 +167,9 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Browser Noise Suppression */}
-        <button
-          onClick={handleNoiseSuppression}
-          className={`${btnBase} ${
-            noiseSuppression
-              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
-              : btnDefaultStyle
-          }`}
-          title={noiseSuppression ? 'Disable Browser Noise Suppression' : 'Enable Browser Noise Suppression'}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M7 9v6h4l5 5V4l-5 5H7z" />
-            {noiseSuppression ? (
-              <>
-                <path d="M19 12c0-1.66-.68-3.16-1.76-4.24l-1.42 1.42C16.55 9.9 17 10.9 17 12c0 1.1-.45 2.1-1.18 2.82l1.42 1.42C18.32 15.16 19 13.66 19 12z" />
-                <path d="M21 12c0-2.76-1.12-5.26-2.93-7.07l-1.42 1.42C18.2 7.9 19 9.85 19 12c0 2.15-.8 4.1-2.35 5.65l1.42 1.42C19.88 17.26 21 14.76 21 12z" opacity="0.6" />
-              </>
-            ) : (
-              <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
-            )}
-          </svg>
-        </button>
-
         {/* AI Noise Suppression (RNNoise) */}
         <button
-          onClick={toggleRnnoise}
+          onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
           className={`${btnBase} ${
             rnnoiseEnabled
               ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'

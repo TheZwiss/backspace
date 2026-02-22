@@ -20,11 +20,11 @@ export function UserSettingsModal() {
   const [isLoading, setIsLoading] = useState(false);
 
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
-  const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
   const autoGainControl = useVoiceStore((s) => s.autoGainControl);
+  const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
   const setEchoCancellation = useVoiceStore((s) => s.setEchoCancellation);
-  const toggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const setAutoGainControl = useVoiceStore((s) => s.setAutoGainControl);
+  const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
 
   const isOpen = activeModal === 'userSettings';
 
@@ -126,9 +126,19 @@ export function UserSettingsModal() {
           <h3 className="text-xs font-bold text-discord-text-secondary uppercase mb-3">
             Voice Processing
           </h3>
-          <p className="text-xs text-discord-text-muted mb-3">
-            Echo Cancellation is automatically disabled while you screen share to prevent Chrome from ducking your mic volume.
-          </p>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-discord-text-primary">AI Noise Suppression</div>
+              <div className="text-xs text-discord-text-muted">ML-based noise removal (RNNoise) — filters keyboard, fans, and background noise</div>
+            </div>
+            <button
+              onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${rnnoiseEnabled ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${rnnoiseEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
 
           <div className="flex items-center justify-between py-2">
             <div>
@@ -140,19 +150,6 @@ export function UserSettingsModal() {
               className={`relative w-10 h-5 rounded-full transition-colors ${echoCancellation ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
             >
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${echoCancellation ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <div className="text-sm text-discord-text-primary">Noise Suppression</div>
-              <div className="text-xs text-discord-text-muted">Filters background noise from your mic</div>
-            </div>
-            <button
-              onClick={toggleNoiseSuppression}
-              className={`relative w-10 h-5 rounded-full transition-colors ${noiseSuppression ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
-            >
-              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${noiseSuppression ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
 

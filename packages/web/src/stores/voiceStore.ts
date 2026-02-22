@@ -65,10 +65,9 @@ interface VoiceState {
   echoCancellation: boolean;
   autoGainControl: boolean;
   rnnoiseEnabled: boolean;
-  toggleNoiseSuppression: () => void;
   setEchoCancellation: (enabled: boolean) => void;
   setAutoGainControl: (enabled: boolean) => void;
-  toggleRnnoise: () => void;
+  setRnnoiseEnabled: (enabled: boolean) => void;
   deafenedUserIds: Set<string>;
   setUserDeafened: (userId: string, deafened: boolean) => void;
   // WebSocket-based voice user status (visible without joining LiveKit)
@@ -226,11 +225,10 @@ export const useVoiceStore = create<VoiceState>()(
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: false,
-      rnnoiseEnabled: false,
-      toggleNoiseSuppression: () => set((state) => ({ noiseSuppression: !state.noiseSuppression })),
+      rnnoiseEnabled: true,
       setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
       setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
-      toggleRnnoise: () => set((state) => ({ rnnoiseEnabled: !state.rnnoiseEnabled })),
+      setRnnoiseEnabled: (enabled) => set({ rnnoiseEnabled: enabled }),
       deafenedUserIds: new Set(),
       setUserDeafened: (userId, deafened) => {
         set((state) => {
@@ -305,7 +303,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
-      version: 3,
+      version: 4,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -314,13 +312,18 @@ export const useVoiceStore = create<VoiceState>()(
           persistedState.echoCancellation = true;
           persistedState.autoGainControl = false;
         }
-        if (version < 3) {
-          persistedState.rnnoiseEnabled = false;
+        if (version < 4) {
+          // v4: RNNoise on by default, browser NS is no longer user-configurable
+          // (AudioManager uses it as automatic fallback when RNNoise is off)
+          persistedState.rnnoiseEnabled = true;
+          persistedState.noiseSuppression = true;
         }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
       // Only persist these keys. Maps and Sets are complex to serialize.
+      // noiseSuppression is intentionally excluded — always true internally,
+      // managed automatically by AudioManager based on RNNoise state.
       partialize: (state) => ({
         currentVoiceChannelId: state.currentVoiceChannelId,
         isMuted: state.isMuted,
@@ -330,7 +333,6 @@ export const useVoiceStore = create<VoiceState>()(
         inputDeviceId: state.inputDeviceId,
         outputDeviceId: state.outputDeviceId,
         videoQuality: state.videoQuality,
-        noiseSuppression: state.noiseSuppression,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,
