@@ -1,0 +1,535 @@
+import { useState, useEffect, useRef } from 'react';
+import { Track } from 'livekit-client';
+import { getActiveRoom } from './useLiveKit';
+
+// ── Types ──
+
+type TrackSource = 'microphone' | 'camera' | 'screen_share' | 'screen_share_audio' | 'unknown';
+type TrackDirection = 'send' | 'recv';
+
+export interface AudioTrackStat {
+  key: string;
+  direction: TrackDirection;
+  source: TrackSource;
+  participantName: string | null;
+  bitrate: number;
+  codec: string | null;
+  packetLoss: number | null;
+  jitter: number | null;
+}
+
+export interface VideoTrackStat {
+  key: string;
+  direction: TrackDirection;
+  source: TrackSource;
+  participantName: string | null;
+  bitrate: number;
+  codec: string | null;
+  width: number | null;
+  height: number | null;
+  fps: number | null;
+  qualityLimitation: string | null;
+  simulcastLayer: string | null;
+}
+
+export interface NetworkStats {
+  ping: number | null;
+  packetLoss: number | null;
+  jitter: number | null;
+  serverAddress: string | null;
+  protocol: string | null;
+  candidateType: string | null;
+}
+
+export interface TrackStatsSnapshot {
+  network: NetworkStats;
+  audioTracks: AudioTrackStat[];
+  videoTracks: VideoTrackStat[];
+}
+
+// ── Internal types ──
+
+interface TrackIdentity {
+  source: TrackSource;
+  direction: TrackDirection;
+  participantName: string | null;
+}
+
+interface PrevSample {
+  bytes: number;
+  frames: number;
+  timestamp: number;
+  packetsRecv: number;
+  packetsLost: number;
+}
+
+// ── Helpers ──
+
+function mapSource(lkSource: Track.Source): TrackSource {
+  switch (lkSource) {
+    case Track.Source.Microphone: return 'microphone';
+    case Track.Source.Camera: return 'camera';
+    case Track.Source.ScreenShare: return 'screen_share';
+    case Track.Source.ScreenShareAudio: return 'screen_share_audio';
+    default: return 'unknown';
+  }
+}
+
+function parseUsername(identity: string): string {
+  const parts = identity.split(':');
+  return parts[1] ?? identity;
+}
+
+/** Determine media kind from a WebRTC stats report (handles both spec and legacy fields). */
+function reportKind(report: any): 'audio' | 'video' | null {
+  const k = report.kind ?? report.mediaType;
+  if (k === 'audio' || k === 'video') return k;
+  return null;
+}
+
+/**
+ * Discover all unique RTCPeerConnections from the LiveKit Room engine.
+ * Different livekit-client versions expose the PC at different internal paths.
+ */
+function discoverPeerConnections(room: any): RTCPeerConnection[] {
+  const engine = room?.engine;
+  if (!engine) return [];
+
+  const pcs: RTCPeerConnection[] = [];
+  const seen = new WeakSet<object>();
+
+  const tryAdd = (val: any) => {
+    if (val && typeof val.getStats === 'function' && !seen.has(val)) {
+      seen.add(val);
+      pcs.push(val);
+    }
+  };
+
+  // Current livekit-client (1.x+): engine.pcManager.{publisher,subscriber}.pc
+  tryAdd(engine.pcManager?.publisher?.pc);
+  tryAdd(engine.pcManager?.subscriber?.pc);
+  // Private backing field fallback
+  tryAdd(engine.pcManager?.publisher?._pc);
+  tryAdd(engine.pcManager?.subscriber?._pc);
+  // Older livekit-client paths
+  tryAdd(engine.publisher?.pc);
+  tryAdd(engine.subscriber?.pc);
+  // Unified-plan single PC
+  tryAdd(engine.pc);
+  tryAdd(room.pc);
+
+  return pcs;
+}
+
+function inferSimulcastLayer(width: number | null): string | null {
+  if (width === null || width <= 0) return null;
+  if (width >= 1920) return 'High';
+  if (width >= 1280) return 'Medium';
+  return 'Low';
+}
+
+// ── Hook ──
+
+export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
+  const [snapshot, setSnapshot] = useState<TrackStatsSnapshot | null>(null);
+  const prevSampleRef = useRef<Map<string, PrevSample>>(new Map());
+
+  useEffect(() => {
+    if (!enabled) {
+      prevSampleRef.current.clear();
+      setSnapshot(null);
+      return;
+    }
+
+    const poll = async () => {
+      const room = getActiveRoom();
+      if (!room) {
+        setSnapshot(null);
+        return;
+      }
+
+      const pcs = discoverPeerConnections(room as any);
+      if (pcs.length === 0) {
+        setSnapshot(null);
+        return;
+      }
+
+      const prev = prevSampleRef.current;
+      const now = performance.now();
+
+      // ── Step A: Network stats + codec map from pc.getStats() ──
+      const network: NetworkStats = {
+        ping: null,
+        packetLoss: null,
+        jitter: null,
+        serverAddress: null,
+        protocol: null,
+        candidateType: null,
+      };
+
+      // Global codec map across all PCs
+      const globalCodecMap = new Map<string, string>();
+      let selectedCandidatePairRemoteId: string | null = null;
+
+      for (const pc of pcs) {
+        let reports: RTCStatsReport;
+        try {
+          reports = await pc.getStats();
+        } catch {
+          continue;
+        }
+
+        reports.forEach((report: any) => {
+          if (report.type === 'codec') {
+            globalCodecMap.set(report.id, report.mimeType?.split('/')[1] ?? report.mimeType ?? '');
+          }
+
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            if (report.currentRoundTripTime != null) {
+              network.ping = Math.round(report.currentRoundTripTime * 1000);
+            }
+            if (!network.serverAddress && report.remoteCandidateId) {
+              selectedCandidatePairRemoteId = report.remoteCandidateId;
+            }
+          }
+
+          if (report.type === 'remote-candidate' && !network.serverAddress) {
+            const addr = report.address || report.ip;
+            if (addr) {
+              network.serverAddress = addr;
+              network.protocol = report.protocol ?? null;
+              network.candidateType = report.candidateType ?? null;
+            }
+          }
+        });
+
+        // Safari fallback: look up remote candidate by ID
+        if (!network.serverAddress && selectedCandidatePairRemoteId) {
+          let reports2: RTCStatsReport;
+          try {
+            reports2 = await pc.getStats();
+          } catch {
+            continue;
+          }
+          const remoteCandidate = reports2.get(selectedCandidatePairRemoteId);
+          if (remoteCandidate) {
+            const addr = remoteCandidate.address || remoteCandidate.ip;
+            if (addr) {
+              network.serverAddress = addr;
+              network.protocol = remoteCandidate.protocol ?? null;
+              network.candidateType = remoteCandidate.candidateType ?? null;
+            }
+          }
+        }
+      }
+
+      // ── Step B: Build TrackIdentityMap ──
+      const identityMap = new Map<string, TrackIdentity>();
+
+      // Local tracks
+      for (const pub of room.localParticipant.trackPublications.values()) {
+        const mst = pub.track?.mediaStreamTrack;
+        if (mst) {
+          identityMap.set(mst.id, {
+            source: mapSource(pub.source),
+            direction: 'send',
+            participantName: null,
+          });
+        }
+      }
+
+      // Remote tracks
+      for (const [, rp] of room.remoteParticipants) {
+        const name = parseUsername(rp.identity);
+        for (const pub of rp.trackPublications.values()) {
+          const mst = pub.track?.mediaStreamTrack;
+          if (mst) {
+            identityMap.set(mst.id, {
+              source: mapSource(pub.source),
+              direction: 'recv',
+              participantName: name,
+            });
+          }
+        }
+      }
+
+      // ── Step C & D: Per-sender and per-receiver stats ──
+      const audioTracks: AudioTrackStat[] = [];
+      const videoTracks: VideoTrackStat[] = [];
+      let totalPacketsReceived = 0;
+      let totalPacketsLost = 0;
+      const seenKeys = new Set<string>();
+
+      for (const pc of pcs) {
+        // Process senders (outbound)
+        for (const sender of pc.getSenders()) {
+          if (!sender.track) continue;
+
+          const identity = identityMap.get(sender.track.id);
+          if (!identity) continue;
+
+          let senderStats: RTCStatsReport;
+          try {
+            senderStats = await sender.getStats();
+          } catch {
+            continue;
+          }
+
+          // Build per-sender codec map
+          const senderCodecMap = new Map<string, string>();
+          senderStats.forEach((report: any) => {
+            if (report.type === 'codec') {
+              senderCodecMap.set(report.id, report.mimeType?.split('/')[1] ?? report.mimeType ?? '');
+            }
+          });
+
+          senderStats.forEach((report: any) => {
+            if (report.type !== 'outbound-rtp') return;
+
+            const kind = reportKind(report);
+            if (!kind) return;
+
+            const ssrcKey = `out-${report.ssrc}`;
+            if (seenKeys.has(ssrcKey)) return;
+            seenKeys.add(ssrcKey);
+
+            const prevEntry = prev.get(ssrcKey);
+            const deltaMs = prevEntry ? now - prevEntry.timestamp : 0;
+            const deltaSeconds = deltaMs / 1000;
+
+            // Delta bitrate
+            let bitrate = 0;
+            if (prevEntry && deltaMs > 0) {
+              bitrate = ((report.bytesSent - prevEntry.bytes) * 8) / deltaMs; // kbps
+            }
+
+            // Codec: try sender-scoped first, then global fallback
+            let codec: string | null = null;
+            if (report.codecId) {
+              codec = senderCodecMap.get(report.codecId) ?? globalCodecMap.get(report.codecId) ?? null;
+            }
+
+            if (kind === 'audio') {
+              prev.set(ssrcKey, {
+                bytes: report.bytesSent,
+                frames: 0,
+                timestamp: now,
+                packetsRecv: 0,
+                packetsLost: 0,
+              });
+
+              if (bitrate > 0) {
+                audioTracks.push({
+                  key: ssrcKey,
+                  direction: 'send',
+                  source: identity.source,
+                  participantName: null,
+                  bitrate,
+                  codec,
+                  packetLoss: null,
+                  jitter: null,
+                });
+              }
+            }
+
+            if (kind === 'video') {
+              const framesEncoded = report.framesEncoded ?? 0;
+              const prevFrames = prevEntry?.frames ?? 0;
+              const deltaFrames = framesEncoded - prevFrames;
+              const fps = (prevEntry && deltaSeconds > 0) ? Math.round(deltaFrames / deltaSeconds) : null;
+
+              let width: number | null = report.frameWidth > 0 ? report.frameWidth : null;
+              let height: number | null = report.frameHeight > 0 ? report.frameHeight : null;
+
+              // Safari fallback: resolution from MediaStreamTrack.getSettings()
+              const senderTrack = sender.track;
+              if (width === null && senderTrack && senderTrack.readyState === 'live') {
+                const settings = senderTrack.getSettings();
+                if (settings.width && settings.height) {
+                  width = settings.width;
+                  height = settings.height;
+                }
+              }
+
+              prev.set(ssrcKey, {
+                bytes: report.bytesSent,
+                frames: framesEncoded,
+                timestamp: now,
+                packetsRecv: 0,
+                packetsLost: 0,
+              });
+
+              if (bitrate > 0 || (width !== null && height !== null)) {
+                videoTracks.push({
+                  key: ssrcKey,
+                  direction: 'send',
+                  source: identity.source,
+                  participantName: null,
+                  bitrate,
+                  codec,
+                  width,
+                  height,
+                  fps,
+                  qualityLimitation: report.qualityLimitationReason ?? null,
+                  simulcastLayer: null,
+                });
+              }
+            }
+          });
+        }
+
+        // Process receivers (inbound)
+        for (const receiver of pc.getReceivers()) {
+          if (!receiver.track) continue;
+
+          const identity = identityMap.get(receiver.track.id);
+          if (!identity) continue;
+
+          let receiverStats: RTCStatsReport;
+          try {
+            receiverStats = await receiver.getStats();
+          } catch {
+            continue;
+          }
+
+          // Build per-receiver codec map
+          const recvCodecMap = new Map<string, string>();
+          receiverStats.forEach((report: any) => {
+            if (report.type === 'codec') {
+              recvCodecMap.set(report.id, report.mimeType?.split('/')[1] ?? report.mimeType ?? '');
+            }
+          });
+
+          receiverStats.forEach((report: any) => {
+            if (report.type !== 'inbound-rtp') return;
+
+            const kind = reportKind(report);
+            if (!kind) return;
+
+            const ssrcKey = `in-${report.ssrc}`;
+            if (seenKeys.has(ssrcKey)) return;
+            seenKeys.add(ssrcKey);
+
+            const prevEntry = prev.get(ssrcKey);
+            const deltaMs = prevEntry ? now - prevEntry.timestamp : 0;
+            const deltaSeconds = deltaMs / 1000;
+
+            // Delta bitrate
+            let bitrate = 0;
+            if (prevEntry && deltaMs > 0) {
+              bitrate = ((report.bytesReceived - prevEntry.bytes) * 8) / deltaMs; // kbps
+            }
+
+            // Packet loss
+            const packetsRecv = report.packetsReceived ?? 0;
+            const packetsLost = report.packetsLost ?? 0;
+            totalPacketsReceived += packetsRecv;
+            totalPacketsLost += packetsLost;
+
+            let perTrackLoss: number | null = null;
+            if (prevEntry) {
+              const deltaRecv = packetsRecv - prevEntry.packetsRecv;
+              const deltaLost = packetsLost - prevEntry.packetsLost;
+              const deltaTotal = deltaRecv + deltaLost;
+              if (deltaTotal > 0) {
+                perTrackLoss = (deltaLost / deltaTotal) * 100;
+              }
+            }
+
+            // Jitter
+            const jitter = report.jitter != null ? Math.round(report.jitter * 1000) : null;
+
+            // Codec
+            let codec: string | null = null;
+            if (report.codecId) {
+              codec = recvCodecMap.get(report.codecId) ?? globalCodecMap.get(report.codecId) ?? null;
+            }
+
+            if (kind === 'audio') {
+              prev.set(ssrcKey, {
+                bytes: report.bytesReceived,
+                frames: 0,
+                timestamp: now,
+                packetsRecv: packetsRecv,
+                packetsLost: packetsLost,
+              });
+
+              // Set network jitter from first inbound audio
+              if (network.jitter === null && jitter !== null) {
+                network.jitter = jitter;
+              }
+
+              if (bitrate > 0) {
+                audioTracks.push({
+                  key: ssrcKey,
+                  direction: 'recv',
+                  source: identity.source,
+                  participantName: identity.participantName,
+                  bitrate,
+                  codec,
+                  packetLoss: perTrackLoss,
+                  jitter,
+                });
+              }
+            }
+
+            if (kind === 'video') {
+              const framesDecoded = report.framesDecoded ?? 0;
+              const prevFrames = prevEntry?.frames ?? 0;
+              const deltaFrames = framesDecoded - prevFrames;
+              const fps = (prevEntry && deltaSeconds > 0) ? Math.round(deltaFrames / deltaSeconds) : null;
+
+              const width: number | null = report.frameWidth > 0 ? report.frameWidth : null;
+              const height: number | null = report.frameHeight > 0 ? report.frameHeight : null;
+
+              prev.set(ssrcKey, {
+                bytes: report.bytesReceived,
+                frames: framesDecoded,
+                timestamp: now,
+                packetsRecv: packetsRecv,
+                packetsLost: packetsLost,
+              });
+
+              if (bitrate > 0 || (width !== null && height !== null)) {
+                videoTracks.push({
+                  key: ssrcKey,
+                  direction: 'recv',
+                  source: identity.source,
+                  participantName: identity.participantName,
+                  bitrate,
+                  codec,
+                  width,
+                  height,
+                  fps,
+                  qualityLimitation: null,
+                  simulcastLayer: inferSimulcastLayer(width),
+                });
+              }
+            }
+          });
+        }
+      }
+
+      // ── Step E: Aggregate packet loss ──
+      const totalPackets = totalPacketsReceived + totalPacketsLost;
+      if (totalPackets > 0) {
+        network.packetLoss = (totalPacketsLost / totalPackets) * 100;
+      }
+
+      // ── Step F: Cleanup stale prevSample entries ──
+      for (const key of prev.keys()) {
+        if (!seenKeys.has(key)) {
+          prev.delete(key);
+        }
+      }
+
+      setSnapshot({ network, audioTracks, videoTracks });
+    };
+
+    poll();
+    const interval = setInterval(poll, 1000);
+    return () => clearInterval(interval);
+  }, [enabled]);
+
+  return snapshot;
+}

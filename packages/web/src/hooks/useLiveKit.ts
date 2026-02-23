@@ -537,29 +537,6 @@ export function useLiveKit() {
   }, [room, videoQuality, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
-    if (!room) return;
-    const interval = setInterval(async () => {
-      try {
-        const engine = (room as any).engine;
-        const pc = engine?.pcManager?.publisher?.pc || engine?.publisher?.pc || engine?.pc || (room as any).pc;
-        if (!pc) return;
-        const stats = await (pc as RTCPeerConnection).getStats();
-        stats.forEach((report: any) => {
-          if (report.type === 'outbound-rtp' && report.kind === 'video' && report.frameWidth > 0) {
-            const fps = Math.round(report.framesPerSecond || 0);
-            const key = `_lastBytes_${report.ssrc}`;
-            const lastBytes = (window as any)[key] || report.bytesSent;
-            const bitrate = (((report.bytesSent - lastBytes) * 8) / 5000 / 1000).toFixed(2);
-            (window as any)[key] = report.bytesSent;
-            console.log(`[Soft-Launch Diagnostic] ${report.frameWidth}x${report.frameHeight} @ ${fps} FPS (~${bitrate} Mbps) | ${report.qualityLimitationReason}`);
-          }
-        });
-      } catch (err) { }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [room]);
-
-  useEffect(() => {
     return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
