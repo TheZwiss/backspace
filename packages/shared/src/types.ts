@@ -168,9 +168,9 @@ export interface DmMessage {
 
 export interface DmMessageWithUser extends DmMessage {
   user: User;
-  attachments?: Attachment[];
-  reactions?: Reaction[];
-  replyTo?: MessageWithUser | null;
+  attachments: Attachment[];
+  reactions: Reaction[];
+  replyTo?: DmMessageWithUser | null;
 }
 
 // ─── WebSocket Event Types ──────────────────────────────────────────────────
@@ -185,7 +185,7 @@ export type ClientEvent =
   | { type: 'presence_update'; status: 'online' | 'idle' | 'dnd' }
   | { type: 'voice_join'; channelId: string }
   | { type: 'voice_leave' }
-  | { type: 'dm_message_create'; dmChannelId: string; content: string; replyToId?: string }
+  | { type: 'dm_message_create'; dmChannelId: string; content?: string; attachments?: string[]; replyToId?: string }
   | { type: 'dm_typing_start'; dmChannelId: string }
   | { type: 'dm_message_edit'; messageId: string; content: string }
   | { type: 'dm_message_delete'; messageId: string }
@@ -319,7 +319,9 @@ export interface AddDmMemberRequest {
 }
 
 export interface CreateDmMessageRequest {
-  content: string;
+  content?: string;
+  attachments?: string[];
+  replyToId?: string;
 }
 
 export interface PaginatedQuery {

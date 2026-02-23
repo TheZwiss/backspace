@@ -14,6 +14,8 @@ import type {
   CreateDmMessageRequest,
   AddDmMemberRequest,
   PaginatedQuery,
+  Attachment,
+  Reaction,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -26,6 +28,121 @@ function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     customStatus: row.customStatus,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * Batch-fetch reactions for a set of DM message IDs.
+ * Returns a map from dmMessageId to Reaction[].
+ */
+export function fetchDmReactionsForMessages(dmMessageIds: string[]): Map<string, Reaction[]> {
+  if (dmMessageIds.length === 0) return new Map();
+  const db = getDb();
+  const reactionRows = db.select()
+    .from(schema.dmReactions)
+    .where(inArray(schema.dmReactions.dmMessageId, dmMessageIds))
+    .all();
+
+  // Batch fetch users for reactions
+  const reactionUserIds = [...new Set(reactionRows.map(r => r.userId))];
+  const reactionUsers = reactionUserIds.length > 0
+    ? db.select().from(schema.users).where(inArray(schema.users.id, reactionUserIds)).all()
+    : [];
+  const reactionUserMap = new Map(reactionUsers.map(u => [u.id, u]));
+
+  const map = new Map<string, Reaction[]>();
+  for (const r of reactionRows) {
+    const user = reactionUserMap.get(r.userId);
+    const reaction: Reaction = {
+      id: r.id,
+      messageId: r.dmMessageId,
+      userId: r.userId,
+      emoji: r.emoji,
+      createdAt: r.createdAt,
+      user: user ? sanitizeUser(user) : undefined,
+    };
+    if (!map.has(r.dmMessageId)) {
+      map.set(r.dmMessageId, []);
+    }
+    map.get(r.dmMessageId)!.push(reaction);
+  }
+  return map;
+}
+
+/**
+ * Pure transformer: builds a DmMessageWithUser from pre-fetched data.
+ */
+export function buildDmMessageWithUser(
+  message: typeof schema.dmMessages.$inferSelect,
+  user: typeof schema.users.$inferSelect,
+  attachmentRows: (typeof schema.attachments.$inferSelect)[],
+  reactions: Reaction[] = [],
+  replyTo: DmMessageWithUser | null = null,
+): DmMessageWithUser {
+  return {
+    id: message.id,
+    dmChannelId: message.dmChannelId,
+    userId: message.userId,
+    replyToId: message.replyToId,
+    content: message.content,
+    editedAt: message.editedAt,
+    createdAt: message.createdAt,
+    user: sanitizeUser(user),
+    attachments: attachmentRows.map(a => ({
+      id: a.id,
+      messageId: a.dmMessageId ?? message.id,
+      filename: a.filename,
+      originalName: a.originalName,
+      mimetype: a.mimetype,
+      size: a.size,
+      createdAt: a.createdAt,
+    })),
+    reactions,
+    replyTo,
+  };
+}
+
+/**
+ * Fetches a DM message by ID and hydrates it with user, attachments, reactions, and replyTo.
+ */
+export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | null {
+  const db = getDb();
+  const message = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, dmMessageId)).get();
+  if (!message) return null;
+
+  const user = db.select().from(schema.users).where(eq(schema.users.id, message.userId)).get();
+  if (!user) return null;
+
+  const attachmentRows = db.select()
+    .from(schema.attachments)
+    .where(eq(schema.attachments.dmMessageId, dmMessageId))
+    .all();
+
+  const reactionsMap = fetchDmReactionsForMessages([dmMessageId]);
+  const reactions = reactionsMap.get(dmMessageId) ?? [];
+
+  let replyTo: DmMessageWithUser | null = null;
+  if (message.replyToId) {
+    const replyMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, message.replyToId)).get();
+    if (replyMsg) {
+      const replyUser = db.select().from(schema.users).where(eq(schema.users.id, replyMsg.userId)).get();
+      if (replyUser) {
+        replyTo = {
+          id: replyMsg.id,
+          dmChannelId: replyMsg.dmChannelId,
+          userId: replyMsg.userId,
+          replyToId: replyMsg.replyToId,
+          content: replyMsg.content,
+          editedAt: replyMsg.editedAt,
+          createdAt: replyMsg.createdAt,
+          user: sanitizeUser(replyUser),
+          attachments: [],
+          reactions: [],
+        };
+      }
+    }
+  }
+
+  return buildDmMessageWithUser(message, user, attachmentRows, reactions, replyTo);
 }
 
 /**
@@ -590,18 +707,64 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const users = db.select().from(schema.users).where(inArray(schema.users.id, userIds)).all();
     const userMap = new Map(users.map(u => [u.id, u]));
 
+    // Batch fetch attachments by dmMessageId
+    const messageIds = messageRows.map(m => m.id);
+    const allAttachments = db.select()
+      .from(schema.attachments)
+      .where(inArray(schema.attachments.dmMessageId, messageIds))
+      .all();
+    const attachmentMap = new Map<string, (typeof schema.attachments.$inferSelect)[]>();
+    for (const att of allAttachments) {
+      const mid = att.dmMessageId ?? '';
+      if (!attachmentMap.has(mid)) attachmentMap.set(mid, []);
+      attachmentMap.get(mid)!.push(att);
+    }
+
+    // Batch fetch reactions
+    const reactionsMap = fetchDmReactionsForMessages(messageIds);
+
+    // Batch fetch reply-to messages
+    const replyToIds = messageRows
+      .map(m => m.replyToId)
+      .filter((id): id is string => id !== null && id !== undefined);
+    const uniqueReplyIds = [...new Set(replyToIds)];
+    const replyToMap = new Map<string, DmMessageWithUser>();
+    if (uniqueReplyIds.length > 0) {
+      const replyMessages = db.select()
+        .from(schema.dmMessages)
+        .where(inArray(schema.dmMessages.id, uniqueReplyIds))
+        .all();
+      const replyUserIds = [...new Set(replyMessages.map(m => m.userId))];
+      const replyUsers = replyUserIds.length > 0
+        ? db.select().from(schema.users).where(inArray(schema.users.id, replyUserIds)).all()
+        : [];
+      const replyUserMap = new Map(replyUsers.map(u => [u.id, u]));
+
+      for (const rm of replyMessages) {
+        const rUser = replyUserMap.get(rm.userId);
+        if (!rUser) continue;
+        replyToMap.set(rm.id, {
+          id: rm.id,
+          dmChannelId: rm.dmChannelId,
+          userId: rm.userId,
+          replyToId: rm.replyToId,
+          content: rm.content,
+          editedAt: rm.editedAt,
+          createdAt: rm.createdAt,
+          user: sanitizeUser(rUser),
+          attachments: [],
+          reactions: [],
+        });
+      }
+    }
+
     const messages: DmMessageWithUser[] = messageRows
       .map(m => {
         const user = userMap.get(m.userId);
         if (!user) return null;
-        return {
-          id: m.id,
-          dmChannelId: m.dmChannelId,
-          userId: m.userId,
-          content: m.content,
-          createdAt: m.createdAt,
-          user: sanitizeUser(user),
-        };
+        const reactions = reactionsMap.get(m.id) ?? [];
+        const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
+        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
       })
       .filter((m): m is DmMessageWithUser => m !== null);
 
@@ -613,14 +776,15 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { content } = request.body;
+    const { content, attachments: attachmentIds, replyToId } = request.body;
 
     if (!isDmMember(id, request.userId)) {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
     }
 
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
-      return reply.code(400).send({ error: 'Message content is required', statusCode: 400 });
+    if ((!content || typeof content !== 'string' || content.trim().length === 0) &&
+        (!attachmentIds || attachmentIds.length === 0)) {
+      return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
     }
 
     const db = getDb();
@@ -631,23 +795,25 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       id: messageId,
       dmChannelId: id,
       userId: request.userId,
-      content: content.trim(),
+      replyToId: replyToId || null,
+      content: content?.trim() || null,
       createdAt: now,
     }).run();
 
-    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!user) {
-      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+    // Link attachments to this DM message
+    if (attachmentIds && attachmentIds.length > 0) {
+      for (const attId of attachmentIds) {
+        db.update(schema.attachments)
+          .set({ dmMessageId: messageId })
+          .where(eq(schema.attachments.id, attId))
+          .run();
+      }
     }
 
-    const message: DmMessageWithUser = {
-      id: messageId,
-      dmChannelId: id,
-      userId: request.userId,
-      content: content.trim(),
-      createdAt: now,
-      user: sanitizeUser(user),
-    };
+    const message = getDmMessageWithUser(messageId);
+    if (!message) {
+      return reply.code(500).send({ error: 'Failed to create message', statusCode: 500 });
+    }
 
     // Broadcast to all DM members (including those who closed the channel)
     broadcastDmMessage(id, message);
@@ -683,20 +849,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.dmMessages.id, id))
       .run();
 
-    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!user) {
-      return reply.code(500).send({ error: 'User not found', statusCode: 500 });
+    const updated = getDmMessageWithUser(id);
+    if (!updated) {
+      return reply.code(500).send({ error: 'Failed to update message', statusCode: 500 });
     }
-
-    const updated: DmMessageWithUser = {
-      id: msg.id,
-      dmChannelId: msg.dmChannelId,
-      userId: msg.userId,
-      content: content.trim(),
-      editedAt: now,
-      createdAt: msg.createdAt,
-      user: sanitizeUser(user),
-    };
 
     // Broadcast to all DM members
     const dmMembers = db.select()

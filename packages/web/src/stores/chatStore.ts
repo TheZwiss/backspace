@@ -166,7 +166,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       if (isDm) {
-        await api.dm.sendMessage(channelId, { content });
+        await api.dm.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       } else {
         await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       }

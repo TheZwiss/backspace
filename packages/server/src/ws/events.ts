@@ -4,7 +4,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
 import { isMember, getChannelServerId, isDmMember } from '../utils/permissions.js';
-import { broadcastDmMessage } from '../routes/dm.js';
+import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -523,15 +523,20 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
 
 function handleDmMessageCreate(event: Record<string, unknown>, userId: string): void {
   const dmChannelId = event.dmChannelId as string;
-  const content = event.content as string;
+  const content = event.content as string | undefined;
+  const attachmentIds = event.attachments as string[] | undefined;
+  const replyToId = event.replyToId as string | undefined;
 
   if (!dmChannelId || typeof dmChannelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
     return;
   }
 
-  if (!content || typeof content !== 'string' || content.trim().length === 0) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'content is required' });
+  const hasContent = content && typeof content === 'string' && content.trim().length > 0;
+  const hasAttachments = attachmentIds && Array.isArray(attachmentIds) && attachmentIds.length > 0;
+
+  if (!hasContent && !hasAttachments) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Message must have content or attachments' });
     return;
   }
 
@@ -548,21 +553,23 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     id: messageId,
     dmChannelId,
     userId,
-    content: content.trim(),
+    replyToId: replyToId || null,
+    content: hasContent ? content.trim() : null,
     createdAt: now,
   }).run();
 
-  const user = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-  if (!user) return;
+  // Link attachments to this DM message
+  if (hasAttachments) {
+    for (const attId of attachmentIds) {
+      db.update(schema.attachments)
+        .set({ dmMessageId: messageId })
+        .where(eq(schema.attachments.id, attId))
+        .run();
+    }
+  }
 
-  const dmMessage: DmMessageWithUser = {
-    id: messageId,
-    dmChannelId,
-    userId,
-    content: content.trim(),
-    createdAt: now,
-    user: sanitizeUser(user),
-  };
+  const dmMessage = getDmMessageWithUser(messageId);
+  if (!dmMessage) return;
 
   // Broadcast to all DM members (including those who closed the channel)
   broadcastDmMessage(dmChannelId, dmMessage);
@@ -637,18 +644,8 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     .where(eq(schema.dmMessages.id, messageId))
     .run();
 
-  const user = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-  if (!user) return;
-
-  const updated: DmMessageWithUser = {
-    id: msg.id,
-    dmChannelId: msg.dmChannelId,
-    userId: msg.userId,
-    content: content.trim(),
-    editedAt: now,
-    createdAt: msg.createdAt,
-    user: sanitizeUser(user),
-  };
+  const updated = getDmMessageWithUser(messageId);
+  if (!updated) return;
 
   const dmMembers = db.select()
     .from(schema.dmMembers)
