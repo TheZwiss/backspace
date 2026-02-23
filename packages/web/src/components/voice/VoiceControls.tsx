@@ -3,9 +3,9 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useServerStore } from '../../stores/serverStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
-import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
+import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -16,7 +16,6 @@ export function VoiceControls() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
-  const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const connectionError = useVoiceStore((s) => s.connectionError);
@@ -47,13 +46,10 @@ export function VoiceControls() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
-        AudioManager.getInstance().setScreenShareActive(true);
-        await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+        await startScreenShare(room);
       } else {
-        await room.localParticipant.setScreenShareEnabled(false);
-        AudioManager.getInstance().setScreenShareActive(false);
+        await stopScreenShare(room);
       }
-      toggleScreenShare();
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);
     }

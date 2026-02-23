@@ -2,8 +2,8 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
-import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
+import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
 
 interface StreamTileProps {
@@ -107,22 +107,14 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const handleStopStreaming = useCallback(async () => {
     const room = getActiveRoom();
     if (room) {
-      await room.localParticipant.setScreenShareEnabled(false);
-      AudioManager.getInstance().setScreenShareActive(false);
-      useVoiceStore.getState().toggleScreenShare();
+      await stopScreenShare(room);
     }
   }, []);
 
   const handleChangeStream = useCallback(async () => {
     const room = getActiveRoom();
     if (room) {
-      await room.localParticipant.setScreenShareEnabled(false);
-      // Small delay then re-start to re-trigger the source picker
-      setTimeout(async () => {
-        await room.localParticipant.setScreenShareEnabled(true, {
-          audio: true,
-        });
-      }, 200);
+      await changeScreenShare(room);
     }
   }, []);
 

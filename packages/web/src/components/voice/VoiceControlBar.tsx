@@ -3,18 +3,8 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
-import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
-import { VideoPresets, VideoPreset } from 'livekit-client';
-
-const QUALITY_MAP: Record<string, any> = {
-  '1080p60': new VideoPreset(1920, 1080, 15_000_000, 60),
-  '1080p': new VideoPreset(1920, 1080, 8_000_000, 30),
-  '720p60': new VideoPreset(1280, 720, 8_000_000, 60),
-  '720p': new VideoPreset(1280, 720, 5_000_000, 30),
-  '540p': new VideoPreset(960, 540, 2_000_000, 30),
-  '360p': new VideoPreset(640, 360, 1_000_000, 30),
-};
+import { SCREEN_QUALITY_MAP, startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-[#1e1f22] text-discord-text-secondary hover:bg-[#2b2d31] hover:text-discord-text-primary`;
@@ -29,7 +19,6 @@ export function VoiceControlBar() {
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
-  const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
@@ -72,7 +61,7 @@ export function VoiceControlBar() {
       const willEnable = !isCameraOn;
       if (willEnable) {
         const videoQuality = useVoiceStore.getState().videoQuality;
-        const preset = QUALITY_MAP[videoQuality];
+        const preset = SCREEN_QUALITY_MAP[videoQuality];
         if (preset) {
           await room.localParticipant.setCameraEnabled(true,
             { resolution: preset.resolution },
@@ -98,13 +87,10 @@ export function VoiceControlBar() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
-        AudioManager.getInstance().setScreenShareActive(true);
-        await room.localParticipant.setScreenShareEnabled(true, { audio: true });
+        await startScreenShare(room);
       } else {
-        await room.localParticipant.setScreenShareEnabled(false);
-        AudioManager.getInstance().setScreenShareActive(false);
+        await stopScreenShare(room);
       }
-      toggleScreenShare();
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle screen share:', err);
     }

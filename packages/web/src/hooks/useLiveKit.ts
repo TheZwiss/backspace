@@ -18,21 +18,14 @@ import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
-
-/**
- * OPENCORD NATIVE OVERDRIVE PIPELINE v33
- */
-
-const QUALITY_MAP: Record<string, VideoPreset> = {
-  '1080p60': new VideoPreset(1920, 1080, 12_000_000, 60),
-  '1080p': new VideoPreset(1920, 1080, 8_000_000, 30),
-  '720p60': new VideoPreset(1280, 720, 8_000_000, 60),
-  '720p': new VideoPreset(1280, 720, 4_000_000, 30),
-  '540p': new VideoPreset(960, 540, 2_000_000, 30),
-  '360p': new VideoPreset(640, 360, 1_000_000, 30),
-};
-
-const AUTO_PRESET = QUALITY_MAP['720p60']!;
+import {
+  SCREEN_QUALITY_MAP,
+  AUTO_PRESET,
+  applyOverdrive,
+  startScreenShare,
+  stopScreenShare,
+  handleScreenShareUnpublished,
+} from '../utils/screenShare';
 
 let _activeRoom: Room | null = null;
 
@@ -114,31 +107,6 @@ function parseIdentity(identity: string): { userId: string; username: string } {
 
 let _connectGeneration = 0;
 
-async function applyOverdriveHammer(room: Room, source: Track.Source, preset: VideoPreset) {
-  try {
-    const pub = room.localParticipant.getTrackPublications().find(p => p.source === source);
-    if (!pub?.track) return;
-
-    const engine = (room as any).engine;
-    const pc = engine?.pcManager?.publisher?.pc || engine?.publisher?.pc || engine?.pc;
-    if (pc) {
-      const senders = (pc as RTCPeerConnection).getSenders();
-      const sender = senders.find(s => s.track?.id === (pub.track as any).mediaStreamTrack?.id);
-      if (sender) {
-        const params = sender.getParameters();
-        if (params.encodings && params.encodings[0]) {
-          params.encodings[0].maxBitrate = preset.encoding.maxBitrate;
-          (params.encodings[0] as any).minBitrate = 2_000_000;
-          params.encodings[0].maxFramerate = preset.encoding.maxFramerate;
-          params.encodings[0].networkPriority = 'high';
-          // @ts-ignore
-          params.degradationPreference = 'maintain-framerate';
-          await sender.setParameters(params);
-        }
-      }
-    }
-  } catch (err) {}
-}
 
 export function useLiveKit() {
   const [room, setRoom] = useState<Room | null>(null);
@@ -357,11 +325,10 @@ export function useLiveKit() {
     try {
       const { token, url } = await api.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
-      const newRoom = new Room({ adaptiveStream: false, dynacast: false, publishDefaults: { videoCodec: 'h264', simulcast: false } });
+      const newRoom = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: false } });
       roomRef.current = newRoom;
-      
+
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
-      // ... existing event listeners ...
       newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
         guardedUpdate();
         if (useVoiceStore.getState().isDeafened) {
@@ -399,6 +366,8 @@ export function useLiveKit() {
         if (publication.source === Track.Source.ScreenShare) {
           const { userId } = parseIdentity(newRoom.localParticipant.identity);
           useVoiceStore.getState().unwatchStream(userId);
+          // OS-level "Stop sharing" fires this without going through stopScreenShare
+          handleScreenShareUnpublished();
         }
         guardedUpdate();
       });
@@ -530,7 +499,7 @@ export function useLiveKit() {
     try {
       const { token, url } = await api.livekit.dmToken(dmChannelId);
       if (gen !== _connectGeneration) return;
-      const newRoom = new Room({ adaptiveStream: false, dynacast: false, publishDefaults: { videoCodec: 'h264', simulcast: false } });
+      const newRoom = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: false } });
       roomRef.current = newRoom;
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
       newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
@@ -558,6 +527,8 @@ export function useLiveKit() {
         if (publication.source === Track.Source.ScreenShare) {
           const { userId } = parseIdentity(newRoom.localParticipant.identity);
           useVoiceStore.getState().unwatchStream(userId);
+          // OS-level "Stop sharing" fires this without going through stopScreenShare
+          handleScreenShareUnpublished();
         }
         guardedUpdate();
       });
@@ -664,55 +635,23 @@ export function useLiveKit() {
   const toggleCamera = useCallback(async () => {
     if (roomRef.current) {
       if (!isCameraOn) {
-        const preset = QUALITY_MAP[videoQuality] || VideoPresets.h720;
+        const preset = SCREEN_QUALITY_MAP[videoQuality] || VideoPresets.h720;
         await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: preset.resolution, frameRate: preset.encoding.maxFramerate }, { videoCodec: 'h264', videoEncoding: preset.encoding, simulcast: false });
-        setTimeout(() => { if (roomRef.current) applyOverdriveHammer(roomRef.current, Track.Source.Camera, preset); }, 2000);
+        setTimeout(() => { if (roomRef.current) applyOverdrive(roomRef.current, Track.Source.Camera, preset); }, 2000);
       } else { await roomRef.current.localParticipant.setCameraEnabled(false); }
       updateParticipants();
     }
   }, [isCameraOn, videoQuality, updateParticipants]);
 
   const toggleScreenShare = useCallback(async () => {
-    if (roomRef.current) {
-      if (!isScreenSharing) {
-        // Notify AudioManager BEFORE enabling screen share so the mic track
-        // gets republished with AEC off, preventing Chrome's ducking.
-        AudioManager.getInstance().setScreenShareActive(true);
-
-        const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
-        const track = await roomRef.current.localParticipant.setScreenShareEnabled(true, {
-          audio: true,
-          resolution: VideoPresets.h360.resolution,
-          // @ts-ignore
-          frameRate: 30,
-        }, {
-          videoCodec: 'h264', videoEncoding: VideoPresets.h360.encoding, simulcast: false, priority: 'very-high'
-        } as any);
-
-        if (track) {
-          setTimeout(async () => {
-            if (roomRef.current && isScreenSharing) {
-              const screenPub = roomRef.current.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
-              if (screenPub?.track?.mediaStreamTrack) {
-                 await screenPub.track.mediaStreamTrack.applyConstraints({
-                   width: { ideal: preset.resolution.width },
-                   height: { ideal: preset.resolution.height },
-                   frameRate: { ideal: preset.encoding.maxFramerate, min: 30 }
-                 });
-                 await applyOverdriveHammer(roomRef.current, Track.Source.ScreenShare, preset);
-              }
-            }
-          }, 2000);
-          setTimeout(() => applyOverdriveHammer(roomRef.current!, Track.Source.ScreenShare, preset), 5000);
-        }
-      } else {
-        await roomRef.current.localParticipant.setScreenShareEnabled(false);
-        // Restore user's AEC preference after screen share ends
-        AudioManager.getInstance().setScreenShareActive(false);
-      }
-      updateParticipants();
+    if (!roomRef.current) return;
+    if (!useVoiceStore.getState().isScreenSharing) {
+      await startScreenShare(roomRef.current);
+    } else {
+      await stopScreenShare(roomRef.current);
     }
-  }, [isScreenSharing, videoQuality, updateParticipants]);
+    updateParticipants();
+  }, [updateParticipants]);
 
   useEffect(() => {
     updateParticipants();
@@ -720,7 +659,7 @@ export function useLiveKit() {
 
   useEffect(() => {
     if (!room) return;
-    const preset = QUALITY_MAP[videoQuality] || AUTO_PRESET;
+    const preset = SCREEN_QUALITY_MAP[videoQuality] || AUTO_PRESET;
     const updateActiveTracks = async () => {
       if (isScreenSharing) {
         const screenPub = room.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
@@ -729,10 +668,10 @@ export function useLiveKit() {
           if (mediaTrack) {
             await mediaTrack.applyConstraints({ width: { ideal: preset.resolution.width }, height: { ideal: preset.resolution.height }, frameRate: { ideal: preset.encoding.maxFramerate } });
           }
-          await applyOverdriveHammer(room, Track.Source.ScreenShare, preset);
+          await applyOverdrive(room, Track.Source.ScreenShare, preset);
         }
       }
-      if (isCameraOn) { await applyOverdriveHammer(room, Track.Source.Camera, preset); }
+      if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, preset); }
     };
     updateActiveTracks().catch(() => {});
   }, [room, videoQuality, isScreenSharing, isCameraOn]);
