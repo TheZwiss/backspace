@@ -13,6 +13,7 @@ export function SoundController() {
   // Refs to track previous states
   const isInitialMount = useRef(true);
   const prevIsWsConnected = useRef<boolean>(false);
+  const wsDisconnectedAt = useRef<number>(0);
   const prevIsMuted = useRef<boolean>(useVoiceStore.getState().isMuted);
   const prevIsDeafened = useRef<boolean>(useVoiceStore.getState().isDeafened);
   const prevIsCameraOn = useRef<boolean>(useVoiceStore.getState().isCameraOn);
@@ -24,12 +25,17 @@ export function SoundController() {
   const incomingCallLoop = useRef<AudioBufferSourceNode | null>(null);
   const outgoingCallLoop = useRef<AudioBufferSourceNode | null>(null);
 
-  // WebSocket Reconnect Sound — suppress during active voice (LiveKit handles its own reconnection)
+  // WebSocket Reconnect Sound — suppress during active voice and brief blips (<3s)
   useEffect(() => {
     if (isInitialMount.current) return;
+    if (!isWsConnected && prevIsWsConnected.current) {
+      // Record when we lost connection
+      wsDisconnectedAt.current = Date.now();
+    }
     if (isWsConnected && !prevIsWsConnected.current) {
       const isInActiveVoice = useVoiceStore.getState().isLiveKitConnected;
-      if (!isInActiveVoice) {
+      const downtime = wsDisconnectedAt.current > 0 ? Date.now() - wsDisconnectedAt.current : Infinity;
+      if (!isInActiveVoice && downtime > 3000) {
         audioManager.playSound('reconnect');
       }
     }

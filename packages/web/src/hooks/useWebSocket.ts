@@ -9,6 +9,7 @@ import type { ServerEvent, ClientEvent } from '@opencord/shared';
 let globalWs: WebSocket | null = null;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
 let currentToken: string | null = null;
 let isInitialized = false;
 
@@ -280,6 +281,10 @@ function handleEvent(event: ServerEvent): void {
       break;
     }
 
+    case 'pong':
+      // Heartbeat response — no action needed
+      break;
+
     case 'error':
       console.error('WebSocket error:', event.message);
       break;
@@ -300,6 +305,14 @@ function connect(): void {
   ws.onopen = () => {
     reconnectAttempts = 0;
     ws.send(JSON.stringify({ type: 'auth', token: currentToken }));
+
+    // Start heartbeat to keep connection alive through proxies/NATs
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 30_000);
   };
 
   ws.onmessage = (e) => {
@@ -313,6 +326,10 @@ function connect(): void {
 
   ws.onclose = () => {
     globalWs = null;
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = undefined;
+    }
     if (currentToken) {
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
       reconnectAttempts++;
@@ -331,6 +348,10 @@ function disconnect(): void {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = undefined;
   }
   if (globalWs) {
     globalWs.close();

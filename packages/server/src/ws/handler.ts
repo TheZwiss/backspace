@@ -604,6 +604,12 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
         return;
       }
 
+      // Fast-path heartbeat — never reaches business logic
+      if (parsed.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+
       // Handle authenticated events
       if (userId && username) {
         handleClientEvent(parsed, userId, username);

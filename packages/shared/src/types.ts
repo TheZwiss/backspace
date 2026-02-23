@@ -186,7 +186,8 @@ export type ClientEvent =
   | { type: 'dm_call_accept'; dmChannelId: string }
   | { type: 'dm_call_reject'; dmChannelId: string }
   | { type: 'dm_call_end'; dmChannelId: string }
-  | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean };
+  | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean }
+  | { type: 'ping' };
 
 // Server → Client Events
 export type ServerEvent =
@@ -220,6 +221,7 @@ export type ServerEvent =
   | { type: 'channel_updated'; channel: Channel; serverId: string }
   | { type: 'channel_deleted'; channelId: string; serverId: string }
   | { type: 'server_updated'; server: Server }
+  | { type: 'pong' }
   | { type: 'error'; message: string };
 
 // ─── API Request/Response Types ─────────────────────────────────────────────
