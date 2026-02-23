@@ -21,8 +21,8 @@ export const AUTO_PRESET = SCREEN_QUALITY_MAP['720p60']!;
  * Apply overdrive hammer to a published track — forces bitrate/resolution/framerate
  * directly on the RTCRtpSender, bypassing LiveKit's conservative defaults.
  *
- * Screen share: uses 'maintain-resolution' (text/code readability matters more than fps)
- * Camera: uses 'maintain-framerate' (smooth motion matters more than sharpness)
+ * Screen share: uses 'maintain-framerate' (gaming: hold 60fps, allow temporary quality drops)
+ * Camera: uses 'maintain-framerate' (smooth face motion matters more than sharpness)
  */
 export async function applyOverdrive(
   room: Room,
@@ -50,7 +50,7 @@ export async function applyOverdrive(
 
     const isScreenShare = source === Track.Source.ScreenShare;
     if (isScreenShare) {
-      (params as any).degradationPreference = 'maintain-resolution';
+      (params as any).degradationPreference = 'maintain-framerate';
       (params.encodings[0] as any).minBitrate = 2_000_000;
     } else {
       (params as any).degradationPreference = 'maintain-framerate';
@@ -90,6 +90,14 @@ export async function startScreenShare(room: Room): Promise<boolean> {
       // User cancelled the screen picker
       AudioManager.getInstance().setScreenShareActive(false);
       return false;
+    }
+
+    // Tell the encoder to optimize for motion (more P-frames, fewer I-frames)
+    // Must be set BEFORE the overdrive timer so the encoder knows from frame 1
+    const screenPub = room.localParticipant.getTrackPublications()
+      .find(p => p.source === Track.Source.ScreenShare);
+    if (screenPub?.track?.mediaStreamTrack) {
+      screenPub.track.mediaStreamTrack.contentHint = 'motion';
     }
 
     // Update store — screen share is now active
