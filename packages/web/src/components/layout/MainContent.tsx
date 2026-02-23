@@ -112,6 +112,9 @@ export function MainContent() {
 
           <div className="flex-1 flex overflow-hidden pb-20">
             <VoiceGrid participants={participants} />
+            {voiceChatOpen && !voiceFullscreen && (
+              <VoiceChatPanel channelId={currentChannelId} channelName={`@${dmName}`} />
+            )}
           </div>
 
           <VoiceControlBar />

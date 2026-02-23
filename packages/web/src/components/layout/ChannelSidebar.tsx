@@ -24,6 +24,7 @@ export function ChannelSidebar() {
   const user = useAuthStore((s) => s.user);
   const members = useServerStore((s) => s.members);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const setCurrentVoiceChannel = useVoiceStore((s) => s.setCurrentVoiceChannel);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
@@ -97,9 +98,9 @@ export function ChannelSidebar() {
     <div className="fixed bottom-2 left-2 z-30 w-[296px]">
       <div className="bg-[#1a1b1e] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] ring-1 ring-white/[0.06]">
         {/* Voice controls (expands when connected) */}
-        {currentVoiceChannelId && <VoiceControls />}
+        {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
         {/* Separator between voice and user area */}
-        {currentVoiceChannelId && <div className="mx-3 border-t border-white/[0.06]" />}
+        {(currentVoiceChannelId || activeDmCall) && <div className="mx-3 border-t border-white/[0.06]" />}
         {/* User area (always visible) */}
         <UserAreaPanel
           user={user}
