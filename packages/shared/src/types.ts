@@ -135,6 +135,16 @@ export interface Attachment {
   createdAt: number;
 }
 
+// ─── Active Call Types ───────────────────────────────────────────────────────
+
+export interface ActiveCallInfo {
+  dmChannelId: string;
+  callerId: string;
+  participants: string[];
+  startedAt: number;
+  state: 'ringing' | 'active';
+}
+
 // ─── DM Types ───────────────────────────────────────────────────────────────
 
 export interface DmChannel {
@@ -191,7 +201,7 @@ export type ClientEvent =
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[] }
+  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[] }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }

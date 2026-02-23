@@ -13,6 +13,7 @@ import type {
   ServerEvent,
   ServerFolder,
   ReadState,
+  ActiveCallInfo,
 } from '@opencord/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
@@ -33,21 +34,46 @@ export interface AuthenticatedSocket {
   username: string;
 }
 
+// ─── VoiceRoom Abstraction ─────────────────────────────────────────────────
+
+export interface ServerRoomMeta {
+  type: 'server';
+  serverId: string;
+}
+
+export interface DmRoomMeta {
+  type: 'dm';
+  callerId: string;
+  state: 'ringing' | 'active';
+}
+
+export interface VoiceRoom {
+  roomId: string;
+  roomType: 'server' | 'dm';
+  participants: Set<string>;
+  metadata: ServerRoomMeta | DmRoomMeta;
+  startedAt: number;
+}
+
+// ─── ConnectionManager ─────────────────────────────────────────────────────
+
 class ConnectionManager {
   // userId → Set of WebSocket connections (multiple tabs)
   private connections: Map<string, Set<WebSocket>> = new Map();
   // userId → Set of server IDs the user belongs to
   private userServers: Map<string, Set<string>> = new Map();
-  // channelId → Set of userIds in voice channel
-  private voiceStates: Map<string, Set<string>> = new Map();
   // ws → userId (reverse lookup)
   private wsToUser: Map<WebSocket, string> = new Map();
-  // dmChannelId → { callerId, startedAt } — active DM calls
-  private activeCalls: Map<string, { callerId: string; startedAt: number }> = new Map();
+  // Unified voice room tracking (replaces voiceStates + activeCalls)
+  private voiceRooms: Map<string, VoiceRoom> = new Map();
+  // O(1) reverse index: userId → roomId
+  private userToRoom: Map<string, string> = new Map();
   // userId → { isMuted, isDeafened, isCameraOn, isScreenSharing } — voice user status
   private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = new Map();
   // userId → Timeout
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
+  private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -55,7 +81,7 @@ class ConnectionManager {
     }
     this.connections.get(userId)!.add(ws);
     this.wsToUser.set(ws, userId);
-    
+
     // If they were pending offline, cancel it!
     this.cancelDisconnect(userId);
   }
@@ -105,19 +131,48 @@ class ConnectionManager {
     const db = getDb();
     db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
 
-    // Leave voice if in one
-    const leftChannel = this.leaveAllVoice(userId);
+    // Leave voice room if in one (handles both server and DM rooms)
+    const left = this.leaveCurrentRoom(userId);
     this.clearVoiceUserStatus(userId);
-    if (leftChannel) {
-      // Get channel's server to broadcast
-      const channel = db.select().from(schema.channels).where(eq(schema.channels.id, leftChannel)).get();
-      if (channel) {
-        this.sendToServer(channel.serverId, {
+    if (left) {
+      if (left.room.roomType === 'server') {
+        const meta = left.room.metadata as ServerRoomMeta;
+        this.sendToServer(meta.serverId, {
           type: 'voice_state_update',
-          channelId: leftChannel,
+          channelId: left.roomId,
           userId: userId,
           action: 'leave',
         });
+      } else {
+        // DM room — broadcast leave and auto-end if empty
+        this.sendToDmMembers(left.roomId, {
+          type: 'voice_state_update',
+          channelId: left.roomId,
+          userId: userId,
+          action: 'leave',
+        });
+        const updatedRoom = this.voiceRooms.get(left.roomId);
+        if (updatedRoom && updatedRoom.participants.size === 0 && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
+          this.destroyRoom(left.roomId);
+          this.sendToDmMembers(left.roomId, {
+            type: 'dm_call_ended',
+            dmChannelId: left.roomId,
+          });
+        }
+      }
+    }
+
+    // Destroy any ringing DM rooms where this user is the caller
+    for (const [roomId, room] of this.voiceRooms) {
+      if (room.roomType === 'dm') {
+        const meta = room.metadata as DmRoomMeta;
+        if (meta.state === 'ringing' && meta.callerId === userId) {
+          this.destroyRoom(roomId);
+          this.sendToDmMembers(roomId, {
+            type: 'dm_call_ended',
+            dmChannelId: roomId,
+          });
+        }
       }
     }
 
@@ -156,55 +211,162 @@ class ConnectionManager {
     return this.userServers.get(userId) ?? new Set();
   }
 
-  // Voice state management
-  joinVoice(channelId: string, userId: string): void {
-    // Leave any existing voice channel first
-    this.leaveAllVoice(userId);
-    if (!this.voiceStates.has(channelId)) {
-      this.voiceStates.set(channelId, new Set());
-    }
-    this.voiceStates.get(channelId)!.add(userId);
+  // ─── Unified VoiceRoom API ─────────────────────────────────────────────────
+
+  /** Create a room. Returns false if room already exists. */
+  createRoom(roomId: string, roomType: 'server' | 'dm', metadata: ServerRoomMeta | DmRoomMeta): boolean {
+    if (this.voiceRooms.has(roomId)) return false;
+    this.voiceRooms.set(roomId, {
+      roomId,
+      roomType,
+      participants: new Set(),
+      metadata,
+      startedAt: Date.now(),
+    });
+    return true;
   }
 
-  leaveVoice(channelId: string, userId: string): void {
-    const users = this.voiceStates.get(channelId);
-    if (users) {
-      users.delete(userId);
-      if (users.size === 0) {
-        this.voiceStates.delete(channelId);
+  /** Create a DM room in ringing state with 60s auto-cleanup. */
+  createDmRoom(dmChannelId: string, callerId: string): boolean {
+    const created = this.createRoom(dmChannelId, 'dm', {
+      type: 'dm',
+      callerId,
+      state: 'ringing',
+    });
+    if (!created) return false;
+
+    // 60s ringing timeout — auto-destroy if still ringing
+    const timeout = setTimeout(() => {
+      this.ringingTimeouts.delete(dmChannelId);
+      const room = this.voiceRooms.get(dmChannelId);
+      if (room && room.roomType === 'dm' && (room.metadata as DmRoomMeta).state === 'ringing') {
+        this.destroyRoom(dmChannelId);
+        this.sendToDmMembers(dmChannelId, {
+          type: 'dm_call_ended',
+          dmChannelId,
+        });
       }
-    }
+    }, 60_000);
+    this.ringingTimeouts.set(dmChannelId, timeout);
+
+    return true;
   }
 
-  leaveAllVoice(userId: string): string | null {
-    let leftChannelId: string | null = null;
-    for (const [channelId, users] of this.voiceStates) {
-      if (users.has(userId)) {
-        users.delete(userId);
-        if (users.size === 0) {
-          this.voiceStates.delete(channelId);
+  /** Transition a DM room from ringing → active. Returns false if not found or not ringing. */
+  activateDmRoom(dmChannelId: string): boolean {
+    const room = this.voiceRooms.get(dmChannelId);
+    if (!room || room.roomType !== 'dm') return false;
+    const meta = room.metadata as DmRoomMeta;
+    if (meta.state !== 'ringing') return false;
+    meta.state = 'active';
+
+    // Clear ringing timeout
+    const timeout = this.ringingTimeouts.get(dmChannelId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.ringingTimeouts.delete(dmChannelId);
+    }
+    return true;
+  }
+
+  /** Add a user to a room. Enforces one-room-per-user invariant. Returns the room or null if room doesn't exist. */
+  joinRoom(roomId: string, userId: string): VoiceRoom | null {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+
+    // Enforce one-room-per-user invariant: silently remove from old room
+    const currentRoomId = this.userToRoom.get(userId);
+    if (currentRoomId && currentRoomId !== roomId) {
+      const oldRoom = this.voiceRooms.get(currentRoomId);
+      if (oldRoom) {
+        oldRoom.participants.delete(userId);
+        if (oldRoom.participants.size === 0 && oldRoom.roomType === 'server') {
+          this.voiceRooms.delete(currentRoomId);
         }
-        leftChannelId = channelId;
-        break;
       }
     }
-    return leftChannelId;
+
+    room.participants.add(userId);
+    this.userToRoom.set(userId, roomId);
+    return room;
   }
 
-  getVoiceUsers(channelId: string): Set<string> {
-    return this.voiceStates.get(channelId) ?? new Set();
-  }
+  /** Remove a user from a specific room. Returns the room or null if not found. */
+  leaveRoom(roomId: string, userId: string): VoiceRoom | null {
+    const room = this.voiceRooms.get(roomId);
+    if (!room || !room.participants.has(userId)) return null;
 
-  getUserVoiceChannel(userId: string): string | null {
-    for (const [channelId, users] of this.voiceStates) {
-      if (users.has(userId)) {
-        return channelId;
-      }
+    room.participants.delete(userId);
+    this.userToRoom.delete(userId);
+
+    // Auto-cleanup empty server rooms (they're lazy-created)
+    if (room.participants.size === 0 && room.roomType === 'server') {
+      this.voiceRooms.delete(roomId);
     }
-    return null;
+
+    return room;
   }
 
-  // Voice user status management
+  /** Leave whatever room the user is in. Returns { roomId, room } or null. */
+  leaveCurrentRoom(userId: string): { roomId: string; room: VoiceRoom } | null {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) return null;
+
+    const room = this.leaveRoom(roomId, userId);
+    if (!room) return null;
+
+    return { roomId, room };
+  }
+
+  /** Destroy a room entirely. Returns displaced userIds. */
+  destroyRoom(roomId: string): string[] {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return [];
+
+    const displaced: string[] = [];
+    for (const userId of room.participants) {
+      this.userToRoom.delete(userId);
+      displaced.push(userId);
+    }
+
+    this.voiceRooms.delete(roomId);
+
+    // Clear ringing timeout if any
+    const timeout = this.ringingTimeouts.get(roomId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.ringingTimeouts.delete(roomId);
+    }
+
+    return displaced;
+  }
+
+  /** Get a room by ID. */
+  getRoom(roomId: string): VoiceRoom | undefined {
+    return this.voiceRooms.get(roomId);
+  }
+
+  /** Get participants in a room. */
+  getRoomParticipants(roomId: string): Set<string> {
+    return this.voiceRooms.get(roomId)?.participants ?? new Set();
+  }
+
+  /** Get the room a user is currently in. Returns { roomId, room } or null. */
+  getUserRoom(userId: string): { roomId: string; room: VoiceRoom } | null {
+    const roomId = this.userToRoom.get(userId);
+    if (!roomId) return null;
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return null;
+    return { roomId, room };
+  }
+
+  /** Read-only access to all rooms. */
+  getAllRooms(): Map<string, VoiceRoom> {
+    return this.voiceRooms;
+  }
+
+  // ─── Voice User Status (unchanged) ────────────────────────────────────────
+
   setVoiceUserStatus(userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean): void {
     this.voiceUserStates.set(userId, { isMuted, isDeafened, isCameraOn, isScreenSharing });
   }
@@ -221,22 +383,9 @@ class ConnectionManager {
     return this.voiceUserStates;
   }
 
-  // DM call management
-  startCall(dmChannelId: string, callerId: string): boolean {
-    if (this.activeCalls.has(dmChannelId)) return false; // Already in a call
-    this.activeCalls.set(dmChannelId, { callerId, startedAt: Date.now() });
-    return true;
-  }
+  // ─── Broadcasting ─────────────────────────────────────────────────────────
 
-  endCall(dmChannelId: string): void {
-    this.activeCalls.delete(dmChannelId);
-  }
-
-  getActiveCall(dmChannelId: string): { callerId: string; startedAt: number } | undefined {
-    return this.activeCalls.get(dmChannelId);
-  }
-
-  // Send to a specific user (all their connections)
+  /** Send to a specific user (all their connections). */
   sendToUser(userId: string, event: ServerEvent): void {
     const connections = this.getUserConnections(userId);
     const message = JSON.stringify(event);
@@ -247,7 +396,7 @@ class ConnectionManager {
     }
   }
 
-  // Send to all members of a server
+  /** Send to all members of a server. */
   sendToServer(serverId: string, event: ServerEvent, excludeUserId?: string): void {
     const message = JSON.stringify(event);
     for (const [userId, serverIds] of this.userServers) {
@@ -262,7 +411,35 @@ class ConnectionManager {
     }
   }
 
-  // Send to all connections of all online users (for global events)
+  /** Send to all DM channel members (queries dm_members table). */
+  sendToDmMembers(dmChannelId: string, event: ServerEvent, excludeUserId?: string): void {
+    const db = getDb();
+    const dmMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+      .all();
+
+    for (const member of dmMembers) {
+      if (member.userId !== excludeUserId) {
+        this.sendToUser(member.userId, event);
+      }
+    }
+  }
+
+  /** Send to a room — routes to sendToServer (server rooms) or sendToDmMembers (DM rooms). */
+  sendToRoom(roomId: string, event: ServerEvent, excludeUserId?: string): void {
+    const room = this.voiceRooms.get(roomId);
+    if (!room) return;
+
+    if (room.roomType === 'server') {
+      const meta = room.metadata as ServerRoomMeta;
+      this.sendToServer(meta.serverId, event, excludeUserId);
+    } else {
+      this.sendToDmMembers(roomId, event, excludeUserId);
+    }
+  }
+
+  /** Send to all connections of all online users. */
   sendToAll(event: ServerEvent, excludeUserId?: string): void {
     const message = JSON.stringify(event);
     for (const [userId, connections] of this.connections) {
@@ -291,6 +468,7 @@ function buildReadyPayload(userId: string): {
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   readStates: ReadState[];
+  activeCalls: ActiveCallInfo[];
 } {
   const db = getDb();
 
@@ -349,11 +527,11 @@ function buildReadyPayload(userId: string): {
         .map(m => {
           const u = userMap.get(m.userId);
           if (!u) return null;
-          
+
           const assignedRoleIds = memberRoleRows
             .filter(mr => mr.userId === m.userId)
             .map(mr => mr.roleId);
-          
+
           const memberRoles = roles
             .filter(r => assignedRoleIds.includes(r.id))
             .map(r => ({
@@ -481,7 +659,7 @@ function buildReadyPayload(userId: string): {
       .where(eq(schema.serverFolderMembers.folderId, folder.id))
       .all()
       .map(m => m.serverId);
-    
+
     folders.push({
       id: folder.id,
       userId: folder.userId,
@@ -498,15 +676,35 @@ function buildReadyPayload(userId: string): {
   for (const srv of servers) {
     for (const ch of srv.channels) {
       if (ch.type === 'voice' || ch.type === 'video') {
-        const users = connectionManager.getVoiceUsers(ch.id);
-        if (users.size > 0) {
-          voiceStates[ch.id] = Array.from(users);
+        const participants = connectionManager.getRoomParticipants(ch.id);
+        if (participants.size > 0) {
+          voiceStates[ch.id] = Array.from(participants);
         }
       }
     }
   }
 
-  // Build voice user states — tell the client mute/deafen/camera/screenshare status of voice users
+  // Build active calls from user's DM memberships
+  const activeCalls: ActiveCallInfo[] = [];
+  for (const dm of dmMemberships) {
+    const room = connectionManager.getRoom(dm.dmChannelId);
+    if (room && room.roomType === 'dm') {
+      const dmMeta = room.metadata as DmRoomMeta;
+      activeCalls.push({
+        dmChannelId: dm.dmChannelId,
+        callerId: dmMeta.callerId,
+        participants: Array.from(room.participants),
+        startedAt: room.startedAt,
+        state: dmMeta.state,
+      });
+      // Inject DM call participants into voiceStates so frontend's generic handler works
+      if (room.participants.size > 0) {
+        voiceStates[dm.dmChannelId] = Array.from(room.participants);
+      }
+    }
+  }
+
+  // Build voice user states — includes both server and DM participants now
   const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = {};
   for (const chId of Object.keys(voiceStates)) {
     const usersInChannel = voiceStates[chId];
@@ -531,7 +729,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, servers, dmChannels, folders, voiceStates, voiceUserStates, readStates };
+  return { user, servers, dmChannels, folders, voiceStates, voiceUserStates, readStates, activeCalls };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

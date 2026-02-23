@@ -4,7 +4,7 @@ import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
-import type { ServerEvent, ClientEvent } from '@opencord/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@opencord/shared';
 
 let globalWs: WebSocket | null = null;
 let reconnectAttempts = 0;
@@ -59,6 +59,39 @@ function handleEvent(event: ServerEvent): void {
           console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened, curCamera, curScreen });
           wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
           wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen });
+        }
+      }
+      // Restore DM call state from server (handles reconnect and page refresh)
+      {
+        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall } = useVoiceStore.getState();
+        const myId = event.user.id;
+        if (event.activeCalls && event.activeCalls.length > 0) {
+          for (const call of event.activeCalls) {
+            const isParticipant = call.participants.includes(myId);
+            if (call.state === 'active' && isParticipant) {
+              // Restore active DM call
+              setActiveDmCall({ dmChannelId: call.dmChannelId });
+              break;
+            } else if (call.state === 'ringing' && call.callerId !== myId) {
+              // Restore incoming call (we're the callee)
+              // Look up caller name from DM channel members
+              const dmCh = event.dmChannels?.find((d: any) => d.id === call.dmChannelId);
+              const callerUser = dmCh?.members?.find((m: any) => m.id === call.callerId);
+              setIncomingCall({
+                dmChannelId: call.dmChannelId,
+                callerId: call.callerId,
+                callerName: callerUser?.displayName || callerUser?.username || call.callerId,
+              });
+            }
+          }
+        } else {
+          // No active calls on server — clear stale local state
+          if (activeDmCall) {
+            setActiveDmCall(null);
+          }
+          if (incomingCall) {
+            setIncomingCall(null);
+          }
         }
       }
       break;

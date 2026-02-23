@@ -2,6 +2,7 @@ import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
+import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
 import { isMember, getChannelServerId, isDmMember } from '../utils/permissions.js';
 import { broadcastDmMessage } from '../routes/dm.js';
 import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@opencord/shared';
@@ -366,6 +367,37 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
   });
 }
 
+// ─── Voice Handlers (Unified Room API) ─────────────────────────────────────
+
+/** Helper: broadcast a voice leave and auto-end empty DM calls. */
+function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): void {
+  if (room.roomType === 'server') {
+    const meta = room.metadata as ServerRoomMeta;
+    connectionManager.sendToServer(meta.serverId, {
+      type: 'voice_state_update',
+      channelId: roomId,
+      userId,
+      action: 'leave',
+    });
+  } else {
+    connectionManager.sendToDmMembers(roomId, {
+      type: 'voice_state_update',
+      channelId: roomId,
+      userId,
+      action: 'leave',
+    });
+    // Auto-end call if DM room is now empty and was active
+    const updatedRoom = connectionManager.getRoom(roomId);
+    if (updatedRoom && updatedRoom.participants.size === 0 && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
+      connectionManager.destroyRoom(roomId);
+      connectionManager.sendToDmMembers(roomId, {
+        type: 'dm_call_ended',
+        dmChannelId: roomId,
+      });
+    }
+  }
+}
+
 function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
   const channelId = event.channelId as string;
 
@@ -385,13 +417,13 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  // If the user is already in this exact channel (e.g. WS reconnect re-registration),
+  // If the user is already in this exact room (e.g. WS reconnect re-registration),
   // skip the leave+join broadcast to avoid visual flicker for other users.
-  const currentChannel = connectionManager.getUserVoiceChannel(userId);
-  if (currentChannel === channelId) {
+  const currentRoom = connectionManager.getUserRoom(userId);
+  if (currentRoom && currentRoom.roomId === channelId) {
     const status = connectionManager.getVoiceUserStatus(userId);
     if (status) {
-      connectionManager.sendToServer(serverId, {
+      connectionManager.sendToRoom(channelId, {
         type: 'voice_status_update',
         userId,
         channelId,
@@ -404,25 +436,35 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  // Leave any current voice channel
-  const previousChannel = connectionManager.leaveAllVoice(userId);
-  if (previousChannel) {
-    const prevServerId = getChannelServerId(previousChannel);
-    if (prevServerId) {
-      connectionManager.sendToServer(prevServerId, {
-        type: 'voice_state_update',
-        channelId: previousChannel,
-        userId,
-        action: 'leave',
-      });
+  // Leave current room (server OR DM)
+  const left = connectionManager.leaveCurrentRoom(userId);
+  if (left) {
+    broadcastRoomLeave(left.roomId, left.room, userId);
+  }
+
+  // Cancel any ringing DM rooms where this user is the caller
+  // (edge case: user starts DM call then joins server voice before anyone accepts)
+  for (const [roomId, room] of connectionManager.getAllRooms()) {
+    if (room.roomType === 'dm') {
+      const meta = room.metadata as DmRoomMeta;
+      if (meta.state === 'ringing' && meta.callerId === userId) {
+        connectionManager.destroyRoom(roomId);
+        connectionManager.sendToDmMembers(roomId, {
+          type: 'dm_call_ended',
+          dmChannelId: roomId,
+        });
+      }
     }
   }
 
-  // Join new voice channel
-  connectionManager.joinVoice(channelId, userId);
+  // Lazy-create server room
+  connectionManager.createRoom(channelId, 'server', { type: 'server', serverId });
 
-  // Broadcast to server
-  connectionManager.sendToServer(serverId, {
+  // Join room
+  connectionManager.joinRoom(channelId, userId);
+
+  // Broadcast join
+  connectionManager.sendToRoom(channelId, {
     type: 'voice_state_update',
     channelId,
     userId,
@@ -432,7 +474,7 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
   // Also broadcast current voice status if it exists (persisted during moves)
   const status = connectionManager.getVoiceUserStatus(userId);
   if (status) {
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToRoom(channelId, {
       type: 'voice_status_update',
       userId,
       channelId,
@@ -445,19 +487,39 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
 }
 
 function handleVoiceLeave(userId: string): void {
-  const channelId = connectionManager.leaveAllVoice(userId);
-  if (channelId) {
-    const serverId = getChannelServerId(channelId);
-    if (serverId) {
-      connectionManager.sendToServer(serverId, {
-        type: 'voice_state_update',
-        channelId,
-        userId,
-        action: 'leave',
-      });
-    }
+  const left = connectionManager.leaveCurrentRoom(userId);
+  if (left) {
+    broadcastRoomLeave(left.roomId, left.room, userId);
   }
+  connectionManager.clearVoiceUserStatus(userId);
 }
+
+function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
+  const isMuted = event.isMuted === true;
+  const isDeafened = event.isDeafened === true;
+  const isCameraOn = event.isCameraOn === true;
+  const isScreenSharing = event.isScreenSharing === true;
+
+  // BUG FIX: uses unified getUserRoom() instead of server-only getUserVoiceChannel()
+  // This now works for both server channels AND DM calls.
+  const userRoom = connectionManager.getUserRoom(userId);
+  if (!userRoom) return;
+
+  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened, isCameraOn, isScreenSharing);
+
+  // sendToRoom routes to sendToServer for server rooms, sendToDmMembers for DM rooms
+  connectionManager.sendToRoom(userRoom.roomId, {
+    type: 'voice_status_update',
+    userId,
+    channelId: userRoom.roomId,
+    isMuted,
+    isDeafened,
+    isCameraOn,
+    isScreenSharing,
+  });
+}
+
+// ─── DM Message Handlers ───────────────────────────────────────────────────
 
 function handleDmMessageCreate(event: Record<string, unknown>, userId: string): void {
   const dmChannelId = event.dmChannelId as string;
@@ -650,6 +712,8 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   }
 }
 
+// ─── Reaction Handlers ─────────────────────────────────────────────────────
+
 function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
   const messageId = event.messageId as string;
   const emoji = event.emoji as string;
@@ -720,6 +784,8 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
   }
 }
 
+// ─── Read State Handler ────────────────────────────────────────────────────
+
 function handleChannelAck(event: Record<string, unknown>, userId: string): void {
   const channelId = event.channelId as string;
   const messageId = event.messageId as string;
@@ -765,32 +831,7 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   });
 }
 
-function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
-  const isMuted = event.isMuted === true;
-  const isDeafened = event.isDeafened === true;
-  const isCameraOn = event.isCameraOn === true;
-  const isScreenSharing = event.isScreenSharing === true;
-
-  const channelId = connectionManager.getUserVoiceChannel(userId);
-  if (!channelId) return;
-
-  const serverId = getChannelServerId(channelId);
-  if (!serverId) return;
-
-  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened, isCameraOn, isScreenSharing);
-
-  connectionManager.sendToServer(serverId, {
-    type: 'voice_status_update',
-    userId,
-    channelId,
-    isMuted,
-    isDeafened,
-    isCameraOn,
-    isScreenSharing,
-  });
-}
-
-// ─── DM Call Handlers ──────────────────────────────────────────────────────────
+// ─── DM Call Handlers (Unified Room API) ───────────────────────────────────
 
 function handleDmCallStart(event: Record<string, unknown>, userId: string, username: string): void {
   const dmChannelId = event.dmChannelId as string;
@@ -804,30 +845,41 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
     return;
   }
 
-  // Try to start the call (fails if already active)
-  const started = connectionManager.startCall(dmChannelId, userId);
-  if (!started) {
+  // Leave current room if in one
+  const left = connectionManager.leaveCurrentRoom(userId);
+  if (left) {
+    broadcastRoomLeave(left.roomId, left.room, userId);
+  }
+  connectionManager.clearVoiceUserStatus(userId);
+
+  // Cancel any other ringing rooms started by this user
+  for (const [roomId, room] of connectionManager.getAllRooms()) {
+    if (room.roomType === 'dm' && roomId !== dmChannelId) {
+      const meta = room.metadata as DmRoomMeta;
+      if (meta.state === 'ringing' && meta.callerId === userId) {
+        connectionManager.destroyRoom(roomId);
+        connectionManager.sendToDmMembers(roomId, {
+          type: 'dm_call_ended',
+          dmChannelId: roomId,
+        });
+      }
+    }
+  }
+
+  // Create DM room in ringing state (fails if already active)
+  const created = connectionManager.createDmRoom(dmChannelId, userId);
+  if (!created) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'A call is already active in this DM channel' });
     return;
   }
 
-  // Find the other DM member(s) and send incoming call notification
-  const db = getDb();
-  const dmMembers = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
-
-  for (const member of dmMembers) {
-    if (member.userId !== userId) {
-      connectionManager.sendToUser(member.userId, {
-        type: 'dm_call_incoming',
-        dmChannelId,
-        callerId: userId,
-        callerName: username,
-      });
-    }
-  }
+  // Ring other members
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'dm_call_incoming',
+    dmChannelId,
+    callerId: userId,
+    callerName: username,
+  }, userId);
 }
 
 function handleDmCallAccept(event: Record<string, unknown>, userId: string): void {
@@ -842,25 +894,51 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string): voi
     return;
   }
 
-  const activeCall = connectionManager.getActiveCall(dmChannelId);
-  if (!activeCall) {
+  const room = connectionManager.getRoom(dmChannelId);
+  if (!room || room.roomType !== 'dm') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
     return;
   }
 
-  // Notify all DM members that the call was accepted
-  const db = getDb();
-  const dmMembers = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
+  const meta = room.metadata as DmRoomMeta;
 
-  for (const member of dmMembers) {
-    connectionManager.sendToUser(member.userId, {
-      type: 'dm_call_accepted',
-      dmChannelId,
-    });
+  // Activate the room (ringing → active)
+  connectionManager.activateDmRoom(dmChannelId);
+
+  // Leave current rooms for both caller and acceptor
+  const callerLeft = connectionManager.leaveCurrentRoom(meta.callerId);
+  if (callerLeft) {
+    broadcastRoomLeave(callerLeft.roomId, callerLeft.room, meta.callerId);
   }
+  const acceptorLeft = connectionManager.leaveCurrentRoom(userId);
+  if (acceptorLeft) {
+    broadcastRoomLeave(acceptorLeft.roomId, acceptorLeft.room, userId);
+  }
+
+  // Join both participants
+  connectionManager.joinRoom(dmChannelId, meta.callerId);
+  connectionManager.joinRoom(dmChannelId, userId);
+
+  // Notify all DM members that the call was accepted
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'dm_call_accepted',
+    dmChannelId,
+  });
+
+  // Broadcast voice_state_update join for both participants
+  // This populates the frontend's voiceUsers map generically
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'voice_state_update',
+    channelId: dmChannelId,
+    userId: meta.callerId,
+    action: 'join',
+  });
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'voice_state_update',
+    channelId: dmChannelId,
+    userId,
+    action: 'join',
+  });
 }
 
 function handleDmCallReject(event: Record<string, unknown>, userId: string): void {
@@ -875,27 +953,17 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
     return;
   }
 
-  const activeCall = connectionManager.getActiveCall(dmChannelId);
-  if (!activeCall) {
-    return; // No active call, silently ignore
-  }
+  const room = connectionManager.getRoom(dmChannelId);
+  if (!room) return; // No active call, silently ignore
 
-  // End the call since it was rejected
-  connectionManager.endCall(dmChannelId);
+  // Destroy room
+  connectionManager.destroyRoom(dmChannelId);
 
   // Notify all DM members that the call was rejected
-  const db = getDb();
-  const dmMembers = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
-
-  for (const member of dmMembers) {
-    connectionManager.sendToUser(member.userId, {
-      type: 'dm_call_rejected',
-      dmChannelId,
-    });
-  }
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'dm_call_rejected',
+    dmChannelId,
+  });
 }
 
 function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
@@ -910,25 +978,20 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  const activeCall = connectionManager.getActiveCall(dmChannelId);
-  if (!activeCall) {
-    return; // No active call, silently ignore
+  const room = connectionManager.getRoom(dmChannelId);
+  if (!room) return; // No active call, silently ignore
+
+  // Clear voice user states for all participants
+  for (const participantId of room.participants) {
+    connectionManager.clearVoiceUserStatus(participantId);
   }
 
-  // End the call
-  connectionManager.endCall(dmChannelId);
+  // Destroy room (removes all participants from userToRoom)
+  connectionManager.destroyRoom(dmChannelId);
 
   // Notify all DM members that the call ended
-  const db = getDb();
-  const dmMembers = db.select()
-    .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
-    .all();
-
-  for (const member of dmMembers) {
-    connectionManager.sendToUser(member.userId, {
-      type: 'dm_call_ended',
-      dmChannelId,
-    });
-  }
+  connectionManager.sendToDmMembers(dmChannelId, {
+    type: 'dm_call_ended',
+    dmChannelId,
+  });
 }
