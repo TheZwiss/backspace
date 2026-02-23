@@ -261,6 +261,18 @@ function handleEvent(event: ServerEvent): void {
       removeDmChannel(event.dmChannelId);
       break;
 
+    case 'dm_member_added': {
+      const { addDmMember } = useServerStore.getState();
+      addDmMember(event.dmChannelId, event.user);
+      break;
+    }
+
+    case 'dm_member_removed': {
+      const { removeDmMember } = useServerStore.getState();
+      removeDmMember(event.dmChannelId, event.userId);
+      break;
+    }
+
     case 'friend_removed': {
       const { removeFriendLocally } = useSocialStore.getState();
       removeFriendLocally(event.userId);

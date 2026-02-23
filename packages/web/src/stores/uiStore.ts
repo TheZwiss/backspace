@@ -11,6 +11,7 @@ type ModalType =
   | 'serverSettings'
   | 'imagePreview'
   | 'newDm'
+  | 'addDmMember'
   | null;
 
 interface UIState {

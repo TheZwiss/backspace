@@ -13,6 +13,7 @@ import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { ServerSettingsModal } from '../modals/ServerSettings';
 import { NewDmModal } from '../modals/NewDmModal';
+import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
@@ -236,6 +237,7 @@ export function AppLayout() {
       <UserSettingsModal />
       <ServerSettingsModal />
       <NewDmModal />
+      <AddDmMemberModal />
       <IncomingCallModal />
       <ImagePreview />
       <PictureInPicture />

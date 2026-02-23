@@ -32,7 +32,8 @@ export function MainContent() {
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const dmChannels = useServerStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
-  
+  const openModal = useUIStore((s) => s.openModal);
+
   const voiceContainerRef = useRef<HTMLDivElement>(null);
 
   // Handle actual browser fullscreen API
@@ -64,8 +65,11 @@ export function MainContent() {
     }
 
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
-    const otherUser = dmChannel?.members.find(m => m.id !== authUser?.id);
-    const dmName = otherUser?.displayName ?? otherUser?.username ?? 'Direct Message';
+    const otherMembers = dmChannel?.members.filter(m => m.id !== authUser?.id) ?? [];
+    const isGroupDm = (dmChannel?.members.length ?? 0) > 2;
+    const dmName = isGroupDm
+      ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
+      : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? 'Direct Message';
 
     const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
@@ -146,6 +150,9 @@ export function MainContent() {
               <path d="M12.5 2A6.5 6.5 0 0 0 6 8.5c0 1.82.75 3.47 1.95 4.65A10.02 10.02 0 0 0 2 22h2c0-4.42 3.58-8 8-8 .35 0 .69.03 1.03.07A6.49 6.49 0 0 0 19 8.5 6.5 6.5 0 0 0 12.5 2Zm0 11A4.5 4.5 0 1 1 17 8.5a4.5 4.5 0 0 1-4.5 4.5Z" />
             </svg>
             <span className="font-bold text-discord-text-primary truncate">{dmName}</span>
+            {isGroupDm && (
+              <span className="text-xs text-discord-text-muted flex-shrink-0">({dmChannel?.members.length} Members)</span>
+            )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
@@ -174,7 +181,11 @@ export function MainContent() {
                 <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded-[4px] hover:bg-discord-modifier-hover" title="Add Friends to DM">
+            <button
+              onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
+              className="w-8 h-8 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded-[4px] hover:bg-discord-modifier-hover"
+              title="Add Friends to DM"
+            >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>

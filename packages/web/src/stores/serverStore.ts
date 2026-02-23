@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel } from '@opencord/shared';
+import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@opencord/shared';
 import { api } from '../api/client';
 
 interface ServerState {
@@ -20,6 +20,8 @@ interface ServerState {
   setDmChannels: (channels: DmChannel[]) => void;
   addDmChannel: (channel: DmChannel) => void;
   removeDmChannel: (id: string) => void;
+  addDmMember: (dmChannelId: string, user: User) => void;
+  removeDmMember: (dmChannelId: string, userId: string) => void;
   closeDm: (id: string) => Promise<void>;
   loadServers: () => Promise<void>;
   loadServerDetail: (serverId: string) => Promise<void>;
@@ -64,6 +66,22 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   removeDmChannel: (id) => set((state) => ({
     dmChannels: state.dmChannels.filter(c => c.id !== id)
+  })),
+
+  addDmMember: (dmChannelId, user) => set((state) => ({
+    dmChannels: state.dmChannels.map(dm =>
+      dm.id === dmChannelId
+        ? { ...dm, members: dm.members.some(m => m.id === user.id) ? dm.members : [...dm.members, user] }
+        : dm
+    ),
+  })),
+
+  removeDmMember: (dmChannelId, userId) => set((state) => ({
+    dmChannels: state.dmChannels.map(dm =>
+      dm.id === dmChannelId
+        ? { ...dm, members: dm.members.filter(m => m.id !== userId) }
+        : dm
+    ),
   })),
 
   closeDm: async (id) => {

@@ -162,6 +162,10 @@ export const api = {
       request<DmMessageWithUser>('PATCH', `/dm/messages/${id}`, data),
     deleteMessage: (id: string) =>
       request<{ success: boolean }>('DELETE', `/dm/messages/${id}`),
+    addMember: (dmChannelId: string, data: { userId: string }) =>
+      request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
+    leave: (dmChannelId: string) =>
+      request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
   },
 
   social: {

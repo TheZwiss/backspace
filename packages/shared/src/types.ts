@@ -226,6 +226,8 @@ export type ServerEvent =
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
   | { type: 'dm_channel_created'; dmChannel: DmChannel }
   | { type: 'dm_channel_closed'; dmChannelId: string }
+  | { type: 'dm_member_added'; dmChannelId: string; user: User }
+  | { type: 'dm_member_removed'; dmChannelId: string; userId: string }
   | { type: 'friend_removed'; userId: string }
   | { type: 'channel_created'; channel: Channel; serverId: string }
   | { type: 'channel_updated'; channel: Channel; serverId: string }
@@ -309,6 +311,10 @@ export interface LiveKitTokenResponse {
 }
 
 export interface CreateDmRequest {
+  userId: string;
+}
+
+export interface AddDmMemberRequest {
   userId: string;
 }
 

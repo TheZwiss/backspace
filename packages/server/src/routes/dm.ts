@@ -12,6 +12,7 @@ import type {
   DmMessageWithUser,
   CreateDmRequest,
   CreateDmMessageRequest,
+  AddDmMemberRequest,
   PaginatedQuery,
 } from '@opencord/shared';
 
@@ -194,6 +195,15 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         .get();
 
       if (otherMember) {
+        // Only match 1-on-1 DMs (exactly 2 members). Skip group DMs that
+        // happen to include the target user to avoid returning the wrong channel.
+        const memberCount = db.select()
+          .from(schema.dmMembers)
+          .where(eq(schema.dmMembers.dmChannelId, myDm.dmChannelId))
+          .all()
+          .length;
+        if (memberCount !== 2) continue;
+
         // DM channel already exists between these users
         const dmChannel = db.select()
           .from(schema.dmChannels)
@@ -317,6 +327,215 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .run();
 
     // Broadcast dm_channel_closed to self for multi-tab sync
+    connectionManager.sendToUser(request.userId, {
+      type: 'dm_channel_closed',
+      dmChannelId: id,
+    });
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // POST /api/dm/:id/members - Add a user to an existing DM channel (group DM upgrade)
+  app.post<{ Params: { id: string }; Body: AddDmMemberRequest }>('/api/dm/:id/members', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { userId: targetUserId } = request.body;
+
+    if (!targetUserId || typeof targetUserId !== 'string') {
+      return reply.code(400).send({ error: 'userId is required', statusCode: 400 });
+    }
+
+    const db = getDb();
+
+    // Validate caller is a member
+    if (!isDmMember(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+    }
+
+    // Validate target user exists
+    const targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
+    if (!targetUser) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    // Validate target is not already a member
+    const existingMembership = db.select()
+      .from(schema.dmMembers)
+      .where(and(
+        eq(schema.dmMembers.dmChannelId, id),
+        eq(schema.dmMembers.userId, targetUserId),
+      ))
+      .get();
+
+    if (existingMembership) {
+      return reply.code(400).send({ error: 'User is already a member of this DM channel', statusCode: 400 });
+    }
+
+    // Validate member count < 10
+    const currentMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, id))
+      .all();
+
+    if (currentMembers.length >= 10) {
+      return reply.code(400).send({ error: 'Group DM cannot exceed 10 members', statusCode: 400 });
+    }
+
+    // Insert dm_members row for new user
+    db.insert(schema.dmMembers).values({
+      dmChannelId: id,
+      userId: targetUserId,
+    }).run();
+
+    // Build full DmChannel response with all members
+    const allMemberRows = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, id))
+      .all();
+    const memberUserIds = allMemberRows.map(m => m.userId);
+    const users = memberUserIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
+      : [];
+
+    const dmChannel = db.select()
+      .from(schema.dmChannels)
+      .where(eq(schema.dmChannels.id, id))
+      .get();
+
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+
+    // Fetch last message
+    const lastMsgRows = db.select()
+      .from(schema.dmMessages)
+      .where(eq(schema.dmMessages.dmChannelId, id))
+      .orderBy(desc(schema.dmMessages.createdAt))
+      .limit(1)
+      .all();
+    const lastMsg = lastMsgRows[0] ?? null;
+
+    const result: DmChannel = {
+      id: dmChannel.id,
+      createdAt: dmChannel.createdAt,
+      members: users.map(sanitizeUser),
+      lastMessage: lastMsg ? {
+        id: lastMsg.id,
+        dmChannelId: lastMsg.dmChannelId,
+        userId: lastMsg.userId,
+        content: lastMsg.content,
+        createdAt: lastMsg.createdAt,
+      } : null,
+    };
+
+    const newUser = sanitizeUser(targetUser);
+
+    // Broadcast dm_member_added to all existing members (before the new one)
+    for (const member of currentMembers) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_member_added',
+        dmChannelId: id,
+        user: newUser,
+      });
+    }
+
+    // Send dm_channel_created to the new member so their sidebar picks it up
+    connectionManager.sendToUser(targetUserId, {
+      type: 'dm_channel_created',
+      dmChannel: result,
+    });
+
+    // Active call sync: if there's an active call in this DM, notify the new member
+    const room = connectionManager.getRoom(id);
+    if (room && room.roomType === 'dm') {
+      const meta = room.metadata as { state: string; callerId: string };
+      if (meta.state === 'active' || meta.state === 'ringing') {
+        // Look up caller name
+        const callerRow = db.select().from(schema.users).where(eq(schema.users.id, meta.callerId)).get();
+        const callerName = callerRow?.displayName ?? callerRow?.username ?? meta.callerId;
+        connectionManager.sendToUser(targetUserId, {
+          type: 'dm_call_incoming',
+          dmChannelId: id,
+          callerId: meta.callerId,
+          callerName,
+        });
+      }
+    }
+
+    return reply.code(200).send(result);
+  });
+
+  // DELETE /api/dm/:id/members - Leave a group DM
+  app.delete<{ Params: { id: string } }>('/api/dm/:id/members', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    // Validate caller is a member
+    if (!isDmMember(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+    }
+
+    // Count members — can't leave a 1-on-1
+    const memberRows = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, id))
+      .all();
+
+    if (memberRows.length <= 2) {
+      return reply.code(400).send({ error: 'Cannot leave a 1-on-1 DM. Use close instead.', statusCode: 400 });
+    }
+
+    // If user is in this DM's VoiceRoom, leave it first
+    const userRoom = connectionManager.getUserRoom(request.userId);
+    if (userRoom && userRoom.roomId === id) {
+      const left = connectionManager.leaveCurrentRoom(request.userId);
+      if (left) {
+        // Broadcast voice leave
+        connectionManager.sendToDmMembers(id, {
+          type: 'voice_state_update',
+          channelId: id,
+          userId: request.userId,
+          action: 'leave',
+        });
+        // Auto-end call if DM room is now empty
+        const updatedRoom = connectionManager.getRoom(id);
+        if (updatedRoom && updatedRoom.participants.size === 0) {
+          connectionManager.destroyRoom(id);
+          connectionManager.sendToDmMembers(id, {
+            type: 'dm_call_ended',
+            dmChannelId: id,
+          });
+        }
+      }
+      connectionManager.clearVoiceUserStatus(request.userId);
+    }
+
+    // Delete dm_members row
+    db.delete(schema.dmMembers)
+      .where(and(
+        eq(schema.dmMembers.dmChannelId, id),
+        eq(schema.dmMembers.userId, request.userId),
+      ))
+      .run();
+
+    // Broadcast dm_member_removed to remaining members
+    const remainingMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, id))
+      .all();
+
+    for (const member of remainingMembers) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_member_removed',
+        dmChannelId: id,
+        userId: request.userId,
+      });
+    }
+
+    // Send dm_channel_closed to the leaving user
     connectionManager.sendToUser(request.userId, {
       type: 'dm_channel_closed',
       dmChannelId: id,

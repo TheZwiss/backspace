@@ -902,21 +902,37 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string): voi
 
   const meta = room.metadata as DmRoomMeta;
 
-  // Activate the room (ringing → active)
-  connectionManager.activateDmRoom(dmChannelId);
+  if (meta.state === 'ringing') {
+    // First accept — transition ringing→active and join the caller
+    connectionManager.activateDmRoom(dmChannelId);
 
-  // Leave current rooms for both caller and acceptor
-  const callerLeft = connectionManager.leaveCurrentRoom(meta.callerId);
-  if (callerLeft) {
-    broadcastRoomLeave(callerLeft.roomId, callerLeft.room, meta.callerId);
+    // Leave caller's current room if in one
+    const callerLeft = connectionManager.leaveCurrentRoom(meta.callerId);
+    if (callerLeft) {
+      broadcastRoomLeave(callerLeft.roomId, callerLeft.room, meta.callerId);
+    }
+
+    // Join caller into the DM room
+    connectionManager.joinRoom(dmChannelId, meta.callerId);
+
+    // Broadcast voice_state_update join for caller
+    connectionManager.sendToDmMembers(dmChannelId, {
+      type: 'voice_state_update',
+      channelId: dmChannelId,
+      userId: meta.callerId,
+      action: 'join',
+    });
   }
+  // If already active, this is a late-join (e.g. 3rd member joining group call).
+  // Skip the ringing→active transition and caller join — just join the acceptor below.
+
+  // Leave acceptor's current room if in one
   const acceptorLeft = connectionManager.leaveCurrentRoom(userId);
   if (acceptorLeft) {
     broadcastRoomLeave(acceptorLeft.roomId, acceptorLeft.room, userId);
   }
 
-  // Join both participants
-  connectionManager.joinRoom(dmChannelId, meta.callerId);
+  // Join acceptor into the DM room
   connectionManager.joinRoom(dmChannelId, userId);
 
   // Notify all DM members that the call was accepted
@@ -925,14 +941,7 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string): voi
     dmChannelId,
   });
 
-  // Broadcast voice_state_update join for both participants
-  // This populates the frontend's voiceUsers map generically
-  connectionManager.sendToDmMembers(dmChannelId, {
-    type: 'voice_state_update',
-    channelId: dmChannelId,
-    userId: meta.callerId,
-    action: 'join',
-  });
+  // Broadcast voice_state_update join for acceptor
   connectionManager.sendToDmMembers(dmChannelId, {
     type: 'voice_state_update',
     channelId: dmChannelId,

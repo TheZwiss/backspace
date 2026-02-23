@@ -176,9 +176,14 @@ export function ChannelSidebar() {
 
           <div className="space-y-[2px]">
             {dmChannels.map((dm) => {
-              const otherUser = dm.members.find(m => m.id !== user?.id);
-              if (!otherUser) return null;
+              const otherMembers = dm.members.filter(m => m.id !== user?.id);
+              if (otherMembers.length === 0) return null;
+              const isGroup = dm.members.length > 2;
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
+
+              const dmDisplayName = isGroup
+                ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
+                : otherMembers[0]?.displayName ?? otherMembers[0]?.username;
 
               return (
                 <div
@@ -195,20 +200,43 @@ export function ChannelSidebar() {
                   {isDmUnread && (
                     <div className="absolute -left-1 w-1 h-2 bg-white rounded-r-full" />
                   )}
-                  <Avatar src={otherUser.avatar} name={otherUser.displayName ?? otherUser.username} size={32} status={otherUser.status as any} />
+                  {isGroup ? (
+                    <div className="relative w-8 h-8 flex-shrink-0">
+                      {otherMembers.slice(0, 2).map((m, i) => (
+                        <div
+                          key={m.id}
+                          className="absolute rounded-full overflow-hidden border-2 border-discord-bg-secondary"
+                          style={{
+                            width: 22, height: 22,
+                            left: i * 10,
+                            top: i * 6,
+                            zIndex: 2 - i,
+                          }}
+                        >
+                          <Avatar src={m.avatar} name={m.displayName ?? m.username} size={22} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? ''} size={32} status={otherMembers[0]?.status as any} />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className={`text-[15px] truncate leading-tight ${
                       currentChannelId === dm.id ? 'text-white font-medium'
                         : isDmUnread ? 'text-white font-bold'
                         : 'text-discord-text-muted group-hover:text-discord-text-secondary font-medium'
                     }`}>
-                      {otherUser.displayName ?? otherUser.username}
+                      {dmDisplayName}
                     </div>
-                    {dm.lastMessage && (
+                    {isGroup ? (
+                      <div className="text-[12px] text-discord-channels-default truncate leading-tight mt-0.5">
+                        {dm.members.length} Members
+                      </div>
+                    ) : dm.lastMessage ? (
                       <div className="text-[12px] text-discord-channels-default truncate leading-tight mt-0.5">
                         {dm.lastMessage.content}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   <button
                     onClick={(e) => {
