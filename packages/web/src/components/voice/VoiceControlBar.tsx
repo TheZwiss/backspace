@@ -106,8 +106,14 @@ export function VoiceControlBar() {
   };
 
   const handleDisconnect = () => {
-    wsSend({ type: 'voice_leave' });
-    useVoiceStore.getState().leaveVoice();
+    const { activeDmCall } = useVoiceStore.getState();
+    if (activeDmCall) {
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId });
+      useVoiceStore.getState().setActiveDmCall(null);
+    } else {
+      wsSend({ type: 'voice_leave' });
+      useVoiceStore.getState().leaveVoice();
+    }
     if (voiceFullscreen) {
       useUIStore.getState().setVoiceFullscreen(false);
       if (document.fullscreenElement) {

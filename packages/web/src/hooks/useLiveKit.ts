@@ -285,8 +285,9 @@ export function useLiveKit() {
     };
   }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, isScreenSharing]);
 
-  const connect = useCallback(async (channelId: string) => {
-    if (connectedChannelRef.current === channelId && roomRef.current?.state === ConnectionState.Connected) return;
+  const connect = useCallback(async (channelId: string, isDm?: boolean) => {
+    const storedId = isDm ? `dm-${channelId}` : channelId;
+    if (connectedChannelRef.current === storedId && roomRef.current?.state === ConnectionState.Connected) return;
     const gen = ++_connectGeneration;
 
     // Ensure AudioContext is created and resumed before tracks arrive
@@ -323,7 +324,7 @@ export function useLiveKit() {
     }
     
     try {
-      const { token, url } = await api.livekit.token(channelId);
+      const { token, url } = isDm ? await api.livekit.dmToken(channelId) : await api.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
       const newRoom = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: false } });
       roomRef.current = newRoom;
@@ -428,9 +429,9 @@ export function useLiveKit() {
 
       await newRoom.connect(url, token);
       if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
-      _activeRoom = newRoom; 
-      connectedChannelRef.current = channelId; 
-      setConnectedChannelId(channelId);
+      _activeRoom = newRoom;
+      connectedChannelRef.current = storedId;
+      setConnectedChannelId(storedId);
       setRoom(newRoom); 
       setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
@@ -457,152 +458,6 @@ export function useLiveKit() {
         newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
       }
       
-      updateParticipants();
-    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); } }
-    finally { if (gen === _connectGeneration) setIsConnecting(false); }
-  }, [updateParticipants, handleDataReceived]);
-
-  const connectDm = useCallback(async (dmChannelId: string) => {
-    const gen = ++_connectGeneration;
-
-    // Ensure AudioContext is created and resumed before tracks arrive
-    await AudioManager.getInstance().resumeContext();
-
-    // 1. Reset state immediately
-    SpeakingDetector.getInstance().clear();
-    setRoom(null);
-    useVoiceStore.getState().setParticipants([]);
-    useVoiceStore.getState().setSpeakingParticipants(new Set());
-    setIsConnected(false);
-    setIsConnecting(true);
-    setConnectionState(ConnectionState.Connecting);
-    setConnectionError(null);
-    setConnectedChannelId(null);
-
-    useVoiceStore.getState().setConnectionError(null);
-    useVoiceStore.getState().setConnectionQuality('unknown');
-
-    // 2. Strictly disconnect previous room (Local Ref OR Global Ref)
-    const roomToDisconnect = roomRef.current || _activeRoom;
-
-    if (roomToDisconnect) {
-      try {
-        console.log('[LiveKit] Disconnecting previous room (DM):', roomToDisconnect.name);
-        await roomToDisconnect.disconnect();
-      } catch (err) {
-        console.warn('Error disconnecting from previous room:', err);
-      }
-      roomRef.current = null;
-      _activeRoom = null;
-    }
-
-    try {
-      const { token, url } = await api.livekit.dmToken(dmChannelId);
-      if (gen !== _connectGeneration) return;
-      const newRoom = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: false } });
-      roomRef.current = newRoom;
-      const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
-      newRoom.on(RoomEvent.ParticipantConnected, guardedUpdate);
-      newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
-      newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        if (track.kind === Track.Kind.Audio) {
-          (track as RemoteAudioTrack).detach();
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) {
-          (track as RemoteAudioTrack).detach();
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.LocalTrackPublished, (publication: LocalTrackPublication) => {
-        if (publication.source === Track.Source.ScreenShare) {
-          const { userId } = parseIdentity(newRoom.localParticipant.identity);
-          useVoiceStore.getState().watchStream(userId);
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
-        if (publication.source === Track.Source.ScreenShare) {
-          const { userId } = parseIdentity(newRoom.localParticipant.identity);
-          useVoiceStore.getState().unwatchStream(userId);
-          // OS-level "Stop sharing" fires this without going through stopScreenShare
-          handleScreenShareUnpublished();
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
-      newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
-      newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (
-          publication.source === Track.Source.ScreenShare ||
-          publication.source === Track.Source.ScreenShareAudio
-        ) {
-          (publication as RemoteTrackPublication).setSubscribed(false);
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.TrackUnpublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (publication.source === Track.Source.ScreenShare) {
-          const { userId } = parseIdentity(participant.identity);
-          const state = useVoiceStore.getState();
-          state.unwatchStream(userId);
-          state.clearStreamVolume(userId);
-          state.clearStreamMute(userId);
-        }
-        guardedUpdate();
-      });
-      newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
-        if (participant.identity === newRoom.localParticipant.identity) {
-          useVoiceStore.getState().setConnectionQuality(quality as any);
-        }
-      });
-      newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
-        if (roomRef.current === newRoom) {
-          setConnectionState(state);
-          const connected = state === ConnectionState.Connected;
-          const connecting = state === ConnectionState.Connecting || state === ConnectionState.Reconnecting;
-
-          setIsConnected(connected);
-          setIsConnecting(connecting);
-
-          useVoiceStore.getState().setIsLiveKitConnected(connected);
-
-          if (connected) {
-            updateParticipants();
-          }
-        }
-      });
-      await newRoom.connect(url, token);
-      if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
-      const fullId = `dm-${dmChannelId}`;
-      _activeRoom = newRoom;
-      connectedChannelRef.current = fullId;
-      setConnectedChannelId(fullId);
-      setRoom(newRoom);
-      setIsConnected(true);
-      useVoiceStore.getState().setIsLiveKitConnected(true);
-      updateParticipants();
-
-      // Unsubscribe from any remote screen share tracks that auto-subscribed during connect
-      newRoom.remoteParticipants.forEach((rp) => {
-        rp.trackPublications.forEach((pub) => {
-          if (
-            (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) &&
-            pub.isSubscribed
-          ) {
-            (pub as RemoteTrackPublication).setSubscribed(false);
-          }
-        });
-      });
-
-      const { isMuted: wasMuted, isDeafened: wasDeafened } = useVoiceStore.getState();
-      useVoiceStore.setState({ isCameraOn: false, isScreenSharing: false });
-      
-      if (wasDeafened) {
-        newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
-      }
       updateParticipants();
     } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); } }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
@@ -704,5 +559,5 @@ export function useLiveKit() {
   }, []);
 
 
-  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
+  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic, toggleCamera, toggleScreenShare };
 }

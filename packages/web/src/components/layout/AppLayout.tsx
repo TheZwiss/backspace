@@ -95,7 +95,6 @@ export function AppLayout() {
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const {
     connect: connectVoice,
-    connectDm: connectDmVoice,
     disconnect: disconnectVoice,
     isConnected: isVoiceConnected,
     isConnecting: isVoiceConnecting,
@@ -133,7 +132,7 @@ export function AppLayout() {
           lastAttemptedRef.current = targetChannelId;
           
           if (activeDmCall) {
-            await connectDmVoice(activeDmCall.dmChannelId);
+            await connectVoice(activeDmCall.dmChannelId, true);
           } else {
             await connectVoice(targetChannelId);
           }
@@ -162,8 +161,7 @@ export function AppLayout() {
     isWsConnected, 
     isLoading, 
     user, 
-    connectVoice, 
-    connectDmVoice, 
+    connectVoice,
     disconnectVoice
   ]);
 

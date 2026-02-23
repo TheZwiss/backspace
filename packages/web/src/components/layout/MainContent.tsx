@@ -9,7 +9,6 @@ import { TypingIndicator } from '../chat/TypingIndicator';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
-import { DmCallView } from '../voice/DmCallView';
 import { FriendsPage } from '../chat/FriendsPage';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -85,8 +84,37 @@ export function MainContent() {
 
     if (isInDmCall) {
       return (
-        <div className="flex-1 flex flex-col min-w-0 relative">
-          <DmCallView />
+        <div
+          ref={voiceContainerRef}
+          className={`flex-1 flex flex-col bg-[#0b0c0e] min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
+        >
+          <div className={`h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-[#0b0c0e] transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+            <div className="flex items-center gap-2">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
+                <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+              </svg>
+              <span className="font-bold text-discord-text-primary">{dmName}</span>
+              {connectionError ? (
+                <span className="text-xs text-discord-red font-medium ml-2">Connection Failed</span>
+              ) : isLiveKitConnected ? (
+                <>
+                  <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
+                  <span className="text-xs text-discord-text-muted ml-1">{participants.length} in call</span>
+                </>
+              ) : (
+                <span className="text-xs text-discord-yellow font-medium ml-2">Connecting...</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <MemberListToggleButton />
+            </div>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden pb-20">
+            <VoiceGrid participants={participants} />
+          </div>
+
+          <VoiceControlBar />
         </div>
       );
     }

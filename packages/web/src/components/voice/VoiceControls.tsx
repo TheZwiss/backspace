@@ -25,10 +25,12 @@ export function VoiceControls() {
   const [showVideoQuality, setShowVideoQuality] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
 
-  if (!currentVoiceChannelId) return null;
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+
+  if (!currentVoiceChannelId && !activeDmCall) return null;
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
-  const channelName = channel?.name ?? 'Voice Channel';
+  const channelName = channel?.name ?? (activeDmCall ? 'DM Call' : 'Voice Channel');
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -66,8 +68,14 @@ export function VoiceControls() {
   };
 
   const handleDisconnect = () => {
-    wsSend({ type: 'voice_leave' });
-    useVoiceStore.getState().leaveVoice();
+    const { activeDmCall } = useVoiceStore.getState();
+    if (activeDmCall) {
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId });
+      useVoiceStore.getState().setActiveDmCall(null);
+    } else {
+      wsSend({ type: 'voice_leave' });
+      useVoiceStore.getState().leaveVoice();
+    }
   };
 
   const statusColor = connectionError
