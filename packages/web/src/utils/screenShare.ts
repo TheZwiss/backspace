@@ -70,11 +70,12 @@ export async function startScreenShare(room: Room): Promise<boolean> {
   const { videoQuality } = useVoiceStore.getState();
   const preset = SCREEN_QUALITY_MAP[videoQuality] || AUTO_PRESET;
 
-  // Notify AudioManager BEFORE enabling screen share so the mic track
-  // gets republished with AEC off, preventing Chrome's ducking.
-  AudioManager.getInstance().setScreenShareActive(true);
-
   try {
+    // NOTE: We do NOT call AudioManager.setScreenShareActive(true) before the
+    // browser picker. The picker suspends getUserMedia while its secure overlay
+    // is open — if we killed the mic stream here (to rebuild without AEC), the
+    // mic would stay dead until the user picks a screen (5-30s of silence).
+    // Instead we defer the AEC toggle to after the track is acquired.
     const track = await room.localParticipant.setScreenShareEnabled(true, {
       audio: true,
       resolution: preset.resolution,
@@ -88,9 +89,13 @@ export async function startScreenShare(room: Room): Promise<boolean> {
 
     if (!track) {
       // User cancelled the screen picker
-      AudioManager.getInstance().setScreenShareActive(false);
       return false;
     }
+
+    // NOW that the track is acquired and published, rebuild the mic without AEC.
+    // Chrome's AEC uses screen share audio as a reference signal and ducks the mic;
+    // this severs that link. The mic is dead for ~50ms during the rebuild — imperceptible.
+    AudioManager.getInstance().setScreenShareActive(true);
 
     // Tell the encoder to optimize for motion (more P-frames, fewer I-frames)
     // Must be set BEFORE the overdrive timer so the encoder knows from frame 1
