@@ -107,6 +107,12 @@ function parseIdentity(identity: string): { userId: string; username: string } {
 
 let _connectGeneration = 0;
 
+/** Strip all listeners then disconnect — prevents ghost Room memory leaks. */
+function destroyRoom(room: Room | null): Promise<void> | void {
+  if (!room) return;
+  room.removeAllListeners();
+  return room.disconnect();
+}
 
 export function useLiveKit() {
   const [room, setRoom] = useState<Room | null>(null);
@@ -314,8 +320,8 @@ export function useLiveKit() {
     
     if (roomToDisconnect) {
       try {
-        console.log('[LiveKit] Disconnecting previous room:', roomToDisconnect.name);
-        await roomToDisconnect.disconnect();
+        console.log('[LiveKit] Destroying previous room:', roomToDisconnect.name);
+        await destroyRoom(roomToDisconnect);
       } catch (err) {
         console.warn('Error disconnecting from previous room:', err);
       }
@@ -428,7 +434,7 @@ export function useLiveKit() {
       });
 
       await newRoom.connect(url, token);
-      if (gen !== _connectGeneration) { newRoom.disconnect(); return; }
+      if (gen !== _connectGeneration) { destroyRoom(newRoom); return; }
       _activeRoom = newRoom;
       connectedChannelRef.current = storedId;
       setConnectedChannelId(storedId);
@@ -469,7 +475,7 @@ export function useLiveKit() {
     connectedChannelRef.current = null;
     setConnectedChannelId(null);
     if (roomRef.current) {
-      await roomRef.current.disconnect();
+      await destroyRoom(roomRef.current);
       roomRef.current = null;
       _activeRoom = null;
       setRoom(null);
@@ -555,7 +561,7 @@ export function useLiveKit() {
   }, [room]);
 
   useEffect(() => {
-    return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
+    return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
 
