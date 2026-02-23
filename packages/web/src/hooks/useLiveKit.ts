@@ -17,18 +17,11 @@ import {
 import { api } from '../api/client';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
+import { SpeakingDetector } from '../audio/SpeakingDetector';
 
 /**
- * OPENCORD NATIVE OVERDRIVE PIPELINE v32
+ * OPENCORD NATIVE OVERDRIVE PIPELINE v33
  */
-
-function setsEqual(a: Set<string>, b: Set<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const v of a) {
-    if (!b.has(v)) return false;
-  }
-  return true;
-}
 
 const QUALITY_MAP: Record<string, VideoPreset> = {
   '1080p60': new VideoPreset(1920, 1080, 12_000_000, 60),
@@ -233,6 +226,7 @@ export function useLiveKit() {
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
     useVoiceStore.getState().setParticipants(allParticipants);
+    SpeakingDetector.getInstance().syncTracks(allParticipants);
   }, []);
 
   const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
@@ -331,6 +325,7 @@ export function useLiveKit() {
     await AudioManager.getInstance().resumeContext();
 
     // 1. Reset state immediately to reflect "Loading/Switching" in UI
+    SpeakingDetector.getInstance().clear();
     setRoom(null);
     useVoiceStore.getState().setParticipants([]);
     useVoiceStore.getState().setSpeakingParticipants(new Set());
@@ -409,12 +404,6 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
-      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-        if (roomRef.current !== newRoom) return;
-        useVoiceStore.getState().setSpeakingParticipants(
-          new Set(speakers.map(s => s.identity))
-        );
-      });
       newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
       newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (
@@ -459,6 +448,7 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.Disconnected, () => {
         if (roomRef.current !== newRoom) return;
+        SpeakingDetector.getInstance().clear();
         setConnectionState(ConnectionState.Disconnected);
         setConnectedChannelId(null);
         roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null);
@@ -510,6 +500,7 @@ export function useLiveKit() {
     await AudioManager.getInstance().resumeContext();
 
     // 1. Reset state immediately
+    SpeakingDetector.getInstance().clear();
     setRoom(null);
     useVoiceStore.getState().setParticipants([]);
     useVoiceStore.getState().setSpeakingParticipants(new Set());
@@ -572,12 +563,6 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
-      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
-        if (roomRef.current !== newRoom) return;
-        useVoiceStore.getState().setSpeakingParticipants(
-          new Set(speakers.map(s => s.identity))
-        );
-      });
       newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (
           publication.source === Track.Source.ScreenShare ||
@@ -654,14 +639,15 @@ export function useLiveKit() {
 
   const disconnect = useCallback(async () => {
     _connectGeneration++;
+    SpeakingDetector.getInstance().clear();
     connectedChannelRef.current = null;
     setConnectedChannelId(null);
-    if (roomRef.current) { 
-      await roomRef.current.disconnect(); 
-      roomRef.current = null; 
-      _activeRoom = null; 
-      setRoom(null); 
-      setIsConnected(false); 
+    if (roomRef.current) {
+      await roomRef.current.disconnect();
+      roomRef.current = null;
+      _activeRoom = null;
+      setRoom(null);
+      setIsConnected(false);
       setIsConnecting(false);
       setConnectionState(ConnectionState.Disconnected);
       useVoiceStore.getState().setParticipants([]);
@@ -775,27 +761,9 @@ export function useLiveKit() {
   }, [room]);
 
   useEffect(() => {
-    return () => { _connectGeneration++; if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
+    return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
-  // Speaking poll safety net: catches missed ActiveSpeakersChanged events
-  useEffect(() => {
-    if (!isConnected) return;
-    const interval = setInterval(() => {
-      const r = roomRef.current;
-      if (!r) return;
-      const speakingIds = new Set<string>();
-      if (r.localParticipant.isSpeaking) speakingIds.add(r.localParticipant.identity);
-      r.remoteParticipants.forEach((p) => {
-        if (p.isSpeaking) speakingIds.add(p.identity);
-      });
-      const current = useVoiceStore.getState().speakingParticipantIds;
-      if (!setsEqual(current, speakingIds)) {
-        useVoiceStore.getState().setSpeakingParticipants(speakingIds);
-      }
-    }, 200);
-    return () => clearInterval(interval);
-  }, [isConnected]);
 
   return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
 }
