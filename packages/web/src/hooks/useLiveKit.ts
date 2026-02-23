@@ -107,10 +107,9 @@ function parseIdentity(identity: string): { userId: string; username: string } {
 
 let _connectGeneration = 0;
 
-/** Strip all listeners then disconnect — prevents ghost Room memory leaks. */
+/** Null-safe Room.disconnect() wrapper — lets the SDK tear down its own internals cleanly. */
 function destroyRoom(room: Room | null): Promise<void> | void {
   if (!room) return;
-  room.removeAllListeners();
   return room.disconnect();
 }
 
