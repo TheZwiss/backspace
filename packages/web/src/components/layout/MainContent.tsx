@@ -26,6 +26,8 @@ export function MainContent() {
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
   const participants = useVoiceStore((s) => s.participants);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
+  const connectionError = useVoiceStore((s) => s.connectionError);
   const showDms = useUIStore((s) => s.showDms);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
@@ -236,8 +238,16 @@ export function MainContent() {
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
             </svg>
             <span className="font-bold text-discord-text-primary">{channel.name}</span>
-            <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
-            <span className="text-xs text-discord-text-muted ml-1">{participants.length} connected</span>
+            {connectionError ? (
+              <span className="text-xs text-discord-red font-medium ml-2">Connection Failed</span>
+            ) : isLiveKitConnected ? (
+              <>
+                <span className="text-xs text-discord-green font-medium ml-2">Connected</span>
+                <span className="text-xs text-discord-text-muted ml-1">{participants.length} connected</span>
+              </>
+            ) : (
+              <span className="text-xs text-discord-yellow font-medium ml-2">Connecting...</span>
+            )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <MemberListToggleButton />

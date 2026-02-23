@@ -5,6 +5,7 @@ import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { VideoQualityPopover } from './VideoQualityPopover';
+import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -20,8 +21,10 @@ export function VoiceControls() {
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
+  const connectionQuality = useVoiceStore((s) => s.connectionQuality);
   const channels = useServerStore((s) => s.channels);
   const [showVideoQuality, setShowVideoQuality] = useState(false);
+  const [showConnectionInfo, setShowConnectionInfo] = useState(false);
 
   if (!currentVoiceChannelId) return null;
 
@@ -73,18 +76,34 @@ export function VoiceControls() {
       ? 'bg-discord-green/20'
       : 'bg-discord-yellow/20';
 
+  const qualityColor =
+    connectionQuality === 'excellent' || connectionQuality === 'good'
+      ? 'text-discord-green'
+      : connectionQuality === 'poor'
+        ? 'text-discord-yellow'
+        : connectionQuality === 'lost'
+          ? 'text-discord-red'
+          : statusColor; // 'unknown' falls back to connection-state color
+
   const btnBase = 'flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors';
   const btnDefaultStyle = 'bg-[#111214] text-discord-text-muted hover:bg-[#1a1b1e] hover:text-discord-text-secondary';
 
   return (
     <>
       {/* Row 1: Signal icon + status text + disconnect */}
-      <div className="flex items-center gap-2 px-3 pt-3 pb-1">
-        <div className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0`}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={statusColor}>
+      <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
+        <button
+          onClick={() => {
+            setShowConnectionInfo(!showConnectionInfo);
+            if (!showConnectionInfo) setShowVideoQuality(false);
+          }}
+          className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0 hover:brightness-125 transition-all`}
+          title="Connection Info"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={qualityColor}>
             <path d="M1.5 21.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM3.14 15.75a.75.75 0 01-.09-1.06A8.46 8.46 0 0112 11a8.46 8.46 0 018.95 3.69.75.75 0 01-1.15.97A6.96 6.96 0 0012 12.5a6.96 6.96 0 00-7.8 3.16.75.75 0 01-1.06.09zM6.37 18.3a.75.75 0 01-.08-1.06A5.46 5.46 0 0112 15a5.46 5.46 0 015.71 2.24.75.75 0 01-1.14.97A3.96 3.96 0 0012 16.5a3.96 3.96 0 00-4.57 1.71.75.75 0 01-1.06.09z" />
           </svg>
-        </div>
+        </button>
 
         <div className="min-w-0 flex-1">
           <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
@@ -96,11 +115,6 @@ export function VoiceControls() {
         </div>
 
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button className="w-7 h-7 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded" title="Connection Info">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2 20h2V8H2v12zm5 0h2V4H7v16zm5 0h2v-8h-2v8zm5 0h2V12h-2v8z" />
-            </svg>
-          </button>
           <button
             onClick={handleDisconnect}
             className="w-7 h-7 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded"
@@ -111,6 +125,12 @@ export function VoiceControls() {
             </svg>
           </button>
         </div>
+
+        {/* Connection Info Popover */}
+        <ConnectionInfoPopover
+          open={showConnectionInfo}
+          onClose={() => setShowConnectionInfo(false)}
+        />
       </div>
 
       {/* Row 2: Camera, Screen Share, Video Quality, Noise Suppression */}
@@ -153,7 +173,10 @@ export function VoiceControls() {
 
         {/* Video Quality */}
         <button
-          onClick={() => setShowVideoQuality(!showVideoQuality)}
+          onClick={() => {
+            setShowVideoQuality(!showVideoQuality);
+            if (!showVideoQuality) setShowConnectionInfo(false);
+          }}
           className={`${btnBase} ${
             showVideoQuality
               ? 'bg-[#111214] text-discord-blurple hover:bg-[#1a1b1e]'

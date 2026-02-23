@@ -29,6 +29,7 @@ export function DmCallView() {
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const setActiveDmCall = useVoiceStore((s) => s.setActiveDmCall);
   const leaveVoice = useVoiceStore((s) => s.leaveVoice);
+  const speakingParticipantIds = useVoiceStore((s) => s.speakingParticipantIds);
 
   const dmChannels = useServerStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
@@ -164,7 +165,7 @@ export function DmCallView() {
               <div className="w-24 h-24 rounded-full bg-discord-blurple flex items-center justify-center text-white text-4xl font-bold">
                 {otherName.charAt(0).toUpperCase()}
               </div>
-              {remoteParticipant?.isSpeaking && (
+              {remoteParticipant && speakingParticipantIds.has(remoteParticipant.identity) && (
                 <div className="absolute inset-0 rounded-full ring-[3px] ring-discord-green" />
               )}
             </div>
@@ -203,7 +204,7 @@ export function DmCallView() {
               <div className="w-24 h-24 rounded-full bg-discord-blurple flex items-center justify-center text-white text-4xl font-bold">
                 {(authUser?.displayName ?? authUser?.username ?? 'Y').charAt(0).toUpperCase()}
               </div>
-              {localParticipant?.isSpeaking && (
+              {localParticipant && speakingParticipantIds.has(localParticipant.identity) && (
                 <div className="absolute inset-0 rounded-full ring-[3px] ring-discord-green" />
               )}
             </div>

@@ -74,9 +74,10 @@ export function GlobalAudioRenderer() {
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
   const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
+  const speakingParticipantIds = useVoiceStore((s) => s.speakingParticipantIds);
 
   // Determine if someone is currently speaking (for stream attenuation)
-  const someoneIsSpeaking = participants.some((p) => !p.isLocal && p.isSpeaking);
+  const someoneIsSpeaking = participants.some((p) => !p.isLocal && speakingParticipantIds.has(p.identity));
 
   // Only render audio for remote participants
   const remoteParticipants = participants.filter((p) => !p.isLocal);

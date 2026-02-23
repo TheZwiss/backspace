@@ -65,6 +65,7 @@ export function PictureInPicture() {
   const participants = useVoiceStore((s) => s.participants);
   const focusedParticipantId = useVoiceStore((s) => s.focusedParticipantId);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
+  const speakingParticipantIds = useVoiceStore((s) => s.speakingParticipantIds);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
@@ -105,12 +106,12 @@ export function PictureInPicture() {
 
   // Fallback participant for avatar (most relevant remote, or first participant)
   const fallbackParticipant = useMemo(() => {
-    const speaking = participants.find(p => !p.isLocal && p.isSpeaking);
+    const speaking = participants.find(p => !p.isLocal && speakingParticipantIds.has(p.identity));
     if (speaking) return speaking;
     const remote = participants.find(p => !p.isLocal);
     if (remote) return remote;
     return participants[0] ?? null;
-  }, [participants]);
+  }, [participants, speakingParticipantIds]);
 
   // Channel name for display
   const channelName = useMemo(() => {
@@ -260,7 +261,7 @@ export function PictureInPicture() {
                 name={displayParticipant.username}
                 size={64}
               />
-              {displayParticipant.isSpeaking && (
+              {speakingParticipantIds.has(displayParticipant.identity) && (
                 <div className="absolute -inset-1 rounded-full ring-2 ring-discord-green animate-pulse" />
               )}
             </div>
@@ -297,7 +298,7 @@ export function PictureInPicture() {
       <div className="absolute bottom-0 left-0 right-0 px-3 py-2 bg-gradient-to-t from-black/70 to-transparent">
         <div className="flex items-center gap-1.5">
           <span className="text-white text-xs font-semibold truncate">{displayName}</span>
-          {displayParticipant?.isSpeaking && (
+          {displayParticipant && speakingParticipantIds.has(displayParticipant.identity) && (
             <div className="w-2 h-2 rounded-full bg-discord-green flex-shrink-0 animate-pulse" />
           )}
         </div>

@@ -14,6 +14,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
+  const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
 
   const [, forceUpdate] = useState(0);
 
@@ -70,7 +71,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   return (
     <div
       className={`relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
-        participant.isSpeaking
+        isSpeaking
           ? 'ring-[3px] ring-discord-green shadow-[0_0_12px_rgba(35,165,90,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
       } ${large ? 'h-full w-full' : 'h-full aspect-video'}`}
@@ -92,7 +93,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               name={participant.username}
               size={large ? 100 : 64}
             />
-            {participant.isSpeaking && (
+            {isSpeaking && (
               <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-discord-green animate-pulse" />
             )}
           </div>

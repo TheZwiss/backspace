@@ -93,12 +93,10 @@ export function AppLayout() {
   
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
-  const setParticipants = useVoiceStore((s) => s.setParticipants);
   const {
     connect: connectVoice,
     connectDm: connectDmVoice,
     disconnect: disconnectVoice,
-    participants: voiceParticipants,
     isConnected: isVoiceConnected,
     isConnecting: isVoiceConnecting,
     connectedChannelId,
@@ -106,11 +104,6 @@ export function AppLayout() {
 
   // Initialize WebSocket
   const { isConnected: isWsConnected } = useWebSocket();
-
-  // Sync participants to store
-  useEffect(() => {
-    setParticipants(voiceParticipants);
-  }, [voiceParticipants, setParticipants]);
 
   // Track the last channel we attempted to connect to, to prevent effect loops
   const lastAttemptedRef = React.useRef<string | null>(null);

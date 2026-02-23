@@ -8,6 +8,7 @@ import {
   RemoteTrackPublication,
   RemoteAudioTrack,
   ConnectionState,
+  ConnectionQuality,
   VideoPresets,
   VideoPreset,
   LocalAudioTrack,
@@ -20,6 +21,14 @@ import { AudioManager } from '../audio/AudioManager';
 /**
  * OPENCORD NATIVE OVERDRIVE PIPELINE v32
  */
+
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) {
+    if (!b.has(v)) return false;
+  }
+  return true;
+}
 
 const QUALITY_MAP: Record<string, VideoPreset> = {
   '1080p60': new VideoPreset(1920, 1080, 12_000_000, 60),
@@ -42,7 +51,6 @@ export interface ParticipantInfo {
   identity: string;
   userId: string;
   username: string;
-  isSpeaking: boolean;
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
@@ -141,7 +149,6 @@ async function applyOverdriveHammer(room: Room, source: Track.Source, preset: Vi
 
 export function useLiveKit() {
   const [room, setRoom] = useState<Room | null>(null);
-  const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
@@ -212,7 +219,6 @@ export function useLiveKit() {
         identity: p.identity,
         userId,
         username,
-        isSpeaking: p.isSpeaking,
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
         isCameraOn: !!videoTrack,
@@ -226,7 +232,7 @@ export function useLiveKit() {
     };
     processParticipant(r.localParticipant, true);
     r.remoteParticipants.forEach((p) => processParticipant(p, false));
-    setParticipants(allParticipants);
+    useVoiceStore.getState().setParticipants(allParticipants);
   }, []);
 
   const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
@@ -326,14 +332,17 @@ export function useLiveKit() {
 
     // 1. Reset state immediately to reflect "Loading/Switching" in UI
     setRoom(null);
-    setParticipants([]);
+    useVoiceStore.getState().setParticipants([]);
+    useVoiceStore.getState().setSpeakingParticipants(new Set());
     setIsConnected(false);
     setIsConnecting(true);
     setConnectionState(ConnectionState.Connecting);
     setConnectionError(null);
     setConnectedChannelId(null); // Clear this so AppLayout knows we are transitioning
-    
+
+    useVoiceStore.getState().setConnectionError(null);
     useVoiceStore.getState().setIsLiveKitConnected(false);
+    useVoiceStore.getState().setConnectionQuality('unknown');
 
     // 2. Strictly disconnect previous room (Local Ref OR Global Ref)
     // This handles cases where AppLayout might have remounted, losing roomRef but leaving _activeRoom alive.
@@ -400,7 +409,12 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
-      newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
+      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        if (roomRef.current !== newRoom) return;
+        useVoiceStore.getState().setSpeakingParticipants(
+          new Set(speakers.map(s => s.identity))
+        );
+      });
       newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
       newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (
@@ -422,17 +436,22 @@ export function useLiveKit() {
         guardedUpdate();
       });
       newRoom.on(RoomEvent.DataReceived, handleDataReceived);
+      newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+        if (participant.identity === newRoom.localParticipant.identity) {
+          useVoiceStore.getState().setConnectionQuality(quality as any);
+        }
+      });
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
           setConnectionState(state);
           const connected = state === ConnectionState.Connected;
           const connecting = state === ConnectionState.Connecting || state === ConnectionState.Reconnecting;
-          
+
           setIsConnected(connected);
           setIsConnecting(connecting);
-          
+
           useVoiceStore.getState().setIsLiveKitConnected(connected);
-          
+
           if (connected) {
             updateParticipants();
           }
@@ -442,7 +461,9 @@ export function useLiveKit() {
         if (roomRef.current !== newRoom) return;
         setConnectionState(ConnectionState.Disconnected);
         setConnectedChannelId(null);
-        roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null); setParticipants([]);
+        roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null);
+        useVoiceStore.getState().setParticipants([]);
+        useVoiceStore.getState().setSpeakingParticipants(new Set());
         useVoiceStore.getState().setIsLiveKitConnected(false);
       });
 
@@ -478,7 +499,7 @@ export function useLiveKit() {
       }
       
       updateParticipants();
-    } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
+    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); } }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);
 
@@ -490,12 +511,16 @@ export function useLiveKit() {
 
     // 1. Reset state immediately
     setRoom(null);
-    setParticipants([]);
+    useVoiceStore.getState().setParticipants([]);
+    useVoiceStore.getState().setSpeakingParticipants(new Set());
     setIsConnected(false);
     setIsConnecting(true);
     setConnectionState(ConnectionState.Connecting);
     setConnectionError(null);
     setConnectedChannelId(null);
+
+    useVoiceStore.getState().setConnectionError(null);
+    useVoiceStore.getState().setConnectionQuality('unknown');
 
     // 2. Strictly disconnect previous room (Local Ref OR Global Ref)
     const roomToDisconnect = roomRef.current || _activeRoom;
@@ -547,7 +572,12 @@ export function useLiveKit() {
       });
       newRoom.on(RoomEvent.TrackMuted, guardedUpdate);
       newRoom.on(RoomEvent.TrackUnmuted, guardedUpdate);
-      newRoom.on(RoomEvent.ActiveSpeakersChanged, guardedUpdate);
+      newRoom.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        if (roomRef.current !== newRoom) return;
+        useVoiceStore.getState().setSpeakingParticipants(
+          new Set(speakers.map(s => s.identity))
+        );
+      });
       newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (
           publication.source === Track.Source.ScreenShare ||
@@ -566,6 +596,11 @@ export function useLiveKit() {
           state.clearStreamMute(userId);
         }
         guardedUpdate();
+      });
+      newRoom.on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+        if (participant.identity === newRoom.localParticipant.identity) {
+          useVoiceStore.getState().setConnectionQuality(quality as any);
+        }
       });
       newRoom.on(RoomEvent.ConnectionStateChanged, (state) => {
         if (roomRef.current === newRoom) {
@@ -613,7 +648,7 @@ export function useLiveKit() {
         newRoom.remoteParticipants.forEach((p) => p.setVolume(0));
       }
       updateParticipants();
-    } catch (err) { if (gen === _connectGeneration) setConnectionError('Failed to connect'); }
+    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); } }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);
 
@@ -629,8 +664,9 @@ export function useLiveKit() {
       setIsConnected(false); 
       setIsConnecting(false);
       setConnectionState(ConnectionState.Disconnected);
-      setParticipants([]); 
-      useVoiceStore.getState().setIsLiveKitConnected(false); 
+      useVoiceStore.getState().setParticipants([]);
+      useVoiceStore.getState().setSpeakingParticipants(new Set());
+      useVoiceStore.getState().setIsLiveKitConnected(false);
     }
   }, []);
 
@@ -742,5 +778,24 @@ export function useLiveKit() {
     return () => { _connectGeneration++; if (roomRef.current) { roomRef.current.disconnect(); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
-  return { room, participants, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
+  // Speaking poll safety net: catches missed ActiveSpeakersChanged events
+  useEffect(() => {
+    if (!isConnected) return;
+    const interval = setInterval(() => {
+      const r = roomRef.current;
+      if (!r) return;
+      const speakingIds = new Set<string>();
+      if (r.localParticipant.isSpeaking) speakingIds.add(r.localParticipant.identity);
+      r.remoteParticipants.forEach((p) => {
+        if (p.isSpeaking) speakingIds.add(p.identity);
+      });
+      const current = useVoiceStore.getState().speakingParticipantIds;
+      if (!setsEqual(current, speakingIds)) {
+        useVoiceStore.getState().setSpeakingParticipants(speakingIds);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isConnected]);
+
+  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, connectDm, disconnect, toggleMic, toggleCamera, toggleScreenShare };
 }

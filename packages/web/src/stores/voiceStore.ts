@@ -11,8 +11,11 @@ interface VoiceState {
   isCameraOn: boolean;
   isScreenSharing: boolean;
   participants: ParticipantInfo[];
+  speakingParticipantIds: Set<string>;
   connectionError: string | null;
   isLiveKitConnected: boolean;
+  connectionQuality: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
+  setConnectionQuality: (q: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown') => void;
   inputVolume: number;  // 0-200 (100 = default)
   outputVolume: number; // 0-200 (100 = default)
   inputDeviceId: string;
@@ -49,6 +52,7 @@ interface VoiceState {
   removeVoiceUser: (channelId: string, userId: string) => void;
   setCurrentVoiceChannel: (channelId: string | null) => void;
   setParticipants: (participants: ParticipantInfo[]) => void;
+  setSpeakingParticipants: (ids: Set<string>) => void;
   setConnectionError: (error: string | null) => void;
   setIsLiveKitConnected: (connected: boolean) => void;
   setInputVolume: (volume: number) => void;
@@ -90,8 +94,10 @@ export const useVoiceStore = create<VoiceState>()(
       isCameraOn: false,
       isScreenSharing: false,
       participants: [],
+      speakingParticipantIds: new Set(),
       connectionError: null,
       isLiveKitConnected: false,
+      connectionQuality: 'unknown',
       inputVolume: 100,
       outputVolume: 100,
       inputDeviceId: 'default',
@@ -202,8 +208,10 @@ export const useVoiceStore = create<VoiceState>()(
       }),
 
       setParticipants: (participants) => set({ participants }),
+      setSpeakingParticipants: (ids) => set({ speakingParticipantIds: ids }),
       setConnectionError: (error) => set({ connectionError: error }),
       setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
+      setConnectionQuality: (quality) => set({ connectionQuality: quality }),
 
       setInputVolume: (volume) => {
         set({ inputVolume: volume });
@@ -264,8 +272,10 @@ export const useVoiceStore = create<VoiceState>()(
         isCameraOn: false,
         isScreenSharing: false,
         participants: [],
+        speakingParticipantIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
+        connectionQuality: 'unknown',
         focusedParticipantId: null,
         activeDmCall: null,
         outgoingCall: null,
@@ -283,8 +293,10 @@ export const useVoiceStore = create<VoiceState>()(
         isCameraOn: false,
         isScreenSharing: false,
         participants: [],
+        speakingParticipantIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
+        connectionQuality: 'unknown',
         inputVolume: 100,
         outputVolume: 100,
         inputDeviceId: 'default',
