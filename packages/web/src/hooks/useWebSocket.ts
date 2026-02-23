@@ -45,20 +45,20 @@ function handleEvent(event: ServerEvent): void {
           setVoiceUsers(channelId, userIds);
         }
       }
-      // Populate voice user statuses (mute/deafen) from server
+      // Populate voice user statuses (mute/deafen/camera/screenshare) from server
       if (event.voiceUserStates) {
         for (const [uid, status] of Object.entries(event.voiceUserStates)) {
-          setVoiceUserStatus(uid, status.isMuted, status.isDeafened);
+          setVoiceUserStatus(uid, status.isMuted, status.isDeafened, status.isCameraOn, status.isScreenSharing);
         }
       }
       // Re-register in voice channel if we're still connected to LiveKit
       // (WebSocket reconnect causes server to drop our voice tracking)
       {
-        const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened } = useVoiceStore.getState();
+        const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen } = useVoiceStore.getState();
         if (currentVoiceChannelId) {
-          console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened });
+          console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened, curCamera, curScreen });
           wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
-          wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened });
+          wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen });
         }
       }
       break;
@@ -99,7 +99,7 @@ function handleEvent(event: ServerEvent): void {
       break;
 
     case 'voice_status_update':
-      setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened);
+      setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened, event.isCameraOn, event.isScreenSharing);
       break;
 
     case 'member_joined':

@@ -44,8 +44,8 @@ class ConnectionManager {
   private wsToUser: Map<WebSocket, string> = new Map();
   // dmChannelId → { callerId, startedAt } — active DM calls
   private activeCalls: Map<string, { callerId: string; startedAt: number }> = new Map();
-  // userId → { isMuted, isDeafened } — voice user status (mute/deafen state)
-  private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean }> = new Map();
+  // userId → { isMuted, isDeafened, isCameraOn, isScreenSharing } — voice user status
+  private voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = new Map();
   // userId → Timeout
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
@@ -205,11 +205,11 @@ class ConnectionManager {
   }
 
   // Voice user status management
-  setVoiceUserStatus(userId: string, isMuted: boolean, isDeafened: boolean): void {
-    this.voiceUserStates.set(userId, { isMuted, isDeafened });
+  setVoiceUserStatus(userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean): void {
+    this.voiceUserStates.set(userId, { isMuted, isDeafened, isCameraOn, isScreenSharing });
   }
 
-  getVoiceUserStatus(userId: string): { isMuted: boolean; isDeafened: boolean } | undefined {
+  getVoiceUserStatus(userId: string): { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean } | undefined {
     return this.voiceUserStates.get(userId);
   }
 
@@ -217,7 +217,7 @@ class ConnectionManager {
     this.voiceUserStates.delete(userId);
   }
 
-  getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean }> {
+  getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
     return this.voiceUserStates;
   }
 
@@ -289,7 +289,7 @@ function buildReadyPayload(userId: string): {
   dmChannels: DmChannel[];
   folders: ServerFolder[];
   voiceStates: Record<string, string[]>;
-  voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean }>;
+  voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   readStates: ReadState[];
 } {
   const db = getDb();
@@ -506,8 +506,8 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Build voice user states — tell the client mute/deafen status of voice users
-  const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean }> = {};
+  // Build voice user states — tell the client mute/deafen/camera/screenshare status of voice users
+  const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = {};
   for (const chId of Object.keys(voiceStates)) {
     const usersInChannel = voiceStates[chId];
     if (usersInChannel) {

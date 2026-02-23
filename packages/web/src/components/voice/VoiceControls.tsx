@@ -34,8 +34,12 @@ export function VoiceControls() {
     const room = getActiveRoom();
     if (!room) return;
     try {
-      await room.localParticipant.setCameraEnabled(!isCameraOn);
+      const willEnable = !isCameraOn;
+      await room.localParticipant.setCameraEnabled(willEnable);
       toggleCamera();
+      // Broadcast camera state via WebSocket
+      const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
+      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss });
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle camera:', err);
     }
@@ -46,9 +50,15 @@ export function VoiceControls() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
-        await startScreenShare(room);
+        const started = await startScreenShare(room);
+        if (started) {
+          const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
+          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true });
+        }
       } else {
         await stopScreenShare(room);
+        const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
+        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false });
       }
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);

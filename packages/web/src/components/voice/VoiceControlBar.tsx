@@ -28,8 +28,8 @@ export function VoiceControlBar() {
   const handleMute = React.useCallback(async () => {
     toggleMic();
     // Broadcast via WebSocket so sidebar shows status without joining
-    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened });
-  }, [isMuted, isDeafened, toggleMic]);
+    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened, isCameraOn, isScreenSharing });
+  }, [isMuted, isDeafened, isCameraOn, isScreenSharing, toggleMic]);
 
   const handleDeafen = React.useCallback(async () => {
     const room = getActiveRoom();
@@ -39,7 +39,7 @@ export function VoiceControlBar() {
     if (willDeafen && !isMuted) toggleMic();
     if (!willDeafen && isMuted) toggleMic();
     // Broadcast via WebSocket
-    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen });
+    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen, isCameraOn, isScreenSharing });
     if (room) {
       try {
         // Broadcast deafen state via LiveKit data channel for in-room users
@@ -52,7 +52,7 @@ export function VoiceControlBar() {
         console.error('[VoiceControlBar] Failed to toggle deafen:', err);
       }
     }
-  }, [isDeafened, isMuted, toggleDeafen, toggleMic]);
+  }, [isDeafened, isMuted, isCameraOn, isScreenSharing, toggleDeafen, toggleMic]);
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -77,6 +77,9 @@ export function VoiceControlBar() {
         await room.localParticipant.setCameraEnabled(false);
       }
       toggleCamera();
+      // Broadcast camera state via WebSocket
+      const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
+      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss });
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle camera:', err);
     }
@@ -87,9 +90,15 @@ export function VoiceControlBar() {
     if (!room) return;
     try {
       if (!isScreenSharing) {
-        await startScreenShare(room);
+        const started = await startScreenShare(room);
+        if (started) {
+          const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
+          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true });
+        }
       } else {
         await stopScreenShare(room);
+        const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
+        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false });
       }
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle screen share:', err);

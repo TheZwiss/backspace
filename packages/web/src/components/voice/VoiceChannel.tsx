@@ -57,8 +57,8 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
             const isMuted = userId === currentUserId
               ? localIsMuted
               : (participant?.isMuted ?? wsStatus?.isMuted ?? false);
-            const hasCamera = participant?.isCameraOn ?? false;
-            const isScreenSharing = participant?.isScreenSharing ?? false;
+            const hasCamera = participant?.isCameraOn ?? wsStatus?.isCameraOn ?? false;
+            const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
 
             return (
               <div key={userId} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-discord-modifier-hover transition-colors">

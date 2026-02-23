@@ -35,7 +35,8 @@ export function ChannelSidebar() {
     toggleMic();
     // Broadcast mute status via WebSocket so non-joined users can see it
     const willBeMuted = !isMuted;
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened });
+    const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
+    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened, isCameraOn, isScreenSharing });
   };
 
   const handleDeafenToggle = async () => {
@@ -47,7 +48,8 @@ export function ChannelSidebar() {
     if (!willDeafen && isMuted) toggleMic();
     // Broadcast status via WebSocket so non-joined users can see it
     const willBeMuted = willDeafen ? true : false;
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen });
+    const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
+    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen, isCameraOn, isScreenSharing });
     if (room) {
       try {
         // Broadcast deafen state to other participants via LiveKit data channel

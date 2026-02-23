@@ -397,6 +397,8 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
         channelId,
         isMuted: status.isMuted,
         isDeafened: status.isDeafened,
+        isCameraOn: status.isCameraOn,
+        isScreenSharing: status.isScreenSharing,
       });
     }
     return;
@@ -436,6 +438,8 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
       channelId,
       isMuted: status.isMuted,
       isDeafened: status.isDeafened,
+      isCameraOn: status.isCameraOn,
+      isScreenSharing: status.isScreenSharing,
     });
   }
 }
@@ -764,6 +768,8 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
 function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
   const isMuted = event.isMuted === true;
   const isDeafened = event.isDeafened === true;
+  const isCameraOn = event.isCameraOn === true;
+  const isScreenSharing = event.isScreenSharing === true;
 
   const channelId = connectionManager.getUserVoiceChannel(userId);
   if (!channelId) return;
@@ -771,7 +777,7 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
   const serverId = getChannelServerId(channelId);
   if (!serverId) return;
 
-  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened);
+  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened, isCameraOn, isScreenSharing);
 
   connectionManager.sendToServer(serverId, {
     type: 'voice_status_update',
@@ -779,6 +785,8 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
     channelId,
     isMuted,
     isDeafened,
+    isCameraOn,
+    isScreenSharing,
   });
 }
 

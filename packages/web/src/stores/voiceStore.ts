@@ -75,8 +75,8 @@ interface VoiceState {
   deafenedUserIds: Set<string>;
   setUserDeafened: (userId: string, deafened: boolean) => void;
   // WebSocket-based voice user status (visible without joining LiveKit)
-  voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean }>;
-  setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean) => void;
+  voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
+  setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean) => void;
   clearVoiceUserStatus: (userId: string) => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
@@ -247,10 +247,10 @@ export const useVoiceStore = create<VoiceState>()(
       },
 
       voiceUserStates: new Map(),
-      setVoiceUserStatus: (userId, isMuted, isDeafened) => {
+      setVoiceUserStatus: (userId, isMuted, isDeafened, isCameraOn, isScreenSharing) => {
         set((state) => {
           const newMap = new Map(state.voiceUserStates);
-          newMap.set(userId, { isMuted, isDeafened });
+          newMap.set(userId, { isMuted, isDeafened, isCameraOn, isScreenSharing });
           return { voiceUserStates: newMap };
         });
       },

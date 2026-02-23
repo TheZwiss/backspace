@@ -1,6 +1,7 @@
 import { Room, Track, VideoPreset } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
+import { wsSend } from '../hooks/useWebSocket';
 
 /**
  * Canonical quality presets — single source of truth.
@@ -172,4 +173,7 @@ export async function changeScreenShare(room: Room): Promise<void> {
 export function handleScreenShareUnpublished(): void {
   AudioManager.getInstance().setScreenShareActive(false);
   useVoiceStore.setState({ isScreenSharing: false });
+  // Broadcast updated state via WebSocket — OS "Stop Sharing" bypasses our UI
+  const { isMuted, isDeafened, isCameraOn } = useVoiceStore.getState();
+  wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing: false });
 }
