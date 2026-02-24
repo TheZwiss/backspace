@@ -144,6 +144,15 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (server_id, user_id, role_id)
     );
 
+    CREATE TABLE IF NOT EXISTS channel_overrides (
+      channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      allow TEXT NOT NULL DEFAULT '0',
+      deny TEXT NOT NULL DEFAULT '0',
+      PRIMARY KEY (channel_id, target_type, target_id)
+    );
+
     CREATE TABLE IF NOT EXISTS read_states (
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       channel_id TEXT NOT NULL,

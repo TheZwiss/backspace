@@ -3,7 +3,7 @@ import { eq, and, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, getChannelServerId, isAdmin } from '../utils/permissions.js';
+import { hasPermission, getChannelServerId, PermissionBits } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
   CreateMessageRequest,
@@ -175,8 +175,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!isMember(serverId, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+    if (!hasPermission(request.userId, serverId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
+      return reply.code(403).send({ error: 'Missing VIEW_CHANNEL or READ_MESSAGE_HISTORY permission', statusCode: 403 });
     }
 
     const db = getDb();
@@ -268,8 +268,8 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!isMember(serverId, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+    if (!hasPermission(request.userId, serverId, PermissionBits.SEND_MESSAGES, id)) {
+      return reply.code(403).send({ error: 'Missing SEND_MESSAGES permission', statusCode: 403 });
     }
 
     if ((!content || typeof content !== 'string' || content.trim().length === 0) &&
@@ -418,9 +418,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const isAuthor = message.userId === request.userId;
-    const isAdminUser = isAdmin(serverId, request.userId);
+    const canManageMessages = hasPermission(request.userId, serverId, PermissionBits.MANAGE_MESSAGES, message.channelId);
 
-    if (!isAuthor && !isAdminUser) {
+    if (!isAuthor && !canManageMessages) {
       return reply.code(403).send({ error: 'You cannot delete this message', statusCode: 403 });
     }
 

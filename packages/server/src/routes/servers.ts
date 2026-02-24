@@ -3,7 +3,8 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isOwner, isAdmin } from '../utils/permissions.js';
+import { isMember, isServerOwner, hasPermission, PermissionBits } from '../utils/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import type {
@@ -80,7 +81,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const now = Date.now();
     const inviteCode = generateInviteCode();
 
-    // Create server, owner membership, and default channel atomically
+    // Create server, owner membership, default channel, and @everyone role atomically
     db.transaction((tx) => {
       tx.insert(schema.servers).values({
         id: serverId,
@@ -104,6 +105,17 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
         name: 'general',
         type: 'text',
         position: 0,
+        createdAt: now,
+      }).run();
+
+      // Auto-create @everyone role (id = serverId)
+      tx.insert(schema.roles).values({
+        id: serverId,
+        serverId,
+        name: '@everyone',
+        color: '#b9bbbe',
+        position: 0,
+        permissions: permissionsToString(DEFAULT_EVERYONE_PERMISSIONS),
         createdAt: now,
       }).run();
     });
@@ -246,8 +258,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
     }
 
-    if (!isOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the server owner can update the server', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_SERVER)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_SERVER permission', statusCode: 403 });
     }
 
     const updates: Partial<typeof schema.servers.$inferInsert> = {};
@@ -298,7 +310,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
     }
 
-    if (!isOwner(id, request.userId)) {
+    if (!isServerOwner(id, request.userId)) {
       return reply.code(403).send({ error: 'Only the server owner can delete the server', statusCode: 403 });
     }
 
@@ -324,8 +336,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
     }
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only admins can generate invite codes', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.CREATE_INVITE)) {
+      return reply.code(403).send({ error: 'Missing CREATE_INVITE permission', statusCode: 403 });
     }
 
     // Return existing invite code if one exists, otherwise generate a new one
@@ -474,8 +486,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
     }
 
-    if (!isOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the server owner can change member roles', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
     if (uid === request.userId) {
@@ -549,14 +561,15 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const isSelf = uid === request.userId;
-    const isServerOwnerUser = isOwner(id, request.userId);
+    const isOwnerUser = isServerOwner(id, request.userId);
+    const canKick = hasPermission(request.userId, id, PermissionBits.KICK_MEMBERS);
 
-    if (!isSelf && !isServerOwnerUser) {
-      return reply.code(403).send({ error: 'Only the server owner can kick members', statusCode: 403 });
+    if (!isSelf && !canKick) {
+      return reply.code(403).send({ error: 'Missing KICK_MEMBERS permission', statusCode: 403 });
     }
 
     // Owner cannot leave their own server - they must delete it
-    if (isSelf && isServerOwnerUser) {
+    if (isSelf && isOwnerUser) {
       return reply.code(400).send({ error: 'Server owner cannot leave. Transfer ownership or delete the server.', statusCode: 400 });
     }
 
@@ -604,8 +617,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const { name, color } = request.body;
     const db = getDb();
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
     const roleId = generateSnowflake();
@@ -630,8 +643,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const updates = request.body;
     const db = getDb();
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
     db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
@@ -646,9 +659,19 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const { id, roleId } = request.params;
     const db = getDb();
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
+
+    // Cannot delete @everyone role
+    if (roleId === id) {
+      return reply.code(400).send({ error: 'Cannot delete the @everyone role', statusCode: 400 });
+    }
+
+    // Delete channel overrides referencing this role
+    db.delete(schema.channelOverrides).where(
+      and(eq(schema.channelOverrides.targetType, 'role'), eq(schema.channelOverrides.targetId, roleId))
+    ).run();
 
     db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
     return reply.code(200).send({ success: true });
@@ -662,8 +685,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const { roleId } = request.body;
     const db = getDb();
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
     db.insert(schema.memberRoles).values({
@@ -682,8 +705,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const { id, uid, roleId } = request.params;
     const db = getDb();
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Unauthorized', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
     db.delete(schema.memberRoles).where(and(

@@ -11,6 +11,7 @@ import { Avatar } from '../ui/Avatar';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { AudioManager } from '../../audio/AudioManager';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
@@ -65,9 +66,10 @@ export function ChannelSidebar() {
     }
   };
 
+  const serverPermissions = useServerStore((s) => s.serverPermissions);
   const server = servers.find(s => s.id === currentServerId);
-  const currentMember = members.find(m => m.userId === user?.id);
-  const isAdminUser = currentMember?.role === 'admin' || currentMember?.role === 'owner';
+  const myServerPerms = currentServerId ? serverPermissions.get(currentServerId) : undefined;
+  const canManageChannels = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_CHANNELS);
 
   const textChannels = channels.filter(c => c.type === 'text');
   const voiceChannels = channels.filter(c => c.type === 'voice' || c.type === 'video');
@@ -306,7 +308,7 @@ export function ChannelSidebar() {
               </svg>
               <span className="text-[12px] font-bold uppercase tracking-wider">Text Channels</span>
             </div>
-            {isAdminUser && (
+            {canManageChannels && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -358,7 +360,7 @@ export function ChannelSidebar() {
               </svg>
               <span className="text-[12px] font-bold uppercase tracking-wider">Voice Channels</span>
             </div>
-            {isAdminUser && (
+            {canManageChannels && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();

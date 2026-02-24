@@ -31,6 +31,7 @@ export interface ServerWithChannelsAndMembers extends Server {
   channels: Channel[];
   members: MemberWithUser[];
   roles: Role[];
+  myPermissions?: string; // Computed per-user BigInt decimal string (server-level)
 }
 
 // ─── Member Types ───────────────────────────────────────────────────────────
@@ -58,7 +59,8 @@ export interface Role {
   name: string;
   color: string;
   position: number;
-  permissions?: string[];
+  permissions?: string; // BigInt decimal string (bitwise)
+  isEveryone?: boolean; // UI hint: true when role.id === server.id
   createdAt: number;
 }
 
@@ -86,6 +88,7 @@ export interface Channel {
   position: number;
   createdAt: number;
   lastMessageId?: string | null;
+  myPermissions?: string; // Computed per-user BigInt decimal string
 }
 
 export interface ReadState {

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { AccessToken } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
-import { getChannelServerId, isMember, isDmMember } from '../utils/permissions.js';
+import { getChannelServerId, hasPermission, isDmMember, PermissionBits } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@opencord/shared';
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
@@ -30,8 +30,8 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       if (!serverId) {
         return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
       }
-      if (!isMember(serverId, request.userId)) {
-        return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+      if (!hasPermission(request.userId, serverId, PermissionBits.CONNECT, channelId)) {
+        return reply.code(403).send({ error: 'Missing CONNECT permission', statusCode: 403 });
       }
       roomName = channelId;
     } else {

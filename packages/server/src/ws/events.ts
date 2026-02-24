@@ -3,7 +3,7 @@ import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
-import { isMember, getChannelServerId, isDmMember } from '../utils/permissions.js';
+import { isMember, getChannelServerId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@opencord/shared';
 
@@ -190,8 +190,8 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
-  if (!isMember(serverId, userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'Not a member of this server' });
+  if (!hasPermission(userId, serverId, PermissionBits.SEND_MESSAGES, channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing SEND_MESSAGES permission' });
     return;
   }
 
@@ -280,17 +280,11 @@ function handleMessageDelete(event: Record<string, unknown>, userId: string): vo
   const serverId = getChannelServerId(message.channelId);
   if (!serverId) return;
 
-  // Allow author or admin to delete
+  // Allow author or MANAGE_MESSAGES permission holder to delete
   const isAuthor = message.userId === userId;
-  const memberRow = db.select()
-    .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.serverId, serverId))
-    .all()
-    .find(m => m.userId === userId);
+  const canManageMessages = hasPermission(userId, serverId, PermissionBits.MANAGE_MESSAGES, message.channelId);
 
-  const isAdminRole = memberRow?.role === 'admin' || memberRow?.role === 'owner';
-
-  if (!isAuthor && !isAdminRole) {
+  if (!isAuthor && !canManageMessages) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'You cannot delete this message' });
     return;
   }
@@ -314,7 +308,7 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
   const serverId = getChannelServerId(channelId);
   if (!serverId) return;
 
-  if (!isMember(serverId, userId)) return;
+  if (!hasPermission(userId, serverId, PermissionBits.SEND_MESSAGES, channelId)) return;
 
   // Clear previous typing timeout for this user+channel
   const key = `${userId}:${channelId}`;
@@ -412,8 +406,8 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  if (!isMember(serverId, userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'Not a member of this server' });
+  if (!hasPermission(userId, serverId, PermissionBits.CONNECT, channelId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing CONNECT permission' });
     return;
   }
 

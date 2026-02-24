@@ -4,6 +4,7 @@ import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
 import { eq, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
+import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
   User,
   ServerWithChannelsAndMembers,
@@ -622,6 +623,29 @@ function buildReadyPayload(userId: string): {
         })
         .filter((m): m is MemberWithUser => m !== null);
 
+      // Compute server-level permissions for this user
+      const serverPerms = computePermissions(userId, serverRow.id);
+
+      // Filter channels by VIEW_CHANNEL and attach per-channel permissions
+      const visibleChannels: Channel[] = [];
+      for (const ch of channels) {
+        const chPerms = computePermissions(userId, serverRow.id, ch.id);
+        const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
+        if (hasView) {
+          visibleChannels.push({
+            id: ch.id,
+            serverId: ch.serverId,
+            name: ch.name,
+            type: ch.type as Channel['type'],
+            topic: ch.topic,
+            position: ch.position ?? 0,
+            createdAt: ch.createdAt,
+            lastMessageId: lastMsgMap.get(ch.id) ?? null,
+            myPermissions: permissionsToString(chPerms),
+          });
+        }
+      }
+
       servers.push({
         id: serverRow.id,
         name: serverRow.name,
@@ -629,16 +653,7 @@ function buildReadyPayload(userId: string): {
         ownerId: serverRow.ownerId,
         inviteCode: serverRow.inviteCode,
         createdAt: serverRow.createdAt,
-        channels: channels.map(ch => ({
-          id: ch.id,
-          serverId: ch.serverId,
-          name: ch.name,
-          type: ch.type as Channel['type'],
-          topic: ch.topic,
-          position: ch.position ?? 0,
-          createdAt: ch.createdAt,
-          lastMessageId: lastMsgMap.get(ch.id) ?? null,
-        })),
+        channels: visibleChannels,
         members,
         roles: roles.map(r => ({
           id: r.id,
@@ -646,8 +661,11 @@ function buildReadyPayload(userId: string): {
           name: r.name,
           color: r.color ?? '#b9bbbe',
           position: r.position ?? 0,
+          permissions: r.permissions ?? undefined,
+          isEveryone: r.id === serverRow.id,
           createdAt: r.createdAt,
         })),
+        myPermissions: permissionsToString(serverPerms),
       });
     }
   }

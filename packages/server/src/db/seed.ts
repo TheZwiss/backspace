@@ -2,6 +2,7 @@ import { getDb, schema } from './index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { hashPassword } from '../utils/auth.js';
 import { eq } from 'drizzle-orm';
+import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
 
 export async function seedDatabase(): Promise<void> {
   const db = getDb();
@@ -60,6 +61,17 @@ export async function seedDatabase(): Promise<void> {
     name: 'General Voice',
     type: 'voice',
     position: 1,
+    createdAt: Date.now(),
+  }).run();
+
+  // Create @everyone role (id === serverId convention)
+  db.insert(schema.roles).values({
+    id: serverId,
+    serverId: serverId,
+    name: '@everyone',
+    color: '#b9bbbe',
+    position: 0,
+    permissions: permissionsToString(DEFAULT_EVERYONE_PERMISSIONS),
     createdAt: Date.now(),
   }).run();
 

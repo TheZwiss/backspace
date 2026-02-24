@@ -140,6 +140,16 @@ export const memberRoles = sqliteTable('member_roles', {
   pk: primaryKey({ columns: [table.serverId, table.userId, table.roleId] }),
 }));
 
+export const channelOverrides = sqliteTable('channel_overrides', {
+  channelId: text('channel_id').notNull().references(() => channels.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(), // 'role' | 'member'
+  targetId: text('target_id').notNull(), // role ID or user ID
+  allow: text('allow').notNull().default('0'), // BigInt decimal string
+  deny: text('deny').notNull().default('0'), // BigInt decimal string
+}, (table) => ({
+  pk: primaryKey({ columns: [table.channelId, table.targetType, table.targetId] }),
+}));
+
 export const readStates = sqliteTable('read_states', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   channelId: text('channel_id').notNull(),

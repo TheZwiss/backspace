@@ -7,6 +7,7 @@ import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import type { MemberRole } from '@opencord/shared';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 export function ServerSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -26,9 +27,13 @@ export function ServerSettingsModal() {
   const [isLoading, setIsLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const serverPermissions = useServerStore((s) => s.serverPermissions);
+
   const isOpen = activeModal === 'serverSettings';
   const server = servers.find(s => s.id === currentServerId);
   const isOwnerUser = server?.ownerId === currentUser?.id;
+  const myServerPerms = currentServerId ? serverPermissions.get(currentServerId) : undefined;
+  const canManageServer = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_SERVER);
 
   React.useEffect(() => {
     if (server) {
@@ -122,11 +127,11 @@ export function ServerSettingsModal() {
                   value={serverName}
                   onChange={(e) => setServerName(e.target.value)}
                   className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
-                  disabled={!isOwnerUser}
+                  disabled={!canManageServer}
                 />
               </div>
 
-              {isOwnerUser && (
+              {canManageServer && (
                 <>
                   <button
                     onClick={handleSave}

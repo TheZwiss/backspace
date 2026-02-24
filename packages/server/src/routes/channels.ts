@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isAdmin, getChannelServerId } from '../utils/permissions.js';
+import { isMember, hasPermission, getChannelServerId, PermissionBits, computePermissions } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
   CreateChannelRequest,
@@ -40,15 +40,21 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
     }
 
-    const channels = db.select()
+    const allChannels = db.select()
       .from(schema.channels)
       .where(eq(schema.channels.serverId, id))
       .all();
 
-    // Sort by position
-    channels.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    // Filter by VIEW_CHANNEL permission per channel
+    const visibleChannels = allChannels.filter(ch => {
+      const perms = computePermissions(request.userId, id, ch.id);
+      return (perms & PermissionBits.VIEW_CHANNEL) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+    });
 
-    return reply.code(200).send(channels.map(rowToChannel));
+    // Sort by position
+    visibleChannels.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+    return reply.code(200).send(visibleChannels.map(rowToChannel));
   });
 
   // POST /api/servers/:id/channels - Create a channel (admin+)
@@ -64,8 +70,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
     }
 
-    if (!isAdmin(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only admins can create channels', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_CHANNELS)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
     if (!name || typeof name !== 'string') {
@@ -133,8 +139,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const serverId = channel.serverId;
-    if (!isAdmin(serverId, request.userId)) {
-      return reply.code(403).send({ error: 'Only admins can update channels', statusCode: 403 });
+    if (!hasPermission(request.userId, serverId, PermissionBits.MANAGE_CHANNELS, id)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
     const updates: Partial<typeof schema.channels.$inferInsert> = {};
@@ -194,8 +200,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const serverId = channel.serverId;
-    if (!isAdmin(serverId, request.userId)) {
-      return reply.code(403).send({ error: 'Only admins can delete channels', statusCode: 403 });
+    if (!hasPermission(request.userId, serverId, PermissionBits.MANAGE_CHANNELS, id)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
     // Delete messages in channel (attachments cascade), then channel
@@ -211,4 +217,121 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.code(200).send({ success: true });
   });
+
+  // ─── Channel Override Endpoints ───────────────────────────────────────────
+
+  // GET /api/channels/:id/overrides - List channel permission overrides
+  app.get<{ Params: { id: string } }>('/api/channels/:id/overrides', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    const channel = db.select().from(schema.channels).where(eq(schema.channels.id, id)).get();
+    if (!channel) {
+      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+    }
+
+    const overrides = db.select().from(schema.channelOverrides)
+      .where(eq(schema.channelOverrides.channelId, id))
+      .all();
+
+    return reply.code(200).send(overrides.map(o => ({
+      channelId: o.channelId,
+      targetType: o.targetType,
+      targetId: o.targetId,
+      allow: o.allow,
+      deny: o.deny,
+    })));
+  });
+
+  // PUT /api/channels/:id/overrides - Create or update a channel override
+  app.put<{
+    Params: { id: string };
+    Body: { targetType: string; targetId: string; allow: string; deny: string };
+  }>('/api/channels/:id/overrides', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { targetType, targetId, allow, deny } = request.body;
+    const db = getDb();
+
+    if (!targetType || !['role', 'member'].includes(targetType)) {
+      return reply.code(400).send({ error: 'targetType must be "role" or "member"', statusCode: 400 });
+    }
+    if (!targetId || typeof targetId !== 'string') {
+      return reply.code(400).send({ error: 'targetId is required', statusCode: 400 });
+    }
+
+    const channel = db.select().from(schema.channels).where(eq(schema.channels.id, id)).get();
+    if (!channel) {
+      return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+    }
+
+    // Validate that allow/deny are valid bigint strings
+    try {
+      BigInt(allow || '0');
+      BigInt(deny || '0');
+    } catch {
+      return reply.code(400).send({ error: 'allow and deny must be valid decimal integer strings', statusCode: 400 });
+    }
+
+    // Upsert: delete existing then insert
+    db.transaction((tx) => {
+      tx.delete(schema.channelOverrides).where(
+        and(
+          eq(schema.channelOverrides.channelId, id),
+          eq(schema.channelOverrides.targetType, targetType),
+          eq(schema.channelOverrides.targetId, targetId),
+        )
+      ).run();
+
+      tx.insert(schema.channelOverrides).values({
+        channelId: id,
+        targetType,
+        targetId,
+        allow: allow || '0',
+        deny: deny || '0',
+      }).run();
+    });
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // DELETE /api/channels/:id/overrides/:targetType/:targetId - Remove a channel override
+  app.delete<{ Params: { id: string; targetType: string; targetId: string } }>(
+    '/api/channels/:id/overrides/:targetType/:targetId',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id, targetType, targetId } = request.params;
+      const db = getDb();
+
+      const channel = db.select().from(schema.channels).where(eq(schema.channels.id, id)).get();
+      if (!channel) {
+        return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
+      }
+
+      if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+        return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      }
+
+      db.delete(schema.channelOverrides).where(
+        and(
+          eq(schema.channelOverrides.channelId, id),
+          eq(schema.channelOverrides.targetType, targetType),
+          eq(schema.channelOverrides.targetId, targetId),
+        )
+      ).run();
+
+      return reply.code(200).send({ success: true });
+    },
+  );
 }

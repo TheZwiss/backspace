@@ -12,6 +12,8 @@ interface ServerState {
   dmChannels: DmChannel[];
   channelToServerMap: Map<string, string>;
   channelLastMessageIds: Map<string, string>;
+  serverPermissions: Map<string, string>; // serverId → myPermissions decimal string
+  channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   setServers: (servers: Server[]) => void;
   setCurrentServer: (serverId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
@@ -52,6 +54,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
   dmChannels: [],
   channelToServerMap: new Map(),
   channelLastMessageIds: new Map(),
+  serverPermissions: new Map(),
+  channelPermissions: new Map(),
 
   setServers: (servers) => set({ servers }),
   setCurrentServer: (serverId) => set({ currentServerId: serverId }),
@@ -225,14 +229,23 @@ export const useServerStore = create<ServerState>((set, get) => ({
       createdAt: s.createdAt,
     }));
 
-    // Build channel→server map and channel→lastMessageId map
+    // Build channel→server map, channel→lastMessageId map, and permission maps
     const channelToServerMap = new Map<string, string>();
     const channelLastMessageIds = new Map<string, string>();
+    const serverPermissions = new Map<string, string>();
+    const channelPermissions = new Map<string, string>();
+
     for (const srv of servers) {
+      if (srv.myPermissions) {
+        serverPermissions.set(srv.id, srv.myPermissions);
+      }
       for (const ch of srv.channels) {
         channelToServerMap.set(ch.id, srv.id);
         if (ch.lastMessageId) {
           channelLastMessageIds.set(ch.id, ch.lastMessageId);
+        }
+        if (ch.myPermissions) {
+          channelPermissions.set(ch.id, ch.myPermissions);
         }
       }
     }
@@ -250,6 +263,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
       dmChannels: dms,
       channelToServerMap,
       channelLastMessageIds,
+      serverPermissions,
+      channelPermissions,
     });
   },
 }));

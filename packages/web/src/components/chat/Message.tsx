@@ -8,6 +8,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Embed } from './Embed';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 interface MessageProps {
   message: MessageWithUser;
@@ -47,9 +48,10 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const channelKey = message.channelId || (message as any).dmChannelId;
   const isAuthor = currentUser?.id === message.userId;
-  const memberRole = members.find(m => m.userId === currentUser?.id)?.role;
-  const isAdminUser = memberRole === 'admin' || memberRole === 'owner';
-  const canDelete = isAuthor || isAdminUser;
+  const channelPermissions = useServerStore((s) => s.channelPermissions);
+  const myChPerms = channelPermissions.get(message.channelId);
+  const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
+  const canDelete = isAuthor || canManageMessages;
 
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
