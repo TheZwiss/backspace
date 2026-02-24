@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, inArray, desc } from 'drizzle-orm';
+import { eq, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import type {
   User,
@@ -15,6 +15,19 @@ import type {
   ReadState,
   ActiveCallInfo,
 } from '@opencord/shared';
+
+// SQLite's SQLITE_MAX_VARIABLE_NUMBER default is 999.
+// Chunk inArray() calls to stay safely under this limit.
+const BATCH_CHUNK_SIZE = 500;
+
+function batchInArray<TId, TResult>(ids: TId[], queryFn: (chunk: TId[]) => TResult[]): TResult[] {
+  if (ids.length <= BATCH_CHUNK_SIZE) return queryFn(ids);
+  const results: TResult[] = [];
+  for (let i = 0; i < ids.length; i += BATCH_CHUNK_SIZE) {
+    results.push(...queryFn(ids.slice(i, i + BATCH_CHUNK_SIZE)));
+  }
+  return results;
+}
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {
@@ -495,11 +508,36 @@ function buildReadyPayload(userId: string): {
       .where(inArray(schema.servers.id, serverIds))
       .all();
 
+    // Batch: all channels for all servers (1 query instead of N)
+    const allChannels = batchInArray(
+      serverIds,
+      ids => db.select().from(schema.channels).where(inArray(schema.channels.serverId, ids)).all(),
+    );
+    const channelsByServer = new Map<string, (typeof allChannels)>();
+    for (const ch of allChannels) {
+      let arr = channelsByServer.get(ch.serverId);
+      if (!arr) { arr = []; channelsByServer.set(ch.serverId, arr); }
+      arr.push(ch);
+    }
+
+    // Batch: last message ID per channel (1 query instead of N×C)
+    const allChannelIds = allChannels.map(ch => ch.id);
+    const lastMsgMap = new Map<string, string>();
+    if (allChannelIds.length > 0) {
+      const lastMsgRows = batchInArray(
+        allChannelIds,
+        ids => db.select({
+          channelId: schema.messages.channelId,
+          lastId: sql<string>`max(${schema.messages.id})`,
+        }).from(schema.messages).where(inArray(schema.messages.channelId, ids)).groupBy(schema.messages.channelId).all(),
+      );
+      for (const row of lastMsgRows) {
+        if (row.lastId) lastMsgMap.set(row.channelId, row.lastId);
+      }
+    }
+
     for (const serverRow of serverRows) {
-      const channels = db.select()
-        .from(schema.channels)
-        .where(eq(schema.channels.serverId, serverRow.id))
-        .all();
+      const channels = channelsByServer.get(serverRow.id) ?? [];
 
       const roles = db.select()
         .from(schema.roles)
@@ -514,7 +552,7 @@ function buildReadyPayload(userId: string): {
 
       const memberUserIds = memberRows.map(m => m.userId);
       const users = memberUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
+        ? batchInArray(memberUserIds, ids => db.select().from(schema.users).where(inArray(schema.users.id, ids)).all())
         : [];
       const userMap = new Map(users.map(u => [u.id, u]));
 
@@ -562,24 +600,16 @@ function buildReadyPayload(userId: string): {
         ownerId: serverRow.ownerId,
         inviteCode: serverRow.inviteCode,
         createdAt: serverRow.createdAt,
-        channels: channels.map(ch => {
-          const lastMsg = db.select({ id: schema.messages.id })
-            .from(schema.messages)
-            .where(eq(schema.messages.channelId, ch.id))
-            .orderBy(desc(schema.messages.createdAt))
-            .limit(1)
-            .get();
-          return {
-            id: ch.id,
-            serverId: ch.serverId,
-            name: ch.name,
-            type: ch.type as Channel['type'],
-            topic: ch.topic,
-            position: ch.position ?? 0,
-            createdAt: ch.createdAt,
-            lastMessageId: lastMsg?.id ?? null,
-          };
-        }),
+        channels: channels.map(ch => ({
+          id: ch.id,
+          serverId: ch.serverId,
+          name: ch.name,
+          type: ch.type as Channel['type'],
+          topic: ch.topic,
+          position: ch.position ?? 0,
+          createdAt: ch.createdAt,
+          lastMessageId: lastMsgMap.get(ch.id) ?? null,
+        })),
         members,
         roles: roles.map(r => ({
           id: r.id,
@@ -602,47 +632,70 @@ function buildReadyPayload(userId: string): {
     .where(eq(schema.dmMembers.userId, userId))
     .all();
 
+  const dmChannelIds = dmMemberships.map(dm => dm.dmChannelId);
   const dmChannels: DmChannel[] = [];
 
-  for (const dm of dmMemberships) {
-    const dmChannel = db.select()
-      .from(schema.dmChannels)
-      .where(eq(schema.dmChannels.id, dm.dmChannelId))
-      .get();
+  if (dmChannelIds.length > 0) {
+    // Batch: all DM channels (1 query)
+    const allDmChannelRows = batchInArray(
+      dmChannelIds,
+      ids => db.select().from(schema.dmChannels).where(inArray(schema.dmChannels.id, ids)).all(),
+    );
+    const dmChannelMap = new Map(allDmChannelRows.map(c => [c.id, c]));
 
-    if (!dmChannel) continue;
+    // Batch: all DM members across all channels (1 query)
+    const allDmMemberRows = batchInArray(
+      dmChannelIds,
+      ids => db.select().from(schema.dmMembers).where(inArray(schema.dmMembers.dmChannelId, ids)).all(),
+    );
 
-    const dmMemberRows = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, dm.dmChannelId))
-      .all();
-
-    const dmMemberUserIds = dmMemberRows.map(m => m.userId);
-    const dmUsers = dmMemberUserIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, dmMemberUserIds)).all()
+    // Batch: all unique users from DM members (1 query)
+    const allDmUserIds = [...new Set(allDmMemberRows.map(m => m.userId))];
+    const allDmUsers = allDmUserIds.length > 0
+      ? batchInArray(allDmUserIds, ids => db.select().from(schema.users).where(inArray(schema.users.id, ids)).all())
       : [];
+    const dmUserMap = new Map(allDmUsers.map(u => [u.id, u]));
 
-    // Get last message
-    const lastMessage = db.select()
-      .from(schema.dmMessages)
-      .where(eq(schema.dmMessages.dmChannelId, dm.dmChannelId))
-      .orderBy(schema.dmMessages.createdAt)
-      .all();
+    // Batch: last message per DM channel (1 query — fixes the full-table-scan bug)
+    const dmLastMsgIdRows = batchInArray(
+      dmChannelIds,
+      ids => db.select({
+        dmChannelId: schema.dmMessages.dmChannelId,
+        lastId: sql<string>`max(${schema.dmMessages.id})`,
+      }).from(schema.dmMessages).where(inArray(schema.dmMessages.dmChannelId, ids)).groupBy(schema.dmMessages.dmChannelId).all(),
+    );
+    const dmLastMsgIds = dmLastMsgIdRows.map(r => r.lastId).filter((id): id is string => id != null);
+    const dmLastMessages = dmLastMsgIds.length > 0
+      ? batchInArray(dmLastMsgIds, ids => db.select().from(schema.dmMessages).where(inArray(schema.dmMessages.id, ids)).all())
+      : [];
+    const dmLastMsgMap = new Map(dmLastMessages.map(m => [m.dmChannelId, m]));
 
-    const last = lastMessage.length > 0 ? lastMessage[lastMessage.length - 1] : null;
+    // Assemble DM channels with zero additional queries
+    for (const dm of dmMemberships) {
+      const dmChannel = dmChannelMap.get(dm.dmChannelId);
+      if (!dmChannel) continue;
 
-    dmChannels.push({
-      id: dmChannel.id,
-      createdAt: dmChannel.createdAt,
-      members: dmUsers.map(sanitizeUser),
-      lastMessage: last ? {
-        id: last.id,
-        dmChannelId: last.dmChannelId,
-        userId: last.userId,
-        content: last.content,
-        createdAt: last.createdAt,
-      } : null,
-    });
+      const memberRows = allDmMemberRows.filter(m => m.dmChannelId === dm.dmChannelId);
+      const members = memberRows
+        .map(m => dmUserMap.get(m.userId))
+        .filter((u): u is NonNullable<typeof u> => u != null)
+        .map(sanitizeUser);
+
+      const last = dmLastMsgMap.get(dm.dmChannelId) ?? null;
+
+      dmChannels.push({
+        id: dmChannel.id,
+        createdAt: dmChannel.createdAt,
+        members,
+        lastMessage: last ? {
+          id: last.id,
+          dmChannelId: last.dmChannelId,
+          userId: last.userId,
+          content: last.content,
+          createdAt: last.createdAt,
+        } : null,
+      });
+    }
   }
 
   // Get Server Folders

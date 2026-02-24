@@ -374,24 +374,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Create new DM channel
+    // Create new DM channel with both members atomically
     const dmChannelId = generateSnowflake();
     const now = Date.now();
 
-    db.insert(schema.dmChannels).values({
-      id: dmChannelId,
-      createdAt: now,
-    }).run();
+    db.transaction((tx) => {
+      tx.insert(schema.dmChannels).values({
+        id: dmChannelId,
+        createdAt: now,
+      }).run();
 
-    db.insert(schema.dmMembers).values({
-      dmChannelId,
-      userId: request.userId,
-    }).run();
+      tx.insert(schema.dmMembers).values({
+        dmChannelId,
+        userId: request.userId,
+      }).run();
 
-    db.insert(schema.dmMembers).values({
-      dmChannelId,
-      userId,
-    }).run();
+      tx.insert(schema.dmMembers).values({
+        dmChannelId,
+        userId,
+      }).run();
+    });
 
     const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     const members = [currentUserRow, targetUser]
@@ -791,24 +793,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const messageId = generateSnowflake();
     const now = Date.now();
 
-    db.insert(schema.dmMessages).values({
-      id: messageId,
-      dmChannelId: id,
-      userId: request.userId,
-      replyToId: replyToId || null,
-      content: content?.trim() || null,
-      createdAt: now,
-    }).run();
+    // Insert message and link attachments atomically
+    db.transaction((tx) => {
+      tx.insert(schema.dmMessages).values({
+        id: messageId,
+        dmChannelId: id,
+        userId: request.userId,
+        replyToId: replyToId || null,
+        content: content?.trim() || null,
+        createdAt: now,
+      }).run();
 
-    // Link attachments to this DM message
-    if (attachmentIds && attachmentIds.length > 0) {
-      for (const attId of attachmentIds) {
-        db.update(schema.attachments)
-          .set({ dmMessageId: messageId })
-          .where(eq(schema.attachments.id, attId))
-          .run();
+      if (attachmentIds && attachmentIds.length > 0) {
+        for (const attId of attachmentIds) {
+          tx.update(schema.attachments)
+            .set({ dmMessageId: messageId })
+            .where(eq(schema.attachments.id, attId))
+            .run();
+        }
       }
-    }
+    });
 
     const message = getDmMessageWithUser(messageId);
     if (!message) {
@@ -886,20 +890,20 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You can only delete your own messages', statusCode: 403 });
     }
 
-    // Delete attachments linked to this DM message
-    db.delete(schema.attachments)
-      .where(eq(schema.attachments.dmMessageId, id))
-      .run();
+    // Delete attachments, reactions, and message atomically
+    db.transaction((tx) => {
+      tx.delete(schema.attachments)
+        .where(eq(schema.attachments.dmMessageId, id))
+        .run();
 
-    // Delete reactions
-    db.delete(schema.dmReactions)
-      .where(eq(schema.dmReactions.dmMessageId, id))
-      .run();
+      tx.delete(schema.dmReactions)
+        .where(eq(schema.dmReactions.dmMessageId, id))
+        .run();
 
-    // Delete message
-    db.delete(schema.dmMessages)
-      .where(eq(schema.dmMessages.id, id))
-      .run();
+      tx.delete(schema.dmMessages)
+        .where(eq(schema.dmMessages.id, id))
+        .run();
+    });
 
     // Broadcast to all DM members
     const dmMembers = db.select()

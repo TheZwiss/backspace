@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import type { User } from '@opencord/shared';
 import { api } from '../api/client';
+import { useChatStore } from './chatStore';
+import { useServerStore } from './serverStore';
+import { useSocialStore } from './socialStore';
+import { useVoiceStore } from './voiceStore';
 
 interface AuthState {
   token: string | null;
@@ -48,6 +52,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('opencord_token');
+    // Clear all user-scoped state to prevent data leaking between sessions
+    useChatStore.getState().clearAllMessages();
+    useServerStore.getState().populateFromReady([], [], []);
+    useSocialStore.getState().reset();
+    useVoiceStore.getState().clearAllVoiceUsers();
     set({ token: null, user: null });
   },
 

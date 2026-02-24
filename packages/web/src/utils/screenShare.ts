@@ -3,6 +3,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { wsSend } from '../hooks/useWebSocket';
+import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,12 +88,12 @@ export async function applyOverdrive(
     const pub = room.localParticipant.getTrackPublications().find(p => p.source === source);
     if (!pub?.track) return;
 
-    const engine = (room as any).engine;
-    const pc = engine?.pcManager?.publisher?.pc || engine?.publisher?.pc || engine?.pc;
+    const pc = getPublisherPC(room);
     if (!pc) return;
 
-    const senders = (pc as RTCPeerConnection).getSenders();
-    const sender = senders.find(s => s.track?.id === (pub.track as any).mediaStreamTrack?.id);
+    const pubMediaTrack = getMediaStreamTrack(pub.track);
+    const senders = pc.getSenders();
+    const sender = senders.find(s => s.track?.id === pubMediaTrack?.id);
     if (!sender) return;
 
     const params = sender.getParameters();

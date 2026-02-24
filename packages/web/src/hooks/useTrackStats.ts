@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Track } from 'livekit-client';
 import { getActiveRoom } from './useLiveKit';
+import { discoverPeerConnections } from '../utils/livekitInternals';
 
 // ── Types ──
 
@@ -94,40 +95,6 @@ function reportKind(report: any): 'audio' | 'video' | null {
   const k = report.kind ?? report.mediaType;
   if (k === 'audio' || k === 'video') return k;
   return null;
-}
-
-/**
- * Discover all unique RTCPeerConnections from the LiveKit Room engine.
- * Different livekit-client versions expose the PC at different internal paths.
- */
-function discoverPeerConnections(room: any): RTCPeerConnection[] {
-  const engine = room?.engine;
-  if (!engine) return [];
-
-  const pcs: RTCPeerConnection[] = [];
-  const seen = new WeakSet<object>();
-
-  const tryAdd = (val: any) => {
-    if (val && typeof val.getStats === 'function' && !seen.has(val)) {
-      seen.add(val);
-      pcs.push(val);
-    }
-  };
-
-  // Current livekit-client (1.x+): engine.pcManager.{publisher,subscriber}.pc
-  tryAdd(engine.pcManager?.publisher?.pc);
-  tryAdd(engine.pcManager?.subscriber?.pc);
-  // Private backing field fallback
-  tryAdd(engine.pcManager?.publisher?._pc);
-  tryAdd(engine.pcManager?.subscriber?._pc);
-  // Older livekit-client paths
-  tryAdd(engine.publisher?.pc);
-  tryAdd(engine.subscriber?.pc);
-  // Unified-plan single PC
-  tryAdd(engine.pc);
-  tryAdd(room.pc);
-
-  return pcs;
 }
 
 function inferSimulcastLayer(width: number | null, height: number | null): string | null {

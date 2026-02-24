@@ -25,6 +25,7 @@ import {
   stopScreenShare,
   handleScreenShareUnpublished,
 } from '../utils/screenShare';
+import { getMediaStreamTrack } from '../utils/livekitInternals';
 
 let _activeRoom: Room | null = null;
 
@@ -522,7 +523,7 @@ export function useLiveKit() {
         const opts = buildScreenShareOptions(screenShareConfig);
         const screenPub = room.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
         if (screenPub?.videoTrack) {
-          const mediaTrack = (screenPub.videoTrack as any).mediaStreamTrack as MediaStreamTrack;
+          const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
             await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate } });
             mediaTrack.contentHint = opts.contentHint;

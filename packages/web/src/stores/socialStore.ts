@@ -18,6 +18,7 @@ interface SocialState {
   addFriendFromAccepted: (friend: Friend, requestId: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
   removeFriendLocally: (userId: string) => void;
+  reset: () => void;
 }
 
 export const useSocialStore = create<SocialState>((set, get) => ({
@@ -139,4 +140,6 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       ),
     }));
   },
+
+  reset: () => set({ friends: [], requests: [], isLoading: false, error: null }),
 }));

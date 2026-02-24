@@ -207,15 +207,22 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (status === 'accepted') {
-      // Add to friends table
+      // Insert friend and update request status atomically
       const now = Date.now();
-      db.insert(schema.friends).values({
-        userId: friendRequest.fromId,
-        friendId: friendRequest.toId,
-        createdAt: now,
-      }).run();
+      db.transaction((tx) => {
+        tx.insert(schema.friends).values({
+          userId: friendRequest.fromId,
+          friendId: friendRequest.toId,
+          createdAt: now,
+        }).run();
 
-      // Get the accepting user's data for the WS event
+        tx.update(schema.friendRequests)
+          .set({ status })
+          .where(eq(schema.friendRequests.id, id))
+          .run();
+      });
+
+      // WS broadcast AFTER transaction commits
       const acceptingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
       if (acceptingUser) {
         const friend: Friend = {
@@ -228,13 +235,13 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
           requestId: id,
         });
       }
+    } else {
+      // For declined, just update the status (single write, no transaction needed)
+      db.update(schema.friendRequests)
+        .set({ status })
+        .where(eq(schema.friendRequests.id, id))
+        .run();
     }
-
-    // Update request status
-    db.update(schema.friendRequests)
-      .set({ status })
-      .where(eq(schema.friendRequests.id, id))
-      .run();
 
     return reply.code(200).send({ success: true });
   });

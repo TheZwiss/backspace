@@ -5,6 +5,10 @@ import { wsSend } from '../hooks/useWebSocket';
 import { isDmChannel, useServerStore } from './serverStore';
 import { useAuthStore } from './authStore';
 
+const MAX_MESSAGES_PER_CHANNEL = 200;
+const MAX_CACHED_CHANNELS = 20;
+const EVICT_TO_CHANNELS = 15;
+
 interface TypingUser {
   userId: string;
   username: string;
@@ -27,6 +31,7 @@ interface ChatState {
   readStates: Map<string, string>;
   unreadChannels: Set<string>;
   realtimeMessageEvents: RealtimeMessageEvent[];
+  channelAccessTimes: Map<string, number>;
   setCurrentChannel: (channelId: string | null) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
   loadMessages: (channelId: string, force?: boolean) => Promise<void>;
@@ -64,14 +69,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
   readStates: new Map(),
   unreadChannels: new Set(),
   realtimeMessageEvents: [],
+  channelAccessTimes: new Map(),
 
-  setCurrentChannel: (channelId) => set({ currentChannelId: channelId }),
+  setCurrentChannel: (channelId) => {
+    set((state) => {
+      const newAccessTimes = new Map(state.channelAccessTimes);
+      if (channelId) {
+        newAccessTimes.set(channelId, Date.now());
+      }
+
+      // Evict stale channels if we have too many cached
+      let newMessages = state.messages;
+      let newHasMore = state.hasMore;
+      if (state.messages.size > MAX_CACHED_CHANNELS) {
+        const entries = [...newAccessTimes.entries()]
+          .filter(([id]) => id !== channelId)
+          .sort((a, b) => a[1] - b[1]);
+        const toEvict = state.messages.size - EVICT_TO_CHANNELS;
+        const evictIds = new Set(entries.slice(0, toEvict).map(([id]) => id));
+        if (evictIds.size > 0) {
+          newMessages = new Map(state.messages);
+          newHasMore = new Map(state.hasMore);
+          for (const id of evictIds) {
+            newMessages.delete(id);
+            newHasMore.delete(id);
+            newAccessTimes.delete(id);
+          }
+        }
+      }
+
+      return {
+        currentChannelId: channelId,
+        channelAccessTimes: newAccessTimes,
+        messages: newMessages,
+        hasMore: newHasMore,
+      };
+    });
+  },
   setReplyTo: (message) => set({ replyTo: message }),
 
-  clearAllMessages: () => set({ messages: new Map(), hasMore: new Map() }),
+  clearAllMessages: () => set({
+    messages: new Map(),
+    hasMore: new Map(),
+    typingUsers: new Map(),
+    readStates: new Map(),
+    unreadChannels: new Set(),
+    realtimeMessageEvents: [],
+    channelAccessTimes: new Map(),
+    currentChannelId: null,
+    replyTo: null,
+  }),
 
   loadMessages: async (channelId: string, force?: boolean) => {
-    if (!force && get().messages.has(channelId)) return;
+    if (!force && get().hasMore.has(channelId)) return;
     set({ isLoading: true, loadError: null });
     try {
       const isDm = isDmChannel(channelId);
@@ -84,7 +134,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         newMessages.set(channelId, messages as MessageWithUser[]);
         const newHasMore = new Map(state.hasMore);
         newHasMore.set(channelId, messages.length >= 50);
-        return { messages: newMessages, hasMore: newHasMore, isLoading: false, loadError: null };
+        const newAccessTimes = new Map(state.channelAccessTimes);
+        newAccessTimes.set(channelId, Date.now());
+        return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, isLoading: false, loadError: null };
       });
     } catch (err) {
       set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
@@ -232,7 +284,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
         return m.content !== message.content;
       });
-      newMessages.set(channelId, [...filtered, message]);
+      let updated = [...filtered, message];
+      // Cap per-channel messages to prevent memory growth
+      if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
+        updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
+      }
+      newMessages.set(channelId, updated);
       return { messages: newMessages };
     });
   },
@@ -248,7 +305,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
         return m.content !== message.content;
       });
-      newMessages.set(channelId, [...filtered, message]);
+      let updated = [...filtered, message];
+      // Cap per-channel messages to prevent memory growth
+      if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
+        updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
+      }
+      newMessages.set(channelId, updated);
       // Append to realtimeMessageEvents (capped at 50)
       const newEvents = [...state.realtimeMessageEvents, { channelId, message }];
       if (newEvents.length > 50) newEvents.splice(0, newEvents.length - 50);

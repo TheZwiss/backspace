@@ -80,33 +80,33 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const now = Date.now();
     const inviteCode = generateInviteCode();
 
-    // Create the server
-    db.insert(schema.servers).values({
-      id: serverId,
-      name: trimmedName,
-      icon: icon ?? null,
-      ownerId: request.userId,
-      inviteCode,
-      createdAt: now,
-    }).run();
+    // Create server, owner membership, and default channel atomically
+    db.transaction((tx) => {
+      tx.insert(schema.servers).values({
+        id: serverId,
+        name: trimmedName,
+        icon: icon ?? null,
+        ownerId: request.userId,
+        inviteCode,
+        createdAt: now,
+      }).run();
 
-    // Add owner as member with 'owner' role
-    db.insert(schema.serverMembers).values({
-      serverId,
-      userId: request.userId,
-      role: 'owner',
-      joinedAt: now,
-    }).run();
+      tx.insert(schema.serverMembers).values({
+        serverId,
+        userId: request.userId,
+        role: 'owner',
+        joinedAt: now,
+      }).run();
 
-    // Create default #general text channel
-    db.insert(schema.channels).values({
-      id: channelId,
-      serverId,
-      name: 'general',
-      type: 'text',
-      position: 0,
-      createdAt: now,
-    }).run();
+      tx.insert(schema.channels).values({
+        id: channelId,
+        serverId,
+        name: 'general',
+        type: 'text',
+        position: 0,
+        createdAt: now,
+      }).run();
+    });
 
     const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
     if (!server) {
@@ -302,10 +302,12 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Only the server owner can delete the server', statusCode: 403 });
     }
 
-    // Delete all channels (messages cascade), members, then server
-    db.delete(schema.channels).where(eq(schema.channels.serverId, id)).run();
-    db.delete(schema.serverMembers).where(eq(schema.serverMembers.serverId, id)).run();
-    db.delete(schema.servers).where(eq(schema.servers.id, id)).run();
+    // Delete all channels (messages cascade), members, then server atomically
+    db.transaction((tx) => {
+      tx.delete(schema.channels).where(eq(schema.channels.serverId, id)).run();
+      tx.delete(schema.serverMembers).where(eq(schema.serverMembers.serverId, id)).run();
+      tx.delete(schema.servers).where(eq(schema.servers.id, id)).run();
+    });
 
     return reply.code(200).send({ success: true });
   });

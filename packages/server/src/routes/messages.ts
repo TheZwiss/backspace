@@ -274,24 +274,26 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const messageId = generateSnowflake();
     const now = Date.now();
 
-    db.insert(schema.messages).values({
-      id: messageId,
-      channelId: id,
-      userId: request.userId,
-      replyToId: replyToId || null,
-      content: content?.trim() || null,
-      createdAt: now,
-    }).run();
+    // Insert message and link attachments atomically
+    db.transaction((tx) => {
+      tx.insert(schema.messages).values({
+        id: messageId,
+        channelId: id,
+        userId: request.userId,
+        replyToId: replyToId || null,
+        content: content?.trim() || null,
+        createdAt: now,
+      }).run();
 
-    // Link attachments to message
-    if (attachmentIds && attachmentIds.length > 0) {
-      for (const attId of attachmentIds) {
-        db.update(schema.attachments)
-          .set({ messageId })
-          .where(eq(schema.attachments.id, attId))
-          .run();
+      if (attachmentIds && attachmentIds.length > 0) {
+        for (const attId of attachmentIds) {
+          tx.update(schema.attachments)
+            .set({ messageId })
+            .where(eq(schema.attachments.id, attId))
+            .run();
+        }
       }
-    }
+    });
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!user) {
@@ -415,9 +417,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You cannot delete this message', statusCode: 403 });
     }
 
-    // Delete attachments then message
-    db.delete(schema.attachments).where(eq(schema.attachments.messageId, id)).run();
-    db.delete(schema.messages).where(eq(schema.messages.id, id)).run();
+    // Delete attachments and message atomically
+    db.transaction((tx) => {
+      tx.delete(schema.attachments).where(eq(schema.attachments.messageId, id)).run();
+      tx.delete(schema.messages).where(eq(schema.messages.id, id)).run();
+    });
 
     // Broadcast deletion
     connectionManager.sendToServer(serverId, {

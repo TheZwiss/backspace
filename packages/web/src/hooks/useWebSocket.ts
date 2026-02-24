@@ -357,7 +357,7 @@ function connect(): void {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 30_000);
+    }, 15_000);
   };
 
   ws.onmessage = (e) => {
