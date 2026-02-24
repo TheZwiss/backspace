@@ -121,7 +121,12 @@ export async function startScreenShare(room: Room): Promise<boolean> {
 
   try {
     const track = await room.localParticipant.setScreenShareEnabled(true, {
-      audio: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: 2,
+      },
       resolution: { width: opts.capture.width, height: opts.capture.height },
       // @ts-ignore — LiveKit accepts frameRate at capture level
       frameRate: opts.capture.frameRate,

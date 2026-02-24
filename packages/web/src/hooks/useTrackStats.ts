@@ -32,6 +32,15 @@ export interface VideoTrackStat {
   simulcastLayer: string | null;
 }
 
+/**
+ * Network-level WebRTC stats for the active ICE transport.
+ *
+ * `serverAddress`, `protocol`, and `candidateType` may legitimately remain null
+ * on strict LANs where Chrome's mDNS IP obfuscation masks candidate-pair addresses.
+ * When ICE candidates use mDNS hostnames (e.g. "abcd-1234.local") instead of raw IPs,
+ * the browser's stats API returns the obfuscated hostname and we cannot resolve the
+ * underlying address. This is a known WebRTC platform limitation, not a bug in our code.
+ */
 export interface NetworkStats {
   ping: number | null;
   packetLoss: number | null;
@@ -121,11 +130,14 @@ function discoverPeerConnections(room: any): RTCPeerConnection[] {
   return pcs;
 }
 
-function inferSimulcastLayer(width: number | null): string | null {
-  if (width === null || width <= 0) return null;
-  if (width >= 1920) return 'High';
-  if (width >= 1280) return 'Medium';
-  return 'Low';
+function inferSimulcastLayer(width: number | null, height: number | null): string | null {
+  if (height !== null && height > 0) {
+    if (height >= 1000) return 'High';
+    if (height >= 700) return 'Medium';
+    return 'Low';
+  }
+  if (width !== null && width > 0) return 'Low';
+  return null;
 }
 
 // ── Hook ──
@@ -169,7 +181,6 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
 
       // Global codec map across all PCs
       const globalCodecMap = new Map<string, string>();
-      let selectedCandidatePairRemoteId: string | null = null;
 
       for (const pc of pcs) {
         let reports: RTCStatsReport;
@@ -179,45 +190,62 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
           continue;
         }
 
+        // Pass 1: Collect codecs, find transport's selected candidate pair
+        let selectedPairId: string | null = null;
         reports.forEach((report: any) => {
           if (report.type === 'codec') {
             globalCodecMap.set(report.id, report.mimeType?.split('/')[1] ?? report.mimeType ?? '');
           }
-
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-            if (report.currentRoundTripTime != null) {
-              network.ping = Math.round(report.currentRoundTripTime * 1000);
-            }
-            if (!network.serverAddress && report.remoteCandidateId) {
-              selectedCandidatePairRemoteId = report.remoteCandidateId;
-            }
-          }
-
-          if (report.type === 'remote-candidate' && !network.serverAddress) {
-            const addr = report.address || report.ip;
-            if (addr) {
-              network.serverAddress = addr;
-              network.protocol = report.protocol ?? null;
-              network.candidateType = report.candidateType ?? null;
-            }
+          if (report.type === 'transport' && report.selectedCandidatePairId) {
+            selectedPairId = report.selectedCandidatePairId;
           }
         });
 
-        // Safari fallback: look up remote candidate by ID
-        if (!network.serverAddress && selectedCandidatePairRemoteId) {
-          let reports2: RTCStatsReport;
-          try {
-            reports2 = await pc.getStats();
-          } catch {
-            continue;
+        // Pass 2: Resolve active candidate pair (three-tier fallback)
+        let activePair: any = null;
+        if (selectedPairId) {
+          // Tier 1: Spec-correct — transport points directly to the active pair
+          activePair = reports.get(selectedPairId);
+        }
+        if (!activePair) {
+          // Tier 2: Active-bytes heuristic — the pair carrying the most data IS
+          // the active transport, regardless of state label or mDNS obfuscation
+          let maxBytes = 0;
+          reports.forEach((report: any) => {
+            if (report.type === 'candidate-pair') {
+              const total = (report.bytesSent ?? 0) + (report.bytesReceived ?? 0);
+              if (total > maxBytes) {
+                maxBytes = total;
+                activePair = report;
+              }
+            }
+          });
+        }
+        if (!activePair) {
+          // Tier 3: Legacy fallback — first pair with state succeeded or in-progress
+          reports.forEach((report: any) => {
+            if (report.type === 'candidate-pair' && !activePair) {
+              if (report.state === 'succeeded' || report.state === 'in-progress') {
+                activePair = report;
+              }
+            }
+          });
+        }
+
+        // Pass 3: Extract network info from active pair
+        if (activePair) {
+          if (activePair.currentRoundTripTime != null) {
+            network.ping = Math.round(activePair.currentRoundTripTime * 1000);
           }
-          const remoteCandidate = reports2.get(selectedCandidatePairRemoteId);
-          if (remoteCandidate) {
-            const addr = remoteCandidate.address || remoteCandidate.ip;
-            if (addr) {
-              network.serverAddress = addr;
-              network.protocol = remoteCandidate.protocol ?? null;
-              network.candidateType = remoteCandidate.candidateType ?? null;
+          if (!network.serverAddress && activePair.remoteCandidateId) {
+            const remoteCandidate = reports.get(activePair.remoteCandidateId);
+            if (remoteCandidate) {
+              const addr = remoteCandidate.address || remoteCandidate.ip;
+              if (addr) {
+                network.serverAddress = addr;
+                network.protocol = remoteCandidate.protocol ?? null;
+                network.candidateType = remoteCandidate.candidateType ?? null;
+              }
             }
           }
         }
@@ -502,7 +530,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   height,
                   fps,
                   qualityLimitation: null,
-                  simulcastLayer: inferSimulcastLayer(width),
+                  simulcastLayer: inferSimulcastLayer(width, height),
                 });
               }
             }
