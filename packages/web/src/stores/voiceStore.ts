@@ -3,6 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
 
+export interface ScreenShareConfig {
+  height: 1080 | 720 | 540;
+  fps: 60 | 45 | 30;
+  mode: 'gaming' | 'text';
+}
+
 interface VoiceState {
   voiceUsers: Map<string, string[]>; // channelId → userIds
   currentVoiceChannelId: string | null;
@@ -21,7 +27,7 @@ interface VoiceState {
   inputDeviceId: string;
   outputDeviceId: string;
   focusedParticipantId: string | null;
-  videoQuality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p';
+  screenShareConfig: ScreenShareConfig;
   // Per-participant volume (userId → 0-200, 100 = default)
   participantVolumes: Map<string, number>;
   setParticipantVolume: (userId: string, volume: number) => void;
@@ -64,7 +70,7 @@ interface VoiceState {
   toggleScreenShare: () => void;
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
-  setVideoQuality: (quality: '1080p' | '1080p60' | '720p' | '720p60' | '540p' | '360p') => void;
+  setScreenShareConfig: (config: Partial<ScreenShareConfig>) => void;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -103,7 +109,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      videoQuality: '720p60',
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming' },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -229,7 +235,9 @@ export const useVoiceStore = create<VoiceState>()(
       toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
-      setVideoQuality: (quality) => set({ videoQuality: quality }),
+      setScreenShareConfig: (config) => set((state) => ({
+        screenShareConfig: { ...state.screenShareConfig, ...config },
+      })),
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: false,
@@ -315,7 +323,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
-      version: 4,
+      version: 5,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -325,10 +333,20 @@ export const useVoiceStore = create<VoiceState>()(
           persistedState.autoGainControl = false;
         }
         if (version < 4) {
-          // v4: RNNoise on by default, browser NS is no longer user-configurable
-          // (AudioManager uses it as automatic fallback when RNNoise is off)
           persistedState.rnnoiseEnabled = true;
           persistedState.noiseSuppression = true;
+        }
+        if (version < 5) {
+          const vq = persistedState.videoQuality as string | undefined;
+          let height: 1080 | 720 | 540 = 720;
+          let fps: 60 | 45 | 30 = 60;
+          if (vq) {
+            if (vq.startsWith('1080')) height = 1080;
+            else if (vq.startsWith('540') || vq.startsWith('360')) height = 540;
+            fps = vq.endsWith('60') ? 60 : 30;
+          }
+          persistedState.screenShareConfig = { height, fps, mode: 'gaming' };
+          delete persistedState.videoQuality;
         }
         return persistedState;
       },
@@ -344,7 +362,7 @@ export const useVoiceStore = create<VoiceState>()(
         outputVolume: state.outputVolume,
         inputDeviceId: state.inputDeviceId,
         outputDeviceId: state.outputDeviceId,
-        videoQuality: state.videoQuality,
+        screenShareConfig: state.screenShareConfig,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,

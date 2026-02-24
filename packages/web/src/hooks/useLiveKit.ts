@@ -9,8 +9,6 @@ import {
   RemoteAudioTrack,
   ConnectionState,
   ConnectionQuality,
-  VideoPresets,
-  VideoPreset,
   LocalAudioTrack,
   LocalTrackPublication,
 } from 'livekit-client';
@@ -19,8 +17,9 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
-  SCREEN_QUALITY_MAP,
-  AUTO_PRESET,
+  CAMERA_PRESET,
+  CAMERA_OVERDRIVE,
+  buildScreenShareOptions,
   applyOverdrive,
   startScreenShare,
   stopScreenShare,
@@ -127,7 +126,7 @@ export function useLiveKit() {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-  const videoQuality = useVoiceStore((s) => s.videoQuality);
+  const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
@@ -495,13 +494,12 @@ export function useLiveKit() {
   const toggleCamera = useCallback(async () => {
     if (roomRef.current) {
       if (!isCameraOn) {
-        const preset = SCREEN_QUALITY_MAP[videoQuality] || VideoPresets.h720;
-        await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: preset.resolution, frameRate: preset.encoding.maxFramerate }, { videoCodec: 'h264', videoEncoding: preset.encoding, simulcast: false });
-        setTimeout(() => { if (roomRef.current) applyOverdrive(roomRef.current, Track.Source.Camera, preset); }, 2000);
+        await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate }, { videoCodec: CAMERA_PRESET.codec, videoEncoding: CAMERA_PRESET.encoding, simulcast: false });
+        setTimeout(() => { if (roomRef.current) applyOverdrive(roomRef.current, Track.Source.Camera, CAMERA_OVERDRIVE); }, 2000);
       } else { await roomRef.current.localParticipant.setCameraEnabled(false); }
       updateParticipants();
     }
-  }, [isCameraOn, videoQuality, updateParticipants]);
+  }, [isCameraOn, updateParticipants]);
 
   const toggleScreenShare = useCallback(async () => {
     if (!roomRef.current) return;
@@ -519,22 +517,23 @@ export function useLiveKit() {
 
   useEffect(() => {
     if (!room) return;
-    const preset = SCREEN_QUALITY_MAP[videoQuality] || AUTO_PRESET;
     const updateActiveTracks = async () => {
       if (isScreenSharing) {
+        const opts = buildScreenShareOptions(screenShareConfig);
         const screenPub = room.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
         if (screenPub?.videoTrack) {
           const mediaTrack = (screenPub.videoTrack as any).mediaStreamTrack as MediaStreamTrack;
           if (mediaTrack) {
-            await mediaTrack.applyConstraints({ width: { ideal: preset.resolution.width }, height: { ideal: preset.resolution.height }, frameRate: { ideal: preset.encoding.maxFramerate } });
+            await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate } });
+            mediaTrack.contentHint = opts.contentHint;
           }
-          await applyOverdrive(room, Track.Source.ScreenShare, preset);
+          await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
       }
-      if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, preset); }
+      if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
     };
     updateActiveTracks().catch(() => {});
-  }, [room, videoQuality, isScreenSharing, isCameraOn]);
+  }, [room, screenShareConfig, isScreenSharing, isCameraOn]);
 
   useEffect(() => {
     return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };

@@ -3,7 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useServerStore } from '../../stores/serverStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
-import { VideoQualityPopover } from './VideoQualityPopover';
+import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
@@ -22,7 +22,7 @@ export function VoiceControls() {
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const connectionQuality = useVoiceStore((s) => s.connectionQuality);
   const channels = useServerStore((s) => s.channels);
-  const [showVideoQuality, setShowVideoQuality] = useState(false);
+  const [showScreenShareSettings, setShowScreenShareSettings] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
@@ -109,7 +109,7 @@ export function VoiceControls() {
         <button
           onClick={() => {
             setShowConnectionInfo(!showConnectionInfo);
-            if (!showConnectionInfo) setShowVideoQuality(false);
+            if (!showConnectionInfo) setShowScreenShareSettings(false);
           }}
           className={`w-8 h-8 rounded-lg ${statusBgColor} flex items-center justify-center flex-shrink-0 hover:brightness-125 transition-all`}
           title="Connection Info"
@@ -188,11 +188,11 @@ export function VoiceControls() {
         {/* Video Quality */}
         <button
           onClick={() => {
-            setShowVideoQuality(!showVideoQuality);
-            if (!showVideoQuality) setShowConnectionInfo(false);
+            setShowScreenShareSettings(!showScreenShareSettings);
+            if (!showScreenShareSettings) setShowConnectionInfo(false);
           }}
           className={`${btnBase} ${
-            showVideoQuality
+            showScreenShareSettings
               ? 'bg-[#111214] text-discord-blurple hover:bg-[#1a1b1e]'
               : btnDefaultStyle
           }`}
@@ -232,10 +232,10 @@ export function VoiceControls() {
           </svg>
         </button>
 
-        {/* Video Quality Popover */}
-        <VideoQualityPopover
-          open={showVideoQuality}
-          onClose={() => setShowVideoQuality(false)}
+        {/* Screen Share Settings Popover */}
+        <ScreenShareSettingsPopover
+          open={showScreenShareSettings}
+          onClose={() => setShowScreenShareSettings(false)}
         />
       </div>
     </>

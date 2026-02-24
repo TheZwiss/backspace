@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
-import { VideoQualityPopover } from './VideoQualityPopover';
+import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
 
@@ -259,7 +259,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     onClick={() => setQualityPopoverOpen(!qualityPopoverOpen)}
                     className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-discord-text-secondary hover:bg-discord-modifier-hover rounded transition-colors"
                   >
-                    <span>{useVoiceStore.getState().videoQuality}</span>
+                    <span>{`${useVoiceStore.getState().screenShareConfig.height}p ${useVoiceStore.getState().screenShareConfig.fps}fps`}</span>
                     <svg
                       width="12"
                       height="12"
@@ -270,7 +270,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     </svg>
                   </button>
                   {qualityPopoverOpen && (
-                    <VideoQualityPopover
+                    <ScreenShareSettingsPopover
                       open={qualityPopoverOpen}
                       onClose={() => setQualityPopoverOpen(false)}
                     />
