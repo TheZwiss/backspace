@@ -3,8 +3,8 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isServerOwner, hasPermission, PermissionBits } from '../utils/permissions.js';
-import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
+import { isMember, isServerOwner, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import type {
@@ -228,9 +228,15 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       })
       .filter((m): m is MemberWithUser => m !== null);
 
+    // Filter channels by VIEW_CHANNEL permission before returning
+    const visibleChannels = channels.filter(ch => {
+      const perms = computePermissions(request.userId, id, ch.id);
+      return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
+    });
+
     const result: ServerWithChannelsAndMembers = {
       ...rowToServer(server),
-      channels: channels.map(rowToChannel),
+      channels: visibleChannels.map(rowToChannel),
       members,
       roles: roles.map(r => ({
         id: r.id,
@@ -517,6 +523,54 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
         eq(schema.serverMembers.userId, uid),
       ))
       .run();
+
+    // Bridge legacy role string to bitwise member_roles
+    if (role === 'admin') {
+      // Find or create Admin role for this server (matches migrate.ts convention)
+      const adminPerms = permissionsToString(ALL_PERMISSIONS);
+      let adminRole = db.select().from(schema.roles)
+        .where(and(
+          eq(schema.roles.serverId, id),
+          eq(schema.roles.name, 'Admin'),
+          eq(schema.roles.permissions, adminPerms),
+        ))
+        .get();
+
+      if (!adminRole) {
+        const adminRoleId = `${id}-admin`;
+        db.insert(schema.roles).values({
+          id: adminRoleId,
+          serverId: id,
+          name: 'Admin',
+          color: '#e74c3c',
+          position: 1,
+          permissions: adminPerms,
+          createdAt: Date.now(),
+        }).run();
+        adminRole = db.select().from(schema.roles).where(eq(schema.roles.id, adminRoleId)).get();
+      }
+
+      if (adminRole) {
+        // Assign the Admin role (no-op if already assigned)
+        db.insert(schema.memberRoles).values({
+          serverId: id,
+          userId: uid,
+          roleId: adminRole.id,
+        }).onConflictDoNothing().run();
+      }
+    } else if (role === 'member') {
+      // Remove all explicit role assignments (demote to @everyone only)
+      // @everyone is implicit via computePermissions, never stored in member_roles
+      db.delete(schema.memberRoles)
+        .where(and(
+          eq(schema.memberRoles.serverId, id),
+          eq(schema.memberRoles.userId, uid),
+        ))
+        .run();
+    }
+
+    // Force target user's client to re-sync with their new permissions
+    connectionManager.pushReadyPayload(uid);
 
     const updatedMember = db.select()
       .from(schema.serverMembers)

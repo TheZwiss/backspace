@@ -318,29 +318,51 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'channel_created': {
-      const { currentServerId: curServerId, channels: curChannels, setChannels } = useServerStore.getState();
+      const { currentServerId: curServerId, channels: curChannels, setChannels, channelToServerMap, channelPermissions } = useServerStore.getState();
       if (event.serverId === curServerId) {
         // Deduplicate: only add if not already present
         if (!curChannels.find(c => c.id === event.channel.id)) {
           setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
         }
       }
+      // Update auxiliary maps
+      channelToServerMap.set(event.channel.id, event.serverId);
+      if (event.channel.myPermissions) {
+        channelPermissions.set(event.channel.id, event.channel.myPermissions);
+      }
       break;
     }
 
     case 'channel_updated': {
-      const { currentServerId: curServerId2, channels: curChannels2, setChannels: setChannels2 } = useServerStore.getState();
+      const { currentServerId: curServerId2, channels: curChannels2, setChannels: setChannels2, channelPermissions: chPermsMap2 } = useServerStore.getState();
       if (event.serverId === curServerId2) {
-        setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
+        const exists = curChannels2.some(c => c.id === event.channel.id);
+        if (exists) {
+          // Replace existing channel data
+          setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
+        } else {
+          // Upsert: user just gained access to this channel
+          setChannels2([...curChannels2, event.channel].sort((a, b) => a.position - b.position));
+          // Populate channelToServerMap for the new channel
+          const { channelToServerMap: ctsMmap } = useServerStore.getState();
+          ctsMmap.set(event.channel.id, event.serverId);
+        }
+      }
+      // Sync channelPermissions with the server's computed value
+      if (event.channel.myPermissions) {
+        chPermsMap2.set(event.channel.id, event.channel.myPermissions);
       }
       break;
     }
 
     case 'channel_deleted': {
-      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3 } = useServerStore.getState();
+      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToServerMap: ctsMap3 } = useServerStore.getState();
       if (event.serverId === curServerId3) {
         setChannels3(curChannels3.filter(c => c.id !== event.channelId));
       }
+      // Clean up auxiliary maps
+      chPermsMap3.delete(event.channelId);
+      ctsMap3.delete(event.channelId);
       // If the user is currently viewing this channel, navigate away
       {
         const { currentChannelId } = useChatStore.getState();

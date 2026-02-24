@@ -4,6 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelServerId, PermissionBits, computePermissions } from '../utils/permissions.js';
+import { permissionsToString } from '@opencord/shared/src/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
   CreateChannelRequest,
@@ -21,6 +22,38 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
     position: row.position ?? 0,
     createdAt: row.createdAt,
   };
+}
+
+/**
+ * After a channel override changes, notify each server member:
+ * - VIEW_CHANNEL holders receive channel_updated (with their myPermissions)
+ * - Non-viewers receive channel_deleted to remove the channel from their UI
+ */
+function broadcastOverrideChange(serverId: string, channelId: string): void {
+  const db = getDb();
+  const channel = db.select().from(schema.channels).where(eq(schema.channels.id, channelId)).get();
+  if (!channel) return;
+
+  const channelData = rowToChannel(channel);
+
+  for (const [userId, serverIds] of connectionManager.getUserServerEntries()) {
+    if (!serverIds.has(serverId)) continue;
+
+    const perms = computePermissions(userId, serverId, channelId);
+    if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+      connectionManager.sendToUser(userId, {
+        type: 'channel_updated',
+        channel: { ...channelData, myPermissions: permissionsToString(perms) },
+        serverId,
+      });
+    } else {
+      connectionManager.sendToUser(userId, {
+        type: 'channel_deleted',
+        channelId,
+        serverId,
+      });
+    }
+  }
 }
 
 export async function channelRoutes(app: FastifyInstance): Promise<void> {
@@ -177,8 +210,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     const channelData = rowToChannel(updated);
 
-    // Broadcast channel_updated to all server members
-    connectionManager.sendToServer(serverId, {
+    // Broadcast channel_updated to members with VIEW_CHANNEL
+    connectionManager.sendToChannel(serverId, id, {
       type: 'channel_updated',
       channel: channelData,
       serverId,
@@ -204,16 +237,26 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
+    // Collect viewers BEFORE deleting (overrides CASCADE-delete with the channel)
+    const viewerIds: string[] = [];
+    for (const [uid, serverIds] of connectionManager.getUserServerEntries()) {
+      if (serverIds.has(serverId)) {
+        const perms = computePermissions(uid, serverId, id);
+        if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+          viewerIds.push(uid);
+        }
+      }
+    }
+
     // Delete messages in channel (attachments cascade), then channel
     db.delete(schema.messages).where(eq(schema.messages.channelId, id)).run();
     db.delete(schema.channels).where(eq(schema.channels.id, id)).run();
 
-    // Broadcast channel_deleted to all server members
-    connectionManager.sendToServer(serverId, {
-      type: 'channel_deleted',
-      channelId: id,
-      serverId,
-    });
+    // Broadcast channel_deleted only to users who could see the channel
+    const deleteEvent = { type: 'channel_deleted' as const, channelId: id, serverId };
+    for (const uid of viewerIds) {
+      connectionManager.sendToUser(uid, deleteEvent);
+    }
 
     return reply.code(200).send({ success: true });
   });
@@ -303,6 +346,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       }).run();
     });
 
+    // Notify all server members of the permission change
+    broadcastOverrideChange(channel.serverId, id);
+
     return reply.code(200).send({ success: true });
   });
 
@@ -330,6 +376,9 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
           eq(schema.channelOverrides.targetId, targetId),
         )
       ).run();
+
+      // Notify all server members of the permission change
+      broadcastOverrideChange(channel.serverId, id);
 
       return reply.code(200).send({ success: true });
     },

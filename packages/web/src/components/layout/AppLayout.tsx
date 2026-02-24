@@ -12,6 +12,7 @@ import { CreateChannelModal } from '../modals/CreateChannel';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { ServerSettingsModal } from '../modals/ServerSettings';
+import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
@@ -236,6 +237,7 @@ export function AppLayout() {
       <InviteModal />
       <UserSettingsModal />
       <ServerSettingsModal />
+      <ChannelSettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
       <IncomingCallModal />

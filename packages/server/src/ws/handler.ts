@@ -425,6 +425,29 @@ class ConnectionManager {
     }
   }
 
+  /** Send to server members who have VIEW_CHANNEL on the given channel. */
+  sendToChannel(serverId: string, channelId: string, event: ServerEvent, excludeUserId?: string): void {
+    const message = JSON.stringify(event);
+    for (const [userId, serverIds] of this.userServers) {
+      if (serverIds.has(serverId) && userId !== excludeUserId) {
+        const perms = computePermissions(userId, serverId, channelId);
+        if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+          const connections = this.getUserConnections(userId);
+          for (const ws of connections) {
+            if (ws.readyState === 1) {
+              ws.send(message);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /** Expose userServers iterator for pre-delete viewer collection. */
+  getUserServerEntries(): IterableIterator<[string, Set<string>]> {
+    return this.userServers.entries();
+  }
+
   /** Send to all DM channel members (queries dm_members table). */
   sendToDmMembers(dmChannelId: string, event: ServerEvent, excludeUserId?: string): void {
     const db = getDb();
@@ -469,6 +492,20 @@ class ConnectionManager {
 
   getAllOnlineUserIds(): string[] {
     return Array.from(this.connections.keys());
+  }
+
+  /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
+  pushReadyPayload(userId: string): void {
+    const connections = this.getUserConnections(userId);
+    if (connections.size === 0) return;
+
+    const readyData = buildReadyPayload(userId);
+    const message = JSON.stringify({ type: 'ready', ...readyData });
+    for (const ws of connections) {
+      if (ws.readyState === 1) {
+        ws.send(message);
+      }
+    }
   }
 }
 

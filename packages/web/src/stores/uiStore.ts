@@ -9,6 +9,7 @@ type ModalType =
   | 'invite'
   | 'userSettings'
   | 'serverSettings'
+  | 'channelSettings'
   | 'imagePreview'
   | 'newDm'
   | 'addDmMember'

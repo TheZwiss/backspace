@@ -210,8 +210,8 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
 
   const messageWithUser = getMessageWithUser(messageId);
   if (messageWithUser) {
-    // Broadcast to all server members (including sender)
-    connectionManager.sendToServer(serverId, {
+    // Broadcast to members with VIEW_CHANNEL on this channel
+    connectionManager.sendToChannel(serverId, channelId, {
       type: 'message_created',
       message: messageWithUser,
     });
@@ -255,7 +255,7 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
 
   const updatedMessage = getMessageWithUser(messageId);
   if (updatedMessage) {
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToChannel(serverId, message.channelId, {
       type: 'message_updated',
       message: updatedMessage,
     });
@@ -293,7 +293,7 @@ function handleMessageDelete(event: Record<string, unknown>, userId: string): vo
   db.delete(schema.attachments).where(eq(schema.attachments.messageId, messageId)).run();
   db.delete(schema.messages).where(eq(schema.messages.id, messageId)).run();
 
-  connectionManager.sendToServer(serverId, {
+  connectionManager.sendToChannel(serverId, message.channelId, {
     type: 'message_deleted',
     messageId,
     channelId: message.channelId,
@@ -317,8 +317,8 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
     clearTimeout(existing);
   }
 
-  // Broadcast typing event (exclude sender)
-  connectionManager.sendToServer(serverId, {
+  // Broadcast typing event to channel viewers (exclude sender)
+  connectionManager.sendToChannel(serverId, channelId, {
     type: 'typing',
     channelId,
     userId,
@@ -728,7 +728,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       createdAt: Date.now(),
     }).run();
 
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToChannel(serverId, message.channelId, {
       type: 'reaction_added',
       messageId,
       reaction: {
@@ -766,7 +766,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
     .run();
 
   if (result.changes > 0) {
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToChannel(serverId, message.channelId, {
       type: 'reaction_removed',
       messageId,
       userId,

@@ -134,6 +134,14 @@ export const api = {
     },
     sendMessage: (channelId: string, data: CreateMessageRequest) =>
       request<MessageWithUser>('POST', `/channels/${channelId}/messages`, data),
+    getOverrides: (channelId: string) =>
+      request<{ channelId: string; targetType: string; targetId: string; allow: string; deny: string }[]>(
+        'GET', `/channels/${channelId}/overrides`
+      ),
+    putOverride: (channelId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) =>
+      request<{ success: boolean }>('PUT', `/channels/${channelId}/overrides`, data),
+    deleteOverride: (channelId: string, targetType: string, targetId: string) =>
+      request<{ success: boolean }>('DELETE', `/channels/${channelId}/overrides/${targetType}/${targetId}`),
   },
 
   messages: {
