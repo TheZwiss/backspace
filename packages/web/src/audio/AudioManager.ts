@@ -30,6 +30,7 @@ export class AudioManager {
   private stereoMerger: ChannelMergerNode | null = null;
   private rnnoiseEnabled = false;
   private rnnoiseReady = false;
+  private keepAliveOscillator: OscillatorNode | null = null;
 
   private constructor() {}
 
@@ -69,7 +70,19 @@ export class AudioManager {
     this.silentGain.connect(this.ctx.destination);
 
     this.inputGain.gain.setValueAtTime(1, this.ctx.currentTime);
-    
+
+    // Safari suspends the AudioContext when it detects no audible output,
+    // even while WebRTC audio is flowing through the pipeline. A sub-bass
+    // oscillator at near-zero gain keeps the rendering thread alive without
+    // producing audible sound.
+    this.keepAliveOscillator = this.ctx.createOscillator();
+    this.keepAliveOscillator.frequency.value = 20;
+    const keepAliveGain = this.ctx.createGain();
+    keepAliveGain.gain.value = 0.00001;
+    this.keepAliveOscillator.connect(keepAliveGain);
+    keepAliveGain.connect(this.ctx.destination);
+    this.keepAliveOscillator.start();
+
     this.ctx.onstatechange = () => {
       console.log(`[AudioManager] Context state: ${this.ctx?.state}`);
       if (this.ctx?.state === 'running') {

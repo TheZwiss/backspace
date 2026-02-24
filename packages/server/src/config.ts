@@ -14,6 +14,10 @@ function env(key: string, defaultValue?: string): string {
   return value;
 }
 
+function envOptional(key: string): string | undefined {
+  return process.env[key] || undefined;
+}
+
 function envInt(key: string, defaultValue: number): number {
   const value = process.env[key];
   if (value === undefined) return defaultValue;
@@ -33,13 +37,13 @@ function envBool(key: string, defaultValue: boolean): boolean {
 export const config = {
   port: envInt('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
-  jwtSecret: env('JWT_SECRET', 'dev-secret-change-me-in-production-please-use-64-chars-hex-string'),
+  jwtSecret: env('JWT_SECRET'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
 
   livekit: {
-    url: env('LIVEKIT_URL', 'wss://nova.ddns.net/livekit'),
-    apiKey: env('LIVEKIT_API_KEY', 'REDACTED_LIVEKIT_KEY'),
-    apiSecret: env('LIVEKIT_API_SECRET', 'REDACTED_LIVEKIT_SECRET'),
+    url: envOptional('LIVEKIT_URL'),
+    apiKey: envOptional('LIVEKIT_API_KEY'),
+    apiSecret: envOptional('LIVEKIT_API_SECRET'),
   },
 
   uploadDir: env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')),

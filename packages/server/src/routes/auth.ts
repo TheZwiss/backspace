@@ -19,7 +19,15 @@ function sanitizeUser(row: typeof schema.users.$inferSelect): User {
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
-  app.post<{ Body: RegisterRequest }>('/api/auth/register', async (request, reply) => {
+  app.post<{ Body: RegisterRequest }>('/api/auth/register', {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '15 minutes',
+        keyGenerator: (request: any) => request.ip,
+      },
+    },
+  }, async (request, reply) => {
     const { username, password, displayName } = request.body;
 
     if (!username || typeof username !== 'string') {
@@ -83,7 +91,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(response);
   });
 
-  app.post<{ Body: LoginRequest }>('/api/auth/login', async (request, reply) => {
+  app.post<{ Body: LoginRequest }>('/api/auth/login', {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '15 minutes',
+        keyGenerator: (request: any) => request.ip,
+      },
+    },
+  }, async (request, reply) => {
     const { username, password } = request.body;
 
     if (!username || typeof username !== 'string') {

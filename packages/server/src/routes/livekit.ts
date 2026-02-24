@@ -9,6 +9,10 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: LiveKitTokenRequest & { dmChannelId?: string } }>('/api/livekit/token', {
     preHandler: authenticate,
   }, async (request, reply) => {
+    if (!config.livekit.apiKey || !config.livekit.apiSecret) {
+      return reply.code(503).send({ error: 'Voice/video is not configured on this server', statusCode: 503 });
+    }
+
     const { channelId, dmChannelId } = request.body as { channelId?: string; dmChannelId?: string };
 
     // Determine room name based on channel type
@@ -54,7 +58,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     const requestHost = request.headers.host?.replace(/:\d+$/, '') || '';
     const livekitUrl = requestHost
       ? `wss://${requestHost}/livekit`
-      : config.livekit.url;
+      : (config.livekit.url ?? '');
 
     const response: LiveKitTokenResponse = {
       token: jwt,

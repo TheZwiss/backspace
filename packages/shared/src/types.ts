@@ -149,6 +149,7 @@ export interface ActiveCallInfo {
 
 export interface DmChannel {
   id: string;
+  ownerId?: string | null;
   createdAt: number;
   members: User[];
   lastMessage?: DmMessage | null;

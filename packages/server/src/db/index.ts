@@ -76,6 +76,7 @@ function createTables(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS dm_channels (
       id TEXT PRIMARY KEY,
+      owner_id TEXT,
       created_at INTEGER NOT NULL
     );
 

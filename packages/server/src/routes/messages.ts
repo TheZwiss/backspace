@@ -252,6 +252,13 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/channels/:id/messages - Create a message
   app.post<{ Params: { id: string }; Body: CreateMessageRequest }>('/api/channels/:id/messages', {
     preHandler: authenticate,
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '5 seconds',
+        keyGenerator: (request: any) => request.userId || request.ip,
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, attachments: attachmentIds, replyToId } = request.body;

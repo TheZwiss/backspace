@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, desc, lt, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -189,6 +189,7 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
           type: 'dm_channel_created',
           dmChannel: {
             id: dmChannel.id,
+            ownerId: dmChannel.ownerId ?? null,
             createdAt: dmChannel.createdAt,
             members: users.map(sanitizeUser),
             lastMessage: message,
@@ -251,6 +252,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       dmChannels.push({
         id: dmChannel.id,
+        ownerId: dmChannel.ownerId ?? null,
         createdAt: dmChannel.createdAt,
         members: users.map(sanitizeUser),
         lastMessage: lastMessage ? {
@@ -359,6 +361,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
         const result: DmChannel = {
           id: dmChannel.id,
+          ownerId: dmChannel.ownerId ?? null,
           createdAt: dmChannel.createdAt,
           members: users.map(sanitizeUser),
           lastMessage: lastMsg ? {
@@ -381,6 +384,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     db.transaction((tx) => {
       tx.insert(schema.dmChannels).values({
         id: dmChannelId,
+        ownerId: request.userId,
         createdAt: now,
       }).run();
 
@@ -402,6 +406,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const result: DmChannel = {
       id: dmChannelId,
+      ownerId: request.userId,
       createdAt: now,
       members,
       lastMessage: null,
@@ -472,10 +477,31 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
     }
 
+    // Enforce DM channel ownership: only the owner can add members (for new-style group DMs)
+    const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+    if (dmChannel.ownerId && dmChannel.ownerId !== request.userId) {
+      return reply.code(403).send({ error: 'Only the group owner can add members', statusCode: 403 });
+    }
+
     // Validate target user exists
     const targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
     if (!targetUser) {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    // Validate the adder and target are friends
+    const friendship = db.select().from(schema.friends).where(
+      or(
+        and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUserId)),
+        and(eq(schema.friends.userId, targetUserId), eq(schema.friends.friendId, request.userId)),
+      ),
+    ).get();
+
+    if (!friendship) {
+      return reply.code(403).send({ error: 'You can only add friends to group DMs', statusCode: 403 });
     }
 
     // Validate target is not already a member
@@ -517,15 +543,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
       : [];
 
-    const dmChannel = db.select()
-      .from(schema.dmChannels)
-      .where(eq(schema.dmChannels.id, id))
-      .get();
-
-    if (!dmChannel) {
-      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
-    }
-
     // Fetch last message
     const lastMsgRows = db.select()
       .from(schema.dmMessages)
@@ -537,6 +554,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const result: DmChannel = {
       id: dmChannel.id,
+      ownerId: dmChannel.ownerId ?? null,
       createdAt: dmChannel.createdAt,
       members: users.map(sanitizeUser),
       lastMessage: lastMsg ? {
@@ -776,6 +794,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/dm/:id/messages - Send a DM message
   app.post<{ Params: { id: string }; Body: CreateDmMessageRequest }>('/api/dm/:id/messages', {
     preHandler: authenticate,
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '5 seconds',
+        keyGenerator: (request: any) => request.userId || request.ip,
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, attachments: attachmentIds, replyToId } = request.body;

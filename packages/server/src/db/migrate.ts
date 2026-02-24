@@ -41,6 +41,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'closed', type: 'INTEGER DEFAULT 0' }
       ]
+    },
+    {
+      name: 'dm_channels',
+      columns: [
+        { name: 'owner_id', type: 'TEXT' }
+      ]
     }
   ];
 

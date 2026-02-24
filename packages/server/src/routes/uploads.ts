@@ -18,6 +18,13 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/uploads - Upload a file
   app.post('/api/uploads', {
     preHandler: authenticate,
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 minute',
+        keyGenerator: (request: any) => (request as any).userId || request.ip,
+      },
+    },
   }, async (request, reply) => {
     const data = await request.file();
     if (!data) {

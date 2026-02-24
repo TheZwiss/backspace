@@ -9,9 +9,47 @@ import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@opencord/shared'
 let globalWs: WebSocket | null = null;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
 let currentToken: string | null = null;
 let isInitialized = false;
+
+// Worker-based heartbeat: Safari throttles main-thread setInterval in
+// background tabs, causing ping timeouts. A Web Worker's timers run on a
+// separate thread and are not subject to the same throttling.
+let heartbeatWorker: Worker | null = null;
+
+function createHeartbeatWorker(): Worker {
+  const blob = new Blob([`
+    let timerId = null;
+    self.onmessage = function(e) {
+      if (e.data === 'start') {
+        if (timerId) clearInterval(timerId);
+        timerId = setInterval(function() { self.postMessage('tick'); }, 15000);
+      } else if (e.data === 'stop') {
+        if (timerId) { clearInterval(timerId); timerId = null; }
+      }
+    };
+  `], { type: 'application/javascript' });
+  return new Worker(URL.createObjectURL(blob));
+}
+
+function startHeartbeat(ws: WebSocket): void {
+  stopHeartbeat();
+  heartbeatWorker = createHeartbeatWorker();
+  heartbeatWorker.onmessage = () => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'ping' }));
+    }
+  };
+  heartbeatWorker.postMessage('start');
+}
+
+function stopHeartbeat(): void {
+  if (heartbeatWorker) {
+    heartbeatWorker.postMessage('stop');
+    heartbeatWorker.terminate();
+    heartbeatWorker = null;
+  }
+}
 
 function handleEvent(event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
@@ -351,13 +389,8 @@ function connect(): void {
     reconnectAttempts = 0;
     ws.send(JSON.stringify({ type: 'auth', token: currentToken }));
 
-    // Start heartbeat to keep connection alive through proxies/NATs
-    if (heartbeatInterval) clearInterval(heartbeatInterval);
-    heartbeatInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 15_000);
+    // Start heartbeat via Web Worker (immune to Safari background throttling)
+    startHeartbeat(ws);
   };
 
   ws.onmessage = (e) => {
@@ -371,10 +404,7 @@ function connect(): void {
 
   ws.onclose = () => {
     globalWs = null;
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = undefined;
-    }
+    stopHeartbeat();
     if (currentToken) {
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
       reconnectAttempts++;
@@ -394,10 +424,7 @@ function disconnect(): void {
     clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
   }
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
-    heartbeatInterval = undefined;
-  }
+  stopHeartbeat();
   if (globalWs) {
     globalWs.close();
     globalWs = null;

@@ -473,6 +473,35 @@ class ConnectionManager {
 
 export const connectionManager = new ConnectionManager();
 
+// ─── WebSocket Rate Limiter (Token Bucket) ─────────────────────────────────
+
+class WsRateLimiter {
+  private tokens: number;
+  private readonly maxTokens: number;
+  private readonly refillRate: number; // tokens per second
+  private lastRefill: number;
+
+  constructor(maxTokens = 30, refillRate = 2) {
+    this.maxTokens = maxTokens;
+    this.tokens = maxTokens;
+    this.refillRate = refillRate;
+    this.lastRefill = Date.now();
+  }
+
+  consume(): boolean {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(this.maxTokens, this.tokens + elapsed * this.refillRate);
+    this.lastRefill = now;
+
+    if (this.tokens >= 1) {
+      this.tokens -= 1;
+      return true;
+    }
+    return false;
+  }
+}
+
 function buildReadyPayload(userId: string): {
   user: User;
   servers: ServerWithChannelsAndMembers[];
@@ -685,6 +714,7 @@ function buildReadyPayload(userId: string): {
 
       dmChannels.push({
         id: dmChannel.id,
+        ownerId: dmChannel.ownerId ?? null,
         createdAt: dmChannel.createdAt,
         members,
         lastMessage: last ? {
@@ -791,6 +821,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
     let authenticated = false;
     let userId: string | undefined;
     let username: string | undefined;
+    const rateLimiter = new WsRateLimiter();
 
     // Set auth timeout - must authenticate within 10 seconds
     const authTimeout = setTimeout(() => {
@@ -858,6 +889,12 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
       // Fast-path heartbeat — never reaches business logic
       if (parsed.type === 'ping') {
         ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      }
+
+      // Rate limit all post-auth, non-ping messages
+      if (!rateLimiter.consume()) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Rate limited' }));
         return;
       }
 

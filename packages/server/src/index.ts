@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
@@ -32,6 +33,12 @@ async function main(): Promise<void> {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  await app.register(rateLimit, {
+    max: 60,
+    timeWindow: '1 minute',
+    keyGenerator: (request) => (request as any).userId || request.ip,
   });
 
   await app.register(websocket);

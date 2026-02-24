@@ -68,6 +68,7 @@ export const attachments = sqliteTable('attachments', {
 
 export const dmChannels = sqliteTable('dm_channels', {
   id: text('id').primaryKey(),
+  ownerId: text('owner_id'),
   createdAt: integer('created_at').notNull(),
 });
 
