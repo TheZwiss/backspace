@@ -190,6 +190,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         user: currentUser,
         attachments: [],
         reactions: [],
+        replyTo: get().replyTo ?? undefined,
       };
       if (isDm) {
         (optimisticMessage as any).dmChannelId = channelId;
