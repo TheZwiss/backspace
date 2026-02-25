@@ -95,7 +95,6 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       tx.insert(schema.serverMembers).values({
         serverId,
         userId: request.userId,
-        role: 'owner',
         joinedAt: now,
       }).run();
 
@@ -219,7 +218,6 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
         return {
           serverId: m.serverId,
           userId: m.userId,
-          role: (m.role ?? 'member') as MemberWithUser['role'],
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
@@ -387,7 +385,6 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     db.insert(schema.serverMembers).values({
       serverId: id,
       userId: request.userId,
-      role: 'member',
       joinedAt: now,
     }).run();
 
@@ -422,7 +419,6 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     db.insert(schema.serverMembers).values({
       serverId: server.id,
       userId: request.userId,
-      role: 'member',
       joinedAt: now,
     }).run();
 
@@ -460,18 +456,44 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const userMap = new Map(users.map(u => [u.id, u]));
 
+    const roles = db.select()
+      .from(schema.roles)
+      .where(eq(schema.roles.serverId, id))
+      .orderBy(schema.roles.position)
+      .all();
+
+    const memberRoleRows = db.select()
+      .from(schema.memberRoles)
+      .where(eq(schema.memberRoles.serverId, id))
+      .all();
+
     const members: MemberWithUser[] = memberRows
       .map(m => {
         const user = userMap.get(m.userId);
         if (!user) return null;
+
+        const assignedRoleIds = memberRoleRows
+          .filter(mr => mr.userId === m.userId)
+          .map(mr => mr.roleId);
+
+        const assignedRoles = roles
+          .filter(r => assignedRoleIds.includes(r.id))
+          .map(r => ({
+            id: r.id,
+            serverId: r.serverId,
+            name: r.name,
+            color: r.color ?? '#b9bbbe',
+            position: r.position ?? 0,
+            createdAt: r.createdAt,
+          }));
+
         return {
           serverId: m.serverId,
           userId: m.userId,
-          role: (m.role ?? 'member') as MemberWithUser['role'],
           nickname: m.nickname,
           joinedAt: m.joinedAt,
           user: sanitizeUser(user),
-          roles: [] as Role[], // TODO: Fetch member roles
+          roles: assignedRoles,
         };
       })
       .filter((m): m is MemberWithUser => m !== null);
@@ -479,12 +501,12 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(members);
   });
 
-  // PATCH /api/servers/:id/members/:uid - Update member role (owner only)
+  // PATCH /api/servers/:id/members/:uid - Update member roles
   app.patch<{ Params: { id: string; uid: string }; Body: UpdateMemberRequest }>('/api/servers/:id/members/:uid', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, uid } = request.params;
-    const { role } = request.body;
+    const { roleIds } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
@@ -497,11 +519,16 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (uid === request.userId) {
-      return reply.code(400).send({ error: 'You cannot change your own role', statusCode: 400 });
+      return reply.code(400).send({ error: 'You cannot change your own roles', statusCode: 400 });
     }
 
-    if (!role || !['admin', 'member'].includes(role)) {
-      return reply.code(400).send({ error: 'Role must be "admin" or "member"', statusCode: 400 });
+    if (!Array.isArray(roleIds)) {
+      return reply.code(400).send({ error: 'roleIds must be an array of role IDs', statusCode: 400 });
+    }
+
+    // Cannot modify the server owner's roles unless you are the owner
+    if (isServerOwner(id, uid) && !isServerOwner(id, request.userId)) {
+      return reply.code(403).send({ error: 'Only the server owner can modify their own roles', statusCode: 403 });
     }
 
     const member = db.select()
@@ -516,62 +543,49 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Member not found', statusCode: 404 });
     }
 
-    db.update(schema.serverMembers)
-      .set({ role })
-      .where(and(
-        eq(schema.serverMembers.serverId, id),
-        eq(schema.serverMembers.userId, uid),
-      ))
-      .run();
+    // Validate all roleIds belong to this server and are not @everyone
+    if (roleIds.length > 0) {
+      const serverRoles = db.select()
+        .from(schema.roles)
+        .where(eq(schema.roles.serverId, id))
+        .all();
 
-    // Bridge legacy role string to bitwise member_roles
-    if (role === 'admin') {
-      // Find or create Admin role for this server (matches migrate.ts convention)
-      const adminPerms = permissionsToString(ALL_PERMISSIONS);
-      let adminRole = db.select().from(schema.roles)
-        .where(and(
-          eq(schema.roles.serverId, id),
-          eq(schema.roles.name, 'Admin'),
-          eq(schema.roles.permissions, adminPerms),
-        ))
-        .get();
+      const serverRoleIds = new Set(serverRoles.map(r => r.id));
 
-      if (!adminRole) {
-        const adminRoleId = `${id}-admin`;
-        db.insert(schema.roles).values({
-          id: adminRoleId,
-          serverId: id,
-          name: 'Admin',
-          color: '#e74c3c',
-          position: 1,
-          permissions: adminPerms,
-          createdAt: Date.now(),
-        }).run();
-        adminRole = db.select().from(schema.roles).where(eq(schema.roles.id, adminRoleId)).get();
+      for (const roleId of roleIds) {
+        if (!serverRoleIds.has(roleId)) {
+          return reply.code(400).send({ error: `Role ${roleId} does not belong to this server`, statusCode: 400 });
+        }
+        if (roleId === id) {
+          return reply.code(400).send({ error: '@everyone role is implicit and cannot be assigned', statusCode: 400 });
+        }
       }
+    }
 
-      if (adminRole) {
-        // Assign the Admin role (no-op if already assigned)
-        db.insert(schema.memberRoles).values({
-          serverId: id,
-          userId: uid,
-          roleId: adminRole.id,
-        }).onConflictDoNothing().run();
-      }
-    } else if (role === 'member') {
-      // Remove all explicit role assignments (demote to @everyone only)
-      // @everyone is implicit via computePermissions, never stored in member_roles
-      db.delete(schema.memberRoles)
+    // Atomically replace member's role assignments
+    db.transaction((tx) => {
+      // Remove all existing role assignments for this member in this server
+      tx.delete(schema.memberRoles)
         .where(and(
           eq(schema.memberRoles.serverId, id),
           eq(schema.memberRoles.userId, uid),
         ))
         .run();
-    }
+
+      // Insert new role assignments
+      for (const roleId of roleIds) {
+        tx.insert(schema.memberRoles).values({
+          serverId: id,
+          userId: uid,
+          roleId,
+        }).run();
+      }
+    });
 
     // Force target user's client to re-sync with their new permissions
     connectionManager.pushReadyPayload(uid);
 
+    // Build response with populated roles
     const updatedMember = db.select()
       .from(schema.serverMembers)
       .where(and(
@@ -589,14 +603,39 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'User not found', statusCode: 500 });
     }
 
+    const updatedRoleRows = db.select()
+      .from(schema.memberRoles)
+      .where(and(
+        eq(schema.memberRoles.serverId, id),
+        eq(schema.memberRoles.userId, uid),
+      ))
+      .all();
+
+    const updatedRoleIds = updatedRoleRows.map(r => r.roleId);
+    const allRoles = db.select()
+      .from(schema.roles)
+      .where(eq(schema.roles.serverId, id))
+      .orderBy(schema.roles.position)
+      .all();
+
+    const memberRoles = allRoles
+      .filter(r => updatedRoleIds.includes(r.id))
+      .map(r => ({
+        id: r.id,
+        serverId: r.serverId,
+        name: r.name,
+        color: r.color ?? '#b9bbbe',
+        position: r.position ?? 0,
+        createdAt: r.createdAt,
+      }));
+
     const result: MemberWithUser = {
       serverId: updatedMember.serverId,
       userId: updatedMember.userId,
-      role: (updatedMember.role ?? 'member') as MemberWithUser['role'],
       nickname: updatedMember.nickname,
       joinedAt: updatedMember.joinedAt,
       user: sanitizeUser(user),
-      roles: [] as Role[], // TODO: Fetch member roles
+      roles: memberRoles,
     };
 
     return reply.code(200).send(result);
@@ -640,7 +679,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Cannot kick the owner
-    if (member.role === 'owner') {
+    if (isServerOwner(id, uid)) {
       return reply.code(400).send({ error: 'Cannot remove the server owner', statusCode: 400 });
     }
 

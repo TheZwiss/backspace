@@ -1,6 +1,5 @@
 import { eq, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
-import type { MemberRole } from '@opencord/shared';
 import {
   PermissionBits,
   ALL_PERMISSIONS,
@@ -132,11 +131,6 @@ export function getMember(serverId: string, userId: string) {
 
 export function isMember(serverId: string, userId: string): boolean {
   return getMember(serverId, userId) !== undefined;
-}
-
-export function getMemberRole(serverId: string, userId: string): MemberRole | null {
-  const member = getMember(serverId, userId);
-  return member ? (member.role as MemberRole) : null;
 }
 
 export function isServerOwner(serverId: string, userId: string): boolean {

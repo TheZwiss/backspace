@@ -4,50 +4,87 @@ import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 
-const ROLE_ORDER: Record<string, number> = { owner: 0, admin: 1, member: 2 };
-const ROLE_LABELS: Record<string, string> = { owner: 'OWNER', admin: 'ADMIN', member: 'MEMBER' };
+/**
+ * Derives the display group for a member based on their highest-positioned role
+ * or owner status. Returns { key, label, color, position }.
+ */
+function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
+  if (ownerId && member.userId === ownerId) {
+    // Owner always sorts first — position Infinity so it's above all roles
+    const ownerRole = member.roles?.find(r => r.position > 0);
+    return {
+      key: '__owner__',
+      label: 'OWNER',
+      color: ownerRole?.color ?? '#f23f43',
+      position: Infinity,
+    };
+  }
+  if (member.roles && member.roles.length > 0) {
+    // Sort by position descending — highest position = most important role
+    const sorted = [...member.roles].sort((a, b) => b.position - a.position);
+    const top = sorted[0]!;
+    return {
+      key: top.id,
+      label: top.name.toUpperCase(),
+      color: top.color,
+      position: top.position,
+    };
+  }
+  // No explicit roles — just @everyone
+  return {
+    key: '__online__',
+    label: 'ONLINE',
+    color: undefined,
+    position: -1,
+  };
+}
 
 export function MemberSidebar() {
   const members = useServerStore((s) => s.members);
+  const servers = useServerStore((s) => s.servers);
+  const currentServerId = useServerStore((s) => s.currentServerId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+
+  const server = servers.find(s => s.id === currentServerId);
+  const ownerId = server?.ownerId;
 
   const { roleGroups, offlineMembers } = useMemo(() => {
     const online = members.filter(m => m.user.status !== 'offline');
     const offline = members.filter(m => m.user.status === 'offline');
 
-    // Group online members by role
-    const groups = new Map<string, MemberWithUser[]>();
+    // Group online members by their highest role
+    const groups = new Map<string, { label: string; color: string | undefined; position: number; members: MemberWithUser[] }>();
     for (const m of online) {
-      const role = m.role || 'member';
-      if (!groups.has(role)) groups.set(role, []);
-      groups.get(role)!.push(m);
+      const group = getMemberGroup(m, ownerId);
+      if (!groups.has(group.key)) {
+        groups.set(group.key, { label: group.label, color: group.color, position: group.position, members: [] });
+      }
+      groups.get(group.key)!.members.push(m);
     }
 
-    // Sort groups by role hierarchy
+    // Sort groups by position descending (highest role first), then ONLINE last
     const sorted = [...groups.entries()].sort(
-      (a, b) => (ROLE_ORDER[a[0]] ?? 99) - (ROLE_ORDER[b[0]] ?? 99)
+      (a, b) => b[1].position - a[1].position
     );
 
     return { roleGroups: sorted, offlineMembers: offline };
-  }, [members]);
+  }, [members, ownerId]);
 
   if (!memberListOpen) return null;
 
-  const roleColors: Record<string, string> = {
-    owner: 'text-discord-red',
-    admin: 'text-discord-blurple',
-    member: 'text-discord-text-primary',
-  };
-
-  const getMemberColor = (member: MemberWithUser) => {
+  const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
     if (member.roles && member.roles.length > 0) {
-      return { color: member.roles[0]!.color };
+      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
+      return { color: sorted[0]!.color };
+    }
+    if (ownerId && member.userId === ownerId) {
+      return { color: '#f23f43' };
     }
     return undefined;
   };
 
-  const handleMemberClick = (e: React.MouseEvent, user: any) => {
+  const handleMemberClick = (e: React.MouseEvent, user: MemberWithUser['user']) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
     openUserProfile(user, {
@@ -58,6 +95,7 @@ export function MemberSidebar() {
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {
     const displayName = member.user.displayName ?? member.user.username;
+    const colorStyle = isOffline ? undefined : getMemberColor(member);
     return (
       <div
         key={member.userId}
@@ -73,8 +111,8 @@ export function MemberSidebar() {
         />
         <div className="flex-1 min-w-0">
           <div
-            className={`text-[15px] font-medium truncate ${isOffline ? 'text-discord-text-muted' : (!getMemberColor(member) ? (roleColors[member.role] ?? 'text-discord-text-primary') : '')}`}
-            style={isOffline ? undefined : getMemberColor(member)}
+            className={`text-[15px] font-medium truncate ${isOffline ? 'text-discord-text-muted' : (!colorStyle ? 'text-discord-text-primary' : '')}`}
+            style={colorStyle}
           >
             {displayName}
           </div>
@@ -90,12 +128,12 @@ export function MemberSidebar() {
     <div className="w-60 bg-discord-bg-members flex-shrink-0 overflow-y-auto select-none no-scrollbar">
       <div className="p-3">
         {/* Role-based groups */}
-        {roleGroups.map(([role, groupMembers]) => (
-          <div key={role} className="mb-4">
+        {roleGroups.map(([key, group]) => (
+          <div key={key} className="mb-4">
             <h3 className="text-[12px] font-bold text-discord-text-muted uppercase tracking-wider px-2 mb-1">
-              {ROLE_LABELS[role] ?? role.toUpperCase()} — {groupMembers.length}
+              {group.label} — {group.members.length}
             </h3>
-            {groupMembers.map((m) => renderMember(m))}
+            {group.members.map((m) => renderMember(m))}
           </div>
         ))}
 

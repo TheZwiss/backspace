@@ -651,7 +651,6 @@ function buildReadyPayload(userId: string): {
           return {
             serverId: m.serverId,
             userId: m.userId,
-            role: (m.role ?? 'member') as MemberWithUser['role'],
             nickname: m.nickname,
             joinedAt: m.joinedAt,
             user: sanitizeUser(u),

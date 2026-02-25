@@ -39,7 +39,6 @@ export async function seedDatabase(): Promise<void> {
   db.insert(schema.serverMembers).values({
     serverId: serverId,
     userId: adminId,
-    role: 'owner',
     joinedAt: Date.now(),
   }).run();
 

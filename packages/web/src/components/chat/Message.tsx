@@ -123,25 +123,23 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const displayName = message.user.displayName ?? message.user.username;
 
-  const roleColor = (() => {
-    const member = members.find(m => m.userId === message.userId);
-    if (member?.roles && member.roles.length > 0) {
-      return { color: member.roles[0]!.color };
-    }
-    if (member?.role === 'owner') return { color: '#f23f43' };
-    if (member?.role === 'admin') return { color: '#5865f2' };
-    return { color: '#dcdcdf' };
-  })();
+  const servers = useServerStore((s) => s.servers);
+  const currentServerId = useServerStore((s) => s.currentServerId);
+  const ownerId = servers.find(s => s.id === currentServerId)?.ownerId;
 
-  const replyRoleColor = (msg: any) => {
-    const member = members.find(m => m.userId === msg.userId);
+  const getMemberDisplayColor = (userId: string) => {
+    const member = members.find(m => m.userId === userId);
     if (member?.roles && member.roles.length > 0) {
-      return { color: member.roles[0]!.color };
+      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
+      return { color: sorted[0]!.color };
     }
-    if (member?.role === 'owner') return { color: '#f23f43' };
-    if (member?.role === 'admin') return { color: '#5865f2' };
+    if (ownerId && userId === ownerId) return { color: '#f23f43' };
     return { color: '#dcdcdf' };
   };
+
+  const roleColor = getMemberDisplayColor(message.userId);
+
+  const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
 
   const content = (
     <div

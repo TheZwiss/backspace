@@ -23,7 +23,6 @@ export const servers = sqliteTable('servers', {
 export const serverMembers = sqliteTable('server_members', {
   serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').default('member'),
   nickname: text('nickname'),
   joinedAt: integer('joined_at').notNull(),
 }, (table) => ({

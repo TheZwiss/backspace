@@ -36,12 +36,9 @@ export interface ServerWithChannelsAndMembers extends Server {
 
 // ─── Member Types ───────────────────────────────────────────────────────────
 
-export type MemberRole = 'owner' | 'admin' | 'member';
-
 export interface Member {
   serverId: string;
   userId: string;
-  role: MemberRole;
   nickname: string | null;
   joinedAt: number;
 }
@@ -288,7 +285,7 @@ export interface UpdateUserRequest {
 }
 
 export interface UpdateMemberRequest {
-  role: MemberRole;
+  roleIds: string[];
 }
 
 export interface CreateMessageRequest {
