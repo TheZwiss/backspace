@@ -1,24 +1,47 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { isDmChannel } from '../../stores/serverStore';
+import { isDmChannel, useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
+import { MentionPopover } from './MentionPopover';
+import type { MemberWithUser } from '@opencord/shared';
 
 interface MessageInputProps {
   channelId: string;
   channelName: string;
 }
 
+interface MentionState {
+  query: string;
+  startIndex: number;
+  selectedIndex: number;
+}
+
 export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [mentionState, setMentionState] = useState<MentionState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const replyTo = useChatStore((s) => s.replyTo);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
+  const members = useServerStore((s) => s.members);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Filter members for the mention popover
+  const filteredMembers = useMemo(() => {
+    if (!mentionState) return [];
+    const q = mentionState.query.toLowerCase();
+    return members
+      .filter((m) => {
+        const name = (m.user.displayName ?? m.user.username).toLowerCase();
+        const username = m.user.username.toLowerCase();
+        return name.includes(q) || username.includes(q);
+      })
+      .slice(0, 8);
+  }, [members, mentionState]);
 
   const handleTyping = useCallback(() => {
     if (typingTimeoutRef.current) return;
@@ -38,6 +61,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     if (!trimmed && files.length === 0) return;
 
     setIsUploading(true);
+    setMentionState(null);
     try {
       // Upload files first
       const attachmentIds: string[] = [];
@@ -49,6 +73,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
       await sendMessage(channelId, trimmed || '', attachmentIds.length > 0 ? attachmentIds : undefined);
       setContent('');
       setFiles([]);
+
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
 
       // Clear typing timeout
       if (typingTimeoutRef.current) {
@@ -62,7 +91,59 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     }
   };
 
+  const selectMention = useCallback((member: MemberWithUser) => {
+    if (!mentionState) return;
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? content.length;
+    const before = content.slice(0, mentionState.startIndex);
+    const after = content.slice(cursorPos);
+    const insertion = `<@${member.userId}> `;
+    const newContent = before + insertion + after;
+    setContent(newContent);
+    setMentionState(null);
+
+    // Restore cursor position after React re-renders
+    const newCursorPos = before.length + insertion.length;
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        textarea.selectionStart = newCursorPos;
+        textarea.selectionEnd = newCursorPos;
+      }
+    });
+  }, [mentionState, content]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Mention popover keyboard navigation
+    if (mentionState && filteredMembers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionState((prev) =>
+          prev ? { ...prev, selectedIndex: Math.min(prev.selectedIndex + 1, filteredMembers.length - 1) } : null
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionState((prev) =>
+          prev ? { ...prev, selectedIndex: Math.max(prev.selectedIndex - 1, 0) } : null
+        );
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredMembers[mentionState.selectedIndex];
+        if (selected) selectMention(selected);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionState(null);
+        return;
+      }
+    }
+
+    // Default: Enter to submit
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -101,7 +182,31 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setContent(value);
+
+    // Detect @mention trigger
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const mentionMatch = textBeforeCursor.match(/@([^\s<]*)$/);
+
+    if (mentionMatch) {
+      const atIndex = cursorPos - mentionMatch[0].length;
+      // Only trigger at word boundary: start of input, after space, or after newline
+      const charBefore = atIndex > 0 ? value[atIndex - 1] : undefined;
+      if (charBefore === undefined || charBefore === ' ' || charBefore === '\n') {
+        setMentionState({
+          query: mentionMatch[1]!,
+          startIndex: atIndex,
+          selectedIndex: 0,
+        });
+      } else {
+        setMentionState(null);
+      }
+    } else {
+      setMentionState(null);
+    }
+
     handleTyping();
 
     // Auto-resize textarea
@@ -118,7 +223,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             <span className="opacity-60">Replying to</span>
             <span className="font-bold">{replyTo.user.displayName ?? replyTo.user.username}</span>
           </div>
-          <button 
+          <button
             onClick={() => setReplyTo(null)}
             className="text-discord-text-muted hover:text-discord-text-primary transition-colors"
           >
@@ -129,10 +234,19 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         </div>
       )}
       <div
-        className={`bg-discord-bg-input ${replyTo ? 'rounded-b-lg' : 'rounded-lg'} overflow-hidden`}
+        className={`relative bg-discord-bg-input ${replyTo ? 'rounded-b-lg' : 'rounded-lg'} overflow-visible`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
+        {/* Mention autocomplete popover */}
+        {mentionState && filteredMembers.length > 0 && (
+          <MentionPopover
+            query={mentionState.query}
+            selectedIndex={mentionState.selectedIndex}
+            onSelect={selectMention}
+          />
+        )}
+
         {/* File previews */}
         {files.length > 0 && (
           <div className="p-4 flex flex-wrap gap-4 bg-discord-bg-secondary/30">

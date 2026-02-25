@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
 import type { MessageWithUser } from '@opencord/shared';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { Avatar } from '../ui/Avatar';
 import { ContextMenu } from '../ui/ContextMenu';
 import { useAuthStore } from '../../stores/authStore';
@@ -141,9 +141,16 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const replyRoleColor = (msg: { userId: string }) => getMemberDisplayColor(msg.userId);
 
+  // Self-mention highlighting
+  const isMentioned = currentUser && message.content?.includes('<@' + currentUser.id + '>');
+
   const content = (
     <div
-      className={`group relative flex px-4 py-0.5 hover:bg-discord-modifier-hover transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''}`}
+      className={`group relative flex px-4 py-0.5 transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
+        isMentioned
+          ? 'bg-[#3c3829] border-l-2 border-l-[#f0b132] hover:bg-[#45402f]'
+          : 'hover:bg-discord-modifier-hover'
+      }`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -227,30 +234,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           <div className="flex flex-col gap-1">
             {message.content && (
               <div className="text-discord-text-normal text-[16px] leading-[1.375rem] break-words whitespace-pre-wrap selection:bg-discord-blurple/30">
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => <span>{children}</span>,
-                    a: ({ href, children }) => (
-                      <a href={href} target="_blank" rel="noopener noreferrer" className="text-discord-text-link hover:underline">
-                        {children}
-                      </a>
-                    ),
-                    code: ({ children }) => (
-                      <code className="px-1 py-0.5 bg-discord-bg-tertiary rounded text-[14px] font-mono">
-                        {children}
-                      </code>
-                    ),
-                    pre: ({ children }) => (
-                      <pre className="mt-1 p-3 bg-discord-bg-tertiary border border-discord-bg-tertiary/50 rounded-md text-[14px] font-mono overflow-x-auto">
-                        {children}
-                      </pre>
-                    ),
-                    strong: ({ children }) => <strong className="font-bold text-discord-text-primary">{children}</strong>,
-                    em: ({ children }) => <em className="italic">{children}</em>,
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
+                <MarkdownRenderer content={message.content} />
                 {message.editedAt && (
                   <span className="text-[10px] text-discord-text-muted ml-1 select-none font-medium">(edited)</span>
                 )}

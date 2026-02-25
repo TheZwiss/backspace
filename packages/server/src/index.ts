@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   });
 
   await app.register(rateLimit, {
-    max: 60,
+    max: 200,
     timeWindow: '1 minute',
     keyGenerator: (request) => (request as any).userId || request.ip,
   });
