@@ -3,6 +3,10 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
 
+const BITRATE_MIN = 500;   // kbps
+const BITRATE_MAX = 20000; // kbps
+const BITRATE_STEP = 500;  // kbps
+
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
   onClose: () => void;
@@ -36,6 +40,12 @@ function formatDegradation(pref: RTCDegradationPreference): string {
     case 'balanced': return 'balanced';
     default: return pref;
   }
+}
+
+function formatKbps(kbps: number): string {
+  return kbps >= 1000
+    ? `${(kbps / 1000).toFixed(kbps % 1000 === 0 ? 0 : 1)} Mbps`
+    : `${kbps} kbps`;
 }
 
 export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSettingsPopoverProps) {
@@ -123,6 +133,46 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
                 {m.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Bitrate Override */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider">
+              Bitrate
+            </div>
+            {config.customBitrateKbps != null && (
+              <button
+                onClick={() => setConfig({ customBitrateKbps: null })}
+                className="text-[11px] text-discord-blurple hover:text-[#7983f5] font-medium transition-colors"
+              >
+                Reset to Auto
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min={BITRATE_MIN}
+              max={BITRATE_MAX}
+              step={BITRATE_STEP}
+              value={config.customBitrateKbps ?? Math.round(result.publish.videoEncoding.maxBitrate / 1000)}
+              onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
+              className="flex-1 h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
+                [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:rounded-full
+                [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+            />
+            <span className={`text-[12px] font-medium min-w-[64px] text-right ${
+              config.customBitrateKbps != null ? 'text-discord-text-primary' : 'text-discord-text-muted'
+            }`}>
+              {config.customBitrateKbps != null
+                ? formatKbps(config.customBitrateKbps)
+                : `Auto`}
+            </span>
           </div>
         </div>
       </div>

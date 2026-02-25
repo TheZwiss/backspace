@@ -53,9 +53,11 @@ const BITRATE_MATRIX: Record<number, Record<number, number>> = {
 const WIDTH_MAP: Record<number, number> = { 1080: 1920, 720: 1280, 540: 960 };
 
 export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
-  const { height, fps, mode } = config;
+  const { height, fps, mode, customBitrateKbps } = config;
   const width = WIDTH_MAP[height]!;
-  const maxBitrate = BITRATE_MATRIX[height]![fps]!;
+  const maxBitrate = customBitrateKbps != null
+    ? customBitrateKbps * 1000
+    : BITRATE_MATRIX[height]![fps]!;
   const minBitrate = Math.round(maxBitrate * 0.25);
 
   return {

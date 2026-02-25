@@ -7,6 +7,7 @@ export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
   fps: 60 | 45 | 30;
   mode: 'gaming' | 'text';
+  customBitrateKbps: number | null;
 }
 
 interface VoiceState {
@@ -109,7 +110,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming' },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -323,7 +324,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'opencord-voice-settings',
-      version: 5,
+      version: 6,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -347,6 +348,11 @@ export const useVoiceStore = create<VoiceState>()(
           }
           persistedState.screenShareConfig = { height, fps, mode: 'gaming' };
           delete persistedState.videoQuality;
+        }
+        if (version < 6) {
+          if (persistedState.screenShareConfig) {
+            persistedState.screenShareConfig.customBitrateKbps = null;
+          }
         }
         return persistedState;
       },
