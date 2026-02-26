@@ -18,7 +18,7 @@ export interface OverdriveOptions {
 
 export interface ScreenShareBuildResult {
   capture: { width: number; height: number; frameRate: number };
-  publish: { videoCodec: 'h264'; videoEncoding: { maxBitrate: number; maxFramerate: number }; simulcast: false };
+  publish: { videoCodec: 'vp9'; videoEncoding: { maxBitrate: number; maxFramerate: number }; simulcast: false };
   overdrive: OverdriveOptions;
   contentHint: 'motion' | 'detail';
 }
@@ -63,7 +63,7 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   return {
     capture: { width, height, frameRate: fps },
     publish: {
-      videoCodec: 'h264',
+      videoCodec: 'vp9',
       videoEncoding: { maxBitrate, maxFramerate: fps },
       simulcast: false,
     },
@@ -99,14 +99,19 @@ export async function applyOverdrive(
     if (!sender) return;
 
     const params = sender.getParameters();
-    if (!params.encodings?.[0]) return;
+    if (!params.encodings?.length) return;
 
-    params.encodings[0].maxBitrate = options.maxBitrate;
-    params.encodings[0].maxFramerate = options.maxFramerate;
-    params.encodings[0].networkPriority = 'high';
+    // Target the highest-quality layer. With simulcast, encodings[0] is the
+    // lowest layer; our overdrive must hit the top layer so the custom bitrate
+    // slider controls the full-resolution stream, not the quarter-res one.
+    // For non-simulcast tracks (single encoding), length - 1 === 0.
+    const idx = params.encodings.length - 1;
+    params.encodings[idx]!.maxBitrate = options.maxBitrate;
+    params.encodings[idx]!.maxFramerate = options.maxFramerate;
+    params.encodings[idx]!.networkPriority = 'high';
     (params as any).degradationPreference = options.degradationPreference;
     if (options.minBitrate > 0) {
-      (params.encodings[0] as any).minBitrate = options.minBitrate;
+      (params.encodings[idx] as any).minBitrate = options.minBitrate;
     }
 
     await sender.setParameters(params);
@@ -134,9 +139,9 @@ export async function startScreenShare(room: Room): Promise<boolean> {
       // @ts-ignore — LiveKit accepts frameRate at capture level
       frameRate: opts.capture.frameRate,
     }, {
-      videoCodec: 'h264',
+      videoCodec: opts.publish.videoCodec,
       videoEncoding: opts.publish.videoEncoding,
-      simulcast: false,
+      simulcast: opts.publish.simulcast,
     } as any);
 
     if (!track) {

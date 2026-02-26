@@ -29,6 +29,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const isStreamMuted = streamMutes.get(userId) ?? false;
 
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
+  const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
 
   // Quality badge state
   const [qualityBadge, setQualityBadge] = useState<string>('');
@@ -37,16 +38,18 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
 
-  // --- VIDEO ---
+  // --- VIDEO --- use LiveKit's track.attach() to register the element
+  // with the adaptive stream observer (enables SFU layer switching by viewport size)
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    if (liveScreenTrack) {
-      videoEl.srcObject = new MediaStream([liveScreenTrack]);
+    if (liveLkScreenTrack) {
+      liveLkScreenTrack.attach(videoEl);
+      return () => { liveLkScreenTrack.detach(videoEl); };
     } else {
       videoEl.srcObject = null;
     }
-  }, [liveScreenTrack]);
+  }, [liveLkScreenTrack]);
 
   // Quality badge (poll every 3s)
   useEffect(() => {

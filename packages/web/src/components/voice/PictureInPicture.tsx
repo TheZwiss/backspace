@@ -122,17 +122,26 @@ export function PictureInPicture() {
     return 'Call';
   }, [currentVoiceChannelId, channels]);
 
-  // Video track attachment
+  // Derive the LiveKit Track from the selected stream's participant
+  const lkTrack = selectedStream
+    ? (selectedStream.type === 'screen'
+        ? selectedStream.participant.lkScreenTrack
+        : selectedStream.participant.lkVideoTrack)
+    : null;
+
+  // Video track attachment — use LiveKit's track.attach() to register the element
+  // with the adaptive stream observer (enables SFU layer switching by viewport size)
   // shouldShow in deps ensures re-run when PiP becomes visible (videoRef was null before)
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    if (selectedStream?.track) {
-      videoEl.srcObject = new MediaStream([selectedStream.track]);
+    if (lkTrack) {
+      lkTrack.attach(videoEl);
+      return () => { lkTrack.detach(videoEl); };
     } else {
       videoEl.srcObject = null;
     }
-  }, [selectedStream?.track, shouldShow]);
+  }, [lkTrack, shouldShow]);
 
   // Initialize position to bottom-right
   useEffect(() => {

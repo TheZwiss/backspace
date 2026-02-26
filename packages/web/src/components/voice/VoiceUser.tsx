@@ -34,16 +34,19 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
     return () => tile.videoTrack?.removeEventListener('ended', onEnded);
   }, [tile.videoTrack]);
 
-  // Attach Video
+  // Attach Video — use LiveKit's track.attach() to register the element
+  // with the adaptive stream observer (enables SFU layer switching by viewport size)
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    if (activeVideoTrack) {
-      videoEl.srcObject = new MediaStream([activeVideoTrack]);
+    const lkTrack = tile.lkVideoTrack;
+    if (lkTrack) {
+      lkTrack.attach(videoEl);
+      return () => { lkTrack.detach(videoEl); };
     } else {
       videoEl.srcObject = null;
     }
-  }, [activeVideoTrack]);
+  }, [tile.lkVideoTrack]);
 
   // Context Menu
   const [volumeMenu, setVolumeMenu] = useState<{

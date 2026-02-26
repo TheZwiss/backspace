@@ -46,6 +46,8 @@ export interface ParticipantInfo {
   videoTrack: MediaStreamTrack | null;
   screenTrack: MediaStreamTrack | null;
   screenAudioTrack: MediaStreamTrack | null;
+  lkVideoTrack: Track | null;   // LiveKit Track for attach/detach (adaptive stream)
+  lkScreenTrack: Track | null;  // LiveKit Track for attach/detach (adaptive stream)
 }
 
 export interface UserTile {
@@ -54,6 +56,7 @@ export interface UserTile {
   participant: ParticipantInfo;
   videoTrack: MediaStreamTrack | null; // camera only
   audioTrack: MediaStreamTrack | null; // mic
+  lkVideoTrack: Track | null;         // LiveKit Track for attach/detach
 }
 
 export interface StreamTile {
@@ -62,6 +65,7 @@ export interface StreamTile {
   participant: ParticipantInfo;
   screenTrack: MediaStreamTrack | null;
   screenAudioTrack: MediaStreamTrack | null;
+  lkScreenTrack: Track | null;        // LiveKit Track for attach/detach
 }
 
 export type GridTile = UserTile | StreamTile;
@@ -69,12 +73,14 @@ export type GridTile = UserTile | StreamTile;
 export function deriveGridTiles(participants: ParticipantInfo[]): GridTile[] {
   const tiles: GridTile[] = [];
   for (const p of participants) {
+    const hasLiveVideo = p.isCameraOn && p.videoTrack?.readyState === 'live';
     tiles.push({
       kind: 'user',
       key: p.identity,
       participant: p,
-      videoTrack: (p.isCameraOn && p.videoTrack?.readyState === 'live') ? p.videoTrack : null,
+      videoTrack: hasLiveVideo ? p.videoTrack : null,
       audioTrack: p.audioTrack,
+      lkVideoTrack: hasLiveVideo ? p.lkVideoTrack : null,
     });
     if (p.isScreenSharing) {
       tiles.push({
@@ -83,6 +89,7 @@ export function deriveGridTiles(participants: ParticipantInfo[]): GridTile[] {
         participant: p,
         screenTrack: p.screenTrack,
         screenAudioTrack: p.screenAudioTrack,
+        lkScreenTrack: p.lkScreenTrack,
       });
     }
   }
@@ -149,6 +156,8 @@ export function useLiveKit() {
       let videoTrack: MediaStreamTrack | null = null;
       let screenTrack: MediaStreamTrack | null = null;
       let screenAudioTrack: MediaStreamTrack | null = null;
+      let lkVideoTrack: Track | null = null;
+      let lkScreenTrack: Track | null = null;
       let hasScreenSharePublication = false;
       p.trackPublications.forEach((pub) => {
         // Detect screen share publication even if unsubscribed
@@ -164,8 +173,8 @@ export function useLiveKit() {
         if (!mt || mt.readyState !== 'live') return;
 
         if (pub.source === Track.Source.Microphone) audioTrack = mt;
-        else if (pub.source === Track.Source.Camera && p.isCameraEnabled) videoTrack = mt;
-        else if (pub.source === Track.Source.ScreenShare) screenTrack = mt;
+        else if (pub.source === Track.Source.Camera && p.isCameraEnabled) { videoTrack = mt; lkVideoTrack = track; }
+        else if (pub.source === Track.Source.ScreenShare) { screenTrack = mt; lkScreenTrack = track; }
         else if (pub.source === Track.Source.ScreenShareAudio) screenAudioTrack = mt;
       });
 
@@ -194,6 +203,8 @@ export function useLiveKit() {
         videoTrack,
         screenTrack,
         screenAudioTrack,
+        lkVideoTrack,
+        lkScreenTrack,
       });
     };
     processParticipant(r.localParticipant, true);
