@@ -65,7 +65,7 @@ export function VoiceControlBar() {
           {
             videoCodec: CAMERA_PRESET.codec,
             videoEncoding: CAMERA_PRESET.encoding,
-            simulcast: false,
+            simulcast: true,
           }
         );
       } else {

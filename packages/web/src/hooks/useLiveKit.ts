@@ -331,7 +331,7 @@ export function useLiveKit() {
     try {
       const { token, url } = isDm ? await api.livekit.dmToken(channelId) : await api.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
-      const newRoom = new Room({ adaptiveStream: false, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: false } });
+      const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
 
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
@@ -495,7 +495,7 @@ export function useLiveKit() {
   const toggleCamera = useCallback(async () => {
     if (roomRef.current) {
       if (!isCameraOn) {
-        await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate }, { videoCodec: CAMERA_PRESET.codec, videoEncoding: CAMERA_PRESET.encoding, simulcast: false });
+        await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate }, { videoCodec: CAMERA_PRESET.codec, videoEncoding: CAMERA_PRESET.encoding, simulcast: true });
         setTimeout(() => { if (roomRef.current) applyOverdrive(roomRef.current, Track.Source.Camera, CAMERA_OVERDRIVE); }, 2000);
       } else { await roomRef.current.localParticipant.setCameraEnabled(false); }
       updateParticipants();
