@@ -174,6 +174,18 @@ function createTables(db: Database.Database): void {
       server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
       PRIMARY KEY (folder_id, server_id)
     );
+
+    CREATE TABLE IF NOT EXISTS instance_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      max_bitrate_kbps INTEGER NOT NULL DEFAULT 20000,
+      min_bitrate_kbps INTEGER NOT NULL DEFAULT 500,
+      bitrate_step_kbps INTEGER NOT NULL DEFAULT 500,
+      allowed_resolutions TEXT NOT NULL DEFAULT '540,720,1080',
+      allowed_framerates TEXT NOT NULL DEFAULT '30,45,60',
+      max_resolution INTEGER NOT NULL DEFAULT 1080,
+      max_framerate INTEGER NOT NULL DEFAULT 60,
+      updated_at INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }
 

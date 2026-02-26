@@ -48,6 +48,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'owner_id', type: 'TEXT' }
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'is_admin', type: 'INTEGER DEFAULT 0' }
+      ]
     }
   ];
 
@@ -82,7 +88,36 @@ export function runMigrations(db: Database.Database): void {
   // ─── RBAC Migration: Ensure @everyone roles exist for all servers ─────────
   migrateEveryoneRoles(db);
 
+  // ─── Instance settings: ensure default row exists ──────────────────────────
+  migrateInstanceSettings(db);
+
+  // ─── Admin flag: ensure at least one admin exists (first registered user) ──
+  migrateFirstAdmin(db);
+
   console.log('Migrations complete.');
+}
+
+/** Ensure the single-row instance_settings row exists */
+function migrateInstanceSettings(db: Database.Database): void {
+  const row = db.prepare('SELECT id FROM instance_settings WHERE id = 1').get();
+  if (!row) {
+    db.prepare(
+      'INSERT OR IGNORE INTO instance_settings (id, max_bitrate_kbps, min_bitrate_kbps, bitrate_step_kbps, allowed_resolutions, allowed_framerates, max_resolution, max_framerate, updated_at) VALUES (1, 20000, 500, 500, ?, ?, 1080, 60, ?)'
+    ).run('540,720,1080', '30,45,60', Date.now());
+    console.log('Migrating: Inserted default instance_settings row');
+  }
+}
+
+/** Ensure at least one user has is_admin = 1 (the earliest registered user) */
+function migrateFirstAdmin(db: Database.Database): void {
+  const anyAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
+  if (!anyAdmin) {
+    const firstUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get() as { id: string } | undefined;
+    if (firstUser) {
+      db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(firstUser.id);
+      console.log(`Migrating: Set first user ${firstUser.id} as instance admin`);
+    }
+  }
 }
 
 /** For each server, ensure an @everyone role exists with id === server.id */

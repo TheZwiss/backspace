@@ -14,6 +14,7 @@ function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     avatar: row.avatar,
     status: (row.status ?? 'offline') as User['status'],
     customStatus: row.customStatus,
+    isAdmin: row.isAdmin === 1,
     createdAt: row.createdAt,
   };
 }
@@ -67,12 +68,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const userId = generateSnowflake();
     const now = Date.now();
 
+    // First registered user becomes instance admin
+    const userCount = db.select().from(schema.users).all().length;
+    const isFirstUser = userCount === 0;
+
     db.insert(schema.users).values({
       id: userId,
       username: trimmedUsername,
       displayName: displayName?.trim() || null,
       passwordHash,
       status: 'online',
+      isAdmin: isFirstUser ? 1 : 0,
       createdAt: now,
     }).run();
 

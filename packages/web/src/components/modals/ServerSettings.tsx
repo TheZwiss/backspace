@@ -1,12 +1,219 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useServerStore } from '../../stores/serverStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import type { InstanceStreamingLimits } from '@opencord/shared';
+
+const VALID_RESOLUTIONS = [540, 720, 1080] as const;
+const VALID_FRAMERATES = [30, 45, 60] as const;
+
+function formatKbps(kbps: number): string {
+  return kbps >= 1000
+    ? `${(kbps / 1000).toFixed(kbps % 1000 === 0 ? 0 : 1)} Mbps`
+    : `${kbps} kbps`;
+}
+
+function StreamingLimitsPanel() {
+  const limits = useSettingsStore((s) => s.streamingLimits);
+  const updateStreamingLimits = useSettingsStore((s) => s.updateStreamingLimits);
+
+  const [draft, setDraft] = useState<InstanceStreamingLimits | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (limits) setDraft({ ...limits });
+  }, [limits]);
+
+  if (!draft) return <div className="text-sm text-discord-text-muted">Loading settings...</div>;
+
+  const hasChanges = JSON.stringify(draft) !== JSON.stringify(limits);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      await updateStreamingLimits(draft);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (limits) setDraft({ ...limits });
+    setSaveError('');
+  };
+
+  const toggleResolution = (res: number) => {
+    const current = new Set(draft.allowedResolutions);
+    if (current.has(res)) {
+      if (current.size <= 1) return; // Must have at least one
+      current.delete(res);
+    } else {
+      current.add(res);
+    }
+    setDraft({ ...draft, allowedResolutions: Array.from(current).sort((a, b) => a - b) });
+  };
+
+  const toggleFramerate = (fps: number) => {
+    const current = new Set(draft.allowedFramerates);
+    if (current.has(fps)) {
+      if (current.size <= 1) return;
+      current.delete(fps);
+    } else {
+      current.add(fps);
+    }
+    setDraft({ ...draft, allowedFramerates: Array.from(current).sort((a, b) => a - b) });
+  };
+
+  const pillBase = 'px-3 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer select-none';
+  const pillOn = 'bg-discord-blurple text-white';
+  const pillOff = 'bg-[#2b2d31] text-discord-text-secondary hover:bg-[#35373c]';
+
+  return (
+    <div className="space-y-4">
+      <div className="text-xs text-discord-text-muted">
+        These limits apply to all users on this instance. Users can pick values within these bounds.
+      </div>
+
+      {/* Bitrate Range */}
+      <div>
+        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-2">
+          Bitrate Range
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <label className="text-[11px] text-discord-text-muted mb-1 block">Min</label>
+            <input
+              type="range"
+              min={100}
+              max={draft.maxBitrateKbps - 500}
+              step={100}
+              value={draft.minBitrateKbps}
+              onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
+              className="w-full h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+            />
+            <div className="text-[11px] text-discord-text-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
+          </div>
+          <div className="flex-1">
+            <label className="text-[11px] text-discord-text-muted mb-1 block">Max</label>
+            <input
+              type="range"
+              min={draft.minBitrateKbps + 500}
+              max={50000}
+              step={500}
+              value={draft.maxBitrateKbps}
+              onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
+              className="w-full h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+            />
+            <div className="text-[11px] text-discord-text-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bitrate Step */}
+      <div>
+        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          Slider Step
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={50}
+            max={5000}
+            step={50}
+            value={draft.bitrateStepKbps}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
+            }}
+            className="w-24 px-2 py-1 bg-discord-bg-tertiary rounded text-sm text-discord-text-primary outline-none focus:ring-1 focus:ring-discord-blurple"
+          />
+          <span className="text-[12px] text-discord-text-muted">kbps</span>
+        </div>
+      </div>
+
+      {/* Allowed Resolutions */}
+      <div>
+        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          Allowed Resolutions
+        </div>
+        <div className="flex gap-1.5">
+          {VALID_RESOLUTIONS.map((res) => (
+            <button
+              key={res}
+              onClick={() => toggleResolution(res)}
+              className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
+            >
+              {res}p
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Allowed Frame Rates */}
+      <div>
+        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          Allowed Frame Rates
+        </div>
+        <div className="flex gap-1.5">
+          {VALID_FRAMERATES.map((fps) => (
+            <button
+              key={fps}
+              onClick={() => toggleFramerate(fps)}
+              className={`${pillBase} ${draft.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
+            >
+              {fps} fps
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Save / Reset */}
+      {saveError && (
+        <div className="p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{saveError}</div>
+      )}
+      {saveSuccess && (
+        <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm">Settings saved</div>
+      )}
+      {hasChanges && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-1.5 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={handleReset}
+            className="px-4 py-1.5 text-sm text-discord-text-muted hover:text-discord-text-secondary transition-colors"
+          >
+            Reset
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ServerSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -19,9 +226,10 @@ export function ServerSettingsModal() {
   const deleteServer = useServerStore((s) => s.deleteServer);
   const loadServerDetail = useServerStore((s) => s.loadServerDetail);
   const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = useSettingsStore((s) => s.isAdmin);
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'overview' | 'members'>('overview');
+  const [tab, setTab] = useState<'overview' | 'members' | 'streaming'>('overview');
   const [serverName, setServerName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -146,6 +354,16 @@ export function ServerSettingsModal() {
           >
             Members
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setTab('streaming')}
+              className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+                tab === 'streaming' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+              }`}
+            >
+              Streaming
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -288,6 +506,10 @@ export function ServerSettingsModal() {
                 );
               })}
             </div>
+          )}
+
+          {tab === 'streaming' && isAdmin && (
+            <StreamingLimitsPanel />
           )}
         </div>
       </div>

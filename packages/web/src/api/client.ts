@@ -25,6 +25,7 @@ import type {
   CreateDmMessageRequest,
   Friend,
   FriendRequest,
+  InstanceStreamingLimits,
 } from '@opencord/shared';
 
 const BASE_URL = '/api';
@@ -192,5 +193,11 @@ export const api = {
       request<LiveKitTokenResponse>('POST', '/livekit/token', { channelId }),
     dmToken: (dmChannelId: string) =>
       request<LiveKitTokenResponse>('POST', '/livekit/token', { dmChannelId }),
+  },
+
+  settings: {
+    getStreaming: () => request<InstanceStreamingLimits>('GET', '/settings/streaming'),
+    updateStreaming: (data: Partial<InstanceStreamingLimits>) =>
+      request<InstanceStreamingLimits>('PATCH', '/settings/streaming', data),
   },
 };

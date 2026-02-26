@@ -59,6 +59,7 @@ const makeRequest = (overrides: Partial<FriendRequest> = {}): FriendRequest => (
     avatar: null,
     status: 'online',
     customStatus: null,
+    isAdmin: false,
     createdAt: Date.now(),
   },
   ...overrides,
@@ -212,6 +213,7 @@ describe('FriendsPage', () => {
           avatar: null,
           status: 'online',
           customStatus: null,
+          isAdmin: false,
           createdAt: Date.now(),
         },
       });
@@ -256,6 +258,7 @@ describe('FriendsPage', () => {
           avatar: null,
           status: 'online',
           customStatus: null,
+          isAdmin: false,
           createdAt: Date.now(),
         },
       });
@@ -295,6 +298,7 @@ describe('FriendsPage', () => {
           avatar: null,
           status: 'online',
           customStatus: null,
+          isAdmin: false,
           createdAt: Date.now(),
         },
       });

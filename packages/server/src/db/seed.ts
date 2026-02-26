@@ -24,6 +24,7 @@ export async function seedDatabase(): Promise<void> {
     displayName: 'Admin',
     passwordHash: adminPasswordHash,
     status: 'offline',
+    isAdmin: 1,
     createdAt: Date.now(),
   }).run();
 

@@ -15,6 +15,7 @@ function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     avatar: row.avatar,
     status: (row.status ?? 'offline') as User['status'],
     customStatus: row.customStatus,
+    isAdmin: row.isAdmin === 1,
     createdAt: row.createdAt,
   };
 }

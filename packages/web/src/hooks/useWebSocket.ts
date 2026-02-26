@@ -4,6 +4,7 @@ import { useServerStore } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@opencord/shared';
 
 let globalWs: WebSocket | null = null;
@@ -60,6 +61,8 @@ function handleEvent(event: ServerEvent): void {
   switch (event.type) {
     case 'ready':
       setUser(event.user);
+      useSettingsStore.getState().setIsAdmin(event.user.isAdmin ?? false);
+      useSettingsStore.getState().fetchStreamingLimits();
       populateFromReady(event.servers, event.folders, event.dmChannels);
       if (currentServerId) {
         loadServerDetail(currentServerId);

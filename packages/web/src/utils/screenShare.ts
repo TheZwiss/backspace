@@ -1,6 +1,7 @@
 import { Room, Track } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
+import { getStreamingLimits } from '../stores/settingsStore';
 import { AudioManager } from '../audio/AudioManager';
 import { wsSend } from '../hooks/useWebSocket';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
@@ -55,9 +56,12 @@ const WIDTH_MAP: Record<number, number> = { 1080: 1920, 720: 1280, 540: 960 };
 export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
   const { height, fps, mode, customBitrateKbps } = config;
   const width = WIDTH_MAP[height]!;
-  const maxBitrate = customBitrateKbps != null
+  const limits = getStreamingLimits();
+  const rawBitrate = customBitrateKbps != null
     ? customBitrateKbps * 1000
     : BITRATE_MATRIX[height]![fps]!;
+  // Clamp to instance-level admin limits
+  const maxBitrate = Math.min(Math.max(rawBitrate, limits.minBitrateKbps * 1000), limits.maxBitrateKbps * 1000);
   const minBitrate = Math.round(maxBitrate * 0.25);
 
   return {

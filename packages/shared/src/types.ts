@@ -7,6 +7,7 @@ export interface User {
   avatar: string | null;
   status: UserStatus;
   customStatus: string | null;
+  isAdmin: boolean;
   createdAt: number;
 }
 
@@ -365,4 +366,16 @@ export interface SendFriendRequest {
 
 export interface UpdateFriendRequest {
   status: 'accepted' | 'declined';
+}
+
+// ─── Instance Settings Types ────────────────────────────────────────────────
+
+export interface InstanceStreamingLimits {
+  maxBitrateKbps: number;
+  minBitrateKbps: number;
+  bitrateStepKbps: number;
+  allowedResolutions: number[];
+  allowedFramerates: number[];
+  maxResolution: number;
+  maxFramerate: number;
 }

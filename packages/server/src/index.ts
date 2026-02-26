@@ -16,6 +16,7 @@ import { uploadRoutes } from './routes/uploads.js';
 import { dmRoutes } from './routes/dm.js';
 import { livekitRoutes } from './routes/livekit.js';
 import { socialRoutes } from './routes/social.js';
+import { settingsRoutes } from './routes/settings.js';
 import { utilRoutes } from './routes/utils.js';
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
   await app.register(dmRoutes);
   await app.register(livekitRoutes);
   await app.register(socialRoutes);
+  await app.register(settingsRoutes);
   await app.register(utilRoutes);
   await app.register(registerWebSocket);
 

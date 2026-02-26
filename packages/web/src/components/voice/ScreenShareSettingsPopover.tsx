@@ -1,24 +1,21 @@
 import React, { useRef, useEffect } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { ScreenShareConfig } from '../../stores/voiceStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
-
-const BITRATE_MIN = 500;   // kbps
-const BITRATE_MAX = 20000; // kbps
-const BITRATE_STEP = 500;  // kbps
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
   onClose: () => void;
 }
 
-const RESOLUTIONS: { value: ScreenShareConfig['height']; label: string }[] = [
+const ALL_RESOLUTIONS: { value: ScreenShareConfig['height']; label: string }[] = [
   { value: 540, label: '540p' },
   { value: 720, label: '720p' },
   { value: 1080, label: '1080p' },
 ];
 
-const FRAME_RATES: { value: ScreenShareConfig['fps']; label: string }[] = [
+const ALL_FRAME_RATES: { value: ScreenShareConfig['fps']; label: string }[] = [
   { value: 30, label: '30' },
   { value: 45, label: '45' },
   { value: 60, label: '60' },
@@ -52,6 +49,18 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
   const popoverRef = useRef<HTMLDivElement>(null);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
+  const limits = useSettingsStore((s) => s.streamingLimits);
+
+  const BITRATE_MIN = limits?.minBitrateKbps ?? 500;
+  const BITRATE_MAX = limits?.maxBitrateKbps ?? 20000;
+  const BITRATE_STEP = limits?.bitrateStepKbps ?? 500;
+
+  const RESOLUTIONS = ALL_RESOLUTIONS.filter((r) =>
+    (limits?.allowedResolutions ?? [540, 720, 1080]).includes(r.value)
+  );
+  const FRAME_RATES = ALL_FRAME_RATES.filter((f) =>
+    (limits?.allowedFramerates ?? [30, 45, 60]).includes(f.value)
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +72,29 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open, onClose]);
+
+  // Auto-clamp persisted config if outside allowed bounds
+  useEffect(() => {
+    if (!limits) return;
+    const patch: Partial<ScreenShareConfig> = {};
+    if (!limits.allowedResolutions.includes(config.height)) {
+      const closest = limits.allowedResolutions.reduce((a, b) =>
+        Math.abs(b - config.height) < Math.abs(a - config.height) ? b : a
+      ) as ScreenShareConfig['height'];
+      patch.height = closest;
+    }
+    if (!limits.allowedFramerates.includes(config.fps)) {
+      const closest = limits.allowedFramerates.reduce((a, b) =>
+        Math.abs(b - config.fps) < Math.abs(a - config.fps) ? b : a
+      ) as ScreenShareConfig['fps'];
+      patch.fps = closest;
+    }
+    if (config.customBitrateKbps != null) {
+      const clamped = Math.min(Math.max(config.customBitrateKbps, limits.minBitrateKbps), limits.maxBitrateKbps);
+      if (clamped !== config.customBitrateKbps) patch.customBitrateKbps = clamped;
+    }
+    if (Object.keys(patch).length > 0) setConfig(patch);
+  }, [limits, config, setConfig]);
 
   if (!open) return null;
 

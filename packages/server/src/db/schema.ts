@@ -8,6 +8,7 @@ export const users = sqliteTable('users', {
   avatar: text('avatar'),
   status: text('status').default('offline'),
   customStatus: text('custom_status'),
+  isAdmin: integer('is_admin').default(0),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -173,3 +174,15 @@ export const serverFolderMembers = sqliteTable('server_folder_members', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.folderId, table.serverId] }),
 }));
+
+export const instanceSettings = sqliteTable('instance_settings', {
+  id: integer('id').primaryKey().default(1),
+  maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
+  minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
+  bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),
+  allowedResolutions: text('allowed_resolutions').notNull().default('540,720,1080'),
+  allowedFramerates: text('allowed_framerates').notNull().default('30,45,60'),
+  maxResolution: integer('max_resolution').notNull().default(1080),
+  maxFramerate: integer('max_framerate').notNull().default(60),
+  updatedAt: integer('updated_at').notNull(),
+});
