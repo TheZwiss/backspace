@@ -393,10 +393,10 @@ export function useLiveKit() {
       newRoom.on(RoomEvent.ParticipantMetadataChanged, guardedUpdate);
       newRoom.on(RoomEvent.TrackPublished, (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (
-          publication.source === Track.Source.ScreenShare ||
-          publication.source === Track.Source.ScreenShareAudio
+          publication.source !== Track.Source.ScreenShare &&
+          publication.source !== Track.Source.ScreenShareAudio
         ) {
-          (publication as RemoteTrackPublication).setSubscribed(false);
+          publication.setSubscribed(true);
         }
         guardedUpdate();
       });
@@ -443,7 +443,7 @@ export function useLiveKit() {
         useVoiceStore.getState().setIsLiveKitConnected(false);
       });
 
-      await newRoom.connect(url, token);
+      await newRoom.connect(url, token, { autoSubscribe: false });
       if (gen !== _connectGeneration) { destroyRoom(newRoom); return; }
       _activeRoom = newRoom;
       connectedChannelRef.current = storedId;
@@ -454,14 +454,14 @@ export function useLiveKit() {
       
       updateParticipants();
 
-      // Unsubscribe from any remote screen share tracks that auto-subscribed during connect
+      // Subscribe to non-screen-share tracks from existing participants (safety net)
       newRoom.remoteParticipants.forEach((rp) => {
         rp.trackPublications.forEach((pub) => {
           if (
-            (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) &&
-            pub.isSubscribed
+            pub.source !== Track.Source.ScreenShare &&
+            pub.source !== Track.Source.ScreenShareAudio
           ) {
-            (pub as RemoteTrackPublication).setSubscribed(false);
+            (pub as RemoteTrackPublication).setSubscribed(true);
           }
         });
       });
