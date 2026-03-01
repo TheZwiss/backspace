@@ -73,9 +73,9 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
   return (
     <div
-      className={`relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
+      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ${
         isSpeaking
-          ? 'ring-[3px] ring-discord-green shadow-[0_0_12px_rgba(35,165,90,0.25)]'
+          ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
       } ${large ? 'h-full w-full' : 'h-full aspect-video'}`}
       onContextMenu={handleContextMenu}
@@ -89,7 +89,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           className={`w-full h-full ${large ? 'object-contain bg-black' : 'object-cover'}`}
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1e1f22]">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
           <div className="relative">
             <Avatar
               src={null}
@@ -97,7 +97,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               size={large ? 100 : 64}
             />
             {isSpeaking && (
-              <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-discord-green animate-pulse" />
+              <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />
             )}
           </div>
         </div>
@@ -119,7 +119,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {participant.isMuted && (
-              <div className="w-5 h-5 bg-discord-red/90 rounded-full flex items-center justify-center">
+              <div className="w-5 h-5 bg-accent-rose/90 rounded-full flex items-center justify-center">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
                   <path d="M12 2C10.9 2 10 2.9 10 4V12C10 13.1 10.9 14 12 14C13.1 14 14 13.1 14 12V4C14 2.9 13.1 2 12 2Z" />
                   <line
@@ -134,7 +134,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               </div>
             )}
             {(isLocal ? isDeafened : participant.isDeafened) && (
-              <div className="w-5 h-5 bg-discord-red/90 rounded-full flex items-center justify-center">
+              <div className="w-5 h-5 bg-accent-rose/90 rounded-full flex items-center justify-center">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
                   <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                   <line
@@ -154,11 +154,11 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
       {volumeMenu && !isLocal && (
         <div
-          className="fixed z-[60] bg-[#111214] rounded-lg shadow-2xl p-3 min-w-[200px] border border-white/[0.06]"
+          className="fixed z-[60] bg-surface-base rounded-lg shadow-2xl p-3 min-w-[200px] border border-white/[0.06]"
           style={{ left: volumeMenu.x, top: volumeMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-xs text-discord-text-muted mb-2 font-medium uppercase tracking-wider">
+          <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
             User Volume
           </div>
           <div className="flex items-center gap-2">
@@ -167,7 +167,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               height="16"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="text-discord-text-muted flex-shrink-0"
+              className="text-txt-tertiary flex-shrink-0"
             >
               <path d="M3 9v6h4l5 5V4L7 9H3z" />
             </svg>
@@ -182,9 +182,9 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
                   parseInt(e.target.value),
                 )
               }
-              className="flex-1 accent-discord-blurple h-1"
+              className="flex-1 accent-accent-primary h-1"
             />
-            <span className="text-xs text-discord-text-secondary min-w-[32px] text-right">
+            <span className="text-xs text-txt-secondary min-w-[32px] text-right">
               {perUserVolume}%
             </span>
           </div>

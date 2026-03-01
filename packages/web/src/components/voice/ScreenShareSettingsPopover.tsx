@@ -101,22 +101,22 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
   const result = buildScreenShareOptions(config);
 
   const pillBase = 'px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors cursor-pointer select-none';
-  const pillSelected = 'bg-discord-blurple text-white';
-  const pillUnselected = 'bg-[#2b2d31] text-discord-text-secondary hover:bg-[#35373c]';
+  const pillSelected = 'bg-accent-primary text-white';
+  const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[260px] bg-[#1e1f22] rounded-lg shadow-lg border border-[#111214] z-50 overflow-hidden"
+      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[260px] glass rounded-lg z-50 overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-[#111214]">
-        <span className="text-[14px] font-bold text-discord-text-primary">Stream Settings</span>
+      <div className="px-3 py-2 border-b border-border-hard">
+        <span className="text-[14px] font-bold text-txt-primary">Stream Settings</span>
       </div>
 
       <div className="px-3 py-3 flex flex-col gap-3">
         {/* Resolution */}
         <div>
-          <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Resolution
           </div>
           <div className="flex gap-1.5">
@@ -134,7 +134,7 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
 
         {/* Frame Rate */}
         <div>
-          <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Frame Rate
           </div>
           <div className="flex gap-1.5">
@@ -152,7 +152,7 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
 
         {/* Content Mode */}
         <div>
-          <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Content Mode
           </div>
           <div className="flex gap-1.5">
@@ -171,13 +171,13 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
         {/* Bitrate Override */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider">
+            <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
               Bitrate
             </div>
             {config.customBitrateKbps != null && (
               <button
                 onClick={() => setConfig({ customBitrateKbps: null })}
-                className="text-[11px] text-discord-blurple hover:text-[#7983f5] font-medium transition-colors"
+                className="text-[11px] text-accent-primary hover:text-accent-lavender font-medium transition-colors"
               >
                 Reset to Auto
               </button>
@@ -191,7 +191,7 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
               step={BITRATE_STEP}
               value={config.customBitrateKbps ?? Math.round(result.publish.videoEncoding.maxBitrate / 1000)}
               onChange={(e) => setConfig({ customBitrateKbps: Number(e.target.value) })}
-              className="flex-1 h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+              className="flex-1 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
                 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0
@@ -199,7 +199,7 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
                 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
             />
             <span className={`text-[12px] font-medium min-w-[64px] text-right ${
-              config.customBitrateKbps != null ? 'text-discord-text-primary' : 'text-discord-text-muted'
+              config.customBitrateKbps != null ? 'text-txt-primary' : 'text-txt-tertiary'
             }`}>
               {config.customBitrateKbps != null
                 ? formatKbps(config.customBitrateKbps)
@@ -210,8 +210,8 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
       </div>
 
       {/* Footer — computed stats */}
-      <div className="px-3 py-2 border-t border-[#111214]">
-        <span className="text-[12px] text-discord-text-muted">
+      <div className="px-3 py-2 border-t border-border-hard">
+        <span className="text-[12px] text-txt-tertiary">
           {formatBitrate(result.publish.videoEncoding.maxBitrate)} · {formatDegradation(result.overdrive.degradationPreference)}
         </span>
       </div>

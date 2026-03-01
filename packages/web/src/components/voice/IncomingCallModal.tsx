@@ -43,22 +43,22 @@ export function IncomingCallModal() {
       <div className="absolute inset-0 bg-black/60" />
 
       {/* Call card */}
-      <div className="relative bg-[#1e1f22] rounded-lg shadow-2xl w-[340px] overflow-hidden">
+      <div className="relative bg-surface-channel rounded-lg shadow-2xl w-[340px] overflow-hidden">
         {/* Ring animation background */}
         <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] rounded-full bg-discord-green/5 animate-ping" style={{ animationDuration: '2s' }} />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150px] h-[150px] rounded-full bg-discord-green/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] rounded-full bg-status-online/5 animate-ping" style={{ animationDuration: '2s' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150px] h-[150px] rounded-full bg-status-online/10 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
         </div>
 
         {/* Content */}
         <div className="relative p-8 flex flex-col items-center gap-4">
           {/* Caller avatar */}
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-discord-blurple flex items-center justify-center text-white text-3xl font-bold">
+            <div className="w-20 h-20 rounded-full bg-accent-primary flex items-center justify-center text-white text-3xl font-bold">
               {incomingCall.callerName.charAt(0).toUpperCase()}
             </div>
             {/* Ringing phone icon */}
-            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-discord-green flex items-center justify-center">
+            <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-status-online flex items-center justify-center">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
               </svg>
@@ -67,8 +67,8 @@ export function IncomingCallModal() {
 
           {/* Caller info */}
           <div className="text-center">
-            <h3 className="text-[20px] font-bold text-discord-text-header">{incomingCall.callerName}</h3>
-            <p className="text-[14px] text-discord-text-muted mt-1">Incoming Voice Call...</p>
+            <h3 className="text-[20px] font-bold text-txt-primary">{incomingCall.callerName}</h3>
+            <p className="text-[14px] text-txt-tertiary mt-1">Incoming Voice Call...</p>
           </div>
 
           {/* Action buttons */}
@@ -76,7 +76,7 @@ export function IncomingCallModal() {
             {/* Decline */}
             <button
               onClick={handleDecline}
-              className="w-14 h-14 rounded-full bg-discord-red hover:bg-discord-red/80 flex items-center justify-center transition-colors group"
+              className="w-14 h-14 rounded-full bg-accent-rose hover:bg-accent-rose/80 flex items-center justify-center transition-colors group"
               title="Decline"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="white" className="group-hover:scale-110 transition-transform">
@@ -87,7 +87,7 @@ export function IncomingCallModal() {
             {/* Accept */}
             <button
               onClick={handleAccept}
-              className="w-14 h-14 rounded-full bg-discord-green hover:bg-discord-green/80 flex items-center justify-center transition-colors group"
+              className="w-14 h-14 rounded-full bg-status-online hover:bg-status-online/80 flex items-center justify-center transition-colors group"
               title="Accept"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="white" className="group-hover:scale-110 transition-transform">

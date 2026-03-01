@@ -50,11 +50,11 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
             height="48"
             viewBox="0 0 24 24"
             fill="currentColor"
-            className="text-discord-text-muted/40 mx-auto mb-3"
+            className="text-txt-tertiary/40 mx-auto mb-3"
           >
             <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
           </svg>
-          <p className="text-discord-text-muted text-sm">
+          <p className="text-txt-tertiary text-sm">
             Waiting for others to join...
           </p>
         </div>
@@ -134,7 +134,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
         {/* Bottom strip of other tiles */}
         {!stripHidden && otherTiles.length > 0 && (
-          <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-[#111214]/50 overflow-x-auto no-scrollbar">
+          <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
             {otherTiles.map((t) => (
               <div
                 key={t.key}

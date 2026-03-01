@@ -130,7 +130,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
   return (
     <div
-      className={`relative bg-[#111214] rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
+      className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
         large ? 'h-full w-full' : 'h-full aspect-video'
       }`}
       onContextMenu={handleContextMenu}
@@ -144,18 +144,18 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           className="w-full h-full object-contain bg-black"
         />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-[#1e1f22]">
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
           <div className="relative">
             <Avatar src={null} name={participant.username} size={large ? 80 : 48} />
           </div>
           <div className="text-center px-4">
-            <p className="text-discord-text-primary text-sm font-semibold">
+            <p className="text-txt-primary text-sm font-semibold">
               {participant.username} is streaming
             </p>
             {!isLocal && (
               <button
                 onClick={handleWatch}
-                className="mt-2 px-4 py-1.5 bg-discord-blurple hover:bg-discord-blurple/80 rounded text-white text-xs font-semibold transition-colors"
+                className="mt-2 px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 rounded text-white text-xs font-semibold transition-colors"
               >
                 Watch Stream
               </button>
@@ -165,7 +165,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       )}
 
       {/* LIVE badge — top left */}
-      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-discord-red rounded text-[11px] font-bold text-white uppercase tracking-wide">
+      <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
         LIVE
       </div>
 
@@ -203,7 +203,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       {/* Context Menu */}
       {contextMenu && (
         <div
-          className="fixed z-[60] bg-[#111214] rounded-lg shadow-2xl p-2 min-w-[220px] border border-white/[0.06]"
+          className="fixed z-[60] bg-surface-base rounded-lg shadow-2xl p-2 min-w-[220px] border border-white/[0.06]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -215,7 +215,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                   handleStopStreaming();
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-discord-red hover:bg-discord-red/10 rounded text-sm transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-txt-danger hover:bg-accent-rose/10 rounded text-sm transition-colors"
               >
                 <svg
                   width="16"
@@ -240,7 +240,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                   handleChangeStream();
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-discord-text-secondary hover:bg-discord-modifier-hover rounded text-sm transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
               >
                 <svg
                   width="16"
@@ -254,13 +254,13 @@ export function StreamTile({ tile, large }: StreamTileProps) {
               </button>
               <div className="border-t border-white/[0.06] my-1" />
               <div className="px-3 py-1">
-                <div className="text-xs text-discord-text-muted mb-1 font-medium uppercase tracking-wider">
+                <div className="text-xs text-txt-tertiary mb-1 font-medium uppercase tracking-wider">
                   Stream Quality
                 </div>
                 <div className="relative">
                   <button
                     onClick={() => setQualityPopoverOpen(!qualityPopoverOpen)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-discord-text-secondary hover:bg-discord-modifier-hover rounded transition-colors"
+                    className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-txt-secondary hover:bg-interactive-hover rounded transition-colors"
                   >
                     <span>{`${useVoiceStore.getState().screenShareConfig.height}p ${useVoiceStore.getState().screenShareConfig.fps}fps`}</span>
                     <svg
@@ -290,7 +290,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     handleUnwatch();
                     setContextMenu(null);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-discord-text-secondary hover:bg-discord-modifier-hover rounded text-sm transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
                 >
                   <svg
                     width="16"
@@ -308,7 +308,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     handleWatch();
                     setContextMenu(null);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-discord-text-secondary hover:bg-discord-modifier-hover rounded text-sm transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
                 >
                   <svg
                     width="16"
@@ -327,14 +327,14 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                 onClick={() => {
                   setStreamMuteAction(userId, !isStreamMuted);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 text-discord-text-secondary hover:bg-discord-modifier-hover rounded text-sm transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
               >
                 <span>Mute Stream</span>
                 <div
                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                     isStreamMuted
-                      ? 'bg-discord-blurple border-discord-blurple'
-                      : 'border-discord-text-muted'
+                      ? 'bg-accent-primary border-accent-primary'
+                      : 'border-txt-tertiary'
                   }`}
                 >
                   {isStreamMuted && (
@@ -351,7 +351,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
               </button>
               {/* Stream Volume slider */}
               <div className="px-3 py-2">
-                <div className="text-xs text-discord-text-muted mb-2 font-medium uppercase tracking-wider">
+                <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
                   Stream Volume
                 </div>
                 <div className="flex items-center gap-2">
@@ -360,7 +360,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     height="16"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="text-discord-text-muted flex-shrink-0"
+                    className="text-txt-tertiary flex-shrink-0"
                   >
                     <path d="M3 9v6h4l5 5V4L7 9H3z" />
                   </svg>
@@ -372,9 +372,9 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     onChange={(e) =>
                       setStreamVolumeAction(userId, parseInt(e.target.value))
                     }
-                    className="flex-1 accent-discord-blurple h-1"
+                    className="flex-1 accent-accent-primary h-1"
                   />
-                  <span className="text-xs text-discord-text-secondary min-w-[32px] text-right">
+                  <span className="text-xs text-txt-secondary min-w-[32px] text-right">
                     {streamVolume}%
                   </span>
                 </div>
@@ -385,14 +385,14 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                 onClick={() =>
                   setAttenuationEnabled(!streamAttenuationEnabled)
                 }
-                className="w-full flex items-center justify-between px-3 py-2 text-discord-text-secondary hover:bg-discord-modifier-hover rounded text-sm transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
               >
                 <span>Stream Attenuation</span>
                 <div
                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                     streamAttenuationEnabled
-                      ? 'bg-discord-blurple border-discord-blurple'
-                      : 'border-discord-text-muted'
+                      ? 'bg-accent-primary border-accent-primary'
+                      : 'border-txt-tertiary'
                   }`}
                 >
                   {streamAttenuationEnabled && (
@@ -410,7 +410,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
               {/* Attenuation Strength slider */}
               {streamAttenuationEnabled && (
                 <div className="px-3 py-2">
-                  <div className="text-xs text-discord-text-muted mb-2 font-medium uppercase tracking-wider">
+                  <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
                     Attenuation Strength
                   </div>
                   <div className="flex items-center gap-2">
@@ -422,9 +422,9 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                       onChange={(e) =>
                         setAttenuationStrength(parseInt(e.target.value))
                       }
-                      className="flex-1 accent-discord-blurple h-1"
+                      className="flex-1 accent-accent-primary h-1"
                     />
-                    <span className="text-xs text-discord-text-secondary min-w-[32px] text-right">
+                    <span className="text-xs text-txt-secondary min-w-[32px] text-right">
                       {streamAttenuationStrength}%
                     </span>
                   </div>

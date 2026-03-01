@@ -13,21 +13,21 @@ function formatBitrate(kbps: number): string {
 }
 
 function pingColor(ms: number): string {
-  if (ms <= 80) return 'text-discord-green';
-  if (ms <= 200) return 'text-discord-yellow';
-  return 'text-discord-red';
+  if (ms <= 80) return 'text-status-online';
+  if (ms <= 200) return 'text-status-idle';
+  return 'text-txt-danger';
 }
 
 function lossColor(pct: number): string {
-  if (pct <= 1) return 'text-discord-green';
-  if (pct <= 5) return 'text-discord-yellow';
-  return 'text-discord-red';
+  if (pct <= 1) return 'text-status-online';
+  if (pct <= 5) return 'text-status-idle';
+  return 'text-txt-danger';
 }
 
 function jitterColor(ms: number): string {
-  if (ms <= 30) return 'text-discord-green';
-  if (ms <= 80) return 'text-discord-yellow';
-  return 'text-discord-red';
+  if (ms <= 30) return 'text-status-online';
+  if (ms <= 80) return 'text-status-idle';
+  return 'text-txt-danger';
 }
 
 function sourceLabel(source: string): string {
@@ -51,15 +51,15 @@ function trackLabel(direction: 'send' | 'recv', source: string, participantName:
 
 const Row = ({ label, value, colorClass }: { label: string; value: string; colorClass?: string }) => (
   <div className="flex items-center justify-between py-[3px]">
-    <span className="text-[12px] text-discord-text-muted">{label}</span>
-    <span className={`text-[12px] font-medium ${colorClass ?? 'text-discord-text-secondary'}`}>{value}</span>
+    <span className="text-[12px] text-txt-tertiary">{label}</span>
+    <span className={`text-[12px] font-medium ${colorClass ?? 'text-txt-secondary'}`}>{value}</span>
   </div>
 );
 
-const Divider = () => <div className="border-t border-[#2b2d31] my-1" />;
+const Divider = () => <div className="border-t border-border-soft my-1" />;
 
 const SectionHeader = ({ title }: { title: string }) => (
-  <div className="text-[10px] font-bold text-discord-text-muted uppercase tracking-wider pt-1 pb-[2px]">
+  <div className="text-[10px] font-bold text-txt-tertiary uppercase tracking-wider pt-1 pb-[2px]">
     {title}
   </div>
 );
@@ -68,10 +68,10 @@ function AudioTrackRow({ track }: { track: AudioTrackStat }) {
   const label = trackLabel(track.direction, track.source, track.participantName);
   return (
     <div className="flex items-center justify-between py-[3px]">
-      <span className="text-[12px] text-discord-text-muted truncate mr-2">{label}</span>
-      <span className="text-[12px] font-medium text-discord-text-secondary whitespace-nowrap">
+      <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
+      <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
         {formatBitrate(track.bitrate)}
-        {track.codec && <span className="text-discord-text-muted ml-2">{track.codec}</span>}
+        {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
       </span>
     </div>
   );
@@ -84,19 +84,19 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
   return (
     <div className="py-[3px]">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-discord-text-muted truncate mr-2">{label}</span>
-        <span className="text-[12px] font-medium text-discord-text-secondary whitespace-nowrap">
+        <span className="text-[12px] text-txt-tertiary truncate mr-2">{label}</span>
+        <span className="text-[12px] font-medium text-txt-secondary whitespace-nowrap">
           {formatBitrate(track.bitrate)}
-          {track.codec && <span className="text-discord-text-muted ml-2">{track.codec}</span>}
+          {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
         </span>
       </div>
       {(resolution || track.fps !== null || track.qualityLimitation || track.simulcastLayer) && (
         <div className="flex items-center justify-between pl-3">
-          <span className="text-[11px] text-discord-text-muted">
+          <span className="text-[11px] text-txt-tertiary">
             {resolution && `${resolution}`}
             {track.fps !== null && ` @${track.fps}`}
           </span>
-          <span className="text-[11px] text-discord-text-muted">
+          <span className="text-[11px] text-txt-tertiary">
             {track.direction === 'send' && track.qualityLimitation && track.qualityLimitation !== 'none'
               ? track.qualityLimitation
               : ''}
@@ -133,17 +133,17 @@ export function ConnectionInfoPopover({ open, onClose }: ConnectionInfoPopoverPr
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[300px] bg-[#1e1f22] rounded-lg shadow-lg border border-[#111214] z-50 overflow-hidden"
+      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[300px] glass rounded-lg z-50 overflow-hidden"
     >
-      <div className="px-3 py-2 border-b border-[#111214]">
-        <span className="text-[14px] font-bold text-discord-text-primary">Connection Info</span>
+      <div className="px-3 py-2 border-b border-border-hard">
+        <span className="text-[14px] font-bold text-txt-primary">Connection Info</span>
       </div>
 
       <div className="px-3 py-2">
         {!room ? (
-          <div className="text-[12px] text-discord-text-muted py-2 text-center">Not connected</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center">Not connected</div>
         ) : !stats ? (
-          <div className="text-[12px] text-discord-text-muted py-2 text-center">Gathering stats...</div>
+          <div className="text-[12px] text-txt-tertiary py-2 text-center">Gathering stats...</div>
         ) : (
           <>
             {/* Network */}

@@ -7,9 +7,9 @@ import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
-const btnDefault = `${btnBase} bg-[#1e1f22] text-discord-text-secondary hover:bg-[#2b2d31] hover:text-discord-text-primary`;
+const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
 const btnActive = (color: string) => `${btnBase} bg-${color}/20 text-${color} hover:bg-${color}/30`;
-const btnGreen = `${btnBase} bg-[#1e1f22] text-discord-green hover:bg-[#2b2d31]`;
+const btnGreen = `${btnBase} bg-surface-channel text-status-online hover:bg-surface-elevated`;
 
 export function VoiceControlBar() {
   const isMuted = useVoiceStore((s) => s.isMuted);
@@ -141,12 +141,12 @@ export function VoiceControlBar() {
 
   return (
     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out">
-      <div className="flex items-center gap-1.5 rounded-full px-3 py-2 bg-[#111214]/90 backdrop-blur-md ring-1 ring-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center gap-1.5 rounded-full px-3 py-2 glass-bubble">
         {/* Mute */}
         <button
           onClick={handleMute}
           className={isMuted || isDeafened
-            ? `${btnBase} bg-discord-red/20 text-discord-red hover:bg-discord-red/30`
+            ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
             : btnDefault
           }
           title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
@@ -162,7 +162,7 @@ export function VoiceControlBar() {
         <button
           onClick={handleDeafen}
           className={isDeafened
-            ? `${btnBase} bg-discord-red/20 text-discord-red hover:bg-discord-red/30`
+            ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
             : btnDefault
           }
           title={isDeafened ? 'Undeafen (D)' : 'Deafen (D)'}
@@ -208,7 +208,7 @@ export function VoiceControlBar() {
           <button
             onClick={() => setQualityOpen(!qualityOpen)}
             className={qualityOpen
-              ? `${btnBase} bg-[#1e1f22] text-discord-text-primary`
+              ? `${btnBase} bg-surface-channel text-txt-primary`
               : btnDefault
             }
             title="Video Quality"
@@ -227,7 +227,7 @@ export function VoiceControlBar() {
         <button
           onClick={toggleVoiceChat}
           className={voiceChatOpen
-            ? `${btnBase} bg-[#1e1f22] text-discord-text-primary`
+            ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault
           }
           title="Toggle Chat"
@@ -241,7 +241,7 @@ export function VoiceControlBar() {
         <button
           onClick={handleFullscreen}
           className={voiceFullscreen
-            ? `${btnBase} bg-[#1e1f22] text-discord-text-primary`
+            ? `${btnBase} bg-surface-channel text-txt-primary`
             : btnDefault
           }
           title={voiceFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'}
@@ -263,7 +263,7 @@ export function VoiceControlBar() {
         {/* Disconnect */}
         <button
           onClick={handleDisconnect}
-          className={`${btnBase} bg-discord-red hover:bg-discord-red-hover text-white`}
+          className={`${btnBase} bg-accent-rose hover:bg-accent-rose/80 text-white`}
           title="Disconnect"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

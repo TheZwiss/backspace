@@ -237,7 +237,7 @@ export function PictureInPicture() {
   return (
     <div
       ref={containerRef}
-      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-[#080a0b] select-none ${
+      className={`fixed z-[40] overflow-hidden rounded-lg shadow-2xl ring-1 ring-white/10 bg-surface-base select-none ${
         isDragging ? 'cursor-grabbing' : 'cursor-grab'
       }`}
       style={{
@@ -263,7 +263,7 @@ export function PictureInPicture() {
           style={{ imageRendering: 'auto' }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-[#1e1f22]">
+        <div className="w-full h-full flex items-center justify-center bg-surface-channel">
           {displayParticipant ? (
             <div className="relative">
               <Avatar
@@ -271,11 +271,11 @@ export function PictureInPicture() {
                 size={64}
               />
               {speakingParticipantIds.has(displayParticipant.identity) && (
-                <div className="absolute -inset-1 rounded-full ring-2 ring-discord-green animate-pulse" />
+                <div className="absolute -inset-1 rounded-full ring-2 ring-status-online animate-pulse" />
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-discord-text-muted">
+            <div className="flex items-center gap-2 text-txt-tertiary">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
               </svg>
@@ -287,7 +287,7 @@ export function PictureInPicture() {
 
       {/* LIVE badge */}
       {isScreen && (
-        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-discord-red rounded text-[11px] font-bold text-white uppercase tracking-wide">
+        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-accent-rose rounded text-[11px] font-bold text-white uppercase tracking-wide">
           LIVE
         </div>
       )}
@@ -308,7 +308,7 @@ export function PictureInPicture() {
         <div className="flex items-center gap-1.5">
           <span className="text-white text-xs font-semibold truncate">{displayName}</span>
           {displayParticipant && speakingParticipantIds.has(displayParticipant.identity) && (
-            <div className="w-2 h-2 rounded-full bg-discord-green flex-shrink-0 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-status-online flex-shrink-0 animate-pulse" />
           )}
         </div>
         <div className="text-white/50 text-[10px] truncate">{channelName}</div>
