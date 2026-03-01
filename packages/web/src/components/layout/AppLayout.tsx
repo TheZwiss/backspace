@@ -217,7 +217,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="h-screen flex flex-col md:grid md:grid-cols-[312px_1fr] bg-surface-base overflow-hidden">
+    <div className="h-screen flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
       {/* Server sidebar - always visible on desktop, toggled on mobile */}
       <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
         <ServerSidebar />
@@ -225,7 +225,7 @@ export function AppLayout() {
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-w-0 bg-surface-chat relative">
+      <div className="flex-1 flex min-w-0 min-h-0 bg-surface-chat relative">
         <MainContent />
         <RightPanel />
       </div>

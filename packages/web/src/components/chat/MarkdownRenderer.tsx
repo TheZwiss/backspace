@@ -60,15 +60,15 @@ function urlTransform(url: string): string {
   return defaultUrlTransform(url);
 }
 
-// ─── Custom Theme (Discord Dark) ───────────────────────────────────────────
-// Based on One Dark, tuned to match Discord's code block aesthetic.
+// ─── Custom Theme (Aether Drift) ──────────────────────────────────────────
+// Based on One Dark, tuned to match Aether Drift's elevated surface aesthetic.
 
-const discordDarkTheme = {
+const aetherTheme = {
   ...themes.oneDark,
   plain: {
     ...themes.oneDark.plain,
-    backgroundColor: '#2b2d31',
-    color: '#dcddde',
+    backgroundColor: 'var(--bg-elevated)',
+    color: 'var(--text-message)',
   },
 };
 
@@ -80,17 +80,17 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   // 'text' means a bare fenced block with no language — render without highlighting
   if (language === 'text') {
     return (
-      <pre className="mt-1 p-3 bg-[#2b2d31] border border-[#1e1f22]/50 rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
+      <pre className="mt-1 p-3 bg-surface-elevated border border-border-hard/50 rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
         <code>{code}</code>
       </pre>
     );
   }
 
   return (
-    <Highlight theme={discordDarkTheme} code={code} language={language}>
+    <Highlight theme={aetherTheme} code={code} language={language}>
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
-          className="mt-1 rounded border border-[#1e1f22]/50 text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
+          className="mt-1 rounded border border-border-hard/50 text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
           style={{ ...style, padding: '0.625rem 0.75rem', margin: 0 }}
         >
           {tokens.map((line, i) => {
@@ -132,7 +132,7 @@ function buildComponents(): Components {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#00aff4] hover:underline"
+          className="text-txt-link hover:underline"
         >
           {children}
         </a>
@@ -149,7 +149,7 @@ function buildComponents(): Components {
       // Inline code
       return (
         <code
-          className="px-[0.35em] py-[0.15em] bg-[#2b2d31] rounded-[3px] text-[0.875em] font-mono text-[#e8912d]"
+          className="px-[0.35em] py-[0.15em] bg-surface-elevated rounded-[3px] text-[0.875em] font-mono text-accent-coral"
           {...rest}
         >
           {children}
@@ -161,13 +161,13 @@ function buildComponents(): Components {
     pre: ({ children }) => <>{children}</>,
 
     // Bold / Italic / Strikethrough
-    strong: ({ children }) => <strong className="font-bold text-[#f2f3f5]">{children}</strong>,
+    strong: ({ children }) => <strong className="font-bold text-txt-primary">{children}</strong>,
     em: ({ children }) => <em className="italic">{children}</em>,
-    del: ({ children }) => <del className="line-through text-[#a3a6aa]">{children}</del>,
+    del: ({ children }) => <del className="line-through text-txt-secondary">{children}</del>,
 
     // Blockquotes
     blockquote: ({ children }) => (
-      <blockquote className="pl-3 border-l-[3px] border-[#4e5058] my-0.5">
+      <blockquote className="pl-3 border-l-[3px] border-interactive-muted my-0.5">
         {children}
       </blockquote>
     ),
@@ -178,12 +178,12 @@ function buildComponents(): Components {
     li: ({ children }) => <li>{children}</li>,
 
     // Headings — Discord renders these with slightly larger/bolder text
-    h1: ({ children }) => <div className="text-[1.5rem] font-bold text-[#f2f3f5] mt-2 mb-1">{children}</div>,
-    h2: ({ children }) => <div className="text-[1.25rem] font-bold text-[#f2f3f5] mt-2 mb-1">{children}</div>,
-    h3: ({ children }) => <div className="text-[1.1rem] font-bold text-[#f2f3f5] mt-1 mb-0.5">{children}</div>,
+    h1: ({ children }) => <div className="text-[1.5rem] font-bold text-txt-primary mt-2 mb-1">{children}</div>,
+    h2: ({ children }) => <div className="text-[1.25rem] font-bold text-txt-primary mt-2 mb-1">{children}</div>,
+    h3: ({ children }) => <div className="text-[1.1rem] font-bold text-txt-primary mt-1 mb-0.5">{children}</div>,
 
     // Horizontal rules
-    hr: () => <hr className="border-[#3f4147] my-2" />,
+    hr: () => <hr className="border-border-soft my-2" />,
 
     // Images (in markdown content — not attachments)
     img: ({ src, alt }) => (
@@ -201,10 +201,10 @@ function buildComponents(): Components {
         <table className="border-collapse text-[0.875rem]">{children}</table>
       </div>
     ),
-    thead: ({ children }) => <thead className="border-b border-[#3f4147]">{children}</thead>,
+    thead: ({ children }) => <thead className="border-b border-border-soft">{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
-    tr: ({ children }) => <tr className="border-b border-[#3f4147]/50">{children}</tr>,
-    th: ({ children }) => <th className="px-3 py-1.5 text-left text-[#f2f3f5] font-semibold">{children}</th>,
+    tr: ({ children }) => <tr className="border-b border-border-soft/50">{children}</tr>,
+    th: ({ children }) => <th className="px-3 py-1.5 text-left text-txt-primary font-semibold">{children}</th>,
     td: ({ children }) => <td className="px-3 py-1.5">{children}</td>,
   };
 }

@@ -10,7 +10,7 @@ export function ImagePreview() {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-discord-bg-overlay animate-fade-in cursor-pointer"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-surface-overlay animate-fade-in cursor-pointer"
       onClick={closeImagePreview}
     >
       <button

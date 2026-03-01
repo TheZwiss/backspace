@@ -25,13 +25,13 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
       const sorted = [...member.roles].sort((a, b) => b.position - a.position);
       color = sorted[0]!.color;
     } else if (ownerId && userId === ownerId) {
-      color = '#f23f43';
+      color = '#fda4af';
     } else {
-      color = '#5865f2'; // blurple default
+      color = '#7c6cf6'; // accent-primary default
     }
   } else {
     displayName = 'Unknown User';
-    color = '#a3a6aa'; // muted fallback
+    color = '#a0a0aa'; // text-secondary fallback
   }
 
   const handleClick = (e: React.MouseEvent) => {

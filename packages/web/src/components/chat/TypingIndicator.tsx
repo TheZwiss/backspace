@@ -30,12 +30,12 @@ export function TypingIndicator({ channelId }: TypingIndicatorProps) {
   }
 
   return (
-    <div className="h-[24px] px-4 flex items-center text-[12px] text-discord-text-header font-medium select-none pointer-events-none">
+    <div className="h-[24px] px-4 flex items-center text-[12px] text-txt-primary font-medium select-none pointer-events-none">
       <div className="flex items-center gap-2">
-        <div className="flex gap-[2px] bg-discord-bg-accent/20 rounded-full px-2 py-1">
-          <div className="w-[5px] h-[5px] bg-discord-text-normal rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.8s' }} />
-          <div className="w-[5px] h-[5px] bg-discord-text-normal rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.8s' }} />
-          <div className="w-[5px] h-[5px] bg-discord-text-normal rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.8s' }} />
+        <div className="flex gap-[2px] bg-surface-elevated/20 rounded-full px-2 py-1">
+          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '0.8s' }} />
+          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '0.8s' }} />
+          <div className="w-[5px] h-[5px] bg-txt-message rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '0.8s' }} />
         </div>
         <span className="truncate max-w-[400px]">
           <span className="font-bold">{text}</span>

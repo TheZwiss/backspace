@@ -133,8 +133,8 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
       const sorted = [...member.roles].sort((a, b) => b.position - a.position);
       return { color: sorted[0]!.color };
     }
-    if (ownerId && userId === ownerId) return { color: '#f23f43' };
-    return { color: '#dcdcdf' };
+    if (ownerId && userId === ownerId) return { color: '#fda4af' };
+    return { color: '#d8d8de' };
   };
 
   const roleColor = getMemberDisplayColor(message.userId);
@@ -148,15 +148,15 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     <div
       className={`group relative flex px-4 py-0.5 transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
-          ? 'bg-[#3c3829] border-l-2 border-l-[#f0b132] hover:bg-[#45402f]'
-          : 'hover:bg-discord-modifier-hover'
+          ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
+          : 'hover:bg-interactive-hover'
       }`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Reply Line */}
       {message.replyTo && (
-        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-discord-interactive-muted rounded-tl-[6px] opacity-60" />
+        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-interactive-muted rounded-tl-[6px] opacity-60" />
       )}
 
       {/* Avatar or timestamp column */}
@@ -172,7 +172,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             />
           </div>
         ) : (
-          <span className={`text-[11px] text-discord-text-muted opacity-0 group-hover:opacity-100 mt-2 select-none w-full text-center leading-[1.375rem] font-medium`}>
+          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-2 select-none w-full text-center leading-[1.375rem] font-medium`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
@@ -184,12 +184,12 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
             <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} />
             <span 
-              className="text-[14px] font-bold text-discord-text-header hover:underline"
+              className="text-[14px] font-bold text-txt-primary hover:underline"
               style={message.replyTo ? replyRoleColor(message.replyTo) : undefined}
             >
               {message.replyTo.user.displayName ?? message.replyTo.user.username}
             </span>
-            <span className="text-[14px] text-discord-text-normal truncate max-w-[400px] hover:text-discord-text-primary">
+            <span className="text-[14px] text-txt-message truncate max-w-[400px] hover:text-txt-primary">
               {message.replyTo.content}
             </span>
           </div>
@@ -204,7 +204,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             >
               {displayName}
             </span>
-            <span className="text-[12px] text-discord-text-muted leading-tight font-medium hover:cursor-default">
+            <span className="text-[12px] text-txt-tertiary leading-tight font-medium hover:cursor-default">
               {formatTime(message.createdAt)}
             </span>
           </div>
@@ -216,27 +216,27 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
-              className="w-full p-3 bg-discord-bg-input rounded-lg text-discord-text-primary outline-none resize-none text-[16px] leading-[1.375rem] shadow-inner"
+              className="w-full p-3 bg-surface-input rounded-lg text-txt-primary outline-none resize-none text-[16px] leading-[1.375rem] shadow-inner"
               rows={2}
               autoFocus
             />
-            <p className="text-[12px] text-discord-text-muted mt-1.5 ml-1">
-              escape to <button onClick={() => setIsEditing(false)} className="text-discord-text-link hover:underline">cancel</button>
+            <p className="text-[12px] text-txt-tertiary mt-1.5 ml-1">
+              escape to <button onClick={() => setIsEditing(false)} className="text-txt-link hover:underline">cancel</button>
               {' '}&bull; enter to <button onClick={() => {
                 if (editContent.trim()) {
                   editMessage(message.id, editContent.trim(), channelKey);
                   setIsEditing(false);
                 }
-              }} className="text-discord-text-link hover:underline">save</button>
+              }} className="text-txt-link hover:underline">save</button>
             </p>
           </div>
         ) : (
           <div className="flex flex-col gap-1">
             {message.content && (
-              <div className="text-discord-text-normal text-[16px] leading-[1.375rem] break-words whitespace-pre-wrap selection:bg-discord-blurple/30">
+              <div className="text-txt-message text-[16px] leading-[1.375rem] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
                 <MarkdownRenderer content={message.content} />
                 {message.editedAt && (
-                  <span className="text-[10px] text-discord-text-muted ml-1 select-none font-medium">(edited)</span>
+                  <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">(edited)</span>
                 )}
               </div>
             )}
@@ -249,13 +249,13 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                     key={emoji}
                     onClick={() => toggleReaction(emoji)}
                     className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[14px] font-medium border transition-colors ${
-                      me 
-                        ? 'bg-discord-blurple/15 border-discord-blurple text-discord-blurple' 
-                        : 'bg-discord-bg-secondary border-transparent text-discord-text-muted hover:border-discord-text-muted/30'
+                      me
+                        ? 'bg-accent-primary/15 border-accent-primary text-accent-primary'
+                        : 'bg-surface-channel border-transparent text-txt-tertiary hover:border-txt-tertiary/30'
                     }`}
                   >
                     <span>{emoji}</span>
-                    <span className={me ? 'text-discord-blurple' : 'text-discord-text-normal'}>{count}</span>
+                    <span className={me ? 'text-accent-primary' : 'text-txt-message'}>{count}</span>
                   </button>
                 ))}
               </div>
@@ -271,7 +271,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   const isImage = att.mimetype.startsWith('image/');
                   if (isImage) {
                     return (
-                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-discord-bg-tertiary/50 bg-discord-bg-tertiary/20">
+                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-border-hard/50 bg-surface-base/20">
                         <img
                           src={`/api/uploads/${att.filename}`}
                           alt={att.originalName}
@@ -287,16 +287,16 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                       key={att.id}
                       href={`/api/uploads/${att.filename}`}
                       download={att.originalName}
-                      className="flex items-center gap-3 p-4 bg-discord-bg-secondary/50 rounded-lg border border-discord-bg-tertiary hover:bg-discord-bg-hover transition-all max-w-[400px] mt-1 group/att"
+                      className="flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all max-w-[400px] mt-1 group/att"
                     >
-                      <div className="p-2 bg-discord-bg-tertiary rounded text-discord-text-muted group-hover/att:text-discord-text-primary transition-colors">
+                      <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors">
                         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
                         </svg>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-discord-text-link text-[15px] font-medium truncate hover:underline">{att.originalName}</p>
-                        <p className="text-[12px] text-discord-text-muted font-medium">
+                        <p className="text-txt-link text-[15px] font-medium truncate hover:underline">{att.originalName}</p>
+                        <p className="text-[12px] text-txt-tertiary font-medium">
                           {att.size < 1024 ? `${att.size} B` :
                            att.size < 1048576 ? `${(att.size / 1024).toFixed(1)} KB` :
                            `${(att.size / 1048576).toFixed(1)} MB`}
@@ -313,13 +313,13 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
       {/* Action buttons on hover */}
       {isHovered && !isEditing && (
-        <div className="absolute -top-[18px] right-4 flex items-center bg-discord-bg-primary border border-discord-bg-tertiary/50 rounded-[4px] shadow-elevation-low overflow-hidden z-10 h-8">
-          <div className="flex items-center px-1 border-r border-discord-bg-tertiary/50 h-full">
+        <div className="absolute -top-[18px] right-4 flex items-center bg-surface-chat border border-border-hard/50 rounded-[4px] shadow-elevation-low overflow-hidden z-10 h-8">
+          <div className="flex items-center px-1 border-r border-border-hard/50 h-full">
             {['👍', '❤️', '😂', '😮'].map(emoji => (
               <button
                 key={emoji}
                 onClick={() => toggleReaction(emoji)}
-                className="p-1 hover:bg-discord-modifier-hover rounded transition-colors text-[16px] leading-none"
+                className="p-1 hover:bg-interactive-hover rounded transition-colors text-[16px] leading-none"
               >
                 {emoji}
               </button>
@@ -327,7 +327,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           </div>
           <button
             onClick={() => setReplyTo(message)}
-            className="px-2 h-full text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
+            className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
             title="Reply"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -340,7 +340,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                 setEditContent(message.content ?? '');
                 setIsEditing(true);
               }}
-              className="px-2 h-full text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
+              className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"
               title="Edit"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -351,7 +351,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           {canDelete && (
             <button
               onClick={() => deleteMessage(message.id, channelKey)}
-              className="px-2 h-full text-discord-text-muted hover:text-discord-red hover:bg-discord-modifier-hover transition-all flex items-center justify-center"
+              className="px-2 h-full text-txt-tertiary hover:text-txt-danger hover:bg-interactive-hover transition-all flex items-center justify-center"
               title="Delete"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

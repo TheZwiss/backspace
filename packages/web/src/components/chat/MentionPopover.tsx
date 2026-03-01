@@ -42,14 +42,14 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
       const sorted = [...member.roles].sort((a, b) => b.position - a.position);
       return sorted[0]!.color;
     }
-    if (ownerId && member.userId === ownerId) return '#f23f43';
+    if (ownerId && member.userId === ownerId) return '#fda4af';
     return undefined;
   };
 
   return (
     <div className="absolute bottom-full left-0 w-[280px] mb-1 z-50">
-      <div className="bg-[#2b2d31] rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.15),0_8px_16px_rgba(0,0,0,0.24)] overflow-hidden max-h-[320px] overflow-y-auto scrollbar-thin">
-        <div className="px-2 py-1.5 text-[11px] font-bold text-discord-text-muted uppercase tracking-wider">
+      <div className="bg-surface-elevated rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.15),0_8px_16px_rgba(0,0,0,0.24)] overflow-hidden max-h-[320px] overflow-y-auto scrollbar-thin">
+        <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
           Members
         </div>
         {filtered.map((member, i) => {
@@ -63,7 +63,7 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
               ref={isSelected ? selectedRef : undefined}
               onClick={() => onSelect(member)}
               className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
-                isSelected ? 'bg-[#404249]' : 'hover:bg-[#35373c]'
+                isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
               }`}
             >
               <Avatar
@@ -79,7 +79,7 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
                 {displayName}
               </span>
               {member.user.displayName && (
-                <span className="text-[12px] text-discord-text-muted truncate">
+                <span className="text-[12px] text-txt-tertiary truncate">
                   @{member.user.username}
                 </span>
               )}
