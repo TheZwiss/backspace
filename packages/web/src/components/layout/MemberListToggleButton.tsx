@@ -8,8 +8,8 @@ export function MemberListToggleButton() {
   return (
     <button
       onClick={toggleMemberList}
-      className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-discord-modifier-hover ${
-        memberListOpen ? 'text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary'
+      className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[4px] hover:bg-interactive-hover ${
+        memberListOpen ? 'text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
       }`}
       title="Toggle Member List"
     >

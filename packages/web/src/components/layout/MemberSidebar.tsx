@@ -15,7 +15,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
     return {
       key: '__owner__',
       label: 'OWNER',
-      color: ownerRole?.color ?? '#f23f43',
+      color: ownerRole?.color ?? 'var(--accent-rose)',
       position: Infinity,
     };
   }
@@ -79,7 +79,7 @@ export function MemberSidebar() {
       return { color: sorted[0]!.color };
     }
     if (ownerId && member.userId === ownerId) {
-      return { color: '#f23f43' };
+      return { color: 'var(--accent-rose)' };
     }
     return undefined;
   };
@@ -100,7 +100,7 @@ export function MemberSidebar() {
       <div
         key={member.userId}
         onClick={(e) => handleMemberClick(e, member.user)}
-        className="flex items-center gap-3 px-2 py-1.5 rounded-[4px] hover:bg-discord-modifier-hover cursor-pointer group transition-colors"
+        className="flex items-center gap-3 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
       >
         <Avatar
           src={member.user.avatar}
@@ -111,13 +111,13 @@ export function MemberSidebar() {
         />
         <div className="flex-1 min-w-0">
           <div
-            className={`text-[15px] font-medium truncate ${isOffline ? 'text-discord-text-muted' : (!colorStyle ? 'text-discord-text-primary' : '')}`}
+            className={`text-[15px] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
             style={colorStyle}
           >
             {displayName}
           </div>
           {!isOffline && member.user.customStatus && (
-            <div className="text-[12px] text-discord-text-muted truncate">{member.user.customStatus}</div>
+            <div className="text-[12px] text-txt-tertiary truncate">{member.user.customStatus}</div>
           )}
         </div>
       </div>
@@ -125,12 +125,12 @@ export function MemberSidebar() {
   };
 
   return (
-    <div className="w-60 bg-discord-bg-members flex-shrink-0 overflow-y-auto select-none no-scrollbar">
+    <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block">
       <div className="p-3">
         {/* Role-based groups */}
         {roleGroups.map(([key, group]) => (
           <div key={key} className="mb-4">
-            <h3 className="text-[12px] font-bold text-discord-text-muted uppercase tracking-wider px-2 mb-1">
+            <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
               {group.label} — {group.members.length}
             </h3>
             {group.members.map((m) => renderMember(m))}
@@ -140,7 +140,7 @@ export function MemberSidebar() {
         {/* Offline */}
         {offlineMembers.length > 0 && (
           <div>
-            <h3 className="text-[12px] font-bold text-discord-text-muted uppercase tracking-wider px-2 mb-1">
+            <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
               OFFLINE — {offlineMembers.length}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}

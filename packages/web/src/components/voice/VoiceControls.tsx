@@ -79,28 +79,28 @@ export function VoiceControls() {
   };
 
   const statusColor = connectionError
-    ? 'text-discord-red'
+    ? 'text-txt-danger'
     : isLiveKitConnected
-      ? 'text-discord-green'
-      : 'text-discord-yellow';
+      ? 'text-status-online'
+      : 'text-status-idle';
 
   const statusBgColor = connectionError
-    ? 'bg-discord-red/20'
+    ? 'bg-accent-rose/20'
     : isLiveKitConnected
-      ? 'bg-discord-green/20'
-      : 'bg-discord-yellow/20';
+      ? 'bg-status-online/20'
+      : 'bg-status-idle/20';
 
   const qualityColor =
     connectionQuality === 'excellent' || connectionQuality === 'good'
-      ? 'text-discord-green'
+      ? 'text-status-online'
       : connectionQuality === 'poor'
-        ? 'text-discord-yellow'
+        ? 'text-status-idle'
         : connectionQuality === 'lost'
-          ? 'text-discord-red'
+          ? 'text-txt-danger'
           : statusColor; // 'unknown' falls back to connection-state color
 
   const btnBase = 'flex-1 h-[34px] flex items-center justify-center rounded-[4px] transition-colors';
-  const btnDefaultStyle = 'bg-[#111214] text-discord-text-muted hover:bg-[#1a1b1e] hover:text-discord-text-secondary';
+  const btnDefaultStyle = 'bg-surface-base text-txt-tertiary hover:bg-surface-channel hover:text-txt-secondary';
 
   return (
     <>
@@ -123,7 +123,7 @@ export function VoiceControls() {
           <div className={`text-[13px] font-semibold leading-[18px] ${statusColor}`}>
             {connectionError ? 'Connection Failed' : isLiveKitConnected ? 'Voice Connected' : 'Connecting...'}
           </div>
-          <div className="text-[12px] text-discord-channels-default truncate leading-[16px]">
+          <div className="text-[12px] text-txt-tertiary truncate leading-[16px]">
             {connectionError ? connectionError : channelName}
           </div>
         </div>
@@ -131,7 +131,7 @@ export function VoiceControls() {
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={handleDisconnect}
-            className="w-7 h-7 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary transition-colors rounded"
+            className="w-7 h-7 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded"
             title="Disconnect"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -153,7 +153,7 @@ export function VoiceControls() {
           onClick={handleCamera}
           className={`${btnBase} ${
             isCameraOn
-              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              ? 'bg-surface-base text-status-online hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
           title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
@@ -174,7 +174,7 @@ export function VoiceControls() {
           onClick={handleScreenShare}
           className={`${btnBase} ${
             isScreenSharing
-              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              ? 'bg-surface-base text-status-online hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
           title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
@@ -193,7 +193,7 @@ export function VoiceControls() {
           }}
           className={`${btnBase} ${
             showScreenShareSettings
-              ? 'bg-[#111214] text-discord-blurple hover:bg-[#1a1b1e]'
+              ? 'bg-surface-base text-accent-primary hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
           title="Video Quality"
@@ -209,7 +209,7 @@ export function VoiceControls() {
           onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
           className={`${btnBase} ${
             rnnoiseEnabled
-              ? 'bg-[#111214] text-discord-green hover:bg-[#1a1b1e]'
+              ? 'bg-surface-base text-status-online hover:bg-surface-channel'
               : btnDefaultStyle
           }`}
           title={rnnoiseEnabled ? 'Disable AI Noise Suppression' : 'Enable AI Noise Suppression'}

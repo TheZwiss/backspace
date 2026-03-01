@@ -13,7 +13,7 @@ export function MobileNav() {
       {/* Hamburger button in header */}
       <button
         onClick={toggleSidebar}
-        className="fixed top-3 left-3 z-40 p-1.5 rounded bg-discord-bg-secondary text-discord-text-primary md:hidden"
+        className="fixed top-3 left-3 z-[120] p-1.5 rounded bg-surface-channel text-txt-primary md:hidden"
       >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
           {sidebarOpen ? (
@@ -27,7 +27,7 @@ export function MobileNav() {
       {/* Backdrop when sidebar is open on mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[35] md:hidden"
           onClick={toggleSidebar}
         />
       )}

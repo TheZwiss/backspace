@@ -97,8 +97,8 @@ export function ChannelSidebar() {
 
   // Floating bottom panel — shared between DM view and server view
   const floatingPanel = user ? (
-    <div className="fixed bottom-2 left-2 z-30 w-[296px]">
-      <div className="bg-[#1a1b1e] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)] ring-1 ring-white/[0.06]">
+    <div className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
+      <div className="glass-bubble rounded-[14px]">
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
         {/* Separator between voice and user area */}
@@ -119,9 +119,9 @@ export function ChannelSidebar() {
   if (!server) {
     return (
       <>
-      <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
+      <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px]">
         <div className="h-12 px-[10px] flex items-center shadow-header z-10">
-          <button className="flex-1 bg-discord-bg-tertiary text-discord-text-muted text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-discord-bg-tertiary/80 transition-colors">
+          <button className="flex-1 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base/80 transition-colors">
             Find or start a conversation
           </button>
         </div>
@@ -130,8 +130,8 @@ export function ChannelSidebar() {
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
               !currentChannelId
-                ? 'bg-discord-modifier-selected text-white'
-                : 'text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary'
+                ? 'bg-interactive-selected text-white'
+                : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className={`flex-shrink-0 ${!currentChannelId ? 'text-white' : 'opacity-70 group-hover:opacity-100'}`}>
@@ -144,7 +144,7 @@ export function ChannelSidebar() {
 
           {/* Nitro */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
               <path d="M2.98966977,9.35789159 C2.98966977,9.77582472 2.63542482,10.1300697 2.21749169,10.1300697 L2.21749169,10.1300697 C1.79955856,10.1300697 1.44531361,9.77582472 1.44531361,9.35789159 L1.44531361,9.35789159 C1.44531361,8.93995846 1.79955856,8.58571351 2.21749169,8.58571351 L2.21749169,8.58571351 C2.63542482,8.58571351 2.98966977,8.93995846 2.98966977,9.35789159 Z" transform="translate(12, 12) scale(1.2) translate(-12, -12)" />
@@ -155,7 +155,7 @@ export function ChannelSidebar() {
 
           {/* Shop */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
               <path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h17A1.5 1.5 0 0 1 22 5.5V7H2V5.5ZM2 9v9.5A1.5 1.5 0 0 0 3.5 20h17a1.5 1.5 0 0 0 1.5-1.5V9H2Zm9.5 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5Zm-4-1h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1Z" />
@@ -164,10 +164,10 @@ export function ChannelSidebar() {
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">
-            <span className="text-[12px] font-bold text-discord-text-muted uppercase tracking-wider">Direct Messages</span>
+            <span className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider">Direct Messages</span>
             <button
               onClick={() => openModal('newDm')}
-              className="text-discord-text-muted hover:text-discord-text-primary transition-colors"
+              className="text-txt-tertiary hover:text-txt-primary transition-colors"
               title="New Direct Message"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -193,10 +193,10 @@ export function ChannelSidebar() {
                   onClick={() => handleChannelClick(dm.id)}
                   className={`relative flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer transition-colors group ${
                     currentChannelId === dm.id
-                      ? 'bg-discord-modifier-selected text-white'
+                      ? 'bg-interactive-selected text-white'
                       : isDmUnread
-                        ? 'text-white hover:bg-discord-modifier-hover'
-                        : 'text-discord-text-muted hover:bg-discord-modifier-hover hover:text-discord-text-secondary'
+                        ? 'text-white hover:bg-interactive-hover'
+                        : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
                   }`}
                 >
                   {isDmUnread && (
@@ -207,7 +207,7 @@ export function ChannelSidebar() {
                       {otherMembers.slice(0, 2).map((m, i) => (
                         <div
                           key={m.id}
-                          className="absolute rounded-full overflow-hidden border-2 border-discord-bg-secondary"
+                          className="absolute rounded-full overflow-hidden border-2 border-surface-channel"
                           style={{
                             width: 22, height: 22,
                             left: i * 10,
@@ -226,16 +226,16 @@ export function ChannelSidebar() {
                     <div className={`text-[15px] truncate leading-tight ${
                       currentChannelId === dm.id ? 'text-white font-medium'
                         : isDmUnread ? 'text-white font-bold'
-                        : 'text-discord-text-muted group-hover:text-discord-text-secondary font-medium'
+                        : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
                     }`}>
                       {dmDisplayName}
                     </div>
                     {isGroup ? (
-                      <div className="text-[12px] text-discord-channels-default truncate leading-tight mt-0.5">
+                      <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
                         {dm.members.length} Members
                       </div>
                     ) : dm.lastMessage ? (
-                      <div className="text-[12px] text-discord-channels-default truncate leading-tight mt-0.5">
+                      <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
                         {dm.lastMessage.content}
                       </div>
                     ) : null}
@@ -250,7 +250,7 @@ export function ChannelSidebar() {
                       }
                       useServerStore.getState().closeDm(dm.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-discord-text-muted hover:text-discord-text-primary transition-opacity flex-shrink-0 ml-1"
+                    className="opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity flex-shrink-0 ml-1"
                     title="Close DM"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -261,7 +261,7 @@ export function ChannelSidebar() {
               );
             })}
             {dmChannels.length === 0 && (
-              <p className="px-2 py-4 text-[13px] text-discord-text-muted italic opacity-60">No DM conversations yet.</p>
+              <p className="px-2 py-4 text-[13px] text-txt-tertiary italic opacity-60">No DM conversations yet.</p>
             )}
           </div>
         </div>
@@ -274,21 +274,21 @@ export function ChannelSidebar() {
 
   return (
     <>
-    <div className="w-60 bg-discord-bg-secondary flex flex-col flex-shrink-0 select-none">
+    <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px]">
       {/* Server header */}
       <div className="h-12 flex items-center shadow-header z-10 group/header">
         <button
           onClick={() => openModal('serverSettings')}
-          className="flex-1 h-full px-4 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors min-w-0"
+          className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
         >
-          <span className="font-bold text-[16px] text-discord-text-primary truncate leading-tight">{server.name}</span>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-discord-text-muted flex-shrink-0">
+          <span className="font-bold text-[16px] text-txt-primary truncate leading-tight">{server.name}</span>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
             <path d="M5.293 7.293a1 1 0 011.414 0L9 9.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
           </svg>
         </button>
         <button
           onClick={() => openModal('invite')}
-          className="w-10 h-full flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover transition-all flex-shrink-0"
+          className="w-10 h-full flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex-shrink-0"
           title="Invite People"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -302,7 +302,7 @@ export function ChannelSidebar() {
         {/* Text Channels */}
         <div>
           <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
-            <div className="flex items-center gap-0.5 text-discord-text-muted hover:text-discord-text-secondary transition-colors">
+            <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-70">
                 <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
               </svg>
@@ -314,7 +314,7 @@ export function ChannelSidebar() {
                   e.stopPropagation();
                   openModal('createChannel');
                 }}
-                className="text-discord-text-muted hover:text-discord-text-primary transition-colors"
+                className="text-txt-tertiary hover:text-txt-primary transition-colors"
                 title="Create Channel"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -332,10 +332,10 @@ export function ChannelSidebar() {
                   onClick={() => handleChannelClick(channel.id)}
                   className={`w-full flex items-center gap-1.5 px-2 h-8 rounded-[4px] group transition-colors ${
                     currentChannelId === channel.id
-                      ? 'bg-discord-modifier-selected text-white'
+                      ? 'bg-interactive-selected text-white'
                       : isUnread
-                        ? 'text-white hover:text-white hover:bg-discord-modifier-hover'
-                        : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-modifier-hover'
+                        ? 'text-white hover:text-white hover:bg-interactive-hover'
+                        : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
                   }`}
                 >
                   {isUnread && (
@@ -351,7 +351,7 @@ export function ChannelSidebar() {
                       height="16"
                       viewBox="0 0 24 24"
                       fill="currentColor"
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-discord-text-muted hover:text-discord-text-primary transition-opacity"
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
                       onClick={(e) => {
                         e.stopPropagation();
                         openModal('channelSettings', { channelId: channel.id });
@@ -369,7 +369,7 @@ export function ChannelSidebar() {
         {/* Voice Channels */}
         <div>
           <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
-            <div className="flex items-center gap-0.5 text-discord-text-muted hover:text-discord-text-secondary transition-colors">
+            <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-70">
                 <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
               </svg>
@@ -381,7 +381,7 @@ export function ChannelSidebar() {
                   e.stopPropagation();
                   openModal('createChannel');
                 }}
-                className="text-discord-text-muted hover:text-discord-text-primary transition-colors"
+                className="text-txt-tertiary hover:text-txt-primary transition-colors"
                 title="Create Channel"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -562,33 +562,33 @@ function UserAreaPanel({
     <div className="relative" ref={panelRef}>
       {/* Input settings panel */}
       {openPanel === 'input' && (
-        <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
+        <div className="absolute bottom-full left-0 right-0 mb-0 bg-surface-channel rounded-t-lg shadow-lg z-[150] border-t border-x border-border-hard">
           {/* Input Device */}
           <div className="relative">
             <button
               onClick={() => setShowInputDeviceList(!showInputDeviceList)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+              className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
             >
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] font-semibold text-discord-text-primary text-left">Input Device</div>
-                <div className="text-[13px] text-discord-text-muted truncate text-left">{selectedInputLabel}</div>
+                <div className="text-[15px] font-semibold text-txt-primary text-left">Input Device</div>
+                <div className="text-[13px] text-txt-tertiary truncate text-left">{selectedInputLabel}</div>
               </div>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted flex-shrink-0 ml-2">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0 ml-2">
                 <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
               </svg>
             </button>
             {showInputDeviceList && (
-              <div className="bg-discord-bg-floating rounded-lg shadow-lg mx-2 mb-2 py-1 border border-discord-bg-tertiary">
+              <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard">
                 {inputDevices.map(d => (
                   <button
                     key={d.deviceId}
                     onClick={() => selectInput(d)}
-                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
-                      inputDeviceId === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
+                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
+                      inputDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
                     }`}
                   >
                     {inputDeviceId === d.deviceId && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-accent-primary flex-shrink-0">
                         <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                       </svg>
                     )}
@@ -599,11 +599,11 @@ function UserAreaPanel({
             )}
           </div>
 
-          <div className="mx-4 border-t border-[#2b2d31]" />
+          <div className="mx-4 border-t border-border-soft" />
 
                       {/* Input Volume */}
                       <div className="px-4 py-3">
-                        <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Input Volume</div>
+                        <div className="text-[15px] font-semibold text-txt-primary mb-2">Input Volume</div>
                         <input
                           type="range"
                           min={0}
@@ -613,9 +613,9 @@ function UserAreaPanel({
                             const vol = Number(e.target.value);
                             storeSetInputVolume(vol);
                           }}
-                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-discord-blurple bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-accent-primary bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
                           style={{
-                            background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${inputVolume / 2}%, #4e5058 ${inputVolume / 2}%, #4e5058 100%)`,
+                            background: `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${inputVolume / 2}%, var(--interactive-muted) ${inputVolume / 2}%, var(--interactive-muted) 100%)`,
                           }}
                         />
                         {/* Mic level meter */}
@@ -624,22 +624,22 @@ function UserAreaPanel({
                             <div
                               key={i}
                               className={`flex-1 h-[6px] rounded-[1px] transition-colors duration-75 ${
-                                i < activeBars ? 'bg-discord-text-muted' : 'bg-[#313338]'
+                                i < activeBars ? 'bg-txt-tertiary' : 'bg-interactive-muted'
                               }`}
                             />
                           ))}
                         </div>
                       </div>
           
-                      <div className="mx-4 border-t border-[#2b2d31]" />
+                      <div className="mx-4 border-t border-border-soft" />
           
                       {/* Voice Settings link */}
                       <button
                         onClick={onSettingsClick}
-                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                       >
-                        <span className="text-[15px] font-semibold text-discord-text-primary">Voice Settings</span>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
+                        <span className="text-[15px] font-semibold text-txt-primary">Voice Settings</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                           <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                         </svg>
                       </button>
@@ -648,33 +648,33 @@ function UserAreaPanel({
           
                   {/* Output settings panel */}
                   {openPanel === 'output' && (
-                    <div className="absolute bottom-full left-0 right-0 mb-0 bg-[#1e1f22] rounded-t-lg shadow-lg z-50 border-t border-x border-discord-bg-tertiary">
+                    <div className="absolute bottom-full left-0 right-0 mb-0 bg-surface-channel rounded-t-lg shadow-lg z-[150] border-t border-x border-border-hard">
                       {/* Output Device */}
                       <div className="relative">
                         <button
                           onClick={() => setShowOutputDeviceList(!showOutputDeviceList)}
-                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+                          className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="text-[15px] font-semibold text-discord-text-primary text-left">Output Device</div>
-                            <div className="text-[13px] text-discord-text-muted truncate text-left">{selectedOutputLabel}</div>
+                            <div className="text-[15px] font-semibold text-txt-primary text-left">Output Device</div>
+                            <div className="text-[13px] text-txt-tertiary truncate text-left">{selectedOutputLabel}</div>
                           </div>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted flex-shrink-0 ml-2">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0 ml-2">
                             <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
                           </svg>
                         </button>
                         {showOutputDeviceList && (
-                          <div className="bg-discord-bg-floating rounded-lg shadow-lg mx-2 mb-2 py-1 border border-discord-bg-tertiary">
+                          <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard">
                             {outputDevices.map(d => (
                               <button
                                 key={d.deviceId}
                                 onClick={() => selectOutput(d)}
-                                className={`w-full px-3 py-2 text-left text-[13px] hover:bg-discord-modifier-hover transition-colors flex items-center gap-2 ${
-                                  outputDeviceId === d.deviceId ? 'text-discord-text-primary' : 'text-discord-text-secondary'
+                                className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
+                                  outputDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
                                 }`}
                               >
                                 {outputDeviceId === d.deviceId && (
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-discord-blurple flex-shrink-0">
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-accent-primary flex-shrink-0">
                                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                                   </svg>
                                 )}
@@ -685,11 +685,11 @@ function UserAreaPanel({
                         )}
                       </div>
           
-                      <div className="mx-4 border-t border-[#2b2d31]" />
+                      <div className="mx-4 border-t border-border-soft" />
           
                       {/* Output Volume */}
                       <div className="px-4 py-3">
-                        <div className="text-[15px] font-semibold text-discord-text-primary mb-2">Output Volume</div>
+                        <div className="text-[15px] font-semibold text-txt-primary mb-2">Output Volume</div>
                         <input
                           type="range"
                           min={0}
@@ -699,21 +699,21 @@ function UserAreaPanel({
                             const vol = Number(e.target.value);
                             storeSetOutputVolume(vol);
                           }}
-                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-discord-bg-tertiary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
+                          className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
                           style={{
-                            background: `linear-gradient(to right, #5865f2 0%, #5865f2 ${outputVolume / 2}%, #4e5058 ${outputVolume / 2}%, #4e5058 100%)`,
+                            background: `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${outputVolume / 2}%, var(--interactive-muted) ${outputVolume / 2}%, var(--interactive-muted) 100%)`,
                           }}
                         />
                       </div>
-          <div className="mx-4 border-t border-[#2b2d31]" />
+          <div className="mx-4 border-t border-border-soft" />
 
           {/* Voice Settings link */}
           <button
             onClick={onSettingsClick}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-discord-modifier-hover transition-colors"
+            className="w-full px-4 py-3 flex items-center justify-between hover:bg-interactive-hover transition-colors"
           >
-            <span className="text-[15px] font-semibold text-discord-text-primary">Voice Settings</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-discord-text-muted">
+            <span className="text-[15px] font-semibold text-txt-primary">Voice Settings</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
             </svg>
           </button>
@@ -723,11 +723,11 @@ function UserAreaPanel({
       {/* User area bar */}
       <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
-        <div className="p-1 hover:bg-discord-modifier-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
+        <div className="p-1 hover:bg-interactive-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
           <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={user.status as any} user={user} />
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-semibold text-discord-text-primary truncate leading-tight">{user.displayName ?? user.username}</div>
-            <div className="text-[11px] text-discord-text-muted truncate leading-tight group-hover:text-discord-text-secondary">@{user.username}</div>
+            <div className="text-[13px] font-semibold text-txt-primary truncate leading-tight">{user.displayName ?? user.username}</div>
+            <div className="text-[11px] text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary">@{user.username}</div>
           </div>
         </div>
 
@@ -736,8 +736,8 @@ function UserAreaPanel({
           {/* Mic */}
           <button
             onClick={onMicToggle}
-            className={`w-8 h-8 flex items-center justify-center hover:bg-discord-modifier-hover rounded-l-[4px] transition-colors ${
-              isMuted ? 'text-discord-red' : 'text-discord-text-muted hover:text-discord-text-primary'
+            className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
+              isMuted ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
@@ -750,8 +750,8 @@ function UserAreaPanel({
           {/* Input chevron */}
           <button
             onClick={() => togglePanel('input')}
-            className={`w-[18px] h-8 flex items-center justify-center hover:bg-discord-modifier-hover rounded-r-[4px] transition-colors ${
-              openPanel === 'input' ? 'text-discord-text-primary bg-discord-modifier-hover' : 'text-discord-text-muted hover:text-discord-text-primary'
+            className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
+              openPanel === 'input' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
             title="Input Devices"
           >
@@ -763,8 +763,8 @@ function UserAreaPanel({
           {/* Headphones */}
           <button
             onClick={onDeafenToggle}
-            className={`w-8 h-8 flex items-center justify-center hover:bg-discord-modifier-hover rounded-l-[4px] transition-colors ${
-              isDeafened ? 'text-discord-red' : 'text-discord-text-muted hover:text-discord-text-primary'
+            className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
+              isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
             title={isDeafened ? 'Undeafen' : 'Deafen'}
           >
@@ -776,8 +776,8 @@ function UserAreaPanel({
           {/* Output chevron */}
           <button
             onClick={() => togglePanel('output')}
-            className={`w-[18px] h-8 flex items-center justify-center hover:bg-discord-modifier-hover rounded-r-[4px] transition-colors ${
-              openPanel === 'output' ? 'text-discord-text-primary bg-discord-modifier-hover' : 'text-discord-text-muted hover:text-discord-text-primary'
+            className={`w-[18px] h-8 flex items-center justify-center hover:bg-interactive-hover rounded-r-[4px] transition-colors ${
+              openPanel === 'output' ? 'text-txt-primary bg-interactive-hover' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
             title="Output Devices"
           >
@@ -789,7 +789,7 @@ function UserAreaPanel({
           {/* Settings */}
           <button
             onClick={onSettingsClick}
-            className="w-8 h-8 flex items-center justify-center text-discord-text-muted hover:text-discord-text-primary hover:bg-discord-modifier-hover rounded-[4px] transition-colors"
+            className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover rounded-[4px] transition-colors"
             title="User Settings"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

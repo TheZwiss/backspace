@@ -31,14 +31,14 @@ function SidebarItem({ name, icon, active, onClick, type = 'server', actionType,
     const base = 'w-12 h-12 flex items-center justify-center transition-all duration-200 overflow-hidden relative group';
     
     if (type === 'dm') {
-      return `${base} ${active ? 'bg-discord-blurple rounded-[16px] text-white' : 'bg-discord-bg-primary rounded-[24px] hover:rounded-[16px] text-discord-text-primary hover:bg-discord-blurple hover:text-white'}`;
-    }
-    
-    if (type === 'action') {
-      return `${base} bg-discord-bg-primary rounded-[24px] hover:rounded-[16px] text-discord-green hover:bg-discord-green hover:text-white`;
+      return `${base} ${active ? 'bg-accent-primary rounded-[16px] text-white' : 'bg-surface-chat rounded-[24px] hover:rounded-[16px] text-txt-primary hover:bg-accent-primary-hover hover:text-white'}`;
     }
 
-    return `${base} ${active ? 'bg-discord-blurple rounded-[16px] text-white' : 'bg-discord-bg-primary rounded-[24px] hover:rounded-[16px] text-discord-text-primary hover:bg-discord-blurple hover:text-white'}`;
+    if (type === 'action') {
+      return `${base} bg-surface-chat rounded-[24px] hover:rounded-[16px] text-status-online hover:bg-status-online hover:text-white`;
+    }
+
+    return `${base} ${active ? 'bg-accent-primary rounded-[16px] text-white' : 'bg-surface-chat rounded-[24px] hover:rounded-[16px] text-txt-primary hover:bg-accent-primary-hover hover:text-white'}`;
   };
 
   return (
@@ -134,7 +134,7 @@ export function ServerSidebar() {
   };
 
   return (
-    <nav className="w-[72px] bg-discord-bg-server flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none">
+    <nav className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip">
       <SidebarItem
         id="@me"
         name="Direct Messages"
@@ -144,7 +144,7 @@ export function ServerSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-discord-modifier-accent rounded-full mb-2" />
+      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-2" />
 
       {servers.map((server) => (
         <SidebarItem

@@ -204,28 +204,28 @@ export function AppLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-discord-bg-primary">
+      <div className="h-screen flex items-center justify-center bg-surface-chat">
         <div className="text-center">
-          <svg className="animate-spin w-10 h-10 text-discord-blurple mx-auto mb-4" viewBox="0 0 24 24" fill="none">
+          <svg className="animate-spin w-10 h-10 text-accent-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-discord-text-muted">Loading Backspace...</p>
+          <p className="text-txt-tertiary">Loading Backspace...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex bg-discord-bg-tertiary overflow-hidden">
+    <div className="h-screen flex flex-col md:grid md:grid-cols-[312px_1fr] bg-surface-base overflow-hidden">
       {/* Server sidebar - always visible on desktop, toggled on mobile */}
-      <div className={`${isMobile ? `fixed z-40 h-full transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}` : 'flex h-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
         <ServerSidebar />
         <ChannelSidebar />
       </div>
 
       {/* Main content area */}
-      <div className="flex-1 flex min-w-0 bg-discord-bg-primary relative">
+      <div className="flex-1 flex min-w-0 bg-surface-chat relative">
         <MainContent />
         <RightPanel />
       </div>
@@ -250,7 +250,7 @@ export function AppLayout() {
       {userProfilePopout.user && userProfilePopout.position && (
         <>
           <div 
-            className="fixed inset-0 z-[45]" 
+            className="fixed inset-0 z-[145]"
             onClick={closeUserProfile}
           />
           <UserProfilePopout 
