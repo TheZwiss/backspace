@@ -26,12 +26,12 @@ import type {
   Friend,
   FriendRequest,
   InstanceStreamingLimits,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 const BASE_URL = '/api';
 
 function getToken(): string | null {
-  return localStorage.getItem('opencord_token');
+  return localStorage.getItem('backspace_token');
 }
 
 async function request<T>(

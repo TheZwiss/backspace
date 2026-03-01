@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { MessageWithUser } from '@opencord/shared';
+import type { MessageWithUser } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Avatar } from '../ui/Avatar';
 import { ContextMenu } from '../ui/ContextMenu';

@@ -1,18 +1,22 @@
-# Opencord
+# Backspace
 
 Open-source, self-hosted Discord alternative built with TypeScript.
 
 ## Features
 
 - Real-time text messaging with WebSocket
-- Servers, channels, and member management
+- Servers, channels, and role-based permission management
 - Voice and video chat via LiveKit
-- Direct messages
+- Screen sharing with configurable quality (VP9)
+- Direct messages (1-on-1 and group DMs up to 10)
+- DM voice/video calls with ringing
+- Friend system with requests
 - File uploads and image sharing
-- Markdown message formatting
-- Typing indicators and presence status
-- Role-based permissions (owner, admin, member)
+- Markdown message formatting with syntax highlighting
+- Message reactions, replies, and editing
+- Typing indicators, presence status, and read states
 - Invite system with shareable codes
+- Instance-level admin panel (streaming limits)
 - Desktop app (Electron)
 - Mobile-responsive web UI
 - Docker deployment
@@ -34,8 +38,8 @@ Open-source, self-hosted Discord alternative built with TypeScript.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/opencord.git
-cd opencord
+git clone https://github.com/your-username/backspace.git
+cd backspace
 
 # Create environment file
 cp .env.example .env
@@ -43,11 +47,11 @@ cp .env.example .env
 # Generate a JWT secret
 echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
 
-# Start Opencord
+# Start Backspace
 docker compose up -d
 ```
 
-Open `http://localhost:3000` in your browser. A default server "Opencord" is created automatically.
+Open `http://localhost:3000` in your browser. A default server "Backspace" is created automatically.
 
 **Default admin account:** `admin` / `admin123` (change this after first login).
 
@@ -78,7 +82,7 @@ cp .env.example .env
 pnpm dev
 
 # Or start individually
-pnpm dev:server    # API server on :3000
+pnpm dev:server    # API server on :3005
 pnpm dev:web       # Vite dev server on :5173
 ```
 
@@ -93,9 +97,9 @@ This builds the shared types, server, and web frontend. The server serves the bu
 ## Project Structure
 
 ```
-Opencord/
+Backspace/
 ├── packages/
-│   ├── shared/       # Shared TypeScript types
+│   ├── shared/       # Shared TypeScript types & permissions
 │   ├── server/       # Fastify API + WebSocket server
 │   ├── web/          # React frontend (Vite + Tailwind)
 │   └── desktop/      # Electron desktop app

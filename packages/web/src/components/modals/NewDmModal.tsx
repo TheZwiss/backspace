@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useServerStore } from '../../stores/serverStore';
 import { api } from '../../api/client';
-import type { User } from '@opencord/shared';
+import type { User } from '@backspace/shared';
 
 export function NewDmModal() {
   const [query, setQuery] = useState('');

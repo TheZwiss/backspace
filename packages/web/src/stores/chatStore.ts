@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { MessageWithUser, Reaction, ReadState } from '@opencord/shared';
+import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
 import { isDmChannel, useServerStore } from './serverStore';

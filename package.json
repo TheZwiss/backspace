@@ -1,16 +1,16 @@
 {
-  "name": "opencord",
+  "name": "backspace",
   "version": "1.0.0",
   "private": true,
   "description": "Open-source, self-hosted Discord alternative",
   "scripts": {
-    "dev:server": "pnpm --filter @opencord/server dev",
-    "dev:web": "pnpm --filter @opencord/web dev",
-    "dev": "pnpm --filter @opencord/server dev & pnpm --filter @opencord/web dev",
-    "build:shared": "pnpm --filter @opencord/shared build",
-    "build:server": "pnpm --filter @opencord/server build",
-    "build:web": "pnpm --filter @opencord/web build",
-    "build": "pnpm --filter @opencord/shared build && pnpm --filter @opencord/server build & pnpm --filter @opencord/web build"
+    "dev:server": "pnpm --filter @backspace/server dev",
+    "dev:web": "pnpm --filter @backspace/web dev",
+    "dev": "pnpm --filter @backspace/server dev & pnpm --filter @backspace/web dev",
+    "build:shared": "pnpm --filter @backspace/shared build",
+    "build:server": "pnpm --filter @backspace/server build",
+    "build:web": "pnpm --filter @backspace/web build",
+    "build": "pnpm --filter @backspace/shared build && pnpm --filter @backspace/server build & pnpm --filter @backspace/web build"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]

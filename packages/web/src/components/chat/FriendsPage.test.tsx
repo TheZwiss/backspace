@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { FriendsPage } from './FriendsPage';
 import { useSocialStore } from '../../stores/socialStore';
 import { useServerStore } from '../../stores/serverStore';
-import type { Friend, FriendRequest } from '@opencord/shared';
+import type { Friend, FriendRequest } from '@backspace/shared';
 
 // Mock the api module
 vi.mock('../../api/client', () => ({

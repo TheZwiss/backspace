@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User } from '@opencord/shared';
+import type { User } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 
 interface AvatarProps {

@@ -6,7 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { api } from '../../api/client';
-import type { Friend, FriendRequest } from '@opencord/shared';
+import type { Friend, FriendRequest } from '@backspace/shared';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
@@ -143,7 +143,7 @@ export function FriendsPage() {
         return (
           <div className="flex-1 p-8">
             <h2 className="text-base font-bold text-discord-text-primary uppercase mb-2">Add Friend</h2>
-            <p className="text-sm text-discord-text-muted mb-4">You can add friends with their Opencord username.</p>
+            <p className="text-sm text-discord-text-muted mb-4">You can add friends with their Backspace username.</p>
             <form onSubmit={handleAddFriend} className="relative mb-8">
               <input
                 type="text"

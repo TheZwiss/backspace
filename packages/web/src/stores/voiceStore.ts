@@ -323,7 +323,7 @@ export const useVoiceStore = create<VoiceState>()(
       }),
     }),
     {
-      name: 'opencord-voice-settings',
+      name: 'backspace-voice-settings',
       version: 6,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {

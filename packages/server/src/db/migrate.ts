@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits, ALL_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 
 export function runMigrations(db: Database.Database): void {
   console.log('Checking for database migrations...');
@@ -137,9 +137,12 @@ function migrateEveryoneRoles(db: Database.Database): void {
   }
 
   // Migrate existing admin members: ensure an Admin role exists and assign it
-  const adminMembers = db.prepare(
-    "SELECT server_id, user_id FROM server_members WHERE role = 'admin'"
-  ).all() as { server_id: string; user_id: string }[];
+  // Only run if the old `role` column still exists on server_members
+  const smColumns = db.pragma('table_info(server_members)') as { name: string }[];
+  const hasRoleColumn = smColumns.some(c => c.name === 'role');
+  const adminMembers = hasRoleColumn
+    ? db.prepare("SELECT server_id, user_id FROM server_members WHERE role = 'admin'").all() as { server_id: string; user_id: string }[]
+    : [];
 
   if (adminMembers.length > 0) {
     // Group by server

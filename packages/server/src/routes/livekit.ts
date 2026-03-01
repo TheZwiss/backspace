@@ -3,7 +3,7 @@ import { AccessToken } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
 import { getChannelServerId, hasPermission, isDmMember, PermissionBits } from '../utils/permissions.js';
-import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@opencord/shared';
+import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@backspace/shared';
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: LiveKitTokenRequest & { dmChannelId?: string } }>('/api/livekit/token', {

@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
-import type { RegisterRequest, LoginRequest, AuthResponse, User } from '@opencord/shared';
+import type { RegisterRequest, LoginRequest, AuthResponse, User } from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

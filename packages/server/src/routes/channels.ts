@@ -4,13 +4,13 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelServerId, PermissionBits, computePermissions } from '../utils/permissions.js';
-import { permissionsToString } from '@opencord/shared/src/permissions.js';
+import { permissionsToString } from '@backspace/shared/src/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
   Channel,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
   return {

@@ -4,7 +4,7 @@ import { isDmChannel, useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 import { MentionPopover } from './MentionPopover';
-import type { MemberWithUser } from '@opencord/shared';
+import type { MemberWithUser } from '@backspace/shared';
 
 interface MessageInputProps {
   channelId: string;

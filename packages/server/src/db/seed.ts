@@ -2,7 +2,7 @@ import { getDb, schema } from './index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { hashPassword } from '../utils/auth.js';
 import { eq } from 'drizzle-orm';
-import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 
 export async function seedDatabase(): Promise<void> {
   const db = getDb();
@@ -31,9 +31,9 @@ export async function seedDatabase(): Promise<void> {
   const serverId = generateSnowflake();
   db.insert(schema.servers).values({
     id: serverId,
-    name: 'Opencord',
+    name: 'Backspace',
     ownerId: adminId,
-    inviteCode: 'opencord',
+    inviteCode: 'backspace',
     createdAt: Date.now(),
   }).run();
 
@@ -76,6 +76,6 @@ export async function seedDatabase(): Promise<void> {
   }).run();
 
   console.log('Database seeded successfully');
-  console.log(`  Default server: Opencord (invite code: opencord)`);
+  console.log(`  Default server: Backspace (invite code: backspace)`);
   console.log(`  Admin user: admin / admin123`);
 }

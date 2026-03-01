@@ -5,7 +5,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@opencord/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
 
 let globalWs: WebSocket | null = null;
 let reconnectAttempts = 0;

@@ -5,7 +5,7 @@ import {
   ALL_PERMISSIONS,
   stringToPermissions,
   permissionsToString,
-} from '@opencord/shared/src/permissions.js';
+} from '@backspace/shared/src/permissions.js';
 
 // Re-export for convenience
 export { PermissionBits, ALL_PERMISSIONS, permissionsToString, stringToPermissions };

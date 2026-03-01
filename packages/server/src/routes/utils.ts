@@ -15,7 +15,7 @@ export async function utilRoutes(app: FastifyInstance): Promise<void> {
     try {
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'OpencordBot/1.0',
+          'User-Agent': 'BackspaceBot/1.0',
         },
       });
 

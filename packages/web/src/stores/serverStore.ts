@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@opencord/shared';
+import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@backspace/shared';
 import { api } from '../api/client';
 
 interface ServerState {

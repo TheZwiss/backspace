@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits } from '@opencord/shared';
+import type { InstanceStreamingLimits } from '@backspace/shared';
 import { api } from '../api/client';
 
 interface SettingsState {

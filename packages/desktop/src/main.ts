@@ -14,7 +14,7 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
 
-const SERVER_URL = process.env.OPENCORD_URL || 'http://localhost:3000';
+const SERVER_URL = process.env.BACKSPACE_URL || 'http://localhost:3000';
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -22,7 +22,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 940,
     minHeight: 500,
-    title: 'Opencord',
+    title: 'Backspace',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#313338',
     show: false,
@@ -61,7 +61,7 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  // Create a 16x16 tray icon (blue circle for Opencord)
+  // Create a 16x16 tray icon (blue circle for Backspace)
   const size = 16;
   const canvas = Buffer.alloc(size * size * 4);
   const cx = size / 2;
@@ -89,7 +89,7 @@ function createTray(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show Opencord',
+      label: 'Show Backspace',
       click: () => {
         mainWindow?.show();
         mainWindow?.focus();
@@ -111,7 +111,7 @@ function createTray(): void {
     },
   ]);
 
-  tray.setToolTip('Opencord');
+  tray.setToolTip('Backspace');
   tray.setContextMenu(contextMenu);
 
   tray.on('click', () => {

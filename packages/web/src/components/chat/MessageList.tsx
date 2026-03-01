@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
-import type { MessageWithUser } from '@opencord/shared';
+import type { MessageWithUser } from '@backspace/shared';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
 

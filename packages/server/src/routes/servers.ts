@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isServerOwner, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
-import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@opencord/shared/src/permissions.js';
+import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import type {
@@ -18,7 +18,7 @@ import type {
   MemberWithUser,
   ServerWithChannelsAndMembers,
   Role,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

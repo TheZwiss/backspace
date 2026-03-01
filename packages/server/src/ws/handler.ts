@@ -15,7 +15,7 @@ import type {
   ServerFolder,
   ReadState,
   ActiveCallInfo,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 // SQLite's SQLITE_MAX_VARIABLE_NUMBER default is 999.
 // Chunk inArray() calls to stay safely under this limit.

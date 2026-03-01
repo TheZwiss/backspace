@@ -8,7 +8,7 @@ import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { InstanceStreamingLimits } from '@opencord/shared';
+import type { InstanceStreamingLimits } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080] as const;
 const VALID_FRAMERATES = [30, 45, 60] as const;

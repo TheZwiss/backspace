@@ -5,7 +5,7 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
 import { isMember, getChannelServerId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@opencord/shared';
+import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

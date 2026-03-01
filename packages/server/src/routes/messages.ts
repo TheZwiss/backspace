@@ -12,7 +12,7 @@ import type {
   User,
   MessageWithUser,
   Reaction,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

@@ -49,7 +49,7 @@ function AudioTrackElement({
   // The <audio> element is always muted — it serves only as a Chrome
   // keep-alive so Chrome continues processing the WebRTC track.
   // Real audio output goes through the Web Audio pipeline.
-  return <audio ref={audioRef} autoPlay playsInline data-opencord="keepalive" />;
+  return <audio ref={audioRef} autoPlay playsInline data-backspace="keepalive" />;
 }
 
 /**

@@ -10,7 +10,7 @@ import type {
   FriendRequest,
   SendFriendRequest,
   UpdateFriendRequest,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

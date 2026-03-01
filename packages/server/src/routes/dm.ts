@@ -16,7 +16,7 @@ import type {
   PaginatedQuery,
   Attachment,
   Reaction,
-} from '@opencord/shared';
+} from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

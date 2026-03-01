@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User } from '@opencord/shared';
+import type { User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useChatStore } from './chatStore';
 import { useServerStore } from './serverStore';
@@ -21,7 +21,7 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  token: localStorage.getItem('opencord_token'),
+  token: localStorage.getItem('backspace_token'),
   user: null,
   isLoading: false,
   error: null,
@@ -30,7 +30,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.login({ username, password });
-      localStorage.setItem('opencord_token', response.token);
+      localStorage.setItem('backspace_token', response.token);
       set({ token: response.token, user: response.user, isLoading: false });
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.register({ username, password, displayName });
-      localStorage.setItem('opencord_token', response.token);
+      localStorage.setItem('backspace_token', response.token);
       set({ token: response.token, user: response.user, isLoading: false });
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Registration failed' });
@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('opencord_token');
+    localStorage.removeItem('backspace_token');
     // Clear all user-scoped state to prevent data leaking between sessions
     useChatStore.getState().clearAllMessages();
     useServerStore.getState().populateFromReady([], [], []);
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await api.users.me();
       set({ user, isLoading: false });
     } catch {
-      localStorage.removeItem('opencord_token');
+      localStorage.removeItem('backspace_token');
       set({ token: null, user: null, isLoading: false });
     }
   },

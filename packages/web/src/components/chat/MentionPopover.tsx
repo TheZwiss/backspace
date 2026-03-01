@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect } from 'react';
-import type { MemberWithUser } from '@opencord/shared';
+import type { MemberWithUser } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { useServerStore } from '../../stores/serverStore';
 

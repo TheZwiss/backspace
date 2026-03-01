@@ -8,4 +8,4 @@ export {
   hasPermissionBit,
   permissionsToString,
   stringToPermissions,
-} from '@opencord/shared/src/permissions';
+} from '@backspace/shared/src/permissions';

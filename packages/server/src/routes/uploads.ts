@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
-import type { Attachment } from '@opencord/shared';
+import type { Attachment } from '@backspace/shared';
 
 export async function uploadRoutes(app: FastifyInstance): Promise<void> {
   // Ensure upload directory exists

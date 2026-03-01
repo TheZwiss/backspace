@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { User } from '@opencord/shared';
+import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
@@ -60,7 +60,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
           <div className="w-full h-[1px] bg-discord-modifier-accent mb-3" />
           
           <div className="mb-3">
-            <div className="text-[12px] font-bold text-discord-text-header uppercase mb-1">Opencord Member Since</div>
+            <div className="text-[12px] font-bold text-discord-text-header uppercase mb-1">Backspace Member Since</div>
             <div className="text-[12px] text-discord-text-normal font-medium">
               {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
             </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useSocialStore } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
-import type { Friend } from '@opencord/shared';
+import type { Friend } from '@backspace/shared';
 
 export function ActivityPanel() {
   const friends = useSocialStore((s) => s.friends);

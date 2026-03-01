@@ -22,7 +22,7 @@ export function Embed({ url }: EmbedProps) {
     // Simple fetch from our new API
     fetch(`/api/utils/metadata?url=${encodeURIComponent(url)}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('opencord_token')}`
+        'Authorization': `Bearer ${localStorage.getItem('backspace_token')}`
       }
     })
       .then(res => res.json())

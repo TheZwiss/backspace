@@ -1,5 +1,5 @@
-appId: com.opencord.desktop
-productName: Opencord
+appId: com.backspace.desktop
+productName: Backspace
 directories:
   output: dist-electron
 files:

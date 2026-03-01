@@ -47,7 +47,7 @@ export const config = {
   },
 
   uploadDir: env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')),
-  dbPath: env('DB_PATH', resolve(__dirname, '../../../data/opencord.db')),
+  dbPath: env('DB_PATH', resolve(__dirname, '../../../data/backspace.db')),
   maxUploadSize: envInt('MAX_UPLOAD_SIZE', 104857600),
   registrationOpen: envBool('REGISTRATION_OPEN', true),
 } as const;

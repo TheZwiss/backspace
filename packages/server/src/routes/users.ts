@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { User, UpdateUserRequest } from '@opencord/shared';
+import type { User, UpdateUserRequest } from '@backspace/shared';
 
 function sanitizeUser(row: typeof schema.users.$inferSelect): User {
   return {

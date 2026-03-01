@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { User } from '@opencord/shared';
+import type { User } from '@backspace/shared';
 
 type ModalType =
   | 'createServer'
@@ -100,7 +100,7 @@ export const useUIStore = create<UIState>()(
       setPipCollapsed: (collapsed) => set({ pipCollapsed: collapsed }),
     }),
     {
-      name: 'opencord-ui-settings',
+      name: 'backspace-ui-settings',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         memberListOpen: state.memberListOpen,

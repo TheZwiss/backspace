@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
-import type { InstanceStreamingLimits } from '@opencord/shared';
+import type { InstanceStreamingLimits } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080];
 const VALID_FRAMERATES = [30, 45, 60];
