@@ -58,7 +58,7 @@ export function UserSettingsModal() {
     <Modal isOpen={isOpen} onClose={closeModal} title="User Settings" maxWidth="max-w-lg">
       <div className="space-y-6">
         {/* Profile preview */}
-        <div className="flex items-center gap-4 p-4 bg-discord-bg-secondary rounded-lg">
+        <div className="flex items-center gap-4 p-4 bg-surface-channel rounded-lg">
           <Avatar
             src={user.avatar}
             name={user.displayName ?? user.username}
@@ -67,28 +67,28 @@ export function UserSettingsModal() {
           />
           <div>
             <div className="font-bold text-lg">{user.displayName ?? user.username}</div>
-            <div className="text-discord-text-muted text-sm">@{user.username}</div>
+            <div className="text-txt-tertiary text-sm">@{user.username}</div>
             {user.customStatus && (
-              <div className="text-discord-text-secondary text-sm mt-1">{user.customStatus}</div>
+              <div className="text-txt-secondary text-sm mt-1">{user.customStatus}</div>
             )}
           </div>
         </div>
 
         {error && (
-          <div className="p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{error}</div>
+          <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
         )}
         {success && (
-          <div className="p-2 bg-discord-green/10 border border-discord-green/30 rounded text-discord-text-positive text-sm">{success}</div>
+          <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">{success}</div>
         )}
 
         <div>
-          <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+          <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
             Status
           </label>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as any)}
-            className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple appearance-none"
+            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary appearance-none"
           >
             <option value="online">Online</option>
             <option value="idle">Idle</option>
@@ -97,44 +97,44 @@ export function UserSettingsModal() {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+          <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
             Display Name
           </label>
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
+            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+          <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
             Custom Status
           </label>
           <input
             type="text"
             value={customStatus}
             onChange={(e) => setCustomStatus(e.target.value)}
-            className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
+            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
             placeholder="What are you up to?"
           />
         </div>
 
         {/* Voice Processing */}
         <div className="border-t border-white/[0.06] pt-4">
-          <h3 className="text-xs font-bold text-discord-text-secondary uppercase mb-3">
+          <h3 className="text-xs font-bold text-txt-secondary uppercase mb-3">
             Voice Processing
           </h3>
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-discord-text-primary">AI Noise Suppression</div>
-              <div className="text-xs text-discord-text-muted">ML-based noise removal (RNNoise) — filters keyboard, fans, and background noise</div>
+              <div className="text-sm text-txt-primary">AI Noise Suppression</div>
+              <div className="text-xs text-txt-tertiary">ML-based noise removal (RNNoise) — filters keyboard, fans, and background noise</div>
             </div>
             <button
               onClick={() => setRnnoiseEnabled(!rnnoiseEnabled)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${rnnoiseEnabled ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${rnnoiseEnabled ? 'bg-status-online' : 'bg-surface-input'}`}
             >
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${rnnoiseEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
@@ -142,12 +142,12 @@ export function UserSettingsModal() {
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-discord-text-primary">Echo Cancellation</div>
-              <div className="text-xs text-discord-text-muted">Removes echo when using speakers (auto-disabled during screen share)</div>
+              <div className="text-sm text-txt-primary">Echo Cancellation</div>
+              <div className="text-xs text-txt-tertiary">Removes echo when using speakers (auto-disabled during screen share)</div>
             </div>
             <button
               onClick={() => setEchoCancellation(!echoCancellation)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${echoCancellation ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${echoCancellation ? 'bg-status-online' : 'bg-surface-input'}`}
             >
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${echoCancellation ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
@@ -155,12 +155,12 @@ export function UserSettingsModal() {
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="text-sm text-discord-text-primary">Auto Gain Control</div>
-              <div className="text-xs text-discord-text-muted">Auto-adjusts mic volume — can cause voice ducking during streams</div>
+              <div className="text-sm text-txt-primary">Auto Gain Control</div>
+              <div className="text-xs text-txt-tertiary">Auto-adjusts mic volume — can cause voice ducking during streams</div>
             </div>
             <button
               onClick={() => setAutoGainControl(!autoGainControl)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${autoGainControl ? 'bg-discord-green' : 'bg-discord-bg-tertiary'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${autoGainControl ? 'bg-status-online' : 'bg-surface-input'}`}
             >
               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${autoGainControl ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
@@ -170,14 +170,14 @@ export function UserSettingsModal() {
         <div className="flex items-center justify-between pt-2">
           <button
             onClick={handleLogout}
-            className="px-4 py-2 text-sm text-discord-red hover:bg-discord-red/10 rounded transition-colors"
+            className="px-4 py-2 text-sm text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
           >
             Log Out
           </button>
           <button
             onClick={handleSave}
             disabled={isLoading}
-            className="px-4 py-2 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
           >
             {isLoading ? 'Saving...' : 'Save Changes'}
           </button>

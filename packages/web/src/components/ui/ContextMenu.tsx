@@ -62,7 +62,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
       {isOpen && (
         <div
           ref={menuRef}
-          className="fixed z-50 min-w-[180px] py-1.5 bg-discord-bg-floating rounded-md shadow-elevation-high animate-fade-in"
+          className="fixed z-[200] min-w-[180px] py-1.5 bg-surface-elevated rounded-md shadow-elevation-high animate-fade-in"
           style={{ left: position.x, top: position.y }}
         >
           {items.map((item, i) => (
@@ -70,8 +70,8 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
               key={i}
               className={`w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 ${
                 item.danger
-                  ? 'text-discord-red hover:bg-discord-red hover:text-white'
-                  : 'text-discord-text-secondary hover:bg-discord-blurple hover:text-white'
+                  ? 'text-txt-danger hover:bg-accent-rose hover:text-white'
+                  : 'text-txt-secondary hover:bg-accent-primary hover:text-white'
               }`}
               style={{ width: 'calc(100% - 12px)' }}
               onClick={(e) => {

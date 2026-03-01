@@ -51,11 +51,11 @@ export function InviteModal() {
 
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title="Invite Friends">
-      <p className="text-discord-text-secondary text-sm mb-4">
+      <p className="text-txt-secondary text-sm mb-4">
         Share this invite link with friends to let them join your server.
       </p>
       {error && (
-        <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">
+        <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
           {error}
         </div>
       )}
@@ -64,15 +64,15 @@ export function InviteModal() {
           type="text"
           value={isLoading ? 'Generating...' : inviteUrl}
           readOnly
-          className="invite-code-input flex-1 px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none font-mono text-xs"
+          className="invite-code-input flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary outline-none font-mono text-xs"
         />
         <button
           onClick={handleCopy}
           disabled={isLoading || !inviteUrl}
           className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
             copied
-              ? 'bg-discord-green text-white'
-              : 'bg-discord-blurple hover:bg-discord-blurple-hover text-white'
+              ? 'bg-status-online text-white'
+              : 'bg-accent-primary hover:bg-accent-primary/80 text-white'
           }`}
         >
           {copied ? 'Copied!' : 'Copy'}

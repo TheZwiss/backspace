@@ -78,34 +78,34 @@ export function NewDmModal() {
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           placeholder="Search for a user..."
-          className="w-full px-3 py-2 bg-discord-bg-tertiary text-discord-text-primary placeholder-discord-text-muted/60 rounded-[4px] text-[14px] outline-none focus:ring-1 focus:ring-discord-blurple"
+          className="w-full px-3 py-2 bg-surface-input text-txt-primary placeholder-txt-tertiary/60 rounded-[4px] text-[14px] outline-none focus:ring-1 focus:ring-accent-primary"
         />
 
         {error && (
-          <p className="text-discord-red text-[13px]">{error}</p>
+          <p className="text-txt-danger text-[13px]">{error}</p>
         )}
 
         <div className="max-h-[300px] overflow-y-auto space-y-[2px]">
           {isSearching && (
-            <div className="py-4 text-center text-discord-text-muted text-[14px]">Searching...</div>
+            <div className="py-4 text-center text-txt-tertiary text-[14px]">Searching...</div>
           )}
 
           {!isSearching && query.trim().length >= 2 && results.length === 0 && (
-            <div className="py-4 text-center text-discord-text-muted text-[14px]">No users found</div>
+            <div className="py-4 text-center text-txt-tertiary text-[14px]">No users found</div>
           )}
 
           {results.map((user) => (
             <button
               key={user.id}
               onClick={() => handleSelectUser(user)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-[4px] hover:bg-discord-modifier-hover transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-[4px] hover:bg-interactive-hover transition-colors text-left"
             >
               <Avatar src={user.avatar} name={user.displayName ?? user.username} size={36} status={user.status as any} />
               <div className="flex-1 min-w-0">
-                <div className="text-[14px] font-medium text-discord-text-primary truncate">
+                <div className="text-[14px] font-medium text-txt-primary truncate">
                   {user.displayName ?? user.username}
                 </div>
-                <div className="text-[12px] text-discord-text-muted truncate">@{user.username}</div>
+                <div className="text-[12px] text-txt-tertiary truncate">@{user.username}</div>
               </div>
             </button>
           ))}

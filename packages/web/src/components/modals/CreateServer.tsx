@@ -41,19 +41,19 @@ export function CreateServerModal() {
     <Modal isOpen={isOpen} onClose={closeModal} title="Create a Server">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">
+          <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
             {error}
           </div>
         )}
         <div className="mb-4">
-          <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+          <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
             Server Name
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
+            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
             placeholder="My Awesome Server"
             autoFocus
           />
@@ -62,14 +62,14 @@ export function CreateServerModal() {
           <button
             type="button"
             onClick={closeModal}
-            className="px-4 py-2 text-sm text-discord-text-secondary hover:text-discord-text-primary transition-colors"
+            className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isLoading}
-            className="px-4 py-2 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
           >
             {isLoading ? 'Creating...' : 'Create'}
           </button>

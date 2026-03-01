@@ -31,15 +31,15 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
   
   return (
     <div 
-      className="fixed z-50 w-[300px] bg-discord-bg-floating rounded-[8px] shadow-elevation-high overflow-hidden animate-fade-in select-none"
+      className="fixed z-[200] w-[300px] bg-surface-elevated rounded-[8px] shadow-elevation-high overflow-hidden animate-fade-in select-none"
       style={position ? { top: position.top, left: position.left } : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
     >
       {/* Banner */}
-      <div className="h-[60px] bg-discord-blurple" />
+      <div className="h-[60px] bg-accent-primary" />
       
       {/* Avatar Container */}
       <div className="px-4 pb-4 relative">
-        <div className="absolute -top-8 left-4 rounded-full border-[6px] border-discord-bg-floating bg-discord-bg-floating">
+        <div className="absolute -top-8 left-4 rounded-full border-[6px] border-surface-elevated bg-surface-elevated">
           <Avatar 
             src={user.avatar} 
             name={displayName} 
@@ -49,27 +49,27 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
         </div>
         
         {/* Content */}
-        <div className="mt-12 bg-discord-bg-tertiary rounded-[8px] p-3">
-          <div className="text-[20px] font-bold text-discord-text-header leading-tight mb-1">
+        <div className="mt-12 bg-surface-input rounded-[8px] p-3">
+          <div className="text-[20px] font-bold text-txt-primary leading-tight mb-1">
             {displayName}
           </div>
-          <div className="text-[14px] text-discord-text-normal font-medium mb-3">
+          <div className="text-[14px] text-txt-secondary font-medium mb-3">
             @{user.username}
           </div>
-          
-          <div className="w-full h-[1px] bg-discord-modifier-accent mb-3" />
-          
+
+          <div className="w-full h-[1px] bg-border-soft mb-3" />
+
           <div className="mb-3">
-            <div className="text-[12px] font-bold text-discord-text-header uppercase mb-1">Backspace Member Since</div>
-            <div className="text-[12px] text-discord-text-normal font-medium">
+            <div className="text-[12px] font-bold text-txt-primary uppercase mb-1">Backspace Member Since</div>
+            <div className="text-[12px] text-txt-secondary font-medium">
               {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
             </div>
           </div>
 
           {user.customStatus && (
             <div className="mb-3">
-              <div className="text-[12px] font-bold text-discord-text-header uppercase mb-1">Status</div>
-              <div className="text-[14px] text-discord-text-normal">{user.customStatus}</div>
+              <div className="text-[12px] font-bold text-txt-primary uppercase mb-1">Status</div>
+              <div className="text-[14px] text-txt-secondary">{user.customStatus}</div>
             </div>
           )}
         </div>
@@ -79,7 +79,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       <div className="px-4 pb-4">
         <button 
           onClick={handleSendMessage}
-          className="w-full py-2 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-[14px] font-medium rounded-[4px] transition-colors"
+          className="w-full py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-[14px] font-medium rounded-[4px] transition-colors"
         >
           Send Message
         </button>

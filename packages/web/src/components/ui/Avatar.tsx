@@ -13,10 +13,10 @@ interface AvatarProps {
 }
 
 const statusColors: Record<string, string> = {
-  online: 'bg-discord-green',
-  idle: 'bg-discord-yellow',
-  dnd: 'bg-discord-red',
-  offline: 'bg-discord-text-muted',
+  online: 'bg-status-online',
+  idle: 'bg-status-idle',
+  dnd: 'bg-status-dnd',
+  offline: 'bg-status-offline',
 };
 
 export function Avatar({ src, name, size = 40, status, className = '', onClick, user }: AvatarProps) {
@@ -59,14 +59,14 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
         />
       ) : null}
       <div
-        className={`avatar-fallback w-full h-full rounded-full bg-discord-blurple flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`}
+        className={`avatar-fallback w-full h-full rounded-full bg-accent-primary flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`}
         style={src ? { display: 'none' } : undefined}
       >
         {initials}
       </div>
       {status && (
         <div
-          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-discord-bg-secondary ${statusColors[status] ?? 'bg-discord-text-muted'}`}
+          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-surface-channel ${statusColors[status] ?? 'bg-status-offline'}`}
           style={{
             width: size * 0.35,
             height: size * 0.35,

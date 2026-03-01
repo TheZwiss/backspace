@@ -32,7 +32,7 @@ function StreamingLimitsPanel() {
     if (limits) setDraft({ ...limits });
   }, [limits]);
 
-  if (!draft) return <div className="text-sm text-discord-text-muted">Loading settings...</div>;
+  if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
 
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(limits);
 
@@ -79,23 +79,23 @@ function StreamingLimitsPanel() {
   };
 
   const pillBase = 'px-3 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer select-none';
-  const pillOn = 'bg-discord-blurple text-white';
-  const pillOff = 'bg-[#2b2d31] text-discord-text-secondary hover:bg-[#35373c]';
+  const pillOn = 'bg-accent-primary text-white';
+  const pillOff = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-discord-text-muted">
+      <div className="text-xs text-txt-tertiary">
         These limits apply to all users on this instance. Users can pick values within these bounds.
       </div>
 
       {/* Bitrate Range */}
       <div>
-        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-2">
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
           Bitrate Range
         </div>
         <div className="flex items-center gap-3">
           <div className="flex-1">
-            <label className="text-[11px] text-discord-text-muted mb-1 block">Min</label>
+            <label className="text-[11px] text-txt-tertiary mb-1 block">Min</label>
             <input
               type="range"
               min={100}
@@ -103,15 +103,15 @@ function StreamingLimitsPanel() {
               step={100}
               value={draft.minBitrateKbps}
               onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
-              className="w-full h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+              className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
                 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
             />
-            <div className="text-[11px] text-discord-text-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
+            <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
           </div>
           <div className="flex-1">
-            <label className="text-[11px] text-discord-text-muted mb-1 block">Max</label>
+            <label className="text-[11px] text-txt-tertiary mb-1 block">Max</label>
             <input
               type="range"
               min={draft.minBitrateKbps + 500}
@@ -119,19 +119,19 @@ function StreamingLimitsPanel() {
               step={500}
               value={draft.maxBitrateKbps}
               onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
-              className="w-full h-1.5 accent-discord-blurple cursor-pointer appearance-none bg-[#4e5058] rounded-full
+              className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
                 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
                 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
             />
-            <div className="text-[11px] text-discord-text-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
+            <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
           </div>
         </div>
       </div>
 
       {/* Bitrate Step */}
       <div>
-        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           Slider Step
         </div>
         <div className="flex items-center gap-2">
@@ -145,15 +145,15 @@ function StreamingLimitsPanel() {
               const v = Number(e.target.value);
               if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
             }}
-            className="w-24 px-2 py-1 bg-discord-bg-tertiary rounded text-sm text-discord-text-primary outline-none focus:ring-1 focus:ring-discord-blurple"
+            className="w-24 px-2 py-1 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary"
           />
-          <span className="text-[12px] text-discord-text-muted">kbps</span>
+          <span className="text-[12px] text-txt-tertiary">kbps</span>
         </div>
       </div>
 
       {/* Allowed Resolutions */}
       <div>
-        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           Allowed Resolutions
         </div>
         <div className="flex gap-1.5">
@@ -171,7 +171,7 @@ function StreamingLimitsPanel() {
 
       {/* Allowed Frame Rates */}
       <div>
-        <div className="text-[11px] text-discord-text-muted font-semibold uppercase tracking-wider mb-1.5">
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
           Allowed Frame Rates
         </div>
         <div className="flex gap-1.5">
@@ -189,23 +189,23 @@ function StreamingLimitsPanel() {
 
       {/* Save / Reset */}
       {saveError && (
-        <div className="p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{saveError}</div>
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
       )}
       {saveSuccess && (
-        <div className="p-2 bg-green-500/10 border border-green-500/30 rounded text-green-400 text-sm">Settings saved</div>
+        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
       )}
       {hasChanges && (
         <div className="flex items-center gap-2">
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-1.5 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button
             onClick={handleReset}
-            className="px-4 py-1.5 text-sm text-discord-text-muted hover:text-discord-text-secondary transition-colors"
+            className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
           >
             Reset
           </button>
@@ -341,7 +341,7 @@ export function ServerSettingsModal() {
           <button
             onClick={() => setTab('overview')}
             className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-              tab === 'overview' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+              tab === 'overview' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
             }`}
           >
             Overview
@@ -349,7 +349,7 @@ export function ServerSettingsModal() {
           <button
             onClick={() => setTab('members')}
             className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-              tab === 'members' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+              tab === 'members' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
             }`}
           >
             Members
@@ -358,7 +358,7 @@ export function ServerSettingsModal() {
             <button
               onClick={() => setTab('streaming')}
               className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                tab === 'streaming' ? 'bg-discord-bg-active text-discord-text-primary' : 'text-discord-text-muted hover:text-discord-text-secondary hover:bg-discord-bg-hover'
+                tab === 'streaming' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
               }`}
             >
               Streaming
@@ -369,20 +369,20 @@ export function ServerSettingsModal() {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {error && (
-            <div className="mb-3 p-2 bg-discord-red/10 border border-discord-red/30 rounded text-discord-text-danger text-sm">{error}</div>
+            <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
           )}
 
           {tab === 'overview' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-discord-text-secondary uppercase mb-2">
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
                   Server Name
                 </label>
                 <input
                   type="text"
                   value={serverName}
                   onChange={(e) => setServerName(e.target.value)}
-                  className="w-full px-3 py-2 bg-discord-bg-tertiary rounded text-discord-text-primary outline-none focus:ring-2 focus:ring-discord-blurple"
+                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
                   disabled={!canManageServer}
                 />
               </div>
@@ -392,16 +392,16 @@ export function ServerSettingsModal() {
                   <button
                     onClick={handleSave}
                     disabled={isLoading}
-                    className="px-4 py-2 bg-discord-blurple hover:bg-discord-blurple-hover text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
                   >
                     {isLoading ? 'Saving...' : 'Save Changes'}
                   </button>
 
-                  <div className="pt-4 border-t border-discord-bg-tertiary">
-                    <h3 className="text-sm font-bold text-discord-red mb-2">Danger Zone</h3>
+                  <div className="pt-4 border-t border-border-soft">
+                    <h3 className="text-sm font-bold text-txt-danger mb-2">Danger Zone</h3>
                     <button
                       onClick={handleDelete}
-                      className="px-4 py-2 bg-discord-red hover:bg-discord-red-hover text-white text-sm font-medium rounded transition-colors"
+                      className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
                     >
                       {confirmDelete ? 'Click again to confirm deletion' : 'Delete Server'}
                     </button>
@@ -420,7 +420,7 @@ export function ServerSettingsModal() {
                 const hasPendingChanges = pendingRoleChanges.has(member.userId);
 
                 return (
-                  <div key={member.userId} className="p-2 rounded hover:bg-discord-bg-hover">
+                  <div key={member.userId} className="p-2 rounded hover:bg-interactive-hover">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Avatar
@@ -433,7 +433,7 @@ export function ServerSettingsModal() {
                           <div className="text-sm font-medium">{displayName}</div>
                           <div className="flex items-center gap-1 flex-wrap">
                             {isOwner && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-discord-red/20 text-discord-red font-medium">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
                                 Owner
                               </span>
                             )}
@@ -447,7 +447,7 @@ export function ServerSettingsModal() {
                               </span>
                             ))}
                             {!isOwner && (!member.roles || member.roles.filter(r => r.id !== currentServerId).length === 0) && (
-                              <span className="text-[10px] text-discord-text-muted">No roles</span>
+                              <span className="text-[10px] text-txt-tertiary">No roles</span>
                             )}
                           </div>
                         </div>
@@ -457,7 +457,7 @@ export function ServerSettingsModal() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleKick(member.userId)}
-                            className="px-2 py-1 text-xs text-discord-red hover:bg-discord-red/10 rounded transition-colors"
+                            className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
                           >
                             Kick
                           </button>
@@ -474,11 +474,11 @@ export function ServerSettingsModal() {
                               type="checkbox"
                               checked={memberRoleIds.has(role.id)}
                               onChange={() => handleRoleToggle(member.userId, role.id, memberRoleIds)}
-                              className="w-3.5 h-3.5 rounded border-discord-text-muted accent-discord-blurple"
+                              className="w-3.5 h-3.5 rounded border-txt-tertiary accent-accent-primary"
                             />
                             <span
                               className="text-xs font-medium"
-                              style={{ color: role.color !== '#b9bbbe' ? role.color : undefined }}
+                              style={{ color: role.color !== '#9ca3af' ? role.color : undefined }}
                             >
                               {role.name}
                             </span>
@@ -488,13 +488,13 @@ export function ServerSettingsModal() {
                           <div className="flex items-center gap-2 mt-1.5">
                             <button
                               onClick={() => handleSaveRoles(member.userId)}
-                              className="px-2 py-0.5 text-xs bg-discord-blurple hover:bg-discord-blurple-hover text-white rounded transition-colors"
+                              className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
                             >
                               Save
                             </button>
                             <button
                               onClick={() => handleCancelRoleChange(member.userId)}
-                              className="px-2 py-0.5 text-xs text-discord-text-muted hover:text-discord-text-secondary transition-colors"
+                              className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
                             >
                               Cancel
                             </button>
