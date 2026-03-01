@@ -1,20 +1,20 @@
-version: "3.8"
-
 services:
-  opencord:
+  backspace:
     build: .
-    container_name: opencord
+    container_name: backspace
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:${PORT:-3000}"
     volumes:
-      - opencord-data:/app/data
+      - backspace-data:/app/data
     env_file:
       - .env
     environment:
       - NODE_ENV=production
-      - DB_PATH=/app/data/opencord.db
+      - DB_PATH=/app/data/backspace.db
       - UPLOAD_DIR=/app/data/uploads
+    networks:
+      - backspace-net
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:${PORT:-3000}/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
@@ -23,5 +23,11 @@ services:
       start_period: 10s
 
 volumes:
-  opencord-data:
-    driver: local
+  backspace-data:
+    name: backspace-data
+    external: true
+
+networks:
+  backspace-net:
+    name: backspace-net
+    external: true

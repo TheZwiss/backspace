@@ -1,5 +1,5 @@
 # ============================================================
-# Opencord — Multi-stage Docker build
+# Backspace — Multi-stage Docker build
 # ============================================================
 
 # Stage 1: Install dependencies and build frontend
@@ -70,7 +70,7 @@ RUN mkdir -p /app/data/uploads
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
-ENV DB_PATH=/app/data/opencord.db
+ENV DB_PATH=/app/data/backspace.db
 ENV UPLOAD_DIR=/app/data/uploads
 
 EXPOSE 3000
