@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
+import { getAvatarGradient } from '../../utils/gradients';
 
 export function IncomingCallModal() {
   const incomingCall = useVoiceStore((s) => s.incomingCall);
@@ -54,7 +55,7 @@ export function IncomingCallModal() {
         <div className="relative p-8 flex flex-col items-center gap-4">
           {/* Caller avatar */}
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-accent-primary flex items-center justify-center text-white text-3xl font-bold">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ background: getAvatarGradient(incomingCall.callerId, incomingCall.callerName).gradient }}>
               {incomingCall.callerName.charAt(0).toUpperCase()}
             </div>
             {/* Ringing phone icon */}

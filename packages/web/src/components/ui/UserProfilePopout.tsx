@@ -5,6 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
+import { getAvatarGradient } from '../../utils/gradients';
 
 interface UserProfilePopoutProps {
   user: User;
@@ -35,16 +36,17 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       style={position ? { top: position.top, left: position.left } : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
     >
       {/* Banner */}
-      <div className="h-[60px] bg-accent-primary" />
+      <div className="h-[60px]" style={{ background: getAvatarGradient(user.id, displayName).gradient }} />
       
       {/* Avatar Container */}
       <div className="px-4 pb-4 relative">
         <div className="absolute -top-8 left-4 rounded-full border-[6px] border-surface-elevated bg-surface-elevated">
-          <Avatar 
-            src={user.avatar} 
-            name={displayName} 
-            size={80} 
-            status={user.status as any} 
+          <Avatar
+            src={user.avatar}
+            name={displayName}
+            size={80}
+            status={user.status as any}
+            user={user}
           />
         </div>
         

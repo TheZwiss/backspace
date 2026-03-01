@@ -1,6 +1,7 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
+import { getAvatarGradient } from '../../utils/gradients';
 
 interface AvatarProps {
   src?: string | null;
@@ -23,6 +24,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
   const fontSize = size < 32 ? 'text-xs' : size < 48 ? 'text-sm' : 'text-lg';
+  const gradient = getAvatarGradient(user?.id, name);
 
   const handleClick = (e: React.MouseEvent) => {
     if (onClick) {
@@ -59,8 +61,8 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
         />
       ) : null}
       <div
-        className={`avatar-fallback w-full h-full rounded-full bg-accent-primary flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`}
-        style={src ? { display: 'none' } : undefined}
+        className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`}
+        style={src ? { display: 'none' } : { background: gradient.gradient }}
       >
         {initials}
       </div>
