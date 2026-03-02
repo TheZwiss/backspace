@@ -270,7 +270,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   const isImage = att.mimetype.startsWith('image/');
                   if (isImage) {
                     return (
-                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-border-hard/50 bg-surface-base/20">
+                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]">
                         <img
                           src={`/api/uploads/${att.filename}`}
                           alt={att.originalName}
@@ -312,8 +312,8 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
       {/* Action buttons on hover */}
       {isHovered && !isEditing && (
-        <div className="absolute -top-[18px] right-4 flex items-center bg-surface-chat border border-border-hard/50 rounded-[4px] shadow-elevation-low overflow-hidden z-10 h-8">
-          <div className="flex items-center px-1 border-r border-border-hard/50 h-full">
+        <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
+          <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
             {['👍', '❤️', '😂', '😮'].map(emoji => (
               <button
                 key={emoji}

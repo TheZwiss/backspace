@@ -80,7 +80,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   // 'text' means a bare fenced block with no language — render without highlighting
   if (language === 'text') {
     return (
-      <pre className="mt-1 p-3 bg-surface-elevated border border-border-hard/50 rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
+      <pre className="mt-1 p-3 bg-surface-elevated border border-white/[0.06] rounded text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto whitespace-pre">
         <code>{code}</code>
       </pre>
     );
@@ -90,7 +90,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
     <Highlight theme={aetherTheme} code={code} language={language}>
       {({ style, tokens, getLineProps, getTokenProps }) => (
         <pre
-          className="mt-1 rounded border border-border-hard/50 text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
+          className="mt-1 rounded border border-white/[0.06] text-[0.875rem] leading-[1.125rem] font-mono overflow-x-auto"
           style={{ ...style, padding: '0.625rem 0.75rem', margin: 0 }}
         >
           {tokens.map((line, i) => {

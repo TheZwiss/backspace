@@ -113,7 +113,7 @@ export function MessageList({ channelId }: MessageListProps) {
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin"
+      className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar"
       onScroll={handleScroll}
     >
       {isLoadingMore && (
