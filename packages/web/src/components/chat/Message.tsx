@@ -248,29 +248,13 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   <button
                     key={emoji}
                     onClick={() => toggleReaction(emoji)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[13px] border transition-all duration-[120ms] ease-out cursor-pointer"
-                    style={me ? {
-                      background: 'rgba(134, 239, 172, 0.10)',
-                      borderColor: 'rgba(134, 239, 172, 0.25)',
-                    } : {
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      borderColor: 'var(--border-soft)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = me
-                        ? 'rgba(134, 239, 172, 0.15)'
-                        : 'rgba(255, 255, 255, 0.08)';
-                      if (!me) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = me
-                        ? 'rgba(134, 239, 172, 0.10)'
-                        : 'rgba(255, 255, 255, 0.04)';
-                      if (!me) e.currentTarget.style.borderColor = 'var(--border-soft)';
-                    }}
+                    className={`glass-pill flex items-center gap-1 rounded-[6px] cursor-pointer transition-all duration-[120ms] ease-out ${
+                      me ? 'glass-pill-mine' : ''
+                    }`}
+                    style={{ padding: '2px 8px', fontSize: '13px', lineHeight: 1 }}
                   >
-                    <span>{emoji}</span>
-                    <span className={`text-xs font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`}>{count}</span>
+                    <span style={{ fontSize: '14px', lineHeight: 1 }}>{emoji}</span>
+                    <span className={`font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`} style={{ fontSize: '12px' }}>{count}</span>
                   </button>
                 ))}
               </div>
