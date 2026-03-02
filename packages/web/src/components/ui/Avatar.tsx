@@ -11,6 +11,7 @@ interface AvatarProps {
   className?: string;
   onClick?: (e: React.MouseEvent) => void;
   user?: User;
+  userId?: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -20,11 +21,11 @@ const statusColors: Record<string, string> = {
   offline: 'bg-status-offline',
 };
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId }: AvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
   const fontSize = size < 32 ? 'text-xs' : size < 48 ? 'text-sm' : 'text-lg';
-  const gradient = getAvatarGradient(user?.id, name);
+  const gradient = getAvatarGradient(userId ?? user?.id, name);
 
   const handleClick = (e: React.MouseEvent) => {
     if (onClick) {

@@ -95,6 +95,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               src={null}
               name={participant.username}
               size={large ? 100 : 64}
+              userId={participant.userId}
             />
             {isSpeaking && (
               <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />

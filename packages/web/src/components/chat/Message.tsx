@@ -182,7 +182,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
       <div className="flex-1 min-w-0 pr-4">
         {message.replyTo && (
           <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
-            <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} />
+            <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} user={message.replyTo.user} />
             <span 
               className="text-[14px] font-bold text-txt-primary hover:underline"
               style={message.replyTo ? replyRoleColor(message.replyTo) : undefined}

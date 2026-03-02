@@ -67,6 +67,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
                   name={displayName}
                   size={20}
                   status={status}
+                  userId={userId}
                 />
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}

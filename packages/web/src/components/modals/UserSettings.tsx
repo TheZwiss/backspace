@@ -64,6 +64,7 @@ export function UserSettingsModal() {
             name={user.displayName ?? user.username}
             size={64}
             status={user.status}
+            userId={user.id}
           />
           <div>
             <div className="font-bold text-lg">{user.displayName ?? user.username}</div>

@@ -215,12 +215,12 @@ export function ChannelSidebar() {
                             zIndex: 2 - i,
                           }}
                         >
-                          <Avatar src={m.avatar} name={m.displayName ?? m.username} size={22} />
+                          <Avatar src={m.avatar} name={m.displayName ?? m.username} size={22} userId={m.id} />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? ''} size={32} status={otherMembers[0]?.status as any} />
+                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? ''} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.id} />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className={`text-[15px] truncate leading-tight ${

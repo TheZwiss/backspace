@@ -54,6 +54,7 @@ export function ActivityPanel() {
         size={32}
         status={isOffline ? 'offline' : friend.status}
         className={isOffline ? 'opacity-60' : undefined}
+        userId={friend.id}
       />
       <div className="flex-1 min-w-0">
         <div className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>

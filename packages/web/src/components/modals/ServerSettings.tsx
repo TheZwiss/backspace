@@ -428,6 +428,7 @@ export function ServerSettingsModal() {
                           name={displayName}
                           size={32}
                           status={member.user.status}
+                          user={member.user}
                         />
                         <div>
                           <div className="text-sm font-medium">{displayName}</div>

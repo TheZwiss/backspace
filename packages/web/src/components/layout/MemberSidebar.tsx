@@ -108,6 +108,7 @@ export function MemberSidebar() {
           size={32}
           status={isOffline ? 'offline' : member.user.status}
           className={isOffline ? 'opacity-60' : undefined}
+          user={member.user}
         />
         <div className="flex-1 min-w-0">
           <div

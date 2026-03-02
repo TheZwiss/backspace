@@ -231,7 +231,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: Friend, onRemove: () =
   return (
     <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
-        <Avatar src={friend.avatar} name={friend.displayName ?? friend.username} size={32} status={friend.status} />
+        <Avatar src={friend.avatar} name={friend.displayName ?? friend.username} size={32} status={friend.status} userId={friend.id} />
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="text-txt-primary font-semibold text-[15px]">{friend.displayName ?? friend.username}</span>
@@ -277,7 +277,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   return (
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
-        <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={user.status as any} />
+        <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={user.status as any} userId={user.id} />
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
             <span className="text-txt-primary font-bold text-sm">{user.displayName ?? user.username}</span>
