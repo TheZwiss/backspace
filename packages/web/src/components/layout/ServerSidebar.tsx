@@ -99,7 +99,7 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
             className="w-full h-full object-cover"
           />
         ) : (
-          <span className="text-[15px] font-medium">{firstLetter}</span>
+          <span className="text-[15px] font-bold">{firstLetter}</span>
         )}
       </button>
     </div>
