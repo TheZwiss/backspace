@@ -64,20 +64,32 @@ export function MessageList({ channelId }: MessageListProps) {
     return () => clearTimeout(ackTimerRef.current);
   }, [channelId, messages.length, isNearBottom, ackChannel]);
 
-  // Auto-scroll to bottom on new messages (if near bottom)
+  // Reset scroll tracking on channel switch so initial-load scroll fires
   useEffect(() => {
-    if (messages.length > prevMessagesLength.current && isNearBottom) {
+    prevMessagesLength.current = 0;
+    setIsNearBottom(true);
+  }, [channelId]);
+
+  // Handle scrolling: initial load snaps to bottom, new messages smooth-scroll if near bottom
+  useEffect(() => {
+    const prev = prevMessagesLength.current;
+    prevMessagesLength.current = messages.length;
+
+    if (messages.length === 0) return;
+
+    if (prev === 0) {
+      // Initial load / channel switch — snap to bottom
+      requestAnimationFrame(() => {
+        const container = containerRef.current;
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
+    } else if (messages.length > prev && isNearBottom) {
+      // New messages arrived while near bottom — smooth scroll
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    prevMessagesLength.current = messages.length;
   }, [messages.length, isNearBottom]);
-
-  // Scroll to bottom on initial load
-  useEffect(() => {
-    if (messages.length > 0 && prevMessagesLength.current === 0) {
-      bottomRef.current?.scrollIntoView();
-    }
-  }, [messages.length]);
 
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;
@@ -124,7 +136,7 @@ export function MessageList({ channelId }: MessageListProps) {
 
       {!hasMore && <WelcomeHeader channelId={channelId} />}
 
-      <div className="pt-4 pb-6 md:pb-14">
+      <div className="pt-4 pb-6 md:pb-20">
         {messages.map((msg, i) => {
           const prevMsg = messages[i - 1];
           const showDate = shouldShowDateDivider(prevMsg, msg);
