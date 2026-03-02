@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
+import { ConnectedInstances } from './ConnectedInstances';
 
 export function UserSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -167,6 +168,9 @@ export function UserSettingsModal() {
             </button>
           </div>
         </div>
+
+        {/* Connected Instances */}
+        <ConnectedInstances />
 
         <div className="flex items-center justify-between pt-2">
           <button

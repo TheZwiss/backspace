@@ -5,6 +5,7 @@ import { useChatStore } from './chatStore';
 import { useServerStore } from './serverStore';
 import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
+import { useInstanceStore } from './instanceStore';
 
 interface AuthState {
   token: string | null;
@@ -32,6 +33,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await api.auth.login({ username, password });
       localStorage.setItem('backspace_token', response.token);
       set({ token: response.token, user: response.user, isLoading: false });
+      // Auto-connect to remote instances (fire-and-forget)
+      useInstanceStore.getState().autoConnectAll().catch(() => {});
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
       throw err;
@@ -57,6 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     useServerStore.getState().populateFromReady([], [], []);
     useSocialStore.getState().reset();
     useVoiceStore.getState().clearAllVoiceUsers();
+    useInstanceStore.getState().reset();
     set({ token: null, user: null });
   },
 
@@ -68,6 +72,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const user = await api.users.me();
       set({ user, isLoading: false });
+      // Auto-connect to remote instances (fire-and-forget)
+      useInstanceStore.getState().autoConnectAll().catch(() => {});
     } catch {
       localStorage.removeItem('backspace_token');
       set({ token: null, user: null, isLoading: false });
