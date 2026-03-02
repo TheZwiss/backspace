@@ -248,11 +248,26 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   <button
                     key={emoji}
                     onClick={() => toggleReaction(emoji)}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[13px] border transition-all duration-[120ms] ease-out cursor-pointer ${
-                      me
-                        ? 'bg-accent-mint/10 border-accent-mint/25 hover:bg-accent-mint/15'
-                        : 'bg-white/[0.04] border-border-soft hover:bg-white/[0.08] hover:border-white/[0.12]'
-                    }`}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[13px] border transition-all duration-[120ms] ease-out cursor-pointer"
+                    style={me ? {
+                      background: 'rgba(134, 239, 172, 0.10)',
+                      borderColor: 'rgba(134, 239, 172, 0.25)',
+                    } : {
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      borderColor: 'var(--border-soft)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = me
+                        ? 'rgba(134, 239, 172, 0.15)'
+                        : 'rgba(255, 255, 255, 0.08)';
+                      if (!me) e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = me
+                        ? 'rgba(134, 239, 172, 0.10)'
+                        : 'rgba(255, 255, 255, 0.04)';
+                      if (!me) e.currentTarget.style.borderColor = 'var(--border-soft)';
+                    }}
                   >
                     <span>{emoji}</span>
                     <span className={`text-xs font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`}>{count}</span>

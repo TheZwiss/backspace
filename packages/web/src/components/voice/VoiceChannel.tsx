@@ -27,13 +27,19 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
     <div>
       <button
         onClick={onClick}
-        className={`w-full flex items-center gap-1.5 px-2 h-8 rounded-[4px] group transition-colors ${
+        className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
           isActive
-            ? 'bg-interactive-selected text-white'
+            ? 'bg-surface-elevated text-txt-primary'
             : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
         }`}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-60">
+        {isActive && (
+          <div
+            className="absolute -left-[2px] top-1/2 -translate-y-1/2 w-[3px] bg-white rounded-r-full"
+            style={{ height: '55%', opacity: 0.7 }}
+          />
+        )}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
           <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
         </svg>
         <span className="truncate text-[15px] font-medium">{channelName}</span>
@@ -41,7 +47,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
 
       {/* Connected users */}
       {voiceUsers.length > 0 && (
-        <div className="ml-6 mt-0.5 space-y-0.5">
+        <div className="ml-9 mt-0.5 space-y-0.5">
           {voiceUsers.map((userId) => {
             const member = members.find(m => m.userId === userId);
             const participant = participants.find(p => p.userId === userId);
@@ -61,11 +67,11 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
             const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
 
             return (
-              <div key={userId} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-interactive-hover transition-colors">
+              <div key={userId} className="flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors">
                 <Avatar
                   src={avatar}
                   name={displayName}
-                  size={20}
+                  size={24}
                   status={status}
                   userId={userId}
                 />
