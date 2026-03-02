@@ -146,23 +146,23 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const content = (
     <div
-      className={`group relative flex px-4 py-0.5 transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
+      className={`group relative flex px-5 py-[3px] transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
-          : 'hover:bg-interactive-hover'
+          : 'hover:bg-[rgba(255,255,255,0.025)]'
       }`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Reply Line */}
       {message.replyTo && (
-        <div className="absolute left-[36px] top-[-14px] w-[33px] h-[22px] border-l-2 border-t-2 border-interactive-muted rounded-tl-[6px] opacity-60" />
+        <div className="absolute left-[40px] top-[-14px] w-[30px] h-[22px] border-l-2 border-t-2 border-interactive-muted rounded-tl-[6px] opacity-60" />
       )}
 
       {/* Avatar or timestamp column */}
-      <div className="w-[72px] flex-shrink-0 flex items-start justify-start pl-0.5">
+      <div className="w-14 flex-shrink-0 flex items-start justify-start">
         {isFirstInGroup || message.replyTo ? (
-          <div className="mt-1">
+          <div className="mt-0.5">
             <Avatar
               src={message.user.avatar}
               name={displayName}
@@ -172,14 +172,14 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             />
           </div>
         ) : (
-          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-2 select-none w-full text-center leading-[1.375rem] font-medium`}>
+          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-[3px] select-none w-full text-center leading-[1.375rem]`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 pr-4">
+      <div className="flex-1 min-w-0">
         {message.replyTo && (
           <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
             <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} user={message.replyTo.user} />
@@ -204,7 +204,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             >
               {displayName}
             </span>
-            <span className="text-[11px] text-txt-tertiary leading-tight font-medium hover:cursor-default">
+            <span className="text-[11px] text-txt-tertiary leading-tight hover:cursor-default">
               {formatTime(message.createdAt)}
             </span>
           </div>

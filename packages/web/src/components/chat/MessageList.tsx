@@ -124,7 +124,7 @@ export function MessageList({ channelId }: MessageListProps) {
 
       {!hasMore && <WelcomeHeader channelId={channelId} />}
 
-      <div className="pb-6 md:pb-[88px]">
+      <div className="pt-4 pb-6 md:pb-14">
         {messages.map((msg, i) => {
           const prevMsg = messages[i - 1];
           const showDate = shouldShowDateDivider(prevMsg, msg);
@@ -133,12 +133,12 @@ export function MessageList({ channelId }: MessageListProps) {
           return (
             <React.Fragment key={msg.id}>
               {showDate && (
-                <div className="flex items-center px-4 my-6 select-none pointer-events-none">
-                  <div className="flex-1 h-[1px] bg-interactive-muted" />
-                  <span className="px-2 text-[12px] font-bold text-txt-tertiary leading-tight">
+                <div className="flex items-center px-5 my-2 select-none pointer-events-none">
+                  <div className="flex-1 h-[1px] bg-border-hard" />
+                  <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
                     {formatDateDivider(msg.createdAt)}
                   </span>
-                  <div className="flex-1 h-[1px] bg-interactive-muted" />
+                  <div className="flex-1 h-[1px] bg-border-hard" />
                 </div>
               )}
               <Message

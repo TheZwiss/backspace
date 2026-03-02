@@ -291,14 +291,14 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           </div>
         )}
 
-        <div className="flex items-start px-1">
+        <div className="flex items-center pl-[10px] pr-1">
           {/* File attach button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-3 text-txt-tertiary hover:text-txt-secondary transition-colors sticky top-0"
+            className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
             title="Attach file"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
             </svg>
           </button>
@@ -324,7 +324,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             placeholder={`Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
-            className="flex-1 py-[11px] px-1 bg-transparent text-txt-primary placeholder-txt-tertiary/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
+            className="flex-1 py-[10px] px-1 bg-transparent text-txt-primary placeholder-txt-tertiary/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
             disabled={isUploading}
           />
@@ -340,22 +340,22 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           )}
 
           {/* GIF button */}
-          <button className="p-2 text-txt-tertiary hover:text-txt-secondary transition-colors" title="GIF">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="GIF">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
             </svg>
           </button>
 
           {/* Sticker button */}
-          <button className="p-2 text-txt-tertiary hover:text-txt-secondary transition-colors" title="Stickers">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="Stickers">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12.5 2C6.81 2 2 6.81 2 12.5S6.81 23 12.5 23c1.31 0 2.56-.25 3.73-.7l5.07-5.07c.45-1.17.7-2.42.7-3.73C22 7.81 17.19 2 12.5 2Zm0 19c-4.69 0-8.5-3.81-8.5-8.5S7.81 4 12.5 4 21 7.81 21 12.5c0 .89-.14 1.74-.4 2.54l-3.56 3.56c-.8.26-1.65.4-2.54.4ZM8 11.5c.83 0 1.5-.67 1.5-1.5S8.83 8.5 8 8.5 6.5 9.17 6.5 10s.67 1.5 1.5 1.5Zm6 0c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5Zm-1 3.5c-2.33 0-4.31-1.46-5.11-3.5h10.22c-.8 2.04-2.78 3.5-5.11 3.5Z" />
             </svg>
           </button>
 
           {/* Emoji button */}
-          <button className="p-2 text-txt-tertiary hover:text-txt-secondary transition-colors" title="Emoji">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="Emoji">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
             </svg>
           </button>

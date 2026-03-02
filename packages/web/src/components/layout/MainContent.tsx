@@ -92,8 +92,8 @@ export function MainContent() {
           ref={voiceContainerRef}
           className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
         >
-          <div className={`h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
-            <div className="flex items-center gap-2">
+          <div className={`py-3 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+            <div className="flex items-center gap-[10px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
               </svg>
@@ -144,8 +144,8 @@ export function MainContent() {
             </button>
           </div>
         )}
-        <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="py-3 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
+          <div className="flex items-center gap-[10px] min-w-0">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
               <path d="M12.5 2A6.5 6.5 0 0 0 6 8.5c0 1.82.75 3.47 1.95 4.65A10.02 10.02 0 0 0 2 22h2c0-4.42 3.58-8 8-8 .35 0 .69.03 1.03.07A6.49 6.49 0 0 0 19 8.5 6.5 6.5 0 0 0 12.5 2Zm0 11A4.5 4.5 0 1 1 17 8.5a4.5 4.5 0 0 1-4.5 4.5Z" />
             </svg>
@@ -158,7 +158,7 @@ export function MainContent() {
             <button
               onClick={handleStartVoiceCall}
               disabled={!!outgoingCall || !!activeDmCall}
-              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
               title="Start Voice Call"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -168,14 +168,14 @@ export function MainContent() {
             <button
               onClick={handleStartVoiceCall}
               disabled={!!outgoingCall || !!activeDmCall}
-              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover disabled:opacity-50 disabled:cursor-not-allowed"
               title="Start Video Call"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Pinned Messages">
+            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Pinned Messages">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" transform="rotate(45 12 12)" />
                 <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
@@ -183,7 +183,7 @@ export function MainContent() {
             </button>
             <button
               onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
-              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover"
+              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
               title="Add Friends to DM"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -191,18 +191,18 @@ export function MainContent() {
               </svg>
             </button>
             <MemberListToggleButton />
-            <div className="w-[1px] h-6 bg-interactive-muted mx-1" />
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Search">
+            <div className="w-[1px] h-5 bg-border-soft mx-1" />
+            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Search">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Inbox">
+            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Inbox">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M19 3H4.99c-1.11 0-1.98.9-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Help">
+            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Help">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" />
               </svg>
@@ -219,7 +219,7 @@ export function MainContent() {
   if (!currentChannelId || !channel) {
     return (
       <div className="flex-1 flex flex-col bg-surface-chat relative">
-        <div className="h-12 px-5 flex items-center justify-between shadow-header">
+        <div className="py-3 px-5 flex items-center justify-between border-b border-border-hard">
           <span className="text-txt-tertiary">Select a channel</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <MemberListToggleButton />
@@ -238,8 +238,8 @@ export function MainContent() {
     if (!isInThisChannel) {
       return (
         <div className="flex-1 flex flex-col bg-surface-base">
-          <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base">
-            <div className="flex items-center gap-2">
+          <div className="py-3 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base">
+            <div className="flex items-center gap-[10px]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
               </svg>
@@ -274,8 +274,8 @@ export function MainContent() {
         ref={voiceContainerRef}
         className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
       >
-        <div className={`h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
-          <div className="flex items-center gap-2">
+        <div className={`py-3 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+          <div className="flex items-center gap-[10px]">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
             </svg>
@@ -310,48 +310,46 @@ export function MainContent() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface-chat min-w-0 relative">
-      <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
-        <div className="flex items-center gap-2 min-w-0">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
-            <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
-          </svg>
+      <div className="py-3 px-5 flex items-center justify-between border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
+        <div className="flex items-center gap-[10px] min-w-0">
+          <span className="text-[20px] font-medium text-txt-tertiary flex-shrink-0 leading-none">#</span>
           <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight">{channel.name}</span>
           {channel.topic && (
             <>
-              <div className="w-[1px] h-6 bg-interactive-muted mx-2" />
+              <div className="w-[1px] h-5 bg-border-soft mx-2" />
               <span className="text-[13px] text-txt-tertiary truncate leading-tight">{channel.topic}</span>
             </>
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Threads">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Threads">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M5.43 21a.996.996 0 01-.98-.8l-.79-4.34H2.5a1 1 0 110-2h.93l-.55-3H1.5a1 1 0 010-2h1.15L1.87 4.86a1 1 0 011.96-.72L4.6 8.86h3.32l-.78-4.72a1 1 0 011.96-.28l.84 5H13.5a1 1 0 110 2h-3.33l.55 3H13.5a1 1 0 110 2h-2.55l.72 3.94a1 1 0 01-.79 1.16 1.034 1.034 0 01-.18.02.996.996 0 01-.98-.82L8.95 15.86H5.63l.72 3.94A1 1 0 015.43 21zM5.86 10.86l.55 3h3.32l-.55-3H5.86z" />
             </svg>
           </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Notification Settings">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Notification Settings">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
             </svg>
           </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Pinned Messages">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Pinned Messages">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
             </svg>
           </button>
           <MemberListToggleButton />
-          <div className="w-[1px] h-6 bg-interactive-muted mx-1" />
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Search">
+          <div className="w-[1px] h-5 bg-border-soft mx-1" />
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Search">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Inbox">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Inbox">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 3H4.99c-1.11 0-1.98.9-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z" />
             </svg>
           </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[4px] hover:bg-interactive-hover" title="Help">
+          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Help">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" />
             </svg>
