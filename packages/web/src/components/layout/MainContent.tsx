@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useServerStore } from '../../stores/serverStore';
+import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -258,7 +258,7 @@ export function MainContent() {
             <button
               onClick={() => {
                 useVoiceStore.getState().setCurrentVoiceChannel(currentChannelId);
-                wsSend({ type: 'voice_join', channelId: currentChannelId });
+                wsSend({ type: 'voice_join', channelId: currentChannelId }, getChannelOrigin(currentChannelId));
               }}
               className="relative z-10 px-8 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(124,108,246,0.3)]"
             >

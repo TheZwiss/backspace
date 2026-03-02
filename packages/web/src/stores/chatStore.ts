@@ -3,6 +3,7 @@ import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
 import { wsSend } from '../hooks/useWebSocket';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from './serverStore';
 import { useAuthStore } from './authStore';
+import { normalizeMessageAssets } from '../utils/assetUrls';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_CACHED_CHANNELS = 20;
@@ -140,6 +141,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ? await client.dm.messages(channelId)
         : await client.channels.messages(channelId);
 
+      // Normalize remote asset URLs (avatars, attachment filenames)
+      if (origin) {
+        for (const msg of messages) normalizeMessageAssets(msg, origin);
+      }
+
       set((state) => {
         const newMessages = new Map(state.messages);
         newMessages.set(channelId, messages as MessageWithUser[]);
@@ -169,6 +175,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const olderMessages = isDm
         ? await client.dm.messages(channelId, oldestMessage.id)
         : await client.channels.messages(channelId, oldestMessage.id);
+
+      // Normalize remote asset URLs (avatars, attachment filenames)
+      if (origin) {
+        for (const msg of olderMessages) normalizeMessageAssets(msg, origin);
+      }
 
       set((state) => {
         const newMessages = new Map(state.messages);

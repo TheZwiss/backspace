@@ -3,6 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
+import { getChannelOrigin } from '../../stores/serverStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
@@ -23,13 +24,15 @@ export function VoiceControlBar() {
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
+  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
+  const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
   const [qualityOpen, setQualityOpen] = useState(false);
 
   const handleMute = React.useCallback(async () => {
     toggleMic();
     // Broadcast via WebSocket so sidebar shows status without joining
-    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened, isCameraOn, isScreenSharing });
-  }, [isMuted, isDeafened, isCameraOn, isScreenSharing, toggleMic]);
+    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened, isCameraOn, isScreenSharing }, voiceOrigin);
+  }, [isMuted, isDeafened, isCameraOn, isScreenSharing, toggleMic, voiceOrigin]);
 
   const handleDeafen = React.useCallback(async () => {
     const room = getActiveRoom();
@@ -39,7 +42,7 @@ export function VoiceControlBar() {
     if (willDeafen && !isMuted) toggleMic();
     if (!willDeafen && isMuted) toggleMic();
     // Broadcast via WebSocket
-    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen, isCameraOn, isScreenSharing });
+    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen, isCameraOn, isScreenSharing }, voiceOrigin);
     if (room) {
       try {
         // Broadcast deafen state via LiveKit data channel for in-room users
@@ -74,7 +77,7 @@ export function VoiceControlBar() {
       toggleCamera();
       // Broadcast camera state via WebSocket
       const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
-      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss });
+      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss }, voiceOrigin);
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle camera:', err);
     }
@@ -88,12 +91,12 @@ export function VoiceControlBar() {
         const started = await startScreenShare(room);
         if (started) {
           const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true });
+          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true }, voiceOrigin);
         }
       } else {
         await stopScreenShare(room);
         const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false });
+        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false }, voiceOrigin);
       }
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle screen share:', err);
@@ -103,10 +106,10 @@ export function VoiceControlBar() {
   const handleDisconnect = () => {
     const { activeDmCall } = useVoiceStore.getState();
     if (activeDmCall) {
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId });
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }); // DM calls are home-only
       useVoiceStore.getState().setActiveDmCall(null);
     } else {
-      wsSend({ type: 'voice_leave' });
+      wsSend({ type: 'voice_leave' }, voiceOrigin);
       useVoiceStore.getState().leaveVoice();
     }
     if (voiceFullscreen) {

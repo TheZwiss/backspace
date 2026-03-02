@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useServerStore } from '../../stores/serverStore';
+import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -38,7 +38,8 @@ export function ChannelSidebar() {
     // Broadcast mute status via WebSocket so non-joined users can see it
     const willBeMuted = !isMuted;
     const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened, isCameraOn, isScreenSharing });
+    const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
+    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened, isCameraOn, isScreenSharing }, voiceOrigin);
   };
 
   const handleDeafenToggle = async () => {
@@ -51,7 +52,8 @@ export function ChannelSidebar() {
     // Broadcast status via WebSocket so non-joined users can see it
     const willBeMuted = willDeafen ? true : false;
     const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen, isCameraOn, isScreenSharing });
+    const voiceOrigin2 = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
+    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen, isCameraOn, isScreenSharing }, voiceOrigin2);
     if (room) {
       try {
         // Broadcast deafen state to other participants via LiveKit data channel
@@ -91,7 +93,7 @@ export function ChannelSidebar() {
       return;
     }
     setCurrentVoiceChannel(channelId);
-    wsSend({ type: 'voice_join', channelId });
+    wsSend({ type: 'voice_join', channelId }, getChannelOrigin(channelId));
     navigate(`/channels/${currentServerId}/${channelId}`);
   };
 

@@ -1,8 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { isDmChannel, useServerStore } from '../../stores/serverStore';
+import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
-import { api } from '../../api/client';
 import { MentionPopover } from './MentionPopover';
 import type { MemberWithUser } from '@backspace/shared';
 
@@ -61,7 +60,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     if (isDm) {
       wsSend({ type: 'dm_typing_start', dmChannelId: channelId });
     } else {
-      wsSend({ type: 'typing_start', channelId });
+      wsSend({ type: 'typing_start', channelId }, getChannelOrigin(channelId));
     }
     typingTimeoutRef.current = setTimeout(() => {
       typingTimeoutRef.current = undefined;
@@ -75,10 +74,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     setIsUploading(true);
     setMentionState(null);
     try {
-      // Upload files first
+      // Upload files first — route to the correct instance for this channel
       const attachmentIds: string[] = [];
+      const uploadClient = getApiForOrigin(getChannelOrigin(channelId));
       for (const file of files) {
-        const attachment = await api.uploads.upload(file);
+        const attachment = await uploadClient.uploads.upload(file);
         attachmentIds.push(attachment.id);
       }
 

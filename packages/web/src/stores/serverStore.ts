@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
+import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
@@ -124,6 +125,13 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const client = getApiForOrigin(origin);
 
       const detail = await client.servers.get(serverId);
+      // Normalize remote asset URLs (avatars, server icon)
+      if (origin) {
+        if (detail.icon) detail.icon = resolveAssetUrl(detail.icon, origin) ?? detail.icon;
+        for (const member of detail.members) {
+          normalizeUserAssets(member.user, origin);
+        }
+      }
       set({
         currentServerId: serverId,
         channels: detail.channels.sort((a, b) => a.position - b.position),

@@ -268,14 +268,15 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               <div className="mt-1 grid gap-2">
                 {message.attachments.map((att) => {
                   const isImage = att.mimetype.startsWith('image/');
+                  const attUrl = att.filename.startsWith('http') ? att.filename : `/api/uploads/${att.filename}`;
                   if (isImage) {
                     return (
                       <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]">
                         <img
-                          src={`/api/uploads/${att.filename}`}
+                          src={attUrl}
                           alt={att.originalName}
                           className="max-w-full max-h-[350px] object-contain cursor-pointer hover:brightness-95 transition-all"
-                          onClick={() => openImagePreview(`/api/uploads/${att.filename}`)}
+                          onClick={() => openImagePreview(attUrl)}
                           loading="lazy"
                         />
                       </div>
@@ -284,7 +285,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   return (
                     <a
                       key={att.id}
-                      href={`/api/uploads/${att.filename}`}
+                      href={attUrl}
                       download={att.originalName}
                       className="flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all max-w-[400px] mt-1 group/att"
                     >

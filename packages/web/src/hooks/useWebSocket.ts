@@ -6,6 +6,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
+import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -92,6 +93,18 @@ function handleEvent(origin: string, event: ServerEvent): void {
         useSettingsStore.getState().fetchStreamingLimits();
       }
 
+      // Normalize asset URLs for remote origins before dispatching to stores
+      if (!isHome) {
+        for (const server of event.servers) {
+          if (server.icon) server.icon = resolveAssetUrl(server.icon, origin) ?? server.icon;
+          if ((server as any).members) {
+            for (const member of (server as any).members) {
+              if (member.user) normalizeUserAssets(member.user, origin);
+            }
+          }
+        }
+      }
+
       populateFromReady(origin, event.servers, event.folders, event.dmChannels);
 
       if (isHome && currentServerId) {
@@ -169,6 +182,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
 
     case 'message_created':
+      if (!isHome) normalizeMessageAssets(event.message, origin);
       addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
@@ -179,6 +193,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
 
     case 'message_updated':
+      if (!isHome) normalizeMessageAssets(event.message, origin);
       updateMessage(event.message);
       break;
 
@@ -210,6 +225,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
 
     case 'member_joined':
+      if (!isHome) normalizeUserAssets(event.member.user, origin);
       addMember(event.member);
       break;
 
@@ -435,6 +451,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'server_updated': {
+      if (!isHome && event.server.icon) {
+        event.server.icon = resolveAssetUrl(event.server.icon, origin) ?? event.server.icon;
+      }
       const { servers: currentServers, setServers } = useServerStore.getState();
       setServers(currentServers.map(s => s.id === event.server.id ? { ...s, ...event.server } : s));
       break;

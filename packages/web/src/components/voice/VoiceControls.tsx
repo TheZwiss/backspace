@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
@@ -27,6 +27,8 @@ export function VoiceControls() {
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
 
+  const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
+
   if (!currentVoiceChannelId && !activeDmCall) return null;
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
@@ -41,7 +43,7 @@ export function VoiceControls() {
       toggleCamera();
       // Broadcast camera state via WebSocket
       const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
-      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss });
+      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss }, voiceOrigin);
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle camera:', err);
     }
@@ -55,12 +57,12 @@ export function VoiceControls() {
         const started = await startScreenShare(room);
         if (started) {
           const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true });
+          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true }, voiceOrigin);
         }
       } else {
         await stopScreenShare(room);
         const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false });
+        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false }, voiceOrigin);
       }
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);
@@ -70,10 +72,10 @@ export function VoiceControls() {
   const handleDisconnect = () => {
     const { activeDmCall } = useVoiceStore.getState();
     if (activeDmCall) {
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId });
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }); // DM calls are home-only
       useVoiceStore.getState().setActiveDmCall(null);
     } else {
-      wsSend({ type: 'voice_leave' });
+      wsSend({ type: 'voice_leave' }, voiceOrigin);
       useVoiceStore.getState().leaveVoice();
     }
   };
