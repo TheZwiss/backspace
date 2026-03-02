@@ -9,6 +9,13 @@ export interface User {
   customStatus: string | null;
   isAdmin: boolean;
   createdAt: number;
+  homeInstance: string | null;
+  replicatedInstances: ReplicatedInstance[];
+}
+
+export interface ReplicatedInstance {
+  domain: string;
+  username: string;
 }
 
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
@@ -244,6 +251,7 @@ export interface RegisterRequest {
   username: string;
   password: string;
   displayName?: string;
+  homeInstance?: string;
 }
 
 export interface LoginRequest {
@@ -283,6 +291,7 @@ export interface UpdateUserRequest {
   avatar?: string;
   customStatus?: string;
   status?: UserStatus;
+  replicatedInstances?: ReplicatedInstance[];
 }
 
 export interface UpdateMemberRequest {
@@ -378,4 +387,20 @@ export interface InstanceStreamingLimits {
   allowedFramerates: number[];
   maxResolution: number;
   maxFramerate: number;
+}
+
+// ─── Federation Types ──────────────────────────────────────────────────────
+
+export interface InstanceInfoResponse {
+  name: string;
+  version: string;
+  registrationOpen: boolean;
+}
+
+export interface VerifyPasswordRequest {
+  password: string;
+}
+
+export interface VerifyPasswordResponse {
+  valid: boolean;
 }

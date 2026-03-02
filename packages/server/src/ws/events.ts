@@ -5,20 +5,8 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
 import { isMember, getChannelServerId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import type { User, MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import type { MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
+import { sanitizeUser } from '../utils/sanitize.js';
 
 function getMessageWithUser(messageId: string): MessageWithUser | null {
   const db = getDb();

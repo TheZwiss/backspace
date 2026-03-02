@@ -9,23 +9,10 @@ import type {
   CreateMessageRequest,
   UpdateMessageRequest,
   PaginatedQuery,
-  User,
   MessageWithUser,
   Reaction,
 } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import { sanitizeUser } from '../utils/sanitize.js';
 
 /**
  * Fetch reactions for a set of message IDs.

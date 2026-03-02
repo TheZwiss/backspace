@@ -16,6 +16,7 @@ import type {
   ReadState,
   ActiveCallInfo,
 } from '@backspace/shared';
+import { sanitizeUser } from '../utils/sanitize.js';
 
 // SQLite's SQLITE_MAX_VARIABLE_NUMBER default is 999.
 // Chunk inArray() calls to stay safely under this limit.
@@ -28,19 +29,6 @@ function batchInArray<TId, TResult>(ids: TId[], queryFn: (chunk: TId[]) => TResu
     results.push(...queryFn(ids.slice(i, i + BATCH_CHUNK_SIZE)));
   }
   return results;
-}
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
 }
 
 export interface AuthenticatedSocket {

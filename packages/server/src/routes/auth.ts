@@ -4,20 +4,8 @@ import { getDb, schema } from '../db/index.js';
 import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
-import type { RegisterRequest, LoginRequest, AuthResponse, User } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
+import { sanitizeUser } from '../utils/sanitize.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
@@ -29,7 +17,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { username, password, displayName } = request.body;
+    const { username, password, displayName, homeInstance } = request.body;
 
     if (!username || typeof username !== 'string') {
       return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
@@ -41,12 +29,46 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const trimmedUsername = username.trim();
 
-    if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
-      return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
-    }
+    // Replicated registrations (homeInstance provided) may use username@domain format
+    // for collision fallback. Local registrations use strict alphanumeric+underscore.
+    if (homeInstance) {
+      // Validate homeInstance is a reasonable domain string
+      if (typeof homeInstance !== 'string' || homeInstance.length > 253 || !/^[a-zA-Z0-9._-]+$/.test(homeInstance)) {
+        return reply.code(400).send({ error: 'Invalid homeInstance domain', statusCode: 400 });
+      }
 
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
-      return reply.code(400).send({ error: 'Username can only contain letters, numbers, and underscores', statusCode: 400 });
+      if (trimmedUsername.includes('@')) {
+        // username@domain format: validate local part + domain part
+        const atIndex = trimmedUsername.indexOf('@');
+        const localPart = trimmedUsername.slice(0, atIndex);
+        const domainPart = trimmedUsername.slice(atIndex + 1);
+
+        if (localPart.length < 3 || localPart.length > 32 || !/^[a-zA-Z0-9_]+$/.test(localPart)) {
+          return reply.code(400).send({ error: 'Username local part must be 3-32 alphanumeric/underscore characters', statusCode: 400 });
+        }
+        if (domainPart.length === 0 || domainPart.length > 253 || !/^[a-zA-Z0-9._-]+$/.test(domainPart)) {
+          return reply.code(400).send({ error: 'Username domain part is invalid', statusCode: 400 });
+        }
+        if (trimmedUsername.length > 100) {
+          return reply.code(400).send({ error: 'Username must be 100 characters or less', statusCode: 400 });
+        }
+      } else {
+        // Plain username from a replicated registration — same rules as local
+        if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
+          return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+          return reply.code(400).send({ error: 'Username can only contain letters, numbers, and underscores', statusCode: 400 });
+        }
+      }
+    } else {
+      // Local registration — strict validation
+      if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
+        return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
+        return reply.code(400).send({ error: 'Username can only contain letters, numbers, and underscores', statusCode: 400 });
+      }
     }
 
     if (password.length < 6) {
@@ -68,9 +90,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const userId = generateSnowflake();
     const now = Date.now();
 
-    // First registered user becomes instance admin
+    // First registered user becomes instance admin (replicated users are never admins)
     const userCount = db.select().from(schema.users).all().length;
-    const isFirstUser = userCount === 0;
+    const isFirstUser = userCount === 0 && !homeInstance;
 
     db.insert(schema.users).values({
       id: userId,
@@ -79,6 +101,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       passwordHash,
       status: 'online',
       isAdmin: isFirstUser ? 1 : 0,
+      homeInstance: homeInstance || null,
       createdAt: now,
     }).run();
 

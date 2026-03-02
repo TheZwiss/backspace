@@ -1,22 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
-import { authenticate } from '../utils/auth.js';
+import { authenticate, verifyPassword } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { User, UpdateUserRequest } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ReplicatedInstance } from '@backspace/shared';
+import { sanitizeUser } from '../utils/sanitize.js';
 
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
@@ -30,8 +18,27 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(sanitizeUser(user));
   });
 
+  // POST /api/users/@me/verify-password — verify password matches current account
+  app.post<{ Body: VerifyPasswordRequest }>('/api/users/@me/verify-password', { preHandler: authenticate }, async (request, reply) => {
+    const { password } = request.body;
+
+    if (!password || typeof password !== 'string') {
+      return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+    }
+
+    const db = getDb();
+    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!user) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    const valid = await verifyPassword(password, user.passwordHash);
+    const response: VerifyPasswordResponse = { valid };
+    return reply.code(200).send(response);
+  });
+
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, customStatus, status } = request.body;
+    const { displayName, avatar, customStatus, status, replicatedInstances } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -69,6 +76,22 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Invalid status', statusCode: 400 });
       }
       updateData.status = status;
+    }
+
+    if (replicatedInstances !== undefined) {
+      if (!Array.isArray(replicatedInstances)) {
+        return reply.code(400).send({ error: 'replicatedInstances must be an array', statusCode: 400 });
+      }
+      // Validate each entry has domain and username strings
+      for (const inst of replicatedInstances) {
+        if (!inst || typeof inst.domain !== 'string' || typeof inst.username !== 'string') {
+          return reply.code(400).send({ error: 'Each replicated instance must have domain and username strings', statusCode: 400 });
+        }
+      }
+      if (replicatedInstances.length > 50) {
+        return reply.code(400).send({ error: 'Maximum 50 replicated instances', statusCode: 400 });
+      }
+      updateData.replicatedInstances = JSON.stringify(replicatedInstances);
     }
 
     if (Object.keys(updateData).length === 0) {

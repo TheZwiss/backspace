@@ -5,25 +5,12 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
-  User,
   Friend,
   FriendRequest,
   SendFriendRequest,
   UpdateFriendRequest,
 } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import { sanitizeUser } from '../utils/sanitize.js';
 
 export async function socialRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/social/friends - List all friends

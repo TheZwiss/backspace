@@ -6,7 +6,6 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
-  User,
   DmChannel,
   DmMessage,
   DmMessageWithUser,
@@ -17,19 +16,7 @@ import type {
   Attachment,
   Reaction,
 } from '@backspace/shared';
-
-function sanitizeUser(row: typeof schema.users.$inferSelect): User {
-  return {
-    id: row.id,
-    username: row.username,
-    displayName: row.displayName,
-    avatar: row.avatar,
-    status: (row.status ?? 'offline') as User['status'],
-    customStatus: row.customStatus,
-    isAdmin: row.isAdmin === 1,
-    createdAt: row.createdAt,
-  };
-}
+import { sanitizeUser } from '../utils/sanitize.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.

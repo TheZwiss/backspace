@@ -9,6 +9,8 @@ export const users = sqliteTable('users', {
   status: text('status').default('offline'),
   customStatus: text('custom_status'),
   isAdmin: integer('is_admin').default(0),
+  homeInstance: text('home_instance'),
+  replicatedInstances: text('replicated_instances').default('[]'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -177,6 +179,7 @@ export const serverFolderMembers = sqliteTable('server_folder_members', {
 
 export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),
+  instanceName: text('instance_name').default('Backspace'),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
   bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),

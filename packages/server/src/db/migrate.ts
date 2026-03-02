@@ -54,6 +54,19 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'is_admin', type: 'INTEGER DEFAULT 0' }
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'home_instance', type: 'TEXT' },
+        { name: 'replicated_instances', type: "TEXT DEFAULT '[]'" }
+      ]
+    },
+    {
+      name: 'instance_settings',
+      columns: [
+        { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" }
+      ]
     }
   ];
 

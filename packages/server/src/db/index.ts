@@ -23,6 +23,8 @@ function createTables(db: Database.Database): void {
       avatar TEXT,
       status TEXT DEFAULT 'offline',
       custom_status TEXT,
+      home_instance TEXT,
+      replicated_instances TEXT DEFAULT '[]',
       created_at INTEGER NOT NULL
     );
 
@@ -177,6 +179,7 @@ function createTables(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS instance_settings (
       id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      instance_name TEXT DEFAULT 'Backspace',
       max_bitrate_kbps INTEGER NOT NULL DEFAULT 20000,
       min_bitrate_kbps INTEGER NOT NULL DEFAULT 500,
       bitrate_step_kbps INTEGER NOT NULL DEFAULT 500,

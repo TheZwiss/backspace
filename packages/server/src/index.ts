@@ -18,6 +18,7 @@ import { livekitRoutes } from './routes/livekit.js';
 import { socialRoutes } from './routes/social.js';
 import { settingsRoutes } from './routes/settings.js';
 import { utilRoutes } from './routes/utils.js';
+import { instanceRoutes } from './routes/instance.js';
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
 import fs from 'fs';
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
   await app.register(socialRoutes);
   await app.register(settingsRoutes);
   await app.register(utilRoutes);
+  await app.register(instanceRoutes);
   await app.register(registerWebSocket);
 
   app.get('/api/health', async () => {
