@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
-import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
-import { isDmChannel, useServerStore } from './serverStore';
+import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from './serverStore';
 import { useAuthStore } from './authStore';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
@@ -44,8 +43,8 @@ interface ChatState {
   addRealtimeMessage: (channelId: string, message: MessageWithUser) => void;
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
-  addReaction: (messageId: string, emoji: string) => void;
-  removeReaction: (messageId: string, emoji: string) => void;
+  addReaction: (messageId: string, emoji: string, channelId: string) => void;
+  removeReaction: (messageId: string, emoji: string, channelId: string) => void;
   onReactionAdded: (messageId: string, reaction: any) => void;
   onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
   setTyping: (channelId: string, userId: string, username: string) => void;
@@ -125,9 +124,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: true, loadError: null });
     try {
       const isDm = isDmChannel(channelId);
+      const origin = getChannelOrigin(channelId);
+      const client = getApiForOrigin(origin);
       const messages = isDm
-        ? await api.dm.messages(channelId)
-        : await api.channels.messages(channelId);
+        ? await client.dm.messages(channelId)
+        : await client.channels.messages(channelId);
 
       set((state) => {
         const newMessages = new Map(state.messages);
@@ -153,9 +154,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const isDm = isDmChannel(channelId);
+      const origin = getChannelOrigin(channelId);
+      const client = getApiForOrigin(origin);
       const olderMessages = isDm
-        ? await api.dm.messages(channelId, oldestMessage.id)
-        : await api.channels.messages(channelId, oldestMessage.id);
+        ? await client.dm.messages(channelId, oldestMessage.id)
+        : await client.channels.messages(channelId, oldestMessage.id);
 
       set((state) => {
         const newMessages = new Map(state.messages);
@@ -175,6 +178,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const replyToId = get().replyTo?.id;
     const isDm = isDmChannel(channelId);
     const currentUser = useAuthStore.getState().user;
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
 
     // Generate optimistic message
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -219,9 +224,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       if (isDm) {
-        await api.dm.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+        await client.dm.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       } else {
-        await api.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+        await client.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
       }
       // Real message will arrive via WebSocket and replace the temp one
     } catch {
@@ -232,6 +237,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   editMessage: async (messageId: string, content: string, channelId: string) => {
     const isDm = isDmChannel(channelId);
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
+
     // Optimistic: update content locally first
     const messages = get().messages.get(channelId);
     const originalMessage = messages?.find(m => m.id === messageId);
@@ -240,9 +248,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     try {
       if (isDm) {
-        await api.dm.updateMessage(messageId, { content });
+        await client.dm.updateMessage(messageId, { content });
       } else {
-        await api.messages.update(messageId, { content });
+        await client.messages.update(messageId, { content });
       }
       // Real update will arrive via WebSocket
     } catch {
@@ -255,15 +263,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   deleteMessage: async (messageId: string, channelId: string) => {
     const isDm = isDmChannel(channelId);
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
+
     // Optimistic: remove locally first
     const messages = get().messages.get(channelId);
     const savedMessage = messages?.find(m => m.id === messageId);
     get().removeMessage(messageId, channelId);
     try {
       if (isDm) {
-        await api.dm.deleteMessage(messageId);
+        await client.dm.deleteMessage(messageId);
       } else {
-        await api.messages.delete(messageId);
+        await client.messages.delete(messageId);
       }
       // Real deletion will arrive via WebSocket (already removed locally)
     } catch {
@@ -345,12 +356,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  addReaction: (messageId: string, emoji: string) => {
-    wsSend({ type: 'reaction_add', messageId, emoji });
+  addReaction: (messageId: string, emoji: string, channelId: string) => {
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'reaction_add', messageId, emoji }, origin);
   },
 
-  removeReaction: (messageId: string, emoji: string) => {
-    wsSend({ type: 'reaction_remove', messageId, emoji });
+  removeReaction: (messageId: string, emoji: string, channelId: string) => {
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'reaction_remove', messageId, emoji }, origin);
   },
 
   onReactionAdded: (messageId: string, reaction: Reaction) => {
@@ -469,8 +482,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { readStates: newReadStates, unreadChannels: newUnread };
     });
 
-    // Send to server
-    wsSend({ type: 'channel_ack', channelId, messageId });
+    // Send to the correct instance
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'channel_ack', channelId, messageId }, origin);
   },
 
   onChannelAck: (channelId: string, messageId: string) => {

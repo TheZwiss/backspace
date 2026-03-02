@@ -60,9 +60,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const toggleReaction = (emoji: string) => {
     const hasReacted = message.reactions?.some(r => r.userId === currentUser?.id && r.emoji === emoji);
     if (hasReacted) {
-      removeReaction(message.id, emoji);
+      removeReaction(message.id, emoji, channelKey);
     } else {
-      addReaction(message.id, emoji);
+      addReaction(message.id, emoji, channelKey);
     }
   };
 

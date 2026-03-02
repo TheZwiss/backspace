@@ -7,16 +7,23 @@ import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
 
-let globalWs: WebSocket | null = null;
-let reconnectAttempts = 0;
-let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let currentToken: string | null = null;
-let isInitialized = false;
+// ─── Connection state ─────────────────────────────────────────────────────────
 
-// Worker-based heartbeat: Safari throttles main-thread setInterval in
-// background tabs, causing ping timeouts. A Web Worker's timers run on a
-// separate thread and are not subject to the same throttling.
-let heartbeatWorker: Worker | null = null;
+interface ConnectionState {
+  ws: WebSocket | null;
+  heartbeatWorker: Worker | null;
+  reconnectAttempts: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  token: string;
+}
+
+// '' = home instance, 'https://remote.example.com' = remote
+const connections = new Map<string, ConnectionState>();
+
+// Track whether the home connection has been initialized via the React hook
+let homeInitialized = false;
+
+// ─── Heartbeat (Web Worker) ───────────────────────────────────────────────────
 
 function createHeartbeatWorker(): Worker {
   const blob = new Blob([`
@@ -33,26 +40,45 @@ function createHeartbeatWorker(): Worker {
   return new Worker(URL.createObjectURL(blob));
 }
 
-function startHeartbeat(ws: WebSocket): void {
-  stopHeartbeat();
-  heartbeatWorker = createHeartbeatWorker();
-  heartbeatWorker.onmessage = () => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ping' }));
+function startHeartbeat(conn: ConnectionState): void {
+  stopHeartbeat(conn);
+  conn.heartbeatWorker = createHeartbeatWorker();
+  conn.heartbeatWorker.onmessage = () => {
+    if (conn.ws && conn.ws.readyState === WebSocket.OPEN) {
+      conn.ws.send(JSON.stringify({ type: 'ping' }));
     }
   };
-  heartbeatWorker.postMessage('start');
+  conn.heartbeatWorker.postMessage('start');
 }
 
-function stopHeartbeat(): void {
-  if (heartbeatWorker) {
-    heartbeatWorker.postMessage('stop');
-    heartbeatWorker.terminate();
-    heartbeatWorker = null;
+function stopHeartbeat(conn: ConnectionState): void {
+  if (conn.heartbeatWorker) {
+    conn.heartbeatWorker.postMessage('stop');
+    conn.heartbeatWorker.terminate();
+    conn.heartbeatWorker = null;
   }
 }
 
-function handleEvent(event: ServerEvent): void {
+// ─── WS URL construction ─────────────────────────────────────────────────────
+
+function buildWsUrl(origin: string): string {
+  if (!origin) {
+    // Home instance — derive from current page
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws`;
+  }
+  // Remote instance — derive from origin URL
+  const url = new URL(origin);
+  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${url.host}/ws`;
+}
+
+// ─── Event handling ───────────────────────────────────────────────────────────
+
+const HOME_ORIGIN = '';
+
+function handleEvent(origin: string, event: ServerEvent): void {
+  const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useServerStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
@@ -60,15 +86,20 @@ function handleEvent(event: ServerEvent): void {
 
   switch (event.type) {
     case 'ready':
-      setUser(event.user);
-      useSettingsStore.getState().setIsAdmin(event.user.isAdmin ?? false);
-      useSettingsStore.getState().fetchStreamingLimits();
-      populateFromReady(event.servers, event.folders, event.dmChannels);
-      if (currentServerId) {
+      if (isHome) {
+        setUser(event.user);
+        useSettingsStore.getState().setIsAdmin(event.user.isAdmin ?? false);
+        useSettingsStore.getState().fetchStreamingLimits();
+      }
+
+      populateFromReady(origin, event.servers, event.folders, event.dmChannels);
+
+      if (isHome && currentServerId) {
         loadServerDetail(currentServerId);
       }
+
       // Only force-reload the current channel on reconnect; other channels keep their cache
-      {
+      if (isHome) {
         const { loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
         if (currentChannelId) {
           reloadMessages(currentChannelId, true);
@@ -79,8 +110,11 @@ function handleEvent(event: ServerEvent): void {
           setReadStates(event.readStates, channelLastMessageIds);
         }
       }
-      // Clear stale voice state, then populate from server truth
-      clearAllVoiceUsers();
+
+      // Voice states — process for all origins (shows who's in voice on remote servers)
+      if (isHome) {
+        clearAllVoiceUsers();
+      }
       if (event.voiceStates) {
         for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
           setVoiceUsers(channelId, userIds);
@@ -92,9 +126,9 @@ function handleEvent(event: ServerEvent): void {
           setVoiceUserStatus(uid, status.isMuted, status.isDeafened, status.isCameraOn, status.isScreenSharing);
         }
       }
-      // Re-register in voice channel if we're still connected to LiveKit
-      // (WebSocket reconnect causes server to drop our voice tracking)
-      {
+
+      // Re-register in voice channel if we're still connected to LiveKit (home only)
+      if (isHome) {
         const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen } = useVoiceStore.getState();
         if (currentVoiceChannelId) {
           console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened, curCamera, curScreen });
@@ -102,20 +136,18 @@ function handleEvent(event: ServerEvent): void {
           wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen });
         }
       }
-      // Restore DM call state from server (handles reconnect and page refresh)
-      {
+
+      // Restore DM call state from server (home only)
+      if (isHome) {
         const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall } = useVoiceStore.getState();
         const myId = event.user.id;
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
             const isParticipant = call.participants.includes(myId);
             if (call.state === 'active' && isParticipant) {
-              // Restore active DM call
               setActiveDmCall({ dmChannelId: call.dmChannelId });
               break;
             } else if (call.state === 'ringing' && call.callerId !== myId) {
-              // Restore incoming call (we're the callee)
-              // Look up caller name from DM channel members
               const dmCh = event.dmChannels?.find((d: any) => d.id === call.dmChannelId);
               const callerUser = dmCh?.members?.find((m: any) => m.id === call.callerId);
               setIncomingCall({
@@ -126,7 +158,6 @@ function handleEvent(event: ServerEvent): void {
             }
           }
         } else {
-          // No active calls on server — clear stale local state
           if (activeDmCall) {
             setActiveDmCall(null);
           }
@@ -161,7 +192,9 @@ function handleEvent(event: ServerEvent): void {
 
     case 'presence_update':
       updateMemberPresence(event.userId, event.status);
-      useSocialStore.getState().updateFriendPresence(event.userId, event.status);
+      if (isHome) {
+        useSocialStore.getState().updateFriendPresence(event.userId, event.status);
+      }
       break;
 
     case 'voice_state_update':
@@ -184,13 +217,14 @@ function handleEvent(event: ServerEvent): void {
       removeMember(event.userId);
       break;
 
+    // ─── DM events (home-only) ──────────────────────────────────────────────
+
     case 'dm_message_created': {
+      if (!isHome) break;
       addRealtimeMessage(event.message.dmChannelId, event.message as any);
-      // If DM channel is unknown (first-ever message safety net), add a minimal one
       const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useServerStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
       if (!knownDm) {
-        // Construct a minimal DmChannel from the message so the sidebar shows it
         addDmCh({
           id: event.message.dmChannelId,
           createdAt: event.message.createdAt,
@@ -198,13 +232,11 @@ function handleEvent(event: ServerEvent): void {
           lastMessage: event.message,
         });
       } else {
-        // Update lastMessage on the DM channel so the sidebar sorts correctly
         const updatedDms = currentDmChannels.map(dm =>
           dm.id === event.message.dmChannelId
             ? { ...dm, lastMessage: event.message }
             : dm
         );
-        // Re-sort by most recent message
         updatedDms.sort((a, b) => {
           const aTime = a.lastMessage?.createdAt ?? a.createdAt;
           const bTime = b.lastMessage?.createdAt ?? b.createdAt;
@@ -212,7 +244,6 @@ function handleEvent(event: ServerEvent): void {
         });
         setDms(updatedDms);
       }
-      // Mark DM as unread if not currently viewing it
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
         if (event.message.dmChannelId !== currentChannelId) {
@@ -223,16 +254,21 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'dm_message_updated':
+      if (!isHome) break;
       updateMessage(event.message as any);
       break;
 
     case 'dm_message_deleted':
+      if (!isHome) break;
       removeMessage(event.messageId, event.dmChannelId);
       break;
 
     case 'dm_typing':
+      if (!isHome) break;
       setTyping(event.dmChannelId, event.userId, event.username);
       break;
+
+    // ─── Reactions (all origins) ────────────────────────────────────────────
 
     case 'reaction_added':
       onReactionAdded(event.messageId, event.reaction);
@@ -242,17 +278,30 @@ function handleEvent(event: ServerEvent): void {
       onReactionRemoved(event.messageId, event.userId, event.emoji);
       break;
 
+    // ─── Social events (home-only) ──────────────────────────────────────────
+
     case 'friend_request_received': {
+      if (!isHome) break;
       const { addIncomingRequest } = useSocialStore.getState();
       addIncomingRequest(event.request);
       break;
     }
 
     case 'friend_request_accepted': {
+      if (!isHome) break;
       const { addFriendFromAccepted } = useSocialStore.getState();
       addFriendFromAccepted(event.friend, event.requestId);
       break;
     }
+
+    case 'friend_removed': {
+      if (!isHome) break;
+      const { removeFriendLocally } = useSocialStore.getState();
+      removeFriendLocally(event.userId);
+      break;
+    }
+
+    // ─── Channel ack (all origins) ──────────────────────────────────────────
 
     case 'channel_ack': {
       const { onChannelAck } = useChatStore.getState();
@@ -260,7 +309,10 @@ function handleEvent(event: ServerEvent): void {
       break;
     }
 
+    // ─── DM call events (home-only) ─────────────────────────────────────────
+
     case 'dm_call_incoming': {
+      if (!isHome) break;
       const { setIncomingCall } = useVoiceStore.getState();
       setIncomingCall({
         dmChannelId: event.dmChannelId,
@@ -271,6 +323,7 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'dm_call_accepted': {
+      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -279,6 +332,7 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'dm_call_rejected': {
+      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -287,6 +341,7 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'dm_call_ended': {
+      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -294,42 +349,43 @@ function handleEvent(event: ServerEvent): void {
       break;
     }
 
+    // ─── DM channel events (home-only) ──────────────────────────────────────
+
     case 'dm_channel_created':
+      if (!isHome) break;
       addDmChannel(event.dmChannel);
       break;
 
     case 'dm_channel_closed':
+      if (!isHome) break;
       removeDmChannel(event.dmChannelId);
       break;
 
     case 'dm_member_added': {
+      if (!isHome) break;
       const { addDmMember } = useServerStore.getState();
       addDmMember(event.dmChannelId, event.user);
       break;
     }
 
     case 'dm_member_removed': {
+      if (!isHome) break;
       const { removeDmMember } = useServerStore.getState();
       removeDmMember(event.dmChannelId, event.userId);
       break;
     }
 
-    case 'friend_removed': {
-      const { removeFriendLocally } = useSocialStore.getState();
-      removeFriendLocally(event.userId);
-      break;
-    }
+    // ─── Channel/server events (all origins) ────────────────────────────────
 
     case 'channel_created': {
-      const { currentServerId: curServerId, channels: curChannels, setChannels, channelToServerMap, channelPermissions } = useServerStore.getState();
+      const { currentServerId: curServerId, channels: curChannels, setChannels, channelToServerMap, channelPermissions, channelOriginMap } = useServerStore.getState();
       if (event.serverId === curServerId) {
-        // Deduplicate: only add if not already present
         if (!curChannels.find(c => c.id === event.channel.id)) {
           setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
         }
       }
-      // Update auxiliary maps
       channelToServerMap.set(event.channel.id, event.serverId);
+      channelOriginMap.set(event.channel.id, origin);
       if (event.channel.myPermissions) {
         channelPermissions.set(event.channel.id, event.channel.myPermissions);
       }
@@ -341,17 +397,14 @@ function handleEvent(event: ServerEvent): void {
       if (event.serverId === curServerId2) {
         const exists = curChannels2.some(c => c.id === event.channel.id);
         if (exists) {
-          // Replace existing channel data
           setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
         } else {
-          // Upsert: user just gained access to this channel
           setChannels2([...curChannels2, event.channel].sort((a, b) => a.position - b.position));
-          // Populate channelToServerMap for the new channel
-          const { channelToServerMap: ctsMmap } = useServerStore.getState();
+          const { channelToServerMap: ctsMmap, channelOriginMap: coMap } = useServerStore.getState();
           ctsMmap.set(event.channel.id, event.serverId);
+          coMap.set(event.channel.id, origin);
         }
       }
-      // Sync channelPermissions with the server's computed value
       if (event.channel.myPermissions) {
         chPermsMap2.set(event.channel.id, event.channel.myPermissions);
       }
@@ -359,18 +412,16 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'channel_deleted': {
-      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToServerMap: ctsMap3 } = useServerStore.getState();
+      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToServerMap: ctsMap3, channelOriginMap: coMap3 } = useServerStore.getState();
       if (event.serverId === curServerId3) {
         setChannels3(curChannels3.filter(c => c.id !== event.channelId));
       }
-      // Clean up auxiliary maps
       chPermsMap3.delete(event.channelId);
       ctsMap3.delete(event.channelId);
-      // If the user is currently viewing this channel, navigate away
+      coMap3.delete(event.channelId);
       {
         const { currentChannelId } = useChatStore.getState();
         if (currentChannelId === event.channelId) {
-          // Find the first remaining text channel to navigate to
           const { channels: remainingChannels } = useServerStore.getState();
           const firstText = remainingChannels.find(c => c.type === 'text');
           if (firstText) {
@@ -390,50 +441,67 @@ function handleEvent(event: ServerEvent): void {
     }
 
     case 'pong':
-      // Heartbeat response — no action needed
       break;
 
     case 'error':
-      console.error('WebSocket error:', event.message);
+      console.error(`WebSocket error (${origin || 'home'}):`, event.message);
       break;
   }
 }
 
-function connect(): void {
-  if (!currentToken) return;
-  if (globalWs && (globalWs.readyState === WebSocket.OPEN || globalWs.readyState === WebSocket.CONNECTING)) {
+// ─── Connection management ────────────────────────────────────────────────────
+
+function getOrCreateConnection(origin: string, token: string): ConnectionState {
+  let conn = connections.get(origin);
+  if (!conn) {
+    conn = {
+      ws: null,
+      heartbeatWorker: null,
+      reconnectAttempts: 0,
+      reconnectTimer: undefined,
+      token,
+    };
+    connections.set(origin, conn);
+  } else {
+    conn.token = token;
+  }
+  return conn;
+}
+
+function connectToOrigin(origin: string, token: string): void {
+  const conn = getOrCreateConnection(origin, token);
+
+  if (conn.ws && (conn.ws.readyState === WebSocket.OPEN || conn.ws.readyState === WebSocket.CONNECTING)) {
     return;
   }
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const wsUrl = buildWsUrl(origin);
   const ws = new WebSocket(wsUrl);
-  globalWs = ws;
+  conn.ws = ws;
 
   ws.onopen = () => {
-    reconnectAttempts = 0;
-    ws.send(JSON.stringify({ type: 'auth', token: currentToken }));
-
-    // Start heartbeat via Web Worker (immune to Safari background throttling)
-    startHeartbeat(ws);
+    conn.reconnectAttempts = 0;
+    ws.send(JSON.stringify({ type: 'auth', token: conn.token }));
+    startHeartbeat(conn);
   };
 
   ws.onmessage = (e) => {
     try {
       const event = JSON.parse(e.data as string) as ServerEvent;
-      handleEvent(event);
+      handleEvent(origin, event);
     } catch {
-      console.error('Failed to parse WebSocket message');
+      console.error(`Failed to parse WebSocket message (${origin || 'home'})`);
     }
   };
 
   ws.onclose = () => {
-    globalWs = null;
-    stopHeartbeat();
-    if (currentToken) {
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-      reconnectAttempts++;
-      reconnectTimer = setTimeout(connect, delay);
+    conn.ws = null;
+    stopHeartbeat(conn);
+    // Only reconnect if the connection is still registered (not explicitly disconnected)
+    if (connections.has(origin) && conn.token) {
+      const delay = Math.min(1000 * Math.pow(2, conn.reconnectAttempts), 30000);
+      conn.reconnectAttempts++;
+      conn.reconnectTimer = setTimeout(() => connectToOrigin(origin, conn.token), delay);
     }
   };
 
@@ -442,31 +510,61 @@ function connect(): void {
   };
 }
 
-function disconnect(): void {
-  currentToken = null;
-  isInitialized = false;
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = undefined;
+function disconnectFromOrigin(origin: string): void {
+  const conn = connections.get(origin);
+  if (!conn) return;
+
+  // Clear token to prevent reconnect
+  conn.token = '';
+
+  if (conn.reconnectTimer) {
+    clearTimeout(conn.reconnectTimer);
+    conn.reconnectTimer = undefined;
   }
-  stopHeartbeat();
-  if (globalWs) {
-    globalWs.close();
-    globalWs = null;
+  stopHeartbeat(conn);
+  if (conn.ws) {
+    conn.ws.close();
+    conn.ws = null;
+  }
+  connections.delete(origin);
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/** Connect to a remote instance's WebSocket. Called by instanceStore. */
+export function connectInstance(origin: string, token: string): void {
+  connectToOrigin(origin, token);
+}
+
+/** Disconnect from a remote instance's WebSocket. Called by instanceStore. */
+export function disconnectInstance(origin: string): void {
+  disconnectFromOrigin(origin);
+}
+
+/** Disconnect all remote (non-home) WebSocket connections. Called on logout. */
+export function disconnectAllRemote(): void {
+  for (const origin of [...connections.keys()]) {
+    if (origin !== HOME_ORIGIN) {
+      disconnectFromOrigin(origin);
+    }
   }
 }
 
 /** Send an event over the WebSocket. Can be used outside of React components. */
-export function wsSend(event: ClientEvent): void {
-  if (globalWs && globalWs.readyState === WebSocket.OPEN) {
-    globalWs.send(JSON.stringify(event));
+export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): void {
+  const conn = connections.get(origin);
+  if (conn?.ws && conn.ws.readyState === WebSocket.OPEN) {
+    conn.ws.send(JSON.stringify(event));
   }
 }
 
 /**
- * Hook to initialize the WebSocket connection. Should only be called ONCE
+ * Hook to initialize the home WebSocket connection. Should only be called ONCE
  * from the top-level layout component (AppLayout). Other components should
  * use the exported `wsSend` function directly.
+ *
+ * Remote instance connections are managed by instanceStore via
+ * connectInstance/disconnectInstance — not by this hook.
  */
 export function useWebSocket() {
   const token = useAuthStore((s) => s.token);
@@ -474,23 +572,25 @@ export function useWebSocket() {
   const [isConnected, setIsConnected] = React.useState(false);
 
   useEffect(() => {
-    if (token && (!isInitialized || token !== prevToken.current)) {
-      currentToken = token;
-      isInitialized = true;
-      connect();
-    } else if (!token && isInitialized) {
-      disconnect();
+    if (token && (!homeInitialized || token !== prevToken.current)) {
+      homeInitialized = true;
+      connectToOrigin(HOME_ORIGIN, token);
+    } else if (!token && homeInitialized) {
+      homeInitialized = false;
+      disconnectFromOrigin(HOME_ORIGIN);
     }
     prevToken.current = token;
   }, [token]);
 
   useEffect(() => {
     const checkStatus = setInterval(() => {
-      setIsConnected(!!globalWs && globalWs.readyState === WebSocket.OPEN);
+      const conn = connections.get(HOME_ORIGIN);
+      setIsConnected(!!conn?.ws && conn.ws.readyState === WebSocket.OPEN);
     }, 500);
     return () => {
       clearInterval(checkStatus);
-      disconnect();
+      homeInitialized = false;
+      disconnectFromOrigin(HOME_ORIGIN);
     };
   }, []);
 

@@ -1,9 +1,16 @@
 import { create } from 'zustand';
 import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@backspace/shared';
-import { api } from '../api/client';
+import { api, BackspaceApiClient } from '../api/client';
+
+// ─── Instance-aware types ─────────────────────────────────────────────────────
+
+/** Server augmented with instance origin tracking (client-only, not in shared types). */
+export type TaggedServer = Server & { _instanceOrigin: string };
+
+// ─── Store interface ──────────────────────────────────────────────────────────
 
 interface ServerState {
-  servers: Server[];
+  servers: TaggedServer[];
   currentServerId: string | null;
   channels: Channel[];
   members: MemberWithUser[];
@@ -14,7 +21,8 @@ interface ServerState {
   channelLastMessageIds: Map<string, string>;
   serverPermissions: Map<string, string>; // serverId → myPermissions decimal string
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
-  setServers: (servers: Server[]) => void;
+  channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
+  setServers: (servers: TaggedServer[]) => void;
   setCurrentServer: (serverId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
   setMembers: (members: MemberWithUser[]) => void;
@@ -41,7 +49,8 @@ interface ServerState {
   updateMemberPresence: (userId: string, status: string) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
-  populateFromReady: (servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
+  populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
+  removeInstanceServers: (origin: string) => void;
 }
 
 export const useServerStore = create<ServerState>((set, get) => ({
@@ -56,6 +65,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   channelLastMessageIds: new Map(),
   serverPermissions: new Map(),
   channelPermissions: new Map(),
+  channelOriginMap: new Map(),
 
   setServers: (servers) => set({ servers }),
   setCurrentServer: (serverId) => set({ currentServerId: serverId }),
@@ -63,7 +73,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
   setDmChannels: (dmChannels) => set({ dmChannels }),
-  
+
   addDmChannel: (channel) => set((state) => ({
     dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
   })),
@@ -98,7 +108,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
   loadServers: async () => {
     try {
       const servers = await api.servers.list();
-      set({ servers });
+      set((state) => ({
+        servers: servers.map(s => ({ ...s, _instanceOrigin: '' })) as TaggedServer[],
+      }));
     } catch {
       // Silently fail - will be populated from WS ready
     }
@@ -106,12 +118,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   loadServerDetail: async (serverId: string) => {
     try {
-      const detail = await api.servers.get(serverId);
+      // Resolve the correct API client based on the server's instance origin
+      const server = get().servers.find(s => s.id === serverId);
+      const origin = server?._instanceOrigin ?? '';
+      const client = getApiForOrigin(origin);
+
+      const detail = await client.servers.get(serverId);
       set({
         currentServerId: serverId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         members: detail.members,
-        roles: detail.roles.sort((a, b) => b.position - a.position), // Higher position = higher in list
+        roles: detail.roles.sort((a, b) => b.position - a.position),
       });
     } catch {
       // Handle error silently
@@ -129,7 +146,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   createServer: async (name: string, icon?: string) => {
     const server = await api.servers.create({ name, icon });
-    set((state) => ({ servers: [...state.servers, server] }));
+    const tagged: TaggedServer = { ...server, _instanceOrigin: '' };
+    set((state) => ({ servers: [...state.servers, tagged] }));
     return server;
   },
 
@@ -152,7 +170,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const server = await api.servers.join(serverId, { inviteCode });
     set((state) => {
       if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, server] };
+      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
     });
   },
 
@@ -160,7 +178,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const server = await api.servers.joinByCode(inviteCode);
     set((state) => {
       if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, server] };
+      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
     });
     return server;
   },
@@ -189,7 +207,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   addServer: (server: Server) => {
     set((state) => {
       if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, server] };
+      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
     });
   },
 
@@ -220,28 +238,72 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  populateFromReady: (servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => {
-    const simpleServers: Server[] = servers.map(s => ({
+  populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => {
+    const isHome = !origin;
+
+    // Tag all incoming servers with their instance origin
+    const taggedServers: TaggedServer[] = servers.map(s => ({
       id: s.id,
       name: s.name,
       icon: s.icon,
       ownerId: s.ownerId,
       inviteCode: s.inviteCode,
       createdAt: s.createdAt,
+      _instanceOrigin: origin,
     }));
 
-    // Build channel→server map, channel→lastMessageId map, and permission maps
-    const channelToServerMap = new Map<string, string>();
-    const channelLastMessageIds = new Map<string, string>();
-    const serverPermissions = new Map<string, string>();
-    const channelPermissions = new Map<string, string>();
+    // Merge by origin: keep servers from other origins, replace all from this origin
+    const existingFromOtherOrigins = get().servers.filter(s => s._instanceOrigin !== origin);
+    const mergedServers = [...existingFromOtherOrigins, ...taggedServers];
 
+    // Build/merge maps for incoming channels
+    const channelToServerMap = new Map(get().channelToServerMap);
+    const channelLastMessageIds = new Map(get().channelLastMessageIds);
+    const serverPermissions = new Map(get().serverPermissions);
+    const channelPermissions = new Map(get().channelPermissions);
+    const channelOriginMap = new Map(get().channelOriginMap);
+
+    // If home, clear home-origin entries first to avoid stale data
+    if (isHome) {
+      for (const [key, val] of get().channelOriginMap) {
+        if (val === origin) {
+          channelToServerMap.delete(key);
+          channelLastMessageIds.delete(key);
+          channelPermissions.delete(key);
+          channelOriginMap.delete(key);
+        }
+      }
+      // Also clear server permissions for this origin
+      for (const s of get().servers) {
+        if (s._instanceOrigin === origin) {
+          serverPermissions.delete(s.id);
+        }
+      }
+    } else {
+      // Remote: clear entries that belonged to this origin
+      for (const [key, val] of get().channelOriginMap) {
+        if (val === origin) {
+          channelToServerMap.delete(key);
+          channelLastMessageIds.delete(key);
+          channelPermissions.delete(key);
+          channelOriginMap.delete(key);
+        }
+      }
+      for (const s of get().servers) {
+        if (s._instanceOrigin === origin) {
+          serverPermissions.delete(s.id);
+        }
+      }
+    }
+
+    // Populate maps from incoming servers
     for (const srv of servers) {
       if (srv.myPermissions) {
         serverPermissions.set(srv.id, srv.myPermissions);
       }
       for (const ch of srv.channels) {
         channelToServerMap.set(ch.id, srv.id);
+        channelOriginMap.set(ch.id, origin);
         if (ch.lastMessageId) {
           channelLastMessageIds.set(ch.id, ch.lastMessageId);
         }
@@ -250,22 +312,71 @@ export const useServerStore = create<ServerState>((set, get) => ({
         }
       }
     }
-    // Also map DM channels
-    const dms = dmChannels || [];
-    for (const dm of dms) {
-      if (dm.lastMessage?.id) {
-        channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+
+    // DM channels are home-only
+    const dms = isHome ? (dmChannels || []) : get().dmChannels;
+    if (isHome) {
+      for (const dm of dms) {
+        if (dm.lastMessage?.id) {
+          channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+        }
       }
     }
 
-    set({
-      servers: simpleServers,
-      folders: folders || [],
-      dmChannels: dms,
+    const update: Partial<ServerState> = {
+      servers: mergedServers,
       channelToServerMap,
       channelLastMessageIds,
       serverPermissions,
       channelPermissions,
+      channelOriginMap,
+    };
+
+    // Only set folders and dmChannels from home origin
+    if (isHome) {
+      update.folders = folders || [];
+      update.dmChannels = dms;
+    }
+
+    set(update as any);
+  },
+
+  removeInstanceServers: (origin: string) => {
+    set((state) => {
+      const remainingServers = state.servers.filter(s => s._instanceOrigin !== origin);
+
+      // Clean up maps for channels that belonged to this origin
+      const channelToServerMap = new Map(state.channelToServerMap);
+      const channelLastMessageIds = new Map(state.channelLastMessageIds);
+      const channelPermissions = new Map(state.channelPermissions);
+      const channelOriginMap = new Map(state.channelOriginMap);
+      const serverPermissions = new Map(state.serverPermissions);
+
+      for (const [channelId, chOrigin] of state.channelOriginMap) {
+        if (chOrigin === origin) {
+          channelToServerMap.delete(channelId);
+          channelLastMessageIds.delete(channelId);
+          channelPermissions.delete(channelId);
+          channelOriginMap.delete(channelId);
+        }
+      }
+      for (const s of state.servers) {
+        if (s._instanceOrigin === origin) {
+          serverPermissions.delete(s.id);
+        }
+      }
+
+      return {
+        servers: remainingServers,
+        channelToServerMap,
+        channelLastMessageIds,
+        channelPermissions,
+        channelOriginMap,
+        serverPermissions,
+        currentServerId: remainingServers.find(s => s.id === state.currentServerId)
+          ? state.currentServerId
+          : null,
+      };
     });
   },
 }));
@@ -285,4 +396,32 @@ export function isDmChannel(channelId: string): boolean {
     return window.location.pathname.startsWith('/channels/@me/');
   }
   return false;
+}
+
+/**
+ * Returns the instance origin for a given channel ID.
+ * '' = home instance, 'https://...' = remote instance.
+ */
+export function getChannelOrigin(channelId: string): string {
+  return useServerStore.getState().channelOriginMap.get(channelId) ?? '';
+}
+
+// ─── API client resolution ────────────────────────────────────────────────────
+// The actual resolver is registered by instanceStore on import, avoiding a
+// circular dependency (instanceStore → useWebSocket → chatStore → serverStore).
+
+let _getApiForOrigin: ((origin: string) => BackspaceApiClient) | null = null;
+
+export function setApiForOriginResolver(resolver: (origin: string) => BackspaceApiClient): void {
+  _getApiForOrigin = resolver;
+}
+
+/**
+ * Returns the correct API client for a given instance origin.
+ * '' or falsy = home instance, 'https://...' = remote instance.
+ * The resolver is registered by instanceStore on import.
+ */
+export function getApiForOrigin(origin: string): BackspaceApiClient {
+  if (!origin || !_getApiForOrigin) return api;
+  return _getApiForOrigin(origin);
 }

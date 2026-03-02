@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.removeItem('backspace_token');
     // Clear all user-scoped state to prevent data leaking between sessions
     useChatStore.getState().clearAllMessages();
-    useServerStore.getState().populateFromReady([], [], []);
+    useServerStore.getState().populateFromReady('', [], [], []);
     useSocialStore.getState().reset();
     useVoiceStore.getState().clearAllVoiceUsers();
     useInstanceStore.getState().reset();

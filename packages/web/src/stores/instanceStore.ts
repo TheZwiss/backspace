@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
+import { setApiForOriginResolver, useServerStore } from './serverStore';
+import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,8 @@ function normalizeOrigin(url: string): string {
     throw new Error('Invalid URL');
   }
 }
+
+// ─── API client resolution ───────────────────────────────────────────────────
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
@@ -166,6 +170,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         return { instances: updated, isLoading: false };
       });
 
+      // Open WebSocket connection to the remote instance
+      connectInstance(origin, response.token);
+
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
     } catch (err) {
@@ -202,6 +209,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         return { instances: updated, isLoading: false };
       });
 
+      // Open WebSocket connection to the remote instance
+      connectInstance(origin, response.token);
+
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
     } catch (err) {
@@ -211,11 +221,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   removeInstance: (origin: string) => {
+    // Tear down WebSocket connection
+    disconnectInstance(origin);
+
     set((state) => {
       const updated = state.instances.filter(i => i.origin !== origin);
       saveCachedTokens(updated);
       return { instances: updated };
     });
+
+    // Remove servers from this instance from the server store
+    useServerStore.getState().removeInstanceServers(origin);
 
     // Sync updated list to remaining instances (fire-and-forget)
     get().syncInstanceList().catch(() => {});
@@ -313,6 +329,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           set((state) => ({
             instances: state.instances.map(i => i.origin === origin ? connectedInstance : i),
           }));
+
+          // Open WebSocket connection now that we've verified the token
+          connectInstance(origin, cachedEntry.token);
         } catch {
           // Token expired or instance unreachable
           set((state) => ({
@@ -337,7 +356,23 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   reset: () => {
+    // Tear down all remote WebSocket connections
+    disconnectAllRemote();
+
     set({ instances: [], isLoading: false, error: null });
     localStorage.removeItem(STORAGE_KEY);
   },
 }));
+
+// ─── API client resolution ───────────────────────────────────────────────────
+// Register the resolver with serverStore so getApiForOrigin() works everywhere.
+// Placed after store creation so useInstanceStore is definitely initialized.
+// This breaks the circular dependency: chatStore → serverStore ← instanceStore
+// instead of: chatStore → instanceStore → useWebSocket → chatStore (cycle).
+
+setApiForOriginResolver((origin: string): BackspaceApiClient => {
+  if (!origin) return api;
+  const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
+  if (!instance) return api;
+  return instance.api;
+});
