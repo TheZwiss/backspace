@@ -12,7 +12,7 @@ import {
   LocalAudioTrack,
   LocalTrackPublication,
 } from 'livekit-client';
-import { api } from '../api/client';
+import { getApiForOrigin, getChannelOrigin } from '../stores/serverStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
@@ -340,7 +340,8 @@ export function useLiveKit() {
     }
     
     try {
-      const { token, url } = isDm ? await api.livekit.dmToken(channelId) : await api.livekit.token(channelId);
+      const client = isDm ? getApiForOrigin('') : getApiForOrigin(getChannelOrigin(channelId));
+      const { token, url } = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
