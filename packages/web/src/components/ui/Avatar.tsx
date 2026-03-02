@@ -69,12 +69,13 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       </div>
       {status && (
         <div
-          className={`absolute -bottom-0.5 -right-0.5 rounded-full border-[3px] border-surface-channel ${statusColors[status] ?? 'bg-status-offline'}`}
+          className={`absolute rounded-full ${statusColors[status] ?? 'bg-status-offline'}`}
           style={{
-            width: size * 0.35,
-            height: size * 0.35,
-            minWidth: 12,
-            minHeight: 12,
+            width: size <= 24 ? 10 : 12,
+            height: size <= 24 ? 10 : 12,
+            bottom: -2,
+            right: -2,
+            border: '3px solid rgba(22, 22, 40, 0.72)',
           }}
         />
       )}

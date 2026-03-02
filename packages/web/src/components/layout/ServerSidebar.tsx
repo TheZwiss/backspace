@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
-import { Tooltip } from '../ui/Tooltip';
+
 import { getServerGradient, HOME_GRADIENT } from '../../utils/gradients';
 
 interface SidebarItemProps {
@@ -13,7 +13,7 @@ interface SidebarItemProps {
   active: boolean;
   onClick: () => void;
   type?: 'server' | 'dm' | 'action';
-  actionType?: 'add' | 'join' | 'explore';
+  actionType?: 'add' | 'join';
   hasUnread?: boolean;
 }
 
@@ -22,94 +22,86 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
   const firstLetter = name.charAt(0).toUpperCase();
 
   const getPillHeight = () => {
-    if (active) return 'h-10';
-    if (isHovered) return 'h-5';
+    if (active) return 'h-8';
+    if (isHovered) return 'h-4';
     if (hasUnread && !active) return 'h-2';
     return 'h-2 scale-0';
   };
 
   const backgroundStyle = useMemo((): React.CSSProperties | undefined => {
-    if (type === 'action') return undefined;
+    if (type === 'action') {
+      return {
+        background: isHovered ? 'rgba(134, 239, 172, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+      };
+    }
 
     if (type === 'dm') {
-      return {
-        background: HOME_GRADIENT.gradient,
-        ...(isHovered ? { boxShadow: `0 0 12px ${HOME_GRADIENT.glow}40` } : {}),
-      };
+      return { background: HOME_GRADIENT.gradient };
     }
 
     // Server type — if it has a custom icon image, no gradient needed
     if (icon) return undefined;
 
     const serverGrad = getServerGradient(id, name);
-    return {
-      background: serverGrad.gradient,
-      ...(isHovered ? { boxShadow: `0 0 12px ${serverGrad.glow}40` } : {}),
-    };
-  }, [type, id, name, icon, active, isHovered]);
+    return { background: serverGrad.gradient };
+  }, [type, id, name, icon, isHovered]);
 
   const getButtonClasses = () => {
-    const base = 'w-12 h-12 flex items-center justify-center transition-all duration-200 overflow-hidden relative group';
+    const base = 'w-10 h-10 flex items-center justify-center duration-200 overflow-hidden [transition:border-radius_0.2s,background_0.2s,color_0.2s]';
 
     if (type === 'dm') {
-      return `${base} text-white ${active ? 'rounded-[16px]' : 'rounded-[24px] hover:rounded-[16px]'}`;
+      return `${base} text-white ${active ? 'rounded-[13px]' : 'rounded-[20px] hover:rounded-[13px]'}`;
     }
 
     if (type === 'action') {
-      return `${base} bg-surface-chat rounded-[24px] hover:rounded-[16px] text-status-online hover:bg-status-online hover:text-white`;
+      return `${base} rounded-[20px] hover:rounded-[13px] text-accent-mint`;
     }
 
     if (icon) {
-      return `${base} ${active ? 'rounded-[16px]' : 'rounded-[24px] hover:rounded-[16px]'}`;
+      return `${base} ${active ? 'rounded-[13px]' : 'rounded-[20px] hover:rounded-[13px]'}`;
     }
 
-    return `${base} text-white ${active ? 'rounded-[16px]' : 'rounded-[24px] hover:rounded-[16px]'}`;
+    return `${base} text-white ${active ? 'rounded-[13px]' : 'rounded-[20px] hover:rounded-[13px]'}`;
   };
 
   return (
     <div
-      className="relative flex items-center mb-2 w-full justify-center"
+      className="relative flex items-center mb-1.5 w-full justify-center"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Pill Indicator */}
       {(type === 'server' || type === 'dm') && (
-        <div className="absolute -left-0 w-2 h-12 flex items-center">
+        <div className="absolute -left-0 w-2 h-10 flex items-center">
           <div
             className={`bg-white rounded-r-full transition-all duration-200 origin-left ${getPillHeight()} w-1`}
           />
         </div>
       )}
 
-      <Tooltip content={name} position="right">
-        <button onClick={onClick} className={getButtonClasses()} style={backgroundStyle}>
-          {type === 'dm' ? (
-            <span className="text-[20px] font-bold">B</span>
-          ) : type === 'action' ? (
-            actionType === 'add' ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-              </svg>
-            ) : actionType === 'explore' ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-3.146-5.351l2.78-1.042 1.042-2.78-2.78 1.042-1.042 2.78zM14.5 7.5l-2.5 5-5 2.5 2.5-5 5-2.5z" />
-              </svg>
-            ) : (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
-              </svg>
-            )
-          ) : icon ? (
-            <img
-              src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
-              alt={name}
-              className="w-full h-full object-cover"
-            />
+      <button onClick={onClick} className={getButtonClasses()} style={backgroundStyle} title={name}>
+        {type === 'dm' ? (
+          <span className="text-[17px] font-bold">B</span>
+        ) : type === 'action' ? (
+          actionType === 'add' ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+            </svg>
           ) : (
-            <span className="text-[16px] font-medium">{firstLetter}</span>
-          )}
-        </button>
-      </Tooltip>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+            </svg>
+          )
+        ) : icon ? (
+          <img
+            src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+            alt={name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <span className="text-[15px] font-medium">{firstLetter}</span>
+        )}
+      </button>
     </div>
   );
 }
@@ -167,7 +159,7 @@ export function ServerSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-2" />
+      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
       {servers.map((server) => (
         <SidebarItem
@@ -180,6 +172,8 @@ export function ServerSidebar() {
           hasUnread={unreadServerIds.has(server.id)}
         />
       ))}
+
+      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
       <SidebarItem
         id="add-server"
@@ -199,14 +193,6 @@ export function ServerSidebar() {
         actionType="join"
       />
 
-      <SidebarItem
-        id="explore"
-        name="Explore Discoverable Servers"
-        active={false}
-        onClick={() => {}}
-        type="action"
-        actionType="explore"
-      />
     </nav>
   );
 }

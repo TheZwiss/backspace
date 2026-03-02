@@ -142,25 +142,22 @@ export function ChannelSidebar() {
             <span className="font-medium text-[16px]">Friends</span>
           </div>
 
-          {/* Nitro */}
+          {/* Placeholder nav items */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
-              <path d="M2.98966977,9.35789159 C2.98966977,9.77582472 2.63542482,10.1300697 2.21749169,10.1300697 L2.21749169,10.1300697 C1.79955856,10.1300697 1.44531361,9.77582472 1.44531361,9.35789159 L1.44531361,9.35789159 C1.44531361,8.93995846 1.79955856,8.58571351 2.21749169,8.58571351 L2.21749169,8.58571351 C2.63542482,8.58571351 2.98966977,8.93995846 2.98966977,9.35789159 Z" transform="translate(12, 12) scale(1.2) translate(-12, -12)" />
-              <path d="M21.7,9.358 L12.957,2.46 C12.396,2.014 11.604,2.014 11.043,2.46 L2.3,9.358 C2.113,9.507 2,9.734 2,9.975 L2,19.5 C2,20.881 3.119,22 4.5,22 L19.5,22 C20.881,22 22,20.881 22,19.5 L22,9.975 C22,9.734 21.887,9.507 21.7,9.358 Z M12,17.5 C10.619,17.5 9.5,16.381 9.5,15 C9.5,13.619 10.619,12.5 12,12.5 C13.381,12.5 14.5,13.619 14.5,15 C14.5,16.381 13.381,17.5 12,17.5 Z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
             </svg>
-            <span className="font-medium text-[16px]">Nitro</span>
+            <span className="font-medium text-[16px]">Coming Soon</span>
           </div>
-
-          {/* Shop */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 opacity-70 group-hover:opacity-100">
-              <path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h17A1.5 1.5 0 0 1 22 5.5V7H2V5.5ZM2 9v9.5A1.5 1.5 0 0 0 3.5 20h17a1.5 1.5 0 0 0 1.5-1.5V9H2Zm9.5 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5Zm-4-1h2a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1a1 1 0 0 1 1-1Z" />
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
             </svg>
-            <span className="font-medium text-[16px]">Shop</span>
+            <span className="font-medium text-[16px]">Coming Soon</span>
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">

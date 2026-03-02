@@ -197,7 +197,7 @@ export function FriendsPage() {
           <button
             onClick={() => setActiveTab('add')}
             className={`px-2 py-0.5 rounded text-[14px] font-medium transition-all ${
-              activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-white hover:bg-status-online/90'
+              activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
             }`}
           >
             Add Friend

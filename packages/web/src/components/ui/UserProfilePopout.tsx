@@ -18,6 +18,13 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
   const addDmChannel = useServerStore((s) => s.addDmChannel);
   const displayName = user.displayName ?? user.username;
 
+  const top = position
+    ? Math.min(Math.max(8, position.top), window.innerHeight - 360)
+    : undefined;
+  const left = position
+    ? Math.min(Math.max(8, position.left), window.innerWidth - 316)
+    : undefined;
+
   const handleSendMessage = async () => {
     try {
       const channel = await api.dm.create({ userId: user.id });
@@ -29,59 +36,77 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       console.error('Failed to create DM channel:', err);
     }
   };
-  
+
   return (
-    <div 
-      className="fixed z-[200] w-[300px] bg-surface-elevated rounded-[8px] shadow-elevation-high overflow-hidden animate-fade-in select-none"
-      style={position ? { top: position.top, left: position.left } : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+    <div
+      className="fixed z-[200] w-[300px] rounded-[12px] overflow-hidden animate-fade-in select-none border border-white/[0.07]"
+      style={{
+        ...(position
+          ? { top, left }
+          : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
+        backdropFilter: 'blur(20px) saturate(1.2)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
+        backgroundColor: 'rgba(20,20,26,0.85)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)',
+      }}
     >
       {/* Banner */}
-      <div className="h-[60px]" style={{ background: getAvatarGradient(user.id, displayName).gradient }} />
-      
-      {/* Avatar Container */}
-      <div className="px-4 pb-4 relative">
-        <div className="absolute -top-8 left-4 rounded-full border-[6px] border-surface-elevated bg-surface-elevated">
+      <div
+        className="h-[48px] rounded-t-[12px]"
+        style={{
+          background: getAvatarGradient(user.id, displayName).gradient,
+          opacity: 0.6,
+        }}
+      />
+
+      {/* Body */}
+      <div className="px-4 pb-4">
+        {/* Avatar — negative margin pulls it into the banner while staying in flow */}
+        <div
+          className="mt-[-28px] mb-3 w-fit rounded-full"
+          style={{ border: '4px solid rgba(20,20,26,0.85)' }}
+        >
           <Avatar
             src={user.avatar}
             name={displayName}
-            size={80}
-            status={user.status as any}
-            user={user}
+            size={56}
+            status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+            userId={user.id}
           />
         </div>
-        
-        {/* Content */}
-        <div className="mt-12 bg-surface-input rounded-[8px] p-3">
-          <div className="text-[20px] font-bold text-txt-primary leading-tight mb-1">
+
+        {/* Name & info — flows naturally after avatar */}
+        <div>
+          <div className="text-[16px] font-semibold text-txt-primary leading-tight">
             {displayName}
           </div>
-          <div className="text-[14px] text-txt-secondary font-medium mb-3">
+          <div className="text-[13px] text-txt-tertiary">
             @{user.username}
           </div>
-
-          <div className="w-full h-[1px] bg-border-soft mb-3" />
-
-          <div className="mb-3">
-            <div className="text-[12px] font-bold text-txt-primary uppercase mb-1">Backspace Member Since</div>
-            <div className="text-[12px] text-txt-secondary font-medium">
-              {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-            </div>
-          </div>
-
           {user.customStatus && (
-            <div className="mb-3">
-              <div className="text-[12px] font-bold text-txt-primary uppercase mb-1">Status</div>
-              <div className="text-[14px] text-txt-secondary">{user.customStatus}</div>
+            <div className="text-[13px] text-txt-secondary italic mt-1">
+              {user.customStatus}
             </div>
           )}
         </div>
-      </div>
-      
-      {/* Footer / Actions */}
-      <div className="px-4 pb-4">
-        <button 
+
+        {/* Divider */}
+        <div className="border-t border-white/[0.06] my-3" />
+
+        {/* Member since */}
+        <div>
+          <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+            Member Since
+          </span>
+          <span className="text-[12px] text-txt-secondary ml-2">
+            {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+        </div>
+
+        {/* Send Message button */}
+        <button
           onClick={handleSendMessage}
-          className="w-full py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-[14px] font-medium rounded-[4px] transition-colors"
+          className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
         >
           Send Message
         </button>
