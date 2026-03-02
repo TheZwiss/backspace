@@ -21,6 +21,28 @@ const statusColors: Record<string, string> = {
   offline: 'bg-status-offline',
 };
 
+/**
+ * Builds a CSS radial-gradient mask that punches a circular hole in the avatar
+ * where the status dot sits. The hole reveals the parent background, creating
+ * a true cutout effect on any surface — no border-color matching needed.
+ *
+ * Prototype reference (.m-dot): 12px box with 3px border (border-box) = 6px
+ * visible color, positioned at bottom:-2 right:-2 → center 4px from corner.
+ */
+function buildCutoutMask(size: number): string {
+  const { dot, gap, inset } = getDotMetrics(size);
+  const cx = size - inset;
+  const cy = size - inset;
+  const r = dot / 2 + gap;
+  return `radial-gradient(circle at ${cx}px ${cy}px, transparent ${r}px, black ${r + 0.5}px)`;
+}
+
+/** Returns visible dot diameter, gap width, and center inset from avatar edge. */
+function getDotMetrics(size: number) {
+  if (size <= 24) return { dot: 5, gap: 2, inset: 3 };
+  return { dot: 6, gap: 3, inset: 4 };
+}
+
 export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId }: AvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
@@ -40,6 +62,14 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
     }
   };
 
+  // Only compute mask when status dot is visible
+  const cutoutMask = status ? buildCutoutMask(size) : undefined;
+  const maskStyle: React.CSSProperties | undefined = cutoutMask
+    ? { maskImage: cutoutMask, WebkitMaskImage: cutoutMask }
+    : undefined;
+
+  const { dot: dotDiameter, inset: dotInset } = getDotMetrics(size);
+
   return (
     <div
       className={`relative inline-flex flex-shrink-0 ${(onClick || user) ? 'cursor-pointer' : ''} ${className}`}
@@ -51,6 +81,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
           src={src.startsWith('http') ? src : `/api/uploads/${src}`}
           alt={name}
           className="w-full h-full rounded-full object-cover"
+          style={maskStyle}
           onError={(e) => {
             (e.target as HTMLImageElement).style.display = 'none';
             const parent = (e.target as HTMLImageElement).parentElement;
@@ -63,7 +94,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       ) : null}
       <div
         className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center ${fontSize} font-semibold text-white ${src ? 'hidden' : 'flex'}`}
-        style={src ? { display: 'none' } : { background: gradient.gradient }}
+        style={src ? { display: 'none' } : { background: gradient.gradient, ...maskStyle }}
       >
         {initials}
       </div>
@@ -71,11 +102,10 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
         <div
           className={`absolute rounded-full ${statusColors[status] ?? 'bg-status-offline'}`}
           style={{
-            width: size <= 24 ? 10 : 12,
-            height: size <= 24 ? 10 : 12,
-            bottom: -2,
-            right: -2,
-            border: '3px solid rgba(22, 22, 40, 0.72)',
+            width: dotDiameter,
+            height: dotDiameter,
+            bottom: dotInset - dotDiameter / 2,
+            right: dotInset - dotDiameter / 2,
           }}
         />
       )}
