@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
@@ -29,6 +29,18 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const members = useServerStore((s) => s.members);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Auto-focus textarea on channel navigation
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, [channelId]);
+
+  // Auto-focus textarea when replying
+  useEffect(() => {
+    if (replyTo) {
+      textareaRef.current?.focus();
+    }
+  }, [replyTo]);
 
   // Filter members for the mention popover
   const filteredMembers = useMemo(() => {
@@ -216,7 +228,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   };
 
   return (
-    <div className="px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
+    <div data-pip-obstacle="bottom" className="px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
       {replyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-border-hard/50">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">

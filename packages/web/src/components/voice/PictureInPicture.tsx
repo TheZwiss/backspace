@@ -12,6 +12,47 @@ const PIP_HEIGHT = 180;
 const PIP_MARGIN = 16;
 const DRAG_THRESHOLD = 5;
 
+/**
+ * Computes PiP boundary box by measuring actual DOM obstacles.
+ * Obstacle elements declare themselves with data-pip-obstacle="left"|"bottom".
+ * PiP queries them at boundary-check time — no hardcoded layout values.
+ *
+ * On mobile (<768px) there are no fixed side/bottom UI obstacles.
+ */
+function getPipBounds(pipX: number): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let minX = PIP_MARGIN;
+  const maxX = vw - PIP_WIDTH - PIP_MARGIN;
+  const minY = PIP_MARGIN;
+  let maxY = vh - PIP_HEIGHT - PIP_MARGIN;
+
+  if (vw < 768) return { minX, maxX, minY, maxY };
+
+  const obstacles = document.querySelectorAll<HTMLElement>('[data-pip-obstacle]');
+  for (const el of obstacles) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+
+    const direction = el.dataset.pipObstacle;
+    if (direction === 'left') {
+      minX = Math.max(minX, rect.right + PIP_MARGIN);
+    } else if (direction === 'bottom') {
+      const pipRight = pipX + PIP_WIDTH;
+      if (pipX < rect.right && pipRight > rect.left) {
+        maxY = Math.min(maxY, rect.top - PIP_HEIGHT - PIP_MARGIN);
+      }
+    }
+  }
+
+  return { minX, maxX, minY, maxY };
+}
+
 interface SelectedStream {
   participant: ParticipantInfo;
   track: MediaStreamTrack;
@@ -93,10 +134,21 @@ export function PictureInPicture() {
     }
   }, [currentVoiceChannelId, activeDmCall, setPipCollapsed]);
 
-  // Visibility
+  // Visibility — split into wouldShow (ignores collapsed) and shouldShow (full check)
   const isInServerVoice = currentVoiceChannelId !== null && currentChannelId !== currentVoiceChannelId;
   const isInDmCall = activeDmCall !== null && currentChannelId !== activeDmCall.dmChannelId;
-  const shouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen && !pipCollapsed;
+  const wouldShow = (isInServerVoice || isInDmCall) && !voiceFullscreen;
+  const shouldShow = wouldShow && !pipCollapsed;
+
+  // Reset pipCollapsed when wouldShow transitions false → true
+  // (user navigated away from voice channel view → PiP reappears)
+  const prevWouldShow = useRef(wouldShow);
+  useEffect(() => {
+    if (wouldShow && !prevWouldShow.current) {
+      setPipCollapsed(false);
+    }
+    prevWouldShow.current = wouldShow;
+  }, [wouldShow, setPipCollapsed]);
 
   // Stream selection
   const selectedStream = useMemo(
@@ -146,34 +198,61 @@ export function PictureInPicture() {
   // Initialize position to bottom-right
   useEffect(() => {
     if (shouldShow && position.x === -1) {
-      setPosition({
-        x: window.innerWidth - PIP_WIDTH - PIP_MARGIN,
-        y: window.innerHeight - PIP_HEIGHT - PIP_MARGIN,
-      });
+      const initX = window.innerWidth - PIP_WIDTH - PIP_MARGIN;
+      const { maxY } = getPipBounds(initX);
+      setPosition({ x: initX, y: maxY });
     }
   }, [shouldShow, position.x]);
 
-  // Window resize: keep PiP in bounds
+  // Re-clamp PiP when viewport resizes, obstacles appear/disappear, or obstacles resize
   useEffect(() => {
     if (!shouldShow) return;
-    const handleResize = () => {
-      setPosition(prev => ({
-        x: Math.max(PIP_MARGIN, Math.min(window.innerWidth - PIP_WIDTH - PIP_MARGIN, prev.x)),
-        y: Math.max(PIP_MARGIN, Math.min(window.innerHeight - PIP_HEIGHT - PIP_MARGIN, prev.y)),
-      }));
+
+    const reclamp = () => {
+      setPosition(prev => {
+        if (prev.x === -1) return prev;
+        const { minX, maxX } = getPipBounds(prev.x);
+        const clampedX = Math.max(minX, Math.min(maxX, prev.x));
+        const { minY, maxY } = getPipBounds(clampedX);
+        return { x: clampedX, y: Math.max(minY, Math.min(maxY, prev.y)) };
+      });
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    // Observe obstacle elements for size changes (e.g., voice panel expanding)
+    let knownObstacles = new Set(document.querySelectorAll<HTMLElement>('[data-pip-obstacle]'));
+    const resizeObserver = new ResizeObserver(reclamp);
+    knownObstacles.forEach(el => resizeObserver.observe(el));
+
+    // Detect obstacle elements being added/removed from the DOM
+    const mutationObserver = new MutationObserver(() => {
+      const current = new Set(document.querySelectorAll<HTMLElement>('[data-pip-obstacle]'));
+      if (current.size !== knownObstacles.size || ![...current].every(el => knownObstacles.has(el))) {
+        resizeObserver.disconnect();
+        current.forEach(el => resizeObserver.observe(el));
+        knownObstacles = current;
+        reclamp();
+      }
+    });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+
+    window.addEventListener('resize', reclamp);
+    return () => {
+      window.removeEventListener('resize', reclamp);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
   }, [shouldShow]);
 
   // Snap to nearest horizontal edge
   const snapToEdge = useCallback((currentX: number, currentY: number) => {
     const centerX = currentX + PIP_WIDTH / 2;
     const screenMidX = window.innerWidth / 2;
+    const { minX } = getPipBounds(currentX);
     const targetX = centerX < screenMidX
-      ? PIP_MARGIN
+      ? minX
       : window.innerWidth - PIP_WIDTH - PIP_MARGIN;
-    const clampedY = Math.max(PIP_MARGIN, Math.min(window.innerHeight - PIP_HEIGHT - PIP_MARGIN, currentY));
+    const { minY, maxY } = getPipBounds(targetX);
+    const clampedY = Math.max(minY, Math.min(maxY, currentY));
     setPosition({ x: targetX, y: clampedY });
   }, []);
 
@@ -194,8 +273,11 @@ export function PictureInPicture() {
     if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
       hasMoved.current = true;
     }
-    const newX = Math.max(PIP_MARGIN, Math.min(window.innerWidth - PIP_WIDTH - PIP_MARGIN, e.clientX - dragOffset.current.x));
-    const newY = Math.max(PIP_MARGIN, Math.min(window.innerHeight - PIP_HEIGHT - PIP_MARGIN, e.clientY - dragOffset.current.y));
+    const rawX = e.clientX - dragOffset.current.x;
+    const bounds = getPipBounds(rawX);
+    const newX = Math.max(bounds.minX, Math.min(bounds.maxX, rawX));
+    const { minY, maxY } = getPipBounds(newX);
+    const newY = Math.max(minY, Math.min(maxY, e.clientY - dragOffset.current.y));
     setPosition({ x: newX, y: newY });
   }, [isDragging]);
 

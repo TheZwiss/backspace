@@ -97,7 +97,7 @@ export function ChannelSidebar() {
 
   // Floating bottom panel — shared between DM view and server view
   const floatingPanel = user ? (
-    <div className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
+    <div data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
       <div className="glass-bubble rounded-[14px]">
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}

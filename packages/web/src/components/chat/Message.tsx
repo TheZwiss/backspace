@@ -248,14 +248,14 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   <button
                     key={emoji}
                     onClick={() => toggleReaction(emoji)}
-                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[8px] text-[14px] font-medium border transition-colors ${
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[13px] border transition-all duration-[120ms] ease-out cursor-pointer ${
                       me
-                        ? 'bg-accent-primary/15 border-accent-primary text-accent-primary'
-                        : 'bg-surface-channel border-transparent text-txt-tertiary hover:border-txt-tertiary/30'
+                        ? 'bg-accent-mint/10 border-accent-mint/25 hover:bg-accent-mint/15'
+                        : 'bg-white/[0.04] border-border-soft hover:bg-white/[0.08] hover:border-white/[0.12]'
                     }`}
                   >
                     <span>{emoji}</span>
-                    <span className={me ? 'text-accent-primary' : 'text-txt-message'}>{count}</span>
+                    <span className={`text-xs font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`}>{count}</span>
                   </button>
                 ))}
               </div>

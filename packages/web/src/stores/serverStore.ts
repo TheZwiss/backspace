@@ -172,9 +172,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   createChannel: async (serverId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => {
     const channel = await api.channels.create(serverId, { name, type, topic });
-    set((state) => ({
-      channels: [...state.channels, channel].sort((a, b) => a.position - b.position),
-    }));
+    set((state) => {
+      if (state.channels.some(c => c.id === channel.id)) return state;
+      return { channels: [...state.channels, channel].sort((a, b) => a.position - b.position) };
+    });
     return channel;
   },
 
