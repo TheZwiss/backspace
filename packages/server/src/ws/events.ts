@@ -713,32 +713,52 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
   if (!messageId || !emoji) return;
 
   const db = getDb();
+
+  // Try server message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-  if (!message) return;
+  if (message) {
+    const serverId = getChannelServerId(message.channelId);
+    if (!serverId || !isMember(serverId, userId)) return;
 
-  const serverId = getChannelServerId(message.channelId);
-  if (!serverId || !isMember(serverId, userId)) return;
-
-  const reactionId = generateSnowflake();
-  try {
-    db.insert(schema.reactions).values({
-      id: reactionId,
-      messageId,
-      userId,
-      emoji,
-      createdAt: Date.now(),
-    }).run();
-
-    connectionManager.sendToChannel(serverId, message.channelId, {
-      type: 'reaction_added',
-      messageId,
-      reaction: {
+    const reactionId = generateSnowflake();
+    try {
+      db.insert(schema.reactions).values({
         id: reactionId,
         messageId,
         userId,
         emoji,
         createdAt: Date.now(),
-      },
+      }).run();
+
+      connectionManager.sendToChannel(serverId, message.channelId, {
+        type: 'reaction_added',
+        messageId,
+        reaction: { id: reactionId, messageId, userId, emoji, createdAt: Date.now() },
+      });
+    } catch (err) {
+      // Unique constraint violation (already reacted)
+    }
+    return;
+  }
+
+  // Fall through to DM message
+  const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+
+  const reactionId = generateSnowflake();
+  try {
+    db.insert(schema.dmReactions).values({
+      id: reactionId,
+      dmMessageId: messageId,
+      userId,
+      emoji,
+      createdAt: Date.now(),
+    }).run();
+
+    connectionManager.sendToDmMembers(dmMsg.dmChannelId, {
+      type: 'reaction_added',
+      messageId,
+      reaction: { id: reactionId, messageId, userId, emoji, createdAt: Date.now() },
     });
   } catch (err) {
     // Unique constraint violation (already reacted)
@@ -752,22 +772,46 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
   if (!messageId || !emoji) return;
 
   const db = getDb();
+
+  // Try server message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-  if (!message) return;
+  if (message) {
+    const serverId = getChannelServerId(message.channelId);
+    if (!serverId || !isMember(serverId, userId)) return;
 
-  const serverId = getChannelServerId(message.channelId);
-  if (!serverId || !isMember(serverId, userId)) return;
+    const result = db.delete(schema.reactions)
+      .where(and(
+        eq(schema.reactions.messageId, messageId),
+        eq(schema.reactions.userId, userId),
+        eq(schema.reactions.emoji, emoji)
+      ))
+      .run();
 
-  const result = db.delete(schema.reactions)
+    if (result.changes > 0) {
+      connectionManager.sendToChannel(serverId, message.channelId, {
+        type: 'reaction_removed',
+        messageId,
+        userId,
+        emoji,
+      });
+    }
+    return;
+  }
+
+  // Fall through to DM message
+  const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
+  if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+
+  const result = db.delete(schema.dmReactions)
     .where(and(
-      eq(schema.reactions.messageId, messageId),
-      eq(schema.reactions.userId, userId),
-      eq(schema.reactions.emoji, emoji)
+      eq(schema.dmReactions.dmMessageId, messageId),
+      eq(schema.dmReactions.userId, userId),
+      eq(schema.dmReactions.emoji, emoji)
     ))
     .run();
 
   if (result.changes > 0) {
-    connectionManager.sendToChannel(serverId, message.channelId, {
+    connectionManager.sendToDmMembers(dmMsg.dmChannelId, {
       type: 'reaction_removed',
       messageId,
       userId,

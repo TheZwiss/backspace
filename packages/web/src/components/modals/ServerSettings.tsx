@@ -189,7 +189,7 @@ function StreamingLimitsPanel() {
 
       {/* Save / Reset */}
       {saveError && (
-        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
+        <div className="p-2 bg-[rgba(253,164,175,0.10)] border border-[rgba(253,164,175,0.30)] rounded text-txt-danger text-sm">{saveError}</div>
       )}
       {saveSuccess && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
@@ -369,7 +369,7 @@ export function ServerSettingsModal() {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {error && (
-            <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
+            <div className="mb-3 p-2 bg-[rgba(253,164,175,0.10)] border border-[rgba(253,164,175,0.30)] rounded text-txt-danger text-sm">{error}</div>
           )}
 
           {tab === 'overview' && (

@@ -76,7 +76,7 @@ export function UserSettingsModal() {
         </div>
 
         {error && (
-          <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
+          <div className="p-2 bg-[rgba(253,164,175,0.10)] border border-[rgba(253,164,175,0.30)] rounded text-txt-danger text-sm">{error}</div>
         )}
         {success && (
           <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">{success}</div>

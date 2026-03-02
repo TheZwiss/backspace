@@ -161,7 +161,7 @@ export function FriendsPage() {
               </button>
             </form>
             {addStatus && (
-              <div className={`text-sm p-3 rounded-lg border ${addStatus.type === 'success' ? 'text-txt-positive border-status-online/20 bg-status-online/5' : 'text-txt-danger border-accent-rose/20 bg-accent-rose/5'}`}>
+              <div className={`text-sm p-3 rounded-lg border ${addStatus.type === 'success' ? 'text-txt-positive border-[rgba(134,239,172,0.20)] bg-[rgba(134,239,172,0.05)]' : 'text-txt-danger border-[rgba(253,164,175,0.20)] bg-[rgba(253,164,175,0.05)]'}`}>
                 {addStatus.message}
               </div>
             )}

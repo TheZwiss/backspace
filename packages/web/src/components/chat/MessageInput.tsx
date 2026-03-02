@@ -230,7 +230,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   return (
     <div data-pip-obstacle="bottom" className="px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
       {replyTo && (
-        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-border-hard/50">
+        <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
             <span className="opacity-60">Replying to</span>
             <span className="font-bold">{replyTo.user.displayName ?? replyTo.user.username}</span>
@@ -261,7 +261,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
         {/* File previews */}
         {files.length > 0 && (
-          <div className="p-4 flex flex-wrap gap-4 bg-surface-channel/30">
+          <div className="p-4 flex flex-wrap gap-4 bg-[rgba(26,26,35,0.30)]">
             {files.map((file, i) => (
               <div key={i} className="relative group bg-surface-channel rounded-lg p-2 max-w-[200px] shadow-elevation-low border border-border-hard">
                 {file.type.startsWith('image/') ? (

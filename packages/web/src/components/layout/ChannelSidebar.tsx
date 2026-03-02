@@ -121,7 +121,7 @@ export function ChannelSidebar() {
       <>
       <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
         <div className="h-12 px-[10px] flex items-center border-b border-border-hard z-10">
-          <button className="flex-1 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base/80 transition-colors">
+          <button className="flex-1 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base transition-colors">
             Find or start a conversation
           </button>
         </div>

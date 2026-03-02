@@ -203,7 +203,7 @@ function buildComponents(): Components {
     ),
     thead: ({ children }) => <thead className="border-b border-border-soft">{children}</thead>,
     tbody: ({ children }) => <tbody>{children}</tbody>,
-    tr: ({ children }) => <tr className="border-b border-border-soft/50">{children}</tr>,
+    tr: ({ children }) => <tr className="border-b border-white/[0.06]">{children}</tr>,
     th: ({ children }) => <th className="px-3 py-1.5 text-left text-txt-primary font-semibold">{children}</th>,
     td: ({ children }) => <td className="px-3 py-1.5">{children}</td>,
   };
