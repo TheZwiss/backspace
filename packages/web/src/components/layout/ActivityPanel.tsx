@@ -68,7 +68,7 @@ export function ActivityPanel() {
   );
 
   return (
-    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block">
+    <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">Active Now</h3>
 

@@ -64,7 +64,7 @@
   }
 
   * {
-    @apply border-none;
+    @apply border-0;
     outline: none !important;
   }
 

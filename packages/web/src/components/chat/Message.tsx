@@ -243,7 +243,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
             {/* Reactions */}
             {Object.keys(reactionGroups).length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
+              <div className="flex flex-wrap gap-1">
                 {Object.entries(reactionGroups).map(([emoji, { count, me }]) => (
                   <button
                     key={emoji}
