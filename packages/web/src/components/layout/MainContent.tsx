@@ -92,12 +92,12 @@ export function MainContent() {
           ref={voiceContainerRef}
           className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
         >
-          <div className={`h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+          <div className={`h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
             <div className="flex items-center gap-2">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
               </svg>
-              <span className="font-bold text-txt-primary">{dmName}</span>
+              <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{dmName}</span>
               {connectionError ? (
                 <span className="text-xs text-txt-danger font-medium ml-2">Connection Failed</span>
               ) : isLiveKitConnected ? (
@@ -144,12 +144,12 @@ export function MainContent() {
             </button>
           </div>
         )}
-        <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
+        <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
           <div className="flex items-center gap-2 min-w-0">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
               <path d="M12.5 2A6.5 6.5 0 0 0 6 8.5c0 1.82.75 3.47 1.95 4.65A10.02 10.02 0 0 0 2 22h2c0-4.42 3.58-8 8-8 .35 0 .69.03 1.03.07A6.49 6.49 0 0 0 19 8.5 6.5 6.5 0 0 0 12.5 2Zm0 11A4.5 4.5 0 1 1 17 8.5a4.5 4.5 0 0 1-4.5 4.5Z" />
             </svg>
-            <span className="font-bold text-txt-primary truncate">{dmName}</span>
+            <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate">{dmName}</span>
             {isGroupDm && (
               <span className="text-xs text-txt-tertiary flex-shrink-0">({dmChannel?.members.length} Members)</span>
             )}
@@ -219,7 +219,7 @@ export function MainContent() {
   if (!currentChannelId || !channel) {
     return (
       <div className="flex-1 flex flex-col bg-surface-chat relative">
-        <div className="h-12 px-4 flex items-center justify-between shadow-header">
+        <div className="h-12 px-5 flex items-center justify-between shadow-header">
           <span className="text-txt-tertiary">Select a channel</span>
           <div className="flex items-center gap-1 flex-shrink-0">
             <MemberListToggleButton />
@@ -238,12 +238,12 @@ export function MainContent() {
     if (!isInThisChannel) {
       return (
         <div className="flex-1 flex flex-col bg-surface-base">
-          <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base">
+          <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base">
             <div className="flex items-center gap-2">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
               </svg>
-              <span className="font-bold text-txt-primary">{channel.name}</span>
+              <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <MemberListToggleButton />
@@ -274,12 +274,12 @@ export function MainContent() {
         ref={voiceContainerRef}
         className={`flex-1 flex flex-col bg-surface-base min-w-0 group/voice relative ${voiceFullscreen ? 'h-screen' : ''}`}
       >
-        <div className={`h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
+        <div className={`h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 bg-surface-base transition-opacity duration-300 ${voiceFullscreen ? 'opacity-0 hover:opacity-100' : ''}`}>
           <div className="flex items-center gap-2">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
             </svg>
-            <span className="font-bold text-txt-primary">{channel.name}</span>
+            <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             {connectionError ? (
               <span className="text-xs text-txt-danger font-medium ml-2">Connection Failed</span>
             ) : isLiveKitConnected ? (
@@ -310,16 +310,16 @@ export function MainContent() {
 
   return (
     <div className="flex-1 flex flex-col bg-surface-chat min-w-0 relative">
-      <div className="h-12 px-4 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
+      <div className="h-12 px-5 flex items-center justify-between shadow-header flex-shrink-0 z-10 bg-surface-chat">
         <div className="flex items-center gap-2 min-w-0">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
             <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
           </svg>
-          <span className="font-bold text-txt-primary truncate leading-tight">{channel.name}</span>
+          <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight">{channel.name}</span>
           {channel.topic && (
             <>
               <div className="w-[1px] h-6 bg-interactive-muted mx-2" />
-              <span className="text-xs text-txt-tertiary truncate leading-tight">{channel.topic}</span>
+              <span className="text-[13px] text-txt-tertiary truncate leading-tight">{channel.topic}</span>
             </>
           )}
         </div>

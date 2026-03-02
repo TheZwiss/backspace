@@ -46,7 +46,7 @@ export function ActivityPanel() {
     <div
       key={friend.id}
       onClick={(e) => handleFriendClick(e, friend)}
-      className="flex items-center gap-3 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
+      className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
     >
       <Avatar
         src={friend.avatar}
@@ -56,11 +56,11 @@ export function ActivityPanel() {
         className={isOffline ? 'opacity-60' : undefined}
       />
       <div className="flex-1 min-w-0">
-        <div className={`text-[15px] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>
+        <div className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>
           {friend.displayName ?? friend.username}
         </div>
         {!isOffline && friend.customStatus && (
-          <div className="text-[12px] text-txt-tertiary truncate">{friend.customStatus}</div>
+          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{friend.customStatus}</div>
         )}
       </div>
     </div>
@@ -82,7 +82,7 @@ export function ActivityPanel() {
           <>
             {onlineFriends.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
+                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   ONLINE — {onlineFriends.length}
                 </h3>
                 {onlineFriends.map(f => renderFriend(f))}
@@ -90,7 +90,7 @@ export function ActivityPanel() {
             )}
             {offlineFriends.length > 0 && (
               <div>
-                <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
+                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
                   OFFLINE — {offlineFriends.length}
                 </h3>
                 {offlineFriends.map(f => renderFriend(f, true))}

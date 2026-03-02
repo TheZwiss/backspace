@@ -199,12 +199,12 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           <div className="flex items-baseline gap-2 mb-0.5">
             <span 
               onClick={handleUsernameClick}
-              className="font-bold cursor-pointer hover:underline text-[16px] leading-tight"
+              className="font-semibold cursor-pointer hover:underline text-[15px] leading-tight"
               style={roleColor}
             >
               {displayName}
             </span>
-            <span className="text-[12px] text-txt-tertiary leading-tight font-medium hover:cursor-default">
+            <span className="text-[11px] text-txt-tertiary leading-tight font-medium hover:cursor-default">
               {formatTime(message.createdAt)}
             </span>
           </div>
@@ -216,7 +216,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
-              className="w-full p-3 bg-surface-input rounded-lg text-txt-primary outline-none resize-none text-[16px] leading-[1.375rem] shadow-inner"
+              className="w-full p-3 bg-surface-input rounded-lg text-txt-primary outline-none resize-none text-[15px] leading-[1.5] shadow-inner"
               rows={2}
               autoFocus
             />
@@ -233,7 +233,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
         ) : (
           <div className="flex flex-col gap-1">
             {message.content && (
-              <div className="text-txt-message text-[16px] leading-[1.375rem] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
+              <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
                 <MarkdownRenderer content={message.content} />
                 {message.editedAt && (
                   <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">(edited)</span>

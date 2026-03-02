@@ -100,7 +100,7 @@ export function MemberSidebar() {
       <div
         key={member.userId}
         onClick={(e) => handleMemberClick(e, member.user)}
-        className="flex items-center gap-3 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
+        className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
       >
         <Avatar
           src={member.user.avatar}
@@ -111,13 +111,13 @@ export function MemberSidebar() {
         />
         <div className="flex-1 min-w-0">
           <div
-            className={`text-[15px] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
+            className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
             style={colorStyle}
           >
             {displayName}
           </div>
           {!isOffline && member.user.customStatus && (
-            <div className="text-[12px] text-txt-tertiary truncate">{member.user.customStatus}</div>
+            <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{member.user.customStatus}</div>
           )}
         </div>
       </div>
@@ -130,7 +130,7 @@ export function MemberSidebar() {
         {/* Role-based groups */}
         {roleGroups.map(([key, group]) => (
           <div key={key} className="mb-4">
-            <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
+            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
               {group.label} — {group.members.length}
             </h3>
             {group.members.map((m) => renderMember(m))}
@@ -140,7 +140,7 @@ export function MemberSidebar() {
         {/* Offline */}
         {offlineMembers.length > 0 && (
           <div>
-            <h3 className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider px-2 mb-1">
+            <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
               OFFLINE — {offlineMembers.length}
             </h3>
             {offlineMembers.map((m) => renderMember(m, true))}
