@@ -15,7 +15,7 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
     return {
       key: '__owner__',
       label: 'OWNER',
-      color: ownerRole?.color ?? 'var(--accent-rose)',
+      color: ownerRole?.color ?? 'rgb(var(--accent-rose))',
       position: Infinity,
     };
   }
@@ -79,7 +79,7 @@ export function MemberSidebar() {
       return { color: sorted[0]!.color };
     }
     if (ownerId && member.userId === ownerId) {
-      return { color: 'var(--accent-rose)' };
+      return { color: 'rgb(var(--accent-rose))' };
     }
     return undefined;
   };

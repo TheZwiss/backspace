@@ -104,7 +104,7 @@ export function ChannelSettingsModal() {
         </div>
 
         {error && (
-          <div className="p-2 bg-[rgba(253,164,175,0.10)] border border-[rgba(253,164,175,0.30)] rounded text-txt-danger text-sm">
+          <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
             {error}
           </div>
         )}
@@ -139,7 +139,7 @@ export function ChannelSettingsModal() {
         </div>
 
         {isPrivate && !isFetching && (
-          <div className="flex items-start gap-2 p-2 bg-[rgba(17,17,24,0.50)] rounded text-xs text-txt-tertiary">
+          <div className="flex items-start gap-2 p-2 bg-surface-input/50 rounded text-xs text-txt-tertiary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 mt-0.5 text-txt-secondary">
               <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
             </svg>

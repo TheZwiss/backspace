@@ -286,7 +286,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                       key={att.id}
                       href={`/api/uploads/${att.filename}`}
                       download={att.originalName}
-                      className="flex items-center gap-3 p-4 bg-[rgba(26,26,35,0.50)] rounded-lg border border-border-hard hover:bg-interactive-hover transition-all max-w-[400px] mt-1 group/att"
+                      className="flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all max-w-[400px] mt-1 group/att"
                     >
                       <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors">
                         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

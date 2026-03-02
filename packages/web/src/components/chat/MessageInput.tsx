@@ -261,7 +261,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
         {/* File previews */}
         {files.length > 0 && (
-          <div className="p-4 flex flex-wrap gap-4 bg-[rgba(26,26,35,0.30)]">
+          <div className="p-4 flex flex-wrap gap-4 bg-surface-channel/30">
             {files.map((file, i) => (
               <div key={i} className="relative group bg-surface-channel rounded-lg p-2 max-w-[200px] shadow-elevation-low border border-border-hard">
                 {file.type.startsWith('image/') ? (

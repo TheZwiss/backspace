@@ -67,8 +67,8 @@ const aetherTheme = {
   ...themes.oneDark,
   plain: {
     ...themes.oneDark.plain,
-    backgroundColor: 'var(--bg-elevated)',
-    color: 'var(--text-message)',
+    backgroundColor: 'rgb(var(--bg-elevated))',
+    color: 'rgb(var(--text-message))',
   },
 };
 

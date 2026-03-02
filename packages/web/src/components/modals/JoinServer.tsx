@@ -52,7 +52,7 @@ export function JoinServerModal() {
           Enter an invite code to join an existing server.
         </p>
         {error && (
-          <div className="mb-3 p-2 bg-[rgba(253,164,175,0.10)] border border-[rgba(253,164,175,0.30)] rounded text-txt-danger text-sm">
+          <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
             {error}
           </div>
         )}

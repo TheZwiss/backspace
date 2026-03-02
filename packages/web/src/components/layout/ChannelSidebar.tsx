@@ -619,7 +619,7 @@ function UserAreaPanel({
                           }}
                           className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-accent-primary bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
                           style={{
-                            background: `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${inputVolume / 2}%, var(--interactive-muted) ${inputVolume / 2}%, var(--interactive-muted) 100%)`,
+                            background: `linear-gradient(to right, rgb(var(--accent-primary)) 0%, rgb(var(--accent-primary)) ${inputVolume / 2}%, rgb(var(--interactive-muted)) ${inputVolume / 2}%, rgb(var(--interactive-muted)) 100%)`,
                           }}
                         />
                         {/* Mic level meter */}
@@ -705,7 +705,7 @@ function UserAreaPanel({
                           }}
                           className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-surface-base [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md"
                           style={{
-                            background: `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${outputVolume / 2}%, var(--interactive-muted) ${outputVolume / 2}%, var(--interactive-muted) 100%)`,
+                            background: `linear-gradient(to right, rgb(var(--accent-primary)) 0%, rgb(var(--accent-primary)) ${outputVolume / 2}%, rgb(var(--interactive-muted)) ${outputVolume / 2}%, rgb(var(--interactive-muted)) 100%)`,
                           }}
                         />
                       </div>
