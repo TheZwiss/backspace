@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { config } from '../config.js';
 import * as schema from './schema.js';
 import { runMigrations } from './migrate.js';
+import { setWorkerId } from '../utils/snowflake.js';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -180,6 +181,7 @@ function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS instance_settings (
       id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       instance_name TEXT DEFAULT 'Backspace',
+      worker_id INTEGER,
       max_bitrate_kbps INTEGER NOT NULL DEFAULT 20000,
       min_bitrate_kbps INTEGER NOT NULL DEFAULT 500,
       bitrate_step_kbps INTEGER NOT NULL DEFAULT 500,
@@ -199,6 +201,16 @@ export function initDatabase() {
   sqlite.pragma('foreign_keys = ON');
   createTables(sqlite);
   runMigrations(sqlite);
+
+  // Initialize Snowflake worker ID from persisted value (set by migration)
+  const settings = sqlite.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number } | undefined;
+  if (settings?.worker_id !== undefined && settings.worker_id !== null) {
+    setWorkerId(settings.worker_id);
+    console.log(`Snowflake worker ID: ${settings.worker_id}`);
+  } else {
+    throw new Error('Snowflake worker_id not found in instance_settings — migration failed');
+  }
+
   console.log(`Database initialized at ${config.dbPath}`);
   return drizzle(sqlite, { schema });
 }

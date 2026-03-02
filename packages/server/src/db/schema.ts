@@ -180,6 +180,7 @@ export const serverFolderMembers = sqliteTable('server_folder_members', {
 export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),
   instanceName: text('instance_name').default('Backspace'),
+  workerId: integer('worker_id'),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
   bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),

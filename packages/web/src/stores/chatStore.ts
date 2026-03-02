@@ -43,8 +43,8 @@ interface ChatState {
   addRealtimeMessage: (channelId: string, message: MessageWithUser) => void;
   updateMessage: (message: MessageWithUser) => void;
   removeMessage: (messageId: string, channelId: string) => void;
-  addReaction: (messageId: string, emoji: string, channelId: string) => void;
-  removeReaction: (messageId: string, emoji: string, channelId: string) => void;
+  addReaction: (messageId: string, emoji: string) => void;
+  removeReaction: (messageId: string, emoji: string) => void;
   onReactionAdded: (messageId: string, reaction: any) => void;
   onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
   setTyping: (channelId: string, userId: string, username: string) => void;
@@ -55,6 +55,16 @@ interface ChatState {
   markChannelUnread: (channelId: string) => void;
   ackChannel: (channelId: string) => void;
   onChannelAck: (channelId: string, messageId: string) => void;
+}
+
+/** Find which channel a message belongs to by scanning the message cache. */
+function findChannelForMessage(messages: Map<string, MessageWithUser[]>, messageId: string): string | null {
+  for (const [channelId, msgs] of messages) {
+    if (msgs.some(m => m.id === messageId)) {
+      return channelId;
+    }
+  }
+  return null;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -356,13 +366,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  addReaction: (messageId: string, emoji: string, channelId: string) => {
-    const origin = getChannelOrigin(channelId);
+  addReaction: (messageId: string, emoji: string) => {
+    // Resolve the channel from our message cache so the UI doesn't need to pass it
+    const channelId = findChannelForMessage(get().messages, messageId);
+    const origin = channelId ? getChannelOrigin(channelId) : '';
     wsSend({ type: 'reaction_add', messageId, emoji }, origin);
   },
 
-  removeReaction: (messageId: string, emoji: string, channelId: string) => {
-    const origin = getChannelOrigin(channelId);
+  removeReaction: (messageId: string, emoji: string) => {
+    const channelId = findChannelForMessage(get().messages, messageId);
+    const origin = channelId ? getChannelOrigin(channelId) : '';
     wsSend({ type: 'reaction_remove', messageId, emoji }, origin);
   },
 

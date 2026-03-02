@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import crypto from 'crypto';
 import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 
 export function runMigrations(db: Database.Database): void {
@@ -65,7 +66,8 @@ export function runMigrations(db: Database.Database): void {
     {
       name: 'instance_settings',
       columns: [
-        { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" }
+        { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" },
+        { name: 'worker_id', type: 'INTEGER' }
       ]
     }
   ];
@@ -104,6 +106,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Instance settings: ensure default row exists ──────────────────────────
   migrateInstanceSettings(db);
 
+  // ─── Worker ID: ensure a unique Snowflake worker ID is persisted ───────────
+  migrateWorkerId(db);
+
   // ─── Admin flag: ensure at least one admin exists (first registered user) ──
   migrateFirstAdmin(db);
 
@@ -130,6 +135,21 @@ function migrateFirstAdmin(db: Database.Database): void {
       db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(firstUser.id);
       console.log(`Migrating: Set first user ${firstUser.id} as instance admin`);
     }
+  }
+}
+
+/**
+ * Ensure a unique Snowflake worker ID is persisted for this instance.
+ * Generated randomly on first boot (0-1023) and never changed.
+ * This prevents ID collisions between federated instances that would
+ * otherwise share worker_id = 1 when running as Docker PID 1.
+ */
+function migrateWorkerId(db: Database.Database): void {
+  const row = db.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number | null } | undefined;
+  if (!row || row.worker_id === null) {
+    const workerId = crypto.randomInt(0, 1024); // 0-1023 (10-bit range)
+    db.prepare('UPDATE instance_settings SET worker_id = ? WHERE id = 1').run(workerId);
+    console.log(`Migrating: Generated Snowflake worker ID ${workerId} for this instance`);
   }
 }
 
