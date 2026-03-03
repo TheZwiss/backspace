@@ -141,10 +141,11 @@ if [[ -f .env ]]; then
   info "Existing .env detected — secrets will be preserved."
 fi
 
-# Helper: read existing .env value
+# Helper: read existing .env value (|| true prevents set -e from killing
+# the script when grep finds no match and returns exit code 1)
 env_val() {
   if [[ -f .env ]]; then
-    grep "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2-
+    grep "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true
   fi
 }
 
