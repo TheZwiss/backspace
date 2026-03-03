@@ -391,7 +391,7 @@ fi
 # ── Phase 7: Set instance name ──────────────────────────────
 
 if [[ "$healthy" == true && -n "$INSTANCE_NAME" && "$INSTANCE_NAME" != "Backspace" ]]; then
-  $DOCKER exec -w /app backspace node -e "
+  $DOCKER exec -w /app/packages/server backspace node -e "
     const Database = require('better-sqlite3');
     const db = new Database('/app/data/backspace.db');
     const changes = db.prepare('UPDATE instance_settings SET instance_name = ? WHERE id = 1').run('${INSTANCE_NAME}').changes;
