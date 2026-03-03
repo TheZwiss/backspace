@@ -55,10 +55,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     const jwt = await token.toJwt();
 
-    const requestHost = request.headers.host?.replace(/:\d+$/, '') || '';
-    const livekitUrl = requestHost
-      ? `wss://${requestHost}/livekit`
-      : (config.livekit.url ?? '');
+    const livekitUrl = config.livekit.url ?? '';
 
     const response: LiveKitTokenResponse = {
       token: jwt,

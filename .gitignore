@@ -21,6 +21,9 @@ data/
 .env.local
 .env.*.local
 
+# Generated deployment config (contains secrets)
+livekit.yaml
+
 # OS files
 .DS_Store
 Thumbs.db
