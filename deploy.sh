@@ -1,45 +1,119 @@
 #!/bin/bash
+# ============================================================
+# Backspace — Quick Deploy Script
+# ============================================================
+# Syncs code and rebuilds on remote server(s).
+#
+# Usage:
+#   ./deploy.sh              Deploy to both (default)
+#   ./deploy.sh pi           Deploy to Pi (nova.ddns.net)
+#   ./deploy.sh vm           Deploy to VM (orbit.ddns.net)
+#   ./deploy.sh all          Deploy to both
+#   ./deploy.sh --local      Force Pi via LAN IP
+#   ./deploy.sh --remote     Force Pi via public DNS
+# ============================================================
+
+set -euo pipefail
 cd "$(dirname "$0")"
 
-# Configuration
-LOCAL_IP="192.168.1.10"
-REMOTE_HOST="nova.ddns.net"
+# ── Targets ─────────────────────────────────────────────────
+
 PI_USER="youruser"
-REMOTE_PATH="~/backspace"
 
-# Host selection: --remote / -r  |  --local / -l  |  auto-detect (default)
-if [[ "$1" == "--remote" || "$1" == "-r" ]]; then
-  PI_HOST="$REMOTE_HOST"
-elif [[ "$1" == "--local" || "$1" == "-l" ]]; then
-  PI_HOST="$LOCAL_IP"
-else
-  if ping -c1 -W2 "$LOCAL_IP" &>/dev/null; then
-    PI_HOST="$LOCAL_IP"
+declare -A TARGETS=(
+  [pi_local]="192.168.1.10"
+  [pi_remote]="nova.ddns.net"
+  [pi_path]="~/backspace"
+  [beta_host]="orbit.ddns.net"
+  [beta_path]="~/backspace"
+)
+
+# ── Rsync excludes ──────────────────────────────────────────
+
+EXCLUDES=(
+  --exclude='node_modules'
+  --exclude='.git'
+  --exclude='.env'
+  --exclude='.env.local'
+  --exclude='packages/*/node_modules'
+  --exclude='packages/web/dist'
+  --exclude='data'
+  --exclude='livekit.yaml'
+  --exclude='.DS_Store'
+  --exclude='Gemini Starter.rtf'
+  --exclude='System Prompt.rtf'
+)
+
+# ── Deploy function ─────────────────────────────────────────
+
+deploy() {
+  local name="$1"
+  local host="$2"
+  local path="$3"
+
+  echo ""
+  echo "═══ Deploying to $name ($host) ═══"
+  echo ""
+
+  # Ensure remote directory exists
+  echo "  [1/3] Preparing remote directory..."
+  ssh "$PI_USER@$host" "mkdir -p $path"
+
+  # Sync files
+  echo "  [2/3] Syncing files..."
+  rsync -avz --delete \
+    "${EXCLUDES[@]}" \
+    ./ "$PI_USER@$host:$path"
+
+  # Rebuild
+  echo "  [3/3] Building and restarting..."
+  ssh "$PI_USER@$host" "cd $path && docker compose up -d --build"
+
+  echo ""
+  echo "  Done: $name"
+}
+
+# ── Resolve Pi host (LAN or WAN) ───────────────────────────
+
+resolve_pi_host() {
+  if ping -c1 -W2 "${TARGETS[pi_local]}" &>/dev/null; then
+    echo "${TARGETS[pi_local]}"
   else
-    PI_HOST="$REMOTE_HOST"
+    echo "${TARGETS[pi_remote]}"
   fi
-fi
+}
 
-echo "🎯 Target: $PI_USER@$PI_HOST"
+# ── Parse arguments ─────────────────────────────────────────
 
-# 0. Ensure remote directory exists
-echo "📁 Preparing remote directory on Pi..."
-ssh "$PI_USER@$PI_HOST" "mkdir -p $REMOTE_PATH"
+TARGET="${1:-all}"
 
-# 1. Sync files via rsync
-echo "🚀 Syncing files to Pi..."
-rsync -avz --delete \
-  --exclude='node_modules' \
-  --exclude='.git' \
-  --exclude='.env.local' \
-  --exclude='packages/*/node_modules' \
-  --exclude='packages/web/dist' \
-  --exclude='data' \
-  --exclude='.DS_Store' \
-  ./ "$PI_USER@$PI_HOST:$REMOTE_PATH"
+case "$TARGET" in
+  pi|--local|--remote|-l|-r)
+    if [[ "$TARGET" == "--local" || "$TARGET" == "-l" ]]; then
+      PI_HOST="${TARGETS[pi_local]}"
+    elif [[ "$TARGET" == "--remote" || "$TARGET" == "-r" ]]; then
+      PI_HOST="${TARGETS[pi_remote]}"
+    else
+      PI_HOST=$(resolve_pi_host)
+    fi
+    deploy "Pi" "$PI_HOST" "${TARGETS[pi_path]}"
+    ;;
 
-# 2. Trigger Docker Compose directly on the Pi via SSH
-echo "🚢 Triggering build and deploy on Pi hardware..."
-ssh "$PI_USER@$PI_HOST" "cd $REMOTE_PATH && docker compose up -d --build"
+  vm|beta|orbit)
+    deploy "Beta VM" "${TARGETS[beta_host]}" "${TARGETS[beta_path]}"
+    ;;
 
-echo "✅ Deployment command sent to Pi!"
+  all|both)
+    PI_HOST=$(resolve_pi_host)
+    deploy "Pi" "$PI_HOST" "${TARGETS[pi_path]}"
+    deploy "Beta VM" "${TARGETS[beta_host]}" "${TARGETS[beta_path]}"
+    ;;
+
+  *)
+    echo "Usage: ./deploy.sh [pi|vm|all|--local|--remote]"
+    exit 1
+    ;;
+esac
+
+echo ""
+echo "Deployment complete."
