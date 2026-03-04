@@ -223,9 +223,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
       removeMessage(event.messageId, event.channelId);
       break;
 
-    case 'typing':
-      setTyping(event.channelId, event.userId, event.username);
+    case 'typing': {
+      let typingUsername = event.username as string;
+      if (!isHome && typingUsername && !typingUsername.includes('@')) {
+        try { typingUsername = `${typingUsername}@${new URL(origin).host}`; } catch {}
+      }
+      setTyping(event.channelId, event.userId, typingUsername);
       break;
+    }
 
     case 'presence_update':
       updateMemberPresence(event.userId, event.status);
@@ -300,9 +305,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
       removeMessage(event.messageId, event.dmChannelId);
       break;
 
-    case 'dm_typing':
-      setTyping(event.dmChannelId, event.userId, event.username);
+    case 'dm_typing': {
+      let dmTypingUsername = event.username as string;
+      if (!isHome && dmTypingUsername && !dmTypingUsername.includes('@')) {
+        try { dmTypingUsername = `${dmTypingUsername}@${new URL(origin).host}`; } catch {}
+      }
+      setTyping(event.dmChannelId, event.userId, dmTypingUsername);
       break;
+    }
 
     // ─── Reactions (all origins) ────────────────────────────────────────────
 

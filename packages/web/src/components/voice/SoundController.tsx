@@ -1,27 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
-import { getHomeWsConnected } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
-  const [isWsConnected, setIsWsConnected] = useState(false);
-
-  // Poll home WS connection status without managing lifecycle
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsWsConnected(getHomeWsConnected());
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
 
   // Refs to track previous states
   const isInitialMount = useRef(true);
-  const prevIsWsConnected = useRef<boolean>(false);
-  const wsDisconnectedAt = useRef<number>(0);
   const prevIsMuted = useRef<boolean>(useVoiceStore.getState().isMuted);
   const prevIsDeafened = useRef<boolean>(useVoiceStore.getState().isDeafened);
   const prevIsCameraOn = useRef<boolean>(useVoiceStore.getState().isCameraOn);
@@ -33,28 +21,10 @@ export function SoundController() {
   const incomingCallLoop = useRef<AudioBufferSourceNode | null>(null);
   const outgoingCallLoop = useRef<AudioBufferSourceNode | null>(null);
 
-  // WebSocket Reconnect Sound — suppress during active voice and brief blips (<3s)
-  useEffect(() => {
-    if (isInitialMount.current) return;
-    if (!isWsConnected && prevIsWsConnected.current) {
-      // Record when we lost connection
-      wsDisconnectedAt.current = Date.now();
-    }
-    if (isWsConnected && !prevIsWsConnected.current) {
-      const isInActiveVoice = useVoiceStore.getState().isLiveKitConnected;
-      const downtime = wsDisconnectedAt.current > 0 ? Date.now() - wsDisconnectedAt.current : Infinity;
-      if (!isInActiveVoice && downtime > 3000) {
-        audioManager.playSound('reconnect');
-      }
-    }
-    prevIsWsConnected.current = isWsConnected;
-  }, [isWsConnected, audioManager]);
-
   useEffect(() => {
     // Set initial mount flag to false after first run
     const timer = setTimeout(() => {
       isInitialMount.current = false;
-      prevIsWsConnected.current = isWsConnected;
     }, 1000);
 
     // 1. Listen to Voice State Changes

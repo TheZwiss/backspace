@@ -15,8 +15,23 @@ export function resolveAssetUrl(filename: string | null | undefined, origin: str
  * Mutates in-place for efficiency (called on arrays of members/messages).
  */
 export function normalizeUserAssets<T extends { avatar?: string | null }>(user: T, origin: string): T {
-  if (origin && user.avatar) {
+  if (!origin) return user;
+  if (user.avatar) {
     user.avatar = resolveAssetUrl(user.avatar, origin) ?? user.avatar;
+  }
+  // Qualify users local to the remote instance with their origin domain.
+  // These users have no homeInstance (they're native there), so the client
+  // can't distinguish them from its own local users without this step.
+  const u = user as Record<string, unknown>;
+  if (typeof u.username === 'string' && typeof u.id === 'string' && !u.homeInstance) {
+    try {
+      const host = new URL(origin).host;
+      u.homeInstance = host;
+      if (!u.homeUserId) u.homeUserId = u.id;
+      if (!(u.username as string).includes('@')) {
+        u.username = `${u.username}@${host}`;
+      }
+    } catch {}
   }
   return user;
 }
