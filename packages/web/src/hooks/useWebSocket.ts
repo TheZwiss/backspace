@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useServerStore } from '../stores/serverStore';
+import { useServerStore, getChannelOrigin } from '../stores/serverStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -162,13 +162,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Re-register in voice channel if we're still connected to LiveKit (home only)
-      if (isHome) {
+      // Re-register in voice channel if we're still connected to LiveKit
+      // Origin-aware: re-sends voice_join only if the voice channel belongs to this origin
+      {
         const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen } = useVoiceStore.getState();
         if (currentVoiceChannelId) {
-          console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, curMuted, curDeafened, curCamera, curScreen });
-          wsSend({ type: 'voice_join', channelId: currentVoiceChannelId });
-          wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen });
+          const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
+          if (voiceOrigin === origin) {
+            console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, origin, curMuted, curDeafened, curCamera, curScreen });
+            wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
+            wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen }, origin);
+          }
         }
       }
 

@@ -15,6 +15,7 @@ import { getActiveRoom } from '../../hooks/useLiveKit';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
+import { joinVoiceChannel } from '../../utils/voice';
 
 export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
@@ -29,7 +30,6 @@ export function ChannelSidebar() {
   const members = useServerStore((s) => s.members);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
-  const setCurrentVoiceChannel = useVoiceStore((s) => s.setCurrentVoiceChannel);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const toggleMic = useVoiceStore((s) => s.toggleMic);
@@ -104,8 +104,7 @@ export function ChannelSidebar() {
       navigate(`/channels/${currentServerId}/${channelId}`);
       return;
     }
-    setCurrentVoiceChannel(channelId);
-    wsSend({ type: 'voice_join', channelId }, getChannelOrigin(channelId));
+    joinVoiceChannel(channelId);
     navigate(`/channels/${currentServerId}/${channelId}`);
   };
 

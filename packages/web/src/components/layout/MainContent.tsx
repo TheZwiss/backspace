@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
+import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -15,6 +15,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { isSelf } from '../../utils/identity';
+import { joinVoiceChannel } from '../../utils/voice';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
@@ -258,10 +259,7 @@ export function MainContent() {
               <p className="text-txt-tertiary text-[15px]">No one is currently in this voice channel.</p>
             </div>
             <button
-              onClick={() => {
-                useVoiceStore.getState().setCurrentVoiceChannel(currentChannelId);
-                wsSend({ type: 'voice_join', channelId: currentChannelId }, getChannelOrigin(currentChannelId));
-              }}
+              onClick={() => joinVoiceChannel(currentChannelId)}
               className="relative z-10 px-8 py-3 bg-accent-primary hover:bg-accent-primary-hover text-white font-semibold rounded-full transition-all text-[15px] shadow-[0_4px_20px_rgba(124,108,246,0.3)]"
             >
               Join Voice
