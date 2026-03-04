@@ -107,6 +107,13 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       populateFromReady(origin, event.servers, event.folders, event.dmChannels);
 
+      // Mark remote instance as connected in instanceStore
+      if (!isHome) {
+        import('../stores/instanceStore').then(({ useInstanceStore }) => {
+          useInstanceStore.getState().setInstanceStatus(origin, 'connected');
+        });
+      }
+
       if (isHome && currentServerId) {
         loadServerDetail(currentServerId);
       }
@@ -518,6 +525,12 @@ function connectToOrigin(origin: string, token: string): void {
   ws.onclose = () => {
     conn.ws = null;
     stopHeartbeat(conn);
+    // Mark remote instance as disconnected in instanceStore
+    if (origin !== HOME_ORIGIN) {
+      import('../stores/instanceStore').then(({ useInstanceStore }) => {
+        useInstanceStore.getState().setInstanceStatus(origin, 'disconnected', 'Connection lost — reconnecting');
+      });
+    }
     // Only reconnect if the connection is still registered (not explicitly disconnected)
     if (connections.has(origin) && conn.token) {
       const delay = Math.min(1000 * Math.pow(2, conn.reconnectAttempts), 30000);

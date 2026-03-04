@@ -20,8 +20,10 @@ import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
 import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
+import { ToastContainer } from '../ui/ToastContainer';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
+import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
@@ -105,6 +107,9 @@ export function AppLayout() {
 
   // Initialize WebSocket
   const { isConnected: isWsConnected } = useWebSocket();
+
+  // Federation toast notifications for remote instance connection state changes
+  useFederationToasts();
 
   // Track the last channel we attempted to connect to, to prevent effect loops
   const lastAttemptedRef = React.useRef<string | null>(null);
@@ -260,6 +265,9 @@ export function AppLayout() {
           />
         </>
       )}
+
+      {/* Federation toasts */}
+      <ToastContainer />
     </div>
   );
 }

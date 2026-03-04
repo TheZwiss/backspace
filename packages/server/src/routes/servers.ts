@@ -379,6 +379,24 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     // Register the user in connectionManager so they receive WS broadcasts for this server
     connectionManager.addUserServer(request.userId, id);
 
+    // Broadcast member_joined to existing server members
+    const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (joiningUser) {
+      const memberPayload: MemberWithUser = {
+        serverId: id,
+        userId: request.userId,
+        nickname: null,
+        joinedAt: now,
+        user: sanitizeUser(joiningUser),
+        roles: [],
+      };
+      connectionManager.sendToServer(id, {
+        type: 'member_joined',
+        serverId: id,
+        member: memberPayload,
+      });
+    }
+
     return reply.code(200).send(rowToServer(server));
   });
 
@@ -412,6 +430,24 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     // Register the user in connectionManager so they receive WS broadcasts for this server
     connectionManager.addUserServer(request.userId, server.id);
+
+    // Broadcast member_joined to existing server members
+    const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (joiningUser) {
+      const memberPayload: MemberWithUser = {
+        serverId: server.id,
+        userId: request.userId,
+        nickname: null,
+        joinedAt: now,
+        user: sanitizeUser(joiningUser),
+        roles: [],
+      };
+      connectionManager.sendToServer(server.id, {
+        type: 'member_joined',
+        serverId: server.id,
+        member: memberPayload,
+      });
+    }
 
     return reply.code(200).send(rowToServer(server));
   });

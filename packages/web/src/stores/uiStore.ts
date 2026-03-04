@@ -15,6 +15,12 @@ type ModalType =
   | 'addDmMember'
   | null;
 
+interface Toast {
+  id: string;
+  message: string;
+  type: 'info' | 'warning' | 'success';
+}
+
 interface UIState {
   sidebarOpen: boolean;
   memberListOpen: boolean;
@@ -27,6 +33,7 @@ interface UIState {
     user: User | null;
     position: { top: number; left: number } | null;
   };
+  toasts: Toast[];
   toggleSidebar: () => void;
   toggleMemberList: () => void;
   openModal: (modal: ModalType, data?: Record<string, unknown>) => void;
@@ -37,6 +44,8 @@ interface UIState {
   closeImagePreview: () => void;
   openUserProfile: (user: User, position: { top: number; left: number }) => void;
   closeUserProfile: () => void;
+  addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number) => void;
+  removeToast: (id: string) => void;
   voiceChatOpen: boolean;
   voiceFullscreen: boolean;
   pipCollapsed: boolean;
@@ -60,6 +69,7 @@ export const useUIStore = create<UIState>()(
         user: null,
         position: null,
       },
+      toasts: [],
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       toggleMemberList: () => set((state) => ({ memberListOpen: !state.memberListOpen })),
@@ -90,6 +100,15 @@ export const useUIStore = create<UIState>()(
       closeUserProfile: () => set({
         userProfilePopout: { user: null, position: null }
       }),
+
+      addToast: (message, type = 'info', duration = 5000) => {
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        set((state) => ({ toasts: [...state.toasts, { id, message, type }] }));
+        setTimeout(() => {
+          set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) }));
+        }, duration);
+      },
+      removeToast: (id) => set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) })),
 
       voiceChatOpen: false,
       voiceFullscreen: false,

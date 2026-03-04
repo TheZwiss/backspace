@@ -19,14 +19,12 @@ cd "$(dirname "$0")"
 # ── Targets ─────────────────────────────────────────────────
 
 PI_USER="youruser"
+PI_LOCAL="192.168.1.10"
+PI_REMOTE="nova.ddns.net"
+PI_PATH="~/backspace"
 
-declare -A TARGETS=(
-  [pi_local]="192.168.1.10"
-  [pi_remote]="nova.ddns.net"
-  [pi_path]="~/backspace"
-  [beta_host]="orbit.ddns.net"
-  [beta_path]="~/backspace"
-)
+BETA_HOST="orbit.ddns.net"
+BETA_PATH="~/backspace"
 
 # ── Rsync excludes ──────────────────────────────────────────
 
@@ -76,10 +74,10 @@ deploy() {
 # ── Resolve Pi host (LAN or WAN) ───────────────────────────
 
 resolve_pi_host() {
-  if ping -c1 -W2 "${TARGETS[pi_local]}" &>/dev/null; then
-    echo "${TARGETS[pi_local]}"
+  if ping -c1 -W2 "$PI_LOCAL" &>/dev/null; then
+    echo "$PI_LOCAL"
   else
-    echo "${TARGETS[pi_remote]}"
+    echo "$PI_REMOTE"
   fi
 }
 
@@ -90,23 +88,23 @@ TARGET="${1:-all}"
 case "$TARGET" in
   pi|--local|--remote|-l|-r)
     if [[ "$TARGET" == "--local" || "$TARGET" == "-l" ]]; then
-      PI_HOST="${TARGETS[pi_local]}"
+      PI_HOST="$PI_LOCAL"
     elif [[ "$TARGET" == "--remote" || "$TARGET" == "-r" ]]; then
-      PI_HOST="${TARGETS[pi_remote]}"
+      PI_HOST="$PI_REMOTE"
     else
       PI_HOST=$(resolve_pi_host)
     fi
-    deploy "Pi" "$PI_HOST" "${TARGETS[pi_path]}"
+    deploy "Pi" "$PI_HOST" "$PI_PATH"
     ;;
 
   vm|beta|orbit)
-    deploy "Beta VM" "${TARGETS[beta_host]}" "${TARGETS[beta_path]}"
+    deploy "Beta VM" "$BETA_HOST" "$BETA_PATH"
     ;;
 
   all|both)
     PI_HOST=$(resolve_pi_host)
-    deploy "Pi" "$PI_HOST" "${TARGETS[pi_path]}"
-    deploy "Beta VM" "${TARGETS[beta_host]}" "${TARGETS[beta_path]}"
+    deploy "Pi" "$PI_HOST" "$PI_PATH"
+    deploy "Beta VM" "$BETA_HOST" "$BETA_PATH"
     ;;
 
   *)

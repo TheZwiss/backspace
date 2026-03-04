@@ -3,6 +3,7 @@ import type { MemberWithUser } from '@backspace/shared';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
+import { Username } from '../ui/Username';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -111,12 +112,11 @@ export function MemberSidebar() {
           user={member.user}
         />
         <div className="flex-1 min-w-0">
-          <div
+          <Username
+            username={displayName}
             className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
             style={colorStyle}
-          >
-            {displayName}
-          </div>
+          />
           {!isOffline && member.user.customStatus && (
             <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{member.user.customStatus}</div>
           )}

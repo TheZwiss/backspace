@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useInstanceStore } from '../../stores/instanceStore';
 import { VoiceChannel } from '../voice/VoiceChannel';
 import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -71,6 +72,15 @@ export function ChannelSidebar() {
   const serverPermissions = useServerStore((s) => s.serverPermissions);
   const server = servers.find(s => s.id === currentServerId);
   const myServerPerms = currentServerId ? serverPermissions.get(currentServerId) : undefined;
+
+  const federationInstances = useInstanceStore((s) => s.instances);
+  const instanceLabel = useMemo(() => {
+    const origin = (server as any)?._instanceOrigin;
+    if (!origin) return null;
+    const inst = federationInstances.find(i => i.origin === origin);
+    if (inst) return inst.label;
+    try { return new URL(origin).host; } catch { return origin; }
+  }, [server, federationInstances]);
   const canManageChannels = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_CHANNELS);
 
   const textChannels = channels.filter(c => c.type === 'text');
@@ -280,7 +290,14 @@ export function ChannelSidebar() {
           onClick={() => openModal('serverSettings')}
           className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
         >
-          <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight">{server.name}</span>
+          <div className="min-w-0">
+            <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight block">{server.name}</span>
+            {instanceLabel && (
+              <span className="text-[10px] text-txt-tertiary font-medium truncate block leading-tight">
+                {instanceLabel}
+              </span>
+            )}
+          </div>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
             <path d="M5.293 7.293a1 1 0 011.414 0L9 9.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" />
           </svg>

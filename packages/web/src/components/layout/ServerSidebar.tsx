@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useInstanceStore } from '../../stores/instanceStore';
 
 import { getServerGradient, HOME_GRADIENT } from '../../utils/gradients';
 
@@ -15,9 +16,10 @@ interface SidebarItemProps {
   type?: 'server' | 'dm' | 'action';
   actionType?: 'add' | 'join';
   hasUnread?: boolean;
+  dimmed?: boolean;
 }
 
-function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionType, hasUnread }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionType, hasUnread, dimmed }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -79,7 +81,7 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
         </div>
       )}
 
-      <button onClick={onClick} className={getButtonClasses()} style={backgroundStyle} title={name}>
+      <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={name}>
         {type === 'dm' ? (
           <span className="text-[17px] font-bold">B</span>
         ) : type === 'action' ? (
@@ -115,8 +117,35 @@ export function ServerSidebar() {
   const showDms = useUIStore((s) => s.showDms);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
+  const addToast = useUIStore((s) => s.addToast);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
+  const instances = useInstanceStore((s) => s.instances);
   const navigate = useNavigate();
+
+  // Group servers by origin
+  const groupedServers = useMemo(() => {
+    const home = servers.filter(s => !(s as any)._instanceOrigin);
+    const remoteMap = new Map<string, typeof servers>();
+    for (const s of servers) {
+      const origin = (s as any)._instanceOrigin;
+      if (!origin) continue;
+      const list = remoteMap.get(origin) || [];
+      list.push(s);
+      remoteMap.set(origin, list);
+    }
+    return { home, remoteGroups: Array.from(remoteMap.entries()) };
+  }, [servers]);
+
+  // Set of disconnected origins
+  const disconnectedOrigins = useMemo(() => {
+    const set = new Set<string>();
+    for (const inst of instances) {
+      if (inst.status === 'disconnected' || inst.status === 'error') {
+        set.add(inst.origin);
+      }
+    }
+    return set;
+  }, [instances]);
 
   // Compute which servers have unread channels
   const unreadServerIds = useMemo(() => {
@@ -137,6 +166,13 @@ export function ServerSidebar() {
   }, [unreadChannels, dmChannels]);
 
   const handleServerClick = (serverId: string) => {
+    const server = servers.find(s => s.id === serverId);
+    const origin = (server as any)?._instanceOrigin;
+    if (origin && disconnectedOrigins.has(origin)) {
+      const inst = instances.find(i => i.origin === origin);
+      addToast(`Reconnecting to ${inst?.label || 'remote instance'}...`, 'warning', 4000);
+      return;
+    }
     setCurrentServer(serverId);
     setShowDms(false);
     navigate(`/channels/${serverId}`);
@@ -161,7 +197,8 @@ export function ServerSidebar() {
 
       <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
-      {servers.map((server) => (
+      {/* Home servers */}
+      {groupedServers.home.map((server) => (
         <SidebarItem
           key={server.id}
           id={server.id}
@@ -172,6 +209,33 @@ export function ServerSidebar() {
           hasUnread={unreadServerIds.has(server.id)}
         />
       ))}
+
+      {/* Remote instance groups */}
+      {groupedServers.remoteGroups.map(([origin, groupServers]) => {
+        const inst = instances.find(i => i.origin === origin);
+        const label = inst?.label || (() => { try { return new URL(origin).host; } catch { return '?'; } })();
+        const isDimmed = disconnectedOrigins.has(origin);
+        return (
+          <React.Fragment key={origin}>
+            <div className="w-8 h-[2px] bg-interactive-muted/50 rounded-full my-1" />
+            <div className="text-[9px] text-txt-tertiary font-medium uppercase tracking-wider mb-1 truncate max-w-[52px] text-center" title={label}>
+              {label}
+            </div>
+            {groupServers.map((server) => (
+              <SidebarItem
+                key={server.id}
+                id={server.id}
+                name={server.name}
+                icon={server.icon}
+                active={currentServerId === server.id}
+                onClick={() => handleServerClick(server.id)}
+                hasUnread={unreadServerIds.has(server.id)}
+                dimmed={isDimmed}
+              />
+            ))}
+          </React.Fragment>
+        );
+      })}
 
       <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 

@@ -312,9 +312,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
       if (current.find(m => m.id === message.id)) return state;
-      // Remove any optimistic temp message from same user with same content
+      // Remove any optimistic temp message with same content.
+      // Don't require userId match — for federated messages the home user ID
+      // differs from the replicated user ID, but content match is sufficient
+      // since temp messages are unique within the short optimistic window.
       const filtered = current.filter(m => {
-        if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
+        if (!m.id.startsWith('temp_')) return true;
         return m.content !== message.content;
       });
       let updated = [...filtered, message];
@@ -333,9 +336,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
       if (current.find(m => m.id === message.id)) return state;
-      // Remove any optimistic temp message from same user with same content
+      // Remove any optimistic temp message with same content (no userId check —
+      // federated messages arrive with a different replicated user ID)
       const filtered = current.filter(m => {
-        if (!m.id.startsWith('temp_') || m.userId !== message.userId) return true;
+        if (!m.id.startsWith('temp_')) return true;
         return m.content !== message.content;
       });
       let updated = [...filtered, message];

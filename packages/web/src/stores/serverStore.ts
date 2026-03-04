@@ -8,6 +8,16 @@ import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 /** Server augmented with instance origin tracking (client-only, not in shared types). */
 export type TaggedServer = Server & { _instanceOrigin: string };
 
+// ─── Error types ─────────────────────────────────────────────────────────────
+
+/** Thrown when joinByCode targets a remote origin the user is not connected to. */
+export class NotConnectedError extends Error {
+  constructor(public origin: string) {
+    super(`Not connected to ${origin}`);
+    this.name = 'NotConnectedError';
+  }
+}
+
 // ─── Store interface ──────────────────────────────────────────────────────────
 
 interface ServerState {
@@ -41,7 +51,7 @@ interface ServerState {
   updateServer: (serverId: string, data: { name?: string; icon?: string }) => Promise<void>;
   deleteServer: (serverId: string) => Promise<void>;
   joinServer: (serverId: string, inviteCode: string) => Promise<void>;
-  joinByCode: (inviteCode: string) => Promise<Server>;
+  joinByCode: (inviteCode: string, origin?: string) => Promise<Server>;
   generateInvite: (serverId: string) => Promise<string>;
   createChannel: (serverId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
@@ -182,7 +192,25 @@ export const useServerStore = create<ServerState>((set, get) => ({
     });
   },
 
-  joinByCode: async (inviteCode: string) => {
+  joinByCode: async (inviteCode: string, origin?: string) => {
+    if (origin) {
+      // Remote instance — verify connectivity via dynamic import (avoids circular dep)
+      const { useInstanceStore } = await import('./instanceStore');
+      const connected = useInstanceStore.getState().instances.some(
+        (i) => i.origin === origin && i.status === 'connected',
+      );
+      if (!connected) throw new NotConnectedError(origin);
+
+      const remoteApi = getApiForOrigin(origin);
+      const server = await remoteApi.servers.joinByCode(inviteCode);
+      set((state) => {
+        if (state.servers.find(s => s.id === server.id)) return state;
+        return { servers: [...state.servers, { ...server, _instanceOrigin: origin } as TaggedServer] };
+      });
+      return server;
+    }
+
+    // Home instance
     const server = await api.servers.joinByCode(inviteCode);
     set((state) => {
       if (state.servers.find(s => s.id === server.id)) return state;

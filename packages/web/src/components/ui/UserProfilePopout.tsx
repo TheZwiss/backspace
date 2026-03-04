@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
+import { Username } from '../ui/Username';
 import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -77,12 +78,15 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
         {/* Name & info — flows naturally after avatar */}
         <div>
-          <div className="text-[16px] font-semibold text-txt-primary leading-tight">
-            {displayName}
-          </div>
-          <div className="text-[13px] text-txt-tertiary">
-            @{user.username}
-          </div>
+          <Username
+            username={displayName}
+            className="text-[16px] font-semibold text-txt-primary leading-tight"
+          />
+          {user.username.includes('@') ? (
+            <Username username={user.username} className="text-[13px] text-txt-tertiary" />
+          ) : (
+            <div className="text-[13px] text-txt-tertiary">@{user.username}</div>
+          )}
           {user.customStatus && (
             <div className="text-[13px] text-txt-secondary italic mt-1">
               {user.customStatus}

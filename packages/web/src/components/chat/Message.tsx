@@ -8,7 +8,9 @@ import { useChatStore } from '../../stores/chatStore';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Embed } from './Embed';
+import { Username } from '../ui/Username';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
 
 interface MessageProps {
   message: MessageWithUser;
@@ -47,7 +49,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const channelKey = message.channelId || (message as any).dmChannelId;
-  const isAuthor = currentUser?.id === message.userId;
+  const isAuthor = isSelf(message.user, currentUser);
   const channelPermissions = useServerStore((s) => s.channelPermissions);
   const myChPerms = channelPermissions.get(message.channelId);
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
@@ -121,7 +123,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     }
   };
 
-  const displayName = message.user.displayName ?? message.user.username;
+  // Resolve display identity: replicated-self messages show home user's avatar/name
+  const displayIdentity = resolveDisplayIdentity(message.user, currentUser);
+  const displayName = displayIdentity.displayName ?? displayIdentity.username;
 
   const servers = useServerStore((s) => s.servers);
   const currentServerId = useServerStore((s) => s.currentServerId);
@@ -164,10 +168,10 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
         {isFirstInGroup || message.replyTo ? (
           <div className="mt-0.5">
             <Avatar
-              src={message.user.avatar}
+              src={displayIdentity.avatar}
               name={displayName}
               size={40}
-              user={message.user}
+              user={displayIdentity}
               className="hover:drop-shadow-md transition-all active:translate-y-[1px]"
             />
           </div>
@@ -180,29 +184,32 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {message.replyTo && (
-          <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
-            <Avatar src={message.replyTo.user.avatar} name={message.replyTo.user.username} size={16} user={message.replyTo.user} />
-            <span 
-              className="text-[14px] font-bold text-txt-primary hover:underline"
-              style={message.replyTo ? replyRoleColor(message.replyTo) : undefined}
-            >
-              {message.replyTo.user.displayName ?? message.replyTo.user.username}
-            </span>
-            <span className="text-[14px] text-txt-message truncate max-w-[400px] hover:text-txt-primary">
-              {message.replyTo.content}
-            </span>
-          </div>
-        )}
+        {message.replyTo && (() => {
+          const replyIdentity = resolveDisplayIdentity(message.replyTo.user, currentUser);
+          const replyDisplayName = replyIdentity.displayName ?? replyIdentity.username;
+          return (
+            <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">
+              <Avatar src={replyIdentity.avatar} name={replyDisplayName} size={16} user={replyIdentity} />
+              <Username
+                username={replyDisplayName}
+                className="text-[14px] font-bold text-txt-primary hover:underline"
+                style={replyRoleColor(message.replyTo)}
+              />
+              <span className="text-[14px] text-txt-message truncate max-w-[400px] hover:text-txt-primary">
+                {message.replyTo.content}
+              </span>
+            </div>
+          );
+        })()}
 
         {(isFirstInGroup || message.replyTo) && (
           <div className="flex items-baseline gap-2 mb-0.5">
-            <span 
-              onClick={handleUsernameClick}
-              className="font-semibold cursor-pointer hover:underline text-[15px] leading-tight"
-              style={roleColor}
-            >
-              {displayName}
+            <span onClick={handleUsernameClick}>
+              <Username
+                username={displayName}
+                className="font-semibold cursor-pointer hover:underline text-[15px] leading-tight"
+                style={roleColor}
+              />
             </span>
             <span className="text-[11px] text-txt-tertiary leading-tight hover:cursor-default">
               {formatTime(message.createdAt)}

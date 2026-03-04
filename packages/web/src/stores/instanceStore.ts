@@ -91,6 +91,7 @@ interface InstanceState {
   connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
   loginToRemote: (origin: string, username: string, password: string) => Promise<void>;
   removeInstance: (origin: string) => void;
+  setInstanceStatus: (origin: string, status: ConnectedInstance['status'], error?: string) => void;
   syncInstanceList: () => Promise<void>;
   autoConnectAll: () => Promise<void>;
   reset: () => void;
@@ -274,6 +275,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       set({ isLoading: false, error: (err as Error).message });
       throw err;
     }
+  },
+
+  setInstanceStatus: (origin, status, error) => {
+    set((state) => ({
+      instances: state.instances.map(i =>
+        i.origin === origin ? { ...i, status, error } : i
+      ),
+    }));
   },
 
   removeInstance: (origin: string) => {
