@@ -2,7 +2,6 @@ import { Room, Track } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
-import { AudioManager } from '../audio/AudioManager';
 import { wsSend } from '../hooks/useWebSocket';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 
@@ -152,9 +151,6 @@ export async function startScreenShare(room: Room): Promise<boolean> {
       return false;
     }
 
-    // Rebuild mic without AEC now that screen share is acquired
-    AudioManager.getInstance().setScreenShareActive(true);
-
     // Set content hint from builder (motion for gaming, detail for text)
     const screenPub = room.localParticipant.getTrackPublications()
       .find(p => p.source === Track.Source.ScreenShare);
@@ -194,7 +190,6 @@ export async function startScreenShare(room: Room): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('[ScreenShare] Failed to start screen share:', err);
-    AudioManager.getInstance().setScreenShareActive(false);
     return false;
   }
 }
@@ -209,7 +204,6 @@ export async function stopScreenShare(room: Room): Promise<void> {
   } catch (err) {
     console.error('[ScreenShare] Failed to stop screen share:', err);
   }
-  AudioManager.getInstance().setScreenShareActive(false);
   useVoiceStore.setState({ isScreenSharing: false });
 }
 
@@ -229,7 +223,6 @@ export async function changeScreenShare(room: Room): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function handleScreenShareUnpublished(): void {
-  AudioManager.getInstance().setScreenShareActive(false);
   useVoiceStore.setState({ isScreenSharing: false });
   const { isMuted, isDeafened, isCameraOn } = useVoiceStore.getState();
   wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing: false });

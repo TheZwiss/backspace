@@ -23,7 +23,6 @@ export class AudioManager {
   private voiceEchoCancellation = true;
   private voiceNoiseSuppression = true;
   private voiceAutoGainControl = false;
-  private screenShareActive = false;
   private streamGeneration = 0;
   private inputSwitchChain: Promise<MediaStream | null> = Promise.resolve(null);
   private rnnoiseNode: AudioWorkletNode | null = null;
@@ -203,10 +202,8 @@ export class AudioManager {
         this.currentStream.getTracks().forEach(t => t.stop());
       }
 
-      // When screen sharing with audio, Chrome's AEC uses the getDisplayMedia
-      // audio as a reference signal and ducks the mic — even with headphones.
-      // Force AEC off during screen share to prevent this.
-      const effectiveEchoCancellation = this.screenShareActive ? false : this.voiceEchoCancellation;
+      // Chrome AEC stays on during screen share — headphone users unaffected,
+      // speaker users get proper echo cancellation.
 
       // When RNNoise is active, force browser NS off — running both degrades quality.
       // The user's noiseSuppression preference is preserved in the store for when RNNoise is disabled.
@@ -215,12 +212,12 @@ export class AudioManager {
       const constraints = {
         audio: {
           deviceId: deviceId === 'default' ? undefined : { exact: deviceId },
-          echoCancellation: effectiveEchoCancellation,
+          echoCancellation: this.voiceEchoCancellation,
           noiseSuppression: effectiveNoiseSuppression,
           autoGainControl: this.voiceAutoGainControl,
           // Chromium-specific constraints — belt-and-suspenders to ensure
           // Chrome's internal audio engine respects the standard constraints.
-          googEchoCancellation: effectiveEchoCancellation,
+          googEchoCancellation: this.voiceEchoCancellation,
           googAutoGainControl: this.voiceAutoGainControl,
           googNoiseSuppression: effectiveNoiseSuppression,
           googHighpassFilter: false,
@@ -336,22 +333,6 @@ export class AudioManager {
       changed = true;
     }
     if (changed && this.currentStream) {
-      this.currentStream.getTracks().forEach(t => t.stop());
-      this.currentStream = null;
-    }
-  }
-
-  /**
-   * When screen sharing with audio is active, Chrome's AEC uses the screen
-   * share audio as a reference signal and aggressively ducks the microphone.
-   * Setting this flag forces echoCancellation OFF regardless of user preference,
-   * severing the software link that causes the ducking.
-   */
-  setScreenShareActive(active: boolean) {
-    if (this.screenShareActive === active) return;
-    this.screenShareActive = active;
-    console.log(`[AudioManager] Screen share active: ${active} — ${active ? 'forcing AEC off' : 'restoring user AEC preference'}`);
-    if (this.currentStream) {
       this.currentStream.getTracks().forEach(t => t.stop());
       this.currentStream = null;
     }

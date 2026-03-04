@@ -145,7 +145,7 @@ export function UserSettingsModal() {
           <div className="flex items-center justify-between py-2">
             <div>
               <div className="text-sm text-txt-primary">Echo Cancellation</div>
-              <div className="text-xs text-txt-tertiary">Removes echo when using speakers (auto-disabled during screen share)</div>
+              <div className="text-xs text-txt-tertiary">Removes echo when using speakers</div>
             </div>
             <button
               onClick={() => setEchoCancellation(!echoCancellation)}
