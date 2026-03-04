@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
+import { useServerStore } from './serverStore';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -87,6 +88,7 @@ interface VoiceState {
   clearVoiceUserStatus: (userId: string) => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
+  clearVoiceUsersForOrigin: (origin: string) => void;
   leaveVoice: () => void;
   reset: () => void;
 }
@@ -274,6 +276,19 @@ export const useVoiceStore = create<VoiceState>()(
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
       clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
+
+      clearVoiceUsersForOrigin: (origin: string) => {
+        const { channelOriginMap } = useServerStore.getState();
+        set((state) => {
+          const newVoiceUsers = new Map(state.voiceUsers);
+          for (const [channelId] of newVoiceUsers) {
+            if ((channelOriginMap.get(channelId) ?? '') === origin) {
+              newVoiceUsers.delete(channelId);
+            }
+          }
+          return { voiceUsers: newVoiceUsers };
+        });
+      },
 
       // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
       leaveVoice: () => set({

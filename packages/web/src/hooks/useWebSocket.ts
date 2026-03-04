@@ -83,7 +83,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useServerStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-  const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
+  const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
     case 'ready':
@@ -124,9 +124,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Voice states — process for all origins (shows who's in voice on remote servers)
+      // Clear voice state for the reconnecting origin before repopulating
       if (isHome) {
         clearAllVoiceUsers();
+      } else {
+        clearVoiceUsersForOrigin(origin);
       }
       if (event.voiceStates) {
         for (const [channelId, userIds] of Object.entries(event.voiceStates)) {

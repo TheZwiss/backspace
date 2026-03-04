@@ -14,8 +14,9 @@ export interface User {
 }
 
 export interface ReplicatedInstance {
-  domain: string;
+  origin: string;   // Full URL with protocol, e.g. "https://orbit.ddns.net"
   username: string;
+  domain?: string;  // Legacy field — kept for backward compat with existing data
 }
 
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';

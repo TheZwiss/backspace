@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { InstanceInfoResponse } from '@backspace/shared';
-import { useInstanceStore } from '../../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 
 // ─── Status indicator ────────────────────────────────────────────────────────
@@ -17,21 +17,21 @@ function StatusDot({ status }: { status: string }) {
 // ─── Add Instance flow ───────────────────────────────────────────────────────
 
 type AddStep = 'url' | 'auth' | 'done';
-type AuthTab = 'register' | 'login';
+type AuthPhase = 'password' | 'fallback-login';
 
 function AddInstanceFlow({ onDone }: { onDone: () => void }) {
   const user = useAuthStore((s) => s.user);
-  const registerOnRemote = useInstanceStore((s) => s.registerOnRemote);
+  const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const probeInstance = useInstanceStore((s) => s.probeInstance);
 
   const [step, setStep] = useState<AddStep>('url');
   const [url, setUrl] = useState('');
   const [probeResult, setProbeResult] = useState<(InstanceInfoResponse & { origin: string }) | null>(null);
-  const [authTab, setAuthTab] = useState<AuthTab>('register');
+  const [authPhase, setAuthPhase] = useState<AuthPhase>('password');
   const [password, setPassword] = useState('');
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [fallbackUsername, setFallbackUsername] = useState('');
+  const [fallbackPassword, setFallbackPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,7 +41,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
     try {
       const result = await probeInstance(url);
       setProbeResult(result);
-      setAuthTab(result.registrationOpen ? 'register' : 'login');
+      setAuthPhase('password');
       setStep('auth');
     } catch (err) {
       setError((err as Error).message);
@@ -50,12 +50,12 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const handleRegister = async () => {
+  const handleConnect = async () => {
     if (!probeResult) return;
     setError('');
     setIsLoading(true);
     try {
-      await registerOnRemote(
+      await connectToRemote(
         probeResult.origin,
         password,
         user?.displayName || undefined,
@@ -63,18 +63,25 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
       setStep('done');
       onDone();
     } catch (err) {
-      setError((err as Error).message);
+      if (err instanceof DifferentPasswordError) {
+        setAuthPhase('fallback-login');
+        setFallbackUsername(err.remoteUsername);
+        setFallbackPassword('');
+        setError('');
+      } else {
+        setError((err as Error).message);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLogin = async () => {
+  const handleFallbackLogin = async () => {
     if (!probeResult) return;
     setError('');
     setIsLoading(true);
     try {
-      await loginToRemote(probeResult.origin, loginUsername, loginPassword);
+      await loginToRemote(probeResult.origin, fallbackUsername, fallbackPassword);
       setStep('done');
       onDone();
     } catch (err) {
@@ -119,8 +126,8 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {/* Step 2: Auth */}
-      {step === 'auth' && probeResult && (
+      {/* Step 2: Auth — single password */}
+      {step === 'auth' && probeResult && authPhase === 'password' && (
         <>
           {/* Instance info card */}
           <div className="flex items-center gap-2">
@@ -131,109 +138,104 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             </div>
           </div>
 
-          {/* Auth tabs */}
-          <div className="flex gap-1 bg-surface-input rounded p-0.5">
-            {probeResult.registrationOpen && (
-              <button
-                onClick={() => setAuthTab('register')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                  authTab === 'register'
-                    ? 'bg-surface-channel text-txt-primary'
-                    : 'text-txt-tertiary hover:text-txt-secondary'
-                }`}
-              >
-                Register
-              </button>
-            )}
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-txt-tertiary mb-1">
+                Enter your password to connect to {new URL(probeResult.origin).host}
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !isLoading && password && handleConnect()}
+                placeholder="Your account password"
+                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                disabled={isLoading}
+                autoFocus
+              />
+              <div className="text-xs text-txt-tertiary mt-1">
+                Your password is verified locally, then used to create or access your account on the remote instance.
+              </div>
+            </div>
             <button
-              onClick={() => setAuthTab('login')}
-              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded transition-colors ${
-                authTab === 'login'
-                  ? 'bg-surface-channel text-txt-primary'
-                  : 'text-txt-tertiary hover:text-txt-secondary'
-              }`}
+              onClick={handleConnect}
+              disabled={isLoading || !password}
+              className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              Login
+              {isLoading ? 'Connecting...' : 'Connect'}
             </button>
           </div>
 
-          {/* Register form */}
-          {authTab === 'register' && (
-            <div className="space-y-2">
-              <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Username</label>
-                <input
-                  type="text"
-                  value={user?.username ?? ''}
-                  disabled
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-secondary text-sm opacity-60"
-                />
-                <div className="text-xs text-txt-tertiary mt-1">
-                  Your username will be replicated. If taken, it becomes {user?.username}@{window.location.host}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Password for this instance</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !isLoading && password && handleRegister()}
-                  placeholder="Create a password for this instance"
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
-                  disabled={isLoading}
-                />
-              </div>
-              <button
-                onClick={handleRegister}
-                disabled={isLoading || !password}
-                className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-              >
-                {isLoading ? 'Registering...' : 'Register & Connect'}
-              </button>
-            </div>
-          )}
-
-          {/* Login form */}
-          {authTab === 'login' && (
-            <div className="space-y-2">
-              <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Username</label>
-                <input
-                  type="text"
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="Your username on this instance"
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
-                  disabled={isLoading}
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Password</label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !isLoading && loginUsername && loginPassword && handleLogin()}
-                  placeholder="Your password on this instance"
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
-                  disabled={isLoading}
-                />
-              </div>
-              <button
-                onClick={handleLogin}
-                disabled={isLoading || !loginUsername || !loginPassword}
-                className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-              >
-                {isLoading ? 'Logging in...' : 'Login & Connect'}
-              </button>
-            </div>
-          )}
-
-          {/* Back button */}
           <div className="flex gap-2">
             <button
               onClick={() => { setStep('url'); setProbeResult(null); setError(''); }}
+              className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+            >
+              Back
+            </button>
+            <button
+              onClick={onDone}
+              className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Step 2b: Fallback login — different password on remote */}
+      {step === 'auth' && probeResult && authPhase === 'fallback-login' && (
+        <>
+          {/* Instance info card */}
+          <div className="flex items-center gap-2">
+            <StatusDot status="connecting" />
+            <div>
+              <div className="text-sm text-txt-primary font-medium">{probeResult.name}</div>
+              <div className="text-xs text-txt-tertiary">{probeResult.origin}</div>
+            </div>
+          </div>
+
+          <div className="p-2 bg-accent-amber/10 border border-accent-amber/30 rounded text-xs text-accent-amber">
+            An account already exists on this instance with a different password. Enter the credentials you used on that instance.
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-txt-tertiary mb-1">Username</label>
+              <input
+                type="text"
+                value={fallbackUsername}
+                onChange={(e) => setFallbackUsername(e.target.value)}
+                placeholder="Your username on this instance"
+                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                disabled={isLoading}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-txt-tertiary mb-1">Password for this instance</label>
+              <input
+                type="password"
+                value={fallbackPassword}
+                onChange={(e) => setFallbackPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !isLoading && fallbackUsername && fallbackPassword && handleFallbackLogin()}
+                placeholder="Password on the remote instance"
+                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                disabled={isLoading}
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={handleFallbackLogin}
+              disabled={isLoading || !fallbackUsername || !fallbackPassword}
+              className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Logging in...' : 'Login & Connect'}
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setAuthPhase('password'); setPassword(''); setError(''); }}
               className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               Back

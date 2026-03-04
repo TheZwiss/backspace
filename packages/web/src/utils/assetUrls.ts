@@ -23,9 +23,9 @@ export function normalizeUserAssets<T extends { avatar?: string | null }>(user: 
 
 /**
  * Rewrite user.avatar and attachment filenames on a message for remote origins.
- * Mutates in-place.
+ * Also normalizes nested replyTo message assets. Mutates in-place.
  */
-export function normalizeMessageAssets<T extends { user: { avatar?: string | null }; attachments?: { filename: string }[] }>(
+export function normalizeMessageAssets<T extends { user: { avatar?: string | null }; attachments?: { filename: string }[]; replyTo?: { user: { avatar?: string | null }; attachments?: { filename: string }[] } | null }>(
   message: T,
   origin: string,
 ): T {
@@ -34,6 +34,15 @@ export function normalizeMessageAssets<T extends { user: { avatar?: string | nul
   if (message.attachments) {
     for (const att of message.attachments) {
       att.filename = resolveAssetUrl(att.filename, origin) ?? att.filename;
+    }
+  }
+  // Normalize reply-to message assets (remote replies have relative URLs)
+  if (message.replyTo) {
+    normalizeUserAssets(message.replyTo.user, origin);
+    if (message.replyTo.attachments) {
+      for (const att of message.replyTo.attachments) {
+        att.filename = resolveAssetUrl(att.filename, origin) ?? att.filename;
+      }
     }
   }
   return message;

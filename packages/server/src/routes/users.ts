@@ -82,10 +82,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (!Array.isArray(replicatedInstances)) {
         return reply.code(400).send({ error: 'replicatedInstances must be an array', statusCode: 400 });
       }
-      // Validate each entry has domain and username strings
+      // Validate each entry has (origin or domain) and username strings
       for (const inst of replicatedInstances) {
-        if (!inst || typeof inst.domain !== 'string' || typeof inst.username !== 'string') {
-          return reply.code(400).send({ error: 'Each replicated instance must have domain and username strings', statusCode: 400 });
+        if (!inst || typeof inst.username !== 'string') {
+          return reply.code(400).send({ error: 'Each replicated instance must have username string', statusCode: 400 });
+        }
+        if (typeof inst.origin !== 'string' && typeof inst.domain !== 'string') {
+          return reply.code(400).send({ error: 'Each replicated instance must have origin or domain string', statusCode: 400 });
         }
       }
       if (replicatedInstances.length > 50) {

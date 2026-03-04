@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, InstanceInfoResponse, ReplicatedInstance } from '@backspace/shared';
+import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import { setApiForOriginResolver, useServerStore } from './serverStore';
@@ -50,6 +50,16 @@ function saveCachedTokens(instances: ConnectedInstance[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
 }
 
+// ─── Error types ────────────────────────────────────────────────────────────
+
+/** Thrown when the remote instance already has an account for this user with a different password. */
+export class DifferentPasswordError extends Error {
+  constructor(public remoteUsername: string) {
+    super('Account exists with a different password on this instance');
+    this.name = 'DifferentPasswordError';
+  }
+}
+
 // ─── URL normalization ───────────────────────────────────────────────────────
 
 function normalizeOrigin(url: string): string {
@@ -78,7 +88,7 @@ interface InstanceState {
   error: string | null;
 
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
-  registerOnRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
+  connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
   loginToRemote: (origin: string, username: string, password: string) => Promise<void>;
   removeInstance: (origin: string) => void;
   syncInstanceList: () => Promise<void>;
@@ -111,21 +121,29 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     return { ...info, origin };
   },
 
-  registerOnRemote: async (origin: string, password: string, displayName?: string) => {
+  connectToRemote: async (origin: string, password: string, displayName?: string) => {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) throw new Error('Not logged in');
 
     set({ isLoading: true, error: null });
 
     try {
+      // Step 1: Verify password against HOME instance
+      const { valid } = await api.users.verifyPassword(password);
+      if (!valid) {
+        throw new Error('Incorrect password');
+      }
+
+      // Step 2: Try register on remote, then fall back to login
       const homeInstance = window.location.host;
       const tempClient = createApiClient(origin, () => null);
 
-      let response;
+      let response: AuthResponse | null = null;
       let finalUsername = currentUser.username;
+      let needsLogin = false;
 
+      // 2a: Attempt registration with plain username
       try {
-        // First attempt: register with current username
         response = await tempClient.auth.register({
           username: currentUser.username,
           password,
@@ -134,24 +152,62 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         });
       } catch (err) {
         const message = (err as Error).message;
-        // If username taken, retry with domain-qualified username
         if (message.includes('already taken') || message.includes('409')) {
-          finalUsername = `${currentUser.username}@${homeInstance}`;
-          response = await tempClient.auth.register({
-            username: finalUsername,
-            password,
-            displayName: displayName || currentUser.displayName || undefined,
-            homeInstance,
-          });
+          // Username collision — try domain-qualified username
+          try {
+            finalUsername = `${currentUser.username}@${homeInstance}`;
+            response = await tempClient.auth.register({
+              username: finalUsername,
+              password,
+              displayName: displayName || currentUser.displayName || undefined,
+              homeInstance,
+            });
+          } catch (err2) {
+            const msg2 = (err2 as Error).message;
+            if (msg2.includes('already taken') || msg2.includes('409')) {
+              // Both usernames exist on remote — fall through to login
+              needsLogin = true;
+            } else {
+              throw err2;
+            }
+          }
+        } else if (message.includes('Registration is currently closed') || message.includes('403')) {
+          // Registration closed on remote — fall through to login
+          needsLogin = true;
         } else {
           throw err;
         }
       }
 
-      // Fetch instance info for the label
-      const info = await tempClient.instance.info();
+      // 2b: If registration didn't work, try login with the same password
+      if (needsLogin) {
+        // Try plain username first, then domain-qualified
+        try {
+          response = await tempClient.auth.login({
+            username: currentUser.username,
+            password,
+          });
+          finalUsername = currentUser.username;
+        } catch {
+          try {
+            finalUsername = `${currentUser.username}@${homeInstance}`;
+            response = await tempClient.auth.login({
+              username: finalUsername,
+              password,
+            });
+          } catch {
+            // Both login attempts failed — different password scenario
+            throw new DifferentPasswordError(currentUser.username);
+          }
+        }
+      }
 
-      // Create authenticated client
+      if (!response) {
+        throw new Error('Failed to authenticate with remote instance');
+      }
+
+      // Step 3: Complete connection
+      const info = await tempClient.instance.info();
       const authenticatedClient = createApiClient(origin, () => response.token);
 
       const instance: ConnectedInstance = {
@@ -244,7 +300,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     // Build the replicated instances list from all connected remotes
     const replicatedInstances: ReplicatedInstance[] = instances.map(inst => ({
-      domain: new URL(inst.origin).host,
+      origin: inst.origin,
       username: inst.username,
     }));
 
@@ -271,8 +327,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     const cached = loadCachedTokens();
     const toConnect = currentUser.replicatedInstances.filter(ri => {
-      // Build origin from domain
-      const origin = `https://${ri.domain}`;
+      const origin = ri.origin || `https://${ri.domain}`;
       // Only attempt if we have a cached token and aren't already connected
       return cached[origin] && !get().instances.some(i => i.origin === origin);
     });
@@ -282,7 +337,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Connect all in parallel, individual failures are non-blocking
     const results = await Promise.allSettled(
       toConnect.map(async (ri) => {
-        const origin = `https://${ri.domain}`;
+        const origin = ri.origin || `https://${ri.domain}`;
         const cachedEntry = cached[origin]!; // Guaranteed by filter above
 
         // Create client with cached token
@@ -291,7 +346,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         // Set as connecting
         const connectingInstance: ConnectedInstance = {
           origin,
-          label: cachedEntry.label || ri.domain,
+          label: cachedEntry.label || new URL(origin).host,
           token: cachedEntry.token,
           user: currentUser, // Placeholder until we verify
           username: cachedEntry.username || ri.username,
@@ -308,7 +363,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           const user = await client.users.me();
 
           // Fetch instance info for fresh label
-          let label = cachedEntry.label || ri.domain;
+          let label = cachedEntry.label || new URL(origin).host;
           try {
             const info = await client.instance.info();
             label = info.name;
@@ -356,6 +411,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   reset: () => {
+    // Clean up server store for each connected remote instance before tearing down
+    const { instances } = get();
+    for (const inst of instances) {
+      useServerStore.getState().removeInstanceServers(inst.origin);
+    }
+
     // Tear down all remote WebSocket connections
     disconnectAllRemote();
 
