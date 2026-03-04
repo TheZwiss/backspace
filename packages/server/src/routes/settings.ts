@@ -16,6 +16,7 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
     allowedFramerates: row.allowedFramerates.split(',').map(Number).filter((n) => VALID_FRAMERATES.includes(n)),
     maxResolution: row.maxResolution,
     maxFramerate: row.maxFramerate,
+    discoveryEnabled: row.discoveryEnabled === 1,
   };
 }
 
@@ -98,6 +99,10 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: `maxFramerate must be one of: ${VALID_FRAMERATES.join(', ')}`, statusCode: 400 });
       }
       updateData.maxFramerate = body.maxFramerate;
+    }
+
+    if (body.discoveryEnabled !== undefined) {
+      updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
     }
 
     // Cross-field validation: min < max

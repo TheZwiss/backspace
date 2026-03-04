@@ -28,13 +28,39 @@ export interface UserWithPassword extends User {
 
 // ─── Server (Guild) Types ───────────────────────────────────────────────────
 
+export type ServerVisibility = 'public' | 'request' | 'private';
+
 export interface Server {
   id: string;
   name: string;
   icon: string | null;
   ownerId: string;
   inviteCode: string | null;
+  visibility: ServerVisibility;
+  description: string | null;
   createdAt: number;
+}
+
+export interface ExploreServer {
+  id: string;
+  name: string;
+  icon: string | null;
+  description: string | null;
+  visibility: ServerVisibility;
+  memberCount: number;
+  createdAt: number;
+}
+
+export interface JoinRequest {
+  id: string;
+  serverId: string;
+  userId: string;
+  message: string | null;
+  status: 'pending' | 'accepted' | 'declined';
+  decidedBy: string | null;
+  createdAt: number;
+  decidedAt: number | null;
+  user?: User;
 }
 
 export interface ServerWithChannelsAndMembers extends Server {
@@ -244,6 +270,9 @@ export type ServerEvent =
   | { type: 'channel_updated'; channel: Channel; serverId: string }
   | { type: 'channel_deleted'; channelId: string; serverId: string }
   | { type: 'server_updated'; server: Server }
+  | { type: 'join_request_received'; request: JoinRequest }
+  | { type: 'join_request_accepted'; request: JoinRequest; server: ServerWithChannelsAndMembers }
+  | { type: 'join_request_declined'; request: JoinRequest }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -287,6 +316,8 @@ export interface UpdateChannelRequest {
 export interface UpdateServerRequest {
   name?: string;
   icon?: string;
+  visibility?: ServerVisibility;
+  description?: string;
 }
 
 export interface UpdateUserRequest {
@@ -360,6 +391,8 @@ export interface Friend {
   customStatus: string | null;
   createdAt: number;
   addedAt: number;
+  homeUserId: string | null;
+  homeInstance: string | null;
 }
 
 export type FriendRequestStatus = 'pending' | 'accepted' | 'declined';
@@ -391,6 +424,7 @@ export interface InstanceStreamingLimits {
   allowedFramerates: number[];
   maxResolution: number;
   maxFramerate: number;
+  discoveryEnabled: boolean;
 }
 
 // ─── Federation Types ──────────────────────────────────────────────────────

@@ -185,7 +185,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     return (
       <div className="px-4 pt-8 pb-4">
         <div className="mb-2">
-          <Avatar src={otherUser?.avatar} name={displayName} size={80} userId={otherUser?.id} />
+          <Avatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} />
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
         <p className="text-txt-secondary text-[14px] mt-1">

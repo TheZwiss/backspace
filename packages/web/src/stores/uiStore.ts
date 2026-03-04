@@ -28,6 +28,7 @@ interface UIState {
   modalData: Record<string, unknown>;
   isMobile: boolean;
   showDms: boolean;
+  showExplore: boolean;
   imagePreviewUrl: string | null;
   userProfilePopout: {
     user: User | null;
@@ -40,6 +41,7 @@ interface UIState {
   closeModal: () => void;
   setIsMobile: (isMobile: boolean) => void;
   setShowDms: (show: boolean) => void;
+  setShowExplore: (show: boolean) => void;
   openImagePreview: (url: string) => void;
   closeImagePreview: () => void;
   openUserProfile: (user: User, position: { top: number; left: number }) => void;
@@ -64,6 +66,7 @@ export const useUIStore = create<UIState>()(
       modalData: {},
       isMobile: false,
       showDms: false,
+      showExplore: false,
       imagePreviewUrl: null,
       userProfilePopout: {
         user: null,
@@ -89,7 +92,8 @@ export const useUIStore = create<UIState>()(
         }
       },
 
-      setShowDms: (show) => set({ showDms: show }),
+      setShowDms: (show) => set({ showDms: show, ...(show ? { showExplore: false } : {}) }),
+      setShowExplore: (show) => set({ showExplore: show, ...(show ? { showDms: false } : {}) }),
 
       openImagePreview: (url) => set({ activeModal: 'imagePreview', imagePreviewUrl: url }),
       closeImagePreview: () => set({ activeModal: null, imagePreviewUrl: null }),

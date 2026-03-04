@@ -28,6 +28,8 @@ import type {
   InstanceStreamingLimits,
   InstanceInfoResponse,
   VerifyPasswordResponse,
+  ExploreServer,
+  JoinRequest,
 } from '@backspace/shared';
 
 export class BackspaceApiClient {
@@ -113,6 +115,15 @@ export class BackspaceApiClient {
 
   readonly instance: {
     info: () => Promise<InstanceInfoResponse>;
+  };
+
+  readonly explore: {
+    list: (q?: string, limit?: number, offset?: number) => Promise<{ servers: ExploreServer[]; total: number; discoveryEnabled: boolean }>;
+    publicJoin: (serverId: string) => Promise<ServerWithChannelsAndMembers>;
+    requestJoin: (serverId: string, message?: string) => Promise<JoinRequest>;
+    getJoinRequests: (serverId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
+    decideJoinRequest: (serverId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
+    myJoinRequests: (status?: string) => Promise<{ requests: JoinRequest[] }>;
   };
 
   constructor(baseUrl: string, getToken: () => string | null) {
@@ -286,6 +297,34 @@ export class BackspaceApiClient {
 
     this.instance = {
       info: () => request<InstanceInfoResponse>('GET', '/instance/info', undefined, false),
+    };
+
+    this.explore = {
+      list: (q?: string, limit = 50, offset = 0) => {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+        return request<{ servers: ExploreServer[]; total: number; discoveryEnabled: boolean }>(
+          'GET', `/servers/explore?${params}`
+        );
+      },
+      publicJoin: (serverId: string) =>
+        request<ServerWithChannelsAndMembers>('POST', `/servers/${serverId}/public-join`),
+      requestJoin: (serverId: string, message?: string) =>
+        request<JoinRequest>('POST', `/servers/${serverId}/request-join`, message ? { message } : {}),
+      getJoinRequests: (serverId: string, status?: string) => {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        return request<{ requests: JoinRequest[] }>('GET', `/servers/${serverId}/join-requests?${params}`);
+      },
+      decideJoinRequest: (serverId: string, requestId: string, action: 'accept' | 'decline') =>
+        request<JoinRequest>('PATCH', `/servers/${serverId}/join-requests/${requestId}`, { action }),
+      myJoinRequests: (status?: string) => {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        return request<{ requests: JoinRequest[] }>('GET', `/users/@me/join-requests?${params}`);
+      },
     };
   }
 }

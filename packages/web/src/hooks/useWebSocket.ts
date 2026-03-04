@@ -268,7 +268,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           createdAt: event.message.createdAt,
           members: event.message.user ? [event.message.user] : [],
           lastMessage: event.message,
-        });
+        }, origin);
       } else {
         const updatedDms = currentDmChannels.map(dm =>
           dm.id === event.message.dmChannelId
@@ -388,7 +388,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'dm_channel_created':
       if (!isHome) break;
-      addDmChannel(event.dmChannel);
+      addDmChannel(event.dmChannel, origin);
       break;
 
     case 'dm_channel_closed':

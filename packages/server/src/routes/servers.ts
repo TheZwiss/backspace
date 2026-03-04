@@ -27,6 +27,8 @@ function rowToServer(row: typeof schema.servers.$inferSelect): Server {
     icon: row.icon,
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
+    visibility: (row.visibility ?? 'private') as Server['visibility'],
+    description: row.description ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -242,7 +244,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, icon } = request.body;
+    const { name, icon, visibility, description } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
@@ -266,6 +268,19 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     if (icon !== undefined) {
       updates.icon = icon;
+    }
+
+    if (visibility !== undefined) {
+      const validVisibilities = ['public', 'request', 'private'];
+      if (!validVisibilities.includes(visibility)) {
+        return reply.code(400).send({ error: 'Visibility must be "public", "request", or "private"', statusCode: 400 });
+      }
+      updates.visibility = visibility;
+    }
+
+    if (description !== undefined) {
+      const trimmed = description.trim().slice(0, 200);
+      updates.description = trimmed || null;
     }
 
     if (Object.keys(updates).length === 0) {

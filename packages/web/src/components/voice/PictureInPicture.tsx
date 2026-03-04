@@ -351,7 +351,7 @@ export function PictureInPicture() {
               <Avatar
                 name={displayParticipant.username}
                 size={64}
-                userId={displayParticipant.userId}
+                userId={displayParticipant.homeUserId ?? displayParticipant.userId}
               />
               {speakingParticipantIds.has(displayParticipant.identity) && (
                 <div className="absolute -inset-1 rounded-full ring-2 ring-status-online animate-pulse" />

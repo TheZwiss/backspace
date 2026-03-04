@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getAvatarGradient } from '../../utils/gradients';
+import { parseFederatedUsername } from '../../utils/identity';
 
 export function IncomingCallModal() {
   const incomingCall = useVoiceStore((s) => s.incomingCall);
@@ -25,7 +27,15 @@ export function IncomingCallModal() {
     };
   }, [incomingCall, setIncomingCall]);
 
+  const dmChannels = useServerStore((s) => s.dmChannels);
+
   if (!incomingCall) return null;
+
+  // Look up the caller in DM channel members for homeUserId
+  const dmChannel = dmChannels.find(d => d.id === incomingCall.dmChannelId);
+  const callerMember = dmChannel?.members.find(m => m.id === incomingCall.callerId);
+  const callerAvatarId = callerMember?.homeUserId ?? incomingCall.callerId;
+  const { baseName: callerBaseName } = parseFederatedUsername(incomingCall.callerName);
 
   const handleAccept = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -55,8 +65,8 @@ export function IncomingCallModal() {
         <div className="relative p-8 flex flex-col items-center gap-4">
           {/* Caller avatar */}
           <div className="relative">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ background: getAvatarGradient(incomingCall.callerId, incomingCall.callerName).gradient }}>
-              {incomingCall.callerName.charAt(0).toUpperCase()}
+            <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold" style={{ background: getAvatarGradient(callerAvatarId, callerBaseName).gradient }}>
+              {callerBaseName.charAt(0).toUpperCase()}
             </div>
             {/* Ringing phone icon */}
             <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-status-online flex items-center justify-center">
@@ -68,7 +78,7 @@ export function IncomingCallModal() {
 
           {/* Caller info */}
           <div className="text-center">
-            <h3 className="text-[20px] font-bold text-txt-primary">{incomingCall.callerName}</h3>
+            <h3 className="text-[20px] font-bold text-txt-primary">{callerBaseName}</h3>
             <p className="text-[14px] text-txt-tertiary mt-1">Incoming Voice Call...</p>
           </div>
 

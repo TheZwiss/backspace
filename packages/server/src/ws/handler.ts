@@ -677,6 +677,8 @@ function buildReadyPayload(userId: string): {
         icon: serverRow.icon,
         ownerId: serverRow.ownerId,
         inviteCode: serverRow.inviteCode,
+        visibility: (serverRow.visibility ?? 'private') as ServerWithChannelsAndMembers['visibility'],
+        description: serverRow.description ?? null,
         createdAt: serverRow.createdAt,
         channels: visibleChannels,
         members,

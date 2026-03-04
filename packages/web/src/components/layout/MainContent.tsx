@@ -9,6 +9,7 @@ import { VoiceGrid } from '../voice/VoiceGrid';
 import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
 import { FriendsPage } from '../chat/FriendsPage';
+import { ExplorePage } from '../chat/ExplorePage';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
@@ -27,6 +28,7 @@ export function MainContent() {
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const showDms = useUIStore((s) => s.showDms);
+  const showExplore = useUIStore((s) => s.showExplore);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const dmChannels = useServerStore((s) => s.dmChannels);
@@ -58,8 +60,9 @@ export function MainContent() {
   const channel = channels.find(c => c.id === currentChannelId);
   const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
 
-  if (showDms || !currentServerId) {
+  if (showDms || showExplore || !currentServerId) {
     if (!currentChannelId) {
+      if (showExplore) return <ExplorePage />;
       return <FriendsPage />;
     }
 

@@ -59,7 +59,7 @@ export function FriendsPage() {
         if (instance?.api) client = instance.api;
       }
       const dmChannel = await client.dm.create({ userId: friendId });
-      addDmChannel(dmChannel);
+      addDmChannel(dmChannel, instanceOrigin);
       navigate(`/channels/@me/${dmChannel.id}`);
     } catch (err) {
       console.error('Failed to open DM:', err);

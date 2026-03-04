@@ -8,7 +8,7 @@ import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { InstanceStreamingLimits } from '@backspace/shared';
+import type { InstanceStreamingLimits, ServerVisibility, JoinRequest } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080] as const;
 const VALID_FRAMERATES = [30, 45, 60] as const;
@@ -215,6 +215,250 @@ function StreamingLimitsPanel() {
   );
 }
 
+function DiscoveryPanel({ serverId }: { serverId: string }) {
+  const servers = useServerStore((s) => s.servers);
+  const updateServer = useServerStore((s) => s.updateServer);
+  const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
+
+  const server = servers.find(s => s.id === serverId);
+
+  const [visibility, setVisibility] = useState<ServerVisibility>(
+    (server?.visibility as ServerVisibility) ?? 'private'
+  );
+  const [description, setDescription] = useState(server?.description ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (server) {
+      setVisibility((server.visibility as ServerVisibility) ?? 'private');
+      setDescription(server.description ?? '');
+    }
+  }, [server]);
+
+  if (!server) return null;
+
+  const hasChanges =
+    visibility !== ((server.visibility as ServerVisibility) ?? 'private') ||
+    description !== (server.description ?? '');
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      await api.servers.update(serverId, { visibility, description: description.trim() });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => {
+    setVisibility((server.visibility as ServerVisibility) ?? 'private');
+    setDescription(server.description ?? '');
+    setSaveError('');
+  };
+
+  const visibilityOptions: { value: ServerVisibility; label: string; desc: string }[] = [
+    { value: 'private', label: 'Private', desc: 'Only people with an invite link can join' },
+    { value: 'request', label: 'Request to Join', desc: 'Visible in Explore — people can request to join' },
+    { value: 'public', label: 'Public', desc: 'Visible in Explore — anyone can join instantly' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {!discoveryEnabled && (
+        <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
+          Server discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.
+        </div>
+      )}
+
+      <div>
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+          Visibility
+        </div>
+        <div className="space-y-1.5">
+          {visibilityOptions.map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
+                visibility === opt.value
+                  ? 'bg-interactive-selected'
+                  : 'hover:bg-interactive-hover'
+              }`}
+            >
+              <input
+                type="radio"
+                name="visibility"
+                value={opt.value}
+                checked={visibility === opt.value}
+                onChange={() => setVisibility(opt.value)}
+                className="mt-0.5 accent-accent-primary"
+              />
+              <div>
+                <div className="text-sm font-medium text-txt-primary">{opt.label}</div>
+                <div className="text-xs text-txt-tertiary">{opt.desc}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+          Description
+        </div>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value.slice(0, 200))}
+          placeholder="A short description for the Explore page..."
+          rows={3}
+          className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary resize-none placeholder:text-txt-tertiary"
+        />
+        <div className="text-[11px] text-txt-tertiary text-right">{description.length}/200</div>
+      </div>
+
+      {saveError && (
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
+      )}
+      {saveSuccess && (
+        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
+      )}
+      {hasChanges && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+          <button
+            onClick={handleReset}
+            className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+          >
+            Reset
+          </button>
+        </div>
+      )}
+
+      {/* Pending Join Requests — only shown when visibility is 'request' */}
+      {(visibility === 'request' || (server.visibility as ServerVisibility) === 'request') && (
+        <JoinRequestsSection serverId={serverId} />
+      )}
+    </div>
+  );
+}
+
+function JoinRequestsSection({ serverId }: { serverId: string }) {
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionError, setActionError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.explore.getJoinRequests(serverId, 'pending')
+      .then(({ requests: reqs }) => {
+        if (!cancelled) {
+          setRequests(reqs);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [serverId]);
+
+  const handleDecide = async (requestId: string, action: 'accept' | 'decline') => {
+    setActionError('');
+    try {
+      await api.explore.decideJoinRequest(serverId, requestId, action);
+      setRequests(prev => prev.filter(r => r.id !== requestId));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Action failed');
+    }
+  };
+
+  return (
+    <div className="pt-4 border-t border-border-soft">
+      <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
+        Pending Join Requests
+      </div>
+
+      {actionError && (
+        <div className="mb-2 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">
+          {actionError}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-sm text-txt-tertiary">Loading...</div>
+      ) : requests.length === 0 ? (
+        <div className="text-sm text-txt-tertiary">No pending join requests</div>
+      ) : (
+        <div className="space-y-2 max-h-[240px] overflow-y-auto scrollbar-thin">
+          {requests.map((req) => {
+            const user = req.user;
+            const displayName = user?.displayName ?? user?.username ?? 'Unknown';
+
+            return (
+              <div key={req.id} className="flex items-start gap-3 p-2.5 rounded bg-surface-base">
+                <Avatar
+                  src={user?.avatar}
+                  name={displayName}
+                  size={32}
+                  userId={user?.id}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-txt-primary truncate">{displayName}</span>
+                    {user?.username && (
+                      <span className="text-xs text-txt-tertiary">@{user.username}</span>
+                    )}
+                  </div>
+                  {req.message && (
+                    <p className="text-xs text-txt-secondary mt-0.5 line-clamp-2">{req.message}</p>
+                  )}
+                  <span className="text-[10px] text-txt-tertiary">
+                    {new Date(req.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => handleDecide(req.id, 'accept')}
+                    className="p-1.5 rounded text-status-online hover:bg-status-online/20 transition-colors"
+                    title="Accept"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => handleDecide(req.id, 'decline')}
+                    className="p-1.5 rounded text-txt-danger hover:bg-accent-rose/20 transition-colors"
+                    title="Decline"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ServerSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
@@ -229,7 +473,7 @@ export function ServerSettingsModal() {
   const isAdmin = useSettingsStore((s) => s.isAdmin);
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'overview' | 'members' | 'streaming'>('overview');
+  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'streaming'>('overview');
   const [serverName, setServerName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -346,6 +590,16 @@ export function ServerSettingsModal() {
           >
             Overview
           </button>
+          {canManageServer && (
+            <button
+              onClick={() => setTab('discovery')}
+              className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+                tab === 'discovery' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+              }`}
+            >
+              Discovery
+            </button>
+          )}
           <button
             onClick={() => setTab('members')}
             className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
@@ -409,6 +663,10 @@ export function ServerSettingsModal() {
                 </>
               )}
             </div>
+          )}
+
+          {tab === 'discovery' && canManageServer && currentServerId && (
+            <DiscoveryPanel serverId={currentServerId} />
           )}
 
           {tab === 'members' && (

@@ -7,6 +7,7 @@ import { api } from '../../api/client';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient } from '../../utils/gradients';
+import { parseFederatedUsername } from '../../utils/identity';
 
 interface UserProfilePopoutProps {
   user: User;
@@ -17,7 +18,8 @@ interface UserProfilePopoutProps {
 export function UserProfilePopout({ user, onClose, position }: UserProfilePopoutProps) {
   const navigate = useNavigate();
   const addDmChannel = useServerStore((s) => s.addDmChannel);
-  const displayName = user.displayName ?? user.username;
+  const { baseName, domain } = parseFederatedUsername(user.username);
+  const displayName = user.displayName ?? baseName;
 
   const top = position
     ? Math.min(Math.max(8, position.top), window.innerHeight - 360)
@@ -72,21 +74,23 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
             name={displayName}
             size={56}
             status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
-            userId={user.id}
+            userId={user.homeUserId ?? user.id}
           />
         </div>
 
         {/* Name & info — flows naturally after avatar */}
         <div>
           <Username
-            username={displayName}
+            username={user.displayName ?? baseName}
             className="text-[16px] font-semibold text-txt-primary leading-tight"
           />
-          {user.username.includes('@') ? (
-            <Username username={user.username} className="text-[13px] text-txt-tertiary" />
-          ) : (
-            <div className="text-[13px] text-txt-tertiary">@{user.username}</div>
-          )}
+          <div className="text-[13px] text-txt-tertiary">
+            {domain ? (
+              <Username username={user.username} className="text-[13px] text-txt-tertiary" />
+            ) : (
+              <span>@{baseName}</span>
+            )}
+          </div>
           {user.customStatus && (
             <div className="text-[13px] text-txt-secondary italic mt-1">
               {user.customStatus}

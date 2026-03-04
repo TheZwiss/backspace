@@ -9,10 +9,12 @@ import { VoiceChannel } from '../voice/VoiceChannel';
 import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
+import { Username } from '../ui/Username';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { parseFederatedUsername } from '../../utils/identity';
 
 export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
@@ -193,7 +195,7 @@ export function ChannelSidebar() {
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
 
               const dmDisplayName = isGroup
-                ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
+                ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
                 : otherMembers[0]?.displayName ?? otherMembers[0]?.username;
 
               return (
@@ -224,21 +226,22 @@ export function ChannelSidebar() {
                             zIndex: 2 - i,
                           }}
                         >
-                          <Avatar src={m.avatar} name={m.displayName ?? m.username} size={22} userId={m.id} />
+                          <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={22} userId={m.homeUserId ?? m.id} />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? ''} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.id} />
+                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className={`text-[15px] truncate leading-tight ${
-                      currentChannelId === dm.id ? 'text-white font-medium'
-                        : isDmUnread ? 'text-white font-bold'
-                        : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
-                    }`}>
-                      {dmDisplayName}
-                    </div>
+                    <Username
+                      username={dmDisplayName ?? ''}
+                      className={`text-[15px] truncate leading-tight block ${
+                        currentChannelId === dm.id ? 'text-white font-medium'
+                          : isDmUnread ? 'text-white font-bold'
+                          : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
+                      }`}
+                    />
                     {isGroup ? (
                       <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
                         {dm.members.length} Members

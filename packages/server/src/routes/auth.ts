@@ -53,13 +53,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(400).send({ error: 'Username must be 100 characters or less', statusCode: 400 });
         }
       } else {
-        // Plain username from a replicated registration — same rules as local
-        if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
-          return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
-        }
-        if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
-          return reply.code(400).send({ error: 'Username can only contain letters, numbers, and underscores', statusCode: 400 });
-        }
+        // Replicated users MUST use username@domain format — plain usernames
+        // are reserved exclusively for native users of this instance
+        return reply.code(400).send({ error: 'Replicated users must use username@domain format', statusCode: 400 });
       }
     } else {
       // Local registration — strict validation

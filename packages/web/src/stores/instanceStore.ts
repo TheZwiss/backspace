@@ -140,13 +140,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       const tempClient = createApiClient(origin, () => null);
 
       let response: AuthResponse | null = null;
-      let finalUsername = currentUser.username;
-      let needsLogin = false;
+      const finalUsername = `${currentUser.username}@${homeInstance}`;
 
-      // 2a: Attempt registration with plain username
+      // 2a: Attempt registration with namespaced username
       try {
         response = await tempClient.auth.register({
-          username: currentUser.username,
+          username: finalUsername,
           password,
           displayName: displayName || currentUser.displayName || undefined,
           homeInstance,
@@ -154,52 +153,29 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         });
       } catch (err) {
         const message = (err as Error).message;
-        if (message.includes('already taken') || message.includes('409')) {
-          // Username collision — try domain-qualified username
-          try {
-            finalUsername = `${currentUser.username}@${homeInstance}`;
-            response = await tempClient.auth.register({
-              username: finalUsername,
-              password,
-              displayName: displayName || currentUser.displayName || undefined,
-              homeInstance,
-              homeUserId: currentUser.id,
-            });
-          } catch (err2) {
-            const msg2 = (err2 as Error).message;
-            if (msg2.includes('already taken') || msg2.includes('409')) {
-              // Both usernames exist on remote — fall through to login
-              needsLogin = true;
-            } else {
-              throw err2;
-            }
-          }
-        } else if (message.includes('Registration is currently closed') || message.includes('403')) {
-          // Registration closed on remote — fall through to login
-          needsLogin = true;
+        if (message.includes('already taken') || message.includes('409') ||
+            message.includes('Registration is currently closed') || message.includes('403')) {
+          // Already registered or registration closed — fall through to login
         } else {
           throw err;
         }
       }
 
-      // 2b: If registration didn't work, try login with the same password
-      if (needsLogin) {
-        // Try plain username first, then domain-qualified
+      // 2b: If registration didn't work, try login
+      if (!response) {
         try {
           response = await tempClient.auth.login({
-            username: currentUser.username,
+            username: finalUsername,
             password,
           });
-          finalUsername = currentUser.username;
         } catch {
+          // Namespaced login failed — try legacy plain username as fallback
           try {
-            finalUsername = `${currentUser.username}@${homeInstance}`;
             response = await tempClient.auth.login({
-              username: finalUsername,
+              username: currentUser.username,
               password,
             });
           } catch {
-            // Both login attempts failed — different password scenario
             throw new DifferentPasswordError(currentUser.username);
           }
         }
@@ -388,6 +364,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             if (homeUser) {
               client.users.update({ homeUserId: homeUser.id }).catch(() => {});
             }
+          }
+
+          // Backfill cached username if stale after server-side migration
+          // (e.g. "test" was renamed to "test@nova.ddns.net")
+          if (user.username !== cachedEntry.username) {
+            cachedEntry.username = user.username;
           }
 
           const connectedInstance: ConnectedInstance = {

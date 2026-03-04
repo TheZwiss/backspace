@@ -68,7 +68,15 @@ export function runMigrations(db: Database.Database): void {
       name: 'instance_settings',
       columns: [
         { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" },
-        { name: 'worker_id', type: 'INTEGER' }
+        { name: 'worker_id', type: 'INTEGER' },
+        { name: 'discovery_enabled', type: 'INTEGER NOT NULL DEFAULT 1' }
+      ]
+    },
+    {
+      name: 'servers',
+      columns: [
+        { name: 'visibility', type: "TEXT DEFAULT 'private'" },
+        { name: 'description', type: 'TEXT' }
       ]
     }
   ];
@@ -101,6 +109,20 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Ensure join_requests table exists (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS join_requests (
+      id TEXT PRIMARY KEY,
+      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      decided_by TEXT REFERENCES users(id),
+      created_at INTEGER NOT NULL,
+      decided_at INTEGER
+    );
+  `);
+
   // ─── RBAC Migration: Ensure @everyone roles exist for all servers ─────────
   migrateEveryoneRoles(db);
 
@@ -109,6 +131,9 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Worker ID: ensure a unique Snowflake worker ID is persisted ───────────
   migrateWorkerId(db);
+
+  // ─── Namespace replicated users: ensure all federated users use user@domain ─
+  migrateReplicatedUsernames(db);
 
   // ─── Admin flag: ensure at least one admin exists (first registered user) ──
   migrateFirstAdmin(db);
@@ -208,5 +233,25 @@ function migrateEveryoneRoles(db: Database.Database): void {
         insertMemberRole.run(serverId, userId, adminRole.id);
       }
     }
+  }
+}
+
+/**
+ * Rename non-namespaced replicated users: e.g. "test" → "test@nova.ddns.net"
+ * Frees plain usernames for native user creation and makes all federated users
+ * visually consistent. Safe because JWTs validate by userId, not username.
+ */
+function migrateReplicatedUsernames(db: Database.Database): void {
+  const rows = db.prepare(
+    "SELECT id, username, home_instance FROM users WHERE home_instance IS NOT NULL AND username NOT LIKE '%@%'"
+  ).all() as { id: string; username: string; home_instance: string }[];
+
+  if (rows.length === 0) return;
+
+  const update = db.prepare('UPDATE users SET username = ? WHERE id = ?');
+  for (const row of rows) {
+    const newUsername = `${row.username}@${row.home_instance}`;
+    update.run(newUsername, row.id);
+    console.log(`Migrating: Renamed replicated user "${row.username}" → "${newUsername}"`);
   }
 }

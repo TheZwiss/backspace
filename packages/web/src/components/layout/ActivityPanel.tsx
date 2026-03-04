@@ -2,7 +2,9 @@ import React, { useEffect, useMemo } from 'react';
 import { useSocialStore } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
+import { Username } from '../ui/Username';
 import type { Friend } from '@backspace/shared';
+import { parseFederatedUsername } from '../../utils/identity';
 
 export function ActivityPanel() {
   const friends = useSocialStore((s) => s.friends);
@@ -34,7 +36,11 @@ export function ActivityPanel() {
         status: friend.status,
         customStatus: friend.customStatus,
         createdAt: friend.createdAt,
-      } as any,
+        homeUserId: friend.homeUserId,
+        homeInstance: friend.homeInstance,
+        isAdmin: false,
+        replicatedInstances: [],
+      },
       {
         top: Math.min(rect.top, window.innerHeight - 450),
         left: rect.left - 316,
@@ -42,30 +48,38 @@ export function ActivityPanel() {
     );
   };
 
-  const renderFriend = (friend: Friend, isOffline = false) => (
-    <div
-      key={friend.id}
-      onClick={(e) => handleFriendClick(e, friend)}
-      className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
-    >
-      <Avatar
-        src={friend.avatar}
-        name={friend.displayName ?? friend.username}
-        size={32}
-        status={isOffline ? 'offline' : friend.status}
-        className={isOffline ? 'opacity-60' : undefined}
-        userId={friend.id}
-      />
-      <div className="flex-1 min-w-0">
-        <div className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}>
-          {friend.displayName ?? friend.username}
+  const renderFriend = (friend: Friend, isOffline = false) => {
+    const { baseName, domain } = parseFederatedUsername(friend.username);
+    const friendDisplayName = friend.displayName ?? baseName;
+    return (
+      <div
+        key={friend.id}
+        onClick={(e) => handleFriendClick(e, friend)}
+        className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
+      >
+        <Avatar
+          src={friend.avatar}
+          name={friendDisplayName}
+          size={32}
+          status={isOffline ? 'offline' : friend.status}
+          className={isOffline ? 'opacity-60' : undefined}
+          userId={friend.homeUserId ?? friend.id}
+        />
+        <div className="flex-1 min-w-0">
+          <Username
+            username={friendDisplayName}
+            className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
+          />
+          {domain && !isOffline && (
+            <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
+          )}
+          {!isOffline && friend.customStatus && (
+            <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{friend.customStatus}</div>
+          )}
         </div>
-        {!isOffline && friend.customStatus && (
-          <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{friend.customStatus}</div>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="w-60 bg-surface-channel flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">

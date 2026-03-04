@@ -4,6 +4,7 @@ import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { parseFederatedUsername } from '../../utils/identity';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -95,7 +96,8 @@ export function MemberSidebar() {
   };
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {
-    const displayName = member.user.displayName ?? member.user.username;
+    const { baseName, domain } = parseFederatedUsername(member.user.username);
+    const displayName = member.user.displayName ?? baseName;
     const colorStyle = isOffline ? undefined : getMemberColor(member);
     return (
       <div
@@ -117,6 +119,9 @@ export function MemberSidebar() {
             className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
             style={colorStyle}
           />
+          {domain && !isOffline && (
+            <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
+          )}
           {!isOffline && member.user.customStatus && (
             <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{member.user.customStatus}</div>
           )}

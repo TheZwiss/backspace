@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User } from '@backspace/shared';
+import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User, UpdateServerRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 
@@ -39,7 +39,7 @@ interface ServerState {
   setMembers: (members: MemberWithUser[]) => void;
   setRoles: (roles: Role[]) => void;
   setDmChannels: (channels: DmChannel[]) => void;
-  addDmChannel: (channel: DmChannel) => void;
+  addDmChannel: (channel: DmChannel, origin?: string) => void;
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
@@ -48,7 +48,7 @@ interface ServerState {
   loadServerDetail: (serverId: string) => Promise<void>;
   loadDmChannels: () => Promise<void>;
   createServer: (name: string, icon?: string) => Promise<Server>;
-  updateServer: (serverId: string, data: { name?: string; icon?: string }) => Promise<void>;
+  updateServer: (serverId: string, data: UpdateServerRequest) => Promise<void>;
   deleteServer: (serverId: string) => Promise<void>;
   joinServer: (serverId: string, inviteCode: string) => Promise<void>;
   joinByCode: (inviteCode: string, origin?: string) => Promise<Server>;
@@ -61,6 +61,7 @@ interface ServerState {
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
   populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
+  addServerFromReady: (origin: string, server: ServerWithChannelsAndMembers) => void;
   removeInstanceServers: (origin: string) => void;
 }
 
@@ -85,9 +86,16 @@ export const useServerStore = create<ServerState>((set, get) => ({
   setRoles: (roles) => set({ roles }),
   setDmChannels: (dmChannels) => set({ dmChannels }),
 
-  addDmChannel: (channel) => set((state) => ({
-    dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)]
-  })),
+  addDmChannel: (channel, origin?: string) => set((state) => {
+    const channelOriginMap = new Map(state.channelOriginMap);
+    if (origin !== undefined) {
+      channelOriginMap.set(channel.id, origin);
+    }
+    return {
+      dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)],
+      channelOriginMap,
+    };
+  }),
 
   removeDmChannel: (id) => set((state) => ({
     dmChannels: state.dmChannels.filter(c => c.id !== id)
@@ -169,7 +177,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     return server;
   },
 
-  updateServer: async (serverId: string, data: { name?: string; icon?: string }) => {
+  updateServer: async (serverId: string, data: UpdateServerRequest) => {
     const updated = await api.servers.update(serverId, data);
     set((state) => ({
       servers: state.servers.map(s => s.id === serverId ? { ...s, ...updated } : s),
@@ -284,6 +292,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
       icon: s.icon,
       ownerId: s.ownerId,
       inviteCode: s.inviteCode,
+      visibility: s.visibility ?? 'private' as const,
+      description: s.description ?? null,
       createdAt: s.createdAt,
       _instanceOrigin: origin,
     }));
@@ -353,6 +363,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
     const dms = isHome ? (dmChannels || []) : get().dmChannels;
     if (isHome) {
       for (const dm of dms) {
+        channelOriginMap.set(dm.id, origin);
         if (dm.lastMessage?.id) {
           channelLastMessageIds.set(dm.id, dm.lastMessage.id);
         }
@@ -375,6 +386,49 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
 
     set(update as any);
+  },
+
+  addServerFromReady: (origin: string, server: ServerWithChannelsAndMembers) => {
+    const tagged: TaggedServer = {
+      id: server.id,
+      name: server.name,
+      icon: server.icon,
+      ownerId: server.ownerId,
+      inviteCode: server.inviteCode,
+      visibility: server.visibility,
+      description: server.description,
+      createdAt: server.createdAt,
+      _instanceOrigin: origin,
+    };
+
+    const channelToServerMap = new Map(get().channelToServerMap);
+    const channelLastMessageIds = new Map(get().channelLastMessageIds);
+    const serverPermissions = new Map(get().serverPermissions);
+    const channelPermissions = new Map(get().channelPermissions);
+    const channelOriginMap = new Map(get().channelOriginMap);
+
+    if (server.myPermissions) {
+      serverPermissions.set(server.id, server.myPermissions);
+    }
+    for (const ch of server.channels) {
+      channelToServerMap.set(ch.id, server.id);
+      channelOriginMap.set(ch.id, origin);
+      if (ch.lastMessageId) {
+        channelLastMessageIds.set(ch.id, ch.lastMessageId);
+      }
+      if (ch.myPermissions) {
+        channelPermissions.set(ch.id, ch.myPermissions);
+      }
+    }
+
+    set((state) => ({
+      servers: [...state.servers.filter(s => s.id !== server.id), tagged],
+      channelToServerMap,
+      channelLastMessageIds,
+      serverPermissions,
+      channelPermissions,
+      channelOriginMap,
+    }));
   },
 
   removeInstanceServers: (origin: string) => {

@@ -21,6 +21,8 @@ export const servers = sqliteTable('servers', {
   icon: text('icon'),
   ownerId: text('owner_id').notNull().references(() => users.id),
   inviteCode: text('invite_code').unique(),
+  visibility: text('visibility').default('private'),
+  description: text('description'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -182,6 +184,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),
   instanceName: text('instance_name').default('Backspace'),
   workerId: integer('worker_id'),
+  discoveryEnabled: integer('discovery_enabled').notNull().default(1),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
   bitrateStepKbps: integer('bitrate_step_kbps').notNull().default(500),
@@ -190,4 +193,15 @@ export const instanceSettings = sqliteTable('instance_settings', {
   maxResolution: integer('max_resolution').notNull().default(1080),
   maxFramerate: integer('max_framerate').notNull().default(60),
   updatedAt: integer('updated_at').notNull(),
+});
+
+export const joinRequests = sqliteTable('join_requests', {
+  id: text('id').primaryKey(),
+  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  message: text('message'),
+  status: text('status').notNull().default('pending'),
+  decidedBy: text('decided_by').references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+  decidedAt: integer('decided_at'),
 });

@@ -1,6 +1,17 @@
 import type { User } from '@backspace/shared';
 
 /**
+ * Splits a potentially federated username into base name and domain.
+ * "youruser@nova.ddns.net" → { baseName: "youruser", domain: "nova.ddns.net" }
+ * "youruser"                → { baseName: "youruser", domain: null }
+ */
+export function parseFederatedUsername(username: string): { baseName: string; domain: string | null } {
+  const atIndex = username.indexOf('@');
+  if (atIndex === -1) return { baseName: username, domain: null };
+  return { baseName: username.slice(0, atIndex), domain: username.slice(atIndex + 1) };
+}
+
+/**
  * Stateless check: is `user` a replicated alias of `homeUser`?
  * Uses the immutable (username, homeInstance) composite key —
  * no store lookups, no snowflake ID mapping.
@@ -16,8 +27,8 @@ export function isSelf(
   if (!user.homeInstance) return false;
   if (user.homeInstance !== window.location.host) return false;
   // Username: "youruser" or "youruser@nova.ddns.net" → base must match
-  const baseUsername = user.username.split('@')[0];
-  return baseUsername === homeUser.username;
+  const { baseName } = parseFederatedUsername(user.username);
+  return baseName === homeUser.username;
 }
 
 /**
