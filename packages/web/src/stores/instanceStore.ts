@@ -50,6 +50,14 @@ function saveCachedTokens(instances: ConnectedInstance[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
 }
 
+// ─── Network error detection ────────────────────────────────────────────────
+
+/** Detect network-level failures (unreachable, DNS, timeout) vs application errors (401, etc.) */
+function isNetworkError(err: unknown): boolean {
+  return err instanceof TypeError ||
+    (err instanceof Error && /fetch|network|ECONNREFUSED|ETIMEDOUT/i.test(err.message));
+}
+
 // ─── Error types ────────────────────────────────────────────────────────────
 
 /** Thrown when the remote instance already has an account for this user with a different password. */
@@ -92,6 +100,7 @@ interface InstanceState {
   loginToRemote: (origin: string, username: string, password: string) => Promise<void>;
   removeInstance: (origin: string) => void;
   setInstanceStatus: (origin: string, status: ConnectedInstance['status'], error?: string) => void;
+  reconnectInstance: (origin: string) => Promise<void>;
   syncInstanceList: () => Promise<void>;
   autoConnectAll: () => Promise<void>;
   reset: () => void;
@@ -280,6 +289,49 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     get().syncInstanceList().catch(() => {});
   },
 
+  reconnectInstance: async (origin: string) => {
+    const inst = get().instances.find(i => i.origin === origin);
+    if (!inst || inst.status === 'connected' || inst.status === 'connecting') return;
+
+    // Set to connecting
+    set((state) => ({
+      instances: state.instances.map(i =>
+        i.origin === origin ? { ...i, status: 'connecting' as const, error: undefined } : i
+      ),
+    }));
+
+    try {
+      const user = await inst.api.users.me();
+
+      set((state) => ({
+        instances: state.instances.map(i =>
+          i.origin === origin ? { ...i, status: 'connected' as const, user, error: undefined } : i
+        ),
+      }));
+
+      connectInstance(origin, inst.token);
+    } catch (err) {
+      if (isNetworkError(err)) {
+        set((state) => ({
+          instances: state.instances.map(i =>
+            i.origin === origin
+              ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+              : i
+          ),
+        }));
+        connectInstance(origin, inst.token);
+      } else {
+        set((state) => ({
+          instances: state.instances.map(i =>
+            i.origin === origin
+              ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+              : i
+          ),
+        }));
+      }
+    }
+  },
+
   syncInstanceList: async () => {
     const { instances } = get();
     const currentUser = useAuthStore.getState().user;
@@ -388,21 +440,36 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
           // Open WebSocket connection now that we've verified the token
           connectInstance(origin, cachedEntry.token);
-        } catch {
-          // Token expired or instance unreachable
-          set((state) => ({
-            instances: state.instances.map(i =>
-              i.origin === origin
-                ? { ...i, status: 'disconnected' as const, error: 'Token expired — re-authenticate to reconnect' }
-                : i
-            ),
-          }));
+        } catch (err) {
+          if (isNetworkError(err)) {
+            // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid
+            set((state) => ({
+              instances: state.instances.map(i =>
+                i.origin === origin
+                  ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+                  : i
+              ),
+            }));
+            // Start WebSocket — its built-in exponential backoff retry will auto-recover
+            // when the network path becomes available (e.g. user switches networks)
+            connectInstance(origin, cachedEntry.token);
+          } else {
+            // Auth failure (401, invalid token, etc.)
+            set((state) => ({
+              instances: state.instances.map(i =>
+                i.origin === origin
+                  ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+                  : i
+              ),
+            }));
+          }
         }
       })
     );
 
-    // Save final state to localStorage
-    saveCachedTokens(get().instances.filter(i => i.status === 'connected'));
+    // Save final state to localStorage — persist ALL instances regardless of status
+    // so disconnected instances survive page reload and can auto-reconnect later
+    saveCachedTokens(get().instances);
 
     // Log any failures for debugging
     const failures = results.filter(r => r.status === 'rejected');

@@ -59,7 +59,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     if (typingTimeoutRef.current) return;
     const isDm = isDmChannel(channelId);
     if (isDm) {
-      wsSend({ type: 'dm_typing_start', dmChannelId: channelId });
+      wsSend({ type: 'dm_typing_start', dmChannelId: channelId }, getChannelOrigin(channelId));
     } else {
       wsSend({ type: 'typing_start', channelId }, getChannelOrigin(channelId));
     }

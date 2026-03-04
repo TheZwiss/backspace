@@ -359,19 +359,31 @@ export const useServerStore = create<ServerState>((set, get) => ({
       }
     }
 
-    // DM channels are home-only
-    const dms = isHome ? (dmChannels || []) : get().dmChannels;
-    if (isHome) {
-      for (const dm of dms) {
-        channelOriginMap.set(dm.id, origin);
-        if (dm.lastMessage?.id) {
-          channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+    // DM channels: process from any origin, normalize remote assets
+    const incomingDms = dmChannels || [];
+    if (!isHome) {
+      for (const dm of incomingDms) {
+        for (const member of dm.members) {
+          normalizeUserAssets(member, origin);
         }
       }
     }
+    for (const dm of incomingDms) {
+      channelOriginMap.set(dm.id, origin);
+      if (dm.lastMessage?.id) {
+        channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+      }
+    }
+    // Merge: remove DMs belonging to this origin from existing state, then append incoming
+    const existingDmsFromOtherOrigins = get().dmChannels.filter(dm => {
+      const dmOrigin = get().channelOriginMap.get(dm.id);
+      return dmOrigin !== origin;
+    });
+    const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
 
     const update: Partial<ServerState> = {
       servers: mergedServers,
+      dmChannels: mergedDms,
       channelToServerMap,
       channelLastMessageIds,
       serverPermissions,
@@ -379,10 +391,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
       channelOriginMap,
     };
 
-    // Only set folders and dmChannels from home origin
+    // Only set folders from home origin
     if (isHome) {
       update.folders = folders || [];
-      update.dmChannels = dms;
     }
 
     set(update as any);

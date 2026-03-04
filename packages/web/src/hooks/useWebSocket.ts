@@ -258,7 +258,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM events (home-only) ──────────────────────────────────────────────
 
     case 'dm_message_created': {
-      if (!isHome) break;
+      if (!isHome) normalizeMessageAssets(event.message as any, origin);
       addRealtimeMessage(event.message.dmChannelId, event.message as any);
       const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useServerStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
@@ -292,17 +292,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_message_updated':
-      if (!isHome) break;
+      if (!isHome) normalizeMessageAssets(event.message as any, origin);
       updateMessage(event.message as any);
       break;
 
     case 'dm_message_deleted':
-      if (!isHome) break;
       removeMessage(event.messageId, event.dmChannelId);
       break;
 
     case 'dm_typing':
-      if (!isHome) break;
       setTyping(event.dmChannelId, event.userId, event.username);
       break;
 
@@ -387,24 +385,26 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM channel events (home-only) ──────────────────────────────────────
 
     case 'dm_channel_created':
-      if (!isHome) break;
+      if (!isHome) {
+        for (const m of event.dmChannel.members) {
+          normalizeUserAssets(m, origin);
+        }
+      }
       addDmChannel(event.dmChannel, origin);
       break;
 
     case 'dm_channel_closed':
-      if (!isHome) break;
       removeDmChannel(event.dmChannelId);
       break;
 
     case 'dm_member_added': {
-      if (!isHome) break;
+      if (!isHome) normalizeUserAssets(event.user, origin);
       const { addDmMember } = useServerStore.getState();
       addDmMember(event.dmChannelId, event.user);
       break;
     }
 
     case 'dm_member_removed': {
-      if (!isHome) break;
       const { removeDmMember } = useServerStore.getState();
       removeDmMember(event.dmChannelId, event.userId);
       break;

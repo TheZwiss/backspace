@@ -265,6 +265,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 export function ConnectedInstances() {
   const instances = useInstanceStore((s) => s.instances);
   const removeInstance = useInstanceStore((s) => s.removeInstance);
+  const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const [showAddForm, setShowAddForm] = useState(false);
 
   return (
@@ -312,13 +313,24 @@ export function ConnectedInstances() {
                 )}
               </div>
             </div>
-            <button
-              onClick={() => removeInstance(inst.origin)}
-              className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors shrink-0 ml-2"
-              title="Disconnect"
-            >
-              Disconnect
-            </button>
+            <div className="flex items-center gap-1 shrink-0 ml-2">
+              {(inst.status === 'disconnected' || inst.status === 'error') && (
+                <button
+                  onClick={() => reconnectInstance(inst.origin)}
+                  className="px-2 py-1 text-xs text-accent-primary hover:bg-accent-primary/10 rounded transition-colors"
+                  title="Reconnect"
+                >
+                  Reconnect
+                </button>
+              )}
+              <button
+                onClick={() => removeInstance(inst.origin)}
+                className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+                title="Disconnect"
+              >
+                Disconnect
+              </button>
+            </div>
           </div>
         ))}
 
