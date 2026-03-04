@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { FriendsPage } from './FriendsPage';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useServerStore } from '../../stores/serverStore';
 import type { Friend, FriendRequest } from '@backspace/shared';
 
@@ -25,6 +25,15 @@ vi.mock('../../api/client', () => ({
   },
 }));
 
+// Mock the instanceStore (imported by socialStore)
+vi.mock('../../stores/instanceStore', () => ({
+  useInstanceStore: {
+    getState: () => ({ instances: [] }),
+    setState: vi.fn(),
+    subscribe: vi.fn(),
+  },
+}));
+
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -34,7 +43,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-const makeFriend = (overrides: Partial<Friend> = {}): Friend => ({
+const makeFriend = (overrides: Partial<TaggedFriend> = {}): TaggedFriend => ({
   id: 'friend-1',
   username: 'testfriend',
   displayName: 'Test Friend',
@@ -43,15 +52,19 @@ const makeFriend = (overrides: Partial<Friend> = {}): Friend => ({
   customStatus: null,
   createdAt: Date.now(),
   addedAt: Date.now(),
+  homeUserId: null,
+  homeInstance: null,
+  _instanceOrigin: '',
   ...overrides,
 });
 
-const makeRequest = (overrides: Partial<FriendRequest> = {}): FriendRequest => ({
+const makeRequest = (overrides: Partial<TaggedFriendRequest> = {}): TaggedFriendRequest => ({
   id: 'req-1',
   fromId: 'other-user',
   toId: 'current-user',
   status: 'pending',
   createdAt: Date.now(),
+  _instanceOrigin: '',
   user: {
     id: 'other-user',
     username: 'otheruser',

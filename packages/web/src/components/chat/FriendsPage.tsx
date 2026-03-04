@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useServerStore } from '../../stores/serverStore';
+import { useInstanceStore } from '../../stores/instanceStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { api } from '../../api/client';
-import type { Friend, FriendRequest } from '@backspace/shared';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
@@ -51,9 +51,14 @@ export function FriendsPage() {
     }
   };
 
-  const handleOpenDm = async (friendId: string) => {
+  const handleOpenDm = async (friendId: string, instanceOrigin: string) => {
     try {
-      const dmChannel = await api.dm.create({ userId: friendId });
+      let client = api;
+      if (instanceOrigin) {
+        const instance = useInstanceStore.getState().instances.find(i => i.origin === instanceOrigin);
+        if (instance?.api) client = instance.api;
+      }
+      const dmChannel = await client.dm.create({ userId: friendId });
       addDmChannel(dmChannel);
       navigate(`/channels/@me/${dmChannel.id}`);
     } catch (err) {
@@ -84,7 +89,7 @@ export function FriendsPage() {
               </div>
             ) : (
               onlineFriends.map(friend => (
-                <FriendItem key={friend.id} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id)} />
+                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend._instanceOrigin)} />
               ))
             )}
           </div>
@@ -101,7 +106,7 @@ export function FriendsPage() {
               </div>
             ) : (
               friends.map(friend => (
-                <FriendItem key={friend.id} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id)} />
+                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend._instanceOrigin)} />
               ))
             )}
           </div>
@@ -120,7 +125,7 @@ export function FriendsPage() {
               <>
                 {pendingIncoming.map(req => (
                   <RequestItem
-                    key={req.id}
+                    key={`${req.id}:${req._instanceOrigin}`}
                     request={req}
                     type="incoming"
                     onAccept={() => updateFriendRequest(req.id, 'accepted')}
@@ -129,7 +134,7 @@ export function FriendsPage() {
                 ))}
                 {pendingOutgoing.map(req => (
                   <RequestItem
-                    key={req.id}
+                    key={`${req.id}:${req._instanceOrigin}`}
                     request={req}
                     type="outgoing"
                     onCancel={() => cancelFriendRequest(req.id)}
@@ -227,7 +232,8 @@ function TabButton({ children, active, onClick }: { children: React.ReactNode, a
   );
 }
 
-function FriendItem({ friend, onRemove, onDm }: { friend: Friend, onRemove: () => void, onDm: () => void }) {
+function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove: () => void, onDm: () => void }) {
+  const instanceLabel = friend._instanceOrigin ? (() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })() : '';
   return (
     <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
@@ -237,7 +243,12 @@ function FriendItem({ friend, onRemove, onDm }: { friend: Friend, onRemove: () =
             <span className="text-txt-primary font-semibold text-[15px]">{friend.displayName ?? friend.username}</span>
             <span className="text-txt-tertiary text-[13px] opacity-0 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
           </div>
-          <span className="text-[12px] text-txt-tertiary font-medium uppercase">{friend.status}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] text-txt-tertiary font-medium uppercase">{friend.status}</span>
+            {instanceLabel && (
+              <span className="text-[11px] text-txt-tertiary/60 font-medium">via {instanceLabel}</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
@@ -265,7 +276,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: Friend, onRemove: () =
 }
 
 function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
-  request: FriendRequest;
+  request: TaggedFriendRequest;
   type: 'incoming' | 'outgoing';
   onAccept?: () => void;
   onDecline?: () => void;
@@ -273,6 +284,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
 }) {
   const user = request.user;
   if (!user) return null;
+  const instanceLabel = request._instanceOrigin ? (() => { try { return new URL(request._instanceOrigin).host; } catch { return request._instanceOrigin; } })() : '';
 
   return (
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
@@ -283,7 +295,12 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
             <span className="text-txt-primary font-bold text-sm">{user.displayName ?? user.username}</span>
             <span className="text-txt-tertiary text-xs">@{user.username}</span>
           </div>
-          <span className="text-xs text-txt-tertiary">{type === 'incoming' ? 'Incoming Friend Request' : 'Outgoing Friend Request'}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-txt-tertiary">{type === 'incoming' ? 'Incoming Friend Request' : 'Outgoing Friend Request'}</span>
+            {instanceLabel && (
+              <span className="text-[11px] text-txt-tertiary/60 font-medium">via {instanceLabel}</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="flex items-center gap-2">

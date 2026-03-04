@@ -316,26 +316,23 @@ function handleEvent(origin: string, event: ServerEvent): void {
       onReactionRemoved(event.messageId, event.userId, event.emoji);
       break;
 
-    // ─── Social events (home-only) ──────────────────────────────────────────
+    // ─── Social events (all origins — federation) ──────────────────────────
 
     case 'friend_request_received': {
-      if (!isHome) break;
       const { addIncomingRequest } = useSocialStore.getState();
-      addIncomingRequest(event.request);
+      addIncomingRequest(event.request, origin);
       break;
     }
 
     case 'friend_request_accepted': {
-      if (!isHome) break;
       const { addFriendFromAccepted } = useSocialStore.getState();
-      addFriendFromAccepted(event.friend, event.requestId);
+      addFriendFromAccepted(event.friend, event.requestId, origin);
       break;
     }
 
     case 'friend_removed': {
-      if (!isHome) break;
       const { removeFriendLocally } = useSocialStore.getState();
-      removeFriendLocally(event.userId);
+      removeFriendLocally(event.userId, origin);
       break;
     }
 
@@ -478,6 +475,29 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       const { servers: currentServers, setServers } = useServerStore.getState();
       setServers(currentServers.map(s => s.id === event.server.id ? { ...s, ...event.server } : s));
+      break;
+    }
+
+    // ─── Join request events (home-only) ────────────────────────────────
+
+    case 'join_request_received': {
+      if (!isHome) break;
+      console.log('[WebSocket] Join request received from', event.request.user?.username ?? event.request.userId);
+      break;
+    }
+
+    case 'join_request_accepted': {
+      if (!isHome) break;
+      // Add the server to our server list
+      const { addServerFromReady } = useServerStore.getState();
+      addServerFromReady(origin, event.server);
+      console.log('[WebSocket] Join request accepted for server', event.server.name);
+      break;
+    }
+
+    case 'join_request_declined': {
+      if (!isHome) break;
+      console.log('[WebSocket] Join request declined for server', event.request.serverId);
       break;
     }
 

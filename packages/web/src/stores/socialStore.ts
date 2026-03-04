@@ -1,10 +1,26 @@
 import { create } from 'zustand';
 import type { Friend, FriendRequest, User } from '@backspace/shared';
 import { api } from '../api/client';
+import { useInstanceStore } from './instanceStore';
+
+// ─── Tagged types (origin tracking for federation) ───────────────────────────
+
+export type TaggedFriend = Friend & { _instanceOrigin: string };
+export type TaggedFriendRequest = FriendRequest & { _instanceOrigin: string };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getApiForOrigin(origin: string) {
+  if (!origin) return api;
+  const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
+  return instance?.api ?? api;
+}
+
+// ─── Store ───────────────────────────────────────────────────────────────────
 
 interface SocialState {
-  friends: Friend[];
-  requests: FriendRequest[];
+  friends: TaggedFriend[];
+  requests: TaggedFriendRequest[];
   isLoading: boolean;
   error: string | null;
   loadFriends: () => Promise<void>;
@@ -14,10 +30,10 @@ interface SocialState {
   cancelFriendRequest: (id: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
   searchUsers: (query: string) => Promise<User[]>;
-  addIncomingRequest: (request: FriendRequest) => void;
-  addFriendFromAccepted: (friend: Friend, requestId: string) => void;
+  addIncomingRequest: (request: FriendRequest, origin: string) => void;
+  addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
-  removeFriendLocally: (userId: string) => void;
+  removeFriendLocally: (userId: string, origin: string) => void;
   reset: () => void;
 }
 
@@ -30,8 +46,31 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   loadFriends: async () => {
     set({ isLoading: true, error: null });
     try {
-      const friends = await api.social.friends();
-      set({ friends, isLoading: false });
+      const instances = useInstanceStore.getState().instances;
+      const connectedInstances = instances.filter(i => i.status === 'connected');
+
+      const results = await Promise.allSettled([
+        api.social.friends().then(friends => ({ friends, origin: '' })),
+        ...connectedInstances.map(inst =>
+          inst.api.social.friends().then(friends => ({ friends, origin: inst.origin }))
+        ),
+      ]);
+
+      const allFriends: TaggedFriend[] = [];
+      const seen = new Set<string>();
+
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        const { friends, origin } = result.value;
+        for (const friend of friends) {
+          const key = `${friend.id}:${origin}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          allFriends.push({ ...friend, _instanceOrigin: origin });
+        }
+      }
+
+      set({ friends: allFriends, isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -40,8 +79,31 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   loadRequests: async () => {
     set({ isLoading: true, error: null });
     try {
-      const requests = await api.social.requests();
-      set({ requests, isLoading: false });
+      const instances = useInstanceStore.getState().instances;
+      const connectedInstances = instances.filter(i => i.status === 'connected');
+
+      const results = await Promise.allSettled([
+        api.social.requests().then(requests => ({ requests, origin: '' })),
+        ...connectedInstances.map(inst =>
+          inst.api.social.requests().then(requests => ({ requests, origin: inst.origin }))
+        ),
+      ]);
+
+      const allRequests: TaggedFriendRequest[] = [];
+      const seen = new Set<string>();
+
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        const { requests, origin } = result.value;
+        for (const request of requests) {
+          const key = `${request.id}:${origin}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          allRequests.push({ ...request, _instanceOrigin: origin });
+        }
+      }
+
+      set({ requests: allRequests, isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -50,7 +112,43 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   sendFriendRequest: async (username: string) => {
     set({ isLoading: true, error: null });
     try {
-      await api.social.sendRequest(username);
+      const atIndex = username.lastIndexOf('@');
+
+      if (atIndex === -1) {
+        // No @ → local user on home instance
+        await api.social.sendRequest(username);
+      } else {
+        const baseName = username.slice(0, atIndex);
+        const domain = username.slice(atIndex + 1);
+
+        // Check if domain matches home instance
+        if (domain === window.location.host) {
+          // Strip domain, send to home API
+          await api.social.sendRequest(baseName);
+        } else {
+          // Find a connected instance matching this domain
+          const instances = useInstanceStore.getState().instances;
+          const match = instances.find(inst => {
+            try {
+              return new URL(inst.origin).host === domain;
+            } catch {
+              return false;
+            }
+          });
+
+          if (!match) {
+            throw new Error(`Not connected to ${domain}. Add it as an instance in Settings first.`);
+          }
+
+          if (match.status !== 'connected') {
+            throw new Error(`Instance ${domain} is not currently connected. Check your connection in Settings.`);
+          }
+
+          // On the remote instance, the user is just "alice", not "alice@orbit"
+          await match.api.social.sendRequest(baseName);
+        }
+      }
+
       await get().loadRequests();
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
@@ -61,7 +159,12 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   updateFriendRequest: async (id: string, status: 'accepted' | 'declined') => {
     set({ isLoading: true, error: null });
     try {
-      await api.social.updateRequest(id, status);
+      // Find the request to determine which instance owns it
+      const request = get().requests.find(r => r.id === id);
+      const origin = request?._instanceOrigin ?? '';
+      const client = getApiForOrigin(origin);
+
+      await client.social.updateRequest(id, status);
       await get().loadRequests();
       if (status === 'accepted') {
         await get().loadFriends();
@@ -75,7 +178,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   cancelFriendRequest: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      await api.social.cancelRequest(id);
+      const request = get().requests.find(r => r.id === id);
+      const origin = request?._instanceOrigin ?? '';
+      const client = getApiForOrigin(origin);
+
+      await client.social.cancelRequest(id);
       set((state) => ({
         requests: state.requests.filter(r => r.id !== id),
         isLoading: false,
@@ -89,9 +196,14 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   removeFriend: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      await api.social.removeFriend(id);
+      // Find the friend to determine which instance owns it
+      const friend = get().friends.find(f => f.id === id);
+      const origin = friend?._instanceOrigin ?? '';
+      const client = getApiForOrigin(origin);
+
+      await client.social.removeFriend(id);
       set((state) => ({
-        friends: state.friends.filter((f) => f.id !== id),
+        friends: state.friends.filter(f => !(f.id === id && f._instanceOrigin === origin)),
         isLoading: false,
       }));
     } catch (err) {
@@ -102,7 +214,27 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   searchUsers: async (query: string) => {
     try {
-      return await api.social.search(query);
+      const instances = useInstanceStore.getState().instances;
+      const connectedInstances = instances.filter(i => i.status === 'connected');
+
+      const results = await Promise.allSettled([
+        api.social.search(query),
+        ...connectedInstances.map(inst => inst.api.social.search(query)),
+      ]);
+
+      const allUsers: User[] = [];
+      const seen = new Set<string>();
+
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue;
+        for (const user of result.value) {
+          if (seen.has(user.id)) continue;
+          seen.add(user.id);
+          allUsers.push(user);
+        }
+      }
+
+      return allUsers;
     } catch (err) {
       console.error('Failed to search users:', err);
       return [];
@@ -110,25 +242,30 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   // Called from WS handler when another user sends you a friend request
-  addIncomingRequest: (request: FriendRequest) => {
+  addIncomingRequest: (request: FriendRequest, origin: string) => {
     set((state) => {
-      if (state.requests.find(r => r.id === request.id)) return state;
-      return { requests: [...state.requests, request] };
+      const key = `${request.id}:${origin}`;
+      if (state.requests.find(r => `${r.id}:${r._instanceOrigin}` === key)) return state;
+      return { requests: [...state.requests, { ...request, _instanceOrigin: origin }] };
     });
   },
 
   // Called from WS handler when someone accepts your friend request
-  addFriendFromAccepted: (friend: Friend, requestId: string) => {
-    set((state) => ({
-      friends: state.friends.find(f => f.id === friend.id) ? state.friends : [...state.friends, friend],
-      requests: state.requests.filter(r => r.id !== requestId),
-    }));
+  addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => {
+    set((state) => {
+      const key = `${friend.id}:${origin}`;
+      const alreadyExists = state.friends.some(f => `${f.id}:${f._instanceOrigin}` === key);
+      return {
+        friends: alreadyExists ? state.friends : [...state.friends, { ...friend, _instanceOrigin: origin }],
+        requests: state.requests.filter(r => !(r.id === requestId && r._instanceOrigin === origin)),
+      };
+    });
   },
 
   // Called from WS handler when the other user removes us as a friend
-  removeFriendLocally: (userId: string) => {
+  removeFriendLocally: (userId: string, origin: string) => {
     set((state) => ({
-      friends: state.friends.filter(f => f.id !== userId),
+      friends: state.friends.filter(f => !(f.id === userId && f._instanceOrigin === origin)),
     }));
   },
 
