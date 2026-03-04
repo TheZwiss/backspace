@@ -14,7 +14,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isSelf } from '../../utils/identity';
 
 export function ChannelSidebar() {
   const servers = useServerStore((s) => s.servers);
@@ -189,7 +189,7 @@ export function ChannelSidebar() {
 
           <div className="space-y-[2px]">
             {dmChannels.map((dm) => {
-              const otherMembers = dm.members.filter(m => m.id !== user?.id);
+              const otherMembers = dm.members.filter(m => !isSelf(m, user));
               if (otherMembers.length === 0) return null;
               const isGroup = dm.members.length > 2;
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;

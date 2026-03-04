@@ -14,6 +14,7 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
+import { isSelf } from '../../utils/identity';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
@@ -67,7 +68,7 @@ export function MainContent() {
     }
 
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
-    const otherMembers = dmChannel?.members.filter(m => m.id !== authUser?.id) ?? [];
+    const otherMembers = dmChannel?.members.filter(m => !isSelf(m, authUser)) ?? [];
     const isGroupDm = (dmChannel?.members.length ?? 0) > 2;
     const dmName = isGroupDm
       ? otherMembers.map(m => m.displayName ?? m.username).join(', ')

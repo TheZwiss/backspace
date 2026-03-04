@@ -30,6 +30,13 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
   const handleSendMessage = async () => {
     try {
+      const existing = useServerStore.getState().findExistingDmForUser(user);
+      if (existing) {
+        useUIStore.getState().setShowDms(true);
+        onClose();
+        navigate(`/channels/@me/${existing.dm.id}`);
+        return;
+      }
       const channel = await api.dm.create({ userId: user.id });
       addDmChannel(channel);
       useUIStore.getState().setShowDms(true);

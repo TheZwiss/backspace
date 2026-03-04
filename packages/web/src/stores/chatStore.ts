@@ -478,7 +478,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const unread = new Set<string>();
     for (const [channelId, lastMsgId] of channelLastMessageIds) {
       const lastRead = rsMap.get(channelId);
-      if (!lastRead || BigInt(lastMsgId) > BigInt(lastRead)) {
+      if (!lastRead) {
+        unread.add(channelId);
+        continue;
+      }
+      try {
+        if (BigInt(lastMsgId) > BigInt(lastRead)) {
+          unread.add(channelId);
+        }
+      } catch {
+        // Corrupted read state (e.g. temp_ ID) — treat as unread
         unread.add(channelId);
       }
     }
@@ -500,6 +509,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const lastMsg = msgs[msgs.length - 1];
     if (!lastMsg) return;
     const messageId = lastMsg.id;
+    // Don't ack optimistic/temp messages — wait for the real server ID
+    if (messageId.startsWith('temp_')) return;
 
     // Update local state immediately
     set((state) => {

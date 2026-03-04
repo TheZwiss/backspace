@@ -824,6 +824,8 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   const channelId = event.channelId as string;
   const messageId = event.messageId as string;
   if (!channelId || !messageId) return;
+  // Validate messageId is a valid snowflake (numeric string) — reject temp/garbage IDs
+  if (!/^\d+$/.test(messageId)) return;
 
   const db = getDb();
 

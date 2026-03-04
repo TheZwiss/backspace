@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User, UpdateServerRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
+import { isSelf } from '../utils/identity';
+import { useAuthStore } from './authStore';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
@@ -63,6 +65,7 @@ interface ServerState {
   populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
   addServerFromReady: (origin: string, server: ServerWithChannelsAndMembers) => void;
   removeInstanceServers: (origin: string) => void;
+  findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
 }
 
 export const useServerStore = create<ServerState>((set, get) => ({
@@ -118,7 +121,9 @@ export const useServerStore = create<ServerState>((set, get) => ({
   })),
 
   closeDm: async (id) => {
-    await api.dm.close(id);
+    const origin = get().channelOriginMap.get(id) || '';
+    const targetApi = getApiForOrigin(origin);
+    await targetApi.dm.close(id);
     set((state) => ({
       dmChannels: state.dmChannels.filter(c => c.id !== id)
     }));
@@ -440,6 +445,25 @@ export const useServerStore = create<ServerState>((set, get) => ({
       channelPermissions,
       channelOriginMap,
     }));
+  },
+
+  findExistingDmForUser: (targetUser) => {
+    const { dmChannels, channelOriginMap } = get();
+    const me = useAuthStore.getState().user;
+    if (!me) return null;
+
+    const targetHomeId = targetUser.homeUserId || targetUser.id;
+
+    for (const dm of dmChannels) {
+      if (dm.members.length !== 2) continue;
+      const other = dm.members.find(m => !isSelf(m, me));
+      if (!other) continue;
+      const otherHomeId = other.homeUserId || other.id;
+      if (otherHomeId === targetHomeId) {
+        return { dm, origin: channelOriginMap.get(dm.id) || '' };
+      }
+    }
+    return null;
   },
 
   removeInstanceServers: (origin: string) => {

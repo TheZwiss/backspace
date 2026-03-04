@@ -138,6 +138,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Admin flag: ensure at least one admin exists (first registered user) ──
   migrateFirstAdmin(db);
 
+  // ─── Clean up corrupted read_states (temp_ IDs leaked from optimistic messages) ─
+  migrateCorruptedReadStates(db);
+
   console.log('Migrations complete.');
 }
 
@@ -233,6 +236,16 @@ function migrateEveryoneRoles(db: Database.Database): void {
         insertMemberRole.run(serverId, userId, adminRole.id);
       }
     }
+  }
+}
+
+/** Delete corrupted read_states rows where last_read_message_id is not a valid snowflake (numeric string) */
+function migrateCorruptedReadStates(db: Database.Database): void {
+  const deleted = db.prepare(
+    "DELETE FROM read_states WHERE last_read_message_id NOT GLOB '[0-9]*' OR last_read_message_id GLOB '*[^0-9]*'"
+  ).run();
+  if (deleted.changes > 0) {
+    console.log(`Migrating: Cleaned up ${deleted.changes} corrupted read_states rows`);
   }
 }
 

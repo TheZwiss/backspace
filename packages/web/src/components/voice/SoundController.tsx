@@ -1,14 +1,22 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useWebSocket } from '../../hooks/useWebSocket';
+import { getHomeWsConnected } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
-  const { isConnected: isWsConnected } = useWebSocket();
+  const [isWsConnected, setIsWsConnected] = useState(false);
+
+  // Poll home WS connection status without managing lifecycle
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsWsConnected(getHomeWsConnected());
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
 
   // Refs to track previous states
   const isInitialMount = useRef(true);

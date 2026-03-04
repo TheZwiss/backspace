@@ -59,6 +59,13 @@ export function NewDmModal() {
   const handleSelectUser = async (user: User) => {
     setError('');
     try {
+      const existing = useServerStore.getState().findExistingDmForUser(user);
+      if (existing) {
+        closeModal();
+        useUIStore.getState().setShowDms(true);
+        navigate(`/channels/@me/${existing.dm.id}`);
+        return;
+      }
       const channel = await api.dm.create({ userId: user.id });
       addDmChannel(channel);
       closeModal();

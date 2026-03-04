@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useServerStore } from '../../stores/serverStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
@@ -53,6 +54,13 @@ export function FriendsPage() {
 
   const handleOpenDm = async (friendId: string, instanceOrigin: string) => {
     try {
+      // Check if a DM already exists with this user (on any instance)
+      const existing = useServerStore.getState().findExistingDmForUser({ id: friendId });
+      if (existing) {
+        useUIStore.getState().setShowDms(true);
+        navigate(`/channels/@me/${existing.dm.id}`);
+        return;
+      }
       let client = api;
       if (instanceOrigin) {
         const instance = useInstanceStore.getState().instances.find(i => i.origin === instanceOrigin);

@@ -547,11 +547,17 @@ function connectToOrigin(origin: string, token: string): void {
   };
 
   ws.onmessage = (e) => {
+    let event: ServerEvent;
     try {
-      const event = JSON.parse(e.data as string) as ServerEvent;
-      handleEvent(origin, event);
+      event = JSON.parse(e.data as string) as ServerEvent;
     } catch {
       console.error(`Failed to parse WebSocket message (${origin || 'home'})`);
+      return;
+    }
+    try {
+      handleEvent(origin, event);
+    } catch (err) {
+      console.error(`Error handling WS event "${event.type}" (${origin || 'home'}):`, err);
     }
   };
 
@@ -615,6 +621,12 @@ export function disconnectAllRemote(): void {
       disconnectFromOrigin(origin);
     }
   }
+}
+
+/** Read-only home WS connection status — safe to call from any component without managing lifecycle. */
+export function getHomeWsConnected(): boolean {
+  const conn = connections.get(HOME_ORIGIN);
+  return !!conn?.ws && conn.ws.readyState === WebSocket.OPEN;
 }
 
 /** Send an event over the WebSocket. Can be used outside of React components. */

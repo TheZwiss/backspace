@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useServerStore, getApiForOrigin } from '../../stores/serverStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 
@@ -16,6 +16,7 @@ export function AddDmMemberModal() {
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const dmChannels = useServerStore((s) => s.dmChannels);
+  const channelOriginMap = useServerStore((s) => s.channelOriginMap);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -67,7 +68,9 @@ export function AddDmMemberModal() {
     setError('');
     setIsAdding(true);
     try {
-      await api.dm.addMember(dmChannelId, { userId: user.id });
+      const origin = channelOriginMap.get(dmChannelId) || '';
+      const targetApi = getApiForOrigin(origin);
+      await targetApi.dm.addMember(dmChannelId, { userId: user.id });
       closeModal();
     } catch (err) {
       setError((err as Error).message || 'Failed to add member');
