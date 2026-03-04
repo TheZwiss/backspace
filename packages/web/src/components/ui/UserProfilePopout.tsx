@@ -55,7 +55,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       <div
         className="h-[48px] rounded-t-[12px]"
         style={{
-          background: getAvatarGradient(user.id, displayName).gradient,
+          background: getAvatarGradient(user.homeUserId ?? user.id, displayName).gradient,
           opacity: 0.6,
         }}
       />

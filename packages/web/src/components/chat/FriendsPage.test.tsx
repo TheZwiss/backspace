@@ -62,6 +62,7 @@ const makeRequest = (overrides: Partial<FriendRequest> = {}): FriendRequest => (
     isAdmin: false,
     createdAt: Date.now(),
     homeInstance: null,
+    homeUserId: null,
     replicatedInstances: [],
   },
   ...overrides,
@@ -218,6 +219,7 @@ describe('FriendsPage', () => {
           isAdmin: false,
           createdAt: Date.now(),
           homeInstance: null,
+          homeUserId: null,
           replicatedInstances: [],
         },
       });
@@ -265,6 +267,7 @@ describe('FriendsPage', () => {
           isAdmin: false,
           createdAt: Date.now(),
           homeInstance: null,
+          homeUserId: null,
           replicatedInstances: [],
         },
       });
@@ -307,6 +310,7 @@ describe('FriendsPage', () => {
           isAdmin: false,
           createdAt: Date.now(),
           homeInstance: null,
+          homeUserId: null,
           replicatedInstances: [],
         },
       });

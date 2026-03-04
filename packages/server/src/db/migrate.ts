@@ -60,7 +60,8 @@ export function runMigrations(db: Database.Database): void {
       name: 'users',
       columns: [
         { name: 'home_instance', type: 'TEXT' },
-        { name: 'replicated_instances', type: "TEXT DEFAULT '[]'" }
+        { name: 'replicated_instances', type: "TEXT DEFAULT '[]'" },
+        { name: 'home_user_id', type: 'TEXT' }
       ]
     },
     {

@@ -17,7 +17,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { username, password, displayName, homeInstance } = request.body;
+    const { username, password, displayName, homeInstance, homeUserId } = request.body;
 
     if (!username || typeof username !== 'string') {
       return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
@@ -102,6 +102,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       status: 'online',
       isAdmin: isFirstUser ? 1 : 0,
       homeInstance: homeInstance || null,
+      homeUserId: (homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null,
       createdAt: now,
     }).run();
 

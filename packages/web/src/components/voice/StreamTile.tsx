@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useAuthStore } from '../../stores/authStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
@@ -24,8 +23,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const { participant } = tile;
   const isLocal = participant.isLocal;
   const userId = participant.userId;
-  const homeUser = useAuthStore((s) => s.user);
-  const avatarUserId = isLocal ? (homeUser?.id ?? userId) : userId;
+  const avatarUserId = participant.homeUserId ?? userId;
 
   const isWatching = watchingStreams.has(userId);
   const streamVolume = streamVolumes.get(userId) ?? 100;

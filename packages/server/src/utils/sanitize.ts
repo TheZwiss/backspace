@@ -21,6 +21,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     isAdmin: row.isAdmin === 1,
     createdAt: row.createdAt,
     homeInstance: row.homeInstance ?? null,
+    homeUserId: row.homeUserId ?? null,
     replicatedInstances,
   };
 }

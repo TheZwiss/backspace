@@ -10,6 +10,7 @@ export interface User {
   isAdmin: boolean;
   createdAt: number;
   homeInstance: string | null;
+  homeUserId: string | null;
   replicatedInstances: ReplicatedInstance[];
 }
 
@@ -253,6 +254,7 @@ export interface RegisterRequest {
   password: string;
   displayName?: string;
   homeInstance?: string;
+  homeUserId?: string;
 }
 
 export interface LoginRequest {
@@ -293,6 +295,7 @@ export interface UpdateUserRequest {
   customStatus?: string;
   status?: UserStatus;
   replicatedInstances?: ReplicatedInstance[];
+  homeUserId?: string;
 }
 
 export interface UpdateMemberRequest {

@@ -150,6 +150,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           password,
           displayName: displayName || currentUser.displayName || undefined,
           homeInstance,
+          homeUserId: currentUser.id,
         });
       } catch (err) {
         const message = (err as Error).message;
@@ -162,6 +163,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               password,
               displayName: displayName || currentUser.displayName || undefined,
               homeInstance,
+              homeUserId: currentUser.id,
             });
           } catch (err2) {
             const msg2 = (err2 as Error).message;
@@ -378,6 +380,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             label = info.name;
           } catch {
             // Non-critical — keep cached label
+          }
+
+          // Backfill homeUserId if missing (existing federated users before this field existed)
+          if (user.homeInstance && !user.homeUserId) {
+            const homeUser = useAuthStore.getState().user;
+            if (homeUser) {
+              client.users.update({ homeUserId: homeUser.id }).catch(() => {});
+            }
           }
 
           const connectedInstance: ConnectedInstance = {

@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useAuthStore } from '../../stores/authStore';
 import type { UserTile } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
@@ -21,8 +20,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
   const perUserVolume = participantVolumes.get(participant.userId) ?? 100;
   const isLocal = participant.isLocal;
-  const homeUser = useAuthStore((s) => s.user);
-  const avatarUserId = isLocal ? (homeUser?.id ?? participant.userId) : participant.userId;
+  const avatarUserId = participant.homeUserId ?? participant.userId;
 
   // --- VIDEO & UI ---
 

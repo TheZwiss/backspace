@@ -2,8 +2,6 @@ import React, { useMemo } from 'react';
 import type { MemberWithUser } from '@backspace/shared';
 import { useServerStore } from '../../stores/serverStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useAuthStore } from '../../stores/authStore';
-import { resolveDisplayIdentity } from '../../utils/identity';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 
@@ -48,7 +46,6 @@ export function MemberSidebar() {
   const currentServerId = useServerStore((s) => s.currentServerId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
-  const authUser = useAuthStore((s) => s.user);
 
   const server = servers.find(s => s.id === currentServerId);
   const ownerId = server?.ownerId;
@@ -100,7 +97,6 @@ export function MemberSidebar() {
   const renderMember = (member: MemberWithUser, isOffline = false) => {
     const displayName = member.user.displayName ?? member.user.username;
     const colorStyle = isOffline ? undefined : getMemberColor(member);
-    const resolvedUser = resolveDisplayIdentity(member.user, authUser ?? null);
     return (
       <div
         key={member.userId}
@@ -114,7 +110,6 @@ export function MemberSidebar() {
           status={isOffline ? 'offline' : member.user.status}
           className={isOffline ? 'opacity-60' : undefined}
           user={member.user}
-          userId={resolvedUser.id}
         />
         <div className="flex-1 min-w-0">
           <Username

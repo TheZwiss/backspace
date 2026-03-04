@@ -38,7 +38,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, customStatus, status, replicatedInstances } = request.body;
+    const { displayName, avatar, customStatus, status, replicatedInstances, homeUserId } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -95,6 +95,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Maximum 50 replicated instances', statusCode: 400 });
       }
       updateData.replicatedInstances = JSON.stringify(replicatedInstances);
+    }
+
+    if (homeUserId !== undefined) {
+      // Only allow setting homeUserId for replicated users (has homeInstance)
+      const currentUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+      if (currentUser?.homeInstance && typeof homeUserId === 'string' && homeUserId.length > 0) {
+        updateData.homeUserId = homeUserId;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {

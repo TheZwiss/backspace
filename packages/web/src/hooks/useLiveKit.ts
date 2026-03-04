@@ -12,7 +12,7 @@ import {
   LocalAudioTrack,
   LocalTrackPublication,
 } from 'livekit-client';
-import { getApiForOrigin, getChannelOrigin } from '../stores/serverStore';
+import { getApiForOrigin, getChannelOrigin, useServerStore } from '../stores/serverStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
@@ -37,6 +37,7 @@ export interface ParticipantInfo {
   identity: string;
   userId: string;
   username: string;
+  homeUserId: string | null;
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
@@ -152,6 +153,8 @@ export function useLiveKit() {
     const processParticipant = (p: Participant, isLocal: boolean) => {
       if (!p.identity) return;
       const { userId, username } = parseIdentity(p.identity);
+      const memberMatch = useServerStore.getState().members.find(m => m.userId === userId);
+      const homeUserId = memberMatch?.user.homeUserId ?? null;
       let audioTrack: MediaStreamTrack | null = null;
       let videoTrack: MediaStreamTrack | null = null;
       let screenTrack: MediaStreamTrack | null = null;
@@ -194,6 +197,7 @@ export function useLiveKit() {
         identity: p.identity,
         userId,
         username,
+        homeUserId,
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
         isCameraOn: !!videoTrack,

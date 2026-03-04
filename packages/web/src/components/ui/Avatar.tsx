@@ -48,7 +48,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   const initials = name.charAt(0).toUpperCase();
   // Match prototype: 24px→10px, 32-34px→12px, 40px→15px, 56px+→18px
   const fontPx = size <= 24 ? 10 : size <= 34 ? 12 : size <= 44 ? 15 : 18;
-  const gradient = getAvatarGradient(userId ?? user?.id, name);
+  const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name);
 
   const handleClick = (e: React.MouseEvent) => {
     if (onClick) {
