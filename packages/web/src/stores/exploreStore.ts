@@ -16,6 +16,7 @@ interface ExploreState {
   searchQuery: string;
   isLoading: boolean;
   discoveryEnabled: boolean;
+  totalAll: number;
   error: string | null;
 
   fetchServers: (query?: string) => Promise<void>;
@@ -42,6 +43,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   searchQuery: '',
   isLoading: false,
   discoveryEnabled: true,
+  totalAll: 0,
   error: null,
 
   fetchServers: async (query?: string) => {
@@ -59,19 +61,29 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
         ),
       ]);
 
+      const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ servers: ExploreServer[]; total: number; totalAll?: number; discoveryEnabled: boolean; origin: string }>[];
+      const rejected = results.filter(r => r.status === 'rejected');
+
+      // If ALL instances failed, surface an error
+      if (fulfilled.length === 0 && rejected.length > 0) {
+        set({ isLoading: false, error: 'Failed to reach any server for discovery' });
+        return;
+      }
+
       const allServers: TaggedExploreServer[] = [];
       const seen = new Set<string>(); // dedup by serverId+origin
       let homeDiscoveryEnabled = true;
+      let totalAllSum = 0;
 
-      for (const result of results) {
-        if (result.status !== 'fulfilled') continue;
-
-        const { servers, discoveryEnabled, origin } = result.value;
+      for (const result of fulfilled) {
+        const { servers, discoveryEnabled, totalAll, origin } = result.value;
 
         // Track home instance discovery state
         if (!origin) {
           homeDiscoveryEnabled = discoveryEnabled;
         }
+
+        totalAllSum += totalAll ?? 0;
 
         for (const server of servers) {
           const key = `${server.id}:${origin}`;
@@ -84,6 +96,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
       set({
         servers: allServers,
         discoveryEnabled: homeDiscoveryEnabled,
+        totalAll: totalAllSum,
         isLoading: false,
       });
     } catch (err) {
@@ -139,6 +152,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     searchQuery: '',
     isLoading: false,
     discoveryEnabled: true,
+    totalAll: 0,
     error: null,
   }),
 }));

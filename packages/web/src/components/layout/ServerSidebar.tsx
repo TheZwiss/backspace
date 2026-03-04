@@ -124,6 +124,7 @@ export function ServerSidebar() {
   const setShowExplore = useUIStore((s) => s.setShowExplore);
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
+  const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const instances = useInstanceStore((s) => s.instances);
   const navigate = useNavigate();
@@ -188,12 +189,14 @@ export function ServerSidebar() {
   const handleDmClick = () => {
     setShowDms(true);
     setCurrentServer(null);
+    setCurrentChannel(null);
     navigate('/channels/@me');
   };
 
   const handleExploreClick = () => {
     setShowExplore(true);
     setCurrentServer(null);
+    setCurrentChannel(null);
     navigate('/channels/@me');
   };
 

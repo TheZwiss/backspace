@@ -195,6 +195,11 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     // which is more efficient to do with raw SQL
     const rawDb = (db as any).$client as import('better-sqlite3').Database;
 
+    // Count ALL discoverable servers (including ones the user has joined) for context
+    const totalAllRow = rawDb.prepare(
+      `SELECT COUNT(DISTINCT s.id) as total FROM servers s WHERE s.visibility IN ('public', 'request')`
+    ).get() as { total: number };
+
     let countSql = `SELECT COUNT(DISTINCT s.id) as total FROM servers s WHERE s.visibility IN ('public', 'request')`;
     let querySql = `
       SELECT s.id, s.name, s.icon, s.description, s.visibility, s.created_at,
@@ -204,7 +209,15 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       WHERE s.visibility IN ('public', 'request')
     `;
 
-    const params: string[] = [];
+    const params: (string | number)[] = [];
+
+    // Exclude servers the user is already in — do this in SQL for correct total/pagination
+    if (myServerIds.size > 0) {
+      const placeholders = [...myServerIds].map(() => '?').join(',');
+      querySql += ` AND s.id NOT IN (${placeholders})`;
+      countSql += ` AND s.id NOT IN (${placeholders})`;
+      params.push(...myServerIds);
+    }
 
     if (q) {
       const likePattern = `%${q}%`;
@@ -226,20 +239,17 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       member_count: number;
     }[];
 
-    // Filter out servers the user is already a member of
-    const servers: ExploreServer[] = rows
-      .filter(r => !myServerIds.has(r.id))
-      .map(r => ({
-        id: r.id,
-        name: r.name,
-        icon: r.icon,
-        description: r.description,
-        visibility: r.visibility as ExploreServer['visibility'],
-        memberCount: r.member_count,
-        createdAt: r.created_at,
-      }));
+    const servers: ExploreServer[] = rows.map(r => ({
+      id: r.id,
+      name: r.name,
+      icon: r.icon,
+      description: r.description,
+      visibility: r.visibility as ExploreServer['visibility'],
+      memberCount: r.member_count,
+      createdAt: r.created_at,
+    }));
 
-    return reply.code(200).send({ servers, total: totalRow.total, discoveryEnabled: true });
+    return reply.code(200).send({ servers, total: totalRow.total, totalAll: totalAllRow.total, discoveryEnabled: true });
   });
 
   // POST /api/servers/:id/public-join — join a public server without invite
