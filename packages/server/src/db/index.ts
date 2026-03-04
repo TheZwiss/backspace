@@ -226,6 +226,10 @@ export function getDb(): DB {
   return db;
 }
 
+export function getRawDb(): Database.Database {
+  return sqlite;
+}
+
 export function closeDatabase(): void {
   if (sqlite) {
     sqlite.close();

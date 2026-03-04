@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, sql, inArray } from 'drizzle-orm';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isServerOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
@@ -193,7 +193,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     // Build raw SQL query for explore — we need a LEFT JOIN for member count
     // which is more efficient to do with raw SQL
-    const rawDb = (db as any).$client as import('better-sqlite3').Database;
+    const rawDb = getRawDb();
 
     // Count ALL discoverable servers (including ones the user has joined) for context
     const totalAllRow = rawDb.prepare(
