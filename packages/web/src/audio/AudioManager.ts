@@ -22,7 +22,7 @@ export class AudioManager {
   private soundBuffers: Map<string, AudioBuffer> = new Map();
   private voiceEchoCancellation = true;
   private voiceNoiseSuppression = true;
-  private voiceAutoGainControl = false;
+  private voiceAutoGainControl = true;
   private streamGeneration = 0;
   private inputSwitchChain: Promise<MediaStream | null> = Promise.resolve(null);
   private rnnoiseNode: AudioWorkletNode | null = null;

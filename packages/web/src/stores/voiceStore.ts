@@ -244,7 +244,7 @@ export const useVoiceStore = create<VoiceState>()(
       })),
       noiseSuppression: true,
       echoCancellation: true,
-      autoGainControl: false,
+      autoGainControl: true,
       rnnoiseEnabled: true,
       setEchoCancellation: (enabled) => set({ echoCancellation: enabled }),
       setAutoGainControl: (enabled) => set({ autoGainControl: enabled }),
