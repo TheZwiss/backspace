@@ -162,17 +162,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Re-register in voice channel — DEFERRED to useLiveKit after LiveKit connects.
-      // Just keep currentVoiceChannelId set so AppLayout triggers LiveKit connection.
-      // The voice_join WS message will be sent by useLiveKit on connect/reconnect.
+      // Re-register in voice channel after WS reconnect — the server lost
+      // voice state on restart, so we must tell it we're still connected.
+      // GUARD: Only re-register if LiveKit is actually connected. Background
+      // tabs can reconnect WS but not LiveKit — sending voice_join without
+      // an active media plane would create ghost users in the sidebar.
       {
-        const { currentVoiceChannelId } = useVoiceStore.getState();
-        if (currentVoiceChannelId) {
+        const { currentVoiceChannelId, isLiveKitConnected, isMuted, isDeafened, isCameraOn, isScreenSharing } = useVoiceStore.getState();
+        if (currentVoiceChannelId && isLiveKitConnected) {
           const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
           if (voiceOrigin === origin) {
-            // Optimistic: show self in sidebar immediately (local only)
             const myId = isHome ? event.user.id : useAuthStore.getState().user?.id;
             if (myId) addVoiceUser(currentVoiceChannelId, myId);
+            wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
+            wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing }, origin);
           }
         }
       }
