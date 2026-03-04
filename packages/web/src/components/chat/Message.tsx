@@ -59,8 +59,11 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
 
+  const isOwnReaction = (r: { userId: string; user?: { id: string; username: string; homeInstance?: string | null } | null }) =>
+    r.user ? isSelf(r.user, currentUser) : r.userId === currentUser?.id;
+
   const toggleReaction = (emoji: string) => {
-    const hasReacted = message.reactions?.some(r => r.userId === currentUser?.id && r.emoji === emoji);
+    const hasReacted = message.reactions?.some(r => isOwnReaction(r) && r.emoji === emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);
     } else {
@@ -71,7 +74,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const reactionGroups = (message.reactions || []).reduce((acc, r) => {
     const group = acc[r.emoji] || { count: 0, me: false };
     group.count++;
-    if (r.userId === currentUser?.id) {
+    if (isOwnReaction(r)) {
       group.me = true;
     }
     acc[r.emoji] = group;

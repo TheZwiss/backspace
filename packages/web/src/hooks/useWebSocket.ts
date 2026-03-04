@@ -118,6 +118,19 @@ function handleEvent(origin: string, event: ServerEvent): void {
         loadServerDetail(currentServerId);
       }
 
+      // For remote instances: if user was viewing one of these servers, load its details
+      // (fixes race condition on page reload — route params effect fires before remote WS connects)
+      if (!isHome) {
+        const { currentServerId: curServerId, loadServerDetail: loadDetail } = useServerStore.getState();
+        if (curServerId && event.servers.some((s: any) => s.id === curServerId)) {
+          loadDetail(curServerId);
+          const { currentChannelId, loadMessages } = useChatStore.getState();
+          if (currentChannelId) {
+            loadMessages(currentChannelId, true);
+          }
+        }
+      }
+
       // Only force-reload the current channel on reconnect; other channels keep their cache
       if (isHome) {
         const { loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();

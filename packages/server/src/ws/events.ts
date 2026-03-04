@@ -709,19 +709,24 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     if (!serverId || !isMember(serverId, userId)) return;
 
     const reactionId = generateSnowflake();
+    const now = Date.now();
     try {
       db.insert(schema.reactions).values({
         id: reactionId,
         messageId,
         userId,
         emoji,
-        createdAt: Date.now(),
+        createdAt: now,
       }).run();
+
+      // Include user object so remote clients can use isSelf() for identity resolution
+      const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+      const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
 
       connectionManager.sendToChannel(serverId, message.channelId, {
         type: 'reaction_added',
         messageId,
-        reaction: { id: reactionId, messageId, userId, emoji, createdAt: Date.now() },
+        reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
       });
     } catch (err) {
       // Unique constraint violation (already reacted)
@@ -734,19 +739,24 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
   if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
 
   const reactionId = generateSnowflake();
+  const now = Date.now();
   try {
     db.insert(schema.dmReactions).values({
       id: reactionId,
       dmMessageId: messageId,
       userId,
       emoji,
-      createdAt: Date.now(),
+      createdAt: now,
     }).run();
+
+    // Include user object so remote clients can use isSelf() for identity resolution
+    const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
 
     connectionManager.sendToDmMembers(dmMsg.dmChannelId, {
       type: 'reaction_added',
       messageId,
-      reaction: { id: reactionId, messageId, userId, emoji, createdAt: Date.now() },
+      reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
     });
   } catch (err) {
     // Unique constraint violation (already reacted)
