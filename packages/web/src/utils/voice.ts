@@ -27,7 +27,7 @@ export function joinVoiceChannel(channelId: string): void {
   }
 
   setCurrentVoiceChannel(channelId);
-  wsSend({ type: 'voice_join', channelId }, getChannelOrigin(channelId));
+  // voice_join is now sent by useLiveKit after successful LiveKit connection
   // Optimistic: immediately show self in new channel
   if (myId) addVoiceUser(channelId, myId);
 }

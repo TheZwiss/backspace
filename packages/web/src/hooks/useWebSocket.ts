@@ -162,17 +162,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Re-register in voice channel if we're still connected to LiveKit
-      // Origin-aware: re-sends voice_join only if the voice channel belongs to this origin
+      // Re-register in voice channel — DEFERRED to useLiveKit after LiveKit connects.
+      // Just keep currentVoiceChannelId set so AppLayout triggers LiveKit connection.
+      // The voice_join WS message will be sent by useLiveKit on connect/reconnect.
       {
-        const { currentVoiceChannelId, isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen } = useVoiceStore.getState();
+        const { currentVoiceChannelId } = useVoiceStore.getState();
         if (currentVoiceChannelId) {
           const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
           if (voiceOrigin === origin) {
-            console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, origin, curMuted, curDeafened, curCamera, curScreen });
-            wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
-            wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen }, origin);
-            // Optimistic: immediately show self in voice channel sidebar
+            // Optimistic: show self in sidebar immediately (local only)
             const myId = isHome ? event.user.id : useAuthStore.getState().user?.id;
             if (myId) addVoiceUser(currentVoiceChannelId, myId);
           }

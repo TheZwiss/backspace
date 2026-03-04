@@ -13,6 +13,7 @@ import {
   LocalTrackPublication,
 } from 'livekit-client';
 import { getApiForOrigin, getChannelOrigin, useServerStore } from '../stores/serverStore';
+import { wsSend } from './useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
@@ -308,6 +309,15 @@ export function useLiveKit() {
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
     if (connectedChannelRef.current === storedId && roomRef.current?.state === ConnectionState.Connected) return;
+
+    // Register voice state with the WS server after LiveKit connects (not for DM calls)
+    const registerWithServer = () => {
+      if (isDm) return;
+      const origin = getChannelOrigin(channelId);
+      wsSend({ type: 'voice_join', channelId }, origin);
+      const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: s } = useVoiceStore.getState();
+      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: s }, origin);
+    };
     const gen = ++_connectGeneration;
 
     // Ensure AudioContext is created and resumed before tracks arrive
@@ -433,6 +443,10 @@ export function useLiveKit() {
           useVoiceStore.getState().setIsLiveKitConnected(connected);
 
           if (connected) {
+            // On LiveKit reconnect, re-register with WS server (server may have restarted)
+            if (connectedChannelRef.current) {
+              registerWithServer();
+            }
             updateParticipants();
           }
         }
@@ -453,10 +467,13 @@ export function useLiveKit() {
       _activeRoom = newRoom;
       connectedChannelRef.current = storedId;
       setConnectedChannelId(storedId);
-      setRoom(newRoom); 
+      setRoom(newRoom);
       setIsConnected(true);
       useVoiceStore.getState().setIsLiveKitConnected(true);
-      
+
+      // Tell WS server we're in the voice channel now that LiveKit is connected
+      registerWithServer();
+
       updateParticipants();
 
       // Subscribe to non-screen-share tracks from existing participants (safety net)
