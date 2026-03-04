@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
 import { useServerStore } from './serverStore';
+import { useAuthStore } from './authStore';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -291,23 +292,40 @@ export const useVoiceStore = create<VoiceState>()(
       },
 
       // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
-      leaveVoice: () => set({
-        currentVoiceChannelId: null,
-        isCameraOn: false,
-        isScreenSharing: false,
-        participants: [],
-        speakingParticipantIds: new Set(),
-        connectionError: null,
-        isLiveKitConnected: false,
-        connectionQuality: 'unknown',
-        focusedParticipantId: null,
-        activeDmCall: null,
-        outgoingCall: null,
-        deafenedUserIds: new Set(),
-        streamVolumes: new Map(),
-        streamMutes: new Map(),
-        watchingStreams: new Set(),
-      }),
+      leaveVoice: () => {
+        const channelId = get().currentVoiceChannelId;
+        const myId = useAuthStore.getState().user?.id;
+
+        set((state) => {
+          // Optimistic: immediately remove self from the channel's voice users
+          const voiceUsers = (channelId && myId)
+            ? (() => {
+                const m = new Map(state.voiceUsers);
+                m.set(channelId, (m.get(channelId) ?? []).filter(id => id !== myId));
+                return m;
+              })()
+            : state.voiceUsers;
+
+          return {
+            currentVoiceChannelId: null,
+            isCameraOn: false,
+            isScreenSharing: false,
+            participants: [],
+            speakingParticipantIds: new Set(),
+            connectionError: null,
+            isLiveKitConnected: false,
+            connectionQuality: 'unknown',
+            focusedParticipantId: null,
+            activeDmCall: null,
+            outgoingCall: null,
+            deafenedUserIds: new Set(),
+            streamVolumes: new Map(),
+            streamMutes: new Map(),
+            watchingStreams: new Set(),
+            voiceUsers,
+          };
+        });
+      },
 
       reset: () => set({
         voiceUsers: new Map(),

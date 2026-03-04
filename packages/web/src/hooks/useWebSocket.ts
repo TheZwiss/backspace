@@ -172,6 +172,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
             console.log('[WebSocket] Re-syncing voice status on reconnect:', { currentVoiceChannelId, origin, curMuted, curDeafened, curCamera, curScreen });
             wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
             wsSend({ type: 'voice_status', isMuted: curMuted, isDeafened: curDeafened, isCameraOn: curCamera, isScreenSharing: curScreen }, origin);
+            // Optimistic: immediately show self in voice channel sidebar
+            const myId = isHome ? event.user.id : useAuthStore.getState().user?.id;
+            if (myId) addVoiceUser(currentVoiceChannelId, myId);
           }
         }
       }

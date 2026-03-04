@@ -1,4 +1,5 @@
 import { useVoiceStore } from '../stores/voiceStore';
+import { useAuthStore } from '../stores/authStore';
 import { getChannelOrigin } from '../stores/serverStore';
 import { wsSend } from '../hooks/useWebSocket';
 
@@ -9,8 +10,10 @@ import { wsSend } from '../hooks/useWebSocket';
  * broadcasts a leave event and the client cleans up stale voice state.
  */
 export function joinVoiceChannel(channelId: string): void {
-  const { currentVoiceChannelId, setCurrentVoiceChannel } = useVoiceStore.getState();
+  const { currentVoiceChannelId, setCurrentVoiceChannel, addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
   if (currentVoiceChannelId === channelId) return;
+
+  const myId = useAuthStore.getState().user?.id;
 
   // Leave old instance if switching cross-origin
   if (currentVoiceChannelId) {
@@ -19,8 +22,12 @@ export function joinVoiceChannel(channelId: string): void {
     if (oldOrigin !== newOrigin) {
       wsSend({ type: 'voice_leave' }, oldOrigin);
     }
+    // Optimistic: immediately remove self from old channel
+    if (myId) removeVoiceUser(currentVoiceChannelId, myId);
   }
 
   setCurrentVoiceChannel(channelId);
   wsSend({ type: 'voice_join', channelId }, getChannelOrigin(channelId));
+  // Optimistic: immediately show self in new channel
+  if (myId) addVoiceUser(channelId, myId);
 }
