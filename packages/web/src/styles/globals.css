@@ -238,6 +238,14 @@
   animation: slideUp 0.15s ease-out;
 }
 
+@keyframes typingFadeIn {
+  from { transform: translateY(4px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-typing-in {
+  animation: typingFadeIn 0.15s ease-out;
+}
+
 @keyframes gradientPulse {
   0%, 100% { opacity: 0.7; }
   50% { opacity: 1; }

@@ -5,7 +5,6 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
-import { TypingIndicator } from '../chat/TypingIndicator';
 import { VoiceGrid } from '../voice/VoiceGrid';
 import { VoiceControlBar } from '../voice/VoiceControlBar';
 import { VoiceChatPanel } from '../voice/VoiceChatPanel';
@@ -210,7 +209,6 @@ export function MainContent() {
           </div>
         </div>
         <MessageList channelId={currentChannelId} />
-        <TypingIndicator channelId={currentChannelId} />
         <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} />
       </div>
     );
@@ -357,7 +355,6 @@ export function MainContent() {
         </div>
       </div>
       <MessageList channelId={currentChannelId} />
-      <TypingIndicator channelId={currentChannelId} />
       <MessageInput channelId={currentChannelId} channelName={channel.name} />
     </div>
   );

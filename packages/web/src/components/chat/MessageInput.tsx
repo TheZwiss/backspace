@@ -3,6 +3,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from '../../stores/serverStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
+import { TypingIndicator } from './TypingIndicator';
 import type { MemberWithUser } from '@backspace/shared';
 
 interface MessageInputProps {
@@ -228,7 +229,8 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   };
 
   return (
-    <div data-pip-obstacle="bottom" className="px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
+    <div data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
+      <TypingIndicator channelId={channelId} />
       {replyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">

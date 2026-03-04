@@ -1,7 +1,6 @@
 import React from 'react';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
-import { TypingIndicator } from '../chat/TypingIndicator';
 import { useUIStore } from '../../stores/uiStore';
 
 interface VoiceChatPanelProps {
@@ -30,9 +29,6 @@ export function VoiceChatPanel({ channelId, channelName }: VoiceChatPanelProps) 
 
       {/* Messages */}
       <MessageList channelId={channelId} />
-
-      {/* Typing indicator */}
-      <TypingIndicator channelId={channelId} />
 
       {/* Input */}
       <MessageInput channelId={channelId} channelName={channelName} />
