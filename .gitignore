@@ -49,3 +49,7 @@ packages/web/src/**/*.js
 # Misc
 .cache/
 tmp/
+
+# Local files
+Gemini Starter.rtf
+System Prompt.rtf
