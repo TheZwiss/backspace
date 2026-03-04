@@ -1,6 +1,7 @@
 import React from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
+import { isSelf } from '../../utils/identity';
 
 const EMPTY_VOICE_USERS: string[] = [];
 import { useServerStore } from '../../stores/serverStore';
@@ -19,7 +20,8 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
   const localIsDeafened = useVoiceStore((s) => s.isDeafened);
   const localIsMuted = useVoiceStore((s) => s.isMuted);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
-  const currentUserId = useAuthStore((s) => s.user?.id);
+  const authUser = useAuthStore((s) => s.user);
+  const currentUserId = authUser?.id;
   const members = useServerStore((s) => s.members);
   const isActive = currentVoiceChannel === channelId;
 
@@ -73,7 +75,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
                   name={displayName}
                   size={24}
                   status={status}
-                  userId={userId}
+                  userId={(authUser && member?.user && isSelf(member.user, authUser)) ? authUser.id : userId}
                 />
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}

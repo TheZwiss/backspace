@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
@@ -23,6 +24,8 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const { participant } = tile;
   const isLocal = participant.isLocal;
   const userId = participant.userId;
+  const homeUser = useAuthStore((s) => s.user);
+  const avatarUserId = isLocal ? (homeUser?.id ?? userId) : userId;
 
   const isWatching = watchingStreams.has(userId);
   const streamVolume = streamVolumes.get(userId) ?? 100;
@@ -146,7 +149,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
           <div className="relative">
-            <Avatar src={null} name={participant.username} size={large ? 80 : 48} userId={participant.userId} />
+            <Avatar src={null} name={participant.username} size={large ? 80 : 48} userId={avatarUserId} />
           </div>
           <div className="text-center px-4">
             <p className="text-txt-primary text-sm font-semibold">
