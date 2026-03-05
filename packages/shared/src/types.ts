@@ -49,6 +49,7 @@ export interface ExploreServer {
   visibility: ServerVisibility;
   memberCount: number;
   createdAt: number;
+  joined?: boolean;
 }
 
 export interface JoinRequest {

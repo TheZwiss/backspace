@@ -118,7 +118,7 @@ export class BackspaceApiClient {
   };
 
   readonly explore: {
-    list: (q?: string, limit?: number, offset?: number) => Promise<{ servers: ExploreServer[]; total: number; discoveryEnabled: boolean }>;
+    list: (q?: string, limit?: number, offset?: number) => Promise<{ servers: ExploreServer[]; total: number; totalAll: number; discoveryEnabled: boolean }>;
     publicJoin: (serverId: string) => Promise<ServerWithChannelsAndMembers>;
     requestJoin: (serverId: string, message?: string) => Promise<JoinRequest>;
     getJoinRequests: (serverId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
@@ -305,7 +305,7 @@ export class BackspaceApiClient {
         if (q) params.set('q', q);
         params.set('limit', String(limit));
         params.set('offset', String(offset));
-        return request<{ servers: ExploreServer[]; total: number; discoveryEnabled: boolean }>(
+        return request<{ servers: ExploreServer[]; total: number; totalAll: number; discoveryEnabled: boolean }>(
           'GET', `/servers/explore?${params}`
         );
       },

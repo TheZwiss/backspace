@@ -211,14 +211,6 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     const params: (string | number)[] = [];
 
-    // Exclude servers the user is already in — do this in SQL for correct total/pagination
-    if (myServerIds.size > 0) {
-      const placeholders = [...myServerIds].map(() => '?').join(',');
-      querySql += ` AND s.id NOT IN (${placeholders})`;
-      countSql += ` AND s.id NOT IN (${placeholders})`;
-      params.push(...myServerIds);
-    }
-
     if (q) {
       const likePattern = `%${q}%`;
       querySql += ` AND (s.name LIKE ? COLLATE NOCASE OR s.description LIKE ? COLLATE NOCASE)`;
@@ -247,6 +239,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       visibility: r.visibility as ExploreServer['visibility'],
       memberCount: r.member_count,
       createdAt: r.created_at,
+      joined: myServerIds.has(r.id),
     }));
 
     return reply.code(200).send({ servers, total: totalRow.total, totalAll: totalAllRow.total, discoveryEnabled: true });

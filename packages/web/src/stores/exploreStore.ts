@@ -89,7 +89,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
           const key = `${server.id}:${origin}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          allServers.push({ ...server, _instanceOrigin: origin });
+          allServers.push({ ...server, _instanceOrigin: origin, joined: server.joined ?? false });
         }
       }
 
@@ -123,10 +123,12 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     // Add to server store
     useServerStore.getState().addServerFromReady(server._instanceOrigin, fullServer);
 
-    // Remove from explore list
+    // Mark as joined in explore list
     set((state) => ({
-      servers: state.servers.filter(s =>
-        !(s.id === server.id && s._instanceOrigin === server._instanceOrigin)
+      servers: state.servers.map(s =>
+        s.id === server.id && s._instanceOrigin === server._instanceOrigin
+          ? { ...s, joined: true }
+          : s
       ),
     }));
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useExploreStore, type TaggedExploreServer } from '../../stores/exploreStore';
 import { useServerStore } from '../../stores/serverStore';
@@ -15,12 +15,13 @@ export function ExplorePage() {
   const myRequests = useExploreStore((s) => s.myRequests);
   const isLoading = useExploreStore((s) => s.isLoading);
   const discoveryEnabled = useExploreStore((s) => s.discoveryEnabled);
-  const totalAll = useExploreStore((s) => s.totalAll);
   const error = useExploreStore((s) => s.error);
   const searchQuery = useExploreStore((s) => s.searchQuery);
   const setSearchQuery = useExploreStore((s) => s.setSearchQuery);
   const fetchServers = useExploreStore((s) => s.fetchServers);
   const fetchMyRequests = useExploreStore((s) => s.fetchMyRequests);
+
+  const [joinedCollapsed, setJoinedCollapsed] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -50,6 +51,19 @@ export function ExplorePage() {
     setCurrentServer(serverId);
     navigate(`/channels/${serverId}`);
   };
+
+  const unjoinedServers = useMemo(
+    () => servers.filter(s => !s.joined),
+    [servers],
+  );
+  const joinedServers = useMemo(
+    () => servers.filter(s => s.joined),
+    [servers],
+  );
+
+  const hasAnyServers = servers.length > 0;
+  const hasUnjoined = unjoinedServers.length > 0;
+  const hasJoined = joinedServers.length > 0;
 
   return (
     <div className="flex-1 flex flex-col bg-surface-chat h-full">
@@ -101,7 +115,8 @@ export function ExplorePage() {
           <div className="mx-6 mt-4 p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-sm text-txt-danger">
             {error}
           </div>
-        ) : servers.length === 0 ? (
+        ) : !hasAnyServers ? (
+          /* True empty state — no discoverable servers at all */
           <div className="flex flex-col items-center justify-center h-64 opacity-60">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-3">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
@@ -109,21 +124,75 @@ export function ExplorePage() {
             <p className="text-txt-tertiary text-sm">
               {searchQuery
                 ? 'No servers match your search.'
-                : totalAll > 0
-                  ? `You've already joined all ${totalAll} discoverable server${totalAll === 1 ? '' : 's'}.`
-                  : 'No servers have been made discoverable yet.'}
+                : 'No servers have been made discoverable yet.'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
-            {servers.map((server) => (
-              <ServerCard
-                key={`${server.id}:${server._instanceOrigin}`}
-                server={server}
-                isPending={myRequests.some(r => r.serverId === server.id && r.status === 'pending')}
-                onJoinSuccess={handleJoinSuccess}
-              />
-            ))}
+          <div className="p-6 space-y-6">
+            {/* All-joined success banner (only when no unjoined servers remain) */}
+            {!hasUnjoined && hasJoined && !searchQuery && (
+              <div className="flex items-center gap-2.5 px-4 py-2.5 bg-accent-mint/10 border border-accent-mint/20 rounded-lg">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-accent-mint flex-shrink-0">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+                <span className="text-[13px] text-accent-mint">
+                  You're in all discoverable servers
+                </span>
+              </div>
+            )}
+
+            {/* Unjoined servers grid */}
+            {hasUnjoined && (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {unjoinedServers.map((server) => (
+                  <ServerCard
+                    key={`${server.id}:${server._instanceOrigin}`}
+                    server={server}
+                    isPending={myRequests.some(r => r.serverId === server.id && r.status === 'pending')}
+                    onJoinSuccess={handleJoinSuccess}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Joined servers section */}
+            {hasJoined && (
+              <div>
+                <button
+                  onClick={() => setJoinedCollapsed(!joinedCollapsed)}
+                  className="flex items-center gap-2 mb-3 group"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    className={`text-txt-tertiary transition-transform ${joinedCollapsed ? '-rotate-90' : ''}`}
+                  >
+                    <path d="M7 10l5 5 5-5z" />
+                  </svg>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary group-hover:text-txt-secondary transition-colors">
+                    Joined
+                  </span>
+                  <span className="text-xs text-txt-tertiary/60">
+                    {joinedServers.length}
+                  </span>
+                </button>
+
+                {!joinedCollapsed && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {joinedServers.map((server) => (
+                      <ServerCard
+                        key={`${server.id}:${server._instanceOrigin}`}
+                        server={server}
+                        isPending={false}
+                        onJoinSuccess={handleJoinSuccess}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -151,6 +220,7 @@ function ServerCard({
 
   const gradient = getServerGradient(server.id, server.name);
   const isPublic = server.visibility === 'public';
+  const isJoined = server.joined === true;
   const originLabel = server._instanceOrigin
     ? (() => { try { return new URL(server._instanceOrigin).host; } catch { return server._instanceOrigin; } })()
     : null;
@@ -181,8 +251,16 @@ function ServerCard({
     }
   };
 
+  const handleViewServer = () => {
+    onJoinSuccess(server.id);
+  };
+
   return (
-    <div className="bg-surface-sidebar rounded-lg border border-border-soft overflow-hidden flex flex-col transition-colors hover:border-border-hard">
+    <div className={`bg-surface-channel rounded-lg border overflow-hidden flex flex-col transition-colors ${
+      isJoined
+        ? 'border-accent-mint/20 hover:border-accent-mint/40'
+        : 'border-border-soft hover:border-border-hard'
+    }`}>
       {/* Banner / Icon area */}
       <div className="h-32 relative flex items-center justify-center" style={{ background: gradient.gradient }}>
         {server.icon ? (
@@ -195,6 +273,18 @@ function ServerCard({
           <span className="text-3xl font-bold text-white/90 drop-shadow-md">
             {server.name.charAt(0).toUpperCase()}
           </span>
+        )}
+
+        {/* Joined badge (top-left) */}
+        {isJoined && (
+          <div className="absolute top-2 left-2">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-accent-mint/25 text-accent-mint backdrop-blur-sm">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+              </svg>
+              Joined
+            </span>
+          </div>
         )}
 
         {/* Visibility badge */}
@@ -244,7 +334,14 @@ function ServerCard({
           <div className="text-[12px] text-txt-danger mb-2">{joinError}</div>
         )}
 
-        {isPublic ? (
+        {isJoined ? (
+          <button
+            onClick={handleViewServer}
+            className="w-full py-2 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-sm font-medium rounded transition-colors"
+          >
+            View Server
+          </button>
+        ) : isPublic ? (
           <button
             onClick={handlePublicJoin}
             disabled={joining}
