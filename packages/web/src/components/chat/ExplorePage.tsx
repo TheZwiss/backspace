@@ -4,6 +4,7 @@ import { useExploreStore, type TaggedExploreServer } from '../../stores/exploreS
 import { useServerStore } from '../../stores/serverStore';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getServerGradient } from '../../utils/gradients';
+import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 
 export function ExplorePage() {
   const navigate = useNavigate();
@@ -93,6 +94,10 @@ export function ExplorePage() {
               </svg>
             </button>
           )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1">
+          <MemberListToggleButton />
         </div>
       </div>
 
