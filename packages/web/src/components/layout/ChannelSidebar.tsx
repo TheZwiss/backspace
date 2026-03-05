@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -35,6 +35,7 @@ export function ChannelSidebar() {
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleMicToggle = async () => {
     toggleMic();
@@ -142,7 +143,7 @@ export function ChannelSidebar() {
           <div
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
-              !currentChannelId
+              !currentChannelId && location.pathname !== '/explore'
                 ? 'bg-interactive-selected text-white'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
             }`}

@@ -2,14 +2,12 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useExploreStore, type TaggedExploreServer } from '../../stores/exploreStore';
 import { useServerStore } from '../../stores/serverStore';
-import { useUIStore } from '../../stores/uiStore';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getServerGradient } from '../../utils/gradients';
 
 export function ExplorePage() {
   const navigate = useNavigate();
   const setCurrentServer = useServerStore((s) => s.setCurrentServer);
-  const setShowExplore = useUIStore((s) => s.setShowExplore);
 
   const servers = useExploreStore((s) => s.servers);
   const myRequests = useExploreStore((s) => s.myRequests);
@@ -47,7 +45,6 @@ export function ExplorePage() {
   }, []);
 
   const handleJoinSuccess = (serverId: string) => {
-    setShowExplore(false);
     setCurrentServer(serverId);
     navigate(`/channels/${serverId}`);
   };

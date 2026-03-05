@@ -183,14 +183,15 @@ export function AppLayout() {
   // Handle route params
   useEffect(() => {
     if (serverId === '@me') {
-      if (!useUIStore.getState().showExplore) {
-        setShowDms(true);
-      }
+      setShowDms(true);
       setCurrentServer(null);
     } else if (serverId) {
       setShowDms(false);
       setCurrentServer(serverId);
       loadServerDetail(serverId);
+    } else {
+      setShowDms(false);
+      setCurrentServer(null);
     }
   }, [serverId, setCurrentServer, loadServerDetail, setShowDms]);
 

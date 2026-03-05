@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -120,14 +120,13 @@ export function ServerSidebar() {
   const dmChannels = useServerStore((s) => s.dmChannels);
   const showDms = useUIStore((s) => s.showDms);
   const setShowDms = useUIStore((s) => s.setShowDms);
-  const showExplore = useUIStore((s) => s.showExplore);
-  const setShowExplore = useUIStore((s) => s.setShowExplore);
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const instances = useInstanceStore((s) => s.instances);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Group servers by origin
   const groupedServers = useMemo(() => {
@@ -182,7 +181,6 @@ export function ServerSidebar() {
     }
     setCurrentServer(serverId);
     setShowDms(false);
-    setShowExplore(false);
     navigate(`/channels/${serverId}`);
   };
 
@@ -194,10 +192,9 @@ export function ServerSidebar() {
   };
 
   const handleExploreClick = () => {
-    setShowExplore(true);
     setCurrentServer(null);
     setCurrentChannel(null);
-    navigate('/channels/@me');
+    navigate('/explore');
   };
 
   return (
@@ -276,7 +273,7 @@ export function ServerSidebar() {
       <SidebarItem
         id="explore"
         name="Explore Servers"
-        active={showExplore}
+        active={location.pathname === '/explore'}
         onClick={handleExploreClick}
         type="action"
         actionType="explore"

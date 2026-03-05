@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useServerStore } from '../../stores/serverStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -30,7 +31,8 @@ export function MainContent() {
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const connectionError = useVoiceStore((s) => s.connectionError);
   const showDms = useUIStore((s) => s.showDms);
-  const showExplore = useUIStore((s) => s.showExplore);
+  const location = useLocation();
+  const isExplorePage = location.pathname === '/explore';
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
   const dmChannels = useServerStore((s) => s.dmChannels);
@@ -62,9 +64,9 @@ export function MainContent() {
   const channel = channels.find(c => c.id === currentChannelId);
   const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
 
-  if (showDms || showExplore || !currentServerId) {
+  if (showDms || isExplorePage || !currentServerId) {
     if (!currentChannelId) {
-      if (showExplore) return <ExplorePage />;
+      if (isExplorePage) return <ExplorePage />;
       return <FriendsPage />;
     }
 
