@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ServerSidebar } from './ServerSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
@@ -33,6 +33,7 @@ import { AudioManager } from '../../audio/AudioManager';
 
 export function AppLayout() {
   const { serverId, channelId, inviteCode } = useParams<{ serverId?: string; channelId?: string; inviteCode?: string }>();
+  const navigate = useNavigate();
   
   // Global interaction handler to resume AudioContext
   useEffect(() => {
@@ -95,6 +96,8 @@ export function AppLayout() {
   const userProfilePopout = useUIStore((s) => s.userProfilePopout);
   const closeUserProfile = useUIStore((s) => s.closeUserProfile);
   
+  const channels = useServerStore((s) => s.channels);
+
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const {
@@ -205,10 +208,35 @@ export function AppLayout() {
     if (channelId) {
       setCurrentChannel(channelId);
       loadMessages(channelId);
+      if (serverId && serverId !== '@me') {
+        useUIStore.getState().setLastChannel(serverId, channelId);
+      }
     } else {
       setCurrentChannel(null);
     }
-  }, [channelId, setCurrentChannel, loadMessages]);
+  }, [channelId, serverId, setCurrentChannel, loadMessages]);
+
+  // Auto-select last visited (or first) channel when opening a server without a channelId
+  useEffect(() => {
+    if (!serverId || serverId === '@me' || channelId) return;
+    if (channels.length === 0) return;
+
+    const firstChannel = channels[0];
+    if (!firstChannel) return;
+
+    // Guard: only redirect when channels belong to the target server.
+    // `channels` is shared per-view state set by loadServerDetail (async).
+    // Without this check, stale channels from a previously viewed server
+    // would cause a wrong redirect during the fetch window.
+    const { channelToServerMap } = useServerStore.getState();
+    if (channelToServerMap.get(firstChannel.id) !== serverId) return;
+
+    const lastId = useUIStore.getState().lastChannelPerServer[serverId];
+    const target = (lastId && channels.find((c) => c.id === lastId)) || firstChannel;
+    if (target) {
+      navigate(`/channels/${serverId}/${target.id}`, { replace: true });
+    }
+  }, [serverId, channelId, channels, navigate]);
 
   if (isLoading || !user) {
     return (

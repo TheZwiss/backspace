@@ -46,6 +46,8 @@ interface UIState {
   closeUserProfile: () => void;
   addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number) => void;
   removeToast: (id: string) => void;
+  lastChannelPerServer: Record<string, string>;
+  setLastChannel: (serverId: string, channelId: string) => void;
   voiceChatOpen: boolean;
   voiceFullscreen: boolean;
   pipCollapsed: boolean;
@@ -110,6 +112,11 @@ export const useUIStore = create<UIState>()(
       },
       removeToast: (id) => set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) })),
 
+      lastChannelPerServer: {},
+      setLastChannel: (serverId, channelId) => set((state) => ({
+        lastChannelPerServer: { ...state.lastChannelPerServer, [serverId]: channelId },
+      })),
+
       voiceChatOpen: false,
       voiceFullscreen: false,
       pipCollapsed: false,
@@ -123,6 +130,7 @@ export const useUIStore = create<UIState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         memberListOpen: state.memberListOpen,
+        lastChannelPerServer: state.lastChannelPerServer,
       }),
     }
   )
