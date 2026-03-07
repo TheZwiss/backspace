@@ -132,9 +132,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadMessages: async (channelId: string, force?: boolean) => {
     if (!force && get().hasMore.has(channelId)) return;
+    const isDm = isDmChannel(channelId);
+    // For server channels, bail if we don't know which instance owns this channel yet.
+    // The remote WS ready handler will call loadMessages once the map is populated.
+    if (!isDm && !useServerStore.getState().channelOriginMap.has(channelId)) return;
     set({ isLoading: true, loadError: null });
     try {
-      const isDm = isDmChannel(channelId);
       const origin = getChannelOrigin(channelId);
       const client = getApiForOrigin(origin);
       const messages = isDm

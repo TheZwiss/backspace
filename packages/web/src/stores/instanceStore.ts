@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
-import { setApiForOriginResolver, useServerStore } from './serverStore';
+import { setApiForOriginResolver, setUserIdForOriginResolver, useServerStore } from './serverStore';
 import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -504,4 +504,13 @@ setApiForOriginResolver((origin: string): BackspaceApiClient => {
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
   if (!instance) return api;
   return instance.api;
+});
+
+// ─── User ID resolution (federation) ──────────────────────────────────────────
+// Maps an origin to the local user's ID on that remote instance.
+// Used by voice join/leave to optimistically add/remove the correct user ID.
+
+setUserIdForOriginResolver((origin: string): string | undefined => {
+  const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
+  return instance?.user.id;
 });

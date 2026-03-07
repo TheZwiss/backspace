@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
-import { useServerStore } from './serverStore';
-import { useAuthStore } from './authStore';
+import { useServerStore, getChannelOrigin, getMyUserIdForOrigin } from './serverStore';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -294,7 +293,7 @@ export const useVoiceStore = create<VoiceState>()(
       // Leave voice without wiping the voiceUsers map (so sidebar still shows others)
       leaveVoice: () => {
         const channelId = get().currentVoiceChannelId;
-        const myId = useAuthStore.getState().user?.id;
+        const myId = channelId ? getMyUserIdForOrigin(getChannelOrigin(channelId)) : undefined;
 
         set((state) => {
           // Optimistic: immediately remove self from the channel's voice users

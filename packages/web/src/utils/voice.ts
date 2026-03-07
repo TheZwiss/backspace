@@ -1,6 +1,5 @@
 import { useVoiceStore } from '../stores/voiceStore';
-import { useAuthStore } from '../stores/authStore';
-import { getChannelOrigin } from '../stores/serverStore';
+import { getChannelOrigin, getMyUserIdForOrigin } from '../stores/serverStore';
 import { wsSend } from '../hooks/useWebSocket';
 
 /**
@@ -13,8 +12,6 @@ export function joinVoiceChannel(channelId: string): void {
   const { currentVoiceChannelId, setCurrentVoiceChannel, addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
   if (currentVoiceChannelId === channelId) return;
 
-  const myId = useAuthStore.getState().user?.id;
-
   // Leave old instance if switching cross-origin
   if (currentVoiceChannelId) {
     const oldOrigin = getChannelOrigin(currentVoiceChannelId);
@@ -22,12 +19,14 @@ export function joinVoiceChannel(channelId: string): void {
     if (oldOrigin !== newOrigin) {
       wsSend({ type: 'voice_leave' }, oldOrigin);
     }
-    // Optimistic: immediately remove self from old channel
-    if (myId) removeVoiceUser(currentVoiceChannelId, myId);
+    // Optimistic: immediately remove self from old channel (using origin-aware ID)
+    const myOldId = getMyUserIdForOrigin(oldOrigin);
+    if (myOldId) removeVoiceUser(currentVoiceChannelId, myOldId);
   }
 
   setCurrentVoiceChannel(channelId);
   // voice_join is now sent by useLiveKit after successful LiveKit connection
-  // Optimistic: immediately show self in new channel
-  if (myId) addVoiceUser(channelId, myId);
+  // Optimistic: immediately show self in new channel (using origin-aware ID)
+  const myNewId = getMyUserIdForOrigin(getChannelOrigin(channelId));
+  if (myNewId) addVoiceUser(channelId, myNewId);
 }

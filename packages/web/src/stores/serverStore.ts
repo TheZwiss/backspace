@@ -144,7 +144,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
     try {
       // Resolve the correct API client based on the server's instance origin
       const server = get().servers.find(s => s.id === serverId);
-      const origin = server?._instanceOrigin ?? '';
+      if (!server) return; // Not populated yet — remote WS ready will trigger reload
+      const origin = server._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
 
       const detail = await client.servers.get(serverId);
@@ -233,7 +234,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
   },
 
   generateInvite: async (serverId: string) => {
-    const result = await api.servers.invite(serverId);
+    const server = get().servers.find(s => s.id === serverId);
+    const origin = server?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    const result = await client.servers.invite(serverId);
     return result.inviteCode;
   },
 
@@ -549,4 +553,24 @@ export function setApiForOriginResolver(resolver: (origin: string) => BackspaceA
 export function getApiForOrigin(origin: string): BackspaceApiClient {
   if (!origin || !_getApiForOrigin) return api;
   return _getApiForOrigin(origin);
+}
+
+// ─── User ID resolution (federation) ──────────────────────────────────────────
+// Same resolver pattern as getApiForOrigin — registered by instanceStore on
+// import to break the circular dependency chain.
+
+let _getUserIdForOrigin: ((origin: string) => string | undefined) | null = null;
+
+export function setUserIdForOriginResolver(resolver: (origin: string) => string | undefined): void {
+  _getUserIdForOrigin = resolver;
+}
+
+/**
+ * Returns the local user's ID on a given instance origin.
+ * '' or falsy = home instance (returns authStore user ID).
+ * 'https://...' = remote instance (returns the federated user ID on that instance).
+ */
+export function getMyUserIdForOrigin(origin: string): string | undefined {
+  if (!origin) return useAuthStore.getState().user?.id;
+  return _getUserIdForOrigin?.(origin);
 }

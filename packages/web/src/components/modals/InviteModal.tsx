@@ -12,9 +12,12 @@ export function InviteModal() {
   const closeModal = useUIStore((s) => s.closeModal);
   const generateInvite = useServerStore((s) => s.generateInvite);
   const currentServerId = useServerStore((s) => s.currentServerId);
+  const servers = useServerStore((s) => s.servers);
+  const currentServer = servers.find(s => s.id === currentServerId);
+  const instanceOrigin = currentServer?._instanceOrigin ?? '';
 
   const isOpen = activeModal === 'invite';
-  const inviteUrl = inviteCode ? `${window.location.origin}/join/${inviteCode}` : '';
+  const inviteUrl = inviteCode ? `${instanceOrigin || window.location.origin}/join/${inviteCode}` : '';
 
   useEffect(() => {
     if (isOpen && currentServerId) {

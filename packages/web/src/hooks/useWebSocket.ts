@@ -172,7 +172,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         if (currentVoiceChannelId && isLiveKitConnected) {
           const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
           if (voiceOrigin === origin) {
-            const myId = isHome ? event.user.id : useAuthStore.getState().user?.id;
+            const myId = event.user.id;
             if (myId) addVoiceUser(currentVoiceChannelId, myId);
             wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
             wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing }, origin);
