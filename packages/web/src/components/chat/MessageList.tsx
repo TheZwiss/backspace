@@ -46,7 +46,9 @@ export function MessageList({ channelId }: MessageListProps) {
   const ackChannel = useChatStore((s) => s.ackChannel);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const isNearBottomRef = useRef(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const prevMessagesLength = useRef(0);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -68,6 +70,7 @@ export function MessageList({ channelId }: MessageListProps) {
   useEffect(() => {
     prevMessagesLength.current = 0;
     setIsNearBottom(true);
+    isNearBottomRef.current = true;
   }, [channelId]);
 
   // Handle scrolling: initial load snaps to bottom, new messages smooth-scroll if near bottom
@@ -91,13 +94,31 @@ export function MessageList({ channelId }: MessageListProps) {
     }
   }, [messages.length, isNearBottom]);
 
+  // Auto-scroll when content height grows (embeds/images loading) while near bottom
+  const hasMessages = messages.length > 0;
+  useEffect(() => {
+    const content = contentRef.current;
+    const container = containerRef.current;
+    if (!content || !container) return;
+
+    const observer = new ResizeObserver(() => {
+      if (isNearBottomRef.current && containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [hasMessages, channelId]);
+
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;
     if (!container) return;
 
     // Check if near bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    setIsNearBottom(distanceFromBottom < 100);
+    const nearBottom = distanceFromBottom < 100;
+    setIsNearBottom(nearBottom);
+    isNearBottomRef.current = nearBottom;
 
     // Load more when scrolled to top
     if (container.scrollTop < 50 && hasMore && !isLoadingMore) {
@@ -136,7 +157,7 @@ export function MessageList({ channelId }: MessageListProps) {
 
       {!hasMore && <WelcomeHeader channelId={channelId} />}
 
-      <div className="pt-4 pb-6 md:pb-20">
+      <div ref={contentRef} className="pt-4 pb-6 md:pb-20">
         {messages.map((msg, i) => {
           const prevMsg = messages[i - 1];
           const showDate = shouldShowDateDivider(prevMsg, msg);

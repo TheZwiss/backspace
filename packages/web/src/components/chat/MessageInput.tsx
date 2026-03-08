@@ -329,7 +329,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             placeholder={`Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
             className="flex-1 py-[10px] px-1 bg-transparent text-txt-primary placeholder-txt-tertiary/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
-            disabled={isUploading}
+
           />
 
           {/* Send indicator */}
