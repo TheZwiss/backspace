@@ -87,9 +87,10 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
       setContent('');
       setFiles([]);
 
-      // Reset textarea height
+      // Reset textarea height and re-focus
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
+        textareaRef.current.focus();
       }
 
       // Clear typing timeout
