@@ -335,12 +335,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── Social events (all origins — federation) ──────────────────────────
 
     case 'friend_request_received': {
+      if (!isHome && event.request.user) normalizeUserAssets(event.request.user, origin);
       const { addIncomingRequest } = useSocialStore.getState();
       addIncomingRequest(event.request, origin);
       break;
     }
 
     case 'friend_request_accepted': {
+      if (!isHome) normalizeUserAssets(event.friend, origin);
       const { addFriendFromAccepted } = useSocialStore.getState();
       addFriendFromAccepted(event.friend, event.requestId, origin);
       break;

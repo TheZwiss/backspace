@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ExploreSpace, JoinRequest, SpaceWithChannelsAndMembers } from '@backspace/shared';
 import { api } from '../api/client';
+import { resolveAssetUrl } from '../utils/assetUrls';
 import { useInstanceStore } from './instanceStore';
 import { useSpaceStore } from './spaceStore';
 
@@ -89,6 +90,9 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
           const key = `${space.id}:${origin}`;
           if (seen.has(key)) continue;
           seen.add(key);
+          if (origin && space.icon) {
+            space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
+          }
           allSpaces.push({ ...space, _instanceOrigin: origin, joined: space.joined ?? false });
         }
       }

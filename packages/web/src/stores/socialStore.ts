@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Friend, FriendRequest, User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
+import { normalizeUserAssets } from '../utils/assetUrls';
 
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
@@ -66,6 +67,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           const key = `${friend.id}:${origin}`;
           if (seen.has(key)) continue;
           seen.add(key);
+          if (origin) normalizeUserAssets(friend, origin);
           allFriends.push({ ...friend, _instanceOrigin: origin });
         }
       }
@@ -99,6 +101,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           const key = `${request.id}:${origin}`;
           if (seen.has(key)) continue;
           seen.add(key);
+          if (origin && request.user) normalizeUserAssets(request.user, origin);
           allRequests.push({ ...request, _instanceOrigin: origin });
         }
       }
@@ -217,22 +220,30 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
 
-      const results = await Promise.allSettled([
-        api.social.search(query),
-        ...connectedInstances.map(inst => inst.api.social.search(query)),
-      ]);
+      // Pair each promise with its origin for asset normalization
+      const searches: { promise: Promise<User[]>; origin: string }[] = [
+        { promise: api.social.search(query), origin: '' },
+        ...connectedInstances.map(inst => ({
+          promise: inst.api.social.search(query),
+          origin: inst.origin,
+        })),
+      ];
+
+      const results = await Promise.allSettled(searches.map(s => s.promise));
 
       const allUsers: User[] = [];
       const seen = new Set<string>();
 
-      for (const result of results) {
-        if (result.status !== 'fulfilled') continue;
+      results.forEach((result, i) => {
+        if (result.status !== 'fulfilled') return;
+        const origin = searches[i]!.origin;
         for (const user of result.value) {
           if (seen.has(user.id)) continue;
           seen.add(user.id);
+          if (origin) normalizeUserAssets(user, origin);
           allUsers.push(user);
         }
-      }
+      });
 
       return allUsers;
     } catch (err) {
