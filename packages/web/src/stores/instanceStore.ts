@@ -41,6 +41,9 @@ function loadCachedTokens(): Record<string, CachedInstanceToken> {
 function saveCachedTokens(instances: ConnectedInstance[]): void {
   const cache: Record<string, CachedInstanceToken> = {};
   for (const inst of instances) {
+    // Skip tokenless placeholders — writing an empty token would cause
+    // autoConnectAll to find a truthy cached entry with an empty bearer token
+    if (!inst.token) continue;
     cache[inst.origin] = {
       token: inst.token,
       label: inst.label,
@@ -94,6 +97,7 @@ interface InstanceState {
   instances: ConnectedInstance[];
   isLoading: boolean;
   error: string | null;
+  _autoConnectDone: boolean;
 
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
   connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
@@ -101,6 +105,7 @@ interface InstanceState {
   removeInstance: (origin: string) => void;
   setInstanceStatus: (origin: string, status: ConnectedInstance['status'], error?: string) => void;
   reconnectInstance: (origin: string) => Promise<void>;
+  reauthenticateInstance: (origin: string, password: string) => Promise<void>;
   syncInstanceList: () => Promise<void>;
   autoConnectAll: () => Promise<void>;
   reset: () => void;
@@ -110,6 +115,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   instances: [],
   isLoading: false,
   error: null,
+  _autoConnectDone: false,
 
   probeInstance: async (url: string) => {
     const origin = normalizeOrigin(url);
@@ -293,6 +299,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const inst = get().instances.find(i => i.origin === origin);
     if (!inst || inst.status === 'connected' || inst.status === 'connecting') return;
 
+    // Tokenless placeholders can't reconnect — they need full re-authentication
+    if (!inst.token) return;
+
     // Set to connecting
     set((state) => ({
       instances: state.instances.map(i =>
@@ -332,7 +341,36 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
   },
 
+  reauthenticateInstance: async (origin: string, password: string) => {
+    const inst = get().instances.find(i => i.origin === origin);
+    if (!inst) return;
+
+    // Remove the stale placeholder
+    set((state) => ({
+      instances: state.instances.filter(i => i.origin !== origin),
+    }));
+
+    // Remove its spaces from the space store
+    useSpaceStore.getState().removeInstanceSpaces(origin);
+
+    // Disconnect any lingering WS
+    disconnectInstance(origin);
+
+    // Re-connect through the standard flow (handles register/login)
+    const currentUser = useAuthStore.getState().user;
+    await get().connectToRemote(
+      origin,
+      password,
+      currentUser?.displayName || undefined,
+    );
+  },
+
   syncInstanceList: async () => {
+    // Prevent premature sync before autoConnectAll has populated all server-known
+    // instances — otherwise a user action (add/remove) would overwrite the server
+    // record with only the currently-loaded subset, permanently erasing the rest
+    if (!get()._autoConnectDone) return;
+
     const { instances } = get();
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
@@ -362,120 +400,153 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   autoConnectAll: async () => {
     const currentUser = useAuthStore.getState().user;
-    if (!currentUser || currentUser.replicatedInstances.length === 0) return;
+    if (!currentUser || currentUser.replicatedInstances.length === 0) {
+      set({ _autoConnectDone: true });
+      return;
+    }
 
     const cached = loadCachedTokens();
-    const toConnect = currentUser.replicatedInstances.filter(ri => {
+
+    // Split server-known instances into two groups:
+    // - withToken: have a cached token → attempt reconnection
+    // - withoutToken: no cached token → add as error placeholder
+    const withToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0]; entry: CachedInstanceToken }> = [];
+    const withoutToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0] }> = [];
+
+    for (const ri of currentUser.replicatedInstances) {
       const origin = ri.origin || `https://${ri.domain}`;
-      // Only attempt if we have a cached token and aren't already connected
-      return cached[origin] && !get().instances.some(i => i.origin === origin);
-    });
+      if (get().instances.some(i => i.origin === origin)) continue; // already loaded
+      const entry = cached[origin];
+      if (entry) {
+        withToken.push({ origin, ri, entry });
+      } else {
+        withoutToken.push({ origin, ri });
+      }
+    }
 
-    if (toConnect.length === 0) return;
-
-    // Connect all in parallel, individual failures are non-blocking
-    const results = await Promise.allSettled(
-      toConnect.map(async (ri) => {
-        const origin = ri.origin || `https://${ri.domain}`;
-        const cachedEntry = cached[origin]!; // Guaranteed by filter above
-
-        // Create client with cached token
-        const client = createApiClient(origin, () => cachedEntry.token);
-
-        // Set as connecting
-        const connectingInstance: ConnectedInstance = {
+    // Immediately add tokenless placeholders so they're visible in Zustand
+    // (and therefore won't be erased by syncInstanceList)
+    if (withoutToken.length > 0) {
+      set((state) => {
+        const placeholders: ConnectedInstance[] = withoutToken.map(({ origin, ri }) => ({
           origin,
-          label: cachedEntry.label || new URL(origin).host,
-          token: cachedEntry.token,
-          user: currentUser, // Placeholder until we verify
-          username: cachedEntry.username || ri.username,
-          status: 'connecting',
-          api: client,
-        };
-
-        set((state) => ({
-          instances: [...state.instances.filter(i => i.origin !== origin), connectingInstance],
+          label: new URL(origin).host,
+          token: '',
+          user: currentUser, // placeholder
+          username: ri.username,
+          status: 'error' as const,
+          error: 'Session expired — re-authenticate to reconnect',
+          api: createApiClient(origin, () => null),
         }));
+        return { instances: [...state.instances, ...placeholders] };
+      });
+    }
 
-        try {
-          // Verify the token is still valid
-          const user = await client.users.me();
+    // Connect instances with cached tokens in parallel
+    if (withToken.length > 0) {
+      const results = await Promise.allSettled(
+        withToken.map(async ({ origin, ri, entry: cachedEntry }) => {
+          // Create client with cached token
+          const client = createApiClient(origin, () => cachedEntry.token);
 
-          // Fetch instance info for fresh label
-          let label = cachedEntry.label || new URL(origin).host;
-          try {
-            const info = await client.instance.info();
-            label = info.name;
-          } catch {
-            // Non-critical — keep cached label
-          }
-
-          // Backfill homeUserId if missing (existing federated users before this field existed)
-          if (user.homeInstance && !user.homeUserId) {
-            const homeUser = useAuthStore.getState().user;
-            if (homeUser) {
-              client.users.update({ homeUserId: homeUser.id }).catch(() => {});
-            }
-          }
-
-          // Backfill cached username if stale after server-side migration
-          // (e.g. "test" was renamed to "test@nova.ddns.net")
-          if (user.username !== cachedEntry.username) {
-            cachedEntry.username = user.username;
-          }
-
-          const connectedInstance: ConnectedInstance = {
+          // Set as connecting
+          const connectingInstance: ConnectedInstance = {
             origin,
-            label,
+            label: cachedEntry.label || new URL(origin).host,
             token: cachedEntry.token,
-            user,
-            username: user.username,
-            status: 'connected',
+            user: currentUser, // Placeholder until we verify
+            username: cachedEntry.username || ri.username,
+            status: 'connecting',
             api: client,
           };
 
           set((state) => ({
-            instances: state.instances.map(i => i.origin === origin ? connectedInstance : i),
+            instances: [...state.instances.filter(i => i.origin !== origin), connectingInstance],
           }));
 
-          // Open WebSocket connection now that we've verified the token
-          connectInstance(origin, cachedEntry.token);
-        } catch (err) {
-          if (isNetworkError(err)) {
-            // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid
+          try {
+            // Verify the token is still valid
+            const user = await client.users.me();
+
+            // Fetch instance info for fresh label
+            let label = cachedEntry.label || new URL(origin).host;
+            try {
+              const info = await client.instance.info();
+              label = info.name;
+            } catch {
+              // Non-critical — keep cached label
+            }
+
+            // Backfill homeUserId if missing (existing federated users before this field existed)
+            if (user.homeInstance && !user.homeUserId) {
+              const homeUser = useAuthStore.getState().user;
+              if (homeUser) {
+                client.users.update({ homeUserId: homeUser.id }).catch(() => {});
+              }
+            }
+
+            // Backfill cached username if stale after server-side migration
+            // (e.g. "test" was renamed to "test@nova.ddns.net")
+            if (user.username !== cachedEntry.username) {
+              cachedEntry.username = user.username;
+            }
+
+            const connectedInstance: ConnectedInstance = {
+              origin,
+              label,
+              token: cachedEntry.token,
+              user,
+              username: user.username,
+              status: 'connected',
+              api: client,
+            };
+
             set((state) => ({
-              instances: state.instances.map(i =>
-                i.origin === origin
-                  ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
-                  : i
-              ),
+              instances: state.instances.map(i => i.origin === origin ? connectedInstance : i),
             }));
-            // Start WebSocket — its built-in exponential backoff retry will auto-recover
-            // when the network path becomes available (e.g. user switches networks)
+
+            // Open WebSocket connection now that we've verified the token
             connectInstance(origin, cachedEntry.token);
-          } else {
-            // Auth failure (401, invalid token, etc.)
-            set((state) => ({
-              instances: state.instances.map(i =>
-                i.origin === origin
-                  ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
-                  : i
-              ),
-            }));
+          } catch (err) {
+            if (isNetworkError(err)) {
+              // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid
+              set((state) => ({
+                instances: state.instances.map(i =>
+                  i.origin === origin
+                    ? { ...i, status: 'disconnected' as const, error: 'Instance unreachable — retrying in background' }
+                    : i
+                ),
+              }));
+              // Start WebSocket — its built-in exponential backoff retry will auto-recover
+              // when the network path becomes available (e.g. user switches networks)
+              connectInstance(origin, cachedEntry.token);
+            } else {
+              // Auth failure (401, invalid token, etc.)
+              set((state) => ({
+                instances: state.instances.map(i =>
+                  i.origin === origin
+                    ? { ...i, status: 'error' as const, error: 'Token expired — re-authenticate to reconnect' }
+                    : i
+                ),
+              }));
+            }
           }
-        }
-      })
-    );
+        })
+      );
+
+      // Log any failures for debugging
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.warn(`autoConnectAll: ${failures.length}/${withToken.length} instances failed to connect`);
+      }
+    }
 
     // Save final state to localStorage — persist ALL instances regardless of status
     // so disconnected instances survive page reload and can auto-reconnect later
     saveCachedTokens(get().instances);
 
-    // Log any failures for debugging
-    const failures = results.filter(r => r.status === 'rejected');
-    if (failures.length > 0) {
-      console.warn(`autoConnectAll: ${failures.length}/${toConnect.length} instances failed to connect`);
-    }
+    // Mark auto-connect complete so syncInstanceList is now safe to run
+    set({ _autoConnectDone: true });
   },
 
   reset: () => {
@@ -488,7 +559,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Tear down all remote WebSocket connections
     disconnectAllRemote();
 
-    set({ instances: [], isLoading: false, error: null });
+    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false });
     localStorage.removeItem(STORAGE_KEY);
   },
 }));

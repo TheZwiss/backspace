@@ -262,10 +262,122 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export function ConnectedInstances() {
-  const instances = useInstanceStore((s) => s.instances);
+function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').ConnectedInstance }) {
   const removeInstance = useInstanceStore((s) => s.removeInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
+  const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
+
+  const [showReauth, setShowReauth] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthLoading, setReauthLoading] = useState(false);
+  const [reauthError, setReauthError] = useState('');
+
+  const isTokenless = !inst.token;
+
+  const handleReauth = async () => {
+    if (!reauthPassword) return;
+    setReauthError('');
+    setReauthLoading(true);
+    try {
+      await reauthenticateInstance(inst.origin, reauthPassword);
+      setShowReauth(false);
+      setReauthPassword('');
+    } catch (err) {
+      setReauthError((err as Error).message);
+    } finally {
+      setReauthLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-3 bg-surface-channel rounded-lg space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <StatusDot status={inst.status} />
+          <div className="min-w-0">
+            <div className="text-sm text-txt-primary font-medium truncate">
+              {inst.label}
+            </div>
+            <div className="text-xs text-txt-tertiary truncate">
+              {new URL(inst.origin).host}
+              {inst.username && (
+                <span className="ml-1 text-txt-quaternary">as {inst.username}</span>
+              )}
+            </div>
+            {(inst.status === 'disconnected' || inst.status === 'error') && inst.error && (
+              <div className="text-xs text-accent-amber mt-0.5">{inst.error}</div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0 ml-2">
+          {(inst.status === 'disconnected' || inst.status === 'error') && (
+            isTokenless ? (
+              <button
+                onClick={() => setShowReauth(!showReauth)}
+                className="px-2 py-1 text-xs text-accent-primary hover:bg-accent-primary/10 rounded transition-colors"
+              >
+                Re-authenticate
+              </button>
+            ) : (
+              <button
+                onClick={() => reconnectInstance(inst.origin)}
+                className="px-2 py-1 text-xs text-accent-primary hover:bg-accent-primary/10 rounded transition-colors"
+              >
+                Reconnect
+              </button>
+            )
+          )}
+          <button
+            onClick={() => removeInstance(inst.origin)}
+            className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+            title="Disconnect"
+          >
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      {/* Inline re-authentication prompt */}
+      {showReauth && (
+        <div className="space-y-2 pt-1">
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={reauthPassword}
+              onChange={(e) => setReauthPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !reauthLoading && reauthPassword && handleReauth()}
+              placeholder="Your account password"
+              className="flex-1 px-3 py-1.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+              disabled={reauthLoading}
+              autoFocus
+            />
+            <button
+              onClick={handleReauth}
+              disabled={reauthLoading || !reauthPassword}
+              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+            >
+              {reauthLoading ? 'Connecting...' : 'Connect'}
+            </button>
+            <button
+              onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
+              className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+          {reauthError && (
+            <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">
+              {reauthError}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ConnectedInstances() {
+  const instances = useInstanceStore((s) => s.instances);
   const [showAddForm, setShowAddForm] = useState(false);
 
   return (
@@ -295,43 +407,7 @@ export function ConnectedInstances() {
 
         {/* Remote instances */}
         {instances.map((inst) => (
-          <div key={inst.origin} className="flex items-center justify-between p-3 bg-surface-channel rounded-lg">
-            <div className="flex items-center gap-2 min-w-0">
-              <StatusDot status={inst.status} />
-              <div className="min-w-0">
-                <div className="text-sm text-txt-primary font-medium truncate">
-                  {inst.label}
-                </div>
-                <div className="text-xs text-txt-tertiary truncate">
-                  {new URL(inst.origin).host}
-                  {inst.username && (
-                    <span className="ml-1 text-txt-quaternary">as {inst.username}</span>
-                  )}
-                </div>
-                {inst.status === 'disconnected' && inst.error && (
-                  <div className="text-xs text-accent-amber mt-0.5">{inst.error}</div>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0 ml-2">
-              {(inst.status === 'disconnected' || inst.status === 'error') && (
-                <button
-                  onClick={() => reconnectInstance(inst.origin)}
-                  className="px-2 py-1 text-xs text-accent-primary hover:bg-accent-primary/10 rounded transition-colors"
-                  title="Reconnect"
-                >
-                  Reconnect
-                </button>
-              )}
-              <button
-                onClick={() => removeInstance(inst.origin)}
-                className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
-                title="Disconnect"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
+          <InstanceRow key={inst.origin} inst={inst} />
         ))}
 
         {/* Add instance button / flow */}

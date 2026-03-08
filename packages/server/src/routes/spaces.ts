@@ -54,7 +54,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateSpaceRequest }>('/api/spaces', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { name, icon } = request.body;
+    const { name, icon, visibility, description } = request.body;
 
     if (!name || typeof name !== 'string') {
       return reply.code(400).send({ error: 'Space name is required', statusCode: 400 });
@@ -64,6 +64,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (trimmedName.length < 1 || trimmedName.length > 100) {
       return reply.code(400).send({ error: 'Space name must be between 1 and 100 characters', statusCode: 400 });
     }
+
+    // Validate visibility
+    const validVisibilities = ['public', 'request', 'private'];
+    const safeVisibility = visibility && validVisibilities.includes(visibility) ? visibility : 'private';
+
+    // Validate description
+    const safeDescription = description ? description.trim().slice(0, 200) || null : null;
 
     const db = getDb();
     const spaceId = generateSnowflake();
@@ -79,6 +86,8 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         icon: icon ?? null,
         ownerId: request.userId,
         inviteCode,
+        visibility: safeVisibility,
+        description: safeDescription,
         createdAt: now,
       }).run();
 
@@ -113,6 +122,9 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (!server) {
       return reply.code(500).send({ error: 'Failed to create space', statusCode: 500 });
     }
+
+    // Register the creator in connectionManager so they receive WS broadcasts for this space
+    connectionManager.addUserSpace(request.userId, spaceId);
 
     return reply.code(201).send(rowToSpace(server));
   });
@@ -216,15 +228,24 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       })
       .filter((m): m is MemberWithUser => m !== null);
 
-    // Filter channels by VIEW_CHANNEL permission before returning
-    const visibleChannels = channels.filter(ch => {
+    // Compute space-level permissions for the requesting user
+    const spacePerms = computePermissions(request.userId, id);
+
+    // Filter channels by VIEW_CHANNEL permission and attach per-channel myPermissions
+    const visibleChannels: (Channel & { myPermissions: string })[] = [];
+    for (const ch of channels) {
       const perms = computePermissions(request.userId, id, ch.id);
-      return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
-    });
+      if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        visibleChannels.push({
+          ...rowToChannel(ch),
+          myPermissions: permissionsToString(perms),
+        });
+      }
+    }
 
     const result: SpaceWithChannelsAndMembers = {
       ...rowToSpace(server),
-      channels: visibleChannels.map(rowToChannel),
+      channels: visibleChannels,
       members,
       roles: roles.map(r => ({
         id: r.id,
@@ -234,6 +255,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         position: r.position ?? 0,
         createdAt: r.createdAt,
       })),
+      myPermissions: permissionsToString(spacePerms),
     };
 
     return reply.code(200).send(result);

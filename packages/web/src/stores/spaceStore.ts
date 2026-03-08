@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Space, Channel, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest } from '@backspace/shared';
+import type { Space, Channel, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
@@ -49,7 +49,7 @@ interface SpaceState {
   loadSpaces: () => Promise<void>;
   loadSpaceDetail: (spaceId: string) => Promise<void>;
   loadDmChannels: () => Promise<void>;
-  createSpace: (name: string, icon?: string) => Promise<Space>;
+  createSpace: (data: CreateSpaceRequest) => Promise<Space>;
   updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
   deleteSpace: (spaceId: string) => Promise<void>;
   joinSpace: (spaceId: string, inviteCode: string) => Promise<void>;
@@ -156,11 +156,26 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           normalizeUserAssets(member.user, origin);
         }
       }
+
+      // Populate permission maps from REST response
+      const spacePermissions = new Map(get().spacePermissions);
+      const channelPermissions = new Map(get().channelPermissions);
+      if (detail.myPermissions) {
+        spacePermissions.set(spaceId, detail.myPermissions);
+      }
+      for (const ch of detail.channels) {
+        if (ch.myPermissions) {
+          channelPermissions.set(ch.id, ch.myPermissions);
+        }
+      }
+
       set({
         currentSpaceId: spaceId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         members: detail.members,
         roles: detail.roles.sort((a, b) => b.position - a.position),
+        spacePermissions,
+        channelPermissions,
       });
     } catch {
       // Handle error silently
@@ -176,8 +191,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }
   },
 
-  createSpace: async (name: string, icon?: string) => {
-    const space =await api.spaces.create({ name, icon });
+  createSpace: async (data: CreateSpaceRequest) => {
+    const space = await api.spaces.create(data);
     const tagged: TaggedSpace = { ...space, _instanceOrigin: '' };
     set((state) => ({ spaces: [...state.spaces, tagged] }));
     return space;

@@ -300,6 +300,8 @@ export interface AuthResponse {
 export interface CreateSpaceRequest {
   name: string;
   icon?: string;
+  visibility?: SpaceVisibility;
+  description?: string;
 }
 
 export interface CreateChannelRequest {
