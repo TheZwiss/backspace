@@ -1,0 +1,274 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { ImageCropModal } from '../../ui/ImageCropModal';
+import { Avatar } from '../../ui/Avatar';
+import { useSpaceStore } from '../../../stores/spaceStore';
+import { useAuthStore } from '../../../stores/authStore';
+import { useUIStore } from '../../../stores/uiStore';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../../api/client';
+import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
+
+interface OverviewPanelProps {
+  spaceId: string;
+}
+
+export function OverviewPanel({ spaceId }: OverviewPanelProps) {
+  const spaces = useSpaceStore((s) => s.spaces);
+  const updateSpace = useSpaceStore((s) => s.updateSpace);
+  const deleteSpace = useSpaceStore((s) => s.deleteSpace);
+  const currentUser = useAuthStore((s) => s.user);
+  const closeModal = useUIStore((s) => s.closeModal);
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const navigate = useNavigate();
+
+  const space = spaces.find((s) => s.id === spaceId);
+  const isOwner = space?.ownerId === currentUser?.id;
+  const myPerms = spacePermissions.get(spaceId);
+  const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
+
+  const [spaceName, setSpaceName] = useState(space?.name ?? '');
+  // null = no change, '' = remove icon, 'filename.png' = new icon uploaded
+  const [iconFilename, setIconFilename] = useState<string | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [uploadingIcon, setUploadingIcon] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (space) {
+      setSpaceName(space.name);
+      // Reset icon state when space data changes externally
+      setIconFilename(null);
+      if (iconPreview) {
+        URL.revokeObjectURL(iconPreview);
+        setIconPreview(null);
+      }
+    }
+  }, [space?.name, space?.icon]);
+
+  if (!space) return null;
+
+  const hasNameChange = spaceName.trim() !== space.name;
+  const hasIconChange = iconFilename !== null;
+  const hasChanges = hasNameChange || hasIconChange;
+
+  const currentIconUrl = space.icon ? api.uploads.url(space.icon) : null;
+
+  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result as string);
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCropComplete = async (blob: Blob) => {
+    if (iconPreview) URL.revokeObjectURL(iconPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setIconPreview(previewUrl);
+    setCropSrc(null);
+
+    const file = new File([blob], 'icon.png', { type: 'image/png' });
+    setUploadingIcon(true);
+    try {
+      const attachment = await api.uploads.upload(file);
+      setIconFilename(attachment.filename);
+    } catch {
+      setSaveError('Failed to upload icon');
+      setIconPreview(null);
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setUploadingIcon(false);
+    }
+  };
+
+  const handleRemoveIcon = () => {
+    if (iconPreview) URL.revokeObjectURL(iconPreview);
+    setIconPreview(null);
+    setIconFilename(''); // '' signals removal
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    try {
+      const updates: { name?: string; icon?: string } = {};
+      if (hasNameChange) updates.name = spaceName.trim();
+      if (hasIconChange) {
+        // Empty string signals icon removal to the backend (sets to null)
+        updates.icon = iconFilename === '' ? '' : iconFilename!;
+      }
+      await updateSpace(spaceId, updates);
+      setIconFilename(null);
+      if (iconPreview) {
+        URL.revokeObjectURL(iconPreview);
+        setIconPreview(null);
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    setSpaceName(space.name);
+    setIconFilename(null);
+    if (iconPreview) {
+      URL.revokeObjectURL(iconPreview);
+      setIconPreview(null);
+    }
+    setSaveError('');
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    try {
+      await deleteSpace(spaceId);
+      closeModal();
+      navigate('/channels/@me');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to delete space');
+    }
+  };
+
+  // Determine what icon to show: preview of pending upload, or current space icon
+  const displayIconSrc = iconPreview ?? (iconFilename === '' ? null : currentIconUrl);
+  const displayIconName = space.name;
+
+  return (
+    <>
+      <div className="space-y-4">
+        {/* Space Icon */}
+        <div>
+          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+            Space Icon
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => canManageSpace && fileInputRef.current?.click()}
+              disabled={!canManageSpace || uploadingIcon}
+              className={`relative w-16 h-16 rounded-full bg-surface-input border-2 border-dashed border-border-subtle flex items-center justify-center overflow-hidden group ${
+                canManageSpace ? 'hover:border-accent-primary cursor-pointer' : 'cursor-default'
+              } transition-colors`}
+            >
+              {displayIconSrc ? (
+                <>
+                  <img src={displayIconSrc} alt="Space icon" className="w-full h-full object-cover" />
+                  {canManageSpace && (
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Avatar name={displayIconName} size={64} />
+              )}
+              {uploadingIcon && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                </div>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleIconSelect}
+              className="hidden"
+            />
+            {canManageSpace && (displayIconSrc || space.icon) && iconFilename !== '' && (
+              <button
+                type="button"
+                onClick={handleRemoveIcon}
+                className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Space Name */}
+        <div>
+          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+            Space Name
+          </label>
+          <input
+            type="text"
+            value={spaceName}
+            onChange={(e) => setSpaceName(e.target.value)}
+            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+            disabled={!canManageSpace}
+          />
+        </div>
+
+        {/* Save / Discard */}
+        {saveError && (
+          <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
+        )}
+        {saveSuccess && (
+          <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
+        )}
+        {canManageSpace && hasChanges && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || uploadingIcon || !spaceName.trim()}
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={handleDiscard}
+              className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        )}
+
+        {/* Danger Zone */}
+        {isOwner && (
+          <div className="pt-4 border-t border-border-soft">
+            <h3 className="text-sm font-bold text-txt-danger mb-2">Danger Zone</h3>
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
+            >
+              {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <ImageCropModal
+        isOpen={cropSrc !== null}
+        onClose={() => setCropSrc(null)}
+        imageSrc={cropSrc ?? ''}
+        onCropComplete={handleCropComplete}
+        title="Crop Space Icon"
+        cropShape="round"
+        aspectRatio={1}
+      />
+    </>
+  );
+}

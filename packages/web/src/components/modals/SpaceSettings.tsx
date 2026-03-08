@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
-import { useNavigate } from 'react-router-dom';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
+import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
+import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
 import type { InstanceStreamingLimits, SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080] as const;
@@ -464,157 +465,47 @@ export function SpaceSettingsModal() {
   const closeModal = useUIStore((s) => s.closeModal);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const spaces = useSpaceStore((s) => s.spaces);
-  const members = useSpaceStore((s) => s.members);
-  const roles = useSpaceStore((s) => s.roles);
-  const updateSpace = useSpaceStore((s) => s.updateSpace);
-  const deleteSpace = useSpaceStore((s) => s.deleteSpace);
-  const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
-  const currentUser = useAuthStore((s) => s.user);
   const isAdmin = useSettingsStore((s) => s.isAdmin);
-  const navigate = useNavigate();
-
-  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'streaming'>('overview');
-  const [spaceName, setSpaceName] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
-
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+
+  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles' | 'streaming'>('overview');
 
   const isOpen = activeModal === 'spaceSettings';
   const space = spaces.find(s => s.id === currentSpaceId);
-  const isOwnerUser = space?.ownerId === currentUser?.id;
   const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
   const canManageSpace = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_SPACE);
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
 
-  // Assignable roles: exclude @everyone (where role.id === spaceId)
-  const assignableRoles = roles.filter(r => r.id !== currentSpaceId);
-
-  React.useEffect(() => {
-    if (space) {
-      setSpaceName(space.name);
-    }
-  }, [space]);
-
   if (!space || !currentSpaceId) return null;
 
-  const handleSave = async () => {
-    setError('');
-    setIsLoading(true);
-    try {
-      await updateSpace(currentSpaceId, { name: spaceName.trim() });
-      setIsLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update space');
-      setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
-    try {
-      await deleteSpace(currentSpaceId);
-      closeModal();
-      navigate('/channels/@me');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete space');
-    }
-  };
-
-  const getMemberRoleIds = (member: typeof members[number]): Set<string> => {
-    // Check for pending (unsaved) changes first
-    const pending = pendingRoleChanges.get(member.userId);
-    if (pending) return pending;
-    return new Set(member.roles?.map(r => r.id) ?? []);
-  };
-
-  const handleRoleToggle = (userId: string, roleId: string, currentRoleIds: Set<string>) => {
-    const updated = new Set(currentRoleIds);
-    if (updated.has(roleId)) {
-      updated.delete(roleId);
-    } else {
-      updated.add(roleId);
-    }
-    setPendingRoleChanges(prev => new Map(prev).set(userId, updated));
-  };
-
-  const handleSaveRoles = async (userId: string) => {
-    const roleIds = pendingRoleChanges.get(userId);
-    if (!roleIds) return;
-
-    try {
-      await api.spaces.updateMember(currentSpaceId, userId, { roleIds: Array.from(roleIds) });
-      setPendingRoleChanges(prev => {
-        const next = new Map(prev);
-        next.delete(userId);
-        return next;
-      });
-      await loadSpaceDetail(currentSpaceId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update roles');
-    }
-  };
-
-  const handleCancelRoleChange = (userId: string) => {
-    setPendingRoleChanges(prev => {
-      const next = new Map(prev);
-      next.delete(userId);
-      return next;
-    });
-  };
-
-  const handleKick = async (userId: string) => {
-    try {
-      await api.spaces.removeMember(currentSpaceId, userId);
-      await loadSpaceDetail(currentSpaceId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to kick member');
-    }
-  };
+  const tabClass = (t: typeof tab) =>
+    `w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+      tab === t ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+    }`;
 
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-xl">
       <div className="flex gap-4">
         {/* Tabs */}
         <div className="w-32 flex-shrink-0 space-y-1">
-          <button
-            onClick={() => setTab('overview')}
-            className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-              tab === 'overview' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-            }`}
-          >
+          <button onClick={() => setTab('overview')} className={tabClass('overview')}>
             Overview
           </button>
           {canManageSpace && (
-            <button
-              onClick={() => setTab('discovery')}
-              className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                tab === 'discovery' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-              }`}
-            >
+            <button onClick={() => setTab('discovery')} className={tabClass('discovery')}>
               Discovery
             </button>
           )}
-          <button
-            onClick={() => setTab('members')}
-            className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-              tab === 'members' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-            }`}
-          >
+          <button onClick={() => setTab('members')} className={tabClass('members')}>
             Members
           </button>
+          {canManageRoles && (
+            <button onClick={() => setTab('roles')} className={tabClass('roles')}>
+              Roles
+            </button>
+          )}
           {isAdmin && (
-            <button
-              onClick={() => setTab('streaming')}
-              className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                tab === 'streaming' ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-              }`}
-            >
+            <button onClick={() => setTab('streaming')} className={tabClass('streaming')}>
               Streaming
             </button>
           )}
@@ -622,154 +513,11 @@ export function SpaceSettingsModal() {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          {error && (
-            <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
-          )}
-
-          {tab === 'overview' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  Space Name
-                </label>
-                <input
-                  type="text"
-                  value={spaceName}
-                  onChange={(e) => setSpaceName(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
-                  disabled={!canManageSpace}
-                />
-              </div>
-
-              {canManageSpace && (
-                <>
-                  <button
-                    onClick={handleSave}
-                    disabled={isLoading}
-                    className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-                  >
-                    {isLoading ? 'Saving...' : 'Save Changes'}
-                  </button>
-
-                  <div className="pt-4 border-t border-border-soft">
-                    <h3 className="text-sm font-bold text-txt-danger mb-2">Danger Zone</h3>
-                    <button
-                      onClick={handleDelete}
-                      className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
-                    >
-                      {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {tab === 'discovery' && canManageSpace && currentSpaceId && (
-            <DiscoveryPanel spaceId={currentSpaceId} />
-          )}
-
-          {tab === 'members' && (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
-              {members.map((member) => {
-                const displayName = member.user.displayName ?? member.user.username;
-                const isOwner = member.userId === space.ownerId;
-                const memberRoleIds = getMemberRoleIds(member);
-                const hasPendingChanges = pendingRoleChanges.has(member.userId);
-
-                return (
-                  <div key={member.userId} className="p-2 rounded hover:bg-interactive-hover">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          src={member.user.avatar}
-                          name={displayName}
-                          size={32}
-                          status={member.user.status}
-                          user={member.user}
-                        />
-                        <div>
-                          <div className="text-sm font-medium">{displayName}</div>
-                          <div className="flex items-center gap-1 flex-wrap">
-                            {isOwner && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
-                                Owner
-                              </span>
-                            )}
-                            {member.roles?.filter(r => r.id !== currentSpaceId).map(r => (
-                              <span
-                                key={r.id}
-                                className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                                style={{ backgroundColor: `${r.color}20`, color: r.color }}
-                              >
-                                {r.name}
-                              </span>
-                            ))}
-                            {!isOwner && (!member.roles || member.roles.filter(r => r.id !== currentSpaceId).length === 0) && (
-                              <span className="text-[10px] text-txt-tertiary">No roles</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {canManageRoles && member.userId !== currentUser?.id && !isOwner && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleKick(member.userId)}
-                            className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
-                          >
-                            Kick
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Role checkboxes — shown for non-self, non-owner members when user can manage roles */}
-                    {canManageRoles && member.userId !== currentUser?.id && !isOwner && assignableRoles.length > 0 && (
-                      <div className="mt-2 ml-10 space-y-1">
-                        {assignableRoles.map(role => (
-                          <label key={role.id} className="flex items-center gap-2 cursor-pointer group/role">
-                            <input
-                              type="checkbox"
-                              checked={memberRoleIds.has(role.id)}
-                              onChange={() => handleRoleToggle(member.userId, role.id, memberRoleIds)}
-                              className="w-3.5 h-3.5 rounded border-txt-tertiary accent-accent-primary"
-                            />
-                            <span
-                              className="text-xs font-medium"
-                              style={{ color: role.color !== '#9ca3af' ? role.color : undefined }}
-                            >
-                              {role.name}
-                            </span>
-                          </label>
-                        ))}
-                        {hasPendingChanges && (
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <button
-                              onClick={() => handleSaveRoles(member.userId)}
-                              className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => handleCancelRoleChange(member.userId)}
-                              className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {tab === 'streaming' && isAdmin && (
-            <StreamingLimitsPanel />
-          )}
+          {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
+          {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
+          {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
+          {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
+          {tab === 'streaming' && isAdmin && <StreamingLimitsPanel />}
         </div>
       </div>
     </Modal>

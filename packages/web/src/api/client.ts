@@ -30,6 +30,7 @@ import type {
   VerifyPasswordResponse,
   ExploreSpace,
   JoinRequest,
+  Role,
 } from '@backspace/shared';
 
 export class BackspaceApiClient {
@@ -115,6 +116,12 @@ export class BackspaceApiClient {
 
   readonly instance: {
     info: () => Promise<InstanceInfoResponse>;
+  };
+
+  readonly roles: {
+    create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) => Promise<Role>;
+    update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) => Promise<Role>;
+    delete: (spaceId: string, roleId: string) => Promise<{ success: boolean }>;
   };
 
   readonly explore: {
@@ -297,6 +304,15 @@ export class BackspaceApiClient {
 
     this.instance = {
       info: () => request<InstanceInfoResponse>('GET', '/instance/info', undefined, false),
+    };
+
+    this.roles = {
+      create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) =>
+        request<Role>('POST', `/spaces/${spaceId}/roles`, data),
+      update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) =>
+        request<Role>('PATCH', `/spaces/${spaceId}/roles/${roleId}`, data),
+      delete: (spaceId: string, roleId: string) =>
+        request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/roles/${roleId}`),
     };
 
     this.explore = {

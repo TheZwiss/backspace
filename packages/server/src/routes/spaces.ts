@@ -243,6 +243,8 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    const canManageRoles = (spacePerms & PermissionBits.MANAGE_ROLES) !== 0n;
+
     const result: SpaceWithChannelsAndMembers = {
       ...rowToSpace(server),
       channels: visibleChannels,
@@ -253,6 +255,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         name: r.name,
         color: r.color ?? '#b9bbbe',
         position: r.position ?? 0,
+        permissions: canManageRoles ? (r.permissions ?? '0') : undefined,
         createdAt: r.createdAt,
       })),
       myPermissions: permissionsToString(spacePerms),
@@ -289,7 +292,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (icon !== undefined) {
-      updates.icon = icon;
+      updates.icon = icon || null;
     }
 
     if (visibility !== undefined) {
@@ -764,15 +767,26 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   // Role Management
   
   // POST /api/spaces/:id/roles - Create a new role
-  app.post<{ Params: { id: string }; Body: { name: string; color?: string } }>('/api/spaces/:id/roles', {
+  app.post<{ Params: { id: string }; Body: { name: string; color?: string; permissions?: string } }>('/api/spaces/:id/roles', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, color } = request.body;
+    const { name, color, permissions } = request.body;
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
       return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+    }
+
+    // Validate permissions string is a valid bigint if provided
+    let permStr: string | undefined;
+    if (permissions !== undefined) {
+      try {
+        BigInt(permissions);
+        permStr = permissions;
+      } catch {
+        return reply.code(400).send({ error: 'Invalid permissions value', statusCode: 400 });
+      }
     }
 
     const roleId = generateSnowflake();
@@ -782,27 +796,60 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       name: name || 'new role',
       color: color || '#b9bbbe',
       position: 0,
+      permissions: permStr ?? null,
       createdAt: Date.now(),
     }).run();
 
     const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+
+    // Broadcast updated state to all space members
+    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
+    for (const m of memberRows) {
+      connectionManager.pushReadyPayload(m.userId);
+    }
+
     return reply.code(201).send(role);
   });
 
   // PATCH /api/spaces/:id/roles/:roleId - Update a role
-  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number } }>('/api/spaces/:id/roles/:roleId', {
+  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number; permissions?: string } }>('/api/spaces/:id/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, roleId } = request.params;
-    const updates = request.body;
+    const { name, color, position, permissions } = request.body;
     const db = getDb();
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
       return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
+    const updates: Partial<typeof schema.roles.$inferInsert> = {};
+    if (name !== undefined) updates.name = name;
+    if (color !== undefined) updates.color = color;
+    if (position !== undefined) updates.position = position;
+
+    if (permissions !== undefined) {
+      try {
+        BigInt(permissions);
+        updates.permissions = permissions;
+      } catch {
+        return reply.code(400).send({ error: 'Invalid permissions value', statusCode: 400 });
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
+    }
+
     db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+
+    // Broadcast updated state to all space members
+    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
+    for (const m of memberRows) {
+      connectionManager.pushReadyPayload(m.userId);
+    }
+
     return reply.code(200).send(updated);
   });
 
@@ -828,6 +875,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     ).run();
 
     db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
+
+    // Broadcast updated state to all space members
+    const memberRows = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).all();
+    for (const m of memberRows) {
+      connectionManager.pushReadyPayload(m.userId);
+    }
+
     return reply.code(200).send({ success: true });
   });
 
