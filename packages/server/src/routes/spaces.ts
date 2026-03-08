@@ -3,31 +3,31 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isServerOwner, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
+import { isMember, isSpaceOwner, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
 import type {
-  CreateServerRequest,
-  UpdateServerRequest,
-  JoinServerRequest,
+  CreateSpaceRequest,
+  UpdateSpaceRequest,
+  JoinSpaceRequest,
   UpdateMemberRequest,
-  Server,
+  Space,
   Channel,
   MemberWithUser,
-  ServerWithChannelsAndMembers,
+  SpaceWithChannelsAndMembers,
   Role,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
-function rowToServer(row: typeof schema.servers.$inferSelect): Server {
+function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
     id: row.id,
     name: row.name,
     icon: row.icon,
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
-    visibility: (row.visibility ?? 'private') as Server['visibility'],
+    visibility: (row.visibility ?? 'private') as Space['visibility'],
     description: row.description ?? null,
     createdAt: row.createdAt,
   };
@@ -36,7 +36,7 @@ function rowToServer(row: typeof schema.servers.$inferSelect): Server {
 function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
   return {
     id: row.id,
-    serverId: row.serverId,
+    spaceId: row.spaceId,
     name: row.name,
     type: row.type as Channel['type'],
     topic: row.topic,
@@ -49,32 +49,32 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString('hex');
 }
 
-export async function serverRoutes(app: FastifyInstance): Promise<void> {
-  // POST /api/servers - Create a new server
-  app.post<{ Body: CreateServerRequest }>('/api/servers', {
+export async function spaceRoutes(app: FastifyInstance): Promise<void> {
+  // POST /api/spaces - Create a new server
+  app.post<{ Body: CreateSpaceRequest }>('/api/spaces', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { name, icon } = request.body;
 
     if (!name || typeof name !== 'string') {
-      return reply.code(400).send({ error: 'Server name is required', statusCode: 400 });
+      return reply.code(400).send({ error: 'Space name is required', statusCode: 400 });
     }
 
     const trimmedName = name.trim();
     if (trimmedName.length < 1 || trimmedName.length > 100) {
-      return reply.code(400).send({ error: 'Server name must be between 1 and 100 characters', statusCode: 400 });
+      return reply.code(400).send({ error: 'Space name must be between 1 and 100 characters', statusCode: 400 });
     }
 
     const db = getDb();
-    const serverId = generateSnowflake();
+    const spaceId = generateSnowflake();
     const channelId = generateSnowflake();
     const now = Date.now();
     const inviteCode = generateInviteCode();
 
     // Create server, owner membership, default channel, and @everyone role atomically
     db.transaction((tx) => {
-      tx.insert(schema.servers).values({
-        id: serverId,
+      tx.insert(schema.spaces).values({
+        id: spaceId,
         name: trimmedName,
         icon: icon ?? null,
         ownerId: request.userId,
@@ -82,25 +82,25 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
         createdAt: now,
       }).run();
 
-      tx.insert(schema.serverMembers).values({
-        serverId,
+      tx.insert(schema.spaceMembers).values({
+        spaceId,
         userId: request.userId,
         joinedAt: now,
       }).run();
 
       tx.insert(schema.channels).values({
         id: channelId,
-        serverId,
+        spaceId,
         name: 'general',
         type: 'text',
         position: 0,
         createdAt: now,
       }).run();
 
-      // Auto-create @everyone role (id = serverId)
+      // Auto-create @everyone role (id = spaceId)
       tx.insert(schema.roles).values({
-        id: serverId,
-        serverId,
+        id: spaceId,
+        spaceId,
         name: '@everyone',
         color: '#b9bbbe',
         position: 0,
@@ -109,68 +109,68 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       }).run();
     });
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
     if (!server) {
-      return reply.code(500).send({ error: 'Failed to create server', statusCode: 500 });
+      return reply.code(500).send({ error: 'Failed to create space', statusCode: 500 });
     }
 
-    return reply.code(201).send(rowToServer(server));
+    return reply.code(201).send(rowToSpace(server));
   });
 
-  // GET /api/servers - List user's servers
-  app.get('/api/servers', {
+  // GET /api/spaces - List user's servers
+  app.get('/api/spaces', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const db = getDb();
 
     const memberships = db.select()
-      .from(schema.serverMembers)
-      .where(eq(schema.serverMembers.userId, request.userId))
+      .from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.userId, request.userId))
       .all();
 
     if (memberships.length === 0) {
       return reply.code(200).send([]);
     }
 
-    const serverIds = memberships.map(m => m.serverId);
+    const spaceIds = memberships.map(m => m.spaceId);
     const servers = db.select()
-      .from(schema.servers)
-      .where(inArray(schema.servers.id, serverIds))
+      .from(schema.spaces)
+      .where(inArray(schema.spaces.id, spaceIds))
       .all();
 
-    return reply.code(200).send(servers.map(rowToServer));
+    return reply.code(200).send(servers.map(rowToSpace));
   });
 
-  // GET /api/servers/:id - Get server detail with channels and members
-  app.get<{ Params: { id: string } }>('/api/servers/:id', {
+  // GET /api/spaces/:id - Get server detail with channels and members
+  app.get<{ Params: { id: string } }>('/api/spaces/:id', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!isMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+      return reply.code(403).send({ error: 'You are not a member of this space', statusCode: 403 });
     }
 
     const channels = db.select()
       .from(schema.channels)
-      .where(eq(schema.channels.serverId, id))
+      .where(eq(schema.channels.spaceId, id))
       .all();
 
     const roles = db.select()
       .from(schema.roles)
-      .where(eq(schema.roles.serverId, id))
+      .where(eq(schema.roles.spaceId, id))
       .orderBy(schema.roles.position)
       .all();
 
     const memberRows = db.select()
-      .from(schema.serverMembers)
-      .where(eq(schema.serverMembers.serverId, id))
+      .from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.spaceId, id))
       .all();
 
     const memberUserIds = memberRows.map(m => m.userId);
@@ -182,7 +182,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const memberRoleRows = db.select()
       .from(schema.memberRoles)
-      .where(eq(schema.memberRoles.serverId, id))
+      .where(eq(schema.memberRoles.spaceId, id))
       .all();
 
     const members: MemberWithUser[] = memberRows
@@ -198,7 +198,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           .filter(r => assignedRoleIds.includes(r.id))
           .map(r => ({
             id: r.id,
-            serverId: r.serverId,
+            spaceId: r.spaceId,
             name: r.name,
             color: r.color ?? '#b9bbbe',
             position: r.position ?? 0,
@@ -206,7 +206,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           }));
 
         return {
-          serverId: m.serverId,
+          spaceId: m.spaceId,
           userId: m.userId,
           nickname: m.nickname,
           joinedAt: m.joinedAt,
@@ -222,13 +222,13 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return (perms & PermissionBits.VIEW_CHANNEL) !== 0n;
     });
 
-    const result: ServerWithChannelsAndMembers = {
-      ...rowToServer(server),
+    const result: SpaceWithChannelsAndMembers = {
+      ...rowToSpace(server),
       channels: visibleChannels.map(rowToChannel),
       members,
       roles: roles.map(r => ({
         id: r.id,
-        serverId: r.serverId,
+        spaceId: r.spaceId,
         name: r.name,
         color: r.color ?? '#b9bbbe',
         position: r.position ?? 0,
@@ -239,29 +239,29 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(result);
   });
 
-  // PATCH /api/servers/:id - Update server (owner only)
-  app.patch<{ Params: { id: string }; Body: UpdateServerRequest }>('/api/servers/:id', {
+  // PATCH /api/spaces/:id - Update server (owner only)
+  app.patch<{ Params: { id: string }; Body: UpdateSpaceRequest }>('/api/spaces/:id', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, icon, visibility, description } = request.body;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_SERVER)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SERVER permission', statusCode: 403 });
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
     }
 
-    const updates: Partial<typeof schema.servers.$inferInsert> = {};
+    const updates: Partial<typeof schema.spaces.$inferInsert> = {};
 
     if (name !== undefined) {
       const trimmedName = name.trim();
       if (trimmedName.length < 1 || trimmedName.length > 100) {
-        return reply.code(400).send({ error: 'Server name must be between 1 and 100 characters', statusCode: 400 });
+        return reply.code(400).send({ error: 'Space name must be between 1 and 100 characters', statusCode: 400 });
       }
       updates.name = trimmedName;
     }
@@ -287,60 +287,60 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
     }
 
-    db.update(schema.servers).set(updates).where(eq(schema.servers.id, id)).run();
+    db.update(schema.spaces).set(updates).where(eq(schema.spaces.id, id)).run();
 
-    const updated = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!updated) {
-      return reply.code(500).send({ error: 'Failed to update server', statusCode: 500 });
+      return reply.code(500).send({ error: 'Failed to update space', statusCode: 500 });
     }
 
-    const serverData = rowToServer(updated);
+    const spaceData = rowToSpace(updated);
 
-    // Broadcast server_updated to all server members
-    connectionManager.sendToServer(id, {
-      type: 'server_updated',
-      server: serverData,
+    // Broadcast space_updated to all space members
+    connectionManager.sendToSpace(id, {
+      type: 'space_updated',
+      space: spaceData,
     });
 
-    return reply.code(200).send(serverData);
+    return reply.code(200).send(spaceData);
   });
 
-  // DELETE /api/servers/:id - Delete server (owner only)
-  app.delete<{ Params: { id: string } }>('/api/servers/:id', {
+  // DELETE /api/spaces/:id - Delete server (owner only)
+  app.delete<{ Params: { id: string } }>('/api/spaces/:id', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (!isServerOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the server owner can delete the server', statusCode: 403 });
+    if (!isSpaceOwner(id, request.userId)) {
+      return reply.code(403).send({ error: 'Only the space owner can delete the space', statusCode: 403 });
     }
 
     // Delete all channels (messages cascade), members, then server atomically
     db.transaction((tx) => {
-      tx.delete(schema.channels).where(eq(schema.channels.serverId, id)).run();
-      tx.delete(schema.serverMembers).where(eq(schema.serverMembers.serverId, id)).run();
-      tx.delete(schema.servers).where(eq(schema.servers.id, id)).run();
+      tx.delete(schema.channels).where(eq(schema.channels.spaceId, id)).run();
+      tx.delete(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).run();
+      tx.delete(schema.spaces).where(eq(schema.spaces.id, id)).run();
     });
 
     return reply.code(200).send({ success: true });
   });
 
-  // POST /api/servers/:id/invite - Generate invite code (admin+)
-  app.post<{ Params: { id: string } }>('/api/servers/:id/invite', {
+  // POST /api/spaces/:id/invite - Generate invite code (admin+)
+  app.post<{ Params: { id: string } }>('/api/spaces/:id/invite', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.CREATE_INVITE)) {
@@ -353,13 +353,13 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const inviteCode = generateInviteCode();
-    db.update(schema.servers).set({ inviteCode }).where(eq(schema.servers.id, id)).run();
+    db.update(schema.spaces).set({ inviteCode }).where(eq(schema.spaces.id, id)).run();
 
     return reply.code(200).send({ inviteCode });
   });
 
-  // POST /api/servers/:id/join - Join server by invite code
-  app.post<{ Params: { id: string }; Body: JoinServerRequest }>('/api/servers/:id/join', {
+  // POST /api/spaces/:id/join - Join server by invite code
+  app.post<{ Params: { id: string }; Body: JoinSpaceRequest }>('/api/spaces/:id/join', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
@@ -371,9 +371,9 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (server.inviteCode !== inviteCode) {
@@ -381,42 +381,42 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this server', statusCode: 409 });
+      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
 
     const now = Date.now();
-    db.insert(schema.serverMembers).values({
-      serverId: id,
+    db.insert(schema.spaceMembers).values({
+      spaceId: id,
       userId: request.userId,
       joinedAt: now,
     }).run();
 
     // Register the user in connectionManager so they receive WS broadcasts for this server
-    connectionManager.addUserServer(request.userId, id);
+    connectionManager.addUserSpace(request.userId, id);
 
     // Broadcast member_joined to existing server members
     const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (joiningUser) {
       const memberPayload: MemberWithUser = {
-        serverId: id,
+        spaceId: id,
         userId: request.userId,
         nickname: null,
         joinedAt: now,
         user: sanitizeUser(joiningUser),
         roles: [],
       };
-      connectionManager.sendToServer(id, {
+      connectionManager.sendToSpace(id, {
         type: 'member_joined',
-        serverId: id,
+        spaceId: id,
         member: memberPayload,
       });
     }
 
-    return reply.code(200).send(rowToServer(server));
+    return reply.code(200).send(rowToSpace(server));
   });
 
-  // POST /api/servers/join - Join server by invite code (no server ID needed)
-  app.post<{ Body: JoinServerRequest }>('/api/servers/join', {
+  // POST /api/spaces/join - Join server by invite code (no server ID needed)
+  app.post<{ Body: JoinSpaceRequest }>('/api/spaces/join', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { inviteCode } = request.body;
@@ -427,65 +427,65 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.inviteCode, inviteCode)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.inviteCode, inviteCode)).get();
     if (!server) {
       return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
     }
 
     if (isMember(server.id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this server', statusCode: 409 });
+      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
 
     const now = Date.now();
-    db.insert(schema.serverMembers).values({
-      serverId: server.id,
+    db.insert(schema.spaceMembers).values({
+      spaceId: server.id,
       userId: request.userId,
       joinedAt: now,
     }).run();
 
     // Register the user in connectionManager so they receive WS broadcasts for this server
-    connectionManager.addUserServer(request.userId, server.id);
+    connectionManager.addUserSpace(request.userId, server.id);
 
     // Broadcast member_joined to existing server members
     const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (joiningUser) {
       const memberPayload: MemberWithUser = {
-        serverId: server.id,
+        spaceId: server.id,
         userId: request.userId,
         nickname: null,
         joinedAt: now,
         user: sanitizeUser(joiningUser),
         roles: [],
       };
-      connectionManager.sendToServer(server.id, {
+      connectionManager.sendToSpace(server.id, {
         type: 'member_joined',
-        serverId: server.id,
+        spaceId: server.id,
         member: memberPayload,
       });
     }
 
-    return reply.code(200).send(rowToServer(server));
+    return reply.code(200).send(rowToSpace(server));
   });
 
-  // GET /api/servers/:id/members - List server members
-  app.get<{ Params: { id: string } }>('/api/servers/:id/members', {
+  // GET /api/spaces/:id/members - List server members
+  app.get<{ Params: { id: string } }>('/api/spaces/:id/members', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!isMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+      return reply.code(403).send({ error: 'You are not a member of this space', statusCode: 403 });
     }
 
     const memberRows = db.select()
-      .from(schema.serverMembers)
-      .where(eq(schema.serverMembers.serverId, id))
+      .from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.spaceId, id))
       .all();
 
     const memberUserIds = memberRows.map(m => m.userId);
@@ -497,13 +497,13 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     const roles = db.select()
       .from(schema.roles)
-      .where(eq(schema.roles.serverId, id))
+      .where(eq(schema.roles.spaceId, id))
       .orderBy(schema.roles.position)
       .all();
 
     const memberRoleRows = db.select()
       .from(schema.memberRoles)
-      .where(eq(schema.memberRoles.serverId, id))
+      .where(eq(schema.memberRoles.spaceId, id))
       .all();
 
     const members: MemberWithUser[] = memberRows
@@ -519,7 +519,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           .filter(r => assignedRoleIds.includes(r.id))
           .map(r => ({
             id: r.id,
-            serverId: r.serverId,
+            spaceId: r.spaceId,
             name: r.name,
             color: r.color ?? '#b9bbbe',
             position: r.position ?? 0,
@@ -527,7 +527,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
           }));
 
         return {
-          serverId: m.serverId,
+          spaceId: m.spaceId,
           userId: m.userId,
           nickname: m.nickname,
           joinedAt: m.joinedAt,
@@ -540,17 +540,17 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(members);
   });
 
-  // PATCH /api/servers/:id/members/:uid - Update member roles
-  app.patch<{ Params: { id: string; uid: string }; Body: UpdateMemberRequest }>('/api/servers/:id/members/:uid', {
+  // PATCH /api/spaces/:id/members/:uid - Update member roles
+  app.patch<{ Params: { id: string; uid: string }; Body: UpdateMemberRequest }>('/api/spaces/:id/members/:uid', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, uid } = request.params;
     const { roleIds } = request.body;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_ROLES)) {
@@ -566,15 +566,15 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Cannot modify the server owner's roles unless you are the owner
-    if (isServerOwner(id, uid) && !isServerOwner(id, request.userId)) {
-      return reply.code(403).send({ error: 'Only the server owner can modify their own roles', statusCode: 403 });
+    if (isSpaceOwner(id, uid) && !isSpaceOwner(id, request.userId)) {
+      return reply.code(403).send({ error: 'Only the space owner can modify their own roles', statusCode: 403 });
     }
 
     const member = db.select()
-      .from(schema.serverMembers)
+      .from(schema.spaceMembers)
       .where(and(
-        eq(schema.serverMembers.serverId, id),
-        eq(schema.serverMembers.userId, uid),
+        eq(schema.spaceMembers.spaceId, id),
+        eq(schema.spaceMembers.userId, uid),
       ))
       .get();
 
@@ -584,16 +584,16 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     // Validate all roleIds belong to this server and are not @everyone
     if (roleIds.length > 0) {
-      const serverRoles = db.select()
+      const spaceRoles = db.select()
         .from(schema.roles)
-        .where(eq(schema.roles.serverId, id))
+        .where(eq(schema.roles.spaceId, id))
         .all();
 
-      const serverRoleIds = new Set(serverRoles.map(r => r.id));
+      const spaceRoleIds = new Set(spaceRoles.map(r => r.id));
 
       for (const roleId of roleIds) {
-        if (!serverRoleIds.has(roleId)) {
-          return reply.code(400).send({ error: `Role ${roleId} does not belong to this server`, statusCode: 400 });
+        if (!spaceRoleIds.has(roleId)) {
+          return reply.code(400).send({ error: `Role ${roleId} does not belong to this space`, statusCode: 400 });
         }
         if (roleId === id) {
           return reply.code(400).send({ error: '@everyone role is implicit and cannot be assigned', statusCode: 400 });
@@ -606,7 +606,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       // Remove all existing role assignments for this member in this server
       tx.delete(schema.memberRoles)
         .where(and(
-          eq(schema.memberRoles.serverId, id),
+          eq(schema.memberRoles.spaceId, id),
           eq(schema.memberRoles.userId, uid),
         ))
         .run();
@@ -614,7 +614,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       // Insert new role assignments
       for (const roleId of roleIds) {
         tx.insert(schema.memberRoles).values({
-          serverId: id,
+          spaceId: id,
           userId: uid,
           roleId,
         }).run();
@@ -626,10 +626,10 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     // Build response with populated roles
     const updatedMember = db.select()
-      .from(schema.serverMembers)
+      .from(schema.spaceMembers)
       .where(and(
-        eq(schema.serverMembers.serverId, id),
-        eq(schema.serverMembers.userId, uid),
+        eq(schema.spaceMembers.spaceId, id),
+        eq(schema.spaceMembers.userId, uid),
       ))
       .get();
 
@@ -645,7 +645,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const updatedRoleRows = db.select()
       .from(schema.memberRoles)
       .where(and(
-        eq(schema.memberRoles.serverId, id),
+        eq(schema.memberRoles.spaceId, id),
         eq(schema.memberRoles.userId, uid),
       ))
       .all();
@@ -653,7 +653,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const updatedRoleIds = updatedRoleRows.map(r => r.roleId);
     const allRoles = db.select()
       .from(schema.roles)
-      .where(eq(schema.roles.serverId, id))
+      .where(eq(schema.roles.spaceId, id))
       .orderBy(schema.roles.position)
       .all();
 
@@ -661,7 +661,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       .filter(r => updatedRoleIds.includes(r.id))
       .map(r => ({
         id: r.id,
-        serverId: r.serverId,
+        spaceId: r.spaceId,
         name: r.name,
         color: r.color ?? '#b9bbbe',
         position: r.position ?? 0,
@@ -669,7 +669,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       }));
 
     const result: MemberWithUser = {
-      serverId: updatedMember.serverId,
+      spaceId: updatedMember.spaceId,
       userId: updatedMember.userId,
       nickname: updatedMember.nickname,
       joinedAt: updatedMember.joinedAt,
@@ -680,20 +680,20 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(result);
   });
 
-  // DELETE /api/servers/:id/members/:uid - Kick member (owner) or leave (self)
-  app.delete<{ Params: { id: string; uid: string } }>('/api/servers/:id/members/:uid', {
+  // DELETE /api/spaces/:id/members/:uid - Kick member (owner) or leave (self)
+  app.delete<{ Params: { id: string; uid: string } }>('/api/spaces/:id/members/:uid', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, uid } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     const isSelf = uid === request.userId;
-    const isOwnerUser = isServerOwner(id, request.userId);
+    const isOwnerUser = isSpaceOwner(id, request.userId);
     const canKick = hasPermission(request.userId, id, PermissionBits.KICK_MEMBERS);
 
     if (!isSelf && !canKick) {
@@ -702,14 +702,14 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
     // Owner cannot leave their own server - they must delete it
     if (isSelf && isOwnerUser) {
-      return reply.code(400).send({ error: 'Server owner cannot leave. Transfer ownership or delete the server.', statusCode: 400 });
+      return reply.code(400).send({ error: 'Space owner cannot leave. Transfer ownership or delete the space.', statusCode: 400 });
     }
 
     const member = db.select()
-      .from(schema.serverMembers)
+      .from(schema.spaceMembers)
       .where(and(
-        eq(schema.serverMembers.serverId, id),
-        eq(schema.serverMembers.userId, uid),
+        eq(schema.spaceMembers.spaceId, id),
+        eq(schema.spaceMembers.userId, uid),
       ))
       .get();
 
@@ -718,21 +718,21 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Cannot kick the owner
-    if (isServerOwner(id, uid)) {
-      return reply.code(400).send({ error: 'Cannot remove the server owner', statusCode: 400 });
+    if (isSpaceOwner(id, uid)) {
+      return reply.code(400).send({ error: 'Cannot remove the space owner', statusCode: 400 });
     }
 
-    db.delete(schema.serverMembers)
+    db.delete(schema.spaceMembers)
       .where(and(
-        eq(schema.serverMembers.serverId, id),
-        eq(schema.serverMembers.userId, uid),
+        eq(schema.spaceMembers.spaceId, id),
+        eq(schema.spaceMembers.userId, uid),
       ))
       .run();
 
     // Broadcast member_left event
-    connectionManager.sendToServer(id, {
+    connectionManager.sendToSpace(id, {
       type: 'member_left',
-      serverId: id,
+      spaceId: id,
       userId: uid,
     });
 
@@ -741,8 +741,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
 
   // Role Management
   
-  // POST /api/servers/:id/roles - Create a new role
-  app.post<{ Params: { id: string }; Body: { name: string; color?: string } }>('/api/servers/:id/roles', {
+  // POST /api/spaces/:id/roles - Create a new role
+  app.post<{ Params: { id: string }; Body: { name: string; color?: string } }>('/api/spaces/:id/roles', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
@@ -756,7 +756,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     const roleId = generateSnowflake();
     db.insert(schema.roles).values({
       id: roleId,
-      serverId: id,
+      spaceId: id,
       name: name || 'new role',
       color: color || '#b9bbbe',
       position: 0,
@@ -767,8 +767,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(role);
   });
 
-  // PATCH /api/servers/:id/roles/:roleId - Update a role
-  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number } }>('/api/servers/:id/roles/:roleId', {
+  // PATCH /api/spaces/:id/roles/:roleId - Update a role
+  app.patch<{ Params: { id: string; roleId: string }; Body: { name?: string; color?: string; position?: number } }>('/api/spaces/:id/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, roleId } = request.params;
@@ -779,13 +779,13 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
-    db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
+    db.update(schema.roles).set(updates).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
     const updated = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
     return reply.code(200).send(updated);
   });
 
-  // DELETE /api/servers/:id/roles/:roleId - Delete a role
-  app.delete<{ Params: { id: string; roleId: string } }>('/api/servers/:id/roles/:roleId', {
+  // DELETE /api/spaces/:id/roles/:roleId - Delete a role
+  app.delete<{ Params: { id: string; roleId: string } }>('/api/spaces/:id/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, roleId } = request.params;
@@ -805,12 +805,12 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
       and(eq(schema.channelOverrides.targetType, 'role'), eq(schema.channelOverrides.targetId, roleId))
     ).run();
 
-    db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.serverId, id))).run();
+    db.delete(schema.roles).where(and(eq(schema.roles.id, roleId), eq(schema.roles.spaceId, id))).run();
     return reply.code(200).send({ success: true });
   });
 
-  // POST /api/servers/:id/members/:uid/roles - Add role to member
-  app.post<{ Params: { id: string; uid: string }; Body: { roleId: string } }>('/api/servers/:id/members/:uid/roles', {
+  // POST /api/spaces/:id/members/:uid/roles - Add role to member
+  app.post<{ Params: { id: string; uid: string }; Body: { roleId: string } }>('/api/spaces/:id/members/:uid/roles', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, uid } = request.params;
@@ -822,7 +822,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     db.insert(schema.memberRoles).values({
-      serverId: id,
+      spaceId: id,
       userId: uid,
       roleId,
     }).run();
@@ -830,8 +830,8 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
-  // DELETE /api/servers/:id/members/:uid/roles/:roleId - Remove role from member
-  app.delete<{ Params: { id: string; uid: string; roleId: string } }>('/api/servers/:id/members/:uid/roles/:roleId', {
+  // DELETE /api/spaces/:id/members/:uid/roles/:roleId - Remove role from member
+  app.delete<{ Params: { id: string; uid: string; roleId: string } }>('/api/spaces/:id/members/:uid/roles/:roleId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, uid, roleId } = request.params;
@@ -842,7 +842,7 @@ export async function serverRoutes(app: FastifyInstance): Promise<void> {
     }
 
     db.delete(schema.memberRoles).where(and(
-      eq(schema.memberRoles.serverId, id),
+      eq(schema.memberRoles.spaceId, id),
       eq(schema.memberRoles.userId, uid),
       eq(schema.memberRoles.roleId, roleId)
     )).run();

@@ -1,23 +1,23 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useExploreStore, type TaggedExploreServer } from '../../stores/exploreStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useExploreStore, type TaggedExploreSpace } from '../../stores/exploreStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { getServerGradient } from '../../utils/gradients';
+import { getSpaceGradient } from '../../utils/gradients';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 
 export function ExplorePage() {
   const navigate = useNavigate();
-  const setCurrentServer = useServerStore((s) => s.setCurrentServer);
+  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
 
-  const servers = useExploreStore((s) => s.servers);
+  const spaces = useExploreStore((s) => s.spaces);
   const myRequests = useExploreStore((s) => s.myRequests);
   const isLoading = useExploreStore((s) => s.isLoading);
   const discoveryEnabled = useExploreStore((s) => s.discoveryEnabled);
   const error = useExploreStore((s) => s.error);
   const searchQuery = useExploreStore((s) => s.searchQuery);
   const setSearchQuery = useExploreStore((s) => s.setSearchQuery);
-  const fetchServers = useExploreStore((s) => s.fetchServers);
+  const fetchSpaces = useExploreStore((s) => s.fetchSpaces);
   const fetchMyRequests = useExploreStore((s) => s.fetchMyRequests);
 
   const [joinedCollapsed, setJoinedCollapsed] = useState(false);
@@ -26,18 +26,18 @@ export function ExplorePage() {
 
   // Fetch on mount
   useEffect(() => {
-    fetchServers();
+    fetchSpaces();
     fetchMyRequests();
-  }, [fetchServers, fetchMyRequests]);
+  }, [fetchSpaces, fetchMyRequests]);
 
   // Debounced search
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchServers(value || undefined);
+      fetchSpaces(value || undefined);
     }, 300);
-  }, [setSearchQuery, fetchServers]);
+  }, [setSearchQuery, fetchSpaces]);
 
   useEffect(() => {
     return () => {
@@ -45,23 +45,23 @@ export function ExplorePage() {
     };
   }, []);
 
-  const handleJoinSuccess = (serverId: string) => {
-    setCurrentServer(serverId);
-    navigate(`/channels/${serverId}`);
+  const handleJoinSuccess = (spaceId: string) => {
+    setCurrentSpace(spaceId);
+    navigate(`/channels/${spaceId}`);
   };
 
-  const unjoinedServers = useMemo(
-    () => servers.filter(s => !s.joined),
-    [servers],
+  const unjoinedSpaces = useMemo(
+    () => spaces.filter(s => !s.joined),
+    [spaces],
   );
-  const joinedServers = useMemo(
-    () => servers.filter(s => s.joined),
-    [servers],
+  const joinedSpaces = useMemo(
+    () => spaces.filter(s => s.joined),
+    [spaces],
   );
 
-  const hasAnyServers = servers.length > 0;
-  const hasUnjoined = unjoinedServers.length > 0;
-  const hasJoined = joinedServers.length > 0;
+  const hasAnySpaces = spaces.length > 0;
+  const hasUnjoined = unjoinedSpaces.length > 0;
+  const hasJoined = joinedSpaces.length > 0;
 
   return (
     <div className="flex-1 flex flex-col bg-surface-chat h-full">
@@ -79,7 +79,7 @@ export function ExplorePage() {
         <div className="relative flex-1 max-w-xs ml-2">
           <input
             type="text"
-            placeholder="Search servers..."
+            placeholder="Search spaces..."
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full bg-surface-base text-txt-primary text-sm px-3 py-1.5 rounded-[4px] outline-none placeholder:text-txt-tertiary/50 focus:ring-1 focus:ring-accent-primary transition-all"
@@ -105,11 +105,11 @@ export function ExplorePage() {
       <div className="flex-1 overflow-y-auto">
         {!discoveryEnabled && (
           <div className="mx-6 mt-4 p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-            Server discovery is disabled by the instance administrator.
+            Space discovery is disabled by the instance administrator.
           </div>
         )}
 
-        {isLoading && servers.length === 0 ? (
+        {isLoading && spaces.length === 0 ? (
           <div className="flex-1 flex items-center justify-center h-64">
             <LoadingSpinner />
           </div>
@@ -117,47 +117,47 @@ export function ExplorePage() {
           <div className="mx-6 mt-4 p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-sm text-txt-danger">
             {error}
           </div>
-        ) : !hasAnyServers ? (
-          /* True empty state — no discoverable servers at all */
+        ) : !hasAnySpaces ? (
+          /* True empty state — no discoverable spaces at all */
           <div className="flex flex-col items-center justify-center h-64 opacity-60">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-3">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
             </svg>
             <p className="text-txt-tertiary text-sm">
               {searchQuery
-                ? 'No servers match your search.'
-                : 'No servers have been made discoverable yet.'}
+                ? 'No spaces match your search.'
+                : 'No spaces have been made discoverable yet.'}
             </p>
           </div>
         ) : (
           <div className="p-6 space-y-6">
-            {/* All-joined success banner (only when no unjoined servers remain) */}
+            {/* All-joined success banner (only when no unjoined spaces remain) */}
             {!hasUnjoined && hasJoined && !searchQuery && (
               <div className="flex items-center gap-2.5 px-4 py-2.5 bg-accent-mint/10 border border-accent-mint/20 rounded-lg">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-accent-mint flex-shrink-0">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                 </svg>
                 <span className="text-[13px] text-accent-mint">
-                  You're in all discoverable servers
+                  You're in all discoverable spaces
                 </span>
               </div>
             )}
 
-            {/* Unjoined servers grid */}
+            {/* Unjoined spaces grid */}
             {hasUnjoined && (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {unjoinedServers.map((server) => (
-                  <ServerCard
-                    key={`${server.id}:${server._instanceOrigin}`}
-                    server={server}
-                    isPending={myRequests.some(r => r.serverId === server.id && r.status === 'pending')}
+                {unjoinedSpaces.map((space) => (
+                  <SpaceCard
+                    key={`${space.id}:${space._instanceOrigin}`}
+                    space={space}
+                    isPending={myRequests.some(r => r.spaceId === space.id && r.status === 'pending')}
                     onJoinSuccess={handleJoinSuccess}
                   />
                 ))}
               </div>
             )}
 
-            {/* Joined servers section */}
+            {/* Joined spaces section */}
             {hasJoined && (
               <div>
                 <button
@@ -177,16 +177,16 @@ export function ExplorePage() {
                     Joined
                   </span>
                   <span className="text-xs text-txt-tertiary/60">
-                    {joinedServers.length}
+                    {joinedSpaces.length}
                   </span>
                 </button>
 
                 {!joinedCollapsed && (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {joinedServers.map((server) => (
-                      <ServerCard
-                        key={`${server.id}:${server._instanceOrigin}`}
-                        server={server}
+                    {joinedSpaces.map((space) => (
+                      <SpaceCard
+                        key={`${space.id}:${space._instanceOrigin}`}
+                        space={space}
                         isPending={false}
                         onJoinSuccess={handleJoinSuccess}
                       />
@@ -202,14 +202,14 @@ export function ExplorePage() {
   );
 }
 
-function ServerCard({
-  server,
+function SpaceCard({
+  space,
   isPending,
   onJoinSuccess,
 }: {
-  server: TaggedExploreServer;
+  space: TaggedExploreSpace;
   isPending: boolean;
-  onJoinSuccess: (serverId: string) => void;
+  onJoinSuccess: (spaceId: string) => void;
 }) {
   const publicJoin = useExploreStore((s) => s.publicJoin);
   const requestJoin = useExploreStore((s) => s.requestJoin);
@@ -220,19 +220,19 @@ function ServerCard({
   const [requestSent, setRequestSent] = useState(isPending);
   const [joinError, setJoinError] = useState('');
 
-  const gradient = getServerGradient(server.id, server.name);
-  const isPublic = server.visibility === 'public';
-  const isJoined = server.joined === true;
-  const originLabel = server._instanceOrigin
-    ? (() => { try { return new URL(server._instanceOrigin).host; } catch { return server._instanceOrigin; } })()
+  const gradient = getSpaceGradient(space.id, space.name);
+  const isPublic = space.visibility === 'public';
+  const isJoined = space.joined === true;
+  const originLabel = space._instanceOrigin
+    ? (() => { try { return new URL(space._instanceOrigin).host; } catch { return space._instanceOrigin; } })()
     : null;
 
   const handlePublicJoin = async () => {
     setJoining(true);
     setJoinError('');
     try {
-      const fullServer = await publicJoin(server);
-      onJoinSuccess(fullServer.id);
+      const fullSpace = await publicJoin(space);
+      onJoinSuccess(fullSpace.id);
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : 'Failed to join');
       setJoining(false);
@@ -243,7 +243,7 @@ function ServerCard({
     setJoining(true);
     setJoinError('');
     try {
-      await requestJoin(server, requestMessage.trim() || undefined);
+      await requestJoin(space, requestMessage.trim() || undefined);
       setRequestSent(true);
       setShowRequestForm(false);
     } catch (err) {
@@ -253,8 +253,8 @@ function ServerCard({
     }
   };
 
-  const handleViewServer = () => {
-    onJoinSuccess(server.id);
+  const handleViewSpace = () => {
+    onJoinSuccess(space.id);
   };
 
   return (
@@ -265,15 +265,15 @@ function ServerCard({
     }`}>
       {/* Banner / Icon area */}
       <div className="h-32 relative flex items-center justify-center" style={{ background: gradient.gradient }}>
-        {server.icon ? (
+        {space.icon ? (
           <img
-            src={server.icon.startsWith('http') ? server.icon : `/api/uploads/${server.icon}`}
-            alt={server.name}
+            src={space.icon.startsWith('http') ? space.icon : `/api/uploads/${space.icon}`}
+            alt={space.name}
             className="w-16 h-16 rounded-2xl object-cover shadow-lg"
           />
         ) : (
           <span className="text-3xl font-bold text-white/90 drop-shadow-md">
-            {server.name.charAt(0).toUpperCase()}
+            {space.name.charAt(0).toUpperCase()}
           </span>
         )}
 
@@ -312,11 +312,11 @@ function ServerCard({
 
       {/* Content */}
       <div className="p-4 flex flex-col flex-1">
-        <h3 className="text-[15px] font-bold text-txt-primary truncate mb-1">{server.name}</h3>
+        <h3 className="text-[15px] font-bold text-txt-primary truncate mb-1">{space.name}</h3>
 
-        {server.description ? (
+        {space.description ? (
           <p className="text-[13px] text-txt-secondary line-clamp-2 mb-3 flex-1">
-            {server.description}
+            {space.description}
           </p>
         ) : (
           <p className="text-[13px] text-txt-tertiary italic mb-3 flex-1">No description</p>
@@ -327,7 +327,7 @@ function ServerCard({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
               <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
             </svg>
-            {server.memberCount} {server.memberCount === 1 ? 'member' : 'members'}
+            {space.memberCount} {space.memberCount === 1 ? 'member' : 'members'}
           </span>
         </div>
 
@@ -338,10 +338,10 @@ function ServerCard({
 
         {isJoined ? (
           <button
-            onClick={handleViewServer}
+            onClick={handleViewSpace}
             className="w-full py-2 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-sm font-medium rounded transition-colors"
           >
-            View Server
+            View Space
           </button>
         ) : isPublic ? (
           <button
@@ -355,7 +355,7 @@ function ServerCard({
                 Joining...
               </span>
             ) : (
-              'Join Server'
+              'Join Space'
             )}
           </button>
         ) : requestSent ? (

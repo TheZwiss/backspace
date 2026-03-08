@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useServerStore, getChannelOrigin } from '../stores/serverStore';
+import { useSpaceStore, getChannelOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -81,7 +81,7 @@ const HOME_ORIGIN = '';
 function handleEvent(origin: string, event: ServerEvent): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
-  const { populateFromReady, loadServerDetail, currentServerId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useServerStore.getState();
+  const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useSpaceStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
   const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
@@ -95,17 +95,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Normalize asset URLs for remote origins before dispatching to stores
       if (!isHome) {
-        for (const server of event.servers) {
-          if (server.icon) server.icon = resolveAssetUrl(server.icon, origin) ?? server.icon;
-          if ((server as any).members) {
-            for (const member of (server as any).members) {
+        for (const space of event.spaces) {
+          if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
+          if ((space as any).members) {
+            for (const member of (space as any).members) {
               if (member.user) normalizeUserAssets(member.user, origin);
             }
           }
         }
       }
 
-      populateFromReady(origin, event.servers, event.folders, event.dmChannels);
+      populateFromReady(origin, event.spaces, event.folders, event.dmChannels);
 
       // Mark remote instance as connected in instanceStore
       if (!isHome) {
@@ -114,16 +114,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
         });
       }
 
-      if (isHome && currentServerId) {
-        loadServerDetail(currentServerId);
+      if (isHome && currentSpaceId) {
+        loadSpaceDetail(currentSpaceId);
       }
 
       // For remote instances: if user was viewing one of these servers, load its details
       // (fixes race condition on page reload — route params effect fires before remote WS connects)
       if (!isHome) {
-        const { currentServerId: curServerId, loadServerDetail: loadDetail } = useServerStore.getState();
-        if (curServerId && event.servers.some((s: any) => s.id === curServerId)) {
-          loadDetail(curServerId);
+        const { currentSpaceId: curSpaceId, loadSpaceDetail: loadDetail } = useSpaceStore.getState();
+        if (curSpaceId && event.spaces.some((s: any) => s.id === curSpaceId)) {
+          loadDetail(curSpaceId);
           const { currentChannelId, loadMessages } = useChatStore.getState();
           if (currentChannelId) {
             loadMessages(currentChannelId, true);
@@ -138,7 +138,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           reloadMessages(currentChannelId, true);
         }
         // Initialize unread tracking from ready payload
-        const { channelLastMessageIds } = useServerStore.getState();
+        const { channelLastMessageIds } = useSpaceStore.getState();
         if (event.readStates) {
           setReadStates(event.readStates, channelLastMessageIds);
         }
@@ -273,7 +273,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'dm_message_created': {
       if (!isHome) normalizeMessageAssets(event.message as any, origin);
       addRealtimeMessage(event.message.dmChannelId, event.message as any);
-      const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useServerStore.getState();
+      const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useSpaceStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
       if (!knownDm) {
         addDmCh({
@@ -417,27 +417,27 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'dm_member_added': {
       if (!isHome) normalizeUserAssets(event.user, origin);
-      const { addDmMember } = useServerStore.getState();
+      const { addDmMember } = useSpaceStore.getState();
       addDmMember(event.dmChannelId, event.user);
       break;
     }
 
     case 'dm_member_removed': {
-      const { removeDmMember } = useServerStore.getState();
+      const { removeDmMember } = useSpaceStore.getState();
       removeDmMember(event.dmChannelId, event.userId);
       break;
     }
 
-    // ─── Channel/server events (all origins) ────────────────────────────────
+    // ─── Channel/space events (all origins) ─────────────────────────────────
 
     case 'channel_created': {
-      const { currentServerId: curServerId, channels: curChannels, setChannels, channelToServerMap, channelPermissions, channelOriginMap } = useServerStore.getState();
-      if (event.serverId === curServerId) {
+      const { currentSpaceId: curSpaceId, channels: curChannels, setChannels, channelToSpaceMap, channelPermissions, channelOriginMap } = useSpaceStore.getState();
+      if (event.spaceId === curSpaceId) {
         if (!curChannels.find(c => c.id === event.channel.id)) {
           setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
         }
       }
-      channelToServerMap.set(event.channel.id, event.serverId);
+      channelToSpaceMap.set(event.channel.id, event.spaceId);
       channelOriginMap.set(event.channel.id, origin);
       if (event.channel.myPermissions) {
         channelPermissions.set(event.channel.id, event.channel.myPermissions);
@@ -446,15 +446,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'channel_updated': {
-      const { currentServerId: curServerId2, channels: curChannels2, setChannels: setChannels2, channelPermissions: chPermsMap2 } = useServerStore.getState();
-      if (event.serverId === curServerId2) {
+      const { currentSpaceId: curSpaceId2, channels: curChannels2, setChannels: setChannels2, channelPermissions: chPermsMap2 } = useSpaceStore.getState();
+      if (event.spaceId === curSpaceId2) {
         const exists = curChannels2.some(c => c.id === event.channel.id);
         if (exists) {
           setChannels2(curChannels2.map(c => c.id === event.channel.id ? event.channel : c).sort((a, b) => a.position - b.position));
         } else {
           setChannels2([...curChannels2, event.channel].sort((a, b) => a.position - b.position));
-          const { channelToServerMap: ctsMmap, channelOriginMap: coMap } = useServerStore.getState();
-          ctsMmap.set(event.channel.id, event.serverId);
+          const { channelToSpaceMap: ctsMmap, channelOriginMap: coMap } = useSpaceStore.getState();
+          ctsMmap.set(event.channel.id, event.spaceId);
           coMap.set(event.channel.id, origin);
         }
       }
@@ -465,8 +465,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'channel_deleted': {
-      const { currentServerId: curServerId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToServerMap: ctsMap3, channelOriginMap: coMap3 } = useServerStore.getState();
-      if (event.serverId === curServerId3) {
+      const { currentSpaceId: curSpaceId3, channels: curChannels3, setChannels: setChannels3, channelPermissions: chPermsMap3, channelToSpaceMap: ctsMap3, channelOriginMap: coMap3 } = useSpaceStore.getState();
+      if (event.spaceId === curSpaceId3) {
         setChannels3(curChannels3.filter(c => c.id !== event.channelId));
       }
       chPermsMap3.delete(event.channelId);
@@ -475,7 +475,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       {
         const { currentChannelId } = useChatStore.getState();
         if (currentChannelId === event.channelId) {
-          const { channels: remainingChannels } = useServerStore.getState();
+          const { channels: remainingChannels } = useSpaceStore.getState();
           const firstText = remainingChannels.find(c => c.type === 'text');
           if (firstText) {
             useChatStore.getState().setCurrentChannel(firstText.id);
@@ -487,12 +487,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    case 'server_updated': {
-      if (!isHome && event.server.icon) {
-        event.server.icon = resolveAssetUrl(event.server.icon, origin) ?? event.server.icon;
+    case 'space_updated': {
+      if (!isHome && event.space.icon) {
+        event.space.icon = resolveAssetUrl(event.space.icon, origin) ?? event.space.icon;
       }
-      const { servers: currentServers, setServers } = useServerStore.getState();
-      setServers(currentServers.map(s => s.id === event.server.id ? { ...s, ...event.server } : s));
+      const { spaces: currentSpaces, setSpaces } = useSpaceStore.getState();
+      setSpaces(currentSpaces.map(s => s.id === event.space.id ? { ...s, ...event.space } : s));
       break;
     }
 
@@ -506,16 +506,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'join_request_accepted': {
       if (!isHome) break;
-      // Add the server to our server list
-      const { addServerFromReady } = useServerStore.getState();
-      addServerFromReady(origin, event.server);
-      console.log('[WebSocket] Join request accepted for server', event.server.name);
+      // Add the space to our space list
+      const { addSpaceFromReady } = useSpaceStore.getState();
+      addSpaceFromReady(origin, event.space);
+      console.log('[WebSocket] Join request accepted for space', event.space.name);
       break;
     }
 
     case 'join_request_declined': {
       if (!isHome) break;
-      console.log('[WebSocket] Join request declined for server', event.request.serverId);
+      console.log('[WebSocket] Join request declined for space', event.request.spaceId);
       break;
     }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore, NotConnectedError } from '../../stores/serverStore';
+import { useSpaceStore, NotConnectedError } from '../../stores/spaceStore';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { parseInviteInput } from '../../utils/inviteParser';
 
 type JoinPhase = 'input' | 'connect' | 'fallback';
 
-export function JoinServerModal() {
+export function JoinSpaceModal() {
   const { inviteCode: urlInviteCode } = useParams<{ inviteCode?: string }>();
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
@@ -23,13 +23,13 @@ export function JoinServerModal() {
 
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const joinByCode = useServerStore((s) => s.joinByCode);
+  const joinByCode = useSpaceStore((s) => s.joinByCode);
   const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
-  const isOpen = activeModal === 'joinServer';
+  const isOpen = activeModal === 'joinSpace';
 
   // Pre-fill from URL param and reset state on open/close
   useEffect(() => {
@@ -49,9 +49,9 @@ export function JoinServerModal() {
   }, [isOpen, urlInviteCode]);
 
   const joinAndNavigate = async (code: string, origin?: string) => {
-    const server = await joinByCode(code, origin || undefined);
+    const space = await joinByCode(code, origin || undefined);
     closeModal();
-    navigate(`/channels/${server.id}`);
+    navigate(`/channels/${space.id}`);
   };
 
   // Phase 1: Submit invite code/URL
@@ -78,7 +78,7 @@ export function JoinServerModal() {
         setPhase('connect');
         setError('');
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to join server');
+        setError(err instanceof Error ? err.message : 'Failed to join space');
       }
     } finally {
       setIsLoading(false);
@@ -128,7 +128,7 @@ export function JoinServerModal() {
   } catch { /* ignore */ }
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Join a Server">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Join a Space">
       {/* Error display (shared across all phases) */}
       {error && (
         <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
@@ -140,7 +140,7 @@ export function JoinServerModal() {
       {phase === 'input' && (
         <form onSubmit={handleSubmit}>
           <p className="text-txt-secondary text-sm mb-4">
-            Enter an invite code or link to join a server.
+            Enter an invite code or link to join a space.
           </p>
           <div className="mb-4">
             <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
@@ -168,7 +168,7 @@ export function JoinServerModal() {
               disabled={isLoading || !inviteCode.trim()}
               className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
-              {isLoading ? 'Joining...' : 'Join Server'}
+              {isLoading ? 'Joining...' : 'Join Space'}
             </button>
           </div>
         </form>
@@ -178,7 +178,7 @@ export function JoinServerModal() {
       {phase === 'connect' && (
         <form onSubmit={handleConnect}>
           <p className="text-txt-secondary text-sm mb-4">
-            Connect to <span className="text-txt-primary font-medium">{hostDisplay}</span> to join this server.
+            Connect to <span className="text-txt-primary font-medium">{hostDisplay}</span> to join this space.
           </p>
           <div className="mb-4 space-y-2">
             <div>

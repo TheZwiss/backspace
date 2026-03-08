@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import type { MemberWithUser } from '@backspace/shared';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
@@ -42,14 +42,14 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
 }
 
 export function MemberSidebar() {
-  const members = useServerStore((s) => s.members);
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
+  const members = useSpaceStore((s) => s.members);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
-  const server = servers.find(s => s.id === currentServerId);
-  const ownerId = server?.ownerId;
+  const space = spaces.find(s => s.id === currentSpaceId);
+  const ownerId = space?.ownerId;
 
   const { roleGroups, offlineMembers } = useMemo(() => {
     const online = members.filter(m => m.user.status !== 'offline');

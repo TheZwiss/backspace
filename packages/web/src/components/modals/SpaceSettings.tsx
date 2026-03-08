@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Avatar } from '../ui/Avatar';
 import { api } from '../../api/client';
 import { useNavigate } from 'react-router-dom';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { InstanceStreamingLimits, ServerVisibility, JoinRequest } from '@backspace/shared';
+import type { InstanceStreamingLimits, SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080] as const;
 const VALID_FRAMERATES = [30, 45, 60] as const;
@@ -215,40 +215,40 @@ function StreamingLimitsPanel() {
   );
 }
 
-function DiscoveryPanel({ serverId }: { serverId: string }) {
-  const servers = useServerStore((s) => s.servers);
-  const updateServer = useServerStore((s) => s.updateServer);
+function DiscoveryPanel({ spaceId }: { spaceId: string }) {
+  const spaces = useSpaceStore((s) => s.spaces);
+  const updateSpace = useSpaceStore((s) => s.updateSpace);
   const discoveryEnabled = useSettingsStore((s) => s.streamingLimits?.discoveryEnabled ?? true);
 
-  const server = servers.find(s => s.id === serverId);
+  const space = spaces.find(s => s.id === spaceId);
 
-  const [visibility, setVisibility] = useState<ServerVisibility>(
-    (server?.visibility as ServerVisibility) ?? 'private'
+  const [visibility, setVisibility] = useState<SpaceVisibility>(
+    (space?.visibility as SpaceVisibility) ?? 'private'
   );
-  const [description, setDescription] = useState(server?.description ?? '');
+  const [description, setDescription] = useState(space?.description ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    if (server) {
-      setVisibility((server.visibility as ServerVisibility) ?? 'private');
-      setDescription(server.description ?? '');
+    if (space) {
+      setVisibility((space.visibility as SpaceVisibility) ?? 'private');
+      setDescription(space.description ?? '');
     }
-  }, [server]);
+  }, [space]);
 
-  if (!server) return null;
+  if (!space) return null;
 
   const hasChanges =
-    visibility !== ((server.visibility as ServerVisibility) ?? 'private') ||
-    description !== (server.description ?? '');
+    visibility !== ((space.visibility as SpaceVisibility) ?? 'private') ||
+    description !== (space.description ?? '');
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
     try {
-      await api.servers.update(serverId, { visibility, description: description.trim() });
+      await api.spaces.update(spaceId, { visibility, description: description.trim() });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
@@ -259,12 +259,12 @@ function DiscoveryPanel({ serverId }: { serverId: string }) {
   };
 
   const handleReset = () => {
-    setVisibility((server.visibility as ServerVisibility) ?? 'private');
-    setDescription(server.description ?? '');
+    setVisibility((space.visibility as SpaceVisibility) ?? 'private');
+    setDescription(space.description ?? '');
     setSaveError('');
   };
 
-  const visibilityOptions: { value: ServerVisibility; label: string; desc: string }[] = [
+  const visibilityOptions: { value: SpaceVisibility; label: string; desc: string }[] = [
     { value: 'private', label: 'Private', desc: 'Only people with an invite link can join' },
     { value: 'request', label: 'Request to Join', desc: 'Visible in Explore — people can request to join' },
     { value: 'public', label: 'Public', desc: 'Visible in Explore — anyone can join instantly' },
@@ -274,7 +274,7 @@ function DiscoveryPanel({ serverId }: { serverId: string }) {
     <div className="space-y-4">
       {!discoveryEnabled && (
         <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
-          Server discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.
+          Space discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.
         </div>
       )}
 
@@ -348,14 +348,14 @@ function DiscoveryPanel({ serverId }: { serverId: string }) {
       )}
 
       {/* Pending Join Requests — only shown when visibility is 'request' */}
-      {(visibility === 'request' || (server.visibility as ServerVisibility) === 'request') && (
-        <JoinRequestsSection serverId={serverId} />
+      {(visibility === 'request' || (space.visibility as SpaceVisibility) === 'request') && (
+        <JoinRequestsSection spaceId={spaceId} />
       )}
     </div>
   );
 }
 
-function JoinRequestsSection({ serverId }: { serverId: string }) {
+function JoinRequestsSection({ spaceId }: { spaceId: string }) {
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionError, setActionError] = useState('');
@@ -363,7 +363,7 @@ function JoinRequestsSection({ serverId }: { serverId: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.explore.getJoinRequests(serverId, 'pending')
+    api.explore.getJoinRequests(spaceId, 'pending')
       .then(({ requests: reqs }) => {
         if (!cancelled) {
           setRequests(reqs);
@@ -374,12 +374,12 @@ function JoinRequestsSection({ serverId }: { serverId: string }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [serverId]);
+  }, [spaceId]);
 
   const handleDecide = async (requestId: string, action: 'accept' | 'decline') => {
     setActionError('');
     try {
-      await api.explore.decideJoinRequest(serverId, requestId, action);
+      await api.explore.decideJoinRequest(spaceId, requestId, action);
       setRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Action failed');
@@ -459,55 +459,55 @@ function JoinRequestsSection({ serverId }: { serverId: string }) {
   );
 }
 
-export function ServerSettingsModal() {
+export function SpaceSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const servers = useServerStore((s) => s.servers);
-  const members = useServerStore((s) => s.members);
-  const roles = useServerStore((s) => s.roles);
-  const updateServer = useServerStore((s) => s.updateServer);
-  const deleteServer = useServerStore((s) => s.deleteServer);
-  const loadServerDetail = useServerStore((s) => s.loadServerDetail);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const members = useSpaceStore((s) => s.members);
+  const roles = useSpaceStore((s) => s.roles);
+  const updateSpace = useSpaceStore((s) => s.updateSpace);
+  const deleteSpace = useSpaceStore((s) => s.deleteSpace);
+  const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = useSettingsStore((s) => s.isAdmin);
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'streaming'>('overview');
-  const [serverName, setServerName] = useState('');
+  const [spaceName, setSpaceName] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
 
-  const serverPermissions = useServerStore((s) => s.serverPermissions);
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
-  const isOpen = activeModal === 'serverSettings';
-  const server = servers.find(s => s.id === currentServerId);
-  const isOwnerUser = server?.ownerId === currentUser?.id;
-  const myServerPerms = currentServerId ? serverPermissions.get(currentServerId) : undefined;
-  const canManageServer = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_SERVER);
-  const canManageRoles = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_ROLES);
+  const isOpen = activeModal === 'spaceSettings';
+  const space = spaces.find(s => s.id === currentSpaceId);
+  const isOwnerUser = space?.ownerId === currentUser?.id;
+  const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
+  const canManageSpace = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_SPACE);
+  const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
 
-  // Assignable roles: exclude @everyone (where role.id === serverId)
-  const assignableRoles = roles.filter(r => r.id !== currentServerId);
+  // Assignable roles: exclude @everyone (where role.id === spaceId)
+  const assignableRoles = roles.filter(r => r.id !== currentSpaceId);
 
   React.useEffect(() => {
-    if (server) {
-      setServerName(server.name);
+    if (space) {
+      setSpaceName(space.name);
     }
-  }, [server]);
+  }, [space]);
 
-  if (!server || !currentServerId) return null;
+  if (!space || !currentSpaceId) return null;
 
   const handleSave = async () => {
     setError('');
     setIsLoading(true);
     try {
-      await updateServer(currentServerId, { name: serverName.trim() });
+      await updateSpace(currentSpaceId, { name: spaceName.trim() });
       setIsLoading(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update server');
+      setError(err instanceof Error ? err.message : 'Failed to update space');
       setIsLoading(false);
     }
   };
@@ -518,11 +518,11 @@ export function ServerSettingsModal() {
       return;
     }
     try {
-      await deleteServer(currentServerId);
+      await deleteSpace(currentSpaceId);
       closeModal();
       navigate('/channels/@me');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete server');
+      setError(err instanceof Error ? err.message : 'Failed to delete space');
     }
   };
 
@@ -548,13 +548,13 @@ export function ServerSettingsModal() {
     if (!roleIds) return;
 
     try {
-      await api.servers.updateMember(currentServerId, userId, { roleIds: Array.from(roleIds) });
+      await api.spaces.updateMember(currentSpaceId, userId, { roleIds: Array.from(roleIds) });
       setPendingRoleChanges(prev => {
         const next = new Map(prev);
         next.delete(userId);
         return next;
       });
-      await loadServerDetail(currentServerId);
+      await loadSpaceDetail(currentSpaceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update roles');
     }
@@ -570,15 +570,15 @@ export function ServerSettingsModal() {
 
   const handleKick = async (userId: string) => {
     try {
-      await api.servers.removeMember(currentServerId, userId);
-      await loadServerDetail(currentServerId);
+      await api.spaces.removeMember(currentSpaceId, userId);
+      await loadSpaceDetail(currentSpaceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to kick member');
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Server Settings" maxWidth="max-w-xl">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-xl">
       <div className="flex gap-4">
         {/* Tabs */}
         <div className="w-32 flex-shrink-0 space-y-1">
@@ -590,7 +590,7 @@ export function ServerSettingsModal() {
           >
             Overview
           </button>
-          {canManageServer && (
+          {canManageSpace && (
             <button
               onClick={() => setTab('discovery')}
               className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
@@ -630,18 +630,18 @@ export function ServerSettingsModal() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  Server Name
+                  Space Name
                 </label>
                 <input
                   type="text"
-                  value={serverName}
-                  onChange={(e) => setServerName(e.target.value)}
+                  value={spaceName}
+                  onChange={(e) => setSpaceName(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
-                  disabled={!canManageServer}
+                  disabled={!canManageSpace}
                 />
               </div>
 
-              {canManageServer && (
+              {canManageSpace && (
                 <>
                   <button
                     onClick={handleSave}
@@ -657,7 +657,7 @@ export function ServerSettingsModal() {
                       onClick={handleDelete}
                       className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
                     >
-                      {confirmDelete ? 'Click again to confirm deletion' : 'Delete Server'}
+                      {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
                     </button>
                   </div>
                 </>
@@ -665,15 +665,15 @@ export function ServerSettingsModal() {
             </div>
           )}
 
-          {tab === 'discovery' && canManageServer && currentServerId && (
-            <DiscoveryPanel serverId={currentServerId} />
+          {tab === 'discovery' && canManageSpace && currentSpaceId && (
+            <DiscoveryPanel spaceId={currentSpaceId} />
           )}
 
           {tab === 'members' && (
             <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
               {members.map((member) => {
                 const displayName = member.user.displayName ?? member.user.username;
-                const isOwner = member.userId === server.ownerId;
+                const isOwner = member.userId === space.ownerId;
                 const memberRoleIds = getMemberRoleIds(member);
                 const hasPendingChanges = pendingRoleChanges.has(member.userId);
 
@@ -696,7 +696,7 @@ export function ServerSettingsModal() {
                                 Owner
                               </span>
                             )}
-                            {member.roles?.filter(r => r.id !== currentServerId).map(r => (
+                            {member.roles?.filter(r => r.id !== currentSpaceId).map(r => (
                               <span
                                 key={r.id}
                                 className="text-[10px] px-1.5 py-0.5 rounded font-medium"
@@ -705,7 +705,7 @@ export function ServerSettingsModal() {
                                 {r.name}
                               </span>
                             ))}
-                            {!isOwner && (!member.roles || member.roles.filter(r => r.id !== currentServerId).length === 0) && (
+                            {!isOwner && (!member.roles || member.roles.filter(r => r.id !== currentSpaceId).length === 0) && (
                               <span className="text-[10px] text-txt-tertiary">No roles</span>
                             )}
                           </div>

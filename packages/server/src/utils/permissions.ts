@@ -13,7 +13,7 @@ export { PermissionBits, ALL_PERMISSIONS, permissionsToString, stringToPermissio
 // ─── Core Resolution Engine ─────────────────────────────────────────────────
 
 /**
- * Compute the effective permissions for a user in a server, optionally scoped
+ * Compute the effective permissions for a user in a space, optionally scoped
  * to a specific channel. Follows Discord's resolution order:
  *
  * 1. Owner → ALL_PERMISSIONS
@@ -24,24 +24,24 @@ export { PermissionBits, ALL_PERMISSIONS, permissionsToString, stringToPermissio
  *    b. Role overrides (combined)
  *    c. Member-specific override
  */
-export function computePermissions(userId: string, serverId: string, channelId?: string): bigint {
+export function computePermissions(userId: string, spaceId: string, channelId?: string): bigint {
   const db = getDb();
 
   // 1. Owner check
-  const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
-  if (!server) return 0n;
-  if (server.ownerId === userId) return ALL_PERMISSIONS;
+  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
+  if (!space) return 0n;
+  if (space.ownerId === userId) return ALL_PERMISSIONS;
 
-  // 2. Base permissions from @everyone role (id === serverId)
+  // 2. Base permissions from @everyone role (id === spaceId)
   const everyoneRole = db.select().from(schema.roles)
-    .where(and(eq(schema.roles.id, serverId), eq(schema.roles.serverId, serverId)))
+    .where(and(eq(schema.roles.id, spaceId), eq(schema.roles.spaceId, spaceId)))
     .get();
   let base = everyoneRole ? stringToPermissions(everyoneRole.permissions) : 0n;
 
   // Get user's assigned roles via member_roles
   const memberRoleRows = db.select().from(schema.memberRoles)
     .where(and(
-      eq(schema.memberRoles.serverId, serverId),
+      eq(schema.memberRoles.spaceId, spaceId),
       eq(schema.memberRoles.userId, userId),
     ))
     .all();
@@ -61,7 +61,7 @@ export function computePermissions(userId: string, serverId: string, channelId?:
   // 3. Admin shortcut
   if ((base & PermissionBits.ADMINISTRATOR) !== 0n) return ALL_PERMISSIONS;
 
-  // If no channel, return server-level perms
+  // If no channel, return space-level perms
   if (!channelId) return base;
 
   // 4. Channel overrides
@@ -71,8 +71,8 @@ export function computePermissions(userId: string, serverId: string, channelId?:
 
   if (overrides.length === 0) return base;
 
-  // 4a. @everyone role override (target_type='role', target_id=serverId)
-  const everyoneOverride = overrides.find(o => o.targetType === 'role' && o.targetId === serverId);
+  // 4a. @everyone role override (target_type='role', target_id=spaceId)
+  const everyoneOverride = overrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
   if (everyoneOverride) {
     const deny = stringToPermissions(everyoneOverride.deny);
     const allow = stringToPermissions(everyoneOverride.allow);
@@ -103,46 +103,46 @@ export function computePermissions(userId: string, serverId: string, channelId?:
 }
 
 /**
- * Check if a user has a specific permission in a server/channel.
+ * Check if a user has a specific permission in a space/channel.
  */
 export function hasPermission(
   userId: string,
-  serverId: string,
+  spaceId: string,
   permission: bigint,
   channelId?: string,
 ): boolean {
-  const perms = computePermissions(userId, serverId, channelId);
+  const perms = computePermissions(userId, spaceId, channelId);
   // ADMINISTRATOR grants everything
   if ((perms & PermissionBits.ADMINISTRATOR) !== 0n) return true;
   return (perms & permission) === permission;
 }
 
-// ─── Existing helpers (kept for backward compat) ────────────────────────────
+// ─── Existing helpers ───────────────────────────────────────────────────────
 
-export function getMember(serverId: string, userId: string) {
+export function getMember(spaceId: string, userId: string) {
   const db = getDb();
-  return db.select().from(schema.serverMembers)
+  return db.select().from(schema.spaceMembers)
     .where(and(
-      eq(schema.serverMembers.serverId, serverId),
-      eq(schema.serverMembers.userId, userId),
+      eq(schema.spaceMembers.spaceId, spaceId),
+      eq(schema.spaceMembers.userId, userId),
     ))
     .get();
 }
 
-export function isMember(serverId: string, userId: string): boolean {
-  return getMember(serverId, userId) !== undefined;
+export function isMember(spaceId: string, userId: string): boolean {
+  return getMember(spaceId, userId) !== undefined;
 }
 
-export function isServerOwner(serverId: string, userId: string): boolean {
+export function isSpaceOwner(spaceId: string, userId: string): boolean {
   const db = getDb();
-  const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
-  return server?.ownerId === userId;
+  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
+  return space?.ownerId === userId;
 }
 
-export function getChannelServerId(channelId: string): string | null {
+export function getChannelSpaceId(channelId: string): string | null {
   const db = getDb();
   const channel = db.select().from(schema.channels).where(eq(schema.channels.id, channelId)).get();
-  return channel?.serverId ?? null;
+  return channel?.spaceId ?? null;
 }
 
 export function isDmMember(dmChannelId: string, userId: string): boolean {

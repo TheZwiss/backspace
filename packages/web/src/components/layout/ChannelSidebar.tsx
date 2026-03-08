@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
+import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -18,16 +18,16 @@ import { parseFederatedUsername, isSelf } from '../../utils/identity';
 import { joinVoiceChannel } from '../../utils/voice';
 
 export function ChannelSidebar() {
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const channels = useServerStore((s) => s.channels);
-  const dmChannels = useServerStore((s) => s.dmChannels);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const channels = useSpaceStore((s) => s.channels);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const openModal = useUIStore((s) => s.openModal);
   const user = useAuthStore((s) => s.user);
-  const members = useServerStore((s) => s.members);
+  const members = useSpaceStore((s) => s.members);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const isMuted = useVoiceStore((s) => s.isMuted);
@@ -72,26 +72,26 @@ export function ChannelSidebar() {
     }
   };
 
-  const serverPermissions = useServerStore((s) => s.serverPermissions);
-  const server = servers.find(s => s.id === currentServerId);
-  const myServerPerms = currentServerId ? serverPermissions.get(currentServerId) : undefined;
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const space = spaces.find(s => s.id === currentSpaceId);
+  const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
 
   const federationInstances = useInstanceStore((s) => s.instances);
   const instanceLabel = useMemo(() => {
-    const origin = (server as any)?._instanceOrigin;
+    const origin = (space as any)?._instanceOrigin;
     if (!origin) return null;
     const inst = federationInstances.find(i => i.origin === origin);
     if (inst) return inst.label;
     try { return new URL(origin).host; } catch { return origin; }
-  }, [server, federationInstances]);
-  const canManageChannels = hasPermissionBit(myServerPerms, PermissionBits.MANAGE_CHANNELS);
+  }, [space, federationInstances]);
+  const canManageChannels = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_CHANNELS);
 
   const textChannels = channels.filter(c => c.type === 'text');
   const voiceChannels = channels.filter(c => c.type === 'voice' || c.type === 'video');
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);
-    navigate(`/channels/${currentServerId || '@me'}/${channelId}`);
+    navigate(`/channels/${currentSpaceId || '@me'}/${channelId}`);
   };
 
   const handleHomeClick = () => {
@@ -102,11 +102,11 @@ export function ChannelSidebar() {
   const handleVoiceJoin = (channelId: string) => {
     // Don't re-join the same channel — prevents duplicate LiveKit connections
     if (currentVoiceChannelId === channelId) {
-      navigate(`/channels/${currentServerId}/${channelId}`);
+      navigate(`/channels/${currentSpaceId}/${channelId}`);
       return;
     }
     joinVoiceChannel(channelId);
-    navigate(`/channels/${currentServerId}/${channelId}`);
+    navigate(`/channels/${currentSpaceId}/${channelId}`);
   };
 
   // Floating bottom panel — shared between DM view and server view
@@ -130,7 +130,7 @@ export function ChannelSidebar() {
     </div>
   ) : null;
 
-  if (!server) {
+  if (!space) {
     return (
       <>
       <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
@@ -260,7 +260,7 @@ export function ChannelSidebar() {
                         navigate('/channels/@me');
                         setCurrentChannel(null);
                       }
-                      useServerStore.getState().closeDm(dm.id);
+                      useSpaceStore.getState().closeDm(dm.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity flex-shrink-0 ml-1"
                     title="Close DM"
@@ -287,14 +287,14 @@ export function ChannelSidebar() {
   return (
     <>
     <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
-      {/* Server header */}
+      {/* Space header */}
       <div className="h-12 flex items-center border-b border-border-hard z-10 group/header">
         <button
-          onClick={() => openModal('serverSettings')}
+          onClick={() => openModal('spaceSettings')}
           className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
         >
           <div className="min-w-0">
-            <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight block">{server.name}</span>
+            <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight block">{space.name}</span>
             {instanceLabel && (
               <span className="text-[10px] text-txt-tertiary font-medium truncate block leading-tight">
                 {instanceLabel}

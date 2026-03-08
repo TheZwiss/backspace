@@ -29,7 +29,7 @@ function createTables(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS servers (
+    CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       icon TEXT,
@@ -38,17 +38,17 @@ function createTables(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS server_members (
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    CREATE TABLE IF NOT EXISTS space_members (
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       nickname TEXT,
       joined_at INTEGER NOT NULL,
-      PRIMARY KEY (server_id, user_id)
+      PRIMARY KEY (space_id, user_id)
     );
 
     CREATE TABLE IF NOT EXISTS channels (
       id TEXT PRIMARY KEY,
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       type TEXT NOT NULL,
       topic TEXT,
@@ -131,7 +131,7 @@ function createTables(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS roles (
       id TEXT PRIMARY KEY,
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       color TEXT DEFAULT '#b9bbbe',
       position INTEGER DEFAULT 0,
@@ -140,10 +140,10 @@ function createTables(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS member_roles (
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-      PRIMARY KEY (server_id, user_id, role_id)
+      PRIMARY KEY (space_id, user_id, role_id)
     );
 
     CREATE TABLE IF NOT EXISTS channel_overrides (
@@ -163,7 +163,7 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (user_id, channel_id)
     );
 
-    CREATE TABLE IF NOT EXISTS server_folders (
+    CREATE TABLE IF NOT EXISTS space_folders (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name TEXT,
@@ -172,10 +172,10 @@ function createTables(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS server_folder_members (
-      folder_id TEXT NOT NULL REFERENCES server_folders(id) ON DELETE CASCADE,
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
-      PRIMARY KEY (folder_id, server_id)
+    CREATE TABLE IF NOT EXISTS space_folder_members (
+      folder_id TEXT NOT NULL REFERENCES space_folders(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      PRIMARY KEY (folder_id, space_id)
     );
 
     CREATE TABLE IF NOT EXISTS instance_settings (

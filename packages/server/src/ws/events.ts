@@ -2,8 +2,8 @@ import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
-import type { VoiceRoom, DmRoomMeta, ServerRoomMeta } from './handler.js';
-import { isMember, getChannelServerId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
+import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
+import { isMember, getChannelSpaceId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import type { MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
@@ -173,13 +173,13 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
-  const serverId = getChannelServerId(channelId);
-  if (!serverId) {
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
     return;
   }
 
-  if (!hasPermission(userId, serverId, PermissionBits.SEND_MESSAGES, channelId)) {
+  if (!hasPermission(userId, spaceId, PermissionBits.SEND_MESSAGES, channelId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing SEND_MESSAGES permission' });
     return;
   }
@@ -200,7 +200,7 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
   const messageWithUser = getMessageWithUser(messageId);
   if (messageWithUser) {
     // Broadcast to members with VIEW_CHANNEL on this channel
-    connectionManager.sendToChannel(serverId, channelId, {
+    connectionManager.sendToChannel(spaceId, channelId, {
       type: 'message_created',
       message: messageWithUser,
     });
@@ -239,12 +239,12 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
     .where(eq(schema.messages.id, messageId))
     .run();
 
-  const serverId = getChannelServerId(message.channelId);
-  if (!serverId) return;
+  const spaceId = getChannelSpaceId(message.channelId);
+  if (!spaceId) return;
 
   const updatedMessage = getMessageWithUser(messageId);
   if (updatedMessage) {
-    connectionManager.sendToChannel(serverId, message.channelId, {
+    connectionManager.sendToChannel(spaceId, message.channelId, {
       type: 'message_updated',
       message: updatedMessage,
     });
@@ -266,12 +266,12 @@ function handleMessageDelete(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
-  const serverId = getChannelServerId(message.channelId);
-  if (!serverId) return;
+  const spaceId = getChannelSpaceId(message.channelId);
+  if (!spaceId) return;
 
   // Allow author or MANAGE_MESSAGES permission holder to delete
   const isAuthor = message.userId === userId;
-  const canManageMessages = hasPermission(userId, serverId, PermissionBits.MANAGE_MESSAGES, message.channelId);
+  const canManageMessages = hasPermission(userId, spaceId, PermissionBits.MANAGE_MESSAGES, message.channelId);
 
   if (!isAuthor && !canManageMessages) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'You cannot delete this message' });
@@ -282,7 +282,7 @@ function handleMessageDelete(event: Record<string, unknown>, userId: string): vo
   db.delete(schema.attachments).where(eq(schema.attachments.messageId, messageId)).run();
   db.delete(schema.messages).where(eq(schema.messages.id, messageId)).run();
 
-  connectionManager.sendToChannel(serverId, message.channelId, {
+  connectionManager.sendToChannel(spaceId, message.channelId, {
     type: 'message_deleted',
     messageId,
     channelId: message.channelId,
@@ -294,10 +294,10 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
 
   if (!channelId || typeof channelId !== 'string') return;
 
-  const serverId = getChannelServerId(channelId);
-  if (!serverId) return;
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) return;
 
-  if (!hasPermission(userId, serverId, PermissionBits.SEND_MESSAGES, channelId)) return;
+  if (!hasPermission(userId, spaceId, PermissionBits.SEND_MESSAGES, channelId)) return;
 
   // Clear previous typing timeout for this user+channel
   const key = `${userId}:${channelId}`;
@@ -307,7 +307,7 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
   }
 
   // Broadcast typing event to channel viewers (exclude sender)
-  connectionManager.sendToChannel(serverId, channelId, {
+  connectionManager.sendToChannel(spaceId, channelId, {
     type: 'typing',
     channelId,
     userId,
@@ -332,10 +332,10 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
   const db = getDb();
   db.update(schema.users).set({ status }).where(eq(schema.users.id, userId)).run();
 
-  // Broadcast to all servers user is in
-  const userServers = connectionManager.getUserServers(userId);
-  for (const serverId of userServers) {
-    connectionManager.sendToServer(serverId, {
+  // Broadcast to all spaces user is in
+  const userSpaces = connectionManager.getUserSpaces(userId);
+  for (const spaceId of userSpaces) {
+    connectionManager.sendToSpace(spaceId, {
       type: 'presence_update',
       userId,
       status,
@@ -354,9 +354,9 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
 
 /** Helper: broadcast a voice leave and auto-end empty DM calls. */
 function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): void {
-  if (room.roomType === 'server') {
-    const meta = room.metadata as ServerRoomMeta;
-    connectionManager.sendToServer(meta.serverId, {
+  if (room.roomType === 'space') {
+    const meta = room.metadata as SpaceRoomMeta;
+    connectionManager.sendToSpace(meta.spaceId, {
       type: 'voice_state_update',
       channelId: roomId,
       userId,
@@ -389,13 +389,13 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  const serverId = getChannelServerId(channelId);
-  if (!serverId) {
+  const spaceId = getChannelSpaceId(channelId);
+  if (!spaceId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
     return;
   }
 
-  if (!hasPermission(userId, serverId, PermissionBits.CONNECT, channelId)) {
+  if (!hasPermission(userId, spaceId, PermissionBits.CONNECT, channelId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Missing CONNECT permission' });
     return;
   }
@@ -419,7 +419,7 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     return;
   }
 
-  // Leave current room (server OR DM)
+  // Leave current room (space OR DM)
   const left = connectionManager.leaveCurrentRoom(userId);
   if (left) {
     broadcastRoomLeave(left.roomId, left.room, userId);
@@ -440,8 +440,8 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
     }
   }
 
-  // Lazy-create server room
-  connectionManager.createRoom(channelId, 'server', { type: 'server', serverId });
+  // Lazy-create space room
+  connectionManager.createRoom(channelId, 'space', { type: 'space', spaceId });
 
   // Join room
   connectionManager.joinRoom(channelId, userId);
@@ -490,7 +490,7 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
 
   connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened, isCameraOn, isScreenSharing);
 
-  // sendToRoom routes to sendToServer for server rooms, sendToDmMembers for DM rooms
+  // sendToRoom routes to sendToSpace for space rooms, sendToDmMembers for DM rooms
   connectionManager.sendToRoom(userRoom.roomId, {
     type: 'voice_status_update',
     userId,
@@ -702,11 +702,11 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
 
   const db = getDb();
 
-  // Try server message first
+  // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
-    const serverId = getChannelServerId(message.channelId);
-    if (!serverId || !isMember(serverId, userId)) return;
+    const spaceId = getChannelSpaceId(message.channelId);
+    if (!spaceId || !isMember(spaceId, userId)) return;
 
     const reactionId = generateSnowflake();
     const now = Date.now();
@@ -723,7 +723,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       const reactionUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
       const userObj = reactionUser ? sanitizeUser(reactionUser) : undefined;
 
-      connectionManager.sendToChannel(serverId, message.channelId, {
+      connectionManager.sendToChannel(spaceId, message.channelId, {
         type: 'reaction_added',
         messageId,
         reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
@@ -771,11 +771,11 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
 
   const db = getDb();
 
-  // Try server message first
+  // Try space message first
   const message = db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
   if (message) {
-    const serverId = getChannelServerId(message.channelId);
-    if (!serverId || !isMember(serverId, userId)) return;
+    const spaceId = getChannelSpaceId(message.channelId);
+    if (!spaceId || !isMember(spaceId, userId)) return;
 
     const result = db.delete(schema.reactions)
       .where(and(
@@ -786,7 +786,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       .run();
 
     if (result.changes > 0) {
-      connectionManager.sendToChannel(serverId, message.channelId, {
+      connectionManager.sendToChannel(spaceId, message.channelId, {
         type: 'reaction_removed',
         messageId,
         userId,

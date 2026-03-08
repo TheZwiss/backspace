@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 
 export function InviteModal() {
   const [inviteCode, setInviteCode] = useState('');
@@ -10,20 +10,20 @@ export function InviteModal() {
   const [error, setError] = useState('');
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const generateInvite = useServerStore((s) => s.generateInvite);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const servers = useServerStore((s) => s.servers);
-  const currentServer = servers.find(s => s.id === currentServerId);
-  const instanceOrigin = currentServer?._instanceOrigin ?? '';
+  const generateInvite = useSpaceStore((s) => s.generateInvite);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpace = spaces.find(s => s.id === currentSpaceId);
+  const instanceOrigin = currentSpace?._instanceOrigin ?? '';
 
   const isOpen = activeModal === 'invite';
   const inviteUrl = inviteCode ? `${instanceOrigin || window.location.origin}/join/${inviteCode}` : '';
 
   useEffect(() => {
-    if (isOpen && currentServerId) {
+    if (isOpen && currentSpaceId) {
       setIsLoading(true);
       setError('');
-      generateInvite(currentServerId)
+      generateInvite(currentSpaceId)
         .then(code => {
           setInviteCode(code);
           setIsLoading(false);
@@ -33,7 +33,7 @@ export function InviteModal() {
           setIsLoading(false);
         });
     }
-  }, [isOpen, currentServerId, generateInvite]);
+  }, [isOpen, currentSpaceId, generateInvite]);
 
   const handleCopy = async () => {
     if (!inviteUrl) return;
@@ -55,7 +55,7 @@ export function InviteModal() {
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title="Invite Friends">
       <p className="text-txt-secondary text-sm mb-4">
-        Share this invite link with friends to let them join your server.
+        Share this invite link with friends to let them join your space.
       </p>
       {error && (
         <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">

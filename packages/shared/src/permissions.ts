@@ -7,7 +7,7 @@ export const PermissionBits = {
   VIEW_CHANNEL:         1n << 1n,
   MANAGE_CHANNELS:      1n << 2n,
   MANAGE_ROLES:         1n << 3n,
-  MANAGE_SERVER:        1n << 4n,
+  MANAGE_SPACE:         1n << 4n,
   CREATE_INVITE:        1n << 5n,
   KICK_MEMBERS:         1n << 6n,
   BAN_MEMBERS:          1n << 7n,

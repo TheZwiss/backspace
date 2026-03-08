@@ -7,8 +7,8 @@ import { DEFAULT_EVERYONE_PERMISSIONS, permissionsToString } from '@backspace/sh
 export async function seedDatabase(): Promise<void> {
   const db = getDb();
 
-  const existingServers = db.select().from(schema.servers).all();
-  if (existingServers.length > 0) {
+  const existingSpaces = db.select().from(schema.spaces).all();
+  if (existingSpaces.length > 0) {
     console.log('Database already has data, skipping seed');
     return;
   }
@@ -28,17 +28,17 @@ export async function seedDatabase(): Promise<void> {
     createdAt: Date.now(),
   }).run();
 
-  const serverId = generateSnowflake();
-  db.insert(schema.servers).values({
-    id: serverId,
+  const spaceId = generateSnowflake();
+  db.insert(schema.spaces).values({
+    id: spaceId,
     name: 'Backspace',
     ownerId: adminId,
     inviteCode: 'backspace',
     createdAt: Date.now(),
   }).run();
 
-  db.insert(schema.serverMembers).values({
-    serverId: serverId,
+  db.insert(schema.spaceMembers).values({
+    spaceId: spaceId,
     userId: adminId,
     joinedAt: Date.now(),
   }).run();
@@ -46,7 +46,7 @@ export async function seedDatabase(): Promise<void> {
   const generalChannelId = generateSnowflake();
   db.insert(schema.channels).values({
     id: generalChannelId,
-    serverId: serverId,
+    spaceId: spaceId,
     name: 'general',
     type: 'text',
     topic: 'General discussion',
@@ -57,17 +57,17 @@ export async function seedDatabase(): Promise<void> {
   const voiceChannelId = generateSnowflake();
   db.insert(schema.channels).values({
     id: voiceChannelId,
-    serverId: serverId,
+    spaceId: spaceId,
     name: 'General Voice',
     type: 'voice',
     position: 1,
     createdAt: Date.now(),
   }).run();
 
-  // Create @everyone role (id === serverId convention)
+  // Create @everyone role (id === spaceId convention)
   db.insert(schema.roles).values({
-    id: serverId,
-    serverId: serverId,
+    id: spaceId,
+    spaceId: spaceId,
     name: '@everyone',
     color: '#b9bbbe',
     position: 0,
@@ -76,6 +76,6 @@ export async function seedDatabase(): Promise<void> {
   }).run();
 
   console.log('Database seeded successfully');
-  console.log(`  Default server: Backspace (invite code: backspace)`);
+  console.log(`  Default space: Backspace (invite code: backspace)`);
   console.log(`  Admin user: admin / admin123`);
 }

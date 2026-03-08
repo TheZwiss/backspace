@@ -1,5 +1,5 @@
 import React from 'react';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 
 interface MentionBadgeProps {
@@ -7,14 +7,14 @@ interface MentionBadgeProps {
 }
 
 export const MentionBadge = React.memo(function MentionBadge({ userId }: MentionBadgeProps) {
-  const members = useServerStore((s) => s.members);
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
+  const members = useSpaceStore((s) => s.members);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const member = members.find((m) => m.userId === userId);
-  const server = servers.find((s) => s.id === currentServerId);
-  const ownerId = server?.ownerId;
+  const space = spaces.find((s) => s.id === currentSpaceId);
+  const ownerId = space?.ownerId;
 
   let displayName: string;
   let color: string;

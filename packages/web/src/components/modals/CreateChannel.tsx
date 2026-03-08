@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 
 export function CreateChannelModal() {
   const [name, setName] = useState('');
@@ -11,8 +11,8 @@ export function CreateChannelModal() {
   const [isLoading, setIsLoading] = useState(false);
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const createChannel = useServerStore((s) => s.createChannel);
-  const currentServerId = useServerStore((s) => s.currentServerId);
+  const createChannel = useSpaceStore((s) => s.createChannel);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
 
   const isOpen = activeModal === 'createChannel';
 
@@ -25,14 +25,14 @@ export function CreateChannelModal() {
       return;
     }
 
-    if (!currentServerId) {
-      setError('No server selected');
+    if (!currentSpaceId) {
+      setError('No space selected');
       return;
     }
 
     setIsLoading(true);
     try {
-      await createChannel(currentServerId, name.trim(), type, topic.trim() || undefined);
+      await createChannel(currentSpaceId, name.trim(), type, topic.trim() || undefined);
       closeModal();
       setName('');
       setTopic('');

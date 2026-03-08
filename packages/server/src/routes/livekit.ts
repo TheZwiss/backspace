@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { AccessToken } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
-import { getChannelServerId, hasPermission, isDmMember, PermissionBits } from '../utils/permissions.js';
+import { getChannelSpaceId, hasPermission, isDmMember, PermissionBits } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@backspace/shared';
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
@@ -25,12 +25,12 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       }
       roomName = `dm-${dmChannelId}`;
     } else if (channelId && typeof channelId === 'string') {
-      // Server voice channel token
-      const serverId = getChannelServerId(channelId);
-      if (!serverId) {
+      // Space voice channel token
+      const spaceId = getChannelSpaceId(channelId);
+      if (!spaceId) {
         return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
       }
-      if (!hasPermission(request.userId, serverId, PermissionBits.CONNECT, channelId)) {
+      if (!hasPermission(request.userId, spaceId, PermissionBits.CONNECT, channelId)) {
         return reply.code(403).send({ error: 'Missing CONNECT permission', statusCode: 403 });
       }
       roomName = channelId;

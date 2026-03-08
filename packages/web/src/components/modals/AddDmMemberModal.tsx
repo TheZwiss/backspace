@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore, getApiForOrigin } from '../../stores/serverStore';
+import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 
@@ -15,8 +15,8 @@ export function AddDmMemberModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
-  const dmChannels = useServerStore((s) => s.dmChannels);
-  const channelOriginMap = useServerStore((s) => s.channelOriginMap);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
+  const channelOriginMap = useSpaceStore((s) => s.channelOriginMap);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 

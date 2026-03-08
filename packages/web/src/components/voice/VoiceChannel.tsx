@@ -2,7 +2,7 @@ import React from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 
 const EMPTY_VOICE_USERS: string[] = [];
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 
 interface VoiceChannelProps {
@@ -23,7 +23,7 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
     const local = s.participants.find(p => p.isLocal);
     return local?.userId ?? null;
   });
-  const members = useServerStore((s) => s.members);
+  const members = useSpaceStore((s) => s.members);
   const isActive = currentVoiceChannel === channelId;
 
   return (

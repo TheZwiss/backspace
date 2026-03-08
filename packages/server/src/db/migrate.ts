@@ -73,7 +73,7 @@ export function runMigrations(db: Database.Database): void {
       ]
     },
     {
-      name: 'servers',
+      name: 'spaces',
       columns: [
         { name: 'visibility', type: "TEXT DEFAULT 'private'" },
         { name: 'description', type: 'TEXT' }
@@ -113,7 +113,7 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS join_requests (
       id TEXT PRIMARY KEY,
-      server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       message TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -123,7 +123,7 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
-  // ─── RBAC Migration: Ensure @everyone roles exist for all servers ─────────
+  // ─── RBAC Migration: Ensure @everyone roles exist for all spaces ─────────
   migrateEveryoneRoles(db);
 
   // ─── Instance settings: ensure default row exists ──────────────────────────
@@ -182,58 +182,58 @@ function migrateWorkerId(db: Database.Database): void {
   }
 }
 
-/** For each server, ensure an @everyone role exists with id === server.id */
+/** For each space, ensure an @everyone role exists with id === space.id */
 function migrateEveryoneRoles(db: Database.Database): void {
-  const servers = db.prepare('SELECT id FROM servers').all() as { id: string }[];
+  const spaces = db.prepare('SELECT id FROM spaces').all() as { id: string }[];
   const now = Date.now();
   const defaultPerms = permissionsToString(DEFAULT_EVERYONE_PERMISSIONS);
   const adminPerms = permissionsToString(ALL_PERMISSIONS);
 
   const insertRole = db.prepare(
-    'INSERT OR IGNORE INTO roles (id, server_id, name, color, position, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT OR IGNORE INTO roles (id, space_id, name, color, position, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
 
-  for (const server of servers) {
-    // Create @everyone role if it doesn't exist (id = server.id)
-    insertRole.run(server.id, server.id, '@everyone', '#b9bbbe', 0, defaultPerms, now);
+  for (const space of spaces) {
+    // Create @everyone role if it doesn't exist (id = space.id)
+    insertRole.run(space.id, space.id, '@everyone', '#b9bbbe', 0, defaultPerms, now);
   }
 
   // Migrate existing admin members: ensure an Admin role exists and assign it
-  // Only run if the old `role` column still exists on server_members
-  const smColumns = db.pragma('table_info(server_members)') as { name: string }[];
+  // Only run if the old `role` column still exists on space_members
+  const smColumns = db.pragma('table_info(space_members)') as { name: string }[];
   const hasRoleColumn = smColumns.some(c => c.name === 'role');
   const adminMembers = hasRoleColumn
-    ? db.prepare("SELECT server_id, user_id FROM server_members WHERE role = 'admin'").all() as { server_id: string; user_id: string }[]
+    ? db.prepare("SELECT space_id, user_id FROM space_members WHERE role = 'admin'").all() as { space_id: string; user_id: string }[]
     : [];
 
   if (adminMembers.length > 0) {
-    // Group by server
-    const serverAdmins = new Map<string, string[]>();
+    // Group by space
+    const spaceAdmins = new Map<string, string[]>();
     for (const row of adminMembers) {
-      let arr = serverAdmins.get(row.server_id);
-      if (!arr) { arr = []; serverAdmins.set(row.server_id, arr); }
+      let arr = spaceAdmins.get(row.space_id);
+      if (!arr) { arr = []; spaceAdmins.set(row.space_id, arr); }
       arr.push(row.user_id);
     }
 
     const checkAdminRole = db.prepare(
-      "SELECT id FROM roles WHERE server_id = ? AND name = 'Admin' AND permissions = ?"
+      "SELECT id FROM roles WHERE space_id = ? AND name = 'Admin' AND permissions = ?"
     );
     const insertMemberRole = db.prepare(
-      'INSERT OR IGNORE INTO member_roles (server_id, user_id, role_id) VALUES (?, ?, ?)'
+      'INSERT OR IGNORE INTO member_roles (space_id, user_id, role_id) VALUES (?, ?, ?)'
     );
 
-    for (const [serverId, userIds] of serverAdmins) {
-      // Find or create Admin role for this server
-      let adminRole = checkAdminRole.get(serverId, adminPerms) as { id: string } | undefined;
+    for (const [spaceId, userIds] of spaceAdmins) {
+      // Find or create Admin role for this space
+      let adminRole = checkAdminRole.get(spaceId, adminPerms) as { id: string } | undefined;
       if (!adminRole) {
         // Generate a simple unique ID for the admin role
-        const adminRoleId = `${serverId}-admin`;
-        insertRole.run(adminRoleId, serverId, 'Admin', '#e74c3c', 1, adminPerms, now);
+        const adminRoleId = `${spaceId}-admin`;
+        insertRole.run(adminRoleId, spaceId, 'Admin', '#e74c3c', 1, adminPerms, now);
         adminRole = { id: adminRoleId };
       }
 
       for (const userId of userIds) {
-        insertMemberRole.run(serverId, userId, adminRole.id);
+        insertMemberRole.run(spaceId, userId, adminRole.id);
       }
     }
   }

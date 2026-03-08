@@ -3,7 +3,7 @@ import { eq, and, desc, lt, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { hasPermission, getChannelServerId, PermissionBits } from '../utils/permissions.js';
+import { hasPermission, getChannelSpaceId, PermissionBits } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
   CreateMessageRequest,
@@ -158,12 +158,12 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const before = request.query.before;
     const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
 
-    const serverId = getChannelServerId(id);
-    if (!serverId) {
+    const spaceId = getChannelSpaceId(id);
+    if (!spaceId) {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!hasPermission(request.userId, serverId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
+    if (!hasPermission(request.userId, spaceId, PermissionBits.VIEW_CHANNEL | PermissionBits.READ_MESSAGE_HISTORY, id)) {
       return reply.code(403).send({ error: 'Missing VIEW_CHANNEL or READ_MESSAGE_HISTORY permission', statusCode: 403 });
     }
 
@@ -251,12 +251,12 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params;
     const { content, attachments: attachmentIds, replyToId } = request.body;
 
-    const serverId = getChannelServerId(id);
-    if (!serverId) {
+    const spaceId = getChannelSpaceId(id);
+    if (!spaceId) {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!hasPermission(request.userId, serverId, PermissionBits.SEND_MESSAGES, id)) {
+    if (!hasPermission(request.userId, spaceId, PermissionBits.SEND_MESSAGES, id)) {
       return reply.code(403).send({ error: 'Missing SEND_MESSAGES permission', statusCode: 403 });
     }
 
@@ -315,7 +315,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const messageWithUser = buildMessageWithUser(message, user, attachmentRows, [], replyTo);
 
     // Broadcast via WebSocket
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToSpace(spaceId, {
       type: 'message_created',
       message: messageWithUser,
     });
@@ -377,9 +377,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo);
 
     // Broadcast edit
-    const serverId = getChannelServerId(message.channelId);
-    if (serverId) {
-      connectionManager.sendToServer(serverId, {
+    const spaceId = getChannelSpaceId(message.channelId);
+    if (spaceId) {
+      connectionManager.sendToSpace(spaceId, {
         type: 'message_updated',
         message: messageWithUser,
       });
@@ -400,13 +400,13 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Message not found', statusCode: 404 });
     }
 
-    const serverId = getChannelServerId(message.channelId);
-    if (!serverId) {
+    const spaceId = getChannelSpaceId(message.channelId);
+    if (!spaceId) {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
     const isAuthor = message.userId === request.userId;
-    const canManageMessages = hasPermission(request.userId, serverId, PermissionBits.MANAGE_MESSAGES, message.channelId);
+    const canManageMessages = hasPermission(request.userId, spaceId, PermissionBits.MANAGE_MESSAGES, message.channelId);
 
     if (!isAuthor && !canManageMessages) {
       return reply.code(403).send({ error: 'You cannot delete this message', statusCode: 403 });
@@ -419,7 +419,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     });
 
     // Broadcast deletion
-    connectionManager.sendToServer(serverId, {
+    connectionManager.sendToSpace(spaceId, {
       type: 'message_deleted',
       messageId: id,
       channelId: message.channelId,

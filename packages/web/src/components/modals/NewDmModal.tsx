@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 
@@ -14,7 +14,7 @@ export function NewDmModal() {
   const [error, setError] = useState('');
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
-  const addDmChannel = useServerStore((s) => s.addDmChannel);
+  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -59,7 +59,7 @@ export function NewDmModal() {
   const handleSelectUser = async (user: User) => {
     setError('');
     try {
-      const existing = useServerStore.getState().findExistingDmForUser(user);
+      const existing = useSpaceStore.getState().findExistingDmForUser(user);
       if (existing) {
         closeModal();
         useUIStore.getState().setShowDms(true);

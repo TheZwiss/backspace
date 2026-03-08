@@ -19,8 +19,8 @@ const AVATAR_GRADIENTS: GradientEntry[] = [
   { gradient: 'linear-gradient(135deg, #f59e0b, #eab308)', glow: '#f59e0b' },   // amber
 ];
 
-// ── Server icon gradients (server fallbacks) ──
-const SERVER_GRADIENTS: GradientEntry[] = [
+// ── Space icon gradients (space fallbacks) ──
+const SPACE_GRADIENTS: GradientEntry[] = [
   { gradient: 'linear-gradient(135deg, #ef4444, #f97316)', glow: '#f97316' },   // red-orange
   { gradient: 'linear-gradient(135deg, #ec4899, #f472b6)', glow: '#ec4899' },   // pink
   { gradient: 'linear-gradient(135deg, #14b8a6, #06b6d4)', glow: '#06b6d4' },   // teal-cyan
@@ -51,8 +51,8 @@ export function getAvatarGradient(id?: string | null, name?: string): GradientEn
   return AVATAR_GRADIENTS[hashString(key) % AVATAR_GRADIENTS.length]!;
 }
 
-/** Deterministic gradient for a server icon. Prefers ID for stability; falls back to name. */
-export function getServerGradient(id?: string | null, name?: string): GradientEntry {
+/** Deterministic gradient for a space icon. Prefers ID for stability; falls back to name. */
+export function getSpaceGradient(id?: string | null, name?: string): GradientEntry {
   const key = id || name || 'unknown';
-  return SERVER_GRADIENTS[hashString(key) % SERVER_GRADIENTS.length]!;
+  return SPACE_GRADIENTS[hashString(key) % SPACE_GRADIENTS.length]!;
 }

@@ -37,7 +37,7 @@ export function App() {
         }
       />
       <Route
-        path="/channels/:serverId/:channelId?"
+        path="/channels/:spaceId/:channelId?"
         element={
           <ProtectedRoute>
             <AppLayout />

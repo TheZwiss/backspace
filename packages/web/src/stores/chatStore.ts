@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
 import { wsSend } from '../hooks/useWebSocket';
-import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from './serverStore';
+import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
 import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 
@@ -135,7 +135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const isDm = isDmChannel(channelId);
     // For server channels, bail if we don't know which instance owns this channel yet.
     // The remote WS ready handler will call loadMessages once the map is populated.
-    if (!isDm && !useServerStore.getState().channelOriginMap.has(channelId)) return;
+    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
     set({ isLoading: true, loadError: null });
     try {
       const origin = getChannelOrigin(channelId);
@@ -229,7 +229,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // For DMs, update lastMessage on the DM channel so sidebar re-sorts
       if (isDm) {
-        const { dmChannels, setDmChannels } = useServerStore.getState();
+        const { dmChannels, setDmChannels } = useSpaceStore.getState();
         const updatedDms = dmChannels.map(dm =>
           dm.id === channelId
             ? { ...dm, lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() } }

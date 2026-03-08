@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { FriendsPage } from './FriendsPage';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import type { Friend, FriendRequest } from '@backspace/shared';
 
 // Mock the api module
@@ -100,7 +100,7 @@ beforeEach(() => {
     loadFriends: vi.fn(),
     loadRequests: vi.fn(),
   });
-  useServerStore.setState({
+  useSpaceStore.setState({
     dmChannels: [],
   });
 });
@@ -177,7 +177,7 @@ describe('FriendsPage', () => {
         friends: [friend],
         requests: [],
       });
-      useServerStore.setState({
+      useSpaceStore.setState({
         addDmChannel: mockAddDmChannel,
       });
 

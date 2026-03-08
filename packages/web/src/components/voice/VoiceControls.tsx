@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useServerStore, getChannelOrigin } from '../../stores/serverStore';
+import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
@@ -21,7 +21,7 @@ export function VoiceControls() {
   const connectionError = useVoiceStore((s) => s.connectionError);
   const isLiveKitConnected = useVoiceStore((s) => s.isLiveKitConnected);
   const connectionQuality = useVoiceStore((s) => s.connectionQuality);
-  const channels = useServerStore((s) => s.channels);
+  const channels = useSpaceStore((s) => s.channels);
   const [showScreenShareSettings, setShowScreenShareSettings] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
-import { setApiForOriginResolver, setUserIdForOriginResolver, useServerStore } from './serverStore';
+import { setApiForOriginResolver, setUserIdForOriginResolver, useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -282,8 +282,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return { instances: updated };
     });
 
-    // Remove servers from this instance from the server store
-    useServerStore.getState().removeInstanceServers(origin);
+    // Remove spaces from this instance from the space store
+    useSpaceStore.getState().removeInstanceSpaces(origin);
 
     // Sync updated list to remaining instances (fire-and-forget)
     get().syncInstanceList().catch(() => {});
@@ -479,10 +479,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   reset: () => {
-    // Clean up server store for each connected remote instance before tearing down
+    // Clean up space store for each connected remote instance before tearing down
     const { instances } = get();
     for (const inst of instances) {
-      useServerStore.getState().removeInstanceServers(inst.origin);
+      useSpaceStore.getState().removeInstanceSpaces(inst.origin);
     }
 
     // Tear down all remote WebSocket connections
@@ -494,9 +494,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 }));
 
 // ─── API client resolution ───────────────────────────────────────────────────
-// Register the resolver with serverStore so getApiForOrigin() works everywhere.
+// Register the resolver with spaceStore so getApiForOrigin() works everywhere.
 // Placed after store creation so useInstanceStore is definitely initialized.
-// This breaks the circular dependency: chatStore → serverStore ← instanceStore
+// This breaks the circular dependency: chatStore → spaceStore ← instanceStore
 // instead of: chatStore → instanceStore → useWebSocket → chatStore (cycle).
 
 setApiForOriginResolver((origin: string): BackspaceApiClient => {

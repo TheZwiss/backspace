@@ -3,14 +3,14 @@ import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isServerOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
+import { isMember, isSpaceOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import type {
-  ExploreServer,
+  ExploreSpace,
   JoinRequest,
   MemberWithUser,
-  ServerWithChannelsAndMembers,
+  SpaceWithChannelsAndMembers,
   Channel,
 } from '@backspace/shared';
 
@@ -20,7 +20,7 @@ function rowToJoinRequest(
 ): JoinRequest {
   return {
     id: row.id,
-    serverId: row.serverId,
+    spaceId: row.spaceId,
     userId: row.userId,
     message: row.message,
     status: row.status as JoinRequest['status'],
@@ -32,22 +32,22 @@ function rowToJoinRequest(
 }
 
 /**
- * Find all online users for a server who have MANAGE_SERVER or are the owner.
+ * Find all online users for a space who have MANAGE_SPACE or are the owner.
  * Used to route join_request_received events.
  */
-function getServerManagers(serverId: string): string[] {
+function getSpaceManagers(spaceId: string): string[] {
   const db = getDb();
-  const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
-  if (!server) return [];
+  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
+  if (!space) return [];
 
   const memberRows = db.select()
-    .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.serverId, serverId))
+    .from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.spaceId, spaceId))
     .all();
 
   const managers: string[] = [];
   for (const member of memberRows) {
-    if (member.userId === server.ownerId || hasPermission(member.userId, serverId, PermissionBits.MANAGE_SERVER)) {
+    if (member.userId === space.ownerId || hasPermission(member.userId, spaceId, PermissionBits.MANAGE_SPACE)) {
       managers.push(member.userId);
     }
   }
@@ -55,28 +55,28 @@ function getServerManagers(serverId: string): string[] {
 }
 
 /**
- * Build a full ServerWithChannelsAndMembers for a newly joined user.
+ * Build a full SpaceWithChannelsAndMembers for a newly joined user.
  * Used after accepting a join request or public join.
  */
-function buildFullServer(serverId: string, forUserId: string): ServerWithChannelsAndMembers | null {
+function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAndMembers | null {
   const db = getDb();
-  const server = db.select().from(schema.servers).where(eq(schema.servers.id, serverId)).get();
-  if (!server) return null;
+  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
+  if (!space) return null;
 
   const channels = db.select()
     .from(schema.channels)
-    .where(eq(schema.channels.serverId, serverId))
+    .where(eq(schema.channels.spaceId, spaceId))
     .all();
 
   const roles = db.select()
     .from(schema.roles)
-    .where(eq(schema.roles.serverId, serverId))
+    .where(eq(schema.roles.spaceId, spaceId))
     .orderBy(schema.roles.position)
     .all();
 
   const memberRows = db.select()
-    .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.serverId, serverId))
+    .from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.spaceId, spaceId))
     .all();
 
   const memberUserIds = memberRows.map(m => m.userId);
@@ -87,7 +87,7 @@ function buildFullServer(serverId: string, forUserId: string): ServerWithChannel
 
   const memberRoleRows = db.select()
     .from(schema.memberRoles)
-    .where(eq(schema.memberRoles.serverId, serverId))
+    .where(eq(schema.memberRoles.spaceId, spaceId))
     .all();
 
   const members: MemberWithUser[] = memberRows
@@ -103,7 +103,7 @@ function buildFullServer(serverId: string, forUserId: string): ServerWithChannel
         .filter(r => assignedRoleIds.includes(r.id))
         .map(r => ({
           id: r.id,
-          serverId: r.serverId,
+          spaceId: r.spaceId,
           name: r.name,
           color: r.color ?? '#b9bbbe',
           position: r.position ?? 0,
@@ -111,7 +111,7 @@ function buildFullServer(serverId: string, forUserId: string): ServerWithChannel
         }));
 
       return {
-        serverId: m.serverId,
+        spaceId: m.spaceId,
         userId: m.userId,
         nickname: m.nickname,
         joinedAt: m.joinedAt,
@@ -121,16 +121,16 @@ function buildFullServer(serverId: string, forUserId: string): ServerWithChannel
     })
     .filter((m): m is MemberWithUser => m !== null);
 
-  const serverPerms = computePermissions(forUserId, serverId);
+  const spacePerms = computePermissions(forUserId, spaceId);
 
   const visibleChannels: Channel[] = [];
   for (const ch of channels) {
-    const chPerms = computePermissions(forUserId, serverId, ch.id);
+    const chPerms = computePermissions(forUserId, spaceId, ch.id);
     const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
     if (hasView) {
       visibleChannels.push({
         id: ch.id,
-        serverId: ch.serverId,
+        spaceId: ch.spaceId,
         name: ch.name,
         type: ch.type as Channel['type'],
         topic: ch.topic,
@@ -142,34 +142,34 @@ function buildFullServer(serverId: string, forUserId: string): ServerWithChannel
   }
 
   return {
-    id: server.id,
-    name: server.name,
-    icon: server.icon,
-    ownerId: server.ownerId,
-    inviteCode: server.inviteCode,
-    visibility: (server.visibility ?? 'private') as ServerWithChannelsAndMembers['visibility'],
-    description: server.description ?? null,
-    createdAt: server.createdAt,
+    id: space.id,
+    name: space.name,
+    icon: space.icon,
+    ownerId: space.ownerId,
+    inviteCode: space.inviteCode,
+    visibility: (space.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
+    description: space.description ?? null,
+    createdAt: space.createdAt,
     channels: visibleChannels,
     members,
     roles: roles.map(r => ({
       id: r.id,
-      serverId: r.serverId,
+      spaceId: r.spaceId,
       name: r.name,
       color: r.color ?? '#b9bbbe',
       position: r.position ?? 0,
       permissions: r.permissions ?? undefined,
-      isEveryone: r.id === serverId,
+      isEveryone: r.id === spaceId,
       createdAt: r.createdAt,
     })),
-    myPermissions: permissionsToString(serverPerms),
+    myPermissions: permissionsToString(spacePerms),
   };
 }
 
 export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
-  // GET /api/servers/explore — list discoverable servers
-  app.get<{ Querystring: { q?: string; limit?: string; offset?: string } }>('/api/servers/explore', {
+  // GET /api/spaces/explore — list discoverable spaces
+  app.get<{ Querystring: { q?: string; limit?: string; offset?: string } }>('/api/spaces/explore', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const db = getDb();
@@ -177,35 +177,35 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     // Check instance-level discovery toggle
     const settings = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     if (!settings || settings.discoveryEnabled === 0) {
-      return reply.code(200).send({ servers: [], total: 0, discoveryEnabled: false });
+      return reply.code(200).send({ spaces: [], total: 0, discoveryEnabled: false });
     }
 
     const q = request.query.q?.trim() ?? '';
     const limit = Math.min(Math.max(parseInt(request.query.limit ?? '50', 10) || 50, 1), 100);
     const offset = Math.max(parseInt(request.query.offset ?? '0', 10) || 0, 0);
 
-    // Get user's current server memberships to exclude
-    const myMemberships = db.select({ serverId: schema.serverMembers.serverId })
-      .from(schema.serverMembers)
-      .where(eq(schema.serverMembers.userId, request.userId))
+    // Get user's current space memberships to exclude
+    const myMemberships = db.select({ spaceId: schema.spaceMembers.spaceId })
+      .from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.userId, request.userId))
       .all();
-    const myServerIds = new Set(myMemberships.map(m => m.serverId));
+    const mySpaceIds = new Set(myMemberships.map(m => m.spaceId));
 
     // Build raw SQL query for explore — we need a LEFT JOIN for member count
     // which is more efficient to do with raw SQL
     const rawDb = getRawDb();
 
-    // Count ALL discoverable servers (including ones the user has joined) for context
+    // Count ALL discoverable spaces (including ones the user has joined) for context
     const totalAllRow = rawDb.prepare(
-      `SELECT COUNT(DISTINCT s.id) as total FROM servers s WHERE s.visibility IN ('public', 'request')`
+      `SELECT COUNT(DISTINCT s.id) as total FROM spaces s WHERE s.visibility IN ('public', 'request')`
     ).get() as { total: number };
 
-    let countSql = `SELECT COUNT(DISTINCT s.id) as total FROM servers s WHERE s.visibility IN ('public', 'request')`;
+    let countSql = `SELECT COUNT(DISTINCT s.id) as total FROM spaces s WHERE s.visibility IN ('public', 'request')`;
     let querySql = `
       SELECT s.id, s.name, s.icon, s.description, s.visibility, s.created_at,
              COUNT(sm.user_id) as member_count
-      FROM servers s
-      LEFT JOIN server_members sm ON sm.server_id = s.id
+      FROM spaces s
+      LEFT JOIN space_members sm ON sm.space_id = s.id
       WHERE s.visibility IN ('public', 'request')
     `;
 
@@ -231,79 +231,79 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       member_count: number;
     }[];
 
-    const servers: ExploreServer[] = rows.map(r => ({
+    const spaces: ExploreSpace[] = rows.map(r => ({
       id: r.id,
       name: r.name,
       icon: r.icon,
       description: r.description,
-      visibility: r.visibility as ExploreServer['visibility'],
+      visibility: r.visibility as ExploreSpace['visibility'],
       memberCount: r.member_count,
       createdAt: r.created_at,
-      joined: myServerIds.has(r.id),
+      joined: mySpaceIds.has(r.id),
     }));
 
-    return reply.code(200).send({ servers, total: totalRow.total, totalAll: totalAllRow.total, discoveryEnabled: true });
+    return reply.code(200).send({ spaces, total: totalRow.total, totalAll: totalAllRow.total, discoveryEnabled: true });
   });
 
-  // POST /api/servers/:id/public-join — join a public server without invite
-  app.post<{ Params: { id: string } }>('/api/servers/:id/public-join', {
+  // POST /api/spaces/:id/public-join — join a public space without invite
+  app.post<{ Params: { id: string } }>('/api/spaces/:id/public-join', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (server.visibility !== 'public') {
-      return reply.code(403).send({ error: 'This server does not allow public joins', statusCode: 403 });
+    if (space.visibility !== 'public') {
+      return reply.code(403).send({ error: 'This space does not allow public joins', statusCode: 403 });
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this server', statusCode: 409 });
+      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
 
     const now = Date.now();
-    db.insert(schema.serverMembers).values({
-      serverId: id,
+    db.insert(schema.spaceMembers).values({
+      spaceId: id,
       userId: request.userId,
       joinedAt: now,
     }).run();
 
     // Register in connectionManager for WS broadcasts
-    connectionManager.addUserServer(request.userId, id);
+    connectionManager.addUserSpace(request.userId, id);
 
-    // Broadcast member_joined to existing server members
+    // Broadcast member_joined to existing space members
     const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (joiningUser) {
       const memberPayload: MemberWithUser = {
-        serverId: id,
+        spaceId: id,
         userId: request.userId,
         nickname: null,
         joinedAt: now,
         user: sanitizeUser(joiningUser),
         roles: [],
       };
-      connectionManager.sendToServer(id, {
+      connectionManager.sendToSpace(id, {
         type: 'member_joined',
-        serverId: id,
+        spaceId: id,
         member: memberPayload,
       });
     }
 
-    // Return full server data
-    const fullServer = buildFullServer(id, request.userId);
-    if (!fullServer) {
-      return reply.code(500).send({ error: 'Failed to load server', statusCode: 500 });
+    // Return full space data
+    const fullSpace = buildFullSpace(id, request.userId);
+    if (!fullSpace) {
+      return reply.code(500).send({ error: 'Failed to load space', statusCode: 500 });
     }
 
-    return reply.code(200).send(fullServer);
+    return reply.code(200).send(fullSpace);
   });
 
-  // POST /api/servers/:id/request-join — request to join a request-only server
-  app.post<{ Params: { id: string }; Body: { message?: string } }>('/api/servers/:id/request-join', {
+  // POST /api/spaces/:id/request-join — request to join a request-only space
+  app.post<{ Params: { id: string }; Body: { message?: string } }>('/api/spaces/:id/request-join', {
     preHandler: authenticate,
     config: {
       rateLimit: {
@@ -315,30 +315,30 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (server.visibility !== 'request') {
-      return reply.code(403).send({ error: 'This server does not accept join requests', statusCode: 403 });
+    if (space.visibility !== 'request') {
+      return reply.code(403).send({ error: 'This space does not accept join requests', statusCode: 403 });
     }
 
     if (isMember(id, request.userId)) {
-      return reply.code(409).send({ error: 'You are already a member of this server', statusCode: 409 });
+      return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
 
     // Check for existing pending request
     const existingRequest = db.select().from(schema.joinRequests)
       .where(and(
-        eq(schema.joinRequests.serverId, id),
+        eq(schema.joinRequests.spaceId, id),
         eq(schema.joinRequests.userId, request.userId),
         eq(schema.joinRequests.status, 'pending'),
       ))
       .get();
 
     if (existingRequest) {
-      return reply.code(409).send({ error: 'You already have a pending request for this server', statusCode: 409 });
+      return reply.code(409).send({ error: 'You already have a pending request for this space', statusCode: 409 });
     }
 
     const requestId = generateSnowflake();
@@ -347,7 +347,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     db.insert(schema.joinRequests).values({
       id: requestId,
-      serverId: id,
+      spaceId: id,
       userId: request.userId,
       message: msgText,
       status: 'pending',
@@ -360,8 +360,8 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       joiningUser ? sanitizeUser(joiningUser) : undefined,
     );
 
-    // Send WS event to server managers (owner + MANAGE_SERVER users)
-    const managers = getServerManagers(id);
+    // Send WS event to space managers (owner + MANAGE_SPACE users)
+    const managers = getSpaceManagers(id);
     for (const managerId of managers) {
       connectionManager.sendToUser(managerId, {
         type: 'join_request_received',
@@ -372,26 +372,26 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(joinRequest);
   });
 
-  // GET /api/servers/:id/join-requests — list join requests for a server
-  app.get<{ Params: { id: string }; Querystring: { status?: string } }>('/api/servers/:id/join-requests', {
+  // GET /api/spaces/:id/join-requests — list join requests for a space
+  app.get<{ Params: { id: string }; Querystring: { status?: string } }>('/api/spaces/:id/join-requests', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (!isServerOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SERVER)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SERVER permission', statusCode: 403 });
+    if (!isSpaceOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
     }
 
     const statusFilter = request.query.status ?? 'pending';
     const rows = db.select().from(schema.joinRequests)
       .where(and(
-        eq(schema.joinRequests.serverId, id),
+        eq(schema.joinRequests.spaceId, id),
         eq(schema.joinRequests.status, statusFilter),
       ))
       .all();
@@ -408,8 +408,8 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ requests });
   });
 
-  // PATCH /api/servers/:id/join-requests/:requestId — accept or decline
-  app.patch<{ Params: { id: string; requestId: string }; Body: { action: 'accept' | 'decline' } }>('/api/servers/:id/join-requests/:requestId', {
+  // PATCH /api/spaces/:id/join-requests/:requestId — accept or decline
+  app.patch<{ Params: { id: string; requestId: string }; Body: { action: 'accept' | 'decline' } }>('/api/spaces/:id/join-requests/:requestId', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id, requestId } = request.params;
@@ -420,17 +420,17 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Action must be "accept" or "decline"', statusCode: 400 });
     }
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
-    if (!isServerOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SERVER)) {
-      return reply.code(403).send({ error: 'Missing MANAGE_SERVER permission', statusCode: 403 });
+    if (!isSpaceOwner(id, request.userId) && !hasPermission(request.userId, id, PermissionBits.MANAGE_SPACE)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_SPACE permission', statusCode: 403 });
     }
 
     const joinReq = db.select().from(schema.joinRequests).where(eq(schema.joinRequests.id, requestId)).get();
-    if (!joinReq || joinReq.serverId !== id) {
+    if (!joinReq || joinReq.spaceId !== id) {
       return reply.code(404).send({ error: 'Join request not found', statusCode: 404 });
     }
 
@@ -443,8 +443,8 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     if (action === 'accept') {
       // Insert member and update request atomically
       db.transaction((tx) => {
-        tx.insert(schema.serverMembers).values({
-          serverId: id,
+        tx.insert(schema.spaceMembers).values({
+          spaceId: id,
           userId: joinReq.userId,
           joinedAt: now,
         }).run();
@@ -457,38 +457,38 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // Register in connectionManager
-      connectionManager.addUserServer(joinReq.userId, id);
+      connectionManager.addUserSpace(joinReq.userId, id);
 
-      // Broadcast member_joined to server
+      // Broadcast member_joined to space
       const joiningUser = db.select().from(schema.users).where(eq(schema.users.id, joinReq.userId)).get();
       if (joiningUser) {
         const memberPayload: MemberWithUser = {
-          serverId: id,
+          spaceId: id,
           userId: joinReq.userId,
           nickname: null,
           joinedAt: now,
           user: sanitizeUser(joiningUser),
           roles: [],
         };
-        connectionManager.sendToServer(id, {
+        connectionManager.sendToSpace(id, {
           type: 'member_joined',
-          serverId: id,
+          spaceId: id,
           member: memberPayload,
         });
       }
 
-      // Build full server for the accepted user
-      const fullServer = buildFullServer(id, joinReq.userId);
+      // Build full space for the accepted user
+      const fullSpace = buildFullSpace(id, joinReq.userId);
 
       const updatedRow = db.select().from(schema.joinRequests).where(eq(schema.joinRequests.id, requestId)).get()!;
       const updatedRequest = rowToJoinRequest(updatedRow, joiningUser ? sanitizeUser(joiningUser) : undefined);
 
       // Send join_request_accepted to the requesting user
-      if (fullServer) {
+      if (fullSpace) {
         connectionManager.sendToUser(joinReq.userId, {
           type: 'join_request_accepted',
           request: updatedRequest,
-          server: fullServer,
+          space: fullSpace,
         });
       }
 

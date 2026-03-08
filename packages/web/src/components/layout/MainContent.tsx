@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -20,9 +20,9 @@ import { joinVoiceChannel } from '../../utils/voice';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
-  const channels = useServerStore((s) => s.channels);
+  const channels = useSpaceStore((s) => s.channels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
-  const currentServerId = useServerStore((s) => s.currentServerId);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const setVoiceFullscreen = useUIStore((s) => s.setVoiceFullscreen);
@@ -35,7 +35,7 @@ export function MainContent() {
   const isExplorePage = location.pathname === '/explore';
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const outgoingCall = useVoiceStore((s) => s.outgoingCall);
-  const dmChannels = useServerStore((s) => s.dmChannels);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
   const openModal = useUIStore((s) => s.openModal);
 
@@ -64,7 +64,7 @@ export function MainContent() {
   const channel = channels.find(c => c.id === currentChannelId);
   const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
 
-  if (showDms || isExplorePage || !currentServerId) {
+  if (showDms || isExplorePage || !currentSpaceId) {
     if (!currentChannelId) {
       if (isExplorePage) return <ExplorePage />;
       return <FriendsPage />;

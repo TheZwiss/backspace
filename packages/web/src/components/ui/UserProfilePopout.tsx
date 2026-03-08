@@ -4,7 +4,7 @@ import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { api } from '../../api/client';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -17,7 +17,7 @@ interface UserProfilePopoutProps {
 
 export function UserProfilePopout({ user, onClose, position }: UserProfilePopoutProps) {
   const navigate = useNavigate();
-  const addDmChannel = useServerStore((s) => s.addDmChannel);
+  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 
@@ -30,7 +30,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
   const handleSendMessage = async () => {
     try {
-      const existing = useServerStore.getState().findExistingDmForUser(user);
+      const existing = useSpaceStore.getState().findExistingDmForUser(user);
       if (existing) {
         useUIStore.getState().setShowDms(true);
         onClose();

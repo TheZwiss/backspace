@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { ContextMenu } from '../ui/ContextMenu';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Embed } from './Embed';
 import { Username } from '../ui/Username';
@@ -44,13 +44,13 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
-  const members = useServerStore((s) => s.members);
+  const members = useSpaceStore((s) => s.members);
   const openImagePreview = useUIStore((s) => s.openImagePreview);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const channelKey = message.channelId || (message as any).dmChannelId;
   const isAuthor = isSelf(message.user, currentUser);
-  const channelPermissions = useServerStore((s) => s.channelPermissions);
+  const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const myChPerms = channelPermissions.get(message.channelId);
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canDelete = isAuthor || canManageMessages;
@@ -130,9 +130,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const displayIdentity = resolveDisplayIdentity(message.user, currentUser);
   const displayName = displayIdentity.displayName ?? displayIdentity.username;
 
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const ownerId = servers.find(s => s.id === currentServerId)?.ownerId;
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const ownerId = spaces.find(s => s.id === currentSpaceId)?.ownerId;
 
   const getMemberDisplayColor = (userId: string) => {
     const member = members.find(m => m.userId === userId);

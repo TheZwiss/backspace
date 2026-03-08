@@ -120,9 +120,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     // Broadcast presence update if status changed
     if (status !== undefined) {
-      const userServers = connectionManager.getUserServers(sanitized.id);
-      for (const serverId of userServers) {
-        connectionManager.sendToServer(serverId, {
+      const userSpaces = connectionManager.getUserSpaces(sanitized.id);
+      for (const spaceId of userSpaces) {
+        connectionManager.sendToSpace(spaceId, {
           type: 'presence_update',
           userId: sanitized.id,
           status: status,

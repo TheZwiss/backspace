@@ -3,12 +3,12 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@backspace/shared';
 
 type ModalType =
-  | 'createServer'
-  | 'joinServer'
+  | 'createSpace'
+  | 'joinSpace'
   | 'createChannel'
   | 'invite'
   | 'userSettings'
-  | 'serverSettings'
+  | 'spaceSettings'
   | 'channelSettings'
   | 'imagePreview'
   | 'newDm'
@@ -46,8 +46,8 @@ interface UIState {
   closeUserProfile: () => void;
   addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number) => void;
   removeToast: (id: string) => void;
-  lastChannelPerServer: Record<string, string>;
-  setLastChannel: (serverId: string, channelId: string) => void;
+  lastChannelPerSpace: Record<string, string>;
+  setLastChannel: (spaceId: string, channelId: string) => void;
   voiceChatOpen: boolean;
   voiceFullscreen: boolean;
   pipCollapsed: boolean;
@@ -112,9 +112,9 @@ export const useUIStore = create<UIState>()(
       },
       removeToast: (id) => set((state) => ({ toasts: state.toasts.filter(t => t.id !== id) })),
 
-      lastChannelPerServer: {},
-      setLastChannel: (serverId, channelId) => set((state) => ({
-        lastChannelPerServer: { ...state.lastChannelPerServer, [serverId]: channelId },
+      lastChannelPerSpace: {},
+      setLastChannel: (spaceId, channelId) => set((state) => ({
+        lastChannelPerSpace: { ...state.lastChannelPerSpace, [spaceId]: channelId },
       })),
 
       voiceChatOpen: false,
@@ -130,7 +130,7 @@ export const useUIStore = create<UIState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         memberListOpen: state.memberListOpen,
-        lastChannelPerServer: state.lastChannelPerServer,
+        lastChannelPerSpace: state.lastChannelPerSpace,
       }),
     }
   )

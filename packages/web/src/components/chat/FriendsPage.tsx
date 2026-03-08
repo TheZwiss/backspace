@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
@@ -16,7 +16,7 @@ export function FriendsPage() {
   const [addUsername, setAddUsername] = useState('');
   const [addStatus, setAddStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const navigate = useNavigate();
-  const addDmChannel = useServerStore((s) => s.addDmChannel);
+  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
 
   const {
     friends,
@@ -55,7 +55,7 @@ export function FriendsPage() {
   const handleOpenDm = async (friendId: string, instanceOrigin: string) => {
     try {
       // Check if a DM already exists with this user (on any instance)
-      const existing = useServerStore.getState().findExistingDmForUser({ id: friendId });
+      const existing = useSpaceStore.getState().findExistingDmForUser({ id: friendId });
       if (existing) {
         useUIStore.getState().setShowDms(true);
         navigate(`/channels/@me/${existing.dm.id}`);

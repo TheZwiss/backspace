@@ -12,7 +12,7 @@ Backspace has its own visual identity — it is NOT a Discord clone. The design 
 - **Design language:** "Aether Drift" — warm matte surfaces with subtle frosted glass accents
 - **Two-material system:** Solid matte panels for content (75%), frosted glass bubbles for persistent controls (25%)
 - **Color palette:** Warm dark surfaces (#13131a chat, #1a1a23 sidebars), pastel accents (mint, peach, lavender, sky, amber, rose, coral)
-- **Glass elements:** Server strip (left column), voice+user bubble (bottom-left, crosses over server strip), input bubble (bottom of chat)
+- **Glass elements:** Space strip (left column), voice+user bubble (bottom-left, crosses over space strip), input bubble (bottom of chat)
 - **Glass material:** `backdrop-filter: blur(20px) saturate(120%)`, warm-tinted `rgba(20,20,26,0.52)`, subtle 0.07 opacity borders
 - **Key principles:** Calm over flashy. Warm over cool. Quiet glass (felt, not seen). No decorative gradients. Minimal shadows.
 - **Accessibility:** `prefers-reduced-transparency` media query falls back to solid surfaces
@@ -95,7 +95,7 @@ Backspace/
 │   │       ├── routes/
 │   │       │   ├── auth.ts
 │   │       │   ├── users.ts
-│   │       │   ├── servers.ts
+│   │       │   ├── spaces.ts
 │   │       │   ├── channels.ts
 │   │       │   ├── messages.ts
 │   │       │   ├── uploads.ts
@@ -128,7 +128,7 @@ Backspace/
 │   │       │   └── SpeakingDetector.ts
 │   │       ├── stores/
 │   │       │   ├── authStore.ts
-│   │       │   ├── serverStore.ts
+│   │       │   ├── spaceStore.ts
 │   │       │   ├── chatStore.ts
 │   │       │   ├── voiceStore.ts
 │   │       │   ├── socialStore.ts
@@ -147,7 +147,7 @@ Backspace/
 │   │       ├── components/
 │   │       │   ├── layout/
 │   │       │   │   ├── AppLayout.tsx
-│   │       │   │   ├── ServerSidebar.tsx
+│   │       │   │   ├── SpaceSidebar.tsx
 │   │       │   │   ├── ChannelSidebar.tsx
 │   │       │   │   ├── MainContent.tsx
 │   │       │   │   ├── RightPanel.tsx
@@ -184,12 +184,12 @@ Backspace/
 │   │       │   │   ├── LoginPage.tsx
 │   │       │   │   └── RegisterPage.tsx
 │   │       │   ├── modals/
-│   │       │   │   ├── CreateServer.tsx
+│   │       │   │   ├── CreateSpace.tsx
 │   │       │   │   ├── InviteModal.tsx
 │   │       │   │   ├── CreateChannel.tsx
-│   │       │   │   ├── JoinServer.tsx
+│   │       │   │   ├── JoinSpace.tsx
 │   │       │   │   ├── UserSettings.tsx
-│   │       │   │   ├── ServerSettings.tsx
+│   │       │   │   ├── SpaceSettings.tsx
 │   │       │   │   ├── ChannelSettingsModal.tsx
 │   │       │   │   ├── NewDmModal.tsx
 │   │       │   │   └── AddDmMemberModal.tsx
@@ -232,8 +232,8 @@ CREATE TABLE users (
     created_at INTEGER NOT NULL
 );
 
--- Servers (Guilds)
-CREATE TABLE servers (
+-- Spaces (Communities)
+CREATE TABLE spaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     icon TEXT,
@@ -242,19 +242,19 @@ CREATE TABLE servers (
     created_at INTEGER NOT NULL
 );
 
--- Server Members
-CREATE TABLE server_members (
-    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+-- Space Members
+CREATE TABLE space_members (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     nickname TEXT,
     joined_at INTEGER NOT NULL,
-    PRIMARY KEY (server_id, user_id)
+    PRIMARY KEY (space_id, user_id)
 );
 
 -- Roles
 CREATE TABLE roles (
     id TEXT PRIMARY KEY,
-    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     color TEXT DEFAULT '#b9bbbe',
     position INTEGER DEFAULT 0,
@@ -264,16 +264,16 @@ CREATE TABLE roles (
 
 -- Member Roles (many-to-many)
 CREATE TABLE member_roles (
-    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    PRIMARY KEY (server_id, user_id, role_id)
+    PRIMARY KEY (space_id, user_id, role_id)
 );
 
 -- Channels
 CREATE TABLE channels (
     id TEXT PRIMARY KEY,
-    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     type TEXT NOT NULL,            -- 'text' | 'voice' | 'video'
     topic TEXT,
@@ -383,8 +383,8 @@ CREATE TABLE read_states (
     PRIMARY KEY (user_id, channel_id)
 );
 
--- Server Folders
-CREATE TABLE server_folders (
+-- Space Folders
+CREATE TABLE space_folders (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT,
@@ -393,10 +393,10 @@ CREATE TABLE server_folders (
     created_at INTEGER NOT NULL
 );
 
-CREATE TABLE server_folder_members (
-    folder_id TEXT NOT NULL REFERENCES server_folders(id) ON DELETE CASCADE,
-    server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
-    PRIMARY KEY (folder_id, server_id)
+CREATE TABLE space_folder_members (
+    folder_id TEXT NOT NULL REFERENCES space_folders(id) ON DELETE CASCADE,
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    PRIMARY KEY (folder_id, space_id)
 );
 
 -- Instance Settings (singleton row, id=1)
@@ -425,31 +425,31 @@ GET    /api/users/@me              (auth)                                   → 
 PATCH  /api/users/@me              (auth) { displayName?, avatar?, customStatus?, status? } → { user }
 GET    /api/users/:id              (auth)                                   → { user }
 
-# Servers
-POST   /api/servers                (auth) { name, icon? }                  → { server }
-GET    /api/servers                (auth)                                   → { servers[] }
-GET    /api/servers/:id            (auth)                                   → { server, channels[], members[], roles[] }
-PATCH  /api/servers/:id            (auth, MANAGE_SERVER) { name?, icon? }  → { server }
-DELETE /api/servers/:id            (auth, owner)                            → { success }
-POST   /api/servers/:id/invite     (auth, CREATE_INVITE)                   → { inviteCode }
-POST   /api/servers/:id/join       (auth) { inviteCode }                   → { server }
-POST   /api/servers/join           (auth) { inviteCode }                   → { server }
+# Spaces
+POST   /api/spaces                (auth) { name, icon? }                  → { space }
+GET    /api/spaces                (auth)                                   → { spaces[] }
+GET    /api/spaces/:id            (auth)                                   → { space, channels[], members[], roles[] }
+PATCH  /api/spaces/:id            (auth, MANAGE_SPACE) { name?, icon? }   → { space }
+DELETE /api/spaces/:id            (auth, owner)                            → { success }
+POST   /api/spaces/:id/invite     (auth, CREATE_INVITE)                   → { inviteCode }
+POST   /api/spaces/:id/join       (auth) { inviteCode }                   → { space }
+POST   /api/spaces/join           (auth) { inviteCode }                   → { space }
 
 # Members
-GET    /api/servers/:id/members    (auth, member)                          → { members[] }
-PATCH  /api/servers/:id/members/:uid (auth, MANAGE_ROLES) { roles }       → { member }
-DELETE /api/servers/:id/members/:uid (auth, KICK_MEMBERS|self)             → { success }
+GET    /api/spaces/:id/members    (auth, member)                          → { members[] }
+PATCH  /api/spaces/:id/members/:uid (auth, MANAGE_ROLES) { roles }       → { member }
+DELETE /api/spaces/:id/members/:uid (auth, KICK_MEMBERS|self)             → { success }
 
 # Roles
-POST   /api/servers/:id/roles      (auth, MANAGE_ROLES) { name, color?, permissions? } → { role }
-PATCH  /api/servers/:id/roles/:rid (auth, MANAGE_ROLES) { name?, color?, permissions?, position? } → { role }
-DELETE /api/servers/:id/roles/:rid (auth, MANAGE_ROLES)                    → { success }
-POST   /api/servers/:id/members/:uid/roles (auth, MANAGE_ROLES) { roleId } → { success }
-DELETE /api/servers/:id/members/:uid/roles/:rid (auth, MANAGE_ROLES)       → { success }
+POST   /api/spaces/:id/roles      (auth, MANAGE_ROLES) { name, color?, permissions? } → { role }
+PATCH  /api/spaces/:id/roles/:rid (auth, MANAGE_ROLES) { name?, color?, permissions?, position? } → { role }
+DELETE /api/spaces/:id/roles/:rid (auth, MANAGE_ROLES)                    → { success }
+POST   /api/spaces/:id/members/:uid/roles (auth, MANAGE_ROLES) { roleId } → { success }
+DELETE /api/spaces/:id/members/:uid/roles/:rid (auth, MANAGE_ROLES)       → { success }
 
 # Channels
-GET    /api/servers/:id/channels   (auth, member, VIEW_CHANNEL)            → { channels[] }
-POST   /api/servers/:id/channels   (auth, MANAGE_CHANNELS) { name, type, topic? } → { channel }
+GET    /api/spaces/:id/channels   (auth, member, VIEW_CHANNEL)            → { channels[] }
+POST   /api/spaces/:id/channels   (auth, MANAGE_CHANNELS) { name, type, topic? } → { channel }
 PATCH  /api/channels/:id           (auth, MANAGE_CHANNELS) { name?, topic?, position? } → { channel }
 DELETE /api/channels/:id           (auth, MANAGE_CHANNELS)                 → { success }
 
@@ -527,7 +527,7 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 # Presence
 { type: 'presence_update', status: 'online' | 'idle' | 'dnd' }
 
-# Voice (Server Channels)
+# Voice (Space Channels)
 { type: 'voice_join', channelId }
 { type: 'voice_leave' }
 { type: 'voice_status', isMuted?, isDeafened?, isCameraOn?, isScreenSharing? }
@@ -541,7 +541,7 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 
 ### Server → Client
 ```
-{ type: 'ready', user, servers, dmChannels, folders, voiceStates, readStates, activeCalls }
+{ type: 'ready', user, spaces, dmChannels, folders, voiceStates, readStates, activeCalls }
 { type: 'pong' }
 
 # Server Messages
@@ -561,16 +561,16 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'dm_member_added', dmChannelId, user }
 { type: 'dm_member_removed', dmChannelId, userId }
 
-# Channel/Server Updates
+# Channel/Space Updates
 { type: 'channel_created', channel }
 { type: 'channel_updated', channel }
-{ type: 'channel_deleted', channelId, serverId }
-{ type: 'server_updated', server }
+{ type: 'channel_deleted', channelId, spaceId }
+{ type: 'space_updated', space }
 { type: 'channel_ack', channelId, messageId, userId }
 
 # Members & Presence
-{ type: 'member_joined', serverId, member: MemberWithUser }
-{ type: 'member_left', serverId, userId }
+{ type: 'member_joined', spaceId, member: MemberWithUser }
+{ type: 'member_left', spaceId, userId }
 { type: 'presence_update', userId, status }
 
 # Voice
@@ -599,10 +599,10 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 | 1 | VIEW_CHANNEL | See channel in list and read messages |
 | 2 | MANAGE_CHANNELS | Create, edit, delete channels |
 | 3 | MANAGE_ROLES | Create, edit, delete roles |
-| 4 | MANAGE_SERVER | Edit server name, icon |
+| 4 | MANAGE_SPACE | Edit space name, icon |
 | 5 | CREATE_INVITE | Generate invite codes |
-| 6 | KICK_MEMBERS | Remove members from server |
-| 7 | BAN_MEMBERS | Ban members from server |
+| 6 | KICK_MEMBERS | Remove members from space |
+| 7 | BAN_MEMBERS | Ban members from space |
 | 10 | SEND_MESSAGES | Post messages in text channels |
 | 11 | MANAGE_MESSAGES | Delete other users' messages |
 | 12 | ATTACH_FILES | Upload files to messages |
@@ -672,7 +672,7 @@ pnpm dev           # Starts server (:3005) + Vite (:5173) with proxy
 All core features are implemented and live:
 
 - **Auth:** Registration (first user = admin), login, JWT sessions
-- **Servers:** Create, join by invite, server settings, delete
+- **Spaces:** Create, join by invite, space settings, delete
 - **Channels:** Text, voice, video types with position ordering
 - **Messaging:** Send, edit, delete, replies, attachments, reactions, typing indicators, read states
 - **Permissions:** Full RBAC with roles, per-channel overrides, computed permissions

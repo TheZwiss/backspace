@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
-import { useServerStore, getChannelOrigin, getMyUserIdForOrigin } from './serverStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from './spaceStore';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -278,7 +278,7 @@ export const useVoiceStore = create<VoiceState>()(
       clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
 
       clearVoiceUsersForOrigin: (origin: string) => {
-        const { channelOriginMap } = useServerStore.getState();
+        const { channelOriginMap } = useSpaceStore.getState();
         set((state) => {
           const newVoiceUsers = new Map(state.voiceUsers);
           for (const [channelId] of newVoiceUsers) {

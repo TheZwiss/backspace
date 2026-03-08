@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, hasPermission, getChannelServerId, PermissionBits, computePermissions } from '../utils/permissions.js';
+import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePermissions } from '../utils/permissions.js';
 import { permissionsToString } from '@backspace/shared/src/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import type {
@@ -15,7 +15,7 @@ import type {
 function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
   return {
     id: row.id,
-    serverId: row.serverId,
+    spaceId: row.spaceId,
     name: row.name,
     type: row.type as Channel['type'],
     topic: row.topic,
@@ -25,57 +25,57 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
 }
 
 /**
- * After a channel override changes, notify each server member:
+ * After a channel override changes, notify each space member:
  * - VIEW_CHANNEL holders receive channel_updated (with their myPermissions)
  * - Non-viewers receive channel_deleted to remove the channel from their UI
  */
-function broadcastOverrideChange(serverId: string, channelId: string): void {
+function broadcastOverrideChange(spaceId: string, channelId: string): void {
   const db = getDb();
   const channel = db.select().from(schema.channels).where(eq(schema.channels.id, channelId)).get();
   if (!channel) return;
 
   const channelData = rowToChannel(channel);
 
-  for (const [userId, serverIds] of connectionManager.getUserServerEntries()) {
-    if (!serverIds.has(serverId)) continue;
+  for (const [userId, spaceIds] of connectionManager.getUserSpaceEntries()) {
+    if (!spaceIds.has(spaceId)) continue;
 
-    const perms = computePermissions(userId, serverId, channelId);
+    const perms = computePermissions(userId, spaceId, channelId);
     if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
       connectionManager.sendToUser(userId, {
         type: 'channel_updated',
         channel: { ...channelData, myPermissions: permissionsToString(perms) },
-        serverId,
+        spaceId,
       });
     } else {
       connectionManager.sendToUser(userId, {
         type: 'channel_deleted',
         channelId,
-        serverId,
+        spaceId,
       });
     }
   }
 }
 
 export async function channelRoutes(app: FastifyInstance): Promise<void> {
-  // GET /api/servers/:id/channels - List channels in a server
-  app.get<{ Params: { id: string } }>('/api/servers/:id/channels', {
+  // GET /api/spaces/:id/channels - List channels in a space
+  app.get<{ Params: { id: string } }>('/api/spaces/:id/channels', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!isMember(id, request.userId)) {
-      return reply.code(403).send({ error: 'You are not a member of this server', statusCode: 403 });
+      return reply.code(403).send({ error: 'You are not a member of this space', statusCode: 403 });
     }
 
     const allChannels = db.select()
       .from(schema.channels)
-      .where(eq(schema.channels.serverId, id))
+      .where(eq(schema.channels.spaceId, id))
       .all();
 
     // Filter by VIEW_CHANNEL permission per channel
@@ -90,17 +90,17 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(visibleChannels.map(rowToChannel));
   });
 
-  // POST /api/servers/:id/channels - Create a channel (admin+)
-  app.post<{ Params: { id: string }; Body: CreateChannelRequest }>('/api/servers/:id/channels', {
+  // POST /api/spaces/:id/channels - Create a channel (admin+)
+  app.post<{ Params: { id: string }; Body: CreateChannelRequest }>('/api/spaces/:id/channels', {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, type, topic } = request.body;
     const db = getDb();
 
-    const server = db.select().from(schema.servers).where(eq(schema.servers.id, id)).get();
-    if (!server) {
-      return reply.code(404).send({ error: 'Server not found', statusCode: 404 });
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.MANAGE_CHANNELS)) {
@@ -123,7 +123,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     // Get max position for ordering
     const existingChannels = db.select()
       .from(schema.channels)
-      .where(eq(schema.channels.serverId, id))
+      .where(eq(schema.channels.spaceId, id))
       .all();
 
     const maxPosition = existingChannels.reduce((max, ch) => Math.max(max, ch.position ?? 0), -1);
@@ -133,7 +133,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     db.insert(schema.channels).values({
       id: channelId,
-      serverId: id,
+      spaceId: id,
       name: trimmedName,
       type,
       topic: topic?.trim() || null,
@@ -148,11 +148,11 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     const channelData = rowToChannel(channel);
 
-    // Broadcast channel_created to all server members
-    connectionManager.sendToServer(id, {
+    // Broadcast channel_created to all space members
+    connectionManager.sendToSpace(id, {
       type: 'channel_created',
       channel: channelData,
-      serverId: id,
+      spaceId: id,
     });
 
     return reply.code(201).send(channelData);
@@ -171,8 +171,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    const serverId = channel.serverId;
-    if (!hasPermission(request.userId, serverId, PermissionBits.MANAGE_CHANNELS, id)) {
+    const spaceId = channel.spaceId;
+    if (!hasPermission(request.userId, spaceId, PermissionBits.MANAGE_CHANNELS, id)) {
       return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
@@ -211,10 +211,10 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     const channelData = rowToChannel(updated);
 
     // Broadcast channel_updated to members with VIEW_CHANNEL
-    connectionManager.sendToChannel(serverId, id, {
+    connectionManager.sendToChannel(spaceId, id, {
       type: 'channel_updated',
       channel: channelData,
-      serverId,
+      spaceId,
     });
 
     return reply.code(200).send(channelData);
@@ -232,16 +232,16 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    const serverId = channel.serverId;
-    if (!hasPermission(request.userId, serverId, PermissionBits.MANAGE_CHANNELS, id)) {
+    const spaceId = channel.spaceId;
+    if (!hasPermission(request.userId, spaceId, PermissionBits.MANAGE_CHANNELS, id)) {
       return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
     // Collect viewers BEFORE deleting (overrides CASCADE-delete with the channel)
     const viewerIds: string[] = [];
-    for (const [uid, serverIds] of connectionManager.getUserServerEntries()) {
-      if (serverIds.has(serverId)) {
-        const perms = computePermissions(uid, serverId, id);
+    for (const [uid, spaceIds] of connectionManager.getUserSpaceEntries()) {
+      if (spaceIds.has(spaceId)) {
+        const perms = computePermissions(uid, spaceId, id);
         if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
           viewerIds.push(uid);
         }
@@ -253,7 +253,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     db.delete(schema.channels).where(eq(schema.channels.id, id)).run();
 
     // Broadcast channel_deleted only to users who could see the channel
-    const deleteEvent = { type: 'channel_deleted' as const, channelId: id, serverId };
+    const deleteEvent = { type: 'channel_deleted' as const, channelId: id, spaceId };
     for (const uid of viewerIds) {
       connectionManager.sendToUser(uid, deleteEvent);
     }
@@ -275,7 +275,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+    if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
       return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
@@ -315,7 +315,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
     }
 
-    if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+    if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
       return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
     }
 
@@ -346,8 +346,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       }).run();
     });
 
-    // Notify all server members of the permission change
-    broadcastOverrideChange(channel.serverId, id);
+    // Notify all space members of the permission change
+    broadcastOverrideChange(channel.spaceId, id);
 
     return reply.code(200).send({ success: true });
   });
@@ -365,7 +365,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'Channel not found', statusCode: 404 });
       }
 
-      if (!hasPermission(request.userId, channel.serverId, PermissionBits.MANAGE_ROLES)) {
+      if (!hasPermission(request.userId, channel.spaceId, PermissionBits.MANAGE_ROLES)) {
         return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
       }
 
@@ -377,8 +377,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         )
       ).run();
 
-      // Notify all server members of the permission change
-      broadcastOverrideChange(channel.serverId, id);
+      // Notify all space members of the permission change
+      broadcastOverrideChange(channel.spaceId, id);
 
       return reply.code(200).send({ success: true });
     },

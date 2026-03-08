@@ -12,7 +12,7 @@ import {
   LocalAudioTrack,
   LocalTrackPublication,
 } from 'livekit-client';
-import { getApiForOrigin, getChannelOrigin, useServerStore } from '../stores/serverStore';
+import { getApiForOrigin, getChannelOrigin, useSpaceStore } from '../stores/spaceStore';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
 import { AudioManager } from '../audio/AudioManager';
@@ -154,7 +154,7 @@ export function useLiveKit() {
     const processParticipant = (p: Participant, isLocal: boolean) => {
       if (!p.identity) return;
       const { userId, username } = parseIdentity(p.identity);
-      const memberMatch = useServerStore.getState().members.find(m => m.userId === userId);
+      const memberMatch = useSpaceStore.getState().members.find(m => m.userId === userId);
       const homeUserId = memberMatch?.user.homeUserId ?? null;
       let audioTrack: MediaStreamTrack | null = null;
       let videoTrack: MediaStreamTrack | null = null;

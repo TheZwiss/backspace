@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getAvatarGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -27,7 +27,7 @@ export function IncomingCallModal() {
     };
   }, [incomingCall, setIncomingCall]);
 
-  const dmChannels = useServerStore((s) => s.dmChannels);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
 
   if (!incomingCall) return null;
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Server, Channel, MemberWithUser, ServerWithChannelsAndMembers, Role, ServerFolder, DmChannel, User, UpdateServerRequest } from '@backspace/shared';
+import type { Space, Channel, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
@@ -8,7 +8,7 @@ import { useAuthStore } from './authStore';
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
 /** Server augmented with instance origin tracking (client-only, not in shared types). */
-export type TaggedServer = Server & { _instanceOrigin: string };
+export type TaggedSpace = Space & { _instanceOrigin: string };
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -22,21 +22,21 @@ export class NotConnectedError extends Error {
 
 // ─── Store interface ──────────────────────────────────────────────────────────
 
-interface ServerState {
-  servers: TaggedServer[];
-  currentServerId: string | null;
+interface SpaceState {
+  spaces: TaggedSpace[];
+  currentSpaceId: string | null;
   channels: Channel[];
   members: MemberWithUser[];
   roles: Role[];
-  folders: ServerFolder[];
+  folders: SpaceFolder[];
   dmChannels: DmChannel[];
-  channelToServerMap: Map<string, string>;
+  channelToSpaceMap: Map<string, string>;
   channelLastMessageIds: Map<string, string>;
-  serverPermissions: Map<string, string>; // serverId → myPermissions decimal string
+  spacePermissions: Map<string, string>; // spaceId → myPermissions decimal string
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
-  setServers: (servers: TaggedServer[]) => void;
-  setCurrentServer: (serverId: string | null) => void;
+  setSpaces: (spaces: TaggedSpace[]) => void;
+  setCurrentSpace: (spaceId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
   setMembers: (members: MemberWithUser[]) => void;
   setRoles: (roles: Role[]) => void;
@@ -46,44 +46,44 @@ interface ServerState {
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
   closeDm: (id: string) => Promise<void>;
-  loadServers: () => Promise<void>;
-  loadServerDetail: (serverId: string) => Promise<void>;
+  loadSpaces: () => Promise<void>;
+  loadSpaceDetail: (spaceId: string) => Promise<void>;
   loadDmChannels: () => Promise<void>;
-  createServer: (name: string, icon?: string) => Promise<Server>;
-  updateServer: (serverId: string, data: UpdateServerRequest) => Promise<void>;
-  deleteServer: (serverId: string) => Promise<void>;
-  joinServer: (serverId: string, inviteCode: string) => Promise<void>;
-  joinByCode: (inviteCode: string, origin?: string) => Promise<Server>;
-  generateInvite: (serverId: string) => Promise<string>;
-  createChannel: (serverId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
+  createSpace: (name: string, icon?: string) => Promise<Space>;
+  updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
+  deleteSpace: (spaceId: string) => Promise<void>;
+  joinSpace: (spaceId: string, inviteCode: string) => Promise<void>;
+  joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
+  generateInvite: (spaceId: string) => Promise<string>;
+  createChannel: (spaceId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
-  addServer: (server: Server) => void;
-  removeServer: (serverId: string) => void;
+  addSpace: (space: Space) => void;
+  removeSpace: (spaceId: string) => void;
   updateMemberPresence: (userId: string, status: string) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
-  populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => void;
-  addServerFromReady: (origin: string, server: ServerWithChannelsAndMembers) => void;
-  removeInstanceServers: (origin: string) => void;
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => void;
+  addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
+  removeInstanceSpaces: (origin: string) => void;
   findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
 }
 
-export const useServerStore = create<ServerState>((set, get) => ({
-  servers: [],
-  currentServerId: null,
+export const useSpaceStore = create<SpaceState>((set, get) => ({
+  spaces: [],
+  currentSpaceId: null,
   channels: [],
   members: [],
   roles: [],
   folders: [],
   dmChannels: [],
-  channelToServerMap: new Map(),
+  channelToSpaceMap: new Map(),
   channelLastMessageIds: new Map(),
-  serverPermissions: new Map(),
+  spacePermissions: new Map(),
   channelPermissions: new Map(),
   channelOriginMap: new Map(),
 
-  setServers: (servers) => set({ servers }),
-  setCurrentServer: (serverId) => set({ currentServerId: serverId }),
+  setSpaces: (spaces) => set({ spaces }),
+  setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),
   setChannels: (channels) => set({ channels }),
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
@@ -129,26 +129,26 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  loadServers: async () => {
+  loadSpaces: async () => {
     try {
-      const servers = await api.servers.list();
+      const spaces =await api.spaces.list();
       set((state) => ({
-        servers: servers.map(s => ({ ...s, _instanceOrigin: '' })) as TaggedServer[],
+        spaces: spaces.map(s => ({ ...s, _instanceOrigin: '' })) as TaggedSpace[],
       }));
     } catch {
       // Silently fail - will be populated from WS ready
     }
   },
 
-  loadServerDetail: async (serverId: string) => {
+  loadSpaceDetail: async (spaceId: string) => {
     try {
       // Resolve the correct API client based on the server's instance origin
-      const server = get().servers.find(s => s.id === serverId);
-      if (!server) return; // Not populated yet — remote WS ready will trigger reload
-      const origin = server._instanceOrigin ?? '';
+      const space =get().spaces.find(s => s.id === spaceId);
+      if (!space) return; // Not populated yet — remote WS ready will trigger reload
+      const origin = space._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
 
-      const detail = await client.servers.get(serverId);
+      const detail = await client.spaces.get(spaceId);
       // Normalize remote asset URLs (avatars, server icon)
       if (origin) {
         if (detail.icon) detail.icon = resolveAssetUrl(detail.icon, origin) ?? detail.icon;
@@ -157,7 +157,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
         }
       }
       set({
-        currentServerId: serverId,
+        currentSpaceId: spaceId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         members: detail.members,
         roles: detail.roles.sort((a, b) => b.position - a.position),
@@ -176,33 +176,33 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
   },
 
-  createServer: async (name: string, icon?: string) => {
-    const server = await api.servers.create({ name, icon });
-    const tagged: TaggedServer = { ...server, _instanceOrigin: '' };
-    set((state) => ({ servers: [...state.servers, tagged] }));
-    return server;
+  createSpace: async (name: string, icon?: string) => {
+    const space =await api.spaces.create({ name, icon });
+    const tagged: TaggedSpace = { ...space, _instanceOrigin: '' };
+    set((state) => ({ spaces: [...state.spaces, tagged] }));
+    return space;
   },
 
-  updateServer: async (serverId: string, data: UpdateServerRequest) => {
-    const updated = await api.servers.update(serverId, data);
+  updateSpace: async (spaceId: string, data: UpdateSpaceRequest) => {
+    const updated = await api.spaces.update(spaceId, data);
     set((state) => ({
-      servers: state.servers.map(s => s.id === serverId ? { ...s, ...updated } : s),
+      spaces: state.spaces.map(s => s.id === spaceId ? { ...s, ...updated } : s),
     }));
   },
 
-  deleteServer: async (serverId: string) => {
-    await api.servers.delete(serverId);
+  deleteSpace: async (spaceId: string) => {
+    await api.spaces.delete(spaceId);
     set((state) => ({
-      servers: state.servers.filter(s => s.id !== serverId),
-      currentServerId: state.currentServerId === serverId ? null : state.currentServerId,
+      spaces: state.spaces.filter(s => s.id !== spaceId),
+      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
     }));
   },
 
-  joinServer: async (serverId: string, inviteCode: string) => {
-    const server = await api.servers.join(serverId, { inviteCode });
+  joinSpace: async (spaceId: string, inviteCode: string) => {
+    const space =await api.spaces.join(spaceId, { inviteCode });
     set((state) => {
-      if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
+      if (state.spaces.find(s => s.id === space.id)) return state;
+      return { spaces: [...state.spaces, { ...space, _instanceOrigin: '' } as TaggedSpace] };
     });
   },
 
@@ -216,33 +216,33 @@ export const useServerStore = create<ServerState>((set, get) => ({
       if (!connected) throw new NotConnectedError(origin);
 
       const remoteApi = getApiForOrigin(origin);
-      const server = await remoteApi.servers.joinByCode(inviteCode);
+      const space =await remoteApi.spaces.joinByCode(inviteCode);
       set((state) => {
-        if (state.servers.find(s => s.id === server.id)) return state;
-        return { servers: [...state.servers, { ...server, _instanceOrigin: origin } as TaggedServer] };
+        if (state.spaces.find(s => s.id === space.id)) return state;
+        return { spaces: [...state.spaces, { ...space, _instanceOrigin: origin } as TaggedSpace] };
       });
-      return server;
+      return space;
     }
 
     // Home instance
-    const server = await api.servers.joinByCode(inviteCode);
+    const space =await api.spaces.joinByCode(inviteCode);
     set((state) => {
-      if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
+      if (state.spaces.find(s => s.id === space.id)) return state;
+      return { spaces: [...state.spaces, { ...space, _instanceOrigin: '' } as TaggedSpace] };
     });
-    return server;
+    return space;
   },
 
-  generateInvite: async (serverId: string) => {
-    const server = get().servers.find(s => s.id === serverId);
-    const origin = server?._instanceOrigin ?? '';
+  generateInvite: async (spaceId: string) => {
+    const space =get().spaces.find(s => s.id === spaceId);
+    const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
-    const result = await client.servers.invite(serverId);
+    const result = await client.spaces.invite(spaceId);
     return result.inviteCode;
   },
 
-  createChannel: async (serverId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => {
-    const channel = await api.channels.create(serverId, { name, type, topic });
+  createChannel: async (spaceId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => {
+    const channel = await api.channels.create(spaceId, { name, type, topic });
     set((state) => {
       if (state.channels.some(c => c.id === channel.id)) return state;
       return { channels: [...state.channels, channel].sort((a, b) => a.position - b.position) };
@@ -257,17 +257,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  addServer: (server: Server) => {
+  addSpace: (space: Space) => {
     set((state) => {
-      if (state.servers.find(s => s.id === server.id)) return state;
-      return { servers: [...state.servers, { ...server, _instanceOrigin: '' } as TaggedServer] };
+      if (state.spaces.find(s => s.id === space.id)) return state;
+      return { spaces: [...state.spaces, { ...space, _instanceOrigin: '' } as TaggedSpace] };
     });
   },
 
-  removeServer: (serverId: string) => {
+  removeSpace: (spaceId: string) => {
     set((state) => ({
-      servers: state.servers.filter(s => s.id !== serverId),
-      currentServerId: state.currentServerId === serverId ? null : state.currentServerId,
+      spaces: state.spaces.filter(s => s.id !== spaceId),
+      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
     }));
   },
 
@@ -291,11 +291,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
   },
 
-  populateFromReady: (origin: string, servers: ServerWithChannelsAndMembers[], folders?: ServerFolder[], dmChannels?: DmChannel[]) => {
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => {
     const isHome = !origin;
 
     // Tag all incoming servers with their instance origin
-    const taggedServers: TaggedServer[] = servers.map(s => ({
+    const taggedSpaces: TaggedSpace[] = spaces.map(s => ({
       id: s.id,
       name: s.name,
       icon: s.icon,
@@ -308,13 +308,13 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }));
 
     // Merge by origin: keep servers from other origins, replace all from this origin
-    const existingFromOtherOrigins = get().servers.filter(s => s._instanceOrigin !== origin);
-    const mergedServers = [...existingFromOtherOrigins, ...taggedServers];
+    const existingFromOtherOrigins = get().spaces.filter(s => s._instanceOrigin !== origin);
+    const mergedSpaces = [...existingFromOtherOrigins, ...taggedSpaces];
 
     // Build/merge maps for incoming channels
-    const channelToServerMap = new Map(get().channelToServerMap);
+    const channelToSpaceMap = new Map(get().channelToSpaceMap);
     const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const serverPermissions = new Map(get().serverPermissions);
+    const spacePermissions = new Map(get().spacePermissions);
     const channelPermissions = new Map(get().channelPermissions);
     const channelOriginMap = new Map(get().channelOriginMap);
 
@@ -322,42 +322,42 @@ export const useServerStore = create<ServerState>((set, get) => ({
     if (isHome) {
       for (const [key, val] of get().channelOriginMap) {
         if (val === origin) {
-          channelToServerMap.delete(key);
+          channelToSpaceMap.delete(key);
           channelLastMessageIds.delete(key);
           channelPermissions.delete(key);
           channelOriginMap.delete(key);
         }
       }
       // Also clear server permissions for this origin
-      for (const s of get().servers) {
+      for (const s of get().spaces) {
         if (s._instanceOrigin === origin) {
-          serverPermissions.delete(s.id);
+          spacePermissions.delete(s.id);
         }
       }
     } else {
       // Remote: clear entries that belonged to this origin
       for (const [key, val] of get().channelOriginMap) {
         if (val === origin) {
-          channelToServerMap.delete(key);
+          channelToSpaceMap.delete(key);
           channelLastMessageIds.delete(key);
           channelPermissions.delete(key);
           channelOriginMap.delete(key);
         }
       }
-      for (const s of get().servers) {
+      for (const s of get().spaces) {
         if (s._instanceOrigin === origin) {
-          serverPermissions.delete(s.id);
+          spacePermissions.delete(s.id);
         }
       }
     }
 
     // Populate maps from incoming servers
-    for (const srv of servers) {
+    for (const srv of spaces) {
       if (srv.myPermissions) {
-        serverPermissions.set(srv.id, srv.myPermissions);
+        spacePermissions.set(srv.id, srv.myPermissions);
       }
       for (const ch of srv.channels) {
-        channelToServerMap.set(ch.id, srv.id);
+        channelToSpaceMap.set(ch.id, srv.id);
         channelOriginMap.set(ch.id, origin);
         if (ch.lastMessageId) {
           channelLastMessageIds.set(ch.id, ch.lastMessageId);
@@ -390,12 +390,12 @@ export const useServerStore = create<ServerState>((set, get) => ({
     });
     const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
 
-    const update: Partial<ServerState> = {
-      servers: mergedServers,
+    const update: Partial<SpaceState> = {
+      spaces: mergedSpaces,
       dmChannels: mergedDms,
-      channelToServerMap,
+      channelToSpaceMap,
       channelLastMessageIds,
-      serverPermissions,
+      spacePermissions,
       channelPermissions,
       channelOriginMap,
     };
@@ -408,30 +408,30 @@ export const useServerStore = create<ServerState>((set, get) => ({
     set(update as any);
   },
 
-  addServerFromReady: (origin: string, server: ServerWithChannelsAndMembers) => {
-    const tagged: TaggedServer = {
-      id: server.id,
-      name: server.name,
-      icon: server.icon,
-      ownerId: server.ownerId,
-      inviteCode: server.inviteCode,
-      visibility: server.visibility,
-      description: server.description,
-      createdAt: server.createdAt,
+  addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => {
+    const tagged: TaggedSpace = {
+      id: space.id,
+      name: space.name,
+      icon: space.icon,
+      ownerId: space.ownerId,
+      inviteCode: space.inviteCode,
+      visibility: space.visibility,
+      description: space.description,
+      createdAt: space.createdAt,
       _instanceOrigin: origin,
     };
 
-    const channelToServerMap = new Map(get().channelToServerMap);
+    const channelToSpaceMap = new Map(get().channelToSpaceMap);
     const channelLastMessageIds = new Map(get().channelLastMessageIds);
-    const serverPermissions = new Map(get().serverPermissions);
+    const spacePermissions = new Map(get().spacePermissions);
     const channelPermissions = new Map(get().channelPermissions);
     const channelOriginMap = new Map(get().channelOriginMap);
 
-    if (server.myPermissions) {
-      serverPermissions.set(server.id, server.myPermissions);
+    if (space.myPermissions) {
+      spacePermissions.set(space.id, space.myPermissions);
     }
-    for (const ch of server.channels) {
-      channelToServerMap.set(ch.id, server.id);
+    for (const ch of space.channels) {
+      channelToSpaceMap.set(ch.id, space.id);
       channelOriginMap.set(ch.id, origin);
       if (ch.lastMessageId) {
         channelLastMessageIds.set(ch.id, ch.lastMessageId);
@@ -442,10 +442,10 @@ export const useServerStore = create<ServerState>((set, get) => ({
     }
 
     set((state) => ({
-      servers: [...state.servers.filter(s => s.id !== server.id), tagged],
-      channelToServerMap,
+      spaces: [...state.spaces.filter(s => s.id !== space.id), tagged],
+      channelToSpaceMap,
       channelLastMessageIds,
-      serverPermissions,
+      spacePermissions,
       channelPermissions,
       channelOriginMap,
     }));
@@ -470,40 +470,40 @@ export const useServerStore = create<ServerState>((set, get) => ({
     return null;
   },
 
-  removeInstanceServers: (origin: string) => {
+  removeInstanceSpaces: (origin: string) => {
     set((state) => {
-      const remainingServers = state.servers.filter(s => s._instanceOrigin !== origin);
+      const remainingSpaces = state.spaces.filter(s => s._instanceOrigin !== origin);
 
       // Clean up maps for channels that belonged to this origin
-      const channelToServerMap = new Map(state.channelToServerMap);
+      const channelToSpaceMap = new Map(state.channelToSpaceMap);
       const channelLastMessageIds = new Map(state.channelLastMessageIds);
       const channelPermissions = new Map(state.channelPermissions);
       const channelOriginMap = new Map(state.channelOriginMap);
-      const serverPermissions = new Map(state.serverPermissions);
+      const spacePermissions = new Map(state.spacePermissions);
 
       for (const [channelId, chOrigin] of state.channelOriginMap) {
         if (chOrigin === origin) {
-          channelToServerMap.delete(channelId);
+          channelToSpaceMap.delete(channelId);
           channelLastMessageIds.delete(channelId);
           channelPermissions.delete(channelId);
           channelOriginMap.delete(channelId);
         }
       }
-      for (const s of state.servers) {
+      for (const s of state.spaces) {
         if (s._instanceOrigin === origin) {
-          serverPermissions.delete(s.id);
+          spacePermissions.delete(s.id);
         }
       }
 
       return {
-        servers: remainingServers,
-        channelToServerMap,
+        spaces: remainingSpaces,
+        channelToSpaceMap,
         channelLastMessageIds,
         channelPermissions,
         channelOriginMap,
-        serverPermissions,
-        currentServerId: remainingServers.find(s => s.id === state.currentServerId)
-          ? state.currentServerId
+        spacePermissions,
+        currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
+          ? state.currentSpaceId
           : null,
       };
     });
@@ -516,7 +516,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
  * from the WS ready event and DM/server channel IDs never overlap.
  */
 export function isDmChannel(channelId: string): boolean {
-  const dmChannels = useServerStore.getState().dmChannels;
+  const dmChannels = useSpaceStore.getState().dmChannels;
   if (dmChannels.length > 0) {
     return dmChannels.some(dm => dm.id === channelId);
   }
@@ -532,12 +532,12 @@ export function isDmChannel(channelId: string): boolean {
  * '' = home instance, 'https://...' = remote instance.
  */
 export function getChannelOrigin(channelId: string): string {
-  return useServerStore.getState().channelOriginMap.get(channelId) ?? '';
+  return useSpaceStore.getState().channelOriginMap.get(channelId) ?? '';
 }
 
 // ─── API client resolution ────────────────────────────────────────────────────
 // The actual resolver is registered by instanceStore on import, avoiding a
-// circular dependency (instanceStore → useWebSocket → chatStore → serverStore).
+// circular dependency (instanceStore → useWebSocket → chatStore → spaceStore).
 
 let _getApiForOrigin: ((origin: string) => BackspaceApiClient) | null = null;
 

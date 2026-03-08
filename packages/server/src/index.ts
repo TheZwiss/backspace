@@ -9,7 +9,7 @@ import { getDb } from './db/index.js';
 import { seedDatabase } from './db/seed.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
-import { serverRoutes } from './routes/servers.js';
+import { spaceRoutes } from './routes/spaces.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { uploadRoutes } from './routes/uploads.js';
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
 
   await app.register(authRoutes);
   await app.register(userRoutes);
-  await app.register(serverRoutes);
+  await app.register(spaceRoutes);
   await app.register(channelRoutes);
   await app.register(messageRoutes);
   await app.register(uploadRoutes);

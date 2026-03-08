@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import type { MemberWithUser } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 
 const MAX_RESULTS = 8;
 
@@ -12,12 +12,12 @@ interface MentionPopoverProps {
 }
 
 export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopoverProps) {
-  const members = useServerStore((s) => s.members);
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
+  const members = useSpaceStore((s) => s.members);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const selectedRef = useRef<HTMLDivElement>(null);
 
-  const ownerId = servers.find((s) => s.id === currentServerId)?.ownerId;
+  const ownerId = spaces.find((s) => s.id === currentSpaceId)?.ownerId;
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();

@@ -130,7 +130,7 @@
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  /* Server strip glass — no border-radius, rightward shadow */
+  /* Space strip glass — no border-radius, rightward shadow */
   .glass-strip {
     backdrop-filter: blur(20px) saturate(120%);
     -webkit-backdrop-filter: blur(20px) saturate(120%);

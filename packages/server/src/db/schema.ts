@@ -15,7 +15,7 @@ export const users = sqliteTable('users', {
   createdAt: integer('created_at').notNull(),
 });
 
-export const servers = sqliteTable('servers', {
+export const spaces = sqliteTable('spaces', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   icon: text('icon'),
@@ -26,18 +26,18 @@ export const servers = sqliteTable('servers', {
   createdAt: integer('created_at').notNull(),
 });
 
-export const serverMembers = sqliteTable('server_members', {
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+export const spaceMembers = sqliteTable('space_members', {
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   nickname: text('nickname'),
   joinedAt: integer('joined_at').notNull(),
 }, (table) => ({
-  pk: primaryKey({ columns: [table.serverId, table.userId] }),
+  pk: primaryKey({ columns: [table.spaceId, table.userId] }),
 }));
 
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey(),
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type').notNull(),
   topic: text('topic'),
@@ -129,7 +129,7 @@ export const dmReactions = sqliteTable('dm_reactions', {
 
 export const roles = sqliteTable('roles', {
   id: text('id').primaryKey(),
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   color: text('color').default('#b9bbbe'),
   position: integer('position').default(0),
@@ -138,11 +138,11 @@ export const roles = sqliteTable('roles', {
 });
 
 export const memberRoles = sqliteTable('member_roles', {
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   roleId: text('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
 }, (table) => ({
-  pk: primaryKey({ columns: [table.serverId, table.userId, table.roleId] }),
+  pk: primaryKey({ columns: [table.spaceId, table.userId, table.roleId] }),
 }));
 
 export const channelOverrides = sqliteTable('channel_overrides', {
@@ -164,7 +164,7 @@ export const readStates = sqliteTable('read_states', {
   pk: primaryKey({ columns: [table.userId, table.channelId] }),
 }));
 
-export const serverFolders = sqliteTable('server_folders', {
+export const spaceFolders = sqliteTable('space_folders', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text('name'),
@@ -173,11 +173,11 @@ export const serverFolders = sqliteTable('server_folders', {
   createdAt: integer('created_at').notNull(),
 });
 
-export const serverFolderMembers = sqliteTable('server_folder_members', {
-  folderId: text('folder_id').notNull().references(() => serverFolders.id, { onDelete: 'cascade' }),
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+export const spaceFolderMembers = sqliteTable('space_folder_members', {
+  folderId: text('folder_id').notNull().references(() => spaceFolders.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
 }, (table) => ({
-  pk: primaryKey({ columns: [table.folderId, table.serverId] }),
+  pk: primaryKey({ columns: [table.folderId, table.spaceId] }),
 }));
 
 export const instanceSettings = sqliteTable('instance_settings', {
@@ -197,7 +197,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
 
 export const joinRequests = sqliteTable('join_requests', {
   id: text('id').primaryKey(),
-  serverId: text('server_id').notNull().references(() => servers.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   message: text('message'),
   status: text('status').notNull().default('pending'),

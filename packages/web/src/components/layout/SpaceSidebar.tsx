@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 
-import { getServerGradient, HOME_GRADIENT } from '../../utils/gradients';
+import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
 
 interface SidebarItemProps {
   id: string;
@@ -13,13 +13,13 @@ interface SidebarItemProps {
   icon?: string | null;
   active: boolean;
   onClick: () => void;
-  type?: 'server' | 'dm' | 'action';
+  type?: 'space' | 'dm' | 'action';
   actionType?: 'add' | 'join' | 'explore';
   hasUnread?: boolean;
   dimmed?: boolean;
 }
 
-function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionType, hasUnread, dimmed }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionType, hasUnread, dimmed }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -41,11 +41,11 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
       return { background: HOME_GRADIENT.gradient };
     }
 
-    // Server type — if it has a custom icon image, no gradient needed
+    // Space type — if it has a custom icon image, no gradient needed
     if (icon) return undefined;
 
-    const serverGrad = getServerGradient(id, name);
-    return { background: serverGrad.gradient };
+    const spaceGrad = getSpaceGradient(id, name);
+    return { background: spaceGrad.gradient };
   }, [type, id, name, icon, isHovered]);
 
   const getButtonClasses = () => {
@@ -73,7 +73,7 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Pill Indicator */}
-      {(type === 'server' || type === 'dm') && (
+      {(type === 'space' || type === 'dm') && (
         <div className="absolute -left-0 w-2 h-10 flex items-center">
           <div
             className={`bg-white rounded-r-full transition-all duration-200 origin-left ${getPillHeight()} w-1`}
@@ -112,12 +112,12 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'server', actionT
   );
 }
 
-export function ServerSidebar() {
-  const servers = useServerStore((s) => s.servers);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const setCurrentServer = useServerStore((s) => s.setCurrentServer);
-  const channelToServerMap = useServerStore((s) => s.channelToServerMap);
-  const dmChannels = useServerStore((s) => s.dmChannels);
+export function SpaceSidebar() {
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
+  const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
   const showDms = useUIStore((s) => s.showDms);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
@@ -128,11 +128,11 @@ export function ServerSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Group servers by origin
-  const groupedServers = useMemo(() => {
-    const home = servers.filter(s => !(s as any)._instanceOrigin);
-    const remoteMap = new Map<string, typeof servers>();
-    for (const s of servers) {
+  // Group spaces by origin
+  const groupedSpaces = useMemo(() => {
+    const home = spaces.filter(s => !(s as any)._instanceOrigin);
+    const remoteMap = new Map<string, typeof spaces>();
+    for (const s of spaces) {
       const origin = (s as any)._instanceOrigin;
       if (!origin) continue;
       const list = remoteMap.get(origin) || [];
@@ -140,7 +140,7 @@ export function ServerSidebar() {
       remoteMap.set(origin, list);
     }
     return { home, remoteGroups: Array.from(remoteMap.entries()) };
-  }, [servers]);
+  }, [spaces]);
 
   // Set of disconnected origins
   const disconnectedOrigins = useMemo(() => {
@@ -153,15 +153,15 @@ export function ServerSidebar() {
     return set;
   }, [instances]);
 
-  // Compute which servers have unread channels
-  const unreadServerIds = useMemo(() => {
+  // Compute which spaces have unread channels
+  const unreadSpaceIds = useMemo(() => {
     const ids = new Set<string>();
     for (const channelId of unreadChannels) {
-      const serverId = channelToServerMap.get(channelId);
-      if (serverId) ids.add(serverId);
+      const spaceId = channelToSpaceMap.get(channelId);
+      if (spaceId) ids.add(spaceId);
     }
     return ids;
-  }, [unreadChannels, channelToServerMap]);
+  }, [unreadChannels, channelToSpaceMap]);
 
   // Check if any DM channels are unread
   const hasDmUnread = useMemo(() => {
@@ -171,28 +171,28 @@ export function ServerSidebar() {
     return false;
   }, [unreadChannels, dmChannels]);
 
-  const handleServerClick = (serverId: string) => {
-    const server = servers.find(s => s.id === serverId);
-    const origin = (server as any)?._instanceOrigin;
+  const handleSpaceClick = (spaceId: string) => {
+    const space = spaces.find(s => s.id === spaceId);
+    const origin = (space as any)?._instanceOrigin;
     if (origin && disconnectedOrigins.has(origin)) {
       const inst = instances.find(i => i.origin === origin);
       addToast(`Reconnecting to ${inst?.label || 'remote instance'}...`, 'warning', 4000);
       return;
     }
-    setCurrentServer(serverId);
+    setCurrentSpace(spaceId);
     setShowDms(false);
-    navigate(`/channels/${serverId}`);
+    navigate(`/channels/${spaceId}`);
   };
 
   const handleDmClick = () => {
     setShowDms(true);
-    setCurrentServer(null);
+    setCurrentSpace(null);
     setCurrentChannel(null);
     navigate('/channels/@me');
   };
 
   const handleExploreClick = () => {
-    setCurrentServer(null);
+    setCurrentSpace(null);
     setCurrentChannel(null);
     navigate('/explore');
   };
@@ -210,21 +210,21 @@ export function ServerSidebar() {
 
       <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
-      {/* Home servers */}
-      {groupedServers.home.map((server) => (
+      {/* Home spaces */}
+      {groupedSpaces.home.map((space) => (
         <SidebarItem
-          key={server.id}
-          id={server.id}
-          name={server.name}
-          icon={server.icon}
-          active={currentServerId === server.id}
-          onClick={() => handleServerClick(server.id)}
-          hasUnread={unreadServerIds.has(server.id)}
+          key={space.id}
+          id={space.id}
+          name={space.name}
+          icon={space.icon}
+          active={currentSpaceId === space.id}
+          onClick={() => handleSpaceClick(space.id)}
+          hasUnread={unreadSpaceIds.has(space.id)}
         />
       ))}
 
       {/* Remote instance groups */}
-      {groupedServers.remoteGroups.map(([origin, groupServers]) => {
+      {groupedSpaces.remoteGroups.map(([origin, groupSpaces]) => {
         const inst = instances.find(i => i.origin === origin);
         const label = inst?.label || (() => { try { return new URL(origin).host; } catch { return '?'; } })();
         const isDimmed = disconnectedOrigins.has(origin);
@@ -234,15 +234,15 @@ export function ServerSidebar() {
             <div className="text-[9px] text-txt-tertiary font-medium uppercase tracking-wider mb-1 truncate max-w-[52px] text-center" title={label}>
               {label}
             </div>
-            {groupServers.map((server) => (
+            {groupSpaces.map((space) => (
               <SidebarItem
-                key={server.id}
-                id={server.id}
-                name={server.name}
-                icon={server.icon}
-                active={currentServerId === server.id}
-                onClick={() => handleServerClick(server.id)}
-                hasUnread={unreadServerIds.has(server.id)}
+                key={space.id}
+                id={space.id}
+                name={space.name}
+                icon={space.icon}
+                active={currentSpaceId === space.id}
+                onClick={() => handleSpaceClick(space.id)}
+                hasUnread={unreadSpaceIds.has(space.id)}
                 dimmed={isDimmed}
               />
             ))}
@@ -253,26 +253,26 @@ export function ServerSidebar() {
       <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
       <SidebarItem
-        id="add-server"
-        name="Add a Server"
+        id="add-space"
+        name="Add a Space"
         active={false}
-        onClick={() => openModal('createServer')}
+        onClick={() => openModal('createSpace')}
         type="action"
         actionType="add"
       />
 
       <SidebarItem
-        id="join-server"
-        name="Join a Server"
+        id="join-space"
+        name="Join a Space"
         active={false}
-        onClick={() => openModal('joinServer')}
+        onClick={() => openModal('joinSpace')}
         type="action"
         actionType="join"
       />
 
       <SidebarItem
         id="explore"
-        name="Explore Servers"
+        name="Explore Spaces"
         active={location.pathname === '/explore'}
         onClick={handleExploreClick}
         type="action"

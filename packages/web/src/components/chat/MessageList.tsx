@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Message } from './Message';
 import { useChatStore } from '../../stores/chatStore';
-import { useServerStore, isDmChannel } from '../../stores/serverStore';
+import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
@@ -169,7 +169,7 @@ export function MessageList({ channelId }: MessageListProps) {
 }
 
 function WelcomeHeader({ channelId }: { channelId: string }) {
-  const dmChannels = useServerStore((s) => s.dmChannels);
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
   const removeFriend = useSocialStore((s) => s.removeFriend);
   const friends = useSocialStore((s) => s.friends);

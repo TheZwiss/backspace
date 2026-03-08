@@ -3,22 +3,22 @@ import type {
   RegisterRequest,
   LoginRequest,
   User,
-  Server,
-  ServerWithChannelsAndMembers,
+  Space,
+  SpaceWithChannelsAndMembers,
   Channel,
   MessageWithUser,
   MemberWithUser,
   Attachment,
   DmChannel,
   DmMessageWithUser,
-  CreateServerRequest,
-  UpdateServerRequest,
+  CreateSpaceRequest,
+  UpdateSpaceRequest,
   CreateChannelRequest,
   UpdateChannelRequest,
   CreateMessageRequest,
   UpdateMessageRequest,
   UpdateUserRequest,
-  JoinServerRequest,
+  JoinSpaceRequest,
   UpdateMemberRequest,
   LiveKitTokenResponse,
   CreateDmRequest,
@@ -28,7 +28,7 @@ import type {
   InstanceStreamingLimits,
   InstanceInfoResponse,
   VerifyPasswordResponse,
-  ExploreServer,
+  ExploreSpace,
   JoinRequest,
 } from '@backspace/shared';
 
@@ -45,23 +45,23 @@ export class BackspaceApiClient {
     verifyPassword: (password: string) => Promise<VerifyPasswordResponse>;
   };
 
-  readonly servers: {
-    list: () => Promise<Server[]>;
-    get: (id: string) => Promise<ServerWithChannelsAndMembers>;
-    create: (data: CreateServerRequest) => Promise<Server>;
-    update: (id: string, data: UpdateServerRequest) => Promise<Server>;
+  readonly spaces: {
+    list: () => Promise<Space[]>;
+    get: (id: string) => Promise<SpaceWithChannelsAndMembers>;
+    create: (data: CreateSpaceRequest) => Promise<Space>;
+    update: (id: string, data: UpdateSpaceRequest) => Promise<Space>;
     delete: (id: string) => Promise<{ success: boolean }>;
     invite: (id: string) => Promise<{ inviteCode: string }>;
-    join: (id: string, data: JoinServerRequest) => Promise<Server>;
-    joinByCode: (inviteCode: string) => Promise<Server>;
+    join: (id: string, data: JoinSpaceRequest) => Promise<Space>;
+    joinByCode: (inviteCode: string) => Promise<Space>;
     members: (id: string) => Promise<MemberWithUser[]>;
-    updateMember: (serverId: string, userId: string, data: UpdateMemberRequest) => Promise<MemberWithUser>;
-    removeMember: (serverId: string, userId: string) => Promise<{ success: boolean }>;
+    updateMember: (spaceId: string, userId: string, data: UpdateMemberRequest) => Promise<MemberWithUser>;
+    removeMember: (spaceId: string, userId: string) => Promise<{ success: boolean }>;
   };
 
   readonly channels: {
-    list: (serverId: string) => Promise<Channel[]>;
-    create: (serverId: string, data: CreateChannelRequest) => Promise<Channel>;
+    list: (spaceId: string) => Promise<Channel[]>;
+    create: (spaceId: string, data: CreateChannelRequest) => Promise<Channel>;
     update: (id: string, data: UpdateChannelRequest) => Promise<Channel>;
     delete: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<MessageWithUser[]>;
@@ -118,11 +118,11 @@ export class BackspaceApiClient {
   };
 
   readonly explore: {
-    list: (q?: string, limit?: number, offset?: number) => Promise<{ servers: ExploreServer[]; total: number; totalAll: number; discoveryEnabled: boolean }>;
-    publicJoin: (serverId: string) => Promise<ServerWithChannelsAndMembers>;
-    requestJoin: (serverId: string, message?: string) => Promise<JoinRequest>;
-    getJoinRequests: (serverId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
-    decideJoinRequest: (serverId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
+    list: (q?: string, limit?: number, offset?: number) => Promise<{ spaces: ExploreSpace[]; total: number; totalAll: number; discoveryEnabled: boolean }>;
+    publicJoin: (spaceId: string) => Promise<SpaceWithChannelsAndMembers>;
+    requestJoin: (spaceId: string, message?: string) => Promise<JoinRequest>;
+    getJoinRequests: (spaceId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
+    decideJoinRequest: (spaceId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
     myJoinRequests: (status?: string) => Promise<{ requests: JoinRequest[] }>;
   };
 
@@ -199,26 +199,26 @@ export class BackspaceApiClient {
         request<VerifyPasswordResponse>('POST', '/users/@me/verify-password', { password }),
     };
 
-    this.servers = {
-      list: () => request<Server[]>('GET', '/servers'),
-      get: (id: string) => request<ServerWithChannelsAndMembers>('GET', `/servers/${id}`),
-      create: (data: CreateServerRequest) => request<Server>('POST', '/servers', data),
-      update: (id: string, data: UpdateServerRequest) => request<Server>('PATCH', `/servers/${id}`, data),
-      delete: (id: string) => request<{ success: boolean }>('DELETE', `/servers/${id}`),
-      invite: (id: string) => request<{ inviteCode: string }>('POST', `/servers/${id}/invite`),
-      join: (id: string, data: JoinServerRequest) => request<Server>('POST', `/servers/${id}/join`, data),
-      joinByCode: (inviteCode: string) => request<Server>('POST', '/servers/join', { inviteCode }),
-      members: (id: string) => request<MemberWithUser[]>('GET', `/servers/${id}/members`),
-      updateMember: (serverId: string, userId: string, data: UpdateMemberRequest) =>
-        request<MemberWithUser>('PATCH', `/servers/${serverId}/members/${userId}`, data),
-      removeMember: (serverId: string, userId: string) =>
-        request<{ success: boolean }>('DELETE', `/servers/${serverId}/members/${userId}`),
+    this.spaces = {
+      list: () => request<Space[]>('GET', '/spaces'),
+      get: (id: string) => request<SpaceWithChannelsAndMembers>('GET', `/spaces/${id}`),
+      create: (data: CreateSpaceRequest) => request<Space>('POST', '/spaces', data),
+      update: (id: string, data: UpdateSpaceRequest) => request<Space>('PATCH', `/spaces/${id}`, data),
+      delete: (id: string) => request<{ success: boolean }>('DELETE', `/spaces/${id}`),
+      invite: (id: string) => request<{ inviteCode: string }>('POST', `/spaces/${id}/invite`),
+      join: (id: string, data: JoinSpaceRequest) => request<Space>('POST', `/spaces/${id}/join`, data),
+      joinByCode: (inviteCode: string) => request<Space>('POST', '/spaces/join', { inviteCode }),
+      members: (id: string) => request<MemberWithUser[]>('GET', `/spaces/${id}/members`),
+      updateMember: (spaceId: string, userId: string, data: UpdateMemberRequest) =>
+        request<MemberWithUser>('PATCH', `/spaces/${spaceId}/members/${userId}`, data),
+      removeMember: (spaceId: string, userId: string) =>
+        request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/members/${userId}`),
     };
 
     this.channels = {
-      list: (serverId: string) => request<Channel[]>('GET', `/servers/${serverId}/channels`),
-      create: (serverId: string, data: CreateChannelRequest) =>
-        request<Channel>('POST', `/servers/${serverId}/channels`, data),
+      list: (spaceId: string) => request<Channel[]>('GET', `/spaces/${spaceId}/channels`),
+      create: (spaceId: string, data: CreateChannelRequest) =>
+        request<Channel>('POST', `/spaces/${spaceId}/channels`, data),
       update: (id: string, data: UpdateChannelRequest) => request<Channel>('PATCH', `/channels/${id}`, data),
       delete: (id: string) => request<{ success: boolean }>('DELETE', `/channels/${id}`),
       messages: (id: string, before?: string, limit = 50) => {
@@ -305,21 +305,21 @@ export class BackspaceApiClient {
         if (q) params.set('q', q);
         params.set('limit', String(limit));
         params.set('offset', String(offset));
-        return request<{ servers: ExploreServer[]; total: number; totalAll: number; discoveryEnabled: boolean }>(
-          'GET', `/servers/explore?${params}`
+        return request<{ spaces: ExploreSpace[]; total: number; totalAll: number; discoveryEnabled: boolean }>(
+          'GET', `/spaces/explore?${params}`
         );
       },
-      publicJoin: (serverId: string) =>
-        request<ServerWithChannelsAndMembers>('POST', `/servers/${serverId}/public-join`),
-      requestJoin: (serverId: string, message?: string) =>
-        request<JoinRequest>('POST', `/servers/${serverId}/request-join`, message ? { message } : {}),
-      getJoinRequests: (serverId: string, status?: string) => {
+      publicJoin: (spaceId: string) =>
+        request<SpaceWithChannelsAndMembers>('POST', `/spaces/${spaceId}/public-join`),
+      requestJoin: (spaceId: string, message?: string) =>
+        request<JoinRequest>('POST', `/spaces/${spaceId}/request-join`, message ? { message } : {}),
+      getJoinRequests: (spaceId: string, status?: string) => {
         const params = new URLSearchParams();
         if (status) params.set('status', status);
-        return request<{ requests: JoinRequest[] }>('GET', `/servers/${serverId}/join-requests?${params}`);
+        return request<{ requests: JoinRequest[] }>('GET', `/spaces/${spaceId}/join-requests?${params}`);
       },
-      decideJoinRequest: (serverId: string, requestId: string, action: 'accept' | 'decline') =>
-        request<JoinRequest>('PATCH', `/servers/${serverId}/join-requests/${requestId}`, { action }),
+      decideJoinRequest: (spaceId: string, requestId: string, action: 'accept' | 'decline') =>
+        request<JoinRequest>('PATCH', `/spaces/${spaceId}/join-requests/${requestId}`, { action }),
       myJoinRequests: (status?: string) => {
         const params = new URLSearchParams();
         if (status) params.set('status', status);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import { isDmChannel, getChannelOrigin, getApiForOrigin, useServerStore } from '../../stores/serverStore';
+import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
@@ -27,7 +27,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const replyTo = useChatStore((s) => s.replyTo);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
-  const members = useServerStore((s) => s.members);
+  const members = useSpaceStore((s) => s.members);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Auto-focus textarea on channel navigation

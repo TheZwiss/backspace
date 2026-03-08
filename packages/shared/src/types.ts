@@ -26,27 +26,27 @@ export interface UserWithPassword extends User {
   passwordHash: string;
 }
 
-// ─── Server (Guild) Types ───────────────────────────────────────────────────
+// ─── Space (Community) Types ─────────────────────────────────────────────────
 
-export type ServerVisibility = 'public' | 'request' | 'private';
+export type SpaceVisibility = 'public' | 'request' | 'private';
 
-export interface Server {
+export interface Space {
   id: string;
   name: string;
   icon: string | null;
   ownerId: string;
   inviteCode: string | null;
-  visibility: ServerVisibility;
+  visibility: SpaceVisibility;
   description: string | null;
   createdAt: number;
 }
 
-export interface ExploreServer {
+export interface ExploreSpace {
   id: string;
   name: string;
   icon: string | null;
   description: string | null;
-  visibility: ServerVisibility;
+  visibility: SpaceVisibility;
   memberCount: number;
   createdAt: number;
   joined?: boolean;
@@ -54,7 +54,7 @@ export interface ExploreServer {
 
 export interface JoinRequest {
   id: string;
-  serverId: string;
+  spaceId: string;
   userId: string;
   message: string | null;
   status: 'pending' | 'accepted' | 'declined';
@@ -64,17 +64,17 @@ export interface JoinRequest {
   user?: User;
 }
 
-export interface ServerWithChannelsAndMembers extends Server {
+export interface SpaceWithChannelsAndMembers extends Space {
   channels: Channel[];
   members: MemberWithUser[];
   roles: Role[];
-  myPermissions?: string; // Computed per-user BigInt decimal string (server-level)
+  myPermissions?: string; // Computed per-user BigInt decimal string (space-level)
 }
 
 // ─── Member Types ───────────────────────────────────────────────────────────
 
 export interface Member {
-  serverId: string;
+  spaceId: string;
   userId: string;
   nickname: string | null;
   joinedAt: number;
@@ -89,24 +89,24 @@ export interface MemberWithUser extends Member {
 
 export interface Role {
   id: string;
-  serverId: string;
+  spaceId: string;
   name: string;
   color: string;
   position: number;
   permissions?: string; // BigInt decimal string (bitwise)
-  isEveryone?: boolean; // UI hint: true when role.id === server.id
+  isEveryone?: boolean; // UI hint: true when role.id === space.id
   createdAt: number;
 }
 
 // ─── Folder Types ───────────────────────────────────────────────────────────
 
-export interface ServerFolder {
+export interface SpaceFolder {
   id: string;
   userId: string;
   name: string | null;
   color: string | null;
   position: number;
-  serverIds: string[];
+  spaceIds: string[];
 }
 
 // ─── Channel Types ──────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export type ChannelType = 'text' | 'voice' | 'video';
 
 export interface Channel {
   id: string;
-  serverId: string;
+  spaceId: string;
   name: string;
   type: ChannelType;
   topic: string | null;
@@ -239,15 +239,15 @@ export type ClientEvent =
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; servers: ServerWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: ServerFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[] }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[] }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
   | { type: 'presence_update'; userId: string; status: string }
   | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave' }
-  | { type: 'member_joined'; serverId: string; member: MemberWithUser }
-  | { type: 'member_left'; serverId: string; userId: string }
+  | { type: 'member_joined'; spaceId: string; member: MemberWithUser }
+  | { type: 'member_left'; spaceId: string; userId: string }
   | { type: 'dm_message_created'; message: DmMessageWithUser }
   | { type: 'dm_message_updated'; message: DmMessageWithUser }
   | { type: 'dm_message_deleted'; messageId: string; dmChannelId: string }
@@ -267,12 +267,12 @@ export type ServerEvent =
   | { type: 'dm_member_added'; dmChannelId: string; user: User }
   | { type: 'dm_member_removed'; dmChannelId: string; userId: string }
   | { type: 'friend_removed'; userId: string }
-  | { type: 'channel_created'; channel: Channel; serverId: string }
-  | { type: 'channel_updated'; channel: Channel; serverId: string }
-  | { type: 'channel_deleted'; channelId: string; serverId: string }
-  | { type: 'server_updated'; server: Server }
+  | { type: 'channel_created'; channel: Channel; spaceId: string }
+  | { type: 'channel_updated'; channel: Channel; spaceId: string }
+  | { type: 'channel_deleted'; channelId: string; spaceId: string }
+  | { type: 'space_updated'; space: Space }
   | { type: 'join_request_received'; request: JoinRequest }
-  | { type: 'join_request_accepted'; request: JoinRequest; server: ServerWithChannelsAndMembers }
+  | { type: 'join_request_accepted'; request: JoinRequest; space: SpaceWithChannelsAndMembers }
   | { type: 'join_request_declined'; request: JoinRequest }
   | { type: 'pong' }
   | { type: 'error'; message: string };
@@ -297,7 +297,7 @@ export interface AuthResponse {
   user: User;
 }
 
-export interface CreateServerRequest {
+export interface CreateSpaceRequest {
   name: string;
   icon?: string;
 }
@@ -314,10 +314,10 @@ export interface UpdateChannelRequest {
   position?: number;
 }
 
-export interface UpdateServerRequest {
+export interface UpdateSpaceRequest {
   name?: string;
   icon?: string;
-  visibility?: ServerVisibility;
+  visibility?: SpaceVisibility;
   description?: string;
 }
 
@@ -344,7 +344,7 @@ export interface UpdateMessageRequest {
   content: string;
 }
 
-export interface JoinServerRequest {
+export interface JoinSpaceRequest {
   inviteCode: string;
 }
 

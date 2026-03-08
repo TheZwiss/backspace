@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { InviteModal } from './InviteModal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 
 // Mock the stores by spying on their getState
 beforeEach(() => {
@@ -12,9 +12,9 @@ beforeEach(() => {
     activeModal: null,
     modalData: {},
   });
-  useServerStore.setState({
-    currentServerId: null,
-    servers: [],
+  useSpaceStore.setState({
+    currentSpaceId: null,
+    spaces: [],
   });
 });
 
@@ -28,8 +28,8 @@ describe('InviteModal', () => {
   it('calls generateInvite and displays the invite URL when opened', async () => {
     const mockGenerateInvite = vi.fn().mockResolvedValue('test-invite-code');
     useUIStore.setState({ activeModal: 'invite' });
-    useServerStore.setState({
-      currentServerId: 'server-123',
+    useSpaceStore.setState({
+      currentSpaceId: 'server-123',
       generateInvite: mockGenerateInvite,
     });
 
@@ -54,8 +54,8 @@ describe('InviteModal', () => {
   it('displays an error when generateInvite fails', async () => {
     const mockGenerateInvite = vi.fn().mockRejectedValue(new Error('Not authorized'));
     useUIStore.setState({ activeModal: 'invite' });
-    useServerStore.setState({
-      currentServerId: 'server-123',
+    useSpaceStore.setState({
+      currentSpaceId: 'server-123',
       generateInvite: mockGenerateInvite,
     });
 
@@ -69,8 +69,8 @@ describe('InviteModal', () => {
   it('Copy button is disabled while loading', () => {
     const mockGenerateInvite = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
     useUIStore.setState({ activeModal: 'invite' });
-    useServerStore.setState({
-      currentServerId: 'server-123',
+    useSpaceStore.setState({
+      currentSpaceId: 'server-123',
       generateInvite: mockGenerateInvite,
     });
 
@@ -91,8 +91,8 @@ describe('InviteModal', () => {
     });
 
     useUIStore.setState({ activeModal: 'invite' });
-    useServerStore.setState({
-      currentServerId: 'server-123',
+    useSpaceStore.setState({
+      currentSpaceId: 'server-123',
       generateInvite: mockGenerateInvite,
     });
 

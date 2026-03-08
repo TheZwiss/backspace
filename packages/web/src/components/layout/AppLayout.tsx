@@ -1,17 +1,17 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ServerSidebar } from './ServerSidebar';
+import { SpaceSidebar } from './SpaceSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
 import { MobileNav } from './MobileNav';
 import { ImagePreview } from '../chat/ImagePreview';
-import { CreateServerModal } from '../modals/CreateServer';
-import { JoinServerModal } from '../modals/JoinServer';
+import { CreateSpaceModal } from '../modals/CreateSpace';
+import { JoinSpaceModal } from '../modals/JoinSpace';
 import { CreateChannelModal } from '../modals/CreateChannel';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
-import { ServerSettingsModal } from '../modals/ServerSettings';
+import { SpaceSettingsModal } from '../modals/SpaceSettings';
 import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
@@ -25,14 +25,14 @@ import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
 
 export function AppLayout() {
-  const { serverId, channelId, inviteCode } = useParams<{ serverId?: string; channelId?: string; inviteCode?: string }>();
+  const { spaceId, channelId, inviteCode } = useParams<{ spaceId?: string; channelId?: string; inviteCode?: string }>();
   const navigate = useNavigate();
   
   // Global interaction handler to resume AudioContext
@@ -83,8 +83,8 @@ export function AppLayout() {
   }, [outputDeviceId]);
 
   const { user, isLoading } = useAuth();
-  const setCurrentServer = useServerStore((s) => s.setCurrentServer);
-  const loadServerDetail = useServerStore((s) => s.loadServerDetail);
+  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
+  const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const loadMessages = useChatStore((s) => s.loadMessages);
   const setIsMobile = useUIStore((s) => s.setIsMobile);
@@ -96,7 +96,7 @@ export function AppLayout() {
   const userProfilePopout = useUIStore((s) => s.userProfilePopout);
   const closeUserProfile = useUIStore((s) => s.closeUserProfile);
   
-  const channels = useServerStore((s) => s.channels);
+  const channels = useSpaceStore((s) => s.channels);
 
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
@@ -185,22 +185,22 @@ export function AppLayout() {
 
   // Handle route params
   useEffect(() => {
-    if (serverId === '@me') {
+    if (spaceId === '@me') {
       setShowDms(true);
-      setCurrentServer(null);
-    } else if (serverId) {
+      setCurrentSpace(null);
+    } else if (spaceId) {
       setShowDms(false);
-      setCurrentServer(serverId);
-      loadServerDetail(serverId);
+      setCurrentSpace(spaceId);
+      loadSpaceDetail(spaceId);
     } else {
       setShowDms(false);
-      setCurrentServer(null);
+      setCurrentSpace(null);
     }
-  }, [serverId, setCurrentServer, loadServerDetail, setShowDms]);
+  }, [spaceId, setCurrentSpace, loadSpaceDetail, setShowDms]);
 
   useEffect(() => {
     if (inviteCode) {
-      openModal('joinServer');
+      openModal('joinSpace');
     }
   }, [inviteCode, openModal]);
 
@@ -208,35 +208,35 @@ export function AppLayout() {
     if (channelId) {
       setCurrentChannel(channelId);
       loadMessages(channelId);
-      if (serverId && serverId !== '@me') {
-        useUIStore.getState().setLastChannel(serverId, channelId);
+      if (spaceId && spaceId !== '@me') {
+        useUIStore.getState().setLastChannel(spaceId, channelId);
       }
     } else {
       setCurrentChannel(null);
     }
-  }, [channelId, serverId, setCurrentChannel, loadMessages]);
+  }, [channelId, spaceId, setCurrentChannel, loadMessages]);
 
   // Auto-select last visited (or first) channel when opening a server without a channelId
   useEffect(() => {
-    if (!serverId || serverId === '@me' || channelId) return;
+    if (!spaceId || spaceId === '@me' || channelId) return;
     if (channels.length === 0) return;
 
     const firstChannel = channels[0];
     if (!firstChannel) return;
 
     // Guard: only redirect when channels belong to the target server.
-    // `channels` is shared per-view state set by loadServerDetail (async).
+    // `channels` is shared per-view state set by loadSpaceDetail (async).
     // Without this check, stale channels from a previously viewed server
     // would cause a wrong redirect during the fetch window.
-    const { channelToServerMap } = useServerStore.getState();
-    if (channelToServerMap.get(firstChannel.id) !== serverId) return;
+    const { channelToSpaceMap } = useSpaceStore.getState();
+    if (channelToSpaceMap.get(firstChannel.id) !== spaceId) return;
 
-    const lastId = useUIStore.getState().lastChannelPerServer[serverId];
+    const lastId = useUIStore.getState().lastChannelPerSpace[spaceId];
     const target = (lastId && channels.find((c) => c.id === lastId)) || firstChannel;
     if (target) {
-      navigate(`/channels/${serverId}/${target.id}`, { replace: true });
+      navigate(`/channels/${spaceId}/${target.id}`, { replace: true });
     }
-  }, [serverId, channelId, channels, navigate]);
+  }, [spaceId, channelId, channels, navigate]);
 
   if (isLoading || !user) {
     return (
@@ -254,9 +254,9 @@ export function AppLayout() {
 
   return (
     <div className="h-screen flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
-      {/* Server sidebar - always visible on desktop, toggled on mobile */}
+      {/* Space sidebar - always visible on desktop, toggled on mobile */}
       <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
-        <ServerSidebar />
+        <SpaceSidebar />
         <ChannelSidebar />
       </div>
 
@@ -267,12 +267,12 @@ export function AppLayout() {
       </div>
 
       {/* Modals */}
-      <CreateServerModal />
-      <JoinServerModal />
+      <CreateSpaceModal />
+      <JoinSpaceModal />
       <CreateChannelModal />
       <InviteModal />
       <UserSettingsModal />
-      <ServerSettingsModal />
+      <SpaceSettingsModal />
       <ChannelSettingsModal />
       <NewDmModal />
       <AddDmMemberModal />

@@ -1,4 +1,4 @@
-import { getApiForOrigin } from '../stores/serverStore';
+import { getApiForOrigin } from '../stores/spaceStore';
 
 /**
  * Resolve a relative asset filename to an absolute URL for remote origins.

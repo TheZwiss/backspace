@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useChatStore } from './chatStore';
-import { useServerStore } from './serverStore';
+import { useSpaceStore } from './spaceStore';
 import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.removeItem('backspace_token');
     // Clear all user-scoped state to prevent data leaking between sessions
     useChatStore.getState().clearAllMessages();
-    useServerStore.getState().populateFromReady('', [], [], []);
+    useSpaceStore.getState().populateFromReady('', [], [], []);
     useSocialStore.getState().reset();
     useVoiceStore.getState().clearAllVoiceUsers();
     useInstanceStore.getState().reset();

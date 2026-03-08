@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import { PermissionBits, permissionsToString, stringToPermissions } from '../../utils/permissions';
 
@@ -17,8 +17,8 @@ export function ChannelSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
-  const currentServerId = useServerStore((s) => s.currentServerId);
-  const channels = useServerStore((s) => s.channels);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const channels = useSpaceStore((s) => s.channels);
 
   const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +31,7 @@ export function ChannelSettingsModal() {
 
   // Fetch overrides when modal opens
   useEffect(() => {
-    if (!isOpen || !channelId || !currentServerId) {
+    if (!isOpen || !channelId || !currentSpaceId) {
       setIsFetching(false);
       return;
     }
@@ -41,9 +41,9 @@ export function ChannelSettingsModal() {
 
     api.channels.getOverrides(channelId)
       .then((overrides: ChannelOverride[]) => {
-        // Check if @everyone role (id === serverId) has VIEW_CHANNEL denied
+        // Check if @everyone role (id === spaceId) has VIEW_CHANNEL denied
         const everyoneOverride = overrides.find(
-          o => o.targetType === 'role' && o.targetId === currentServerId
+          o => o.targetType === 'role' && o.targetId === currentSpaceId
         );
         if (everyoneOverride) {
           const denyBits = stringToPermissions(everyoneOverride.deny);
@@ -58,9 +58,9 @@ export function ChannelSettingsModal() {
       .finally(() => {
         setIsFetching(false);
       });
-  }, [isOpen, channelId, currentServerId]);
+  }, [isOpen, channelId, currentSpaceId]);
 
-  if (!isOpen || !channel || !channelId || !currentServerId) return null;
+  if (!isOpen || !channel || !channelId || !currentSpaceId) return null;
 
   const handleToggle = async () => {
     setError('');
@@ -71,14 +71,14 @@ export function ChannelSettingsModal() {
         // Make private: deny VIEW_CHANNEL for @everyone role
         await api.channels.putOverride(channelId, {
           targetType: 'role',
-          targetId: currentServerId,
+          targetId: currentSpaceId,
           allow: '0',
           deny: permissionsToString(PermissionBits.VIEW_CHANNEL),
         });
         setIsPrivate(true);
       } else {
         // Make public: remove the @everyone VIEW_CHANNEL deny override
-        await api.channels.deleteOverride(channelId, 'role', currentServerId);
+        await api.channels.deleteOverride(channelId, 'role', currentSpaceId);
         setIsPrivate(false);
       }
     } catch (err) {
@@ -144,7 +144,7 @@ export function ChannelSettingsModal() {
               <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
             </svg>
             <span>
-              This channel is hidden from members without explicit access. Users with the Administrator permission or server owners can always see all channels.
+              This channel is hidden from members without explicit access. Users with the Administrator permission or space owners can always see all channels.
             </span>
           </div>
         )}

@@ -7,12 +7,12 @@ import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
   User,
-  ServerWithChannelsAndMembers,
+  SpaceWithChannelsAndMembers,
   MemberWithUser,
   Channel,
   DmChannel,
   ServerEvent,
-  ServerFolder,
+  SpaceFolder,
   ReadState,
   ActiveCallInfo,
 } from '@backspace/shared';
@@ -39,9 +39,9 @@ export interface AuthenticatedSocket {
 
 // ─── VoiceRoom Abstraction ─────────────────────────────────────────────────
 
-export interface ServerRoomMeta {
-  type: 'server';
-  serverId: string;
+export interface SpaceRoomMeta {
+  type: 'space';
+  spaceId: string;
 }
 
 export interface DmRoomMeta {
@@ -52,9 +52,9 @@ export interface DmRoomMeta {
 
 export interface VoiceRoom {
   roomId: string;
-  roomType: 'server' | 'dm';
+  roomType: 'space' | 'dm';
   participants: Set<string>;
-  metadata: ServerRoomMeta | DmRoomMeta;
+  metadata: SpaceRoomMeta | DmRoomMeta;
   startedAt: number;
 }
 
@@ -63,8 +63,8 @@ export interface VoiceRoom {
 class ConnectionManager {
   // userId → Set of WebSocket connections (multiple tabs)
   private connections: Map<string, Set<WebSocket>> = new Map();
-  // userId → Set of server IDs the user belongs to
-  private userServers: Map<string, Set<string>> = new Map();
+  // userId → Set of space IDs the user belongs to
+  private userSpaces: Map<string, Set<string>> = new Map();
   // ws → userId (reverse lookup)
   private wsToUser: Map<WebSocket, string> = new Map();
   // Unified voice room tracking (replaces voiceStates + activeCalls)
@@ -134,13 +134,13 @@ class ConnectionManager {
     const db = getDb();
     db.update(schema.users).set({ status: 'offline' }).where(eq(schema.users.id, userId)).run();
 
-    // Leave voice room if in one (handles both server and DM rooms)
+    // Leave voice room if in one (handles both space and DM rooms)
     const left = this.leaveCurrentRoom(userId);
     this.clearVoiceUserStatus(userId);
     if (left) {
-      if (left.room.roomType === 'server') {
-        const meta = left.room.metadata as ServerRoomMeta;
-        this.sendToServer(meta.serverId, {
+      if (left.room.roomType === 'space') {
+        const meta = left.room.metadata as SpaceRoomMeta;
+        this.sendToSpace(meta.spaceId, {
           type: 'voice_state_update',
           channelId: left.roomId,
           userId: userId,
@@ -179,10 +179,10 @@ class ConnectionManager {
       }
     }
 
-    // Broadcast offline to all servers
-    const userServers = this.getUserServers(userId);
-    for (const serverId of userServers) {
-      this.sendToServer(serverId, {
+    // Broadcast offline to all spaces
+    const userSpaces = this.getUserSpaces(userId);
+    for (const spaceId of userSpaces) {
+      this.sendToSpace(spaceId, {
         type: 'presence_update',
         userId: userId,
         status: 'offline',
@@ -199,25 +199,25 @@ class ConnectionManager {
     return conns !== undefined && conns.size > 0;
   }
 
-  setUserServers(userId: string, serverIds: string[]): void {
-    this.userServers.set(userId, new Set(serverIds));
+  setUserSpaces(userId: string, spaceIds: string[]): void {
+    this.userSpaces.set(userId, new Set(spaceIds));
   }
 
-  addUserServer(userId: string, serverId: string): void {
-    if (!this.userServers.has(userId)) {
-      this.userServers.set(userId, new Set());
+  addUserSpace(userId: string, spaceId: string): void {
+    if (!this.userSpaces.has(userId)) {
+      this.userSpaces.set(userId, new Set());
     }
-    this.userServers.get(userId)!.add(serverId);
+    this.userSpaces.get(userId)!.add(spaceId);
   }
 
-  getUserServers(userId: string): Set<string> {
-    return this.userServers.get(userId) ?? new Set();
+  getUserSpaces(userId: string): Set<string> {
+    return this.userSpaces.get(userId) ?? new Set();
   }
 
   // ─── Unified VoiceRoom API ─────────────────────────────────────────────────
 
   /** Create a room. Returns false if room already exists. */
-  createRoom(roomId: string, roomType: 'server' | 'dm', metadata: ServerRoomMeta | DmRoomMeta): boolean {
+  createRoom(roomId: string, roomType: 'space' | 'dm', metadata: SpaceRoomMeta | DmRoomMeta): boolean {
     if (this.voiceRooms.has(roomId)) return false;
     this.voiceRooms.set(roomId, {
       roomId,
@@ -283,7 +283,7 @@ class ConnectionManager {
       const oldRoom = this.voiceRooms.get(currentRoomId);
       if (oldRoom) {
         oldRoom.participants.delete(userId);
-        if (oldRoom.participants.size === 0 && oldRoom.roomType === 'server') {
+        if (oldRoom.participants.size === 0 && oldRoom.roomType === 'space') {
           this.voiceRooms.delete(currentRoomId);
         }
       }
@@ -302,8 +302,8 @@ class ConnectionManager {
     room.participants.delete(userId);
     this.userToRoom.delete(userId);
 
-    // Auto-cleanup empty server rooms (they're lazy-created)
-    if (room.participants.size === 0 && room.roomType === 'server') {
+    // Auto-cleanup empty space rooms (they're lazy-created)
+    if (room.participants.size === 0 && room.roomType === 'space') {
       this.voiceRooms.delete(roomId);
     }
 
@@ -399,11 +399,11 @@ class ConnectionManager {
     }
   }
 
-  /** Send to all members of a server. */
-  sendToServer(serverId: string, event: ServerEvent, excludeUserId?: string): void {
+  /** Send to all members of a space. */
+  sendToSpace(spaceId: string, event: ServerEvent, excludeUserId?: string): void {
     const message = JSON.stringify(event);
-    for (const [userId, serverIds] of this.userServers) {
-      if (serverIds.has(serverId) && userId !== excludeUserId) {
+    for (const [userId, spaceIds] of this.userSpaces) {
+      if (spaceIds.has(spaceId) && userId !== excludeUserId) {
         const connections = this.getUserConnections(userId);
         for (const ws of connections) {
           if (ws.readyState === 1) {
@@ -414,12 +414,12 @@ class ConnectionManager {
     }
   }
 
-  /** Send to server members who have VIEW_CHANNEL on the given channel. */
-  sendToChannel(serverId: string, channelId: string, event: ServerEvent, excludeUserId?: string): void {
+  /** Send to space members who have VIEW_CHANNEL on the given channel. */
+  sendToChannel(spaceId: string, channelId: string, event: ServerEvent, excludeUserId?: string): void {
     const message = JSON.stringify(event);
-    for (const [userId, serverIds] of this.userServers) {
-      if (serverIds.has(serverId) && userId !== excludeUserId) {
-        const perms = computePermissions(userId, serverId, channelId);
+    for (const [userId, spaceIds] of this.userSpaces) {
+      if (spaceIds.has(spaceId) && userId !== excludeUserId) {
+        const perms = computePermissions(userId, spaceId, channelId);
         if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
           const connections = this.getUserConnections(userId);
           for (const ws of connections) {
@@ -432,9 +432,9 @@ class ConnectionManager {
     }
   }
 
-  /** Expose userServers iterator for pre-delete viewer collection. */
-  getUserServerEntries(): IterableIterator<[string, Set<string>]> {
-    return this.userServers.entries();
+  /** Expose userSpaces iterator for pre-delete viewer collection. */
+  getUserSpaceEntries(): IterableIterator<[string, Set<string>]> {
+    return this.userSpaces.entries();
   }
 
   /** Send to all DM channel members (queries dm_members table). */
@@ -452,14 +452,14 @@ class ConnectionManager {
     }
   }
 
-  /** Send to a room — routes to sendToServer (server rooms) or sendToDmMembers (DM rooms). */
+  /** Send to a room — routes to sendToSpace (space rooms) or sendToDmMembers (DM rooms). */
   sendToRoom(roomId: string, event: ServerEvent, excludeUserId?: string): void {
     const room = this.voiceRooms.get(roomId);
     if (!room) return;
 
-    if (room.roomType === 'server') {
-      const meta = room.metadata as ServerRoomMeta;
-      this.sendToServer(meta.serverId, event, excludeUserId);
+    if (room.roomType === 'space') {
+      const meta = room.metadata as SpaceRoomMeta;
+      this.sendToSpace(meta.spaceId, event, excludeUserId);
     } else {
       this.sendToDmMembers(roomId, event, excludeUserId);
     }
@@ -531,9 +531,9 @@ class WsRateLimiter {
 
 function buildReadyPayload(userId: string): {
   user: User;
-  servers: ServerWithChannelsAndMembers[];
+  spaces: SpaceWithChannelsAndMembers[];
   dmChannels: DmChannel[];
-  folders: ServerFolder[];
+  folders: SpaceFolder[];
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   readStates: ReadState[];
@@ -548,31 +548,31 @@ function buildReadyPayload(userId: string): {
   }
   const user = sanitizeUser(userRow);
 
-  // Get user's server memberships
+  // Get user's space memberships
   const memberships = db.select()
-    .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.userId, userId))
+    .from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.userId, userId))
     .all();
 
-  const serverIds = memberships.map(m => m.serverId);
+  const spaceIds = memberships.map(m => m.spaceId);
 
-  const servers: ServerWithChannelsAndMembers[] = [];
+  const spaces: SpaceWithChannelsAndMembers[] = [];
 
-  if (serverIds.length > 0) {
-    const serverRows = db.select()
-      .from(schema.servers)
-      .where(inArray(schema.servers.id, serverIds))
+  if (spaceIds.length > 0) {
+    const spaceRows = db.select()
+      .from(schema.spaces)
+      .where(inArray(schema.spaces.id, spaceIds))
       .all();
 
-    // Batch: all channels for all servers (1 query instead of N)
+    // Batch: all channels for all spaces (1 query instead of N)
     const allChannels = batchInArray(
-      serverIds,
-      ids => db.select().from(schema.channels).where(inArray(schema.channels.serverId, ids)).all(),
+      spaceIds,
+      ids => db.select().from(schema.channels).where(inArray(schema.channels.spaceId, ids)).all(),
     );
-    const channelsByServer = new Map<string, (typeof allChannels)>();
+    const channelsBySpace = new Map<string, (typeof allChannels)>();
     for (const ch of allChannels) {
-      let arr = channelsByServer.get(ch.serverId);
-      if (!arr) { arr = []; channelsByServer.set(ch.serverId, arr); }
+      let arr = channelsBySpace.get(ch.spaceId);
+      if (!arr) { arr = []; channelsBySpace.set(ch.spaceId, arr); }
       arr.push(ch);
     }
 
@@ -592,18 +592,18 @@ function buildReadyPayload(userId: string): {
       }
     }
 
-    for (const serverRow of serverRows) {
-      const channels = channelsByServer.get(serverRow.id) ?? [];
+    for (const spaceRow of spaceRows) {
+      const channels = channelsBySpace.get(spaceRow.id) ?? [];
 
       const roles = db.select()
         .from(schema.roles)
-        .where(eq(schema.roles.serverId, serverRow.id))
+        .where(eq(schema.roles.spaceId, spaceRow.id))
         .orderBy(schema.roles.position)
         .all();
 
       const memberRows = db.select()
-        .from(schema.serverMembers)
-        .where(eq(schema.serverMembers.serverId, serverRow.id))
+        .from(schema.spaceMembers)
+        .where(eq(schema.spaceMembers.spaceId, spaceRow.id))
         .all();
 
       const memberUserIds = memberRows.map(m => m.userId);
@@ -614,7 +614,7 @@ function buildReadyPayload(userId: string): {
 
       const memberRoleRows = db.select()
         .from(schema.memberRoles)
-        .where(eq(schema.memberRoles.serverId, serverRow.id))
+        .where(eq(schema.memberRoles.spaceId, spaceRow.id))
         .all();
 
       const members: MemberWithUser[] = memberRows
@@ -630,7 +630,7 @@ function buildReadyPayload(userId: string): {
             .filter(r => assignedRoleIds.includes(r.id))
             .map(r => ({
               id: r.id,
-              serverId: r.serverId,
+              spaceId: r.spaceId,
               name: r.name,
               color: r.color ?? '#b9bbbe',
               position: r.position ?? 0,
@@ -638,7 +638,7 @@ function buildReadyPayload(userId: string): {
             }));
 
           return {
-            serverId: m.serverId,
+            spaceId: m.spaceId,
             userId: m.userId,
             nickname: m.nickname,
             joinedAt: m.joinedAt,
@@ -648,18 +648,18 @@ function buildReadyPayload(userId: string): {
         })
         .filter((m): m is MemberWithUser => m !== null);
 
-      // Compute server-level permissions for this user
-      const serverPerms = computePermissions(userId, serverRow.id);
+      // Compute space-level permissions for this user
+      const spacePerms = computePermissions(userId, spaceRow.id);
 
       // Filter channels by VIEW_CHANNEL and attach per-channel permissions
       const visibleChannels: Channel[] = [];
       for (const ch of channels) {
-        const chPerms = computePermissions(userId, serverRow.id, ch.id);
+        const chPerms = computePermissions(userId, spaceRow.id, ch.id);
         const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
         if (hasView) {
           visibleChannels.push({
             id: ch.id,
-            serverId: ch.serverId,
+            spaceId: ch.spaceId,
             name: ch.name,
             type: ch.type as Channel['type'],
             topic: ch.topic,
@@ -671,34 +671,34 @@ function buildReadyPayload(userId: string): {
         }
       }
 
-      servers.push({
-        id: serverRow.id,
-        name: serverRow.name,
-        icon: serverRow.icon,
-        ownerId: serverRow.ownerId,
-        inviteCode: serverRow.inviteCode,
-        visibility: (serverRow.visibility ?? 'private') as ServerWithChannelsAndMembers['visibility'],
-        description: serverRow.description ?? null,
-        createdAt: serverRow.createdAt,
+      spaces.push({
+        id: spaceRow.id,
+        name: spaceRow.name,
+        icon: spaceRow.icon,
+        ownerId: spaceRow.ownerId,
+        inviteCode: spaceRow.inviteCode,
+        visibility: (spaceRow.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
+        description: spaceRow.description ?? null,
+        createdAt: spaceRow.createdAt,
         channels: visibleChannels,
         members,
         roles: roles.map(r => ({
           id: r.id,
-          serverId: r.serverId,
+          spaceId: r.spaceId,
           name: r.name,
           color: r.color ?? '#b9bbbe',
           position: r.position ?? 0,
           permissions: r.permissions ?? undefined,
-          isEveryone: r.id === serverRow.id,
+          isEveryone: r.id === spaceRow.id,
           createdAt: r.createdAt,
         })),
-        myPermissions: permissionsToString(serverPerms),
+        myPermissions: permissionsToString(spacePerms),
       });
     }
   }
 
-  // Store user's server IDs for broadcasting
-  connectionManager.setUserServers(userId, serverIds);
+  // Store user's space IDs for broadcasting
+  connectionManager.setUserSpaces(userId, spaceIds);
 
   // Get DM channels
   const dmMemberships = db.select()
@@ -773,36 +773,36 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Get Server Folders
+  // Get Space Folders
   const folderRows = db.select()
-    .from(schema.serverFolders)
-    .where(eq(schema.serverFolders.userId, userId))
-    .orderBy(schema.serverFolders.position)
+    .from(schema.spaceFolders)
+    .where(eq(schema.spaceFolders.userId, userId))
+    .orderBy(schema.spaceFolders.position)
     .all();
 
-  const folders: any[] = [];
+  const folders: SpaceFolder[] = [];
   for (const folder of folderRows) {
-    const serverIds = db.select()
-      .from(schema.serverFolderMembers)
-      .where(eq(schema.serverFolderMembers.folderId, folder.id))
+    const folderSpaceIds = db.select()
+      .from(schema.spaceFolderMembers)
+      .where(eq(schema.spaceFolderMembers.folderId, folder.id))
       .all()
-      .map(m => m.serverId);
+      .map(m => m.spaceId);
 
     folders.push({
       id: folder.id,
       userId: folder.userId,
       name: folder.name,
       color: folder.color,
-      position: folder.position,
-      serverIds,
+      position: folder.position ?? 0,
+      spaceIds: folderSpaceIds,
     });
   }
 
   // Build voice states — tell the client who is currently in voice channels
-  // across all their servers
+  // across all their spaces
   const voiceStates: Record<string, string[]> = {};
-  for (const srv of servers) {
-    for (const ch of srv.channels) {
+  for (const space of spaces) {
+    for (const ch of space.channels) {
       if (ch.type === 'voice' || ch.type === 'video') {
         const participants = connectionManager.getRoomParticipants(ch.id);
         if (participants.size > 0) {
@@ -832,7 +832,7 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Build voice user states — includes both server and DM participants now
+  // Build voice user states — includes both space and DM participants now
   const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = {};
   for (const chId of Object.keys(voiceStates)) {
     const usersInChannel = voiceStates[chId];
@@ -857,7 +857,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, servers, dmChannels, folders, voiceStates, voiceUserStates, readStates, activeCalls };
+  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, readStates, activeCalls };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {
@@ -915,10 +915,10 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
             ...readyData,
           }));
 
-          // Broadcast presence update to all servers
-          const userServers = connectionManager.getUserServers(userId);
-          for (const serverId of userServers) {
-            connectionManager.sendToServer(serverId, {
+          // Broadcast presence update to all spaces
+          const userSpaces = connectionManager.getUserSpaces(userId);
+          for (const spaceId of userSpaces) {
+            connectionManager.sendToSpace(spaceId, {
               type: 'presence_update',
               userId,
               status: 'online',

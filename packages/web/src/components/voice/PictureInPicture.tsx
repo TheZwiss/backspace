@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
-import { useServerStore } from '../../stores/serverStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
 
@@ -111,8 +111,8 @@ export function PictureInPicture() {
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
   const pipCollapsed = useUIStore((s) => s.pipCollapsed);
   const setPipCollapsed = useUIStore((s) => s.setPipCollapsed);
-  const channelToServerMap = useServerStore((s) => s.channelToServerMap);
-  const channels = useServerStore((s) => s.channels);
+  const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
+  const channels = useSpaceStore((s) => s.channels);
 
   // Drag state
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: -1, y: -1 });
@@ -291,16 +291,16 @@ export function PictureInPicture() {
       if (activeDmCall) {
         navigate(`/channels/@me/${activeDmCall.dmChannelId}`);
       } else if (currentVoiceChannelId) {
-        const serverId = channelToServerMap.get(currentVoiceChannelId);
-        if (serverId) {
-          navigate(`/channels/${serverId}/${currentVoiceChannelId}`);
+        const spaceId = channelToSpaceMap.get(currentVoiceChannelId);
+        if (spaceId) {
+          navigate(`/channels/${spaceId}/${currentVoiceChannelId}`);
         }
       }
     } else {
       // Drag ended — snap to edge
       snapToEdge(position.x, position.y);
     }
-  }, [isDragging, activeDmCall, currentVoiceChannelId, channelToServerMap, navigate, snapToEdge, position]);
+  }, [isDragging, activeDmCall, currentVoiceChannelId, channelToSpaceMap, navigate, snapToEdge, position]);
 
   const handleClose = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

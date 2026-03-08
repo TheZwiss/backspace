@@ -1,17 +1,17 @@
 import { create } from 'zustand';
-import type { ExploreServer, JoinRequest, ServerWithChannelsAndMembers } from '@backspace/shared';
+import type { ExploreSpace, JoinRequest, SpaceWithChannelsAndMembers } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
-import { useServerStore } from './serverStore';
+import { useSpaceStore } from './spaceStore';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface TaggedExploreServer extends ExploreServer {
+export interface TaggedExploreSpace extends ExploreSpace {
   _instanceOrigin: string; // '' = home instance
 }
 
 interface ExploreState {
-  servers: TaggedExploreServer[];
+  spaces: TaggedExploreSpace[];
   myRequests: JoinRequest[];
   searchQuery: string;
   isLoading: boolean;
@@ -19,10 +19,10 @@ interface ExploreState {
   totalAll: number;
   error: string | null;
 
-  fetchServers: (query?: string) => Promise<void>;
+  fetchSpaces: (query?: string) => Promise<void>;
   fetchMyRequests: () => Promise<void>;
-  publicJoin: (server: TaggedExploreServer) => Promise<ServerWithChannelsAndMembers>;
-  requestJoin: (server: TaggedExploreServer, message?: string) => Promise<JoinRequest>;
+  publicJoin: (space: TaggedExploreSpace) => Promise<SpaceWithChannelsAndMembers>;
+  requestJoin: (space: TaggedExploreSpace, message?: string) => Promise<JoinRequest>;
   setSearchQuery: (q: string) => void;
   reset: () => void;
 }
@@ -38,7 +38,7 @@ function getApiForOrigin(origin: string) {
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 export const useExploreStore = create<ExploreState>((set, get) => ({
-  servers: [],
+  spaces: [],
   myRequests: [],
   searchQuery: '',
   isLoading: false,
@@ -46,7 +46,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   totalAll: 0,
   error: null,
 
-  fetchServers: async (query?: string) => {
+  fetchSpaces: async (query?: string) => {
     set({ isLoading: true, error: null });
 
     try {
@@ -61,22 +61,22 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
         ),
       ]);
 
-      const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ servers: ExploreServer[]; total: number; totalAll?: number; discoveryEnabled: boolean; origin: string }>[];
+      const fulfilled = results.filter(r => r.status === 'fulfilled') as PromiseFulfilledResult<{ spaces: ExploreSpace[]; total: number; totalAll?: number; discoveryEnabled: boolean; origin: string }>[];
       const rejected = results.filter(r => r.status === 'rejected');
 
       // If ALL instances failed, surface an error
       if (fulfilled.length === 0 && rejected.length > 0) {
-        set({ isLoading: false, error: 'Failed to reach any server for discovery' });
+        set({ isLoading: false, error: 'Failed to reach any instance for discovery' });
         return;
       }
 
-      const allServers: TaggedExploreServer[] = [];
-      const seen = new Set<string>(); // dedup by serverId+origin
+      const allSpaces: TaggedExploreSpace[] = [];
+      const seen = new Set<string>(); // dedup by spaceId+origin
       let homeDiscoveryEnabled = true;
       let totalAllSum = 0;
 
       for (const result of fulfilled) {
-        const { servers, discoveryEnabled, totalAll, origin } = result.value;
+        const { spaces, discoveryEnabled, totalAll, origin } = result.value;
 
         // Track home instance discovery state
         if (!origin) {
@@ -85,16 +85,16 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
 
         totalAllSum += totalAll ?? 0;
 
-        for (const server of servers) {
-          const key = `${server.id}:${origin}`;
+        for (const space of spaces) {
+          const key = `${space.id}:${origin}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          allServers.push({ ...server, _instanceOrigin: origin, joined: server.joined ?? false });
+          allSpaces.push({ ...space, _instanceOrigin: origin, joined: space.joined ?? false });
         }
       }
 
       set({
-        servers: allServers,
+        spaces: allSpaces,
         discoveryEnabled: homeDiscoveryEnabled,
         totalAll: totalAllSum,
         isLoading: false,
@@ -102,7 +102,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     } catch (err) {
       set({
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Failed to fetch servers',
+        error: err instanceof Error ? err.message : 'Failed to fetch spaces',
       });
     }
   },
@@ -116,28 +116,28 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
     }
   },
 
-  publicJoin: async (server: TaggedExploreServer) => {
-    const client = getApiForOrigin(server._instanceOrigin);
-    const fullServer = await client.explore.publicJoin(server.id);
+  publicJoin: async (space: TaggedExploreSpace) => {
+    const client = getApiForOrigin(space._instanceOrigin);
+    const fullSpace = await client.explore.publicJoin(space.id);
 
-    // Add to server store
-    useServerStore.getState().addServerFromReady(server._instanceOrigin, fullServer);
+    // Add to space store
+    useSpaceStore.getState().addSpaceFromReady(space._instanceOrigin, fullSpace);
 
     // Mark as joined in explore list
     set((state) => ({
-      servers: state.servers.map(s =>
-        s.id === server.id && s._instanceOrigin === server._instanceOrigin
+      spaces: state.spaces.map(s =>
+        s.id === space.id && s._instanceOrigin === space._instanceOrigin
           ? { ...s, joined: true }
           : s
       ),
     }));
 
-    return fullServer;
+    return fullSpace;
   },
 
-  requestJoin: async (server: TaggedExploreServer, message?: string) => {
-    const client = getApiForOrigin(server._instanceOrigin);
-    const request = await client.explore.requestJoin(server.id, message);
+  requestJoin: async (space: TaggedExploreSpace, message?: string) => {
+    const client = getApiForOrigin(space._instanceOrigin);
+    const request = await client.explore.requestJoin(space.id, message);
 
     set((state) => ({
       myRequests: [...state.myRequests, request],
@@ -149,7 +149,7 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   setSearchQuery: (q: string) => set({ searchQuery: q }),
 
   reset: () => set({
-    servers: [],
+    spaces: [],
     myRequests: [],
     searchQuery: '',
     isLoading: false,

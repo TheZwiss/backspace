@@ -1,5 +1,5 @@
 import { useVoiceStore } from '../stores/voiceStore';
-import { getChannelOrigin, getMyUserIdForOrigin } from '../stores/serverStore';
+import { getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { wsSend } from '../hooks/useWebSocket';
 
 /**
