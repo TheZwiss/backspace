@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
@@ -85,20 +85,111 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
         </button>
       )}
       {canMoveMembers && otherVoiceChannels.length > 0 && (
-        <>
-          <div className="h-px bg-white/[0.06] my-1 mx-1.5" />
-          <div className="px-3 py-1 text-[10px] text-txt-tertiary uppercase tracking-wider font-semibold">
-            Move to...
-          </div>
-          {otherVoiceChannels.map((ch) => (
-            <button key={ch.id} onClick={() => handleMove(ch.id)} className={btnClass} style={btnStyle}>
+        <MoveToSubmenu channels={otherVoiceChannels} onMove={handleMove} btnClass={btnClass} btnStyle={btnStyle} />
+      )}
+    </>
+  );
+}
+
+// ─── "Move to" hover flyout submenu ──────────────────────────────────────────
+
+interface MoveToSubmenuProps {
+  channels: { id: string; name: string }[];
+  onMove: (channelId: string) => void;
+  btnClass: string;
+  btnStyle: React.CSSProperties;
+}
+
+function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startCloseTimer = useCallback(() => {
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  }, []);
+
+  const cancelCloseTimer = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  // Position the flyout relative to the trigger
+  useLayoutEffect(() => {
+    const flyout = flyoutRef.current;
+    const trigger = triggerRef.current;
+    if (!open || !flyout || !trigger) return;
+
+    const tRect = trigger.getBoundingClientRect();
+    const fRect = flyout.getBoundingClientRect();
+    const gap = 4;
+
+    // Horizontal: prefer right, flip left if overflowing
+    let left = tRect.right + gap;
+    if (left + fRect.width > window.innerWidth) {
+      left = tRect.left - fRect.width - gap;
+    }
+    if (left < 8) left = 8;
+
+    // Vertical: align top with trigger, clamp to viewport
+    let top = tRect.top;
+    if (top + fRect.height > window.innerHeight - 8) {
+      top = window.innerHeight - fRect.height - 8;
+    }
+    if (top < 8) top = 8;
+
+    flyout.style.left = `${left}px`;
+    flyout.style.top = `${top}px`;
+  }, [open]);
+
+  return (
+    <>
+      <div className="h-px bg-white/[0.06] my-1 mx-1.5" />
+      <button
+        ref={triggerRef}
+        className={btnClass}
+        style={btnStyle}
+        onMouseEnter={() => { cancelCloseTimer(); setOpen(true); }}
+        onMouseLeave={startCloseTimer}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+          <path d="M14 4l2.29 2.29-2.88 2.88 1.42 1.42 2.88-2.88L20 10V4h-6zM10 4H4v6l2.29-2.29 4.71 4.7V20h2v-8.41l-5.29-5.3L10 4z" />
+        </svg>
+        <span className="flex-1">Move to</span>
+        <span className="text-txt-tertiary text-xs ml-auto">›</span>
+      </button>
+      {open && ReactDOM.createPortal(
+        <div
+          ref={flyoutRef}
+          className="fixed z-[210] bg-surface-elevated rounded-md shadow-elevation-high py-1.5 min-w-[160px] max-h-[240px] overflow-y-auto scrollbar-thin animate-fade-in"
+          style={{ left: -9999, top: -9999 }}
+          onMouseEnter={cancelCloseTimer}
+          onMouseLeave={startCloseTimer}
+        >
+          {channels.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => onMove(ch.id)}
+              className={btnClass}
+              style={btnStyle}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-txt-tertiary">
                 <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" />
               </svg>
               <span className="truncate">{ch.name}</span>
             </button>
           ))}
-        </>
+        </div>,
+        document.body,
       )}
     </>
   );
