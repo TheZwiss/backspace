@@ -155,21 +155,25 @@ export function JoinSpaceModal() {
               autoFocus
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading || !inviteCode.trim()}
-              className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-            >
-              {isLoading ? 'Joining...' : 'Join Space'}
-            </button>
+          <div className="sticky bottom-0 z-10 pointer-events-none">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || !inviteCode.trim()}
+                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? 'Joining...' : 'Join Space'}
+                </button>
+              </div>
+            </div>
           </div>
         </form>
       )}
@@ -199,29 +203,35 @@ export function JoinSpaceModal() {
               </div>
             </div>
           </div>
-          <div className="flex justify-between">
-            <button
-              type="button"
-              onClick={() => { setPhase('input'); setPassword(''); setError(''); }}
-              className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
-            >
-              Back
-            </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !password}
-                className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-              >
-                {isLoading ? 'Connecting...' : 'Connect & Join'}
-              </button>
+          <div className="sticky bottom-0 z-10 pointer-events-none">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => { setPhase('input'); setPassword(''); setError(''); }}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+                <div className="w-px h-5 bg-white/10" />
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || !password}
+                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? 'Connecting...' : 'Connect & Join'}
+                </button>
+              </div>
             </div>
           </div>
         </form>
@@ -258,29 +268,35 @@ export function JoinSpaceModal() {
               />
             </div>
           </div>
-          <div className="flex justify-between">
-            <button
-              type="button"
-              onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
-              className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
-            >
-              Back
-            </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isLoading || !fallbackUsername || !fallbackPassword}
-                className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-              >
-                {isLoading ? 'Logging in...' : 'Login & Join'}
-              </button>
+          <div className="sticky bottom-0 z-10 pointer-events-none">
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={() => { setPhase('connect'); setFallbackPassword(''); setError(''); }}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back
+                </button>
+                <div className="w-px h-5 bg-white/10" />
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || !fallbackUsername || !fallbackPassword}
+                  className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? 'Logging in...' : 'Login & Join'}
+                </button>
+              </div>
             </div>
           </div>
         </form>

@@ -113,17 +113,19 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
 
-      <button
-        onClick={handleCreateRole}
-        disabled={creating}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-        {creating ? 'Creating...' : 'Create Role'}
-      </button>
+      <div className="sticky top-0 z-10 pointer-events-none pb-3">
+        <button
+          onClick={handleCreateRole}
+          disabled={creating}
+          className="glass-bubble rounded-full px-3 py-1.5 flex items-center gap-1.5 text-sm text-txt-primary hover:text-txt-secondary transition-colors pointer-events-auto disabled:opacity-50"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          {creating ? 'Creating...' : 'Create Role'}
+        </button>
+      </div>
 
       <div className="space-y-1">
         {sortedRoles.map((role) => {

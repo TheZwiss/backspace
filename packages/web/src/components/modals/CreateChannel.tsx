@@ -128,21 +128,25 @@ export function CreateChannelModal() {
           </div>
         )}
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={closeModal}
-            className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Creating...' : 'Create Channel'}
-          </button>
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {isLoading ? 'Creating...' : 'Create Channel'}
+              </button>
+            </div>
+          </div>
         </div>
       </form>
     </Modal>
