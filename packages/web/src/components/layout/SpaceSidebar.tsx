@@ -4,6 +4,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { Tooltip } from '../ui/Tooltip';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
 
@@ -17,9 +18,12 @@ interface SidebarItemProps {
   actionType?: 'add' | 'join' | 'explore';
   hasUnread?: boolean;
   dimmed?: boolean;
+  federationBadge?: boolean;
+  federationDisconnected?: boolean;
+  tooltipText?: string;
 }
 
-function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionType, hasUnread, dimmed }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -66,6 +70,53 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionTy
     return `${base} text-white ${active ? 'rounded-[13px]' : 'rounded-[20px] hover:rounded-[13px]'}`;
   };
 
+  const buttonContent = (
+    <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
+      {type === 'dm' ? (
+        <span className="text-[17px] font-bold">B</span>
+      ) : type === 'action' ? (
+        actionType === 'add' ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+          </svg>
+        ) : actionType === 'explore' ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+          </svg>
+        )
+      ) : icon ? (
+        <img
+          src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+          alt={name}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <span className="text-[15px] font-bold">{firstLetter}</span>
+      )}
+    </button>
+  );
+
+  const innerContent = (
+    <div className="relative">
+      {buttonContent}
+      {federationBadge && (
+        <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-base flex items-center justify-center">
+          {federationDisconnected ? (
+            <div className="w-[8px] h-[8px] rounded-full bg-accent-amber" />
+          ) : (
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className="relative flex items-center mb-1.5 w-full justify-center"
@@ -81,34 +132,31 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionTy
         </div>
       )}
 
-      <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={name}>
-        {type === 'dm' ? (
-          <span className="text-[17px] font-bold">B</span>
-        ) : type === 'action' ? (
-          actionType === 'add' ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-            </svg>
-          ) : actionType === 'explore' ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
-            </svg>
-          )
-        ) : icon ? (
-          <img
-            src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
-            alt={name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <span className="text-[15px] font-bold">{firstLetter}</span>
-        )}
-      </button>
+      {tooltipText ? (
+        <Tooltip content={tooltipText} position="right" delay={300}>
+          {innerContent}
+        </Tooltip>
+      ) : (
+        innerContent
+      )}
     </div>
+  );
+}
+
+function InstanceDivider({ label, disconnected }: { label: string; disconnected: boolean }) {
+  return (
+    <Tooltip content={label} position="right" delay={300}>
+      <div className="relative flex items-center justify-center w-full my-2">
+        <div className="absolute inset-x-5 h-[1px] bg-interactive-muted/30 rounded-full" />
+        <div className={`relative z-[1] w-5 h-5 rounded-full bg-surface-base flex items-center justify-center ${
+          disconnected ? 'text-accent-amber' : 'text-txt-tertiary'
+        }`}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+          </svg>
+        </div>
+      </div>
+    </Tooltip>
   );
 }
 
@@ -226,14 +274,15 @@ export function SpaceSidebar() {
       {/* Remote instance groups */}
       {groupedSpaces.remoteGroups.map(([origin, groupSpaces]) => {
         const inst = instances.find(i => i.origin === origin);
-        const label = inst?.label || (() => { try { return new URL(origin).host; } catch { return '?'; } })();
+        const hostLabel = (() => { try { return new URL(origin).host; } catch { return '?'; } })();
+        const label = inst?.label || hostLabel;
         const isDimmed = disconnectedOrigins.has(origin);
         return (
           <React.Fragment key={origin}>
-            <div className="w-8 h-[2px] bg-interactive-muted/50 rounded-full my-1" />
-            <div className="text-[9px] text-txt-tertiary font-medium uppercase tracking-wider mb-1 truncate max-w-[52px] text-center" title={label}>
-              {label}
-            </div>
+            <InstanceDivider
+              label={isDimmed ? `${label} (disconnected)` : label}
+              disconnected={isDimmed}
+            />
             {groupSpaces.map((space) => (
               <SidebarItem
                 key={space.id}
@@ -244,6 +293,9 @@ export function SpaceSidebar() {
                 onClick={() => handleSpaceClick(space.id)}
                 hasUnread={unreadSpaceIds.has(space.id)}
                 dimmed={isDimmed}
+                federationBadge
+                federationDisconnected={isDimmed}
+                tooltipText={`${space.name} \u00b7 ${hostLabel}`}
               />
             ))}
           </React.Fragment>
