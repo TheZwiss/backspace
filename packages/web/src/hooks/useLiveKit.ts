@@ -491,7 +491,7 @@ export function useLiveKit() {
         // → clear voice intent so AppLayout doesn't auto-retry into an infinite loop.
         // Client-initiated disconnects already clear this via leaveVoice() / VoiceControlBar.
         if (reason !== undefined && reason !== DisconnectReason.CLIENT_INITIATED) {
-          useVoiceStore.getState().leaveVoice();
+          useVoiceStore.getState().handleForceDisconnect();
         }
       });
 

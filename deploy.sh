@@ -65,7 +65,8 @@ deploy() {
 
   # Rebuild
   echo "  [3/3] Building and restarting..."
-  ssh "$PI_USER@$host" "cd $path && docker compose up -d --build"
+  # Clean up stale renamed containers left by failed recreates (e.g. "d420a6c00439_backspace")
+  ssh "$PI_USER@$host" "cd $path && docker rm -f \$(docker ps -aq --filter 'name=_backspace' 2>/dev/null) 2>/dev/null; docker compose up -d --build"
 
   echo ""
   echo "  Done: $name"

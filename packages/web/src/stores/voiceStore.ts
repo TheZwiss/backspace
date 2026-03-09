@@ -97,6 +97,7 @@ interface VoiceState {
   clearAllVoiceUsers: () => void;
   clearVoiceUsersForOrigin: (origin: string) => void;
   leaveVoice: () => void;
+  handleForceDisconnect: () => void;
   reset: () => void;
 }
 
@@ -367,6 +368,29 @@ export const useVoiceStore = create<VoiceState>()(
             watchingStreams: new Set(),
             voiceUsers,
           };
+        });
+      },
+
+      // Force disconnect: clear local connection state but do NOT touch voiceUsers.
+      // Used for involuntary disconnects (identity collision, server shutdown, etc.)
+      // where the server is the authority on who's actually in voice.
+      handleForceDisconnect: () => {
+        set({
+          currentVoiceChannelId: null,
+          isCameraOn: false,
+          isScreenSharing: false,
+          participants: [],
+          speakingParticipantIds: new Set(),
+          connectionError: null,
+          isLiveKitConnected: false,
+          connectionQuality: 'unknown',
+          focusedParticipantId: null,
+          activeDmCall: null,
+          outgoingCall: null,
+          deafenedUserIds: new Set(),
+          streamVolumes: new Map(),
+          streamMutes: new Map(),
+          watchingStreams: new Set(),
         });
       },
 
