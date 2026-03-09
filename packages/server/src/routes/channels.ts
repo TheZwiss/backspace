@@ -148,12 +148,20 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     const channelData = rowToChannel(channel);
 
-    // Broadcast channel_created to all space members
-    connectionManager.sendToSpace(id, {
-      type: 'channel_created',
-      channel: channelData,
-      spaceId: id,
-    });
+    // Broadcast channel_created with per-user permissions
+    // (same pattern as broadcastOverrideChange — permissions are per-user
+    // so we must compute individually rather than broadcast uniformly)
+    for (const [userId, spaceIds] of connectionManager.getUserSpaceEntries()) {
+      if (!spaceIds.has(id)) continue;
+      const perms = computePermissions(userId, id, channelId);
+      if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        connectionManager.sendToUser(userId, {
+          type: 'channel_created',
+          channel: { ...channelData, myPermissions: permissionsToString(perms) },
+          spaceId: id,
+        });
+      }
+    }
 
     return reply.code(201).send(channelData);
   });
