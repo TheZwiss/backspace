@@ -34,8 +34,11 @@ export function ChannelSidebar() {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const toggleMic = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-  const isServerMuted = useVoiceStore((s) => user ? s.serverMutedUserIds.has(user.id) : false);
-  const isServerDeafened = useVoiceStore((s) => user ? s.serverDeafenedUserIds.has(user.id) : false);
+  const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
+  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
+  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const isServerMuted = !!(user && spaceId && serverMutedUserIds.has(`${spaceId}:${user.id}`));
+  const isServerDeafened = !!(user && spaceId && serverDeafenedUserIds.has(`${spaceId}:${user.id}`));
   const navigate = useNavigate();
   const location = useLocation();
 

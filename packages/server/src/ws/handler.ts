@@ -78,8 +78,8 @@ class ConnectionManager {
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // Server-muted/deafened users (moderator action)
-  private serverMutedUsers: Set<string> = new Set();
-  private serverDeafenedUsers: Set<string> = new Set();
+  private serverMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  private serverDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -304,7 +304,11 @@ class ConnectionManager {
 
     room.participants.delete(userId);
     this.userToRoom.delete(userId);
-    this.clearServerVoiceState(userId);
+    
+    if (room.roomType === 'space') {
+      const meta = room.metadata as SpaceRoomMeta;
+      this.clearServerVoiceState(meta.spaceId, userId);
+    }
 
     // Auto-cleanup empty space rooms (they're lazy-created)
     if (room.participants.size === 0 && room.roomType === 'space') {
@@ -386,27 +390,29 @@ class ConnectionManager {
     this.voiceUserStates.delete(userId);
   }
 
-  setServerMuted(userId: string, muted: boolean): void {
-    if (muted) this.serverMutedUsers.add(userId);
-    else this.serverMutedUsers.delete(userId);
+  setServerMuted(spaceId: string, userId: string, muted: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (muted) this.serverMutedUsers.add(key);
+    else this.serverMutedUsers.delete(key);
   }
 
-  isServerMuted(userId: string): boolean {
-    return this.serverMutedUsers.has(userId);
+  isServerMuted(spaceId: string, userId: string): boolean {
+    return this.serverMutedUsers.has(`${spaceId}:${userId}`);
   }
 
-  setServerDeafened(userId: string, deafened: boolean): void {
-    if (deafened) this.serverDeafenedUsers.add(userId);
-    else this.serverDeafenedUsers.delete(userId);
+  setServerDeafened(spaceId: string, userId: string, deafened: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (deafened) this.serverDeafenedUsers.add(key);
+    else this.serverDeafenedUsers.delete(key);
   }
 
-  isServerDeafened(userId: string): boolean {
-    return this.serverDeafenedUsers.has(userId);
+  isServerDeafened(spaceId: string, userId: string): boolean {
+    return this.serverDeafenedUsers.has(`${spaceId}:${userId}`);
   }
 
-  clearServerVoiceState(userId: string): void {
-    this.serverMutedUsers.delete(userId);
-    this.serverDeafenedUsers.delete(userId);
+  clearServerVoiceState(spaceId: string, userId: string): void {
+    this.serverMutedUsers.delete(`${spaceId}:${userId}`);
+    this.serverDeafenedUsers.delete(`${spaceId}:${userId}`);
   }
 
   getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
@@ -883,10 +889,11 @@ function buildReadyPayload(userId: string): {
       .where(inArray(schema.voiceRestrictions.spaceId, spaceIds))
       .all();
     for (const r of allRestrictions) {
-      const existing = serverVoiceStates[r.userId] ?? { serverMuted: false, serverDeafened: false };
+      const key = `${r.spaceId}:${r.userId}`;
+      const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false };
       if (r.restrictionType === 'mute') existing.serverMuted = true;
       if (r.restrictionType === 'deafen') existing.serverDeafened = true;
-      serverVoiceStates[r.userId] = existing;
+      serverVoiceStates[key] = existing;
     }
   }
 

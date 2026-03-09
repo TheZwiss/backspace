@@ -34,9 +34,10 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   );
 
   const voiceOrigin = getChannelOrigin(channelId);
+  const spaceId = useSpaceStore((s) => s.channelToSpaceMap.get(channelId));
 
-  const isServerMuted = serverMutedUserIds.has(targetUserId);
-  const isServerDeafened = serverDeafenedUserIds.has(targetUserId);
+  const isServerMuted = serverMutedUserIds.has(`${spaceId}:${targetUserId}`);
+  const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
 
   if (!canMuteMembers && !canDeafenMembers && !canMoveMembers) return null;
 

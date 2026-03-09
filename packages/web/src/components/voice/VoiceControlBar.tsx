@@ -4,7 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { wsSend } from '../../hooks/useWebSocket';
-import { getChannelOrigin } from '../../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
 
@@ -27,8 +27,11 @@ export function VoiceControlBar() {
   const toggleVoiceFullscreen = useUIStore((s) => s.toggleVoiceFullscreen);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const myUser = useAuthStore((s) => s.user);
-  const isServerMuted = useVoiceStore((s) => myUser ? s.serverMutedUserIds.has(myUser.id) : false);
-  const isServerDeafened = useVoiceStore((s) => myUser ? s.serverDeafenedUserIds.has(myUser.id) : false);
+  const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
+  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
+  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const isServerMuted = !!(myUser && spaceId && serverMutedUserIds.has(`${spaceId}:${myUser.id}`));
+  const isServerDeafened = !!(myUser && spaceId && serverDeafenedUserIds.has(`${spaceId}:${myUser.id}`));
   const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
   const [qualityOpen, setQualityOpen] = useState(false);
   const qualityBtnRef = useRef<HTMLButtonElement>(null);

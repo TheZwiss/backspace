@@ -437,19 +437,21 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
       .all();
     for (const r of restrictions) {
       if (r.restrictionType === 'mute') {
-        connectionManager.setServerMuted(userId, true);
+        connectionManager.setServerMuted(spaceId, userId, true);
         connectionManager.sendToUser(userId, {
           type: 'voice_server_muted',
           userId,
           channelId,
+          spaceId,
           muted: true,
         });
       } else if (r.restrictionType === 'deafen') {
-        connectionManager.setServerDeafened(userId, true);
+        connectionManager.setServerDeafened(spaceId, userId, true);
         connectionManager.sendToUser(userId, {
           type: 'voice_server_deafened',
           userId,
           channelId,
+          spaceId,
           deafened: true,
         });
       }
@@ -518,19 +520,21 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
 
   for (const r of restrictions) {
     if (r.restrictionType === 'mute') {
-      connectionManager.setServerMuted(userId, true);
+      connectionManager.setServerMuted(spaceId, userId, true);
       connectionManager.sendToSpace(spaceId, {
         type: 'voice_server_muted',
         userId,
         channelId,
+        spaceId,
         muted: true,
       });
     } else if (r.restrictionType === 'deafen') {
-      connectionManager.setServerDeafened(userId, true);
+      connectionManager.setServerDeafened(spaceId, userId, true);
       connectionManager.sendToSpace(spaceId, {
         type: 'voice_server_deafened',
         userId,
         channelId,
+        spaceId,
         deafened: true,
       });
     }
@@ -543,7 +547,6 @@ function handleVoiceLeave(userId: string): void {
     broadcastRoomLeave(left.roomId, left.room, userId);
   }
   connectionManager.clearVoiceUserStatus(userId);
-  connectionManager.clearServerVoiceState(userId);
 }
 
 function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
@@ -557,9 +560,17 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
   const userRoom = connectionManager.getUserRoom(userId);
   if (!userRoom) return;
 
+  let isSpaceMuted = false;
+  let isSpaceDeafened = false;
+  if (userRoom.room.roomType === 'space') {
+    const meta = userRoom.room.metadata as SpaceRoomMeta;
+    isSpaceMuted = connectionManager.isServerMuted(meta.spaceId, userId);
+    isSpaceDeafened = connectionManager.isServerDeafened(meta.spaceId, userId);
+  }
+
   // Server-side enforcement: prevent clients from bypassing server mute/deafen
-  const effectiveMuted = connectionManager.isServerMuted(userId) ? true : isMuted;
-  const effectiveDeafened = connectionManager.isServerDeafened(userId) ? true : isDeafened;
+  const effectiveMuted = isSpaceMuted ? true : isMuted;
+  const effectiveDeafened = isSpaceDeafened ? true : isDeafened;
 
   connectionManager.setVoiceUserStatus(userId, effectiveMuted, effectiveDeafened, isCameraOn, isScreenSharing);
 
@@ -1149,7 +1160,7 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
     return;
   }
 
-  connectionManager.setServerMuted(targetUserId, muted);
+  connectionManager.setServerMuted(meta.spaceId, targetUserId, muted);
 
   // Persist to DB
   const db = getDb();
@@ -1176,6 +1187,7 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
     type: 'voice_server_muted',
     userId: targetUserId,
     channelId: targetRoom.roomId,
+    spaceId: meta.spaceId,
     muted,
   });
 }
@@ -1206,7 +1218,7 @@ function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string)
     return;
   }
 
-  connectionManager.setServerDeafened(targetUserId, deafened);
+  connectionManager.setServerDeafened(meta.spaceId, targetUserId, deafened);
 
   // Persist to DB
   const db = getDb();
@@ -1232,6 +1244,7 @@ function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string)
     type: 'voice_server_deafened',
     userId: targetUserId,
     channelId: targetRoom.roomId,
+    spaceId: meta.spaceId,
     deafened,
   });
 }

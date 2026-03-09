@@ -6,6 +6,7 @@ import { VoiceModMenuItems } from './VoiceModContextMenu';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { UserTile } from '../../hooks/useLiveKit';
+import { getChannelOrigin } from '../../stores/spaceStore';
 
 interface VoiceUserProps {
   tile: UserTile;
@@ -22,6 +23,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
   const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
 
   const [, forceUpdate] = useState(0);
 
@@ -149,8 +151,8 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {participant.isMuted && (() => {
-              const isServerMutedUser = serverMutedUserIds.has(participant.userId);
-              const isServerDeafenedUser = serverDeafenedUserIds.has(participant.userId);
+              const isServerMutedUser = spaceId ? serverMutedUserIds.has(`${spaceId}:${participant.userId}`) : false;
+              const isServerDeafenedUser = spaceId ? serverDeafenedUserIds.has(`${spaceId}:${participant.userId}`) : false;
               const badgeBg = (isServerMutedUser || isServerDeafenedUser) ? 'bg-accent-amber/90' : 'bg-accent-rose/90';
               return (
                 <div className={`w-5 h-5 ${badgeBg} rounded-full flex items-center justify-center`}>
@@ -169,7 +171,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               );
             })()}
             {(isLocal ? isDeafened : participant.isDeafened) && (() => {
-              const isServerDeafenedUser = serverDeafenedUserIds.has(participant.userId);
+              const isServerDeafenedUser = spaceId ? serverDeafenedUserIds.has(`${spaceId}:${participant.userId}`) : false;
               const badgeBg = isServerDeafenedUser ? 'bg-accent-amber/90' : 'bg-accent-rose/90';
               return (
                 <div className={`w-5 h-5 ${badgeBg} rounded-full flex items-center justify-center`}>

@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { VoiceModContextMenu } from './VoiceModContextMenu';
@@ -28,6 +28,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
     return local?.userId ?? null;
   });
   const members = useSpaceStore((s) => s.members);
+  const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
   const myUser = useAuthStore((s) => s.user);
   const isActive = currentVoiceChannel === channelId;
 
@@ -92,8 +93,9 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
               : (participant?.isMuted ?? wsStatus?.isMuted ?? false);
             const hasCamera = participant?.isCameraOn ?? wsStatus?.isCameraOn ?? false;
             const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
-            const isServerMuted = serverMutedUserIds.has(userId);
-            const isServerDeafened = serverDeafenedUserIds.has(userId);
+            const spaceId = channelToSpaceMap.get(channelId);
+            const isServerMuted = serverMutedUserIds.has(`${spaceId}:${userId}`);
+            const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${userId}`);
 
             return (
               <div

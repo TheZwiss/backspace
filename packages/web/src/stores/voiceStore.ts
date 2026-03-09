@@ -88,10 +88,10 @@ interface VoiceState {
   setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean) => void;
   clearVoiceUserStatus: (userId: string) => void;
   // Server mute/deafen state (moderator action)
-  serverMutedUserIds: Set<string>;
-  serverDeafenedUserIds: Set<string>;
-  setServerMutedUser: (userId: string, muted: boolean) => void;
-  setServerDeafenedUser: (userId: string, deafened: boolean) => void;
+  serverMutedUserIds: Set<string>; // Stores "spaceId:userId"
+  serverDeafenedUserIds: Set<string>; // Stores "spaceId:userId"
+  setServerMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
+  setServerDeafenedUser: (spaceId: string, userId: string, deafened: boolean) => void;
   clearServerVoiceStates: () => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
@@ -242,7 +242,8 @@ export const useVoiceStore = create<VoiceState>()(
       toggleMic: () => set((state) => {
         // Server-muted/deafened users cannot unmute themselves
         const myId = useAuthStore.getState().user?.id;
-        if (myId && state.isMuted && (state.serverMutedUserIds.has(myId) || state.serverDeafenedUserIds.has(myId))) {
+        const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
+        if (myId && spaceId && state.isMuted && (state.serverMutedUserIds.has(`${spaceId}:${myId}`) || state.serverDeafenedUserIds.has(`${spaceId}:${myId}`))) {
           return {};
         }
         if (state.isMuted && state.isDeafened) {
@@ -254,7 +255,8 @@ export const useVoiceStore = create<VoiceState>()(
       toggleDeafen: () => set((state) => {
         // Server-deafened users cannot undeafen themselves
         const myId = useAuthStore.getState().user?.id;
-        if (myId && state.isDeafened && state.serverDeafenedUserIds.has(myId)) {
+        const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
+        if (myId && spaceId && state.isDeafened && state.serverDeafenedUserIds.has(`${spaceId}:${myId}`)) {
           return {};
         }
         if (state.isDeafened) {
@@ -305,17 +307,19 @@ export const useVoiceStore = create<VoiceState>()(
 
       serverMutedUserIds: new Set(),
       serverDeafenedUserIds: new Set(),
-      setServerMutedUser: (userId, muted) => {
+      setServerMutedUser: (spaceId, userId, muted) => {
         set((state) => {
           const newSet = new Set(state.serverMutedUserIds);
-          if (muted) newSet.add(userId); else newSet.delete(userId);
+          const key = `${spaceId}:${userId}`;
+          if (muted) newSet.add(key); else newSet.delete(key);
           return { serverMutedUserIds: newSet };
         });
       },
-      setServerDeafenedUser: (userId, deafened) => {
+      setServerDeafenedUser: (spaceId, userId, deafened) => {
         set((state) => {
           const newSet = new Set(state.serverDeafenedUserIds);
-          if (deafened) newSet.add(userId); else newSet.delete(userId);
+          const key = `${spaceId}:${userId}`;
+          if (deafened) newSet.add(key); else newSet.delete(key);
           return { serverDeafenedUserIds: newSet };
         });
       },
@@ -459,15 +463,12 @@ export const useVoiceStore = create<VoiceState>()(
         rnnoiseEnabled: state.rnnoiseEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
-        _serverMutedArr: [...state.serverMutedUserIds],
-        _serverDeafenedArr: [...state.serverDeafenedUserIds],
       }),
       merge: (persistedState: any, currentState: VoiceState) => {
         const merged = { ...currentState, ...persistedState };
-        // Reconstruct Sets from persisted arrays (Sets aren't JSON-serializable)
-        merged.serverMutedUserIds = new Set(persistedState?._serverMutedArr ?? []);
-        merged.serverDeafenedUserIds = new Set(persistedState?._serverDeafenedArr ?? []);
         // Reconstruct non-persisted Sets/Maps to their defaults
+        merged.serverMutedUserIds = currentState.serverMutedUserIds;
+        merged.serverDeafenedUserIds = currentState.serverDeafenedUserIds;
         merged.voiceUsers = currentState.voiceUsers;
         merged.participants = currentState.participants;
         merged.speakingParticipantIds = currentState.speakingParticipantIds;

@@ -169,25 +169,52 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       // Build new restriction Sets atomically from ready payload, then apply in one setState
       {
-        const newServerMuted = new Set<string>();
-        const newServerDeafened = new Set<string>();
-        if (event.serverVoiceStates) {
-          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
-            if (state.serverMuted) newServerMuted.add(uid);
-            if (state.serverDeafened) newServerDeafened.add(uid);
+        const vsState = useVoiceStore.getState();
+        const spaceStoreState = useSpaceStore.getState();
+        
+        // Find all space IDs that belong to the current origin
+        const originSpaceIds = new Set<string>();
+        for (const s of spaceStoreState.spaces) {
+          if (s._instanceOrigin === origin) {
+            originSpaceIds.add(s.id);
           }
         }
-        // Single atomic update — no intermediate empty-Set state
-        useVoiceStore.setState({ serverMutedUserIds: newServerMuted, serverDeafenedUserIds: newServerDeafened });
+
+        const nextServerMuted = new Set(vsState.serverMutedUserIds);
+        const nextServerDeafened = new Set(vsState.serverDeafenedUserIds);
+
+        // Clear existing restrictions that belong to spaces on THIS origin
+        // (If a space was deleted while offline, its orphaned restrictions remain, which is harmless)
+        for (const key of nextServerMuted) {
+          const spaceId = key.split(':')[0];
+          if (spaceId && originSpaceIds.has(spaceId)) nextServerMuted.delete(key);
+        }
+        for (const key of nextServerDeafened) {
+          const spaceId = key.split(':')[0];
+          if (spaceId && originSpaceIds.has(spaceId)) nextServerDeafened.delete(key);
+        }
+
+        if (event.serverVoiceStates) {
+          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
+            if (state.serverMuted) nextServerMuted.add(uid);
+            if (state.serverDeafened) nextServerDeafened.add(uid);
+          }
+        }
+        // Single atomic update
+        useVoiceStore.setState({ serverMutedUserIds: nextServerMuted, serverDeafenedUserIds: nextServerDeafened });
 
         // Enforce local mute/deafen to match server restrictions (one-directional: only force-mute, never auto-unmute)
         const myReadyId = useAuthStore.getState().user?.id;
         if (myReadyId) {
           const vs = useVoiceStore.getState();
-          if (newServerDeafened.has(myReadyId) && !vs.isDeafened) {
-            useVoiceStore.setState({ isMuted: true, isDeafened: true });
-          } else if (newServerMuted.has(myReadyId) && !vs.isMuted) {
-            useVoiceStore.setState({ isMuted: true });
+          const activeSpaceId = vs.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(vs.currentVoiceChannelId) : null;
+          if (activeSpaceId) {
+            const key = `${activeSpaceId}:${myReadyId}`;
+            if (nextServerDeafened.has(key) && !vs.isDeafened) {
+              useVoiceStore.setState({ isMuted: true, isDeafened: true });
+            } else if (nextServerMuted.has(key) && !vs.isMuted) {
+              useVoiceStore.setState({ isMuted: true });
+            }
           }
         }
       }
@@ -291,7 +318,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'voice_server_muted': {
       const { setServerMutedUser } = useVoiceStore.getState();
-      setServerMutedUser(event.userId, event.muted);
+      setServerMutedUser(event.spaceId, event.userId, event.muted);
       const myUserId = useAuthStore.getState().user?.id;
       if (event.userId === myUserId) {
         if (event.muted) {
@@ -306,7 +333,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         } else {
           // Server unmuted — auto-restore mic unless still server-deafened
           const vs = useVoiceStore.getState();
-          if (!vs.serverDeafenedUserIds.has(myUserId) && vs.isMuted) {
+          if (!vs.serverDeafenedUserIds.has(`${event.spaceId}:${myUserId}`) && vs.isMuted) {
             useVoiceStore.setState({ isMuted: false });
             const fresh = useVoiceStore.getState();
             const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
@@ -319,7 +346,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'voice_server_deafened': {
       const { setServerDeafenedUser } = useVoiceStore.getState();
-      setServerDeafenedUser(event.userId, event.deafened);
+      setServerDeafenedUser(event.spaceId, event.userId, event.deafened);
       const myUid = useAuthStore.getState().user?.id;
       if (event.userId === myUid) {
         if (event.deafened) {
@@ -346,7 +373,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           // Server un-deafened — auto-restore
           const vs = useVoiceStore.getState();
           if (vs.isDeafened) {
-            const stillServerMuted = vs.serverMutedUserIds.has(myUid);
+            const stillServerMuted = vs.serverMutedUserIds.has(`${event.spaceId}:${myUid}`);
             useVoiceStore.setState({
               isDeafened: false,
               ...(stillServerMuted ? {} : { isMuted: false }),
