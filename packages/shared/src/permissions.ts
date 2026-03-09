@@ -63,6 +63,18 @@ export function stringToPermissions(str: string | undefined | null): bigint {
   try {
     return BigInt(str);
   } catch {
+    // Fallback: legacy JSON array format (e.g. '["VIEW_CHANNEL","SEND_MESSAGES"]')
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        let result = 0n;
+        for (const key of parsed) {
+          const bit = PermissionBits[key as keyof typeof PermissionBits];
+          if (bit !== undefined) result |= bit;
+        }
+        return result;
+      }
+    } catch { /* not JSON either */ }
     return 0n;
   }
 }

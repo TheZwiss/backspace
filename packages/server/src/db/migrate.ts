@@ -154,6 +154,9 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // ─── Legacy permissions: convert JSON arrays to decimal strings ───────────
+  migrateLegacyPermissions(db);
+
   // ─── RBAC Migration: Ensure @everyone roles exist for all spaces ─────────
   migrateEveryoneRoles(db);
 
@@ -173,6 +176,36 @@ export function runMigrations(db: Database.Database): void {
   migrateCorruptedReadStates(db);
 
   console.log('Migrations complete.');
+}
+
+/** Convert legacy JSON array permissions (e.g. '["VIEW_CHANNEL"]') to decimal strings */
+function migrateLegacyPermissions(db: Database.Database): void {
+  const roles = db.prepare('SELECT id, permissions FROM roles WHERE permissions IS NOT NULL').all() as { id: string; permissions: string }[];
+  const update = db.prepare('UPDATE roles SET permissions = ? WHERE id = ?');
+
+  for (const role of roles) {
+    // Skip if already a valid decimal string
+    try { BigInt(role.permissions); continue; } catch {}
+
+    // Try legacy JSON array
+    try {
+      const parsed = JSON.parse(role.permissions);
+      if (Array.isArray(parsed)) {
+        let result = 0n;
+        for (const key of parsed) {
+          const bit = PermissionBits[key as keyof typeof PermissionBits];
+          if (bit !== undefined) result |= bit;
+        }
+        update.run(result.toString(), role.id);
+        console.log(`Migrating: Converted legacy permissions for role ${role.id}`);
+        continue;
+      }
+    } catch { /* not JSON either */ }
+
+    // Unrecognized format — set to 0
+    update.run('0', role.id);
+    console.log(`Migrating: Reset unrecognized permissions for role ${role.id}`);
+  }
 }
 
 /** Ensure the single-row instance_settings row exists */

@@ -330,24 +330,28 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
           <div className="rounded-lg bg-white/[0.02] p-3.5">
             <div className="space-y-1">
               {group.perms.map((perm) => {
-                const isOn = (draftPermissions & perm.bit) !== 0n;
-                const isAdmin = perm.bit === PermissionBits.ADMINISTRATOR;
+                const isAdminBit = perm.bit === PermissionBits.ADMINISTRATOR;
+                const hasAdmin = (draftPermissions & PermissionBits.ADMINISTRATOR) !== 0n;
+                const isOn = isAdminBit ? hasAdmin : hasAdmin || (draftPermissions & perm.bit) !== 0n;
+                const isInherited = !isAdminBit && hasAdmin;
                 return (
                   <label
                     key={perm.label}
-                    className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-interactive-hover cursor-pointer group/perm"
+                    className={`flex items-center justify-between py-1.5 px-2 rounded cursor-pointer group/perm ${
+                      isInherited ? 'opacity-50 cursor-default' : 'hover:bg-interactive-hover'
+                    }`}
                   >
-                    <span className={`text-sm ${isAdmin ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
+                    <span className={`text-sm ${isAdminBit ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
                       {perm.label}
                     </span>
                     <div
                       onClick={(e) => {
                         e.preventDefault();
-                        togglePermission(perm.bit);
+                        if (!isInherited) togglePermission(perm.bit);
                       }}
-                      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
-                        isOn ? 'bg-accent-primary' : 'bg-interactive-muted'
-                      }`}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${
+                        isInherited ? 'cursor-default' : 'cursor-pointer'
+                      } ${isOn ? 'bg-accent-primary' : 'bg-interactive-muted'}`}
                     >
                       <div
                         className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
