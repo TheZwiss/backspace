@@ -241,7 +241,8 @@ export const useVoiceStore = create<VoiceState>()(
 
       toggleMic: () => set((state) => {
         // Server-muted/deafened users cannot unmute themselves
-        const myId = useAuthStore.getState().user?.id;
+        const origin = state.currentVoiceChannelId ? getChannelOrigin(state.currentVoiceChannelId) : '';
+        const myId = getMyUserIdForOrigin(origin);
         const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
         if (myId && spaceId && state.isMuted && (state.serverMutedUserIds.has(`${spaceId}:${myId}`) || state.serverDeafenedUserIds.has(`${spaceId}:${myId}`))) {
           return {};
@@ -254,7 +255,8 @@ export const useVoiceStore = create<VoiceState>()(
       }),
       toggleDeafen: () => set((state) => {
         // Server-deafened users cannot undeafen themselves
-        const myId = useAuthStore.getState().user?.id;
+        const origin = state.currentVoiceChannelId ? getChannelOrigin(state.currentVoiceChannelId) : '';
+        const myId = getMyUserIdForOrigin(origin);
         const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
         if (myId && spaceId && state.isDeafened && state.serverDeafenedUserIds.has(`${spaceId}:${myId}`)) {
           return {};
