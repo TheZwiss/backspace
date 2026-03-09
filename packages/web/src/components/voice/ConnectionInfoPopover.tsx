@@ -1,10 +1,13 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTrackStats, AudioTrackStat, VideoTrackStat } from '../../hooks/useTrackStats';
 import { getActiveRoom } from '../../hooks/useLiveKit';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 interface ConnectionInfoPopoverProps {
   open: boolean;
   onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
 }
 
 function formatBitrate(kbps: number): string {
@@ -110,9 +113,15 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
   );
 }
 
-export function ConnectionInfoPopover({ open, onClose }: ConnectionInfoPopoverProps) {
+export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionInfoPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const stats = useTrackStats(open);
+
+  const { style } = useFloatingPosition(anchorRef, popoverRef, {
+    placement: 'top',
+    offset: 12,
+    enabled: open,
+  });
 
   // Click-outside to close
   useEffect(() => {
@@ -130,16 +139,17 @@ export function ConnectionInfoPopover({ open, onClose }: ConnectionInfoPopoverPr
 
   const room = getActiveRoom();
 
-  return (
+  return createPortal(
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[300px] glass rounded-lg z-50 overflow-hidden"
+      style={style}
+      className="w-[300px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
         <span className="text-[14px] font-bold text-txt-primary">Connection Info</span>
       </div>
 
-      <div className="px-3 py-2">
+      <div className="px-3 py-2 max-h-[calc(100vh-32px)] overflow-y-auto scrollbar-thin">
         {!room ? (
           <div className="text-[12px] text-txt-tertiary py-2 text-center">Not connected</div>
         ) : !stats ? (
@@ -197,6 +207,7 @@ export function ConnectionInfoPopover({ open, onClose }: ConnectionInfoPopoverPr
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

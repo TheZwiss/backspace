@@ -196,20 +196,24 @@ function StreamingLimitsPanel() {
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
       )}
       {hasChanges && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={handleReset}
-            className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-          >
-            Reset
-          </button>
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
+              <button
+                onClick={handleReset}
+                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -331,20 +335,24 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
       )}
       {hasChanges && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={handleReset}
-            className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-          >
-            Reset
-          </button>
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
+              <button
+                onClick={handleReset}
+                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -479,7 +487,7 @@ export function SpaceSettingsModal() {
   if (!space || !currentSpaceId) return null;
 
   const tabClass = (t: typeof tab) =>
-    `w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+    `w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
       tab === t ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
@@ -487,28 +495,30 @@ export function SpaceSettingsModal() {
     <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-xl">
       <div className="flex gap-4">
         {/* Tabs */}
-        <div className="w-32 flex-shrink-0 space-y-1">
-          <button onClick={() => setTab('overview')} className={tabClass('overview')}>
-            Overview
-          </button>
-          {canManageSpace && (
-            <button onClick={() => setTab('discovery')} className={tabClass('discovery')}>
-              Discovery
+        <div className="w-32 flex-shrink-0 sticky top-0 self-start z-10">
+          <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
+            <button onClick={() => setTab('overview')} className={tabClass('overview')}>
+              Overview
             </button>
-          )}
-          <button onClick={() => setTab('members')} className={tabClass('members')}>
-            Members
-          </button>
-          {canManageRoles && (
-            <button onClick={() => setTab('roles')} className={tabClass('roles')}>
-              Roles
+            {canManageSpace && (
+              <button onClick={() => setTab('discovery')} className={tabClass('discovery')}>
+                Discovery
+              </button>
+            )}
+            <button onClick={() => setTab('members')} className={tabClass('members')}>
+              Members
             </button>
-          )}
-          {isAdmin && (
-            <button onClick={() => setTab('streaming')} className={tabClass('streaming')}>
-              Streaming
-            </button>
-          )}
+            {canManageRoles && (
+              <button onClick={() => setTab('roles')} className={tabClass('roles')}>
+                Roles
+              </button>
+            )}
+            {isAdmin && (
+              <button onClick={() => setTab('streaming')} className={tabClass('streaming')}>
+                Streaming
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}

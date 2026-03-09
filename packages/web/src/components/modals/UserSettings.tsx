@@ -172,20 +172,25 @@ export function UserSettingsModal() {
         {/* Connected Instances */}
         <ConnectedInstances />
 
-        <div className="flex items-center justify-between pt-2">
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 text-sm text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
-          >
-            Log Out
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isLoading}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {isLoading ? 'Saving...' : 'Save Changes'}
-          </button>
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3 pointer-events-auto">
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1 text-sm text-txt-danger hover:bg-accent-rose/10 rounded-full transition-colors"
+              >
+                Log Out
+              </button>
+              <div className="w-px h-5 bg-white/10" />
+              <button
+                onClick={handleSave}
+                disabled={isLoading}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {isLoading ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </Modal>

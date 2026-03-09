@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { getActiveRoom } from '../../hooks/useLiveKit';
@@ -24,6 +24,8 @@ export function VoiceControls() {
   const channels = useSpaceStore((s) => s.channels);
   const [showScreenShareSettings, setShowScreenShareSettings] = useState(false);
   const [showConnectionInfo, setShowConnectionInfo] = useState(false);
+  const connectionBtnRef = useRef<HTMLButtonElement>(null);
+  const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
 
@@ -109,6 +111,7 @@ export function VoiceControls() {
       {/* Row 1: Signal icon + status text + disconnect */}
       <div className="relative flex items-center gap-2 px-3 pt-3 pb-1">
         <button
+          ref={connectionBtnRef}
           onClick={() => {
             setShowConnectionInfo(!showConnectionInfo);
             if (!showConnectionInfo) setShowScreenShareSettings(false);
@@ -146,6 +149,7 @@ export function VoiceControls() {
         <ConnectionInfoPopover
           open={showConnectionInfo}
           onClose={() => setShowConnectionInfo(false)}
+          anchorRef={connectionBtnRef}
         />
       </div>
 
@@ -189,6 +193,7 @@ export function VoiceControls() {
 
         {/* Video Quality */}
         <button
+          ref={qualityBtnRef}
           onClick={() => {
             setShowScreenShareSettings(!showScreenShareSettings);
             if (!showScreenShareSettings) setShowConnectionInfo(false);
@@ -238,6 +243,7 @@ export function VoiceControls() {
         <ScreenShareSettingsPopover
           open={showScreenShareSettings}
           onClose={() => setShowScreenShareSettings(false)}
+          anchorRef={qualityBtnRef}
         />
       </div>
     </>

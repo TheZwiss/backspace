@@ -1,12 +1,15 @@
 import React, { useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
   onClose: () => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
 }
 
 const ALL_RESOLUTIONS: { value: ScreenShareConfig['height']; label: string }[] = [
@@ -45,11 +48,17 @@ function formatKbps(kbps: number): string {
     : `${kbps} kbps`;
 }
 
-export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSettingsPopoverProps) {
+export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenShareSettingsPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
   const limits = useSettingsStore((s) => s.streamingLimits);
+
+  const { style } = useFloatingPosition(anchorRef, popoverRef, {
+    placement: 'top',
+    offset: 12,
+    enabled: open,
+  });
 
   const BITRATE_MIN = limits?.minBitrateKbps ?? 500;
   const BITRATE_MAX = limits?.maxBitrateKbps ?? 20000;
@@ -104,10 +113,11 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
   const pillSelected = 'bg-accent-primary text-white';
   const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
-  return (
+  return createPortal(
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-[260px] glass rounded-lg z-50 overflow-hidden"
+      style={style}
+      className="w-[260px] glass rounded-lg overflow-hidden"
     >
       <div className="px-3 py-2 border-b border-border-hard">
         <span className="text-[14px] font-bold text-txt-primary">Stream Settings</span>
@@ -215,6 +225,7 @@ export function ScreenShareSettingsPopover({ open, onClose }: ScreenShareSetting
           {formatBitrate(result.publish.videoEncoding.maxBitrate)} · {formatDegradation(result.overdrive.degradationPreference)}
         </span>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

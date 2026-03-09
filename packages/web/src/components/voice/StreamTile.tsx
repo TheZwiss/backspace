@@ -38,6 +38,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
+  const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   // --- VIDEO --- use LiveKit's track.attach() to register the element
   // with the adaptive stream observer (enables SFU layer switching by viewport size)
@@ -260,6 +261,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                 </div>
                 <div className="relative">
                   <button
+                    ref={qualityBtnRef}
                     onClick={() => setQualityPopoverOpen(!qualityPopoverOpen)}
                     className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-txt-secondary hover:bg-interactive-hover rounded transition-colors"
                   >
@@ -277,6 +279,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
                     <ScreenShareSettingsPopover
                       open={qualityPopoverOpen}
                       onClose={() => setQualityPopoverOpen(false)}
+                      anchorRef={qualityBtnRef}
                     />
                   )}
                 </div>

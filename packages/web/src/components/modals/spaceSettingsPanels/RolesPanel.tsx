@@ -242,15 +242,17 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
   return (
     <div className="space-y-4">
       {/* Back button */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back to roles
-      </button>
+      <div className="sticky top-0 z-10 pointer-events-none pb-3">
+        <button
+          onClick={onBack}
+          className="glass-bubble rounded-full px-3 py-1.5 flex items-center gap-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors pointer-events-auto"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to roles
+        </button>
+      </div>
 
       {/* Role Name (not editable for @everyone) */}
       {!isEveryone && (
@@ -362,20 +364,24 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Role saved</div>
       )}
       {hasChanges && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving || (!isEveryone && !draftName.trim())}
-            className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button
-            onClick={handleDiscard}
-            className="px-4 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-          >
-            Discard
-          </button>
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
+              <button
+                onClick={handleDiscard}
+                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || (!isEveryone && !draftName.trim())}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

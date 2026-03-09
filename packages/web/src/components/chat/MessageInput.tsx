@@ -24,6 +24,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [mentionState, setMentionState] = useState<MentionState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const replyTo = useChatStore((s) => s.replyTo);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
@@ -249,6 +250,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         </div>
       )}
       <div
+        ref={inputContainerRef}
         className={`relative bg-surface-input md:bg-transparent ${replyTo ? 'rounded-b-lg' : 'rounded-lg md:rounded-none'} overflow-visible`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -259,6 +261,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             query={mentionState.query}
             selectedIndex={mentionState.selectedIndex}
             onSelect={selectMention}
+            anchorRef={inputContainerRef}
           />
         )}
 

@@ -49,6 +49,8 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
       if (rect.bottom > window.innerHeight) {
         newPosition.y = window.innerHeight - rect.height - 8;
       }
+      if (newPosition.x < 8) newPosition.x = 8;
+      if (newPosition.y < 8) newPosition.y = 8;
 
       if (newPosition.x !== position.x || newPosition.y !== position.y) {
         setPosition(newPosition);
@@ -62,7 +64,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
       {isOpen && (
         <div
           ref={menuRef}
-          className="fixed z-[200] min-w-[180px] py-1.5 bg-surface-elevated rounded-md shadow-elevation-high animate-fade-in"
+          className="fixed z-[200] min-w-[180px] py-1.5 bg-surface-elevated rounded-md shadow-elevation-high animate-fade-in max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin"
           style={{ left: position.x, top: position.y }}
         >
           {items.map((item, i) => (

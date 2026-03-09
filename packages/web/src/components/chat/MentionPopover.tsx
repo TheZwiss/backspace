@@ -1,7 +1,9 @@
 import React, { useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { MemberWithUser } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 const MAX_RESULTS = 8;
 
@@ -9,13 +11,15 @@ interface MentionPopoverProps {
   query: string;
   selectedIndex: number;
   onSelect: (member: MemberWithUser) => void;
+  anchorRef: React.RefObject<HTMLElement | null>;
 }
 
-export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopoverProps) {
+export function MentionPopover({ query, selectedIndex, onSelect, anchorRef }: MentionPopoverProps) {
   const members = useSpaceStore((s) => s.members);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const selectedRef = useRef<HTMLDivElement>(null);
+  const floatingRef = useRef<HTMLDivElement>(null);
 
   const ownerId = spaces.find((s) => s.id === currentSpaceId)?.ownerId;
 
@@ -29,6 +33,12 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
       })
       .slice(0, MAX_RESULTS);
   }, [members, query]);
+
+  const { style } = useFloatingPosition(anchorRef, floatingRef, {
+    placement: 'top',
+    offset: 4,
+    enabled: filtered.length > 0,
+  });
 
   // Scroll selected item into view
   useEffect(() => {
@@ -46,8 +56,8 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
     return undefined;
   };
 
-  return (
-    <div className="absolute bottom-full left-0 w-[280px] mb-1 z-50">
+  return createPortal(
+    <div ref={floatingRef} style={style} className="w-[280px]">
       <div className="bg-surface-elevated rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.15),0_8px_16px_rgba(0,0,0,0.24)] overflow-hidden max-h-[320px] overflow-y-auto scrollbar-thin">
         <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
           Members
@@ -88,6 +98,7 @@ export function MentionPopover({ query, selectedIndex, onSelect }: MentionPopove
           );
         })}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
