@@ -84,107 +84,121 @@ function StreamingLimitsPanel() {
   const pillOff = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="text-xs text-txt-tertiary">
         These limits apply to all users on this instance. Users can pick values within these bounds.
       </div>
 
-      {/* Bitrate Range */}
+      {/* Bandwidth */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
-          Bitrate Range
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <label className="text-[11px] text-txt-tertiary mb-1 block">Min</label>
-            <input
-              type="range"
-              min={100}
-              max={draft.maxBitrateKbps - 500}
-              step={100}
-              value={draft.minBitrateKbps}
-              onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
-              className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
-            />
-            <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Bandwidth</div>
+        <p className="text-xs text-txt-tertiary mb-2">Minimum and maximum bitrate bounds, and the step size for the quality slider.</p>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+          {/* Bitrate Range */}
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              Bitrate Range
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <label className="text-[11px] text-txt-tertiary mb-1 block">Min</label>
+                <input
+                  type="range"
+                  min={100}
+                  max={draft.maxBitrateKbps - 500}
+                  step={100}
+                  value={draft.minBitrateKbps}
+                  onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
+                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                />
+                <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
+              </div>
+              <div className="flex-1">
+                <label className="text-[11px] text-txt-tertiary mb-1 block">Max</label>
+                <input
+                  type="range"
+                  min={draft.minBitrateKbps + 500}
+                  max={50000}
+                  step={500}
+                  value={draft.maxBitrateKbps}
+                  onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
+                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                />
+                <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
+              </div>
+            </div>
           </div>
-          <div className="flex-1">
-            <label className="text-[11px] text-txt-tertiary mb-1 block">Max</label>
-            <input
-              type="range"
-              min={draft.minBitrateKbps + 500}
-              max={50000}
-              step={500}
-              value={draft.maxBitrateKbps}
-              onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
-              className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
-            />
-            <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
+
+          {/* Bitrate Step */}
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              Slider Step
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={50}
+                max={5000}
+                step={50}
+                value={draft.bitrateStepKbps}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
+                }}
+                className="w-24 px-2 py-1 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary"
+              />
+              <span className="text-[12px] text-txt-tertiary">kbps</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Bitrate Step */}
+      {/* Quality */}
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-          Slider Step
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            min={50}
-            max={5000}
-            step={50}
-            value={draft.bitrateStepKbps}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
-            }}
-            className="w-24 px-2 py-1 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary"
-          />
-          <span className="text-[12px] text-txt-tertiary">kbps</span>
-        </div>
-      </div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Quality</div>
+        <p className="text-xs text-txt-tertiary mb-2">Available resolution and frame rate options for screen sharing.</p>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+          {/* Allowed Resolutions */}
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              Allowed Resolutions
+            </div>
+            <div className="flex gap-1.5">
+              {VALID_RESOLUTIONS.map((res) => (
+                <button
+                  key={res}
+                  onClick={() => toggleResolution(res)}
+                  className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
+                >
+                  {res}p
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Allowed Resolutions */}
-      <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-          Allowed Resolutions
-        </div>
-        <div className="flex gap-1.5">
-          {VALID_RESOLUTIONS.map((res) => (
-            <button
-              key={res}
-              onClick={() => toggleResolution(res)}
-              className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
-            >
-              {res}p
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Allowed Frame Rates */}
-      <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-          Allowed Frame Rates
-        </div>
-        <div className="flex gap-1.5">
-          {VALID_FRAMERATES.map((fps) => (
-            <button
-              key={fps}
-              onClick={() => toggleFramerate(fps)}
-              className={`${pillBase} ${draft.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
-            >
-              {fps} fps
-            </button>
-          ))}
+          {/* Allowed Frame Rates */}
+          <div>
+            <div className="text-xs text-txt-secondary mb-1.5">
+              Allowed Frame Rates
+            </div>
+            <div className="flex gap-1.5">
+              {VALID_FRAMERATES.map((fps) => (
+                <button
+                  key={fps}
+                  onClick={() => toggleFramerate(fps)}
+                  className={`${pillBase} ${draft.allowedFramerates.includes(fps) ? pillOn : pillOff}`}
+                >
+                  {fps} fps
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -276,7 +290,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {!discoveryEnabled && (
         <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
           Space discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.
@@ -284,48 +298,50 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       )}
 
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-2">
-          Visibility
-        </div>
-        <div className="space-y-1.5">
-          {visibilityOptions.map((opt) => (
-            <label
-              key={opt.value}
-              className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
-                visibility === opt.value
-                  ? 'bg-interactive-selected'
-                  : 'hover:bg-interactive-hover'
-              }`}
-            >
-              <input
-                type="radio"
-                name="visibility"
-                value={opt.value}
-                checked={visibility === opt.value}
-                onChange={() => setVisibility(opt.value)}
-                className="mt-0.5 accent-accent-primary"
-              />
-              <div>
-                <div className="text-sm font-medium text-txt-primary">{opt.label}</div>
-                <div className="text-xs text-txt-tertiary">{opt.desc}</div>
-              </div>
-            </label>
-          ))}
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Visibility</div>
+        <p className="text-xs text-txt-tertiary mb-2">Control who can discover and join this space.</p>
+        <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="space-y-1.5">
+            {visibilityOptions.map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-start gap-3 p-2.5 rounded cursor-pointer transition-colors ${
+                  visibility === opt.value
+                    ? 'bg-interactive-selected'
+                    : 'hover:bg-interactive-hover'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="visibility"
+                  value={opt.value}
+                  checked={visibility === opt.value}
+                  onChange={() => setVisibility(opt.value)}
+                  className="mt-0.5 accent-accent-primary"
+                />
+                <div>
+                  <div className="text-sm font-medium text-txt-primary">{opt.label}</div>
+                  <div className="text-xs text-txt-tertiary">{opt.desc}</div>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 
       <div>
-        <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
-          Description
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Description</div>
+        <p className="text-xs text-txt-tertiary mb-2">A short summary shown on the Explore page.</p>
+        <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value.slice(0, 200))}
+            placeholder="A short description for the Explore page..."
+            rows={3}
+            className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary resize-none placeholder:text-txt-tertiary"
+          />
+          <div className="text-[11px] text-txt-tertiary text-right">{description.length}/200</div>
         </div>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value.slice(0, 200))}
-          placeholder="A short description for the Explore page..."
-          rows={3}
-          className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary resize-none placeholder:text-txt-tertiary"
-        />
-        <div className="text-[11px] text-txt-tertiary text-right">{description.length}/200</div>
       </div>
 
       {saveError && (
@@ -334,6 +350,12 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       {saveSuccess && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
       )}
+
+      {/* Pending Join Requests — only shown when visibility is 'request' */}
+      {(visibility === 'request' || (space.visibility as SpaceVisibility) === 'request') && (
+        <JoinRequestsSection spaceId={spaceId} />
+      )}
+
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
@@ -354,11 +376,6 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Pending Join Requests — only shown when visibility is 'request' */}
-      {(visibility === 'request' || (space.visibility as SpaceVisibility) === 'request') && (
-        <JoinRequestsSection spaceId={spaceId} />
       )}
     </div>
   );
@@ -493,9 +510,9 @@ export function SpaceSettingsModal() {
 
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-xl">
-      <div className="flex gap-4">
+      <div className="flex gap-4 h-[min(460px,65vh)]">
         {/* Tabs */}
-        <div className="w-32 flex-shrink-0 sticky top-0 self-start z-10">
+        <div className="w-32 flex-shrink-0 self-start z-10">
           <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
             <button onClick={() => setTab('overview')} className={tabClass('overview')}>
               Overview
@@ -522,7 +539,7 @@ export function SpaceSettingsModal() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
           {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
           {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
           {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}

@@ -381,12 +381,13 @@ export function ConnectedInstances() {
   const [showAddForm, setShowAddForm] = useState(false);
 
   return (
-    <div className="border-t border-white/[0.06] pt-4">
-      <h3 className="text-xs font-bold text-txt-secondary uppercase mb-3">
+    <div>
+      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         Connected Instances
-      </h3>
+      </div>
+      <p className="text-xs text-txt-tertiary mb-2">Link accounts across federated Backspace instances.</p>
 
-      <div className="space-y-2">
+      <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
         {/* Home instance (always shown, non-removable) */}
         <div className="flex items-center justify-between p-3 bg-surface-channel rounded-lg">
           <div className="flex items-center gap-2 min-w-0">

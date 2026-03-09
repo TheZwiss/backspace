@@ -24,21 +24,39 @@ interface CachedInstanceToken {
   username: string;
 }
 
-const STORAGE_KEY = 'backspace_instances';
+const STORAGE_KEY_PREFIX = 'backspace_instances';
+const LEGACY_STORAGE_KEY = 'backspace_instances';
+
+function storageKey(userId: string): string {
+  return `${STORAGE_KEY_PREFIX}_${userId}`;
+}
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
-function loadCachedTokens(): Record<string, CachedInstanceToken> {
+function loadCachedTokens(userId: string): Record<string, CachedInstanceToken> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, CachedInstanceToken>;
+    const scopedKey = storageKey(userId);
+    const raw = localStorage.getItem(scopedKey);
+    if (raw) {
+      return JSON.parse(raw) as Record<string, CachedInstanceToken>;
+    }
+
+    // One-time migration: adopt legacy unscoped key if it exists
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as Record<string, CachedInstanceToken>;
+      localStorage.setItem(scopedKey, legacy);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return parsed;
+    }
+
+    return {};
   } catch {
     return {};
   }
 }
 
-function saveCachedTokens(instances: ConnectedInstance[]): void {
+function saveCachedTokens(instances: ConnectedInstance[], userId: string): void {
   const cache: Record<string, CachedInstanceToken> = {};
   for (const inst of instances) {
     // Skip tokenless placeholders — writing an empty token would cause
@@ -50,7 +68,7 @@ function saveCachedTokens(instances: ConnectedInstance[]): void {
       username: inst.username,
     };
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+  localStorage.setItem(storageKey(userId), JSON.stringify(cache));
 }
 
 // ─── Network error detection ────────────────────────────────────────────────
@@ -216,7 +234,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       set((state) => {
         const updated = [...state.instances, instance];
-        saveCachedTokens(updated);
+        saveCachedTokens(updated, currentUser.id);
         return { instances: updated, isLoading: false };
       });
 
@@ -255,7 +273,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       set((state) => {
         const updated = [...state.instances, instance];
-        saveCachedTokens(updated);
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) saveCachedTokens(updated, userId);
         return { instances: updated, isLoading: false };
       });
 
@@ -284,7 +303,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     set((state) => {
       const updated = state.instances.filter(i => i.origin !== origin);
-      saveCachedTokens(updated);
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) saveCachedTokens(updated, userId);
       return { instances: updated };
     });
 
@@ -405,7 +425,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return;
     }
 
-    const cached = loadCachedTokens();
+    const cached = loadCachedTokens(currentUser.id);
 
     // Split server-known instances into two groups:
     // - withToken: have a cached token → attempt reconnection
@@ -543,7 +563,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     // Save final state to localStorage — persist ALL instances regardless of status
     // so disconnected instances survive page reload and can auto-reconnect later
-    saveCachedTokens(get().instances);
+    saveCachedTokens(get().instances, currentUser.id);
 
     // Mark auto-connect complete so syncInstanceList is now safe to run
     set({ _autoConnectDone: true });
@@ -560,7 +580,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     disconnectAllRemote();
 
     set({ instances: [], isLoading: false, error: null, _autoConnectDone: false });
-    localStorage.removeItem(STORAGE_KEY);
+    // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));
 

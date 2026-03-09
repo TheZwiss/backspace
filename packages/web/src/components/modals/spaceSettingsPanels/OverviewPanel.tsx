@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
+import { getApiForOrigin } from '../../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 
 interface OverviewPanelProps {
@@ -56,7 +57,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const hasIconChange = iconFilename !== null;
   const hasChanges = hasNameChange || hasIconChange;
 
-  const currentIconUrl = space.icon ? api.uploads.url(space.icon) : null;
+  const currentIconUrl = space.icon
+    ? (space.icon.startsWith('http') ? space.icon : api.uploads.url(space.icon))
+    : null;
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,7 +79,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     const file = new File([blob], 'icon.png', { type: 'image/png' });
     setUploadingIcon(true);
     try {
-      const attachment = await api.uploads.upload(file);
+      const spaceApi = getApiForOrigin(space._instanceOrigin);
+      const attachment = await spaceApi.uploads.upload(file);
       setIconFilename(attachment.filename);
     } catch {
       setSaveError('Failed to upload icon');
@@ -149,10 +153,14 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-5">
+        {/* Space Identity */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Space Identity</div>
+          <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
         {/* Space Icon */}
         <div>
-          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+          <label className="block text-xs text-txt-secondary mb-1.5">
             Space Icon
           </label>
           <div className="flex items-center gap-3">
@@ -209,7 +217,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
         {/* Space Name */}
         <div>
-          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+          <label className="block text-xs text-txt-secondary mb-1.5">
             Space Name
           </label>
           <input
@@ -220,6 +228,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             disabled={!canManageSpace}
           />
         </div>
+          </div>
+        </div>
 
         {/* Save / Discard */}
         {saveError && (
@@ -228,6 +238,22 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {saveSuccess && (
           <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
         )}
+        {/* Danger Zone */}
+        {isOwner && (
+          <div>
+            <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">Danger Zone</div>
+            <div className="rounded-lg bg-white/[0.02] p-3.5">
+              <p className="text-xs text-txt-tertiary mb-3">Permanently delete this space and all its data. This cannot be undone.</p>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
+              >
+                {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {canManageSpace && hasChanges && (
           <div className="sticky bottom-0 z-10 pointer-events-none">
             <div className="flex justify-center pt-3 pb-1">
@@ -247,19 +273,6 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Danger Zone */}
-        {isOwner && (
-          <div className="pt-4 border-t border-border-soft">
-            <h3 className="text-sm font-bold text-txt-danger mb-2">Danger Zone</h3>
-            <button
-              onClick={handleDelete}
-              className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
-            >
-              {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
-            </button>
           </div>
         )}
       </div>

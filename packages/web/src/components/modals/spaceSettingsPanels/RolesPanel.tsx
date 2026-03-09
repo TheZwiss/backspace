@@ -108,7 +108,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
@@ -127,36 +127,42 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
         </button>
       </div>
 
-      <div className="space-y-1">
-        {sortedRoles.map((role) => {
-          const isEveryone = role.id === spaceId;
-          return (
-            <button
-              key={role.id}
-              onClick={() => setEditingRoleId(role.id)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-interactive-hover transition-colors text-left group"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: role.color }}
-                />
-                <span className="text-sm text-txt-primary truncate">
-                  {isEveryone ? '@everyone' : role.name}
-                </span>
-              </div>
-              <svg
-                className="w-4 h-4 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          );
-        })}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Roles</div>
+        <p className="text-xs text-txt-tertiary mb-2">Roles define what permissions members have. Higher roles take priority.</p>
+        <div className="rounded-lg bg-white/[0.02] p-2">
+          <div className="space-y-0.5">
+            {sortedRoles.map((role) => {
+              const isEveryone = role.id === spaceId;
+              return (
+                <button
+                  key={role.id}
+                  onClick={() => setEditingRoleId(role.id)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-interactive-hover transition-colors text-left group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: role.color }}
+                    />
+                    <span className="text-sm text-txt-primary truncate">
+                      {isEveryone ? '@everyone' : role.name}
+                    </span>
+                  </div>
+                  <svg
+                    className="w-4 h-4 text-txt-tertiary group-hover:text-txt-secondary transition-colors flex-shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -190,12 +196,14 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
   const hasColorChange = !isEveryone && draftColor !== role.color;
   const hasPermChange = permissionsToString(draftPermissions) !== (role.permissions ?? '0');
   const hasChanges = hasNameChange || hasColorChange || hasPermChange;
+  const showPill = hasChanges || !isEveryone;
 
   const togglePermission = (bit: bigint) => {
     setDraftPermissions((prev) => (prev & bit) !== 0n ? prev & ~bit : prev | bit);
   };
 
   const handleSave = async () => {
+    setConfirmDelete(false);
     setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
@@ -219,6 +227,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
     setDraftName(role.name);
     setDraftColor(role.color);
     setDraftPermissions(stringToPermissions(role.permissions));
+    setConfirmDelete(false);
     setSaveError('');
   };
 
@@ -242,7 +251,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Back button */}
       <div className="sticky top-0 z-10 pointer-events-none pb-3">
         <button
@@ -256,147 +265,151 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
         </button>
       </div>
 
-      {/* Role Name (not editable for @everyone) */}
+      {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
-          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-            Role Name
-          </label>
-          <input
-            type="text"
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary text-sm"
-          />
-        </div>
-      )}
-
-      {/* Role Color (not editable for @everyone) */}
-      {!isEveryone && (
-        <div>
-          <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
-            Role Color
-          </label>
-          <div className="flex items-center gap-2 flex-wrap">
-            {PRESET_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setDraftColor(c)}
-                className={`w-7 h-7 rounded-full border-2 transition-all ${
-                  draftColor === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'
-                }`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-            <label className="relative w-7 h-7 rounded-full border-2 border-border-subtle hover:border-accent-primary transition-colors cursor-pointer overflow-hidden">
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Identity</div>
+          <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+            <div>
+              <label className="block text-xs text-txt-secondary mb-1.5">
+                Role Name
+              </label>
               <input
-                type="color"
-                value={draftColor}
-                onChange={(e) => setDraftColor(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                type="text"
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary text-sm"
               />
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-red-400 via-green-400 to-blue-400" />
-            </label>
-            <input
-              type="text"
-              value={draftColor}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setDraftColor(v);
-              }}
-              className="w-20 px-2 py-1 bg-surface-input rounded text-xs text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary font-mono"
-              maxLength={7}
-            />
+            </div>
+            <div>
+              <label className="block text-xs text-txt-secondary mb-1.5">
+                Role Color
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setDraftColor(c)}
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                      draftColor === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+                <label className="relative w-7 h-7 rounded-full border-2 border-border-subtle hover:border-accent-primary transition-colors cursor-pointer overflow-hidden">
+                  <input
+                    type="color"
+                    value={draftColor}
+                    onChange={(e) => setDraftColor(e.target.value)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="w-full h-full rounded-full bg-gradient-to-br from-red-400 via-green-400 to-blue-400" />
+                </label>
+                <input
+                  type="text"
+                  value={draftColor}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setDraftColor(v);
+                  }}
+                  className="w-20 px-2 py-1 bg-surface-input rounded text-xs text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary font-mono"
+                  maxLength={7}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Permissions */}
-      <div>
-        <label className="block text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-          Permissions
-        </label>
-        <div className="space-y-3">
-          {PERMISSION_GROUPS.map((group) => (
-            <div key={group.name}>
-              <div className="text-[11px] text-txt-tertiary font-medium mb-1.5 uppercase tracking-wider">
-                {group.name}
-              </div>
-              <div className="space-y-1">
-                {group.perms.map((perm) => {
-                  const isOn = (draftPermissions & perm.bit) !== 0n;
-                  const isAdmin = perm.bit === PermissionBits.ADMINISTRATOR;
-                  return (
-                    <label
-                      key={perm.label}
-                      className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-interactive-hover cursor-pointer group/perm"
+      {/* Permission groups — each gets its own section card */}
+      {PERMISSION_GROUPS.map((group) => (
+        <div key={group.name}>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+            {group.name}
+          </div>
+          <div className="rounded-lg bg-white/[0.02] p-3.5">
+            <div className="space-y-1">
+              {group.perms.map((perm) => {
+                const isOn = (draftPermissions & perm.bit) !== 0n;
+                const isAdmin = perm.bit === PermissionBits.ADMINISTRATOR;
+                return (
+                  <label
+                    key={perm.label}
+                    className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-interactive-hover cursor-pointer group/perm"
+                  >
+                    <span className={`text-sm ${isAdmin ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
+                      {perm.label}
+                    </span>
+                    <div
+                      onClick={(e) => {
+                        e.preventDefault();
+                        togglePermission(perm.bit);
+                      }}
+                      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+                        isOn ? 'bg-accent-primary' : 'bg-interactive-muted'
+                      }`}
                     >
-                      <span className={`text-sm ${isAdmin ? 'text-txt-danger font-medium' : 'text-txt-primary'}`}>
-                        {perm.label}
-                      </span>
                       <div
-                        onClick={(e) => {
-                          e.preventDefault();
-                          togglePermission(perm.bit);
-                        }}
-                        className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
-                          isOn ? 'bg-accent-primary' : 'bg-interactive-muted'
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                          isOn ? 'translate-x-4' : 'translate-x-0.5'
                         }`}
-                      >
-                        <div
-                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                            isOn ? 'translate-x-4' : 'translate-x-0.5'
-                          }`}
-                        />
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
+                      />
+                    </div>
+                  </label>
+                );
+              })}
             </div>
-          ))}
+          </div>
         </div>
-      </div>
+      ))}
 
-      {/* Save / Discard */}
       {saveError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
       )}
       {saveSuccess && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Role saved</div>
       )}
-      {hasChanges && (
+      {showPill && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
-                onClick={handleDiscard}
-                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-              >
-                Discard
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || (!isEveryone && !draftName.trim())}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+            <div className={`glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto${
+              isEveryone ? ' animate-slide-up' : ''
+            }`}>
+              {hasChanges && (
+                <>
+                  <button
+                    onClick={handleDiscard}
+                    className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={saving || (!isEveryone && !draftName.trim())}
+                    className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                </>
+              )}
+              {!isEveryone && hasChanges && (
+                <div className="w-px h-5 bg-white/10" />
+              )}
+              {!isEveryone && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50 ${
+                    confirmDelete
+                      ? 'bg-accent-rose/15 text-accent-rose'
+                      : 'text-accent-rose hover:bg-accent-rose/10'
+                  }`}
+                >
+                  {deleting ? 'Deleting...' : confirmDelete ? 'Confirm?' : 'Delete Role'}
+                </button>
+              )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Delete Role (not for @everyone) */}
-      {!isEveryone && (
-        <div className="pt-4 border-t border-border-soft">
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="px-4 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-          >
-            {deleting ? 'Deleting...' : confirmDelete ? 'Click again to confirm' : 'Delete Role'}
-          </button>
         </div>
       )}
     </div>

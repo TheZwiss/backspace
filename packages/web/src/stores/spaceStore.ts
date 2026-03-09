@@ -199,7 +199,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   updateSpace: async (spaceId: string, data: UpdateSpaceRequest) => {
-    const updated = await api.spaces.update(spaceId, data);
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    const updated = await client.spaces.update(spaceId, data);
+    // Normalize remote asset URL so the icon displays correctly in-app
+    if (origin && updated.icon) {
+      updated.icon = resolveAssetUrl(updated.icon, origin) ?? updated.icon;
+    }
     set((state) => ({
       spaces: state.spaces.map(s => s.id === spaceId ? { ...s, ...updated } : s),
     }));
