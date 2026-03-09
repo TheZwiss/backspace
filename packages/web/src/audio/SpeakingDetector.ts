@@ -1,4 +1,5 @@
 import { useVoiceStore } from '../stores/voiceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { AudioManager } from './AudioManager';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 
@@ -168,8 +169,24 @@ export class SpeakingDetector {
 
     // --- Local participant ---
     if (this.localIdentity) {
-      if (store.isMuted) {
-        // Muted → never speaking, reset hold counter
+      // Compute effective muted/deafened state (intent OR server enforcement)
+      let effectiveMuted = store.isMuted;
+      let effectiveDeafened = store.isDeafened;
+      const channelId = store.currentVoiceChannelId;
+      if (channelId) {
+        const spaceId = useSpaceStore.getState().channelToSpaceMap.get(channelId);
+        if (spaceId) {
+          const myOriginId = getMyUserIdForOrigin(getChannelOrigin(channelId));
+          if (myOriginId) {
+            const serverKey = `${spaceId}:${myOriginId}`;
+            effectiveMuted = effectiveMuted || store.serverMutedUserIds.has(serverKey);
+            effectiveDeafened = effectiveDeafened || store.serverDeafenedUserIds.has(serverKey);
+          }
+        }
+      }
+
+      if (effectiveMuted || effectiveDeafened) {
+        // Muted or deafened → never speaking, reset hold counter
         this.holdCounters.delete(this.localIdentity);
       } else {
         const analyser = AudioManager.getInstance().getAnalyserNode();

@@ -43,6 +43,7 @@ export function ChannelSidebar() {
   const location = useLocation();
 
   const handleMicToggle = async () => {
+    if (isServerMuted || isServerDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
     broadcastVoiceStatus();
@@ -53,6 +54,7 @@ export function ChannelSidebar() {
   };
 
   const handleDeafenToggle = async () => {
+    if (isServerDeafened) return;
     toggleDeafen();
     broadcastVoiceStatus();
     broadcastDeafenViaLiveKit();

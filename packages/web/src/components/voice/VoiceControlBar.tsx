@@ -39,6 +39,7 @@ export function VoiceControlBar() {
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleMute = React.useCallback(async () => {
+    if (isServerMuted || isServerDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
     broadcastVoiceStatus();
@@ -46,13 +47,14 @@ export function VoiceControlBar() {
     if (wasDeafened && !useVoiceStore.getState().isDeafened) {
       broadcastDeafenViaLiveKit();
     }
-  }, [toggleMic]);
+  }, [isServerMuted, isServerDeafened, toggleMic]);
 
   const handleDeafen = React.useCallback(async () => {
+    if (isServerDeafened) return;
     toggleDeafen();
     broadcastVoiceStatus();
     broadcastDeafenViaLiveKit();
-  }, [toggleDeafen]);
+  }, [isServerDeafened, toggleDeafen]);
 
   const handleCamera = async () => {
     const room = getActiveRoom();
