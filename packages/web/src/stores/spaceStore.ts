@@ -592,6 +592,14 @@ export function setUserIdForOriginResolver(resolver: (origin: string) => string 
   _getUserIdForOrigin = resolver;
 }
 
+// Direct identity cache populated from WS ready events.
+// Bypasses the instanceStore resolver for reliable federation support.
+const _myUserIdByOrigin = new Map<string, string>();
+
+export function setMyUserIdForOrigin(origin: string, userId: string): void {
+  _myUserIdByOrigin.set(origin, userId);
+}
+
 /**
  * Returns the local user's ID on a given instance origin.
  * '' or falsy = home instance (returns authStore user ID).
@@ -599,5 +607,9 @@ export function setUserIdForOriginResolver(resolver: (origin: string) => string 
  */
 export function getMyUserIdForOrigin(origin: string): string | undefined {
   if (!origin) return useAuthStore.getState().user?.id;
+  // Direct cache (populated from WS ready) takes priority — always correct
+  const cached = _myUserIdByOrigin.get(origin);
+  if (cached) return cached;
+  // Fallback to instanceStore resolver (may have placeholder user during connection)
   return _getUserIdForOrigin?.(origin);
 }

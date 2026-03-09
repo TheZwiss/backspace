@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -108,6 +108,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
 
       populateFromReady(origin, event.spaces, event.folders, event.dmChannels);
+
+      // Cache authoritative identity for this origin (federation-safe)
+      if (!isHome) {
+        setMyUserIdForOrigin(origin, event.user.id);
+      }
 
       // Mark remote instance as connected in instanceStore
       if (!isHome) {
