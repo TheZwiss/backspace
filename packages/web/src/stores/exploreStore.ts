@@ -50,6 +50,24 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
   fetchSpaces: async (query?: string) => {
     set({ isLoading: true, error: null });
 
+    // Wait for autoConnectAll to finish if it hasn't yet.
+    // This prevents fetching with an incomplete/empty instance list on page reload.
+    if (!useInstanceStore.getState()._autoConnectDone) {
+      await new Promise<void>((resolve) => {
+        const unsub = useInstanceStore.subscribe((state) => {
+          if (state._autoConnectDone) {
+            unsub();
+            resolve();
+          }
+        });
+        // Re-check after subscribing to avoid TOCTOU race
+        if (useInstanceStore.getState()._autoConnectDone) {
+          unsub();
+          resolve();
+        }
+      });
+    }
+
     try {
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
