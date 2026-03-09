@@ -476,6 +476,36 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
       isScreenSharing: status.isScreenSharing,
     });
   }
+
+  // Load persistent voice restrictions for this user in this space
+  const db = getDb();
+  const restrictions = db.select()
+    .from(schema.voiceRestrictions)
+    .where(and(
+      eq(schema.voiceRestrictions.spaceId, spaceId),
+      eq(schema.voiceRestrictions.userId, userId),
+    ))
+    .all();
+
+  for (const r of restrictions) {
+    if (r.restrictionType === 'mute') {
+      connectionManager.setServerMuted(userId, true);
+      connectionManager.sendToSpace(spaceId, {
+        type: 'voice_server_muted',
+        userId,
+        channelId,
+        muted: true,
+      });
+    } else if (r.restrictionType === 'deafen') {
+      connectionManager.setServerDeafened(userId, true);
+      connectionManager.sendToSpace(spaceId, {
+        type: 'voice_server_deafened',
+        userId,
+        channelId,
+        deafened: true,
+      });
+    }
+  }
 }
 
 function handleVoiceLeave(userId: string): void {
@@ -1092,6 +1122,26 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
 
   connectionManager.setServerMuted(targetUserId, muted);
 
+  // Persist to DB
+  const db = getDb();
+  if (muted) {
+    db.insert(schema.voiceRestrictions).values({
+      spaceId: meta.spaceId,
+      userId: targetUserId,
+      restrictionType: 'mute',
+      moderatorId: userId,
+      createdAt: Date.now(),
+    }).onConflictDoNothing().run();
+  } else {
+    db.delete(schema.voiceRestrictions).where(
+      and(
+        eq(schema.voiceRestrictions.spaceId, meta.spaceId),
+        eq(schema.voiceRestrictions.userId, targetUserId),
+        eq(schema.voiceRestrictions.restrictionType, 'mute'),
+      )
+    ).run();
+  }
+
   // Broadcast to all space members
   connectionManager.sendToSpace(meta.spaceId, {
     type: 'voice_server_muted',
@@ -1128,6 +1178,26 @@ function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string)
   }
 
   connectionManager.setServerDeafened(targetUserId, deafened);
+
+  // Persist to DB
+  const db = getDb();
+  if (deafened) {
+    db.insert(schema.voiceRestrictions).values({
+      spaceId: meta.spaceId,
+      userId: targetUserId,
+      restrictionType: 'deafen',
+      moderatorId: userId,
+      createdAt: Date.now(),
+    }).onConflictDoNothing().run();
+  } else {
+    db.delete(schema.voiceRestrictions).where(
+      and(
+        eq(schema.voiceRestrictions.spaceId, meta.spaceId),
+        eq(schema.voiceRestrictions.userId, targetUserId),
+        eq(schema.voiceRestrictions.restrictionType, 'deafen'),
+      )
+    ).run();
+  }
 
   connectionManager.sendToSpace(meta.spaceId, {
     type: 'voice_server_deafened',

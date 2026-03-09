@@ -142,6 +142,18 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Ensure voice_restrictions table exists (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS voice_restrictions (
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      restriction_type TEXT NOT NULL,
+      moderator_id TEXT NOT NULL REFERENCES users(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (space_id, user_id, restriction_type)
+    );
+  `);
+
   // ─── RBAC Migration: Ensure @everyone roles exist for all spaces ─────────
   migrateEveryoneRoles(db);
 

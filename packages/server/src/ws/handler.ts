@@ -890,6 +890,19 @@ function buildReadyPayload(userId: string): {
     }
   }
 
+  // Also include the connecting user's own DB-persisted restrictions
+  // (covers reconnect after disconnect timeout cleared in-memory state)
+  const myRestrictions = db.select()
+    .from(schema.voiceRestrictions)
+    .where(eq(schema.voiceRestrictions.userId, userId))
+    .all();
+  for (const r of myRestrictions) {
+    const existing = serverVoiceStates[userId] ?? { serverMuted: false, serverDeafened: false };
+    if (r.restrictionType === 'mute') existing.serverMuted = true;
+    if (r.restrictionType === 'deafen') existing.serverDeafened = true;
+    serverVoiceStates[userId] = existing;
+  }
+
   // Fetch read states for unread tracking
   const readStateRows = db.select()
     .from(schema.readStates)

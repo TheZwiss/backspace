@@ -768,6 +768,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       ))
       .run();
 
+    // Clean up any voice restrictions for the removed member
+    db.delete(schema.voiceRestrictions).where(
+      and(
+        eq(schema.voiceRestrictions.spaceId, id),
+        eq(schema.voiceRestrictions.userId, uid),
+      )
+    ).run();
+
     // Broadcast member_left event
     connectionManager.sendToSpace(id, {
       type: 'member_left',
@@ -1037,6 +1045,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       tx.delete(schema.memberRoles).where(and(
         eq(schema.memberRoles.spaceId, id),
         eq(schema.memberRoles.userId, targetId),
+      )).run();
+
+      // Clean up any voice restrictions for the banned member
+      tx.delete(schema.voiceRestrictions).where(and(
+        eq(schema.voiceRestrictions.spaceId, id),
+        eq(schema.voiceRestrictions.userId, targetId),
       )).run();
     });
 

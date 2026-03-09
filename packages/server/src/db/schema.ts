@@ -217,3 +217,13 @@ export const joinRequests = sqliteTable('join_requests', {
   createdAt: integer('created_at').notNull(),
   decidedAt: integer('decided_at'),
 });
+
+export const voiceRestrictions = sqliteTable('voice_restrictions', {
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  restrictionType: text('restriction_type').notNull(), // 'mute' | 'deafen'
+  moderatorId: text('moderator_id').notNull().references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.spaceId, table.userId, table.restrictionType] }),
+}));

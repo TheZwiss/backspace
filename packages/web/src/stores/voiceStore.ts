@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from './spaceStore';
+import { useAuthStore } from './authStore';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -239,6 +240,11 @@ export const useVoiceStore = create<VoiceState>()(
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
       toggleMic: () => set((state) => {
+        // Server-muted/deafened users cannot unmute themselves
+        const myId = useAuthStore.getState().user?.id;
+        if (myId && state.isMuted && (state.serverMutedUserIds.has(myId) || state.serverDeafenedUserIds.has(myId))) {
+          return {};
+        }
         if (state.isMuted && state.isDeafened) {
           // Unmuting while deafened → clear both (Discord behavior)
           return { isMuted: false, isDeafened: false };
@@ -246,6 +252,11 @@ export const useVoiceStore = create<VoiceState>()(
         return { isMuted: !state.isMuted };
       }),
       toggleDeafen: () => set((state) => {
+        // Server-deafened users cannot undeafen themselves
+        const myId = useAuthStore.getState().user?.id;
+        if (myId && state.isDeafened && state.serverDeafenedUserIds.has(myId)) {
+          return {};
+        }
         if (state.isDeafened) {
           // Undeafening → clear both
           return { isMuted: false, isDeafened: false };
@@ -358,8 +369,6 @@ export const useVoiceStore = create<VoiceState>()(
             streamVolumes: new Map(),
             streamMutes: new Map(),
             watchingStreams: new Set(),
-            serverMutedUserIds: new Set(),
-            serverDeafenedUserIds: new Set(),
             voiceUsers,
           };
         });
@@ -397,7 +406,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 6,
+      version: 7,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -427,6 +436,9 @@ export const useVoiceStore = create<VoiceState>()(
             persistedState.screenShareConfig.customBitrateKbps = null;
           }
         }
+        if (version < 7) {
+          // No data migration needed — Sets will be populated from server on next connect
+        }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -447,7 +459,26 @@ export const useVoiceStore = create<VoiceState>()(
         rnnoiseEnabled: state.rnnoiseEnabled,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
+        _serverMutedArr: [...state.serverMutedUserIds],
+        _serverDeafenedArr: [...state.serverDeafenedUserIds],
       }),
+      merge: (persistedState: any, currentState: VoiceState) => {
+        const merged = { ...currentState, ...persistedState };
+        // Reconstruct Sets from persisted arrays (Sets aren't JSON-serializable)
+        merged.serverMutedUserIds = new Set(persistedState?._serverMutedArr ?? []);
+        merged.serverDeafenedUserIds = new Set(persistedState?._serverDeafenedArr ?? []);
+        // Reconstruct non-persisted Sets/Maps to their defaults
+        merged.voiceUsers = currentState.voiceUsers;
+        merged.participants = currentState.participants;
+        merged.speakingParticipantIds = currentState.speakingParticipantIds;
+        merged.deafenedUserIds = currentState.deafenedUserIds;
+        merged.voiceUserStates = currentState.voiceUserStates;
+        merged.participantVolumes = currentState.participantVolumes;
+        merged.streamVolumes = currentState.streamVolumes;
+        merged.streamMutes = currentState.streamMutes;
+        merged.watchingStreams = currentState.watchingStreams;
+        return merged;
+      },
     }
   )
 );

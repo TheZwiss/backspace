@@ -167,12 +167,25 @@ function handleEvent(origin: string, event: ServerEvent): void {
           setVoiceUserStatus(uid, status.isMuted, status.isDeafened, status.isCameraOn, status.isScreenSharing);
         }
       }
-      // Populate server mute/deafen states
-      if (event.serverVoiceStates) {
-        const { setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
-        for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
-          if (state.serverMuted) setServerMutedUser(uid, true);
-          if (state.serverDeafened) setServerDeafenedUser(uid, true);
+      // Clear stale server voice states before applying fresh from ready payload
+      {
+        const { clearServerVoiceStates, setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
+        clearServerVoiceStates();
+        if (event.serverVoiceStates) {
+          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
+            if (state.serverMuted) setServerMutedUser(uid, true);
+            if (state.serverDeafened) setServerDeafenedUser(uid, true);
+          }
+        }
+        // Enforce local mute/deafen to match server restrictions (one-directional: only force-mute, never auto-unmute)
+        const myReadyId = useAuthStore.getState().user?.id;
+        if (myReadyId) {
+          const vs = useVoiceStore.getState();
+          if (vs.serverDeafenedUserIds.has(myReadyId) && !vs.isDeafened) {
+            useVoiceStore.setState({ isMuted: true, isDeafened: true });
+          } else if (vs.serverMutedUserIds.has(myReadyId) && !vs.isMuted) {
+            useVoiceStore.setState({ isMuted: true });
+          }
         }
       }
 
@@ -266,10 +279,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
         addVoiceUser(event.channelId, event.userId);
       } else {
         removeVoiceUser(event.channelId, event.userId);
-        // Clear server mute/deafen state for departed user
-        const { setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
-        setServerMutedUser(event.userId, false);
-        setServerDeafenedUser(event.userId, false);
       }
       break;
 
@@ -280,14 +289,26 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_server_muted': {
       const { setServerMutedUser } = useVoiceStore.getState();
       setServerMutedUser(event.userId, event.muted);
-      // If the local user was server-muted, force-mute the mic
       const myUserId = useAuthStore.getState().user?.id;
-      if (event.userId === myUserId && event.muted) {
-        const vs = useVoiceStore.getState();
-        if (!vs.isMuted) {
-          vs.toggleMic();
-          const voiceOrigin = vs.currentVoiceChannelId ? getChannelOrigin(vs.currentVoiceChannelId) : '';
-          wsSend({ type: 'voice_status', isMuted: true, isDeafened: vs.isDeafened, isCameraOn: vs.isCameraOn, isScreenSharing: vs.isScreenSharing }, voiceOrigin);
+      if (event.userId === myUserId) {
+        if (event.muted) {
+          // Force-mute the mic
+          const vs = useVoiceStore.getState();
+          if (!vs.isMuted) {
+            useVoiceStore.setState({ isMuted: true });
+            const fresh = useVoiceStore.getState();
+            const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
+            wsSend({ type: 'voice_status', isMuted: true, isDeafened: fresh.isDeafened, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
+          }
+        } else {
+          // Server unmuted — auto-restore mic unless still server-deafened
+          const vs = useVoiceStore.getState();
+          if (!vs.serverDeafenedUserIds.has(myUserId) && vs.isMuted) {
+            useVoiceStore.setState({ isMuted: false });
+            const fresh = useVoiceStore.getState();
+            const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
+            wsSend({ type: 'voice_status', isMuted: false, isDeafened: fresh.isDeafened, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
+          }
         }
       }
       break;
@@ -296,15 +317,52 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_server_deafened': {
       const { setServerDeafenedUser } = useVoiceStore.getState();
       setServerDeafenedUser(event.userId, event.deafened);
-      // If the local user was server-deafened, force-deafen (smart toggle sets both muted+deafened)
       const myUid = useAuthStore.getState().user?.id;
-      if (event.userId === myUid && event.deafened) {
-        const vs = useVoiceStore.getState();
-        if (!vs.isDeafened) {
-          vs.toggleDeafen();
-          const fresh = useVoiceStore.getState();
-          const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
-          wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
+      if (event.userId === myUid) {
+        if (event.deafened) {
+          // Force-deafen (smart toggle sets both muted+deafened)
+          const vs = useVoiceStore.getState();
+          if (!vs.isDeafened) {
+            useVoiceStore.setState({ isMuted: true, isDeafened: true });
+            const fresh = useVoiceStore.getState();
+            const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
+            wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
+            // Broadcast deafen to in-room participants via LiveKit data channel
+            import('./useLiveKit').then(({ getActiveRoom }) => {
+              const room = getActiveRoom();
+              if (room) {
+                const encoder = new TextEncoder();
+                room.localParticipant.publishData(
+                  encoder.encode(JSON.stringify({ type: 'deafen', deafened: true })),
+                  { reliable: true }
+                ).catch(() => {});
+              }
+            });
+          }
+        } else {
+          // Server un-deafened — auto-restore
+          const vs = useVoiceStore.getState();
+          if (vs.isDeafened) {
+            const stillServerMuted = vs.serverMutedUserIds.has(myUid);
+            useVoiceStore.setState({
+              isDeafened: false,
+              ...(stillServerMuted ? {} : { isMuted: false }),
+            });
+            const fresh = useVoiceStore.getState();
+            const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
+            wsSend({ type: 'voice_status', isMuted: fresh.isMuted, isDeafened: false, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
+            // Broadcast undeafen via LiveKit data channel
+            import('./useLiveKit').then(({ getActiveRoom }) => {
+              const room = getActiveRoom();
+              if (room) {
+                const encoder = new TextEncoder();
+                room.localParticipant.publishData(
+                  encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
+                  { reliable: true }
+                ).catch(() => {});
+              }
+            });
+          }
         }
       }
       break;
