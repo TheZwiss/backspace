@@ -149,6 +149,10 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
 
     flyout.style.left = `${left}px`;
     flyout.style.top = `${top}px`;
+
+    const availableHeight = window.innerHeight - top - 8;
+    const maxHeight = Math.max(availableHeight, 120);
+    flyout.style.maxHeight = `${maxHeight}px`;
   }, [open]);
 
   return (
@@ -170,7 +174,7 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
       {open && ReactDOM.createPortal(
         <div
           ref={flyoutRef}
-          className="fixed z-[210] bg-surface-elevated rounded-md shadow-elevation-high py-1.5 min-w-[160px] max-h-[240px] overflow-y-auto scrollbar-thin animate-fade-in"
+          className="fixed z-[210] bg-surface-elevated rounded-md shadow-elevation-high py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
           style={{ left: -9999, top: -9999 }}
           onMouseEnter={cancelCloseTimer}
           onMouseLeave={startCloseTimer}
