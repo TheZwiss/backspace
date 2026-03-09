@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { deriveGridTiles } from '../../hooks/useLiveKit';
+import { useGridLayout } from '../../hooks/useGridLayout';
 import type { ParticipantInfo, GridTile } from '../../hooks/useLiveKit';
 
 interface VoiceGridProps {
@@ -15,6 +16,9 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
   const [stripHidden, setStripHidden] = useState(false);
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { cols, tileWidth, tileHeight } = useGridLayout(containerRef, tiles.length);
 
   // Reset strip visibility when focus target changes
   useEffect(() => {
@@ -150,23 +154,24 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
     );
   }
 
-  // Default grid mode
-  const gridClass = (() => {
-    if (tiles.length === 1) return 'grid-cols-1 max-w-2xl mx-auto';
-    if (tiles.length === 2) return 'grid-cols-2 max-w-4xl mx-auto';
-    if (tiles.length <= 4) return 'grid-cols-2';
-    if (tiles.length <= 9) return 'grid-cols-3';
-    return 'grid-cols-4';
-  })();
-
+  // Default grid mode — container-aware layout via ResizeObserver
   return (
-    <div className="flex-1 p-3 overflow-auto flex items-center min-h-0">
-      <div className={`grid ${gridClass} gap-2 w-full max-h-full`}>
+    <div ref={containerRef} className="flex-1 overflow-hidden min-h-0">
+      <div
+        className="grid h-full w-full"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, ${tileWidth}px)`,
+          gridAutoRows: `${tileHeight}px`,
+          gap: '8px',
+          justifyContent: 'center',
+          alignContent: 'center',
+        }}
+      >
         {tiles.map((t) => (
           <div
             key={t.key}
             onClick={() => setFocusedParticipant(t.key)}
-            className="cursor-pointer hover:opacity-90 transition-opacity h-full"
+            className="cursor-pointer hover:opacity-90 transition-opacity"
           >
             {renderTile(t)}
           </div>

@@ -108,7 +108,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         isSpeaking
           ? 'ring-[3px] ring-status-online shadow-[0_0_12px_rgba(134,239,172,0.25)]'
           : 'ring-1 ring-white/[0.06] hover:ring-white/10'
-      } ${large ? 'h-full w-full' : 'h-full aspect-video'}`}
+      } h-full w-full`}
       onContextMenu={handleContextMenu}
     >
       {hasVideo ? (
