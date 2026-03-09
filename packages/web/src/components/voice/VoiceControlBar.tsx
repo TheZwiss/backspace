@@ -35,34 +35,45 @@ export function VoiceControlBar() {
 
   const handleMute = React.useCallback(async () => {
     if (isServerMuted || isServerDeafened) return;
+    const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
-    // Broadcast via WebSocket so sidebar shows status without joining
-    wsSend({ type: 'voice_status', isMuted: !isMuted, isDeafened, isCameraOn, isScreenSharing }, voiceOrigin);
-  }, [isMuted, isDeafened, isCameraOn, isScreenSharing, toggleMic, voiceOrigin, isServerMuted, isServerDeafened]);
+    // Read fresh state after the smart toggle (may have cleared deafen too)
+    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
+    wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
+    // If unmuting while deafened cleared deafen, broadcast deafen=false via LiveKit data channel
+    if (wasDeafened && !d) {
+      const room = getActiveRoom();
+      if (room) {
+        const encoder = new TextEncoder();
+        room.localParticipant.publishData(
+          encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
+          { reliable: true }
+        ).catch(() => {});
+      }
+    }
+  }, [toggleMic, voiceOrigin, isServerMuted, isServerDeafened]);
 
   const handleDeafen = React.useCallback(async () => {
     if (isServerDeafened) return;
     const room = getActiveRoom();
-    const willDeafen = !isDeafened;
-    // Update store FIRST so updateParticipants reads correct state
     toggleDeafen();
-    if (willDeafen && !isMuted) toggleMic();
-    if (!willDeafen && isMuted) toggleMic();
-    // Broadcast via WebSocket
-    wsSend({ type: 'voice_status', isMuted: willDeafen, isDeafened: willDeafen, isCameraOn, isScreenSharing }, voiceOrigin);
+    // Read fresh state — smart toggle handles mute coupling
+    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
+    // If server-muted, enforce muted even after undeafen
+    const effectiveMuted = isServerMuted ? true : m;
+    wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
     if (room) {
       try {
-        // Broadcast deafen state via LiveKit data channel for in-room users
         const encoder = new TextEncoder();
         room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: willDeafen })),
+          encoder.encode(JSON.stringify({ type: 'deafen', deafened: d })),
           { reliable: true }
         ).catch(() => {});
       } catch (err) {
         console.error('[VoiceControlBar] Failed to toggle deafen:', err);
       }
     }
-  }, [isDeafened, isMuted, isCameraOn, isScreenSharing, toggleDeafen, toggleMic]);
+  }, [toggleDeafen, isServerMuted, isServerDeafened, voiceOrigin]);
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -155,13 +166,13 @@ export function VoiceControlBar() {
         {/* Mute */}
         <button
           onClick={handleMute}
-          className={isServerMuted
+          className={(isServerMuted || isServerDeafened)
             ? `${btnBase} bg-accent-amber/20 text-accent-amber cursor-not-allowed`
             : isMuted || isDeafened
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={isServerMuted ? 'Server Muted' : isMuted ? 'Unmute (M)' : 'Mute (M)'}
+          title={(isServerMuted || isServerDeafened) ? 'Server Muted' : isMuted ? 'Unmute (M)' : 'Mute (M)'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />

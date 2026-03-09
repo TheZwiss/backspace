@@ -484,6 +484,7 @@ function handleVoiceLeave(userId: string): void {
     broadcastRoomLeave(left.roomId, left.room, userId);
   }
   connectionManager.clearVoiceUserStatus(userId);
+  connectionManager.clearServerVoiceState(userId);
 }
 
 function handleVoiceStatus(event: Record<string, unknown>, userId: string): void {
@@ -497,15 +498,19 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
   const userRoom = connectionManager.getUserRoom(userId);
   if (!userRoom) return;
 
-  connectionManager.setVoiceUserStatus(userId, isMuted, isDeafened, isCameraOn, isScreenSharing);
+  // Server-side enforcement: prevent clients from bypassing server mute/deafen
+  const effectiveMuted = connectionManager.isServerMuted(userId) ? true : isMuted;
+  const effectiveDeafened = connectionManager.isServerDeafened(userId) ? true : isDeafened;
+
+  connectionManager.setVoiceUserStatus(userId, effectiveMuted, effectiveDeafened, isCameraOn, isScreenSharing);
 
   // sendToRoom routes to sendToSpace for space rooms, sendToDmMembers for DM rooms
   connectionManager.sendToRoom(userRoom.roomId, {
     type: 'voice_status_update',
     userId,
     channelId: userRoom.roomId,
-    isMuted,
-    isDeafened,
+    isMuted: effectiveMuted,
+    isDeafened: effectiveDeafened,
     isCameraOn,
     isScreenSharing,
   });

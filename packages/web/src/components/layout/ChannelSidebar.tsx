@@ -40,34 +40,41 @@ export function ChannelSidebar() {
   const location = useLocation();
 
   const handleMicToggle = async () => {
-    if (isServerMuted || isServerDeafened) return; // Blocked by server mute/deafen
+    if (isServerMuted || isServerDeafened) return;
+    const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
-    // Broadcast mute status via WebSocket so non-joined users can see it
-    const willBeMuted = !isMuted;
-    const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
+    // Read fresh state after the smart toggle (may have cleared deafen too)
+    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
     const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened, isCameraOn, isScreenSharing }, voiceOrigin);
+    wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
+    // If unmuting while deafened cleared deafen, broadcast deafen=false via LiveKit data channel
+    if (wasDeafened && !d) {
+      const room = getActiveRoom();
+      if (room) {
+        const encoder = new TextEncoder();
+        room.localParticipant.publishData(
+          encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
+          { reliable: true }
+        ).catch(() => {});
+      }
+    }
   };
 
   const handleDeafenToggle = async () => {
-    if (isServerDeafened) return; // Blocked by server deafen
+    if (isServerDeafened) return;
     const room = getActiveRoom();
-    const willDeafen = !isDeafened;
-    // Update store FIRST so updateParticipants reads correct state when LiveKit events fire
     toggleDeafen();
-    if (willDeafen && !isMuted) toggleMic();
-    if (!willDeafen && isMuted) toggleMic();
-    // Broadcast status via WebSocket so non-joined users can see it
-    const willBeMuted = willDeafen ? true : false;
-    const { isCameraOn, isScreenSharing } = useVoiceStore.getState();
+    // Read fresh state — smart toggle handles mute coupling
+    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
+    // If server-muted, enforce muted even after undeafen
+    const effectiveMuted = isServerMuted ? true : m;
     const voiceOrigin2 = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
-    wsSend({ type: 'voice_status', isMuted: willBeMuted, isDeafened: willDeafen, isCameraOn, isScreenSharing }, voiceOrigin2);
+    wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin2);
     if (room) {
       try {
-        // Broadcast deafen state to other participants via LiveKit data channel
         const encoder = new TextEncoder();
         room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: willDeafen })),
+          encoder.encode(JSON.stringify({ type: 'deafen', deafened: d })),
           { reliable: true }
         ).catch(() => {});
       } catch (err) {
@@ -788,15 +795,15 @@ function UserAreaPanel({
           <button
             onClick={onMicToggle}
             className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
-              isServerMuted ? 'text-accent-amber cursor-not-allowed'
-                : isMuted ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
+              (isServerMuted || isServerDeafened) ? 'text-accent-amber cursor-not-allowed'
+                : isMuted || isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={isServerMuted ? 'Server Muted' : isMuted ? 'Unmute' : 'Mute'}
+            title={(isServerMuted || isServerDeafened) ? 'Server Muted' : isMuted ? 'Unmute' : 'Mute'}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              {(isMuted || isServerMuted) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+              {(isMuted || isDeafened || isServerMuted) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
             </svg>
           </button>
           {/* Input chevron */}

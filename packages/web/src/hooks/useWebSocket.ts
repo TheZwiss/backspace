@@ -266,6 +266,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
         addVoiceUser(event.channelId, event.userId);
       } else {
         removeVoiceUser(event.channelId, event.userId);
+        // Clear server mute/deafen state for departed user
+        const { setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
+        setServerMutedUser(event.userId, false);
+        setServerDeafenedUser(event.userId, false);
       }
       break;
 
@@ -292,15 +296,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_server_deafened': {
       const { setServerDeafenedUser } = useVoiceStore.getState();
       setServerDeafenedUser(event.userId, event.deafened);
-      // If the local user was server-deafened, force-deafen and force-mute
+      // If the local user was server-deafened, force-deafen (smart toggle sets both muted+deafened)
       const myUid = useAuthStore.getState().user?.id;
       if (event.userId === myUid && event.deafened) {
         const vs = useVoiceStore.getState();
         if (!vs.isDeafened) {
           vs.toggleDeafen();
-          if (!vs.isMuted) vs.toggleMic();
-          const voiceOrigin = vs.currentVoiceChannelId ? getChannelOrigin(vs.currentVoiceChannelId) : '';
-          wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: vs.isCameraOn, isScreenSharing: vs.isScreenSharing }, voiceOrigin);
+          const fresh = useVoiceStore.getState();
+          const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
+          wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
         }
       }
       break;

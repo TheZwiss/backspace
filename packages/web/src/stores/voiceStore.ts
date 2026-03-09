@@ -238,8 +238,21 @@ export const useVoiceStore = create<VoiceState>()(
       
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
-      toggleMic: () => set((state) => ({ isMuted: !state.isMuted })),
-      toggleDeafen: () => set((state) => ({ isDeafened: !state.isDeafened })),
+      toggleMic: () => set((state) => {
+        if (state.isMuted && state.isDeafened) {
+          // Unmuting while deafened → clear both (Discord behavior)
+          return { isMuted: false, isDeafened: false };
+        }
+        return { isMuted: !state.isMuted };
+      }),
+      toggleDeafen: () => set((state) => {
+        if (state.isDeafened) {
+          // Undeafening → clear both
+          return { isMuted: false, isDeafened: false };
+        }
+        // Deafening → set both
+        return { isMuted: true, isDeafened: true };
+      }),
       toggleCamera: () => set((state) => ({ isCameraOn: !state.isCameraOn })),
       toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
@@ -345,6 +358,8 @@ export const useVoiceStore = create<VoiceState>()(
             streamVolumes: new Map(),
             streamMutes: new Map(),
             watchingStreams: new Set(),
+            serverMutedUserIds: new Set(),
+            serverDeafenedUserIds: new Set(),
             voiceUsers,
           };
         });
