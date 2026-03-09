@@ -42,6 +42,20 @@ export function ChannelSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const floatingPanelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState(140);
+
+  useEffect(() => {
+    const el = floatingPanelRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setPanelHeight(entry.contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const handleMicToggle = async () => {
     if (isServerMuted || isServerDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
@@ -101,7 +115,7 @@ export function ChannelSidebar() {
 
   // Floating bottom panel — shared between DM view and server view
   const floatingPanel = user ? (
-    <div data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
+    <div ref={floatingPanelRef} data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
       <div className="glass-bubble rounded-[14px]">
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
@@ -133,7 +147,7 @@ export function ChannelSidebar() {
             Find or start a conversation
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto pt-4 px-2 pb-[140px] no-scrollbar">
+        <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar" style={{ paddingBottom: panelHeight + 24 }}>
           <div
             onClick={handleHomeClick}
             className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
@@ -313,7 +327,7 @@ export function ChannelSidebar() {
       </div>
 
       {/* Channels */}
-      <div className="flex-1 overflow-y-auto pt-3 px-2 pb-[140px] space-y-[21px] no-scrollbar">
+      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[21px] no-scrollbar" style={{ paddingBottom: panelHeight + 24 }}>
         {/* Text Channels */}
         <div>
           <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
