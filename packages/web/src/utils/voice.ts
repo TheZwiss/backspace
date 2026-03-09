@@ -1,6 +1,64 @@
 import { useVoiceStore } from '../stores/voiceStore';
-import { getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
+import { getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { wsSend } from '../hooks/useWebSocket';
+
+// ---------------------------------------------------------------------------
+// Effective-state helpers — single source of truth for broadcasts
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute effective mute/deafen by merging user intent with server enforcement,
+ * then broadcast the effective voice_status over the WebSocket.
+ *
+ * @param overrideOrigin  Pass explicitly when called from a WS handler that
+ *                        knows the origin. Omit to derive from currentVoiceChannelId.
+ */
+export function broadcastVoiceStatus(overrideOrigin?: string): void {
+  const vs = useVoiceStore.getState();
+  const { isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId, serverMutedUserIds, serverDeafenedUserIds } = vs;
+  if (!currentVoiceChannelId) return;
+
+  const origin = overrideOrigin ?? getChannelOrigin(currentVoiceChannelId);
+  const myId = getMyUserIdForOrigin(origin);
+  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
+  const serverKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
+
+  const effectiveMuted = isMuted || serverMutedUserIds.has(serverKey);
+  const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(serverKey);
+
+  wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: effectiveDeafened, isCameraOn, isScreenSharing }, origin);
+}
+
+/**
+ * Broadcast the effective deafen state to in-room participants via the
+ * LiveKit data channel. Dynamic-imports getActiveRoom to avoid circular deps.
+ */
+export function broadcastDeafenViaLiveKit(): void {
+  const vs = useVoiceStore.getState();
+  const { isDeafened, currentVoiceChannelId, serverDeafenedUserIds } = vs;
+  if (!currentVoiceChannelId) return;
+
+  const origin = getChannelOrigin(currentVoiceChannelId);
+  const myId = getMyUserIdForOrigin(origin);
+  const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
+  const serverKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
+  const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(serverKey);
+
+  import('../hooks/useLiveKit').then(({ getActiveRoom }) => {
+    const room = getActiveRoom();
+    if (room) {
+      const encoder = new TextEncoder();
+      room.localParticipant.publishData(
+        encoder.encode(JSON.stringify({ type: 'deafen', deafened: effectiveDeafened })),
+        { reliable: true }
+      ).catch(() => {});
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Voice channel join
+// ---------------------------------------------------------------------------
 
 /**
  * Centralized voice channel join that handles cross-instance cleanup.

@@ -240,13 +240,9 @@ export const useVoiceStore = create<VoiceState>()(
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
       toggleMic: () => set((state) => {
-        // Server-muted/deafened users cannot unmute themselves
-        const origin = state.currentVoiceChannelId ? getChannelOrigin(state.currentVoiceChannelId) : '';
-        const myId = getMyUserIdForOrigin(origin);
-        const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
-        if (myId && spaceId && state.isMuted && (state.serverMutedUserIds.has(`${spaceId}:${myId}`) || state.serverDeafenedUserIds.has(`${spaceId}:${myId}`))) {
-          return {};
-        }
+        // User intent toggle — effective state (intent || serverEnforcement) is
+        // computed at broadcast/hardware time, so the mic stays off while server-muted
+        // even if the user toggles isMuted to false.
         if (state.isMuted && state.isDeafened) {
           // Unmuting while deafened → clear both (Discord behavior)
           return { isMuted: false, isDeafened: false };
@@ -254,13 +250,7 @@ export const useVoiceStore = create<VoiceState>()(
         return { isMuted: !state.isMuted };
       }),
       toggleDeafen: () => set((state) => {
-        // Server-deafened users cannot undeafen themselves
-        const origin = state.currentVoiceChannelId ? getChannelOrigin(state.currentVoiceChannelId) : '';
-        const myId = getMyUserIdForOrigin(origin);
-        const spaceId = state.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(state.currentVoiceChannelId) : null;
-        if (myId && spaceId && state.isDeafened && state.serverDeafenedUserIds.has(`${spaceId}:${myId}`)) {
-          return {};
-        }
+        // User intent toggle — same decoupled model as toggleMic.
         if (state.isDeafened) {
           // Undeafening → clear both
           return { isMuted: false, isDeafened: false };

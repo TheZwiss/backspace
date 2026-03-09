@@ -11,10 +11,12 @@ import {
   ConnectionQuality,
   LocalAudioTrack,
   LocalTrackPublication,
+  DisconnectReason,
 } from 'livekit-client';
-import { getApiForOrigin, getChannelOrigin, useSpaceStore } from '../stores/spaceStore';
+import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
+import { broadcastVoiceStatus } from '../utils/voice';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
@@ -138,6 +140,8 @@ export function useLiveKit() {
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
+  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
+  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
@@ -187,8 +191,15 @@ export function useLiveKit() {
       let isPartMuted = !p.isMicrophoneEnabled;
 
       if (isLocal) {
-        isPartDeafened = useVoiceStore.getState().isDeafened;
-        isPartMuted = useVoiceStore.getState().isMuted;
+        // Compute effective state: user intent || server enforcement
+        const vs = useVoiceStore.getState();
+        const cvId = vs.currentVoiceChannelId;
+        const localOrigin = cvId ? getChannelOrigin(cvId) : '';
+        const localMyId = cvId ? getMyUserIdForOrigin(localOrigin) : undefined;
+        const localSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
+        const localKey = (localSpaceId && localMyId) ? `${localSpaceId}:${localMyId}` : '';
+        isPartMuted = vs.isMuted || vs.serverMutedUserIds.has(localKey);
+        isPartDeafened = vs.isDeafened || vs.serverDeafenedUserIds.has(localKey);
       } else {
         isPartDeafened = userState?.isDeafened ?? useVoiceStore.getState().deafenedUserIds.has(userId);
         if (userState) isPartMuted = userState.isMuted;
@@ -238,6 +249,16 @@ export function useLiveKit() {
     const r = roomRef.current;
     if (!r || !isConnected) return;
 
+    // Compute effective mute/deafen: user intent || server enforcement
+    const vs = useVoiceStore.getState();
+    const cvId = vs.currentVoiceChannelId;
+    const effOrigin = cvId ? getChannelOrigin(cvId) : '';
+    const effMyId = cvId ? getMyUserIdForOrigin(effOrigin) : undefined;
+    const effSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
+    const effKey = (effSpaceId && effMyId) ? `${effSpaceId}:${effMyId}` : '';
+    const effectiveMuted = isMuted || serverMutedUserIds.has(effKey);
+    const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(effKey);
+
     const syncMic = async () => {
       try {
         const audioManager = AudioManager.getInstance();
@@ -249,8 +270,8 @@ export function useLiveKit() {
         const micPub = r.localParticipant.getTrackPublications()
           .find(p => p.source === Track.Source.Microphone);
 
-        // If muted or deafened, mute the track in-place (keep it published)
-        if (isMuted || isDeafened) {
+        // If effectively muted or deafened, mute the track in-place (keep it published)
+        if (effectiveMuted || effectiveDeafened) {
           if (micPub?.track && !micPub.isMuted) {
             await r.localParticipant.setMicrophoneEnabled(false);
           }
@@ -302,7 +323,7 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+  }, [isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
 
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
@@ -313,8 +334,7 @@ export function useLiveKit() {
       if (isDm) return;
       const origin = getChannelOrigin(channelId);
       wsSend({ type: 'voice_join', channelId }, origin);
-      const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: s } = useVoiceStore.getState();
-      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: s }, origin);
+      broadcastVoiceStatus(origin);
     };
     const gen = ++_connectGeneration;
 
@@ -361,7 +381,15 @@ export function useLiveKit() {
       const guardedUpdate = () => { if (roomRef.current === newRoom) updateParticipants(); };
       newRoom.on(RoomEvent.ParticipantConnected, (participant) => {
         guardedUpdate();
-        if (useVoiceStore.getState().isDeafened) {
+        // Notify new participant of our effective deafen state
+        const vsConn = useVoiceStore.getState();
+        const cvIdConn = vsConn.currentVoiceChannelId;
+        const connOrigin = cvIdConn ? getChannelOrigin(cvIdConn) : '';
+        const connMyId = cvIdConn ? getMyUserIdForOrigin(connOrigin) : undefined;
+        const connSpaceId = cvIdConn ? useSpaceStore.getState().channelToSpaceMap.get(cvIdConn) : null;
+        const connKey = (connSpaceId && connMyId) ? `${connSpaceId}:${connMyId}` : '';
+        const effDeaf = vsConn.isDeafened || vsConn.serverDeafenedUserIds.has(connKey);
+        if (effDeaf) {
           const encoder = new TextEncoder();
           newRoom.localParticipant.publishData(
             encoder.encode(JSON.stringify({ type: 'deafen', deafened: true })),
@@ -449,7 +477,7 @@ export function useLiveKit() {
           }
         }
       });
-      newRoom.on(RoomEvent.Disconnected, () => {
+      newRoom.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
         if (roomRef.current !== newRoom) return;
         SpeakingDetector.getInstance().clear();
         setConnectionState(ConnectionState.Disconnected);
@@ -458,6 +486,13 @@ export function useLiveKit() {
         useVoiceStore.getState().setParticipants([]);
         useVoiceStore.getState().setSpeakingParticipants(new Set());
         useVoiceStore.getState().setIsLiveKitConnected(false);
+
+        // Non-client disconnect (identity collision, server shutdown, kicked, etc.)
+        // → clear voice intent so AppLayout doesn't auto-retry into an infinite loop.
+        // Client-initiated disconnects already clear this via leaveVoice() / VoiceControlBar.
+        if (reason !== undefined && reason !== DisconnectReason.CLIENT_INITIATED) {
+          useVoiceStore.getState().leaveVoice();
+        }
       });
 
       await newRoom.connect(url, token, { autoSubscribe: false });
@@ -495,7 +530,7 @@ export function useLiveKit() {
       }
       
       updateParticipants();
-    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); } }
+    } catch (err) { if (gen === _connectGeneration) { setConnectionError('Failed to connect'); useVoiceStore.getState().setConnectionError('Failed to connect'); useVoiceStore.getState().leaveVoice(); } }
     finally { if (gen === _connectGeneration) setIsConnecting(false); }
   }, [updateParticipants, handleDataReceived]);
 
@@ -545,7 +580,7 @@ export function useLiveKit() {
 
   useEffect(() => {
     updateParticipants();
-  }, [voiceUserStates, isMuted, isDeafened, updateParticipants]);
+  }, [voiceUserStates, isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, updateParticipants]);
 
   useEffect(() => {
     if (!room) return;

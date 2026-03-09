@@ -2,8 +2,8 @@ import { Room, Track } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
-import { wsSend } from '../hooks/useWebSocket';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
+import { broadcastVoiceStatus } from './voice';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -224,6 +224,5 @@ export async function changeScreenShare(room: Room): Promise<void> {
 
 export function handleScreenShareUnpublished(): void {
   useVoiceStore.setState({ isScreenSharing: false });
-  const { isMuted, isDeafened, isCameraOn } = useVoiceStore.getState();
-  wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing: false });
+  broadcastVoiceStatus();
 }

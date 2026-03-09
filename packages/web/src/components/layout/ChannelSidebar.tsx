@@ -11,11 +11,10 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { wsSend } from '../../hooks/useWebSocket';
-import { getActiveRoom } from '../../hooks/useLiveKit';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
-import { joinVoiceChannel } from '../../utils/voice';
+import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -44,47 +43,19 @@ export function ChannelSidebar() {
   const location = useLocation();
 
   const handleMicToggle = async () => {
-    if (isServerMuted || isServerDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
-    // Read fresh state after the smart toggle (may have cleared deafen too)
-    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
-    const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
-    wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
-    // If unmuting while deafened cleared deafen, broadcast deafen=false via LiveKit data channel
-    if (wasDeafened && !d) {
-      const room = getActiveRoom();
-      if (room) {
-        const encoder = new TextEncoder();
-        room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
-          { reliable: true }
-        ).catch(() => {});
-      }
+    broadcastVoiceStatus();
+    // If unmuting while deafened cleared deafen, broadcast via LiveKit data channel
+    if (wasDeafened && !useVoiceStore.getState().isDeafened) {
+      broadcastDeafenViaLiveKit();
     }
   };
 
   const handleDeafenToggle = async () => {
-    if (isServerDeafened) return;
-    const room = getActiveRoom();
     toggleDeafen();
-    // Read fresh state — smart toggle handles mute coupling
-    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
-    // If server-muted, enforce muted even after undeafen
-    const effectiveMuted = isServerMuted ? true : m;
-    const voiceOrigin2 = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
-    wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin2);
-    if (room) {
-      try {
-        const encoder = new TextEncoder();
-        room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: d })),
-          { reliable: true }
-        ).catch(() => {});
-      } catch (err) {
-        console.error('[ChannelSidebar] Failed to toggle deafen:', err);
-      }
-    }
+    broadcastVoiceStatus();
+    broadcastDeafenViaLiveKit();
   };
 
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);

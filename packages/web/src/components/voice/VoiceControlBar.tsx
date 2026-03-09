@@ -7,6 +7,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
+import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
@@ -38,46 +39,20 @@ export function VoiceControlBar() {
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleMute = React.useCallback(async () => {
-    if (isServerMuted || isServerDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
-    // Read fresh state after the smart toggle (may have cleared deafen too)
-    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
-    wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
-    // If unmuting while deafened cleared deafen, broadcast deafen=false via LiveKit data channel
-    if (wasDeafened && !d) {
-      const room = getActiveRoom();
-      if (room) {
-        const encoder = new TextEncoder();
-        room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
-          { reliable: true }
-        ).catch(() => {});
-      }
+    broadcastVoiceStatus();
+    // If unmuting while deafened cleared deafen, broadcast via LiveKit data channel
+    if (wasDeafened && !useVoiceStore.getState().isDeafened) {
+      broadcastDeafenViaLiveKit();
     }
-  }, [toggleMic, voiceOrigin, isServerMuted, isServerDeafened]);
+  }, [toggleMic]);
 
   const handleDeafen = React.useCallback(async () => {
-    if (isServerDeafened) return;
-    const room = getActiveRoom();
     toggleDeafen();
-    // Read fresh state — smart toggle handles mute coupling
-    const { isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: ss } = useVoiceStore.getState();
-    // If server-muted, enforce muted even after undeafen
-    const effectiveMuted = isServerMuted ? true : m;
-    wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: d, isCameraOn: c, isScreenSharing: ss }, voiceOrigin);
-    if (room) {
-      try {
-        const encoder = new TextEncoder();
-        room.localParticipant.publishData(
-          encoder.encode(JSON.stringify({ type: 'deafen', deafened: d })),
-          { reliable: true }
-        ).catch(() => {});
-      } catch (err) {
-        console.error('[VoiceControlBar] Failed to toggle deafen:', err);
-      }
-    }
-  }, [toggleDeafen, isServerMuted, isServerDeafened, voiceOrigin]);
+    broadcastVoiceStatus();
+    broadcastDeafenViaLiveKit();
+  }, [toggleDeafen]);
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -97,9 +72,7 @@ export function VoiceControlBar() {
         await room.localParticipant.setCameraEnabled(false);
       }
       toggleCamera();
-      // Broadcast camera state via WebSocket
-      const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
-      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss }, voiceOrigin);
+      broadcastVoiceStatus();
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle camera:', err);
     }
@@ -111,14 +84,10 @@ export function VoiceControlBar() {
     try {
       if (!isScreenSharing) {
         const started = await startScreenShare(room);
-        if (started) {
-          const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true }, voiceOrigin);
-        }
+        if (started) broadcastVoiceStatus();
       } else {
         await stopScreenShare(room);
-        const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false }, voiceOrigin);
+        broadcastVoiceStatus();
       }
     } catch (err) {
       console.error('[VoiceControlBar] Failed to toggle screen share:', err);
@@ -176,7 +145,7 @@ export function VoiceControlBar() {
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={(isServerMuted || isServerDeafened) ? 'Server Muted' : isMuted ? 'Unmute (M)' : 'Mute (M)'}
+          title={(isServerMuted || isServerDeafened) ? (isMuted ? 'Server Muted (self-muted)' : 'Server Muted') : isMuted ? 'Unmute (M)' : 'Mute (M)'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />

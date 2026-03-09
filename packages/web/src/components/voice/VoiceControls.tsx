@@ -7,6 +7,7 @@ import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { broadcastVoiceStatus } from '../../utils/voice';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -50,9 +51,7 @@ export function VoiceControls() {
       const willEnable = !isCameraOn;
       await room.localParticipant.setCameraEnabled(willEnable);
       toggleCamera();
-      // Broadcast camera state via WebSocket
-      const { isMuted: m, isDeafened: d, isScreenSharing: ss } = useVoiceStore.getState();
-      wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: willEnable, isScreenSharing: ss }, voiceOrigin);
+      broadcastVoiceStatus();
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle camera:', err);
     }
@@ -64,14 +63,10 @@ export function VoiceControls() {
     try {
       if (!isScreenSharing) {
         const started = await startScreenShare(room);
-        if (started) {
-          const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-          wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: true }, voiceOrigin);
-        }
+        if (started) broadcastVoiceStatus();
       } else {
         await stopScreenShare(room);
-        const { isMuted: m, isDeafened: d, isCameraOn: c } = useVoiceStore.getState();
-        wsSend({ type: 'voice_status', isMuted: m, isDeafened: d, isCameraOn: c, isScreenSharing: false }, voiceOrigin);
+        broadcastVoiceStatus();
       }
     } catch (err) {
       console.error('[VoiceControls] Failed to toggle screen share:', err);

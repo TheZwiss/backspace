@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
+import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useSpaceStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
-  const { addVoiceUser, removeVoiceUser, clearAllVoiceUsers, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
+  const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
     case 'ready':
@@ -150,12 +151,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
         useChatStore.getState().setReadStates(event.readStates, channelLastMessageIds, originChannelIds);
       }
 
-      // Clear voice state for the reconnecting origin before repopulating
-      if (isHome) {
-        clearAllVoiceUsers();
-      } else {
-        clearVoiceUsersForOrigin(origin);
-      }
+      // Clear voice state only for the reconnecting origin before repopulating
+      clearVoiceUsersForOrigin(origin);
       if (event.voiceStates) {
         for (const [channelId, userIds] of Object.entries(event.voiceStates)) {
           setVoiceUsers(channelId, userIds);
@@ -203,20 +200,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
         // Single atomic update
         useVoiceStore.setState({ serverMutedUserIds: nextServerMuted, serverDeafenedUserIds: nextServerDeafened });
 
-        // Enforce local mute/deafen to match server restrictions (one-directional: only force-mute, never auto-unmute)
-        const myReadyId = useAuthStore.getState().user?.id;
-        if (myReadyId) {
-          const vs = useVoiceStore.getState();
-          const activeSpaceId = vs.currentVoiceChannelId ? useSpaceStore.getState().channelToSpaceMap.get(vs.currentVoiceChannelId) : null;
-          if (activeSpaceId) {
-            const key = `${activeSpaceId}:${myReadyId}`;
-            if (nextServerDeafened.has(key) && !vs.isDeafened) {
-              useVoiceStore.setState({ isMuted: true, isDeafened: true });
-            } else if (nextServerMuted.has(key) && !vs.isMuted) {
-              useVoiceStore.setState({ isMuted: true });
-            }
-          }
-        }
+        // With decoupled state, user intent is never force-set by the server.
+        // Effective state (intent || serverEnforcement) is computed reactively
+        // at broadcast and hardware time.
       }
 
       // Re-register in voice channel after WS reconnect — the server lost
@@ -225,14 +211,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // tabs can reconnect WS but not LiveKit — sending voice_join without
       // an active media plane would create ghost users in the sidebar.
       {
-        const { currentVoiceChannelId, isLiveKitConnected, isMuted, isDeafened, isCameraOn, isScreenSharing } = useVoiceStore.getState();
+        const { currentVoiceChannelId, isLiveKitConnected } = useVoiceStore.getState();
         if (currentVoiceChannelId && isLiveKitConnected) {
           const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
           if (voiceOrigin === origin) {
             const myId = event.user.id;
             if (myId) addVoiceUser(currentVoiceChannelId, myId);
             wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
-            wsSend({ type: 'voice_status', isMuted, isDeafened, isCameraOn, isScreenSharing }, origin);
+            broadcastVoiceStatus(origin);
           }
         }
       }
@@ -319,101 +305,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_server_muted': {
       const { setServerMutedUser } = useVoiceStore.getState();
       setServerMutedUser(event.spaceId, event.userId, event.muted);
-      
-      const checkMute = (myUserId: string | undefined) => {
-        if (event.userId === myUserId) {
-          if (event.muted) {
-            // Force-mute the mic
-            const vs = useVoiceStore.getState();
-            if (!vs.isMuted) {
-              useVoiceStore.setState({ isMuted: true });
-              const fresh = useVoiceStore.getState();
-              const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
-              wsSend({ type: 'voice_status', isMuted: true, isDeafened: fresh.isDeafened, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
-            }
-          } else {
-            // Server unmuted — auto-restore mic unless still server-deafened
-            const vs = useVoiceStore.getState();
-            if (!vs.serverDeafenedUserIds.has(`${event.spaceId}:${myUserId}`) && vs.isMuted) {
-              useVoiceStore.setState({ isMuted: false });
-              const fresh = useVoiceStore.getState();
-              const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
-              wsSend({ type: 'voice_status', isMuted: false, isDeafened: fresh.isDeafened, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
-            }
-          }
-        }
-      };
-
-      if (isHome) {
-        checkMute(useAuthStore.getState().user?.id);
-      } else {
-        import('../stores/spaceStore').then(({ getMyUserIdForOrigin }) => {
-          checkMute(getMyUserIdForOrigin(origin));
-        });
-      }
+      // Broadcast effective state if this targets the current user
+      const myMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+      if (event.userId === myMuteId) broadcastVoiceStatus();
       break;
     }
 
     case 'voice_server_deafened': {
       const { setServerDeafenedUser } = useVoiceStore.getState();
       setServerDeafenedUser(event.spaceId, event.userId, event.deafened);
-
-      const checkDeafen = (myUid: string | undefined) => {
-        if (event.userId === myUid) {
-          if (event.deafened) {
-            // Force-deafen (smart toggle sets both muted+deafened)
-            const vs = useVoiceStore.getState();
-            if (!vs.isDeafened) {
-              useVoiceStore.setState({ isMuted: true, isDeafened: true });
-              const fresh = useVoiceStore.getState();
-              const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
-              wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
-              // Broadcast deafen to in-room participants via LiveKit data channel
-              import('./useLiveKit').then(({ getActiveRoom }) => {
-                const room = getActiveRoom();
-                if (room) {
-                  const encoder = new TextEncoder();
-                  room.localParticipant.publishData(
-                    encoder.encode(JSON.stringify({ type: 'deafen', deafened: true })),
-                    { reliable: true }
-                  ).catch(() => {});
-                }
-              });
-            }
-          } else {
-            // Server un-deafened — auto-restore
-            const vs = useVoiceStore.getState();
-            if (vs.isDeafened) {
-              const stillServerMuted = vs.serverMutedUserIds.has(`${event.spaceId}:${myUid}`);
-              useVoiceStore.setState({
-                isDeafened: false,
-                ...(stillServerMuted ? {} : { isMuted: false }),
-              });
-              const fresh = useVoiceStore.getState();
-              const voiceOrigin = fresh.currentVoiceChannelId ? getChannelOrigin(fresh.currentVoiceChannelId) : '';
-              wsSend({ type: 'voice_status', isMuted: fresh.isMuted, isDeafened: false, isCameraOn: fresh.isCameraOn, isScreenSharing: fresh.isScreenSharing }, voiceOrigin);
-              // Broadcast undeafen via LiveKit data channel
-              import('./useLiveKit').then(({ getActiveRoom }) => {
-                const room = getActiveRoom();
-                if (room) {
-                  const encoder = new TextEncoder();
-                  room.localParticipant.publishData(
-                    encoder.encode(JSON.stringify({ type: 'deafen', deafened: false })),
-                    { reliable: true }
-                  ).catch(() => {});
-                }
-              });
-            }
-          }
-        }
-      };
-
-      if (isHome) {
-        checkDeafen(useAuthStore.getState().user?.id);
-      } else {
-        import('../stores/spaceStore').then(({ getMyUserIdForOrigin }) => {
-          checkDeafen(getMyUserIdForOrigin(origin));
-        });
+      // Broadcast effective state if this targets the current user
+      const myDeafenId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+      if (event.userId === myDeafenId) {
+        broadcastVoiceStatus();
+        broadcastDeafenViaLiveKit();
       }
       break;
     }
