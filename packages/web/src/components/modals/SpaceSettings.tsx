@@ -9,6 +9,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
 import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
+import { BansPanel } from './spaceSettingsPanels/BansPanel';
 import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 function DiscoveryPanel({ spaceId }: { spaceId: string }) {
@@ -269,13 +270,14 @@ export function SpaceSettingsModal() {
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
-  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles'>('overview');
+  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles' | 'bans'>('overview');
 
   const isOpen = activeModal === 'spaceSettings';
   const space = spaces.find(s => s.id === currentSpaceId);
   const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
   const canManageSpace = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_SPACE);
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
+  const canBanMembers = hasPermissionBit(mySpacePerms, PermissionBits.BAN_MEMBERS);
 
   if (!space || !currentSpaceId) return null;
 
@@ -306,6 +308,11 @@ export function SpaceSettingsModal() {
                 Roles
               </button>
             )}
+            {canBanMembers && (
+              <button onClick={() => setTab('bans')} className={tabClass('bans')}>
+                Bans
+              </button>
+            )}
           </div>
         </div>
 
@@ -315,6 +322,7 @@ export function SpaceSettingsModal() {
           {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
           {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
           {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
+          {tab === 'bans' && canBanMembers && <BansPanel spaceId={currentSpaceId} />}
         </div>
       </div>
     </Modal>

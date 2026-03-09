@@ -237,11 +237,14 @@ export type ClientEvent =
   | { type: 'dm_call_reject'; dmChannelId: string }
   | { type: 'dm_call_end'; dmChannelId: string }
   | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
+  | { type: 'voice_server_mute'; userId: string; muted: boolean }
+  | { type: 'voice_server_deafen'; userId: string; deafened: boolean }
+  | { type: 'voice_move'; userId: string; targetChannelId: string }
   | { type: 'ping' };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[] }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; serverVoiceStates?: Record<string, { serverMuted: boolean; serverDeafened: boolean }> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -276,6 +279,10 @@ export type ServerEvent =
   | { type: 'join_request_received'; request: JoinRequest }
   | { type: 'join_request_accepted'; request: JoinRequest; space: SpaceWithChannelsAndMembers }
   | { type: 'join_request_declined'; request: JoinRequest }
+  | { type: 'voice_server_muted'; userId: string; channelId: string; muted: boolean }
+  | { type: 'voice_server_deafened'; userId: string; channelId: string; deafened: boolean }
+  | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
+  | { type: 'member_banned'; spaceId: string; reason: string | null }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 

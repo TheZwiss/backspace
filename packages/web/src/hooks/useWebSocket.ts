@@ -167,6 +167,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
           setVoiceUserStatus(uid, status.isMuted, status.isDeafened, status.isCameraOn, status.isScreenSharing);
         }
       }
+      // Populate server mute/deafen states
+      if (event.serverVoiceStates) {
+        const { setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
+        for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
+          if (state.serverMuted) setServerMutedUser(uid, true);
+          if (state.serverDeafened) setServerDeafenedUser(uid, true);
+        }
+      }
 
       // Re-register in voice channel after WS reconnect — the server lost
       // voice state on restart, so we must tell it we're still connected.
@@ -265,6 +273,56 @@ function handleEvent(origin: string, event: ServerEvent): void {
       setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened, event.isCameraOn, event.isScreenSharing);
       break;
 
+    case 'voice_server_muted': {
+      const { setServerMutedUser } = useVoiceStore.getState();
+      setServerMutedUser(event.userId, event.muted);
+      // If the local user was server-muted, force-mute the mic
+      const myUserId = useAuthStore.getState().user?.id;
+      if (event.userId === myUserId && event.muted) {
+        const vs = useVoiceStore.getState();
+        if (!vs.isMuted) {
+          vs.toggleMic();
+          const voiceOrigin = vs.currentVoiceChannelId ? getChannelOrigin(vs.currentVoiceChannelId) : '';
+          wsSend({ type: 'voice_status', isMuted: true, isDeafened: vs.isDeafened, isCameraOn: vs.isCameraOn, isScreenSharing: vs.isScreenSharing }, voiceOrigin);
+        }
+      }
+      break;
+    }
+
+    case 'voice_server_deafened': {
+      const { setServerDeafenedUser } = useVoiceStore.getState();
+      setServerDeafenedUser(event.userId, event.deafened);
+      // If the local user was server-deafened, force-deafen and force-mute
+      const myUid = useAuthStore.getState().user?.id;
+      if (event.userId === myUid && event.deafened) {
+        const vs = useVoiceStore.getState();
+        if (!vs.isDeafened) {
+          vs.toggleDeafen();
+          if (!vs.isMuted) vs.toggleMic();
+          const voiceOrigin = vs.currentVoiceChannelId ? getChannelOrigin(vs.currentVoiceChannelId) : '';
+          wsSend({ type: 'voice_status', isMuted: true, isDeafened: true, isCameraOn: vs.isCameraOn, isScreenSharing: vs.isScreenSharing }, voiceOrigin);
+        }
+      }
+      break;
+    }
+
+    case 'voice_moved': {
+      // The local user was moved to a different channel by a moderator
+      const myMovedId = useAuthStore.getState().user?.id;
+      if (event.userId === myMovedId) {
+        // Import dynamically to avoid circular deps — joinVoiceChannel handles
+        // leaving old channel, setting new channel, and triggering LiveKit reconnect
+        import('../utils/voice').then(({ joinVoiceChannel }) => {
+          // Force-set the channel (joinVoiceChannel skips if same channel)
+          const vs = useVoiceStore.getState();
+          // Clear current channel first so joinVoiceChannel doesn't bail
+          vs.setCurrentVoiceChannel(null);
+          joinVoiceChannel(event.newChannelId);
+        });
+      }
+      break;
+    }
+
     case 'member_joined':
       if (!isHome) normalizeUserAssets(event.member.user, origin);
       addMember(event.member);
@@ -273,6 +331,13 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'member_left':
       removeMember(event.userId);
       break;
+
+    case 'member_banned': {
+      // The current user has been banned from a space — remove it from the sidebar
+      const { removeSpace: rmSpace } = useSpaceStore.getState();
+      rmSpace(event.spaceId);
+      break;
+    }
 
     // ─── DM events (home-only) ──────────────────────────────────────────────
 

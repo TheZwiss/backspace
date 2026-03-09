@@ -197,6 +197,16 @@ export const instanceSettings = sqliteTable('instance_settings', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+export const bans = sqliteTable('bans', {
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reason: text('reason'),
+  bannedBy: text('banned_by').notNull().references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.spaceId, table.userId] }),
+}));
+
 export const joinRequests = sqliteTable('join_requests', {
   id: text('id').primaryKey(),
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),

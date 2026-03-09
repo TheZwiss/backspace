@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { MessageWithUser } from '@backspace/shared';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
@@ -53,9 +54,16 @@ export function MessageList({ channelId }: MessageListProps) {
   const prevMessagesLength = useRef(0);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
+  const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
+  const isDm = isDmChannel(channelId);
+  const canReadHistory = isDm || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
+
   useEffect(() => {
-    loadMessages(channelId);
-  }, [channelId, loadMessages]);
+    if (canReadHistory) {
+      loadMessages(channelId);
+    }
+  }, [channelId, loadMessages, canReadHistory]);
 
   // Ack channel when messages load or when new messages arrive while near bottom
   useEffect(() => {
@@ -134,6 +142,14 @@ export function MessageList({ channelId }: MessageListProps) {
       setIsLoadingMore(false);
     }
   }, [channelId, hasMore, isLoadingMore, loadMoreMessages]);
+
+  if (!canReadHistory) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <span className="text-txt-tertiary text-[14px]">You do not have permission to view message history in this channel</span>
+      </div>
+    );
+  }
 
   if (isLoading && messages.length === 0) {
     return (

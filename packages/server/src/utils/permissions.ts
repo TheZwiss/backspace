@@ -155,3 +155,14 @@ export function isDmMember(dmChannelId: string, userId: string): boolean {
     .get();
   return member !== undefined;
 }
+
+export function isBanned(spaceId: string, userId: string): boolean {
+  const db = getDb();
+  const ban = db.select().from(schema.bans)
+    .where(and(
+      eq(schema.bans.spaceId, spaceId),
+      eq(schema.bans.userId, userId),
+    ))
+    .get();
+  return ban !== undefined;
+}

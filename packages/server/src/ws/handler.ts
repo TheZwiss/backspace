@@ -77,6 +77,9 @@ class ConnectionManager {
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Server-muted/deafened users (moderator action)
+  private serverMutedUsers: Set<string> = new Set();
+  private serverDeafenedUsers: Set<string> = new Set();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -301,6 +304,7 @@ class ConnectionManager {
 
     room.participants.delete(userId);
     this.userToRoom.delete(userId);
+    this.clearServerVoiceState(userId);
 
     // Auto-cleanup empty space rooms (they're lazy-created)
     if (room.participants.size === 0 && room.roomType === 'space') {
@@ -380,6 +384,29 @@ class ConnectionManager {
 
   clearVoiceUserStatus(userId: string): void {
     this.voiceUserStates.delete(userId);
+  }
+
+  setServerMuted(userId: string, muted: boolean): void {
+    if (muted) this.serverMutedUsers.add(userId);
+    else this.serverMutedUsers.delete(userId);
+  }
+
+  isServerMuted(userId: string): boolean {
+    return this.serverMutedUsers.has(userId);
+  }
+
+  setServerDeafened(userId: string, deafened: boolean): void {
+    if (deafened) this.serverDeafenedUsers.add(userId);
+    else this.serverDeafenedUsers.delete(userId);
+  }
+
+  isServerDeafened(userId: string): boolean {
+    return this.serverDeafenedUsers.has(userId);
+  }
+
+  clearServerVoiceState(userId: string): void {
+    this.serverMutedUsers.delete(userId);
+    this.serverDeafenedUsers.delete(userId);
   }
 
   getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
@@ -536,6 +563,7 @@ function buildReadyPayload(userId: string): {
   folders: SpaceFolder[];
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
+  serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean }>;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
 } {
@@ -847,6 +875,21 @@ function buildReadyPayload(userId: string): {
     }
   }
 
+  // Build server mute/deafen states for users currently in voice
+  const serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean }> = {};
+  for (const chId of Object.keys(voiceStates)) {
+    const usersInChannel = voiceStates[chId];
+    if (usersInChannel) {
+      for (const uid of usersInChannel) {
+        const sm = connectionManager.isServerMuted(uid);
+        const sd = connectionManager.isServerDeafened(uid);
+        if (sm || sd) {
+          serverVoiceStates[uid] = { serverMuted: sm, serverDeafened: sd };
+        }
+      }
+    }
+  }
+
   // Fetch read states for unread tracking
   const readStateRows = db.select()
     .from(schema.readStates)
@@ -858,7 +901,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, readStates, activeCalls };
+  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, serverVoiceStates, readStates, activeCalls };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { AccessToken } from 'livekit-server-sdk';
+import { AccessToken, TrackSource } from 'livekit-server-sdk';
 import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
-import { getChannelSpaceId, hasPermission, isDmMember, PermissionBits } from '../utils/permissions.js';
+import { getChannelSpaceId, hasPermission, computePermissions, isDmMember, PermissionBits } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@backspace/shared';
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
@@ -17,6 +17,10 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
 
     // Determine room name based on channel type
     let roomName: string;
+
+    // Default: full publish (DM calls always get full permissions)
+    let canSpeak = true;
+    let canStream = true;
 
     if (dmChannelId && typeof dmChannelId === 'string') {
       // DM call token
@@ -33,6 +37,10 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       if (!hasPermission(request.userId, spaceId, PermissionBits.CONNECT, channelId)) {
         return reply.code(403).send({ error: 'Missing CONNECT permission', statusCode: 403 });
       }
+      // Check SPEAK and STREAM permissions for granular token grants
+      const perms = computePermissions(request.userId, spaceId, channelId);
+      canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+      canStream = (perms & PermissionBits.STREAM) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
       roomName = channelId;
     } else {
       return reply.code(400).send({ error: 'channelId or dmChannelId is required', statusCode: 400 });
@@ -45,10 +53,21 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       ttl: '1h',
     });
 
+    // Build canPublishSources based on permissions
+    const canPublishSources: TrackSource[] = [];
+    if (canSpeak) {
+      canPublishSources.push(TrackSource.MICROPHONE);
+      canPublishSources.push(TrackSource.CAMERA);
+    }
+    if (canStream) {
+      canPublishSources.push(TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO);
+    }
+
     token.addGrant({
       room: roomName,
       roomJoin: true,
-      canPublish: true,
+      canPublish: canSpeak || canStream,
+      canPublishSources,
       canSubscribe: true,
       canPublishData: true,
     });

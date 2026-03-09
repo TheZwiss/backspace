@@ -1,50 +1,76 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { useAuthStore } from '../../stores/authStore';
+import { Avatar } from '../ui/Avatar';
+import { VoiceModContextMenu } from './VoiceModContextMenu';
 
 const EMPTY_VOICE_USERS: string[] = [];
-import { useSpaceStore } from '../../stores/spaceStore';
-import { Avatar } from '../ui/Avatar';
 
 interface VoiceChannelProps {
   channelId: string;
   channelName: string;
   onClick: () => void;
+  locked?: boolean;
 }
 
-export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelProps) {
+export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceChannelProps) {
   const voiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
   const localIsDeafened = useVoiceStore((s) => s.isDeafened);
   const localIsMuted = useVoiceStore((s) => s.isMuted);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
+  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
+  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
   const currentUserId = useVoiceStore((s) => {
-    // Derive from participants — avoids unnecessary authStore dependency
     const local = s.participants.find(p => p.isLocal);
     return local?.userId ?? null;
   });
   const members = useSpaceStore((s) => s.members);
+  const myUser = useAuthStore((s) => s.user);
   const isActive = currentVoiceChannel === channelId;
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; userId: string } | null>(null);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, userId: string) => {
+      if (userId === myUser?.id) return;
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, userId });
+    },
+    [myUser?.id],
+  );
 
   return (
     <div>
       <button
         onClick={onClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
-          isActive
-            ? 'bg-surface-elevated text-txt-primary'
-            : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+          locked
+            ? 'text-txt-tertiary/50 cursor-not-allowed'
+            : isActive
+              ? 'bg-surface-elevated text-txt-primary'
+              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
         }`}
+        title={locked ? "You don't have permission to connect to this channel" : undefined}
       >
-        {isActive && (
+        {isActive && !locked && (
           <div
             className="absolute -left-[2px] top-1/2 -translate-y-1/2 w-[3px] bg-white rounded-r-full"
             style={{ height: '55%', opacity: 0.7 }}
           />
         )}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
-          <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
-        </svg>
+        {locked ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]/50">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
+            <path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46ZM19.07 4.93C20.91 6.77 22 9.28 22 12C22 14.72 20.91 17.23 19.07 19.07L17.66 17.66C19.11 16.21 20 14.21 20 12C20 9.79 19.11 7.79 17.66 6.34L19.07 4.93Z" />
+          </svg>
+        )}
         <span className="truncate text-[15px] font-medium">{channelName}</span>
       </button>
 
@@ -57,8 +83,6 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
             const displayName = member?.user.displayName ?? member?.user.username ?? participant?.username ?? userId;
             const avatar = member?.user.avatar ?? null;
             const status = member?.user.status;
-            // Resolve status: for local user use store directly, for remote users
-            // try LiveKit participant first, then fall back to WebSocket voiceUserStates
             const wsStatus = voiceUserStates.get(userId);
             const isParticipantDeafened = userId === currentUserId
               ? localIsDeafened
@@ -68,9 +92,15 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
               : (participant?.isMuted ?? wsStatus?.isMuted ?? false);
             const hasCamera = participant?.isCameraOn ?? wsStatus?.isCameraOn ?? false;
             const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
+            const isServerMuted = serverMutedUserIds.has(userId);
+            const isServerDeafened = serverDeafenedUserIds.has(userId);
 
             return (
-              <div key={userId} className="flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors">
+              <div
+                key={userId}
+                className="flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors"
+                onContextMenu={(e) => handleContextMenu(e, userId)}
+              >
                 <Avatar
                   src={avatar}
                   name={displayName}
@@ -81,14 +111,31 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {isMuted && (
+                  {isServerMuted && (
+                    <span title="Server Muted">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                        <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                  )}
+                  {isServerDeafened && (
+                    <span title="Server Deafened">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
+                        <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
+                        <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                  )}
+                  {!isServerMuted && isMuted && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
                       <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                       <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
                       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                   )}
-                  {isParticipantDeafened && (
+                  {!isServerDeafened && isParticipantDeafened && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
                       <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
@@ -107,6 +154,16 @@ export function VoiceChannel({ channelId, channelName, onClick }: VoiceChannelPr
             );
           })}
         </div>
+      )}
+
+      {/* Voice moderation context menu (portalled to body) */}
+      {contextMenu && (
+        <VoiceModContextMenu
+          targetUserId={contextMenu.userId}
+          channelId={channelId}
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from '.
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { MemberWithUser } from '@backspace/shared';
 
 interface MessageInputProps {
@@ -30,6 +31,12 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const members = useSpaceStore((s) => s.members);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
+  const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
+  const isDm = isDmChannel(channelId);
+  const canSendMessages = isDm || hasPermissionBit(channelPerms, PermissionBits.SEND_MESSAGES);
+  const canAttachFiles = isDm || hasPermissionBit(channelPerms, PermissionBits.ATTACH_FILES);
 
   // Auto-focus textarea on channel navigation
   useEffect(() => {
@@ -230,6 +237,16 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     textarea.style.height = Math.min(textarea.scrollHeight, 300) + 'px';
   };
 
+  if (!canSendMessages) {
+    return (
+      <div data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
+        <div className="flex items-center justify-center py-[14px] px-4">
+          <span className="text-txt-tertiary text-[14px]">You do not have permission to send messages in this channel</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
       <TypingIndicator channelId={channelId} />
@@ -252,8 +269,8 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
       <div
         ref={inputContainerRef}
         className={`relative bg-surface-input md:bg-transparent ${replyTo ? 'rounded-b-lg' : 'rounded-lg md:rounded-none'} overflow-visible`}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
+        onDrop={canAttachFiles ? handleDrop : undefined}
+        onDragOver={canAttachFiles ? handleDragOver : undefined}
       >
         {/* Mention autocomplete popover */}
         {mentionState && filteredMembers.length > 0 && (
@@ -299,15 +316,17 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
         <div className="flex items-center pl-[10px] pr-1">
           {/* File attach button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
-            title="Attach file"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
-            </svg>
-          </button>
+          {canAttachFiles && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
+              title="Attach file"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+              </svg>
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -328,7 +347,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             value={content}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
+            onPaste={canAttachFiles ? handlePaste : undefined}
             placeholder={`Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
             className="flex-1 py-[10px] px-1 bg-transparent text-txt-primary placeholder-txt-tertiary/60 outline-none resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}

@@ -116,6 +116,18 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Ensure bans table exists (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bans (
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT,
+      banned_by TEXT NOT NULL REFERENCES users(id),
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (space_id, user_id)
+    );
+  `);
+
   // Ensure join_requests table exists (idempotent)
   db.exec(`
     CREATE TABLE IF NOT EXISTS join_requests (

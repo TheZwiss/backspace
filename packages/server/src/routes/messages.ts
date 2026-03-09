@@ -260,6 +260,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing SEND_MESSAGES permission', statusCode: 403 });
     }
 
+    if (attachmentIds && attachmentIds.length > 0 &&
+        !hasPermission(request.userId, spaceId, PermissionBits.ATTACH_FILES, id)) {
+      return reply.code(403).send({ error: 'Missing ATTACH_FILES permission', statusCode: 403 });
+    }
+
     if ((!content || typeof content !== 'string' || content.trim().length === 0) &&
         (!attachmentIds || attachmentIds.length === 0)) {
       return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });

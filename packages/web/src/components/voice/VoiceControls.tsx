@@ -6,6 +6,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -28,6 +29,12 @@ export function VoiceControls() {
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  const channelPerms = useSpaceStore((s) => currentVoiceChannelId ? s.channelPermissions.get(currentVoiceChannelId) : undefined);
+
+  // In DM calls, all permissions are granted; in space channels, check SPEAK and STREAM
+  const isDmCall = !!activeDmCall;
+  const canSpeak = isDmCall || hasPermissionBit(channelPerms, PermissionBits.SPEAK);
+  const canStream = isDmCall || hasPermissionBit(channelPerms, PermissionBits.STREAM);
 
   const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
 
@@ -155,41 +162,45 @@ export function VoiceControls() {
 
       {/* Row 2: Camera, Screen Share, Video Quality, Noise Suppression */}
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
-        <button
-          onClick={handleCamera}
-          className={`${btnBase} ${
-            isCameraOn
-              ? 'bg-surface-base text-status-online hover:bg-surface-channel'
-              : btnDefaultStyle
-          }`}
-          title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-        >
-          {isCameraOn ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            </svg>
-          )}
-        </button>
+        {canSpeak && (
+          <button
+            onClick={handleCamera}
+            className={`${btnBase} ${
+              isCameraOn
+                ? 'bg-surface-base text-status-online hover:bg-surface-channel'
+                : btnDefaultStyle
+            }`}
+            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+          >
+            {isCameraOn ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        )}
 
-        <button
-          onClick={handleScreenShare}
-          className={`${btnBase} ${
-            isScreenSharing
-              ? 'bg-surface-base text-status-online hover:bg-surface-channel'
-              : btnDefaultStyle
-          }`}
-          title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
-            <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
-          </svg>
-        </button>
+        {canStream && (
+          <button
+            onClick={handleScreenShare}
+            className={`${btnBase} ${
+              isScreenSharing
+                ? 'bg-surface-base text-status-online hover:bg-surface-channel'
+                : btnDefaultStyle
+            }`}
+            title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
+              <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
+            </svg>
+          </button>
+        )}
 
         {/* Video Quality */}
         <button

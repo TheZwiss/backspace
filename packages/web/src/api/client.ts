@@ -59,6 +59,9 @@ export class BackspaceApiClient {
     members: (id: string) => Promise<MemberWithUser[]>;
     updateMember: (spaceId: string, userId: string, data: UpdateMemberRequest) => Promise<MemberWithUser>;
     removeMember: (spaceId: string, userId: string) => Promise<{ success: boolean }>;
+    getBans: (spaceId: string) => Promise<{ spaceId: string; userId: string; reason: string | null; bannedBy: string; createdAt: number; user: any; moderator: any }[]>;
+    ban: (spaceId: string, userId: string, reason?: string) => Promise<{ success: boolean }>;
+    unban: (spaceId: string, userId: string) => Promise<{ success: boolean }>;
   };
 
   readonly channels: {
@@ -223,6 +226,12 @@ export class BackspaceApiClient {
         request<MemberWithUser>('PATCH', `/spaces/${spaceId}/members/${userId}`, data),
       removeMember: (spaceId: string, userId: string) =>
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/members/${userId}`),
+      getBans: (spaceId: string) =>
+        request<any[]>('GET', `/spaces/${spaceId}/bans`),
+      ban: (spaceId: string, userId: string, reason?: string) =>
+        request<{ success: boolean }>('POST', `/spaces/${spaceId}/bans`, { userId, reason }),
+      unban: (spaceId: string, userId: string) =>
+        request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/bans/${userId}`),
     };
 
     this.channels = {

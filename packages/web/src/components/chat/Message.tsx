@@ -54,6 +54,8 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const myChPerms = channelPermissions.get(message.channelId);
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canDelete = isAuthor || canManageMessages;
+  const isDmMessage = !!(message as any).dmChannelId || !message.channelId;
+  const canAddReactions = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.ADD_REACTIONS);
 
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
@@ -66,7 +68,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     const hasReacted = message.reactions?.some(r => isOwnReaction(r) && r.emoji === emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);
-    } else {
+    } else if (canAddReactions) {
       addReaction(message.id, emoji);
     }
   };
@@ -324,17 +326,19 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
       {/* Action buttons on hover */}
       {isHovered && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
-          <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
-            {['👍', '❤️', '😂', '😮'].map(emoji => (
-              <button
-                key={emoji}
-                onClick={() => toggleReaction(emoji)}
-                className="p-1 hover:bg-interactive-hover rounded transition-colors text-[16px] leading-none"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+          {canAddReactions && (
+            <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
+              {['👍', '❤️', '😂', '😮'].map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => toggleReaction(emoji)}
+                  className="p-1 hover:bg-interactive-hover rounded transition-colors text-[16px] leading-none"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => setReplyTo(message)}
             className="px-2 h-full text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex items-center justify-center"

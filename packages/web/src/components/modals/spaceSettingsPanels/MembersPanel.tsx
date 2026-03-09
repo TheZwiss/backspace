@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Avatar } from '../../ui/Avatar';
-import { useSpaceStore } from '../../../stores/spaceStore';
+import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { api } from '../../../api/client';
+import { parseFederatedUsername } from '../../../utils/identity';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 import type { MemberWithUser } from '@backspace/shared';
 
@@ -19,9 +19,11 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
   const space = spaces.find((s) => s.id === spaceId);
+  const spaceApi = getApiForOrigin(space?._instanceOrigin ?? '');
   const myPerms = spacePermissions.get(spaceId);
   const canManageRoles = hasPermissionBit(myPerms, PermissionBits.MANAGE_ROLES);
   const canKick = hasPermissionBit(myPerms, PermissionBits.KICK_MEMBERS);
+  const canBan = hasPermissionBit(myPerms, PermissionBits.BAN_MEMBERS);
 
   const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
     const roleIds = pendingRoleChanges.get(userId);
     if (!roleIds) return;
     try {
-      await api.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
       setPendingRoleChanges((prev) => {
         const next = new Map(prev);
         next.delete(userId);
@@ -75,10 +77,19 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
 
   const handleKick = async (userId: string) => {
     try {
-      await api.spaces.removeMember(spaceId, userId);
+      await spaceApi.spaces.removeMember(spaceId, userId);
       await loadSpaceDetail(spaceId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to kick member');
+    }
+  };
+
+  const handleBan = async (userId: string) => {
+    try {
+      await spaceApi.spaces.ban(spaceId, userId);
+      await loadSpaceDetail(spaceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to ban member');
     }
   };
 
@@ -99,6 +110,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
         <div className="rounded-lg bg-white/[0.02] p-2">
           <div className="space-y-0.5">
             {members.map((member) => {
+              const { domain } = parseFederatedUsername(member.user.username);
               const displayName = member.user.displayName ?? member.user.username;
               const isOwner = member.userId === space.ownerId;
               const memberRoleIds = getMemberRoleIds(member);
@@ -127,7 +139,12 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                         user={member.user}
                       />
                       <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{displayName}</div>
+                        <div className="text-sm font-medium truncate">
+                          {displayName}
+                          {domain && (
+                            <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{domain}</span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1 flex-wrap">
                           {isOwner && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
@@ -151,6 +168,14 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                     </div>
 
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      {canBan && member.userId !== currentUser?.id && !isOwner && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleBan(member.userId); }}
+                          className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+                        >
+                          Ban
+                        </button>
+                      )}
                       {canKick && member.userId !== currentUser?.id && !isOwner && (
                         <button
                           onClick={(e) => { e.stopPropagation(); handleKick(member.userId); }}

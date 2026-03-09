@@ -1,6 +1,10 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { VoiceModMenuItems } from './VoiceModContextMenu';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { UserTile } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
@@ -13,6 +17,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
   const { participant } = tile;
   const isDeafened = useVoiceStore((s) => s.isDeafened);
+  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
 
@@ -50,6 +55,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   }, [tile.lkVideoTrack]);
 
   // Context Menu
+  const menuRef = useRef<HTMLDivElement>(null);
   const [volumeMenu, setVolumeMenu] = useState<{
     x: number;
     y: number;
@@ -65,11 +71,31 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
     [isLocal],
   );
 
+  // Click-outside dismissal — mousedown + contains check
   useEffect(() => {
     if (!volumeMenu) return;
-    const close = () => setVolumeMenu(null);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setVolumeMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [volumeMenu]);
+
+  // Viewport-aware positioning — direct DOM mutation, no state churn
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!volumeMenu || !el) return;
+    const rect = el.getBoundingClientRect();
+    let x = volumeMenu.x;
+    let y = volumeMenu.y;
+    if (rect.right > window.innerWidth) x = window.innerWidth - rect.width - 8;
+    if (rect.bottom > window.innerHeight) y = window.innerHeight - rect.height - 8;
+    if (x < 8) x = 8;
+    if (y < 8) y = 8;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
   }, [volumeMenu]);
 
   return (
@@ -154,44 +180,87 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         </div>
       </div>
 
-      {volumeMenu && !isLocal && (
+      {volumeMenu && !isLocal && ReactDOM.createPortal(
         <div
-          className="fixed z-[60] bg-surface-base rounded-lg shadow-2xl p-3 min-w-[200px] border border-white/[0.06]"
+          ref={menuRef}
+          className="fixed z-[200] bg-surface-elevated rounded-md shadow-elevation-high min-w-[200px] animate-fade-in"
           style={{ left: volumeMenu.x, top: volumeMenu.y }}
-          onClick={(e) => e.stopPropagation()}
         >
-          <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-            User Volume
-          </div>
-          <div className="flex items-center gap-2">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="text-txt-tertiary flex-shrink-0"
-            >
-              <path d="M3 9v6h4l5 5V4L7 9H3z" />
-            </svg>
-            <input
-              type="range"
-              min="0"
-              max="200"
-              value={perUserVolume}
-              onChange={(e) =>
-                setParticipantVolume(
-                  participant.userId,
-                  parseInt(e.target.value),
-                )
-              }
-              className="flex-1 accent-accent-primary h-1"
+          {/* Moderation options (renders nothing if no perms) */}
+          {currentVoiceChannelId && (
+            <VoiceModSection
+              targetUserId={participant.userId}
+              channelId={currentVoiceChannelId}
+              onAction={() => setVolumeMenu(null)}
             />
-            <span className="text-xs text-txt-secondary min-w-[32px] text-right">
-              {perUserVolume}%
-            </span>
+          )}
+          {/* Volume slider */}
+          <div className="p-3">
+            <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
+              User Volume
+            </div>
+            <div className="flex items-center gap-2">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="text-txt-tertiary flex-shrink-0"
+              >
+                <path d="M3 9v6h4l5 5V4L7 9H3z" />
+              </svg>
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={perUserVolume}
+                onChange={(e) =>
+                  setParticipantVolume(
+                    participant.userId,
+                    parseInt(e.target.value),
+                  )
+                }
+                className="flex-1 accent-accent-primary h-1"
+              />
+              <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+                {perUserVolume}%
+              </span>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
+  );
+}
+
+/** Renders moderation items + divider only when the user has mod perms. */
+function VoiceModSection({ targetUserId, channelId, onAction }: {
+  targetUserId: string;
+  channelId: string;
+  onAction: () => void;
+}) {
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const myPerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
+
+  const hasMod =
+    hasPermissionBit(myPerms, PermissionBits.MUTE_MEMBERS) ||
+    hasPermissionBit(myPerms, PermissionBits.DEAFEN_MEMBERS) ||
+    hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
+
+  if (!hasMod) return null;
+
+  return (
+    <>
+      <div className="py-1.5">
+        <VoiceModMenuItems
+          targetUserId={targetUserId}
+          channelId={channelId}
+          onAction={onAction}
+        />
+      </div>
+      <div className="h-px bg-white/[0.06] mx-1.5" />
+    </>
   );
 }

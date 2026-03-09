@@ -3,7 +3,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isSpaceOwner, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
+import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
@@ -411,6 +411,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid invite code', statusCode: 400 });
     }
 
+    if (isBanned(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+    }
+
     if (isMember(id, request.userId)) {
       return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
@@ -461,6 +465,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.inviteCode, inviteCode)).get();
     if (!server) {
       return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
+    }
+
+    if (isBanned(server.id, request.userId)) {
+      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
     }
 
     if (isMember(server.id, request.userId)) {
@@ -928,6 +936,146 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.memberRoles.userId, uid),
       eq(schema.memberRoles.roleId, roleId)
     )).run();
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // ─── Ban Management ───────────────────────────────────────────────────────
+
+  // GET /api/spaces/:id/bans - List bans
+  app.get<{ Params: { id: string } }>('/api/spaces/:id/bans', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
+      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+    }
+
+    const banRows = db.select().from(schema.bans)
+      .where(eq(schema.bans.spaceId, id))
+      .all();
+
+    if (banRows.length === 0) return reply.code(200).send([]);
+
+    const userIds = [...new Set(banRows.map(b => b.userId))];
+    const bannedByIds = [...new Set(banRows.map(b => b.bannedBy))];
+    const allUserIds = [...new Set([...userIds, ...bannedByIds])];
+    const users = db.select().from(schema.users)
+      .where(inArray(schema.users.id, allUserIds))
+      .all();
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    const bans = banRows.map(b => {
+      const user = userMap.get(b.userId);
+      const moderator = userMap.get(b.bannedBy);
+      return {
+        spaceId: b.spaceId,
+        userId: b.userId,
+        reason: b.reason,
+        bannedBy: b.bannedBy,
+        createdAt: b.createdAt,
+        user: user ? sanitizeUser(user) : null,
+        moderator: moderator ? sanitizeUser(moderator) : null,
+      };
+    });
+
+    return reply.code(200).send(bans);
+  });
+
+  // POST /api/spaces/:id/bans - Ban a member
+  app.post<{ Params: { id: string }; Body: { userId: string; reason?: string } }>('/api/spaces/:id/bans', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { userId: targetId, reason } = request.body;
+    const db = getDb();
+
+    if (!targetId || typeof targetId !== 'string') {
+      return reply.code(400).send({ error: 'userId is required', statusCode: 400 });
+    }
+
+    if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
+      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+    }
+
+    // Cannot ban the space owner
+    if (isSpaceOwner(id, targetId)) {
+      return reply.code(400).send({ error: 'Cannot ban the space owner', statusCode: 400 });
+    }
+
+    // Cannot ban yourself
+    if (targetId === request.userId) {
+      return reply.code(400).send({ error: 'Cannot ban yourself', statusCode: 400 });
+    }
+
+    // Check if already banned
+    if (isBanned(id, targetId)) {
+      return reply.code(409).send({ error: 'User is already banned', statusCode: 409 });
+    }
+
+    const now = Date.now();
+
+    db.transaction((tx) => {
+      // Insert ban record
+      tx.insert(schema.bans).values({
+        spaceId: id,
+        userId: targetId,
+        reason: reason?.trim() || null,
+        bannedBy: request.userId,
+        createdAt: now,
+      }).run();
+
+      // Remove member from space
+      tx.delete(schema.spaceMembers).where(and(
+        eq(schema.spaceMembers.spaceId, id),
+        eq(schema.spaceMembers.userId, targetId),
+      )).run();
+
+      // Remove member's role assignments
+      tx.delete(schema.memberRoles).where(and(
+        eq(schema.memberRoles.spaceId, id),
+        eq(schema.memberRoles.userId, targetId),
+      )).run();
+    });
+
+    // Broadcast member_left event so other clients update their member list
+    connectionManager.sendToSpace(id, {
+      type: 'member_left',
+      spaceId: id,
+      userId: targetId,
+    });
+
+    // Notify the banned user
+    connectionManager.sendToUser(targetId, {
+      type: 'member_banned',
+      spaceId: id,
+      reason: reason?.trim() || null,
+    });
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // DELETE /api/spaces/:id/bans/:uid - Unban a user
+  app.delete<{ Params: { id: string; uid: string } }>('/api/spaces/:id/bans/:uid', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id, uid } = request.params;
+    const db = getDb();
+
+    if (!hasPermission(request.userId, id, PermissionBits.BAN_MEMBERS)) {
+      return reply.code(403).send({ error: 'Missing BAN_MEMBERS permission', statusCode: 403 });
+    }
+
+    const result = db.delete(schema.bans).where(and(
+      eq(schema.bans.spaceId, id),
+      eq(schema.bans.userId, uid),
+    )).run();
+
+    if (result.changes === 0) {
+      return reply.code(404).send({ error: 'Ban not found', statusCode: 404 });
+    }
 
     return reply.code(200).send({ success: true });
   });

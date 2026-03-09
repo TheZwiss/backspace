@@ -150,6 +150,15 @@ export function handleClientEvent(
     case 'voice_status':
       handleVoiceStatus(event, userId);
       break;
+    case 'voice_server_mute':
+      handleVoiceServerMute(event, userId);
+      break;
+    case 'voice_server_deafen':
+      handleVoiceServerDeafen(event, userId);
+      break;
+    case 'voice_move':
+      handleVoiceMove(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -708,6 +717,11 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     const spaceId = getChannelSpaceId(message.channelId);
     if (!spaceId || !isMember(spaceId, userId)) return;
 
+    if (!hasPermission(userId, spaceId, PermissionBits.ADD_REACTIONS, message.channelId)) {
+      connectionManager.sendToUser(userId, { type: 'error', message: 'Missing ADD_REACTIONS permission' });
+      return;
+    }
+
     const reactionId = generateSnowflake();
     const now = Date.now();
     try {
@@ -1039,4 +1053,171 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
     type: 'dm_call_ended',
     dmChannelId,
   });
+}
+
+// ─── Voice Moderation Handlers ──────────────────────────────────────────────
+
+function handleVoiceServerMute(event: Record<string, unknown>, userId: string): void {
+  const targetUserId = event.userId as string;
+  const muted = event.muted === true;
+
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'userId is required' });
+    return;
+  }
+
+  // Find the target user's current room
+  const targetRoom = connectionManager.getUserRoom(targetUserId);
+  if (!targetRoom || targetRoom.room.roomType !== 'space') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target user is not in a voice channel' });
+    return;
+  }
+
+  const meta = targetRoom.room.metadata as SpaceRoomMeta;
+  if (!hasPermission(userId, meta.spaceId, PermissionBits.MUTE_MEMBERS, targetRoom.roomId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing MUTE_MEMBERS permission' });
+    return;
+  }
+
+  // Cannot server-mute yourself
+  if (targetUserId === userId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot server-mute yourself' });
+    return;
+  }
+
+  connectionManager.setServerMuted(targetUserId, muted);
+
+  // Broadcast to all space members
+  connectionManager.sendToSpace(meta.spaceId, {
+    type: 'voice_server_muted',
+    userId: targetUserId,
+    channelId: targetRoom.roomId,
+    muted,
+  });
+}
+
+function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string): void {
+  const targetUserId = event.userId as string;
+  const deafened = event.deafened === true;
+
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'userId is required' });
+    return;
+  }
+
+  const targetRoom = connectionManager.getUserRoom(targetUserId);
+  if (!targetRoom || targetRoom.room.roomType !== 'space') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target user is not in a voice channel' });
+    return;
+  }
+
+  const meta = targetRoom.room.metadata as SpaceRoomMeta;
+  if (!hasPermission(userId, meta.spaceId, PermissionBits.DEAFEN_MEMBERS, targetRoom.roomId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing DEAFEN_MEMBERS permission' });
+    return;
+  }
+
+  if (targetUserId === userId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot server-deafen yourself' });
+    return;
+  }
+
+  connectionManager.setServerDeafened(targetUserId, deafened);
+
+  connectionManager.sendToSpace(meta.spaceId, {
+    type: 'voice_server_deafened',
+    userId: targetUserId,
+    channelId: targetRoom.roomId,
+    deafened,
+  });
+}
+
+function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
+  const targetUserId = event.userId as string;
+  const targetChannelId = event.targetChannelId as string;
+
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'userId is required' });
+    return;
+  }
+  if (!targetChannelId || typeof targetChannelId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'targetChannelId is required' });
+    return;
+  }
+
+  // Find the target user's current room
+  const currentRoom = connectionManager.getUserRoom(targetUserId);
+  if (!currentRoom || currentRoom.room.roomType !== 'space') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target user is not in a voice channel' });
+    return;
+  }
+
+  const meta = currentRoom.room.metadata as SpaceRoomMeta;
+  if (!hasPermission(userId, meta.spaceId, PermissionBits.MOVE_MEMBERS, currentRoom.roomId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing MOVE_MEMBERS permission' });
+    return;
+  }
+
+  // Verify target channel exists and is a voice/video channel in the same space
+  const db = getDb();
+  const targetChannel = db.select().from(schema.channels).where(eq(schema.channels.id, targetChannelId)).get();
+  if (!targetChannel || targetChannel.spaceId !== meta.spaceId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target channel not found in this space' });
+    return;
+  }
+  if (targetChannel.type !== 'voice' && targetChannel.type !== 'video') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target channel is not a voice channel' });
+    return;
+  }
+  if (targetChannelId === currentRoom.roomId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'User is already in that channel' });
+    return;
+  }
+
+  const oldChannelId = currentRoom.roomId;
+
+  // Leave current room
+  connectionManager.leaveRoom(oldChannelId, targetUserId);
+
+  // Broadcast leave from old channel
+  connectionManager.sendToSpace(meta.spaceId, {
+    type: 'voice_state_update',
+    channelId: oldChannelId,
+    userId: targetUserId,
+    action: 'leave',
+  });
+
+  // Lazy-create target room and join
+  connectionManager.createRoom(targetChannelId, 'space', { type: 'space', spaceId: meta.spaceId });
+  connectionManager.joinRoom(targetChannelId, targetUserId);
+
+  // Broadcast join to new channel
+  connectionManager.sendToSpace(meta.spaceId, {
+    type: 'voice_state_update',
+    channelId: targetChannelId,
+    userId: targetUserId,
+    action: 'join',
+  });
+
+  // Notify the moved user so they reconnect to LiveKit
+  connectionManager.sendToUser(targetUserId, {
+    type: 'voice_moved',
+    userId: targetUserId,
+    oldChannelId,
+    newChannelId: targetChannelId,
+  });
+
+  // Preserve voice user status during move
+  const status = connectionManager.getVoiceUserStatus(targetUserId);
+  if (status) {
+    connectionManager.sendToRoom(targetChannelId, {
+      type: 'voice_status_update',
+      userId: targetUserId,
+      channelId: targetChannelId,
+      isMuted: status.isMuted,
+      isDeafened: status.isDeafened,
+      isCameraOn: status.isCameraOn,
+      isScreenSharing: status.isScreenSharing,
+    });
+  }
 }

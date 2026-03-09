@@ -86,6 +86,12 @@ interface VoiceState {
   voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean) => void;
   clearVoiceUserStatus: (userId: string) => void;
+  // Server mute/deafen state (moderator action)
+  serverMutedUserIds: Set<string>;
+  serverDeafenedUserIds: Set<string>;
+  setServerMutedUser: (userId: string, muted: boolean) => void;
+  setServerDeafenedUser: (userId: string, deafened: boolean) => void;
+  clearServerVoiceStates: () => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
   clearVoiceUsersForOrigin: (origin: string) => void;
@@ -273,6 +279,24 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
 
+      serverMutedUserIds: new Set(),
+      serverDeafenedUserIds: new Set(),
+      setServerMutedUser: (userId, muted) => {
+        set((state) => {
+          const newSet = new Set(state.serverMutedUserIds);
+          if (muted) newSet.add(userId); else newSet.delete(userId);
+          return { serverMutedUserIds: newSet };
+        });
+      },
+      setServerDeafenedUser: (userId, deafened) => {
+        set((state) => {
+          const newSet = new Set(state.serverDeafenedUserIds);
+          if (deafened) newSet.add(userId); else newSet.delete(userId);
+          return { serverDeafenedUserIds: newSet };
+        });
+      },
+      clearServerVoiceStates: () => set({ serverMutedUserIds: new Set(), serverDeafenedUserIds: new Set() }),
+
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
       clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
@@ -352,6 +376,8 @@ export const useVoiceStore = create<VoiceState>()(
         streamVolumes: new Map(),
         streamMutes: new Map(),
         watchingStreams: new Set(),
+        serverMutedUserIds: new Set(),
+        serverDeafenedUserIds: new Set(),
       }),
     }),
     {
