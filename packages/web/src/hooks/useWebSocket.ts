@@ -167,23 +167,26 @@ function handleEvent(origin: string, event: ServerEvent): void {
           setVoiceUserStatus(uid, status.isMuted, status.isDeafened, status.isCameraOn, status.isScreenSharing);
         }
       }
-      // Clear stale server voice states before applying fresh from ready payload
+      // Build new restriction Sets atomically from ready payload, then apply in one setState
       {
-        const { clearServerVoiceStates, setServerMutedUser, setServerDeafenedUser } = useVoiceStore.getState();
-        clearServerVoiceStates();
+        const newServerMuted = new Set<string>();
+        const newServerDeafened = new Set<string>();
         if (event.serverVoiceStates) {
           for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
-            if (state.serverMuted) setServerMutedUser(uid, true);
-            if (state.serverDeafened) setServerDeafenedUser(uid, true);
+            if (state.serverMuted) newServerMuted.add(uid);
+            if (state.serverDeafened) newServerDeafened.add(uid);
           }
         }
+        // Single atomic update — no intermediate empty-Set state
+        useVoiceStore.setState({ serverMutedUserIds: newServerMuted, serverDeafenedUserIds: newServerDeafened });
+
         // Enforce local mute/deafen to match server restrictions (one-directional: only force-mute, never auto-unmute)
         const myReadyId = useAuthStore.getState().user?.id;
         if (myReadyId) {
           const vs = useVoiceStore.getState();
-          if (vs.serverDeafenedUserIds.has(myReadyId) && !vs.isDeafened) {
+          if (newServerDeafened.has(myReadyId) && !vs.isDeafened) {
             useVoiceStore.setState({ isMuted: true, isDeafened: true });
-          } else if (vs.serverMutedUserIds.has(myReadyId) && !vs.isMuted) {
+          } else if (newServerMuted.has(myReadyId) && !vs.isMuted) {
             useVoiceStore.setState({ isMuted: true });
           }
         }

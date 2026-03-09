@@ -875,32 +875,19 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Build server mute/deafen states for users currently in voice
+  // Build server mute/deafen states from DB (authoritative source for all spaces the user belongs to)
   const serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean }> = {};
-  for (const chId of Object.keys(voiceStates)) {
-    const usersInChannel = voiceStates[chId];
-    if (usersInChannel) {
-      for (const uid of usersInChannel) {
-        const sm = connectionManager.isServerMuted(uid);
-        const sd = connectionManager.isServerDeafened(uid);
-        if (sm || sd) {
-          serverVoiceStates[uid] = { serverMuted: sm, serverDeafened: sd };
-        }
-      }
+  if (spaceIds.length > 0) {
+    const allRestrictions = db.select()
+      .from(schema.voiceRestrictions)
+      .where(inArray(schema.voiceRestrictions.spaceId, spaceIds))
+      .all();
+    for (const r of allRestrictions) {
+      const existing = serverVoiceStates[r.userId] ?? { serverMuted: false, serverDeafened: false };
+      if (r.restrictionType === 'mute') existing.serverMuted = true;
+      if (r.restrictionType === 'deafen') existing.serverDeafened = true;
+      serverVoiceStates[r.userId] = existing;
     }
-  }
-
-  // Also include the connecting user's own DB-persisted restrictions
-  // (covers reconnect after disconnect timeout cleared in-memory state)
-  const myRestrictions = db.select()
-    .from(schema.voiceRestrictions)
-    .where(eq(schema.voiceRestrictions.userId, userId))
-    .all();
-  for (const r of myRestrictions) {
-    const existing = serverVoiceStates[userId] ?? { serverMuted: false, serverDeafened: false };
-    if (r.restrictionType === 'mute') existing.serverMuted = true;
-    if (r.restrictionType === 'deafen') existing.serverDeafened = true;
-    serverVoiceStates[userId] = existing;
   }
 
   // Fetch read states for unread tracking

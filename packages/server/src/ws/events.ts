@@ -425,6 +425,35 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
         isScreenSharing: status.isScreenSharing,
       });
     }
+
+    // Re-broadcast persistent restrictions (covers page reload while in voice)
+    const db = getDb();
+    const restrictions = db.select()
+      .from(schema.voiceRestrictions)
+      .where(and(
+        eq(schema.voiceRestrictions.spaceId, spaceId),
+        eq(schema.voiceRestrictions.userId, userId),
+      ))
+      .all();
+    for (const r of restrictions) {
+      if (r.restrictionType === 'mute') {
+        connectionManager.setServerMuted(userId, true);
+        connectionManager.sendToUser(userId, {
+          type: 'voice_server_muted',
+          userId,
+          channelId,
+          muted: true,
+        });
+      } else if (r.restrictionType === 'deafen') {
+        connectionManager.setServerDeafened(userId, true);
+        connectionManager.sendToUser(userId, {
+          type: 'voice_server_deafened',
+          userId,
+          channelId,
+          deafened: true,
+        });
+      }
+    }
     return;
   }
 
