@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
-import type { InstanceStreamingLimits } from '@backspace/shared';
+import { config } from '../config.js';
+import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
 
 const VALID_RESOLUTIONS = [540, 720, 1080];
 const VALID_FRAMERATES = [30, 45, 60];
@@ -125,5 +126,71 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send(rowToLimits(updatedRow));
+  });
+
+  // GET /api/settings/instance — admin only, returns instance admin settings
+  app.get('/api/settings/instance', { preHandler: authenticate }, async (request, reply) => {
+    const db = getDb();
+
+    const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!caller || caller.isAdmin !== 1) {
+      return reply.code(403).send({ error: 'Only instance admins can view instance settings', statusCode: 403 });
+    }
+
+    const row = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    if (!row) {
+      return reply.code(500).send({ error: 'Instance settings not initialized', statusCode: 500 });
+    }
+
+    const response: InstanceAdminSettings = {
+      instanceName: row.instanceName ?? 'Backspace',
+      registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
+      discoveryEnabled: row.discoveryEnabled === 1,
+    };
+
+    return reply.code(200).send(response);
+  });
+
+  // PATCH /api/settings/instance — admin only, updates instance admin settings
+  app.patch<{ Body: Partial<InstanceAdminSettings> }>('/api/settings/instance', { preHandler: authenticate }, async (request, reply) => {
+    const db = getDb();
+
+    const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!caller || caller.isAdmin !== 1) {
+      return reply.code(403).send({ error: 'Only instance admins can modify instance settings', statusCode: 403 });
+    }
+
+    const body = request.body;
+    const updateData: Record<string, number | string> = { updatedAt: Date.now() };
+
+    if (body.instanceName !== undefined) {
+      if (typeof body.instanceName !== 'string' || body.instanceName.trim().length === 0 || body.instanceName.trim().length > 32) {
+        return reply.code(400).send({ error: 'Instance name must be 1-32 characters', statusCode: 400 });
+      }
+      updateData.instanceName = body.instanceName.trim();
+    }
+
+    if (body.registrationOpen !== undefined) {
+      updateData.registrationOpen = body.registrationOpen ? 1 : 0;
+    }
+
+    if (body.discoveryEnabled !== undefined) {
+      updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
+    }
+
+    db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
+
+    const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    if (!updatedRow) {
+      return reply.code(500).send({ error: 'Failed to read updated settings', statusCode: 500 });
+    }
+
+    const response: InstanceAdminSettings = {
+      instanceName: updatedRow.instanceName ?? 'Backspace',
+      registrationOpen: updatedRow.registrationOpen !== null ? updatedRow.registrationOpen === 1 : config.registrationOpen,
+      discoveryEnabled: updatedRow.discoveryEnabled === 1,
+    };
+
+    return reply.code(200).send(response);
   });
 }

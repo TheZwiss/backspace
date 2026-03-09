@@ -10,6 +10,7 @@ type ModalType =
   | 'userSettings'
   | 'spaceSettings'
   | 'channelSettings'
+  | 'instanceSettings'
   | 'imagePreview'
   | 'newDm'
   | 'addDmMember'

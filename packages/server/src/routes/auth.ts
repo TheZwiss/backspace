@@ -71,11 +71,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Password must be at least 6 characters', statusCode: 400 });
     }
 
-    if (!config.registrationOpen) {
+    const db = getDb();
+
+    // Check registration: DB setting overrides env var if explicitly set by admin
+    const instanceRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    const registrationOpen = instanceRow?.registrationOpen !== null && instanceRow?.registrationOpen !== undefined
+      ? instanceRow.registrationOpen === 1
+      : config.registrationOpen;
+    if (!registrationOpen) {
       return reply.code(403).send({ error: 'Registration is currently closed', statusCode: 403 });
     }
-
-    const db = getDb();
 
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmedUsername)).get();
     if (existing) {

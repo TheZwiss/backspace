@@ -419,6 +419,12 @@ export interface UpdateFriendRequest {
 
 // ─── Instance Settings Types ────────────────────────────────────────────────
 
+export interface InstanceAdminSettings {
+  instanceName: string;
+  registrationOpen: boolean;
+  discoveryEnabled: boolean;
+}
+
 export interface InstanceStreamingLimits {
   maxBitrateKbps: number;
   minBitrateKbps: number;

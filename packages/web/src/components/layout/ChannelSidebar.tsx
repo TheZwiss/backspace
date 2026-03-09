@@ -122,9 +122,11 @@ export function ChannelSidebar() {
           user={user}
           isMuted={isMuted}
           isDeafened={isDeafened}
+          isAdmin={!!user.isAdmin}
           onMicToggle={handleMicToggle}
           onDeafenToggle={handleDeafenToggle}
           onSettingsClick={() => openModal('userSettings')}
+          onAdminClick={() => openModal('instanceSettings')}
         />
       </div>
     </div>
@@ -442,16 +444,20 @@ function UserAreaPanel({
   user,
   isMuted,
   isDeafened,
+  isAdmin,
   onMicToggle,
   onDeafenToggle,
   onSettingsClick,
+  onAdminClick,
 }: {
   user: any;
   isMuted: boolean;
   isDeafened: boolean;
+  isAdmin: boolean;
   onMicToggle: () => void;
   onDeafenToggle: () => void;
   onSettingsClick: () => void;
+  onAdminClick: () => void;
 }) {
   const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -811,6 +817,19 @@ function UserAreaPanel({
               <path d="M7 10l5 5 5-5z" />
             </svg>
           </button>
+
+          {/* Admin — Instance Settings */}
+          {isAdmin && (
+            <button
+              onClick={onAdminClick}
+              className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-accent-amber hover:bg-interactive-hover rounded-[4px] transition-colors"
+              title="Instance Settings"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+              </svg>
+            </button>
+          )}
 
           {/* Settings */}
           <button

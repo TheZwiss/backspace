@@ -1,12 +1,15 @@
 import { create } from 'zustand';
-import type { InstanceStreamingLimits } from '@backspace/shared';
+import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
 import { api } from '../api/client';
 
 interface SettingsState {
   streamingLimits: InstanceStreamingLimits | null;
+  instanceSettings: InstanceAdminSettings | null;
   isAdmin: boolean;
   fetchStreamingLimits: () => Promise<void>;
   updateStreamingLimits: (limits: Partial<InstanceStreamingLimits>) => Promise<void>;
+  fetchInstanceSettings: () => Promise<void>;
+  updateInstanceSettings: (data: Partial<InstanceAdminSettings>) => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
 }
 
@@ -27,6 +30,7 @@ export function getStreamingLimits(): InstanceStreamingLimits {
 
 export const useSettingsStore = create<SettingsState>((set) => ({
   streamingLimits: null,
+  instanceSettings: null,
   isAdmin: false,
 
   fetchStreamingLimits: async () => {
@@ -42,6 +46,28 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   updateStreamingLimits: async (limits: Partial<InstanceStreamingLimits>) => {
     const updated = await api.settings.updateStreaming(limits);
     set({ streamingLimits: updated });
+  },
+
+  fetchInstanceSettings: async () => {
+    try {
+      const settings = await api.settings.getInstance();
+      set({ instanceSettings: settings });
+    } catch (err) {
+      console.warn('[Settings] Failed to fetch instance settings:', err);
+    }
+  },
+
+  updateInstanceSettings: async (data: Partial<InstanceAdminSettings>) => {
+    const updated = await api.settings.updateInstance(data);
+    set({ instanceSettings: updated });
+    // If discoveryEnabled changed, also update it in streamingLimits for the DiscoveryPanel warning banner
+    if (data.discoveryEnabled !== undefined) {
+      set((state) => ({
+        streamingLimits: state.streamingLimits
+          ? { ...state.streamingLimits, discoveryEnabled: updated.discoveryEnabled }
+          : state.streamingLimits,
+      }));
+    }
   },
 
   setIsAdmin: (isAdmin: boolean) => set({ isAdmin }),

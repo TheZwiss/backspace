@@ -69,7 +69,8 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" },
         { name: 'worker_id', type: 'INTEGER' },
-        { name: 'discovery_enabled', type: 'INTEGER NOT NULL DEFAULT 1' }
+        { name: 'discovery_enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
+        { name: 'registration_open', type: 'INTEGER' }
       ]
     },
     {

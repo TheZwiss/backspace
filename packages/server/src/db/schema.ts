@@ -192,6 +192,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   allowedFramerates: text('allowed_framerates').notNull().default('30,45,60'),
   maxResolution: integer('max_resolution').notNull().default(1080),
   maxFramerate: integer('max_framerate').notNull().default(60),
+  registrationOpen: integer('registration_open'),  // null = use env var default, 0/1 = explicit
   updatedAt: integer('updated_at').notNull(),
 });
 

@@ -26,6 +26,7 @@ import type {
   Friend,
   FriendRequest,
   InstanceStreamingLimits,
+  InstanceAdminSettings,
   InstanceInfoResponse,
   VerifyPasswordResponse,
   ExploreSpace,
@@ -112,6 +113,8 @@ export class BackspaceApiClient {
   readonly settings: {
     getStreaming: () => Promise<InstanceStreamingLimits>;
     updateStreaming: (data: Partial<InstanceStreamingLimits>) => Promise<InstanceStreamingLimits>;
+    getInstance: () => Promise<InstanceAdminSettings>;
+    updateInstance: (data: Partial<InstanceAdminSettings>) => Promise<InstanceAdminSettings>;
   };
 
   readonly instance: {
@@ -300,6 +303,9 @@ export class BackspaceApiClient {
       getStreaming: () => request<InstanceStreamingLimits>('GET', '/settings/streaming'),
       updateStreaming: (data: Partial<InstanceStreamingLimits>) =>
         request<InstanceStreamingLimits>('PATCH', '/settings/streaming', data),
+      getInstance: () => request<InstanceAdminSettings>('GET', '/settings/instance'),
+      updateInstance: (data: Partial<InstanceAdminSettings>) =>
+        request<InstanceAdminSettings>('PATCH', '/settings/instance', data),
     };
 
     this.instance = {
