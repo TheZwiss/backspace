@@ -28,11 +28,19 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 
   const [spaceName, setSpaceName] = useState(space?.name ?? '');
-  // null = no change, '' = remove icon, 'filename.png' = new icon uploaded
+  // null = no change, '' = remove, 'filename.png' = new uploaded
   const [iconFilename, setIconFilename] = useState<string | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+
+  // Banner state (same pattern as icon)
+  const [bannerFilename, setBannerFilename] = useState<string | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [bannerCropSrc, setBannerCropSrc] = useState<string | null>(null);
+  const bannerFileInputRef = useRef<HTMLInputElement>(null);
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -42,24 +50,35 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   useEffect(() => {
     if (space) {
       setSpaceName(space.name);
-      // Reset icon state when space data changes externally
       setIconFilename(null);
       if (iconPreview) {
         URL.revokeObjectURL(iconPreview);
         setIconPreview(null);
       }
+      setBannerFilename(null);
+      if (bannerPreview) {
+        URL.revokeObjectURL(bannerPreview);
+        setBannerPreview(null);
+      }
     }
-  }, [space?.name, space?.icon]);
+  }, [space?.name, space?.icon, space?.banner]);
 
   if (!space) return null;
 
   const hasNameChange = spaceName.trim() !== space.name;
   const hasIconChange = iconFilename !== null;
-  const hasChanges = hasNameChange || hasIconChange;
+  const hasBannerChange = bannerFilename !== null;
+  const hasChanges = hasNameChange || hasIconChange || hasBannerChange;
 
   const currentIconUrl = space.icon
     ? (space.icon.startsWith('http') ? space.icon : api.uploads.url(space.icon))
     : null;
+
+  const currentBannerUrl = space.banner
+    ? (space.banner.startsWith('http') ? space.banner : api.uploads.url(space.banner))
+    : null;
+
+  // ─── Icon handlers ────────────────────────────────────────────────────────
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -94,25 +113,72 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const handleRemoveIcon = () => {
     if (iconPreview) URL.revokeObjectURL(iconPreview);
     setIconPreview(null);
-    setIconFilename(''); // '' signals removal
+    setIconFilename('');
   };
+
+  // ─── Banner handlers ──────────────────────────────────────────────────────
+
+  const handleBannerSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setBannerCropSrc(reader.result as string);
+    reader.readAsDataURL(file);
+    if (bannerFileInputRef.current) bannerFileInputRef.current.value = '';
+  };
+
+  const handleBannerCropComplete = async (blob: Blob) => {
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+    const previewUrl = URL.createObjectURL(blob);
+    setBannerPreview(previewUrl);
+    setBannerCropSrc(null);
+
+    const file = new File([blob], 'banner.png', { type: 'image/png' });
+    setUploadingBanner(true);
+    try {
+      const spaceApi = getApiForOrigin(space._instanceOrigin);
+      const attachment = await spaceApi.uploads.upload(file);
+      setBannerFilename(attachment.filename);
+    } catch {
+      setSaveError('Failed to upload banner');
+      setBannerPreview(null);
+      URL.revokeObjectURL(previewUrl);
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  const handleRemoveBanner = () => {
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+    setBannerPreview(null);
+    setBannerFilename('');
+  };
+
+  // ─── Save / Discard / Delete ──────────────────────────────────────────────
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
     try {
-      const updates: { name?: string; icon?: string } = {};
+      const updates: { name?: string; icon?: string; banner?: string } = {};
       if (hasNameChange) updates.name = spaceName.trim();
       if (hasIconChange) {
-        // Empty string signals icon removal to the backend (sets to null)
         updates.icon = iconFilename === '' ? '' : iconFilename!;
+      }
+      if (hasBannerChange) {
+        updates.banner = bannerFilename === '' ? '' : bannerFilename!;
       }
       await updateSpace(spaceId, updates);
       setIconFilename(null);
       if (iconPreview) {
         URL.revokeObjectURL(iconPreview);
         setIconPreview(null);
+      }
+      setBannerFilename(null);
+      if (bannerPreview) {
+        URL.revokeObjectURL(bannerPreview);
+        setBannerPreview(null);
       }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
@@ -129,6 +195,11 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     if (iconPreview) {
       URL.revokeObjectURL(iconPreview);
       setIconPreview(null);
+    }
+    setBannerFilename(null);
+    if (bannerPreview) {
+      URL.revokeObjectURL(bannerPreview);
+      setBannerPreview(null);
     }
     setSaveError('');
   };
@@ -147,9 +218,9 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     }
   };
 
-  // Determine what icon to show: preview of pending upload, or current space icon
   const displayIconSrc = iconPreview ?? (iconFilename === '' ? null : currentIconUrl);
   const displayIconName = space.name;
+  const displayBannerSrc = bannerPreview ?? (bannerFilename === '' ? null : currentBannerUrl);
 
   return (
     <>
@@ -215,6 +286,68 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
           </div>
         </div>
 
+        {/* Space Banner */}
+        <div>
+          <label className="block text-xs text-txt-secondary mb-1.5">
+            Space Banner
+          </label>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => canManageSpace && bannerFileInputRef.current?.click()}
+              disabled={!canManageSpace || uploadingBanner}
+              className={`relative w-full h-24 rounded-lg bg-surface-input border-2 border-dashed border-border-subtle flex items-center justify-center overflow-hidden group ${
+                canManageSpace ? 'hover:border-accent-primary cursor-pointer' : 'cursor-default'
+              } transition-colors`}
+            >
+              {displayBannerSrc ? (
+                <>
+                  <img src={displayBannerSrc} alt="Space banner" className="w-full h-full object-cover" />
+                  {canManageSpace && (
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center gap-1 text-txt-tertiary">
+                  <svg className="w-6 h-6 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                  </svg>
+                  <span className="text-[11px]">Upload banner (16:9)</span>
+                </div>
+              )}
+              {uploadingBanner && (
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                </div>
+              )}
+            </button>
+            <input
+              ref={bannerFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleBannerSelect}
+              className="hidden"
+            />
+            {canManageSpace && (displayBannerSrc || space.banner) && bannerFilename !== '' && (
+              <button
+                type="button"
+                onClick={handleRemoveBanner}
+                className="text-xs text-txt-tertiary hover:text-txt-danger transition-colors self-start"
+              >
+                Remove banner
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Space Name */}
         <div>
           <label className="block text-xs text-txt-secondary mb-1.5">
@@ -266,7 +399,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || uploadingIcon || !spaceName.trim()}
+                  disabled={saving || uploadingIcon || uploadingBanner || !spaceName.trim()}
                   className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Saving...' : 'Save'}
@@ -285,6 +418,16 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         title="Crop Space Icon"
         cropShape="round"
         aspectRatio={1}
+      />
+
+      <ImageCropModal
+        isOpen={bannerCropSrc !== null}
+        onClose={() => setBannerCropSrc(null)}
+        imageSrc={bannerCropSrc ?? ''}
+        onCropComplete={handleBannerCropComplete}
+        title="Crop Space Banner"
+        cropShape="rect"
+        aspectRatio={16 / 9}
       />
     </>
   );

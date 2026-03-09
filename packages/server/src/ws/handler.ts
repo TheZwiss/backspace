@@ -675,6 +675,7 @@ function buildReadyPayload(userId: string): {
         id: spaceRow.id,
         name: spaceRow.name,
         icon: spaceRow.icon,
+        banner: spaceRow.banner ?? null,
         ownerId: spaceRow.ownerId,
         inviteCode: spaceRow.inviteCode,
         visibility: (spaceRow.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],

@@ -25,6 +25,7 @@ function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
     id: row.id,
     name: row.name,
     icon: row.icon,
+    banner: row.banner ?? null,
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
     visibility: (row.visibility ?? 'private') as Space['visibility'],
@@ -54,7 +55,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateSpaceRequest }>('/api/spaces', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { name, icon, visibility, description } = request.body;
+    const { name, icon, banner, visibility, description } = request.body;
 
     if (!name || typeof name !== 'string') {
       return reply.code(400).send({ error: 'Space name is required', statusCode: 400 });
@@ -84,6 +85,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         id: spaceId,
         name: trimmedName,
         icon: icon ?? null,
+        banner: banner ?? null,
         ownerId: request.userId,
         inviteCode,
         visibility: safeVisibility,
@@ -269,7 +271,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, icon, visibility, description } = request.body;
+    const { name, icon, banner, visibility, description } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
@@ -293,6 +295,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     if (icon !== undefined) {
       updates.icon = icon || null;
+    }
+
+    if (banner !== undefined) {
+      updates.banner = banner || null;
     }
 
     if (visibility !== undefined) {

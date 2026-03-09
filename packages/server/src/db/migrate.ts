@@ -79,6 +79,12 @@ export function runMigrations(db: Database.Database): void {
         { name: 'visibility', type: "TEXT DEFAULT 'private'" },
         { name: 'description', type: 'TEXT' }
       ]
+    },
+    {
+      name: 'spaces',
+      columns: [
+        { name: 'banner', type: 'TEXT' }
+      ]
     }
   ];
 

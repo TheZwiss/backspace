@@ -4,6 +4,7 @@ import { useExploreStore, type TaggedExploreSpace } from '../../stores/exploreSt
 import { useSpaceStore } from '../../stores/spaceStore';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getSpaceGradient } from '../../utils/gradients';
+import { extractDominantColors, colorsToGradient } from '../../utils/colorExtractor';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 
 export function ExplorePage() {
@@ -219,13 +220,33 @@ function SpaceCard({
   const [requestMessage, setRequestMessage] = useState('');
   const [requestSent, setRequestSent] = useState(isPending);
   const [joinError, setJoinError] = useState('');
+  const [iconGradient, setIconGradient] = useState<string | null>(null);
 
-  const gradient = getSpaceGradient(space.id, space.name);
+  const fallbackGradient = getSpaceGradient(space.id, space.name).gradient;
   const isPublic = space.visibility === 'public';
   const isJoined = space.joined === true;
   const originLabel = space._instanceOrigin
     ? (() => { try { return new URL(space._instanceOrigin).host; } catch { return space._instanceOrigin; } })()
     : null;
+
+  const iconUrl = space.icon
+    ? (space.icon.startsWith('http') ? space.icon : `/api/uploads/${space.icon}`)
+    : null;
+  const bannerUrl = space.banner
+    ? (space.banner.startsWith('http') ? space.banner : `/api/uploads/${space.banner}`)
+    : null;
+
+  // Extract dominant colors from icon when no banner is set
+  useEffect(() => {
+    if (bannerUrl || !iconUrl) return;
+    let cancelled = false;
+    extractDominantColors(iconUrl)
+      .then(colors => {
+        if (!cancelled && colors.length > 0) setIconGradient(colorsToGradient(colors));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [iconUrl, bannerUrl]);
 
   const handlePublicJoin = async () => {
     setJoining(true);
@@ -263,23 +284,24 @@ function SpaceCard({
         ? 'border-accent-mint/20 hover:border-accent-mint/40'
         : 'border-border-soft hover:border-border-hard'
     }`}>
-      {/* Banner / Icon area */}
-      <div className="h-32 relative flex items-center justify-center" style={{ background: gradient.gradient }}>
-        {space.icon ? (
-          <img
-            src={space.icon.startsWith('http') ? space.icon : `/api/uploads/${space.icon}`}
-            alt={space.name}
-            className="w-16 h-16 rounded-2xl object-cover shadow-lg"
-          />
+      {/* Banner area */}
+      <div className="h-32 relative overflow-hidden">
+        {/* Background layer */}
+        {bannerUrl ? (
+          <img src={bannerUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl font-bold text-white/90 drop-shadow-md">
-            {space.name.charAt(0).toUpperCase()}
-          </span>
+          <div className="absolute inset-0" style={{ background: iconGradient ?? fallbackGradient }} />
         )}
+
+        {/* Frosted bottom fade — Aether Drift glass */}
+        <div
+          className="absolute bottom-0 inset-x-0 h-16"
+          style={{ background: 'linear-gradient(to top, rgba(20,20,26,0.9), transparent)' }}
+        />
 
         {/* Joined badge (top-left) */}
         {isJoined && (
-          <div className="absolute top-2 left-2">
+          <div className="absolute top-2 left-2 z-[2]">
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-accent-mint/25 text-accent-mint backdrop-blur-sm">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
@@ -290,8 +312,8 @@ function SpaceCard({
         )}
 
         {/* Visibility badge */}
-        <div className="absolute top-2 right-2">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+        <div className="absolute top-2 right-2 z-[2]">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm ${
             isPublic
               ? 'bg-accent-mint/20 text-accent-mint'
               : 'bg-accent-amber/20 text-accent-amber'
@@ -300,18 +322,28 @@ function SpaceCard({
           </span>
         </div>
 
-        {/* Instance origin */}
-        {originLabel && (
-          <div className="absolute bottom-2 left-2">
-            <span className="px-1.5 py-0.5 rounded bg-black/40 text-[10px] text-white/80 font-medium backdrop-blur-sm">
-              {originLabel}
-            </span>
+      </div>
+
+      {/* Overlapping icon */}
+      <div className="relative px-4 -mt-8 z-10">
+        {iconUrl ? (
+          <img
+            src={iconUrl}
+            alt={space.name}
+            className="w-14 h-14 rounded-xl object-cover ring-[3px] ring-surface-channel shadow-lg"
+          />
+        ) : (
+          <div
+            className="w-14 h-14 rounded-xl ring-[3px] ring-surface-channel shadow-lg flex items-center justify-center text-xl font-bold text-white/90"
+            style={{ background: fallbackGradient }}
+          >
+            {space.name.charAt(0).toUpperCase()}
           </div>
         )}
       </div>
 
       {/* Content */}
-      <div className="p-4 flex flex-col flex-1">
+      <div className="px-4 pt-2 pb-4 flex flex-col flex-1">
         <h3 className="text-[15px] font-bold text-txt-primary truncate mb-1">{space.name}</h3>
 
         {space.description ? (
@@ -329,6 +361,14 @@ function SpaceCard({
             </svg>
             {space.memberCount} {space.memberCount === 1 ? 'member' : 'members'}
           </span>
+          {originLabel && (
+            <span className="flex items-center gap-1 text-txt-tertiary/70">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-50">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+              {originLabel}
+            </span>
+          )}
         </div>
 
         {/* Action area */}

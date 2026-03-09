@@ -203,9 +203,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const updated = await client.spaces.update(spaceId, data);
-    // Normalize remote asset URL so the icon displays correctly in-app
+    // Normalize remote asset URLs so the icon/banner display correctly in-app
     if (origin && updated.icon) {
       updated.icon = resolveAssetUrl(updated.icon, origin) ?? updated.icon;
+    }
+    if (origin && updated.banner) {
+      updated.banner = resolveAssetUrl(updated.banner, origin) ?? updated.banner;
     }
     set((state) => ({
       spaces: state.spaces.map(s => s.id === spaceId ? { ...s, ...updated } : s),
@@ -321,6 +324,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       id: s.id,
       name: s.name,
       icon: s.icon,
+      banner: s.banner ?? null,
       ownerId: s.ownerId,
       inviteCode: s.inviteCode,
       visibility: s.visibility ?? 'private' as const,
@@ -435,6 +439,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       id: space.id,
       name: space.name,
       icon: space.icon,
+      banner: space.banner ?? null,
       ownerId: space.ownerId,
       inviteCode: space.inviteCode,
       visibility: space.visibility,

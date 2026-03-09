@@ -34,6 +34,7 @@ export interface Space {
   id: string;
   name: string;
   icon: string | null;
+  banner: string | null;
   ownerId: string;
   inviteCode: string | null;
   visibility: SpaceVisibility;
@@ -45,6 +46,7 @@ export interface ExploreSpace {
   id: string;
   name: string;
   icon: string | null;
+  banner: string | null;
   description: string | null;
   visibility: SpaceVisibility;
   memberCount: number;
@@ -300,6 +302,7 @@ export interface AuthResponse {
 export interface CreateSpaceRequest {
   name: string;
   icon?: string;
+  banner?: string;
   visibility?: SpaceVisibility;
   description?: string;
 }
@@ -319,6 +322,7 @@ export interface UpdateChannelRequest {
 export interface UpdateSpaceRequest {
   name?: string;
   icon?: string;
+  banner?: string;
   visibility?: SpaceVisibility;
   description?: string;
 }

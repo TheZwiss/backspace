@@ -52,7 +52,7 @@ interface ChatState {
   clearTyping: (channelId: string, userId: string) => void;
   getMessages: (channelId: string) => MessageWithUser[];
   getTypingUsers: (channelId: string) => TypingUser[];
-  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>) => void;
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => void;
   markChannelUnread: (channelId: string) => void;
   ackChannel: (channelId: string) => void;
   onChannelAck: (channelId: string, messageId: string) => void;
@@ -473,13 +473,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return users.filter(t => now - t.timestamp < 5000);
   },
 
-  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>) => {
-    const rsMap = new Map<string, string>();
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => {
+    // 1. Merge server read states into existing local state (preserves optimistic acks)
+    const rsMap = new Map(get().readStates);
     for (const rs of readStates) {
-      rsMap.set(rs.channelId, rs.lastReadMessageId);
+      const local = rsMap.get(rs.channelId);
+      if (!local) {
+        rsMap.set(rs.channelId, rs.lastReadMessageId);
+      } else {
+        try {
+          if (BigInt(rs.lastReadMessageId) > BigInt(local)) {
+            rsMap.set(rs.channelId, rs.lastReadMessageId);
+          }
+        } catch {
+          rsMap.set(rs.channelId, rs.lastReadMessageId);
+        }
+      }
     }
+
+    // 2. Rebuild unreadChannels ONLY for channels from this origin
+    //    Keep existing unread entries from other origins untouched
+    const currentChannelId = get().currentChannelId;
     const unread = new Set<string>();
-    for (const [channelId, lastMsgId] of channelLastMessageIds) {
+    for (const id of get().unreadChannels) {
+      if (!originChannelIds || !originChannelIds.has(id)) {
+        unread.add(id); // preserve other-origin unreads
+      }
+    }
+
+    const channelsToCheck = originChannelIds ?? new Set(channelLastMessageIds.keys());
+    for (const channelId of channelsToCheck) {
+      if (channelId === currentChannelId) continue; // skip current channel (acked momentarily)
+      const lastMsgId = channelLastMessageIds.get(channelId);
+      if (!lastMsgId) continue; // empty channel
       const lastRead = rsMap.get(channelId);
       if (!lastRead) {
         unread.add(channelId);
@@ -490,10 +516,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
           unread.add(channelId);
         }
       } catch {
-        // Corrupted read state (e.g. temp_ ID) — treat as unread
         unread.add(channelId);
       }
     }
+
     set({ readStates: rsMap, unreadChannels: unread });
   },
 

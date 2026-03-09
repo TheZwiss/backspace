@@ -111,6 +111,9 @@ export const useExploreStore = create<ExploreState>((set, get) => ({
           if (origin && space.icon) {
             space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
           }
+          if (origin && space.banner) {
+            space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
+          }
           allSpaces.push({ ...space, _instanceOrigin: origin, joined: space.joined ?? false });
         }
       }

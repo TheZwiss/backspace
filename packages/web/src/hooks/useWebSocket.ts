@@ -97,6 +97,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (!isHome) {
         for (const space of event.spaces) {
           if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
+          if (space.banner) space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
           if ((space as any).members) {
             for (const member of (space as any).members) {
               if (member.user) normalizeUserAssets(member.user, origin);
@@ -133,15 +134,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Only force-reload the current channel on reconnect; other channels keep their cache
       if (isHome) {
-        const { loadMessages: reloadMessages, currentChannelId, setReadStates } = useChatStore.getState();
+        const { loadMessages: reloadMessages, currentChannelId } = useChatStore.getState();
         if (currentChannelId) {
           reloadMessages(currentChannelId, true);
         }
-        // Initialize unread tracking from ready payload
-        const { channelLastMessageIds } = useSpaceStore.getState();
-        if (event.readStates) {
-          setReadStates(event.readStates, channelLastMessageIds);
+      }
+
+      // Initialize/update unread tracking for this origin (home or remote)
+      if (event.readStates) {
+        const { channelLastMessageIds, channelOriginMap } = useSpaceStore.getState();
+        const originChannelIds = new Set<string>();
+        for (const [channelId, chOrigin] of channelOriginMap) {
+          if (chOrigin === origin) originChannelIds.add(channelId);
         }
+        useChatStore.getState().setReadStates(event.readStates, channelLastMessageIds, originChannelIds);
       }
 
       // Clear voice state for the reconnecting origin before repopulating
@@ -474,6 +480,19 @@ function handleEvent(origin: string, event: ServerEvent): void {
       chPermsMap3.delete(event.channelId);
       ctsMap3.delete(event.channelId);
       coMap3.delete(event.channelId);
+      // Clean up unread and read state for the deleted channel
+      {
+        const { channelLastMessageIds: clmIds } = useSpaceStore.getState();
+        clmIds.delete(event.channelId);
+        const cs = useChatStore.getState();
+        if (cs.unreadChannels.has(event.channelId) || cs.readStates.has(event.channelId)) {
+          const newUnread = new Set(cs.unreadChannels);
+          newUnread.delete(event.channelId);
+          const newRS = new Map(cs.readStates);
+          newRS.delete(event.channelId);
+          useChatStore.setState({ unreadChannels: newUnread, readStates: newRS });
+        }
+      }
       {
         const { currentChannelId } = useChatStore.getState();
         if (currentChannelId === event.channelId) {
@@ -492,6 +511,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'space_updated': {
       if (!isHome && event.space.icon) {
         event.space.icon = resolveAssetUrl(event.space.icon, origin) ?? event.space.icon;
+      }
+      if (!isHome && event.space.banner) {
+        event.space.banner = resolveAssetUrl(event.space.banner, origin) ?? event.space.banner;
       }
       const { spaces: currentSpaces, setSpaces } = useSpaceStore.getState();
       setSpaces(currentSpaces.map(s => s.id === event.space.id ? { ...s, ...event.space } : s));

@@ -145,6 +145,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
     id: space.id,
     name: space.name,
     icon: space.icon,
+    banner: space.banner ?? null,
     ownerId: space.ownerId,
     inviteCode: space.inviteCode,
     visibility: (space.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
@@ -202,7 +203,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     let countSql = `SELECT COUNT(DISTINCT s.id) as total FROM spaces s WHERE s.visibility IN ('public', 'request')`;
     let querySql = `
-      SELECT s.id, s.name, s.icon, s.description, s.visibility, s.created_at,
+      SELECT s.id, s.name, s.icon, s.banner, s.description, s.visibility, s.created_at,
              COUNT(sm.user_id) as member_count
       FROM spaces s
       LEFT JOIN space_members sm ON sm.space_id = s.id
@@ -225,6 +226,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       id: string;
       name: string;
       icon: string | null;
+      banner: string | null;
       description: string | null;
       visibility: string;
       created_at: number;
@@ -235,6 +237,7 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       id: r.id,
       name: r.name,
       icon: r.icon,
+      banner: r.banner,
       description: r.description,
       visibility: r.visibility as ExploreSpace['visibility'],
       memberCount: r.member_count,
