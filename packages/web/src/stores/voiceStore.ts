@@ -35,6 +35,9 @@ interface VoiceState {
   participantVolumes: Map<string, number>;
   setParticipantVolume: (userId: string, volume: number) => void;
   getParticipantVolume: (userId: string) => number;
+  // Per-participant local mute (userId → muted?)
+  participantMutes: Map<string, boolean>;
+  setParticipantMute: (userId: string, muted: boolean) => void;
   // Stream widget state
   streamVolumes: Map<string, number>;       // userId → 0-200 (100 default)
   streamMutes: Map<string, boolean>;        // userId → muted?
@@ -133,6 +136,15 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
       getParticipantVolume: (userId) => get().participantVolumes.get(userId) ?? 100,
+
+      participantMutes: new Map(),
+      setParticipantMute: (userId, muted) => {
+        set((state) => {
+          const newMap = new Map(state.participantMutes);
+          newMap.set(userId, muted);
+          return { participantMutes: newMap };
+        });
+      },
 
       // Stream widget state
       streamVolumes: new Map(),
@@ -381,6 +393,7 @@ export const useVoiceStore = create<VoiceState>()(
             activeDmCall: null,
             outgoingCall: null,
             deafenedUserIds: new Set(),
+            participantMutes: new Map(),
             streamVolumes: new Map(),
             streamMutes: new Map(),
             watchingStreams: new Set(),
@@ -407,6 +420,7 @@ export const useVoiceStore = create<VoiceState>()(
           activeDmCall: null,
           outgoingCall: null,
           deafenedUserIds: new Set(),
+          participantMutes: new Map(),
           streamVolumes: new Map(),
           streamMutes: new Map(),
           watchingStreams: new Set(),
@@ -432,6 +446,7 @@ export const useVoiceStore = create<VoiceState>()(
         outputDeviceId: 'default',
         focusedParticipantId: null,
         participantVolumes: new Map(),
+        participantMutes: new Map(),
         incomingCall: null,
         outgoingCall: null,
         activeDmCall: null,
@@ -512,6 +527,7 @@ export const useVoiceStore = create<VoiceState>()(
         merged.deafenedUserIds = currentState.deafenedUserIds;
         merged.voiceUserStates = currentState.voiceUserStates;
         merged.participantVolumes = currentState.participantVolumes;
+        merged.participantMutes = currentState.participantMutes;
         merged.streamVolumes = currentState.streamVolumes;
         merged.streamMutes = currentState.streamMutes;
         merged.watchingStreams = currentState.watchingStreams;

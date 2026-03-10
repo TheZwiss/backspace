@@ -250,6 +250,10 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
   const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
   const perUserVolume = participantVolumes.get(targetUserId) ?? 100;
 
+  const participantMutes = useVoiceStore((s) => s.participantMutes);
+  const setParticipantMute = useVoiceStore((s) => s.setParticipantMute);
+  const isUserMuted = participantMutes.get(targetUserId) ?? false;
+
   const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
   const participants = useVoiceStore((s) => s.participants);
   const targetParticipant = participants.find((p) => p.userId === targetUserId);
@@ -339,6 +343,29 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
           <div className="h-px bg-white/[0.06] mx-1.5" />
         </>
       )}
+      <div className="py-1.5">
+        <button
+          onClick={() => setParticipantMute(targetUserId, !isUserMuted)}
+          className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+          style={{ width: 'calc(100% - 12px)' }}
+        >
+          <span className="flex-1">Mute User</span>
+          <div
+            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+              isUserMuted
+                ? 'bg-accent-primary border-accent-primary'
+                : 'border-txt-tertiary'
+            }`}
+          >
+            {isUserMuted && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+              </svg>
+            )}
+          </div>
+        </button>
+      </div>
+      <div className="h-px bg-white/[0.06] mx-1.5" />
       <div className="p-3">
         <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
           User Volume

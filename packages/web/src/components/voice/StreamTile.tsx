@@ -2,8 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
-import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
-import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
+import { StreamContextMenu } from './StreamContextMenu';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
 
 interface StreamTileProps {
@@ -14,11 +13,7 @@ interface StreamTileProps {
 export function StreamTile({ tile, large }: StreamTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const streamVolumes = useVoiceStore((s) => s.streamVolumes);
-  const streamMutes = useVoiceStore((s) => s.streamMutes);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
-  const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
-  const streamAttenuationStrength = useVoiceStore((s) => s.streamAttenuationStrength);
 
   const { participant } = tile;
   const isLocal = participant.isLocal;
@@ -26,8 +21,6 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const avatarUserId = participant.homeUserId ?? userId;
 
   const isWatching = watchingStreams.has(userId);
-  const streamVolume = streamVolumes.get(userId) ?? 100;
-  const isStreamMuted = streamMutes.get(userId) ?? false;
 
   const liveScreenTrack = tile.screenTrack?.readyState === 'live' ? tile.screenTrack : null;
   const liveLkScreenTrack = liveScreenTrack ? tile.lkScreenTrack : null;
@@ -37,8 +30,6 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [qualityPopoverOpen, setQualityPopoverOpen] = useState(false);
-  const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   // --- VIDEO --- use LiveKit's track.attach() to register the element
   // with the adaptive stream observer (enables SFU layer switching by viewport size)
@@ -92,41 +83,10 @@ export function StreamTile({ tile, large }: StreamTileProps) {
     [],
   );
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [contextMenu]);
-
   const handleWatch = useCallback(() => {
     useVoiceStore.getState().watchStream(userId);
     setStreamSubscription(getActiveRoom(), participant.identity, true);
   }, [userId, participant.identity]);
-
-  const handleUnwatch = useCallback(() => {
-    useVoiceStore.getState().unwatchStream(userId);
-    setStreamSubscription(getActiveRoom(), participant.identity, false);
-  }, [userId, participant.identity]);
-
-  const handleStopStreaming = useCallback(async () => {
-    const room = getActiveRoom();
-    if (room) {
-      await stopScreenShare(room);
-    }
-  }, []);
-
-  const handleChangeStream = useCallback(async () => {
-    const room = getActiveRoom();
-    if (room) {
-      await changeScreenShare(room);
-    }
-  }, []);
-
-  const setStreamVolumeAction = useVoiceStore((s) => s.setStreamVolume);
-  const setStreamMuteAction = useVoiceStore((s) => s.setStreamMute);
-  const setAttenuationEnabled = useVoiceStore((s) => s.setStreamAttenuationEnabled);
-  const setAttenuationStrength = useVoiceStore((s) => s.setStreamAttenuationStrength);
 
   const hasVideo = liveScreenTrack !== null;
 
@@ -204,239 +164,13 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
       {/* Context Menu */}
       {contextMenu && (
-        <div
-          className="fixed z-[60] bg-surface-base rounded-lg shadow-2xl p-2 min-w-[220px] border border-white/[0.06]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isLocal ? (
-            /* Streamer context menu (own stream) */
-            <>
-              <button
-                onClick={() => {
-                  handleStopStreaming();
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-txt-danger hover:bg-accent-rose/10 rounded text-sm transition-colors"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z" />
-                  <line
-                    x1="4"
-                    y1="4"
-                    x2="20"
-                    y2="20"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-                Stop Streaming
-              </button>
-              <button
-                onClick={() => {
-                  handleChangeStream();
-                  setContextMenu(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
-              >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                </svg>
-                Change Stream
-              </button>
-              <div className="border-t border-white/[0.06] my-1" />
-              <div className="px-3 py-1">
-                <div className="text-xs text-txt-tertiary mb-1 font-medium uppercase tracking-wider">
-                  Stream Quality
-                </div>
-                <div className="relative">
-                  <button
-                    ref={qualityBtnRef}
-                    onClick={() => setQualityPopoverOpen(!qualityPopoverOpen)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 text-sm text-txt-secondary hover:bg-interactive-hover rounded transition-colors"
-                  >
-                    <span>{`${useVoiceStore.getState().screenShareConfig.height}p ${useVoiceStore.getState().screenShareConfig.fps}fps`}</span>
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M7 10l5 5 5-5z" />
-                    </svg>
-                  </button>
-                  {qualityPopoverOpen && (
-                    <ScreenShareSettingsPopover
-                      open={qualityPopoverOpen}
-                      onClose={() => setQualityPopoverOpen(false)}
-                      anchorRef={qualityBtnRef}
-                    />
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            /* Viewer context menu (remote stream) */
-            <>
-              {isWatching ? (
-                <button
-                  onClick={() => {
-                    handleUnwatch();
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
-                  </svg>
-                  Stop Watching
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    handleWatch();
-                    setContextMenu(null);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
-                  </svg>
-                  Watch Stream
-                </button>
-              )}
-              <div className="border-t border-white/[0.06] my-1" />
-              {/* Mute toggle */}
-              <button
-                onClick={() => {
-                  setStreamMuteAction(userId, !isStreamMuted);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
-              >
-                <span>Mute Stream</span>
-                <div
-                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                    isStreamMuted
-                      ? 'bg-accent-primary border-accent-primary'
-                      : 'border-txt-tertiary'
-                  }`}
-                >
-                  {isStreamMuted && (
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="white"
-                    >
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                    </svg>
-                  )}
-                </div>
-              </button>
-              {/* Stream Volume slider */}
-              <div className="px-3 py-2">
-                <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-                  Stream Volume
-                </div>
-                <div className="flex items-center gap-2">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="text-txt-tertiary flex-shrink-0"
-                  >
-                    <path d="M3 9v6h4l5 5V4L7 9H3z" />
-                  </svg>
-                  <input
-                    type="range"
-                    min="0"
-                    max="200"
-                    value={streamVolume}
-                    onChange={(e) =>
-                      setStreamVolumeAction(userId, parseInt(e.target.value))
-                    }
-                    className="flex-1 accent-accent-primary h-1"
-                  />
-                  <span className="text-xs text-txt-secondary min-w-[32px] text-right">
-                    {streamVolume}%
-                  </span>
-                </div>
-              </div>
-              <div className="border-t border-white/[0.06] my-1" />
-              {/* Stream Attenuation toggle */}
-              <button
-                onClick={() =>
-                  setAttenuationEnabled(!streamAttenuationEnabled)
-                }
-                className="w-full flex items-center justify-between px-3 py-2 text-txt-secondary hover:bg-interactive-hover rounded text-sm transition-colors"
-              >
-                <span>Stream Attenuation</span>
-                <div
-                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                    streamAttenuationEnabled
-                      ? 'bg-accent-primary border-accent-primary'
-                      : 'border-txt-tertiary'
-                  }`}
-                >
-                  {streamAttenuationEnabled && (
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="white"
-                    >
-                      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                    </svg>
-                  )}
-                </div>
-              </button>
-              {/* Attenuation Strength slider */}
-              {streamAttenuationEnabled && (
-                <div className="px-3 py-2">
-                  <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
-                    Attenuation Strength
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={streamAttenuationStrength}
-                      onChange={(e) =>
-                        setAttenuationStrength(parseInt(e.target.value))
-                      }
-                      className="flex-1 accent-accent-primary h-1"
-                    />
-                    <span className="text-xs text-txt-secondary min-w-[32px] text-right">
-                      {streamAttenuationStrength}%
-                    </span>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <StreamContextMenu
+          userId={userId}
+          identity={participant.identity}
+          isLocal={isLocal}
+          position={contextMenu}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

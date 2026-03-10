@@ -73,6 +73,7 @@ export function GlobalAudioRenderer() {
   const outputVolume = useVoiceStore((s) => s.outputVolume);
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
   const streamVolumes = useVoiceStore((s) => s.streamVolumes);
+  const participantMutes = useVoiceStore((s) => s.participantMutes);
   const streamMutes = useVoiceStore((s) => s.streamMutes);
   const watchingStreams = useVoiceStore((s) => s.watchingStreams);
   const streamAttenuationEnabled = useVoiceStore((s) => s.streamAttenuationEnabled);
@@ -95,6 +96,7 @@ export function GlobalAudioRenderer() {
     <>
       {remoteParticipants.map((p: ParticipantInfo) => {
         const micVolume = participantVolumes.get(p.userId) ?? 100;
+        const isMicMuted = participantMutes.get(p.userId) ?? false;
         const streamVol = streamVolumes.get(p.userId) ?? 100;
         const isStreamMuted = streamMutes.get(p.userId) ?? false;
 
@@ -107,7 +109,7 @@ export function GlobalAudioRenderer() {
                 globalVolume={outputVolume}
                 perSourceVolume={micVolume}
                 isDeafened={isDeafened}
-                isMuted={false}
+                isMuted={isMicMuted}
                 attenuate={false}
                 someoneIsSpeaking={false}
                 attenuationEnabled={false}

@@ -23,6 +23,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const participantMutes = useVoiceStore((s) => s.participantMutes);
+  const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
   const currentUserId = useVoiceStore((s) => {
     const local = s.participants.find(p => p.isLocal);
     return local?.userId ?? null;
@@ -146,10 +148,22 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
                   {hasCamera && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
                       <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                      {userId !== myUser?.id && unwatchedCameras.has(userId) && (
+                        <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      )}
                     </svg>
                   )}
                   {isScreenSharing && (
                     <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]">LIVE</span>
+                  )}
+                  {userId !== myUser?.id && participantMutes.get(userId) && (
+                    <span title="Locally Muted">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
+                        <path d="M3 9v6h4l5 5V4L7 9H3z" />
+                        <line x1="17" y1="7" x2="23" y2="13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                        <line x1="23" y1="7" x2="17" y2="13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      </svg>
+                    </span>
                   )}
                 </div>
               </div>
