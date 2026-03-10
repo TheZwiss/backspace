@@ -240,6 +240,7 @@ export type ClientEvent =
   | { type: 'voice_server_mute'; userId: string; muted: boolean }
   | { type: 'voice_server_deafen'; userId: string; deafened: boolean }
   | { type: 'voice_move'; userId: string; targetChannelId: string }
+  | { type: 'voice_disconnect'; userId: string }
   | { type: 'ping' };
 
 // Server → Client Events
@@ -282,6 +283,7 @@ export type ServerEvent =
   | { type: 'voice_server_muted'; userId: string; channelId: string; spaceId: string; muted: boolean }
   | { type: 'voice_server_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
+  | { type: 'voice_disconnected'; userId: string; channelId: string }
   | { type: 'member_banned'; spaceId: string; reason: string | null }
   | { type: 'pong' }
   | { type: 'error'; message: string };

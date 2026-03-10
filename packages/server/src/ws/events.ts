@@ -159,6 +159,9 @@ export function handleClientEvent(
     case 'voice_move':
       handleVoiceMove(event, userId);
       break;
+    case 'voice_disconnect':
+      handleVoiceDisconnect(event, userId);
+      break;
     default:
       connectionManager.sendToUser(userId, {
         type: 'error',
@@ -1337,4 +1340,54 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
       isScreenSharing: status.isScreenSharing,
     });
   }
+}
+
+function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): void {
+  const targetUserId = event.userId as string;
+
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'userId is required' });
+    return;
+  }
+
+  if (targetUserId === userId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot disconnect yourself' });
+    return;
+  }
+
+  // Find the target user's current room
+  const currentRoom = connectionManager.getUserRoom(targetUserId);
+  if (!currentRoom || currentRoom.room.roomType !== 'space') {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Target user is not in a voice channel' });
+    return;
+  }
+
+  const meta = currentRoom.room.metadata as SpaceRoomMeta;
+  if (!hasPermission(userId, meta.spaceId, PermissionBits.DISCONNECT_MEMBERS, currentRoom.roomId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Missing DISCONNECT_MEMBERS permission' });
+    return;
+  }
+
+  const channelId = currentRoom.roomId;
+
+  // Remove from voice room
+  connectionManager.leaveRoom(channelId, targetUserId);
+
+  // Clear ephemeral voice status (mute/camera/etc)
+  connectionManager.clearVoiceUserStatus(targetUserId);
+
+  // Broadcast leave to all space members
+  connectionManager.sendToSpace(meta.spaceId, {
+    type: 'voice_state_update',
+    channelId,
+    userId: targetUserId,
+    action: 'leave',
+  });
+
+  // Notify the disconnected user so they clean up client-side
+  connectionManager.sendToUser(targetUserId, {
+    type: 'voice_disconnected',
+    userId: targetUserId,
+    channelId,
+  });
 }

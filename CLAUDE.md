@@ -531,6 +531,7 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'voice_join', channelId }
 { type: 'voice_leave' }
 { type: 'voice_status', isMuted?, isDeafened?, isCameraOn?, isScreenSharing? }
+{ type: 'voice_disconnect', userId }
 
 # DM Calls
 { type: 'dm_call_start', dmChannelId }
@@ -576,6 +577,7 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 # Voice
 { type: 'voice_state_update', channelId, userId, action: 'join' | 'leave' }
 { type: 'voice_status_update', userId, isMuted, isDeafened, isCameraOn, isScreenSharing }
+{ type: 'voice_disconnected', userId, channelId }
 
 # DM Calls
 { type: 'dm_call_incoming', dmChannelId, callerId, callerName }
@@ -615,6 +617,7 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 | 24 | MOVE_MEMBERS | Move members between voice channels |
 | 25 | USE_VOICE_ACTIVITY | Use voice activity detection |
 | 26 | STREAM | Share screen in voice channels |
+| 27 | DISCONNECT_MEMBERS | Disconnect members from voice channels |
 
 **Resolution order:** Owner → @everyone role → Assigned roles (OR'd) → ADMINISTRATOR shortcut → Channel overrides (@everyone → role overrides → member override).
 

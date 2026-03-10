@@ -32,6 +32,10 @@ export function computePermissions(userId: string, spaceId: string, channelId?: 
   if (!space) return 0n;
   if (space.ownerId === userId) return ALL_PERMISSIONS;
 
+  // 1b. Instance admin — full access across all spaces
+  const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (userRow?.isAdmin === 1) return ALL_PERMISSIONS;
+
   // 2. Base permissions from @everyone role (id === spaceId)
   const everyoneRole = db.select().from(schema.roles)
     .where(and(eq(schema.roles.id, spaceId), eq(schema.roles.spaceId, spaceId)))

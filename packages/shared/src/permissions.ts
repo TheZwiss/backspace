@@ -23,6 +23,7 @@ export const PermissionBits = {
   MOVE_MEMBERS:         1n << 24n,
   USE_VOICE_ACTIVITY:   1n << 25n,
   STREAM:               1n << 26n,
+  DISCONNECT_MEMBERS:   1n << 27n,
 } as const;
 
 export type PermissionBit = (typeof PermissionBits)[keyof typeof PermissionBits];

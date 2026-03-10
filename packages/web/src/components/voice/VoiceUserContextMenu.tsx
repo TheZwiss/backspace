@@ -28,6 +28,7 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   const canMuteMembers = hasPermissionBit(myPerms, PermissionBits.MUTE_MEMBERS);
   const canDeafenMembers = hasPermissionBit(myPerms, PermissionBits.DEAFEN_MEMBERS);
   const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
+  const canDisconnectMembers = hasPermissionBit(myPerms, PermissionBits.DISCONNECT_MEMBERS);
 
   const otherVoiceChannels = channels.filter(
     (c) => (c.type === 'voice' || c.type === 'video') && c.id !== channelId,
@@ -39,7 +40,7 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   const isServerMuted = serverMutedUserIds.has(`${spaceId}:${targetUserId}`);
   const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
 
-  if (!canMuteMembers && !canDeafenMembers && !canMoveMembers) return null;
+  if (!canMuteMembers && !canDeafenMembers && !canMoveMembers && !canDisconnectMembers) return null;
 
   const handleServerMute = () => {
     wsSend({ type: 'voice_server_mute', userId: targetUserId, muted: !isServerMuted }, voiceOrigin);
@@ -53,6 +54,11 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
 
   const handleMove = (targetChannelId: string) => {
     wsSend({ type: 'voice_move', userId: targetUserId, targetChannelId }, voiceOrigin);
+    onAction();
+  };
+
+  const handleDisconnect = () => {
+    wsSend({ type: 'voice_disconnect', userId: targetUserId }, voiceOrigin);
     onAction();
   };
 
@@ -83,6 +89,17 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
           </svg>
           {isServerDeafened ? 'Server Undeafen' : 'Server Deafen'}
         </button>
+      )}
+      {canDisconnectMembers && (
+        <>
+          <div className="h-px bg-white/[0.06] my-1 mx-1.5" />
+          <button onClick={handleDisconnect} className={`${btnClass} text-red-400 hover:text-white`} style={btnStyle}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+              <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.956.956 0 010-1.36C3.36 8.68 7.42 7 12 7s8.64 1.68 11.71 4.72c.18.18.29.44.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 00-2.67-1.85.996.996 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+            </svg>
+            Disconnect
+          </button>
+        </>
       )}
       {canMoveMembers && otherVoiceChannels.length > 0 && (
         <MoveToSubmenu channels={otherVoiceChannels} onMove={handleMove} btnClass={btnClass} btnStyle={btnStyle} />
@@ -224,7 +241,8 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
   const canMuteMembers = hasPermissionBit(myPerms, PermissionBits.MUTE_MEMBERS);
   const canDeafenMembers = hasPermissionBit(myPerms, PermissionBits.DEAFEN_MEMBERS);
   const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
-  const hasModPerms = canMuteMembers || canDeafenMembers || canMoveMembers;
+  const canDisconnectMembers = hasPermissionBit(myPerms, PermissionBits.DISCONNECT_MEMBERS);
+  const hasModPerms = canMuteMembers || canDeafenMembers || canMoveMembers || canDisconnectMembers;
 
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
   const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);

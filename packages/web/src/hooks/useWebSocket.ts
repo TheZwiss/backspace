@@ -345,6 +345,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    case 'voice_disconnected': {
+      const myDisconnectId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+      if (event.userId === myDisconnectId) {
+        useVoiceStore.getState().handleForceDisconnect();
+      }
+      break;
+    }
+
     case 'member_joined':
       if (!isHome) normalizeUserAssets(event.member.user, origin);
       addMember(event.member);
