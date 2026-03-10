@@ -102,18 +102,15 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       {/* Body */}
       <div className="px-4 pb-4 relative">
         {/* Avatar */}
-        <div
-          className="mt-[-40px] mb-3 w-fit rounded-full"
-          style={{ border: '4px solid rgba(20,20,26,0.85)' }}
-        >
-          <Avatar
-            src={user.avatar}
-            name={displayName}
-            size={80}
-            status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
-            userId={user.homeUserId ?? user.id}
-          />
-        </div>
+        <Avatar
+          src={user.avatar}
+          name={displayName}
+          size={80}
+          status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+          userId={user.homeUserId ?? user.id}
+          ring={{ width: 4, color: 'rgba(20,20,26,0.85)' }}
+          className="mt-[-44px] mb-3"
+        />
 
         {/* Name & info */}
         <div>
@@ -122,11 +119,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
             className="text-[16px] font-semibold leading-tight"
           />
           <div className="text-[13px] text-txt-tertiary">
-            {domain ? (
-              <Username username={user.username} className="text-[13px] text-txt-tertiary" />
-            ) : (
-              <span>@{baseName}</span>
-            )}
+            <Username username={user.username} showAt className="text-[13px] text-txt-tertiary" />
           </div>
           {user.customStatus && (
             <div className="text-[13px] text-txt-secondary italic mt-1">

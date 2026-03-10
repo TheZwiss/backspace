@@ -12,6 +12,7 @@ interface AvatarProps {
   onClick?: (e: React.MouseEvent) => void;
   user?: User;
   userId?: string;
+  ring?: { width: number; color: string };
 }
 
 const statusColors: Record<string, string> = {
@@ -29,26 +30,39 @@ const statusColors: Record<string, string> = {
  * Prototype reference (.m-dot): 12px box with 3px border (border-box) = 6px
  * visible color, positioned at bottom:-2 right:-2 → center 4px from corner.
  */
-function buildCutoutMask(size: number): string {
-  const { dot, gap, inset } = getDotMetrics(size);
-  const cx = size - inset;
-  const cy = size - inset;
+function buildCutoutMask(avatarSize: number, ringWidth: number = 0): string {
+  const outerSize = avatarSize + ringWidth * 2;
+  const { dot, gap, inset } = getDotMetrics(avatarSize, ringWidth);
+  const cx = outerSize - inset;
+  const cy = outerSize - inset;
   const r = dot / 2 + gap;
   return `radial-gradient(circle at ${cx}px ${cy}px, transparent ${r}px, black ${r + 0.5}px)`;
 }
 
-/** Returns visible dot diameter, gap width, and center inset from avatar edge. */
-function getDotMetrics(size: number) {
-  if (size <= 24) return { dot: 5, gap: 2, inset: 3 };
-  return { dot: 6, gap: 3, inset: 4 };
+/** Returns visible dot diameter, gap width, and center inset from outer edge. */
+function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
+  let dot: number, gap: number, avatarInset: number;
+  if (avatarSize <= 24) {
+    dot = 5; gap = 2; avatarInset = 3;
+  } else if (avatarSize <= 48) {
+    dot = 6; gap = 3; avatarInset = 4;
+  } else {
+    dot = Math.round(avatarSize * 0.15);
+    gap = Math.round(avatarSize * 0.05);
+    avatarInset = Math.round(avatarSize * 0.10);
+  }
+  return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring }: AvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
   // Match prototype: 24px→10px, 32-34px→12px, 40px→15px, 56px+→18px
   const fontPx = size <= 24 ? 10 : size <= 34 ? 12 : size <= 44 ? 15 : 18;
   const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, user?.avatarColor);
+
+  const ringWidth = ring?.width ?? 0;
+  const outerSize = size + ringWidth * 2;
 
   const handleClick = (e: React.MouseEvent) => {
     if (onClick) {
@@ -64,41 +78,52 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   };
 
   // Only compute mask when status dot is visible
-  const cutoutMask = status ? buildCutoutMask(size) : undefined;
+  const cutoutMask = status ? buildCutoutMask(size, ringWidth) : undefined;
   const maskStyle: React.CSSProperties | undefined = cutoutMask
     ? { maskImage: cutoutMask, WebkitMaskImage: cutoutMask }
     : undefined;
 
-  const { dot: dotDiameter, inset: dotInset } = getDotMetrics(size);
+  const { dot: dotDiameter, inset: dotInset } = getDotMetrics(size, ringWidth);
 
   return (
     <div
       className={`relative inline-flex flex-shrink-0 ${(onClick || user) ? 'cursor-pointer' : ''} ${className}`}
-      style={{ width: size, height: size }}
+      style={{ width: outerSize, height: outerSize }}
       onClick={handleClick}
     >
-      {src ? (
-        <img
-          src={src.startsWith('http') ? src : `/api/uploads/${src}`}
-          alt={name}
-          className="w-full h-full rounded-full object-cover"
-          style={maskStyle}
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-            const parent = (e.target as HTMLImageElement).parentElement;
-            if (parent) {
-              const fallback = parent.querySelector('.avatar-fallback') as HTMLElement;
-              if (fallback) fallback.style.display = 'flex';
-            }
-          }}
-        />
-      ) : null}
+      {/* Inner masked circle — ring background + avatar content */}
       <div
-        className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${src ? 'hidden' : 'flex'}`}
-        style={src ? { display: 'none' } : { background: gradient.gradient, fontSize: fontPx, ...maskStyle }}
+        className="w-full h-full rounded-full"
+        style={{
+          padding: ringWidth,
+          backgroundColor: ring?.color,
+          ...maskStyle,
+        }}
       >
-        {initials}
+        {src ? (
+          <img
+            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:'))
+              ? src : `/api/uploads/${src}`}
+            alt={name}
+            className="w-full h-full rounded-full object-cover"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              const parent = (e.target as HTMLImageElement).parentElement;
+              if (parent) {
+                const fallback = parent.querySelector('.avatar-fallback') as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }
+            }}
+          />
+        ) : null}
+        <div
+          className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${src ? 'hidden' : 'flex'}`}
+          style={src ? { display: 'none' } : { background: gradient.gradient, fontSize: fontPx }}
+        >
+          {initials}
+        </div>
       </div>
+      {/* Status dot — outside the masked div so it isn't clipped */}
       {status && (
         <div
           className={`absolute rounded-full ${statusColors[status] ?? 'bg-status-offline'}`}

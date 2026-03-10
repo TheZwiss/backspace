@@ -255,18 +255,15 @@ export function UserProfileModal() {
 
         {/* Header (avatar + name) */}
         <div className="px-5 flex-shrink-0 relative">
-          <div
-            className="mt-[-48px] mb-2 w-fit rounded-full"
-            style={{ border: '4px solid var(--color-surface-elevated, #1e1e2a)' }}
-          >
-            <Avatar
-              src={user.avatar}
-              name={displayName}
-              size={96}
-              status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
-              userId={user.homeUserId ?? user.id}
-            />
-          </div>
+          <Avatar
+            src={user.avatar}
+            name={displayName}
+            size={96}
+            status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
+            userId={user.homeUserId ?? user.id}
+            ring={{ width: 4, color: 'var(--color-surface-elevated, #1e1e2a)' }}
+            className="mt-[-52px] mb-2"
+          />
 
           <div className="mb-3">
             <Username
@@ -274,11 +271,7 @@ export function UserProfileModal() {
               className="text-[20px] font-bold leading-tight"
             />
             <div className="text-[14px] text-txt-tertiary mt-0.5">
-              {domain ? (
-                <Username username={user.username} className="text-[14px] text-txt-tertiary" />
-              ) : (
-                <span>@{baseName}</span>
-              )}
+              <Username username={user.username} showAt className="text-[14px] text-txt-tertiary" />
             </div>
             {user.customStatus && (
               <div className="text-[13px] text-txt-secondary italic mt-1">
