@@ -6,12 +6,46 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor } from '../../utils/gradients';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 
 type Tab = 'about' | 'friends' | 'spaces';
+
+type FriendshipStatus =
+  | { state: 'self' }
+  | { state: 'friends'; friend: TaggedFriend }
+  | { state: 'outbound_pending'; request: TaggedFriendRequest }
+  | { state: 'inbound_pending'; request: TaggedFriendRequest }
+  | { state: 'none' };
+
+function getFriendshipStatus(
+  viewedUser: User,
+  currentUser: User | null,
+  friends: TaggedFriend[],
+  requests: TaggedFriendRequest[],
+): FriendshipStatus {
+  if (!currentUser) return { state: 'none' };
+  if (isSelf(viewedUser, currentUser)) return { state: 'self' };
+
+  const friend = friends.find(f => canonicalUserMatch(f, viewedUser));
+  if (friend) return { state: 'friends', friend };
+
+  const request = requests.find(r =>
+    r.user && canonicalUserMatch(r.user, viewedUser)
+  );
+  if (request?.user) {
+    // request.user is the OTHER party. If their ID === toId, then I am fromId (outbound)
+    const isOutbound = request.user.id === request.toId;
+    return isOutbound
+      ? { state: 'outbound_pending', request }
+      : { state: 'inbound_pending', request };
+  }
+
+  return { state: 'none' };
+}
 
 export function UserProfileModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -20,8 +54,12 @@ export function UserProfileModal() {
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const friends = useSocialStore((s) => s.friends);
+  const requests = useSocialStore((s) => s.requests);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
   const removeFriend = useSocialStore((s) => s.removeFriend);
+  const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
+  const cancelFriendRequest = useSocialStore((s) => s.cancelFriendRequest);
+  const currentUser = useAuthStore((s) => s.user);
 
   const [user, setUser] = useState<User | null>(null);
   const [userOrigin, setUserOrigin] = useState('');
@@ -36,8 +74,10 @@ export function UserProfileModal() {
   const passedUser = modalData?.user as User | undefined;
   const passedOrigin = (modalData?.origin as string | undefined) ?? '';
 
-  // Determine friendship status
-  const isFriend = user ? friends.some((f) => f.id === user.id) : false;
+  // Determine friendship status (federation-safe canonical matching)
+  const friendship: FriendshipStatus = user
+    ? getFriendshipStatus(user, currentUser, friends, requests)
+    : { state: 'none' };
 
   const loadUser = useCallback(async (id: string, origin: string) => {
     try {
@@ -132,19 +172,38 @@ export function UserProfileModal() {
     }
   };
 
-  const handleFriendAction = async () => {
+  const handleAddFriend = async () => {
     setFriendActionLoading(true);
-    try {
-      if (isFriend) {
-        await removeFriend(user.id);
-      } else {
-        await sendFriendRequest(user.username);
-      }
-    } catch {
-      // Silently fail
-    } finally {
-      setFriendActionLoading(false);
-    }
+    try { await sendFriendRequest(user.username); } catch { /* silent */ }
+    finally { setFriendActionLoading(false); }
+  };
+
+  const handleRemoveFriend = async () => {
+    if (friendship.state !== 'friends') return;
+    setFriendActionLoading(true);
+    try { await removeFriend(friendship.friend.id); } catch { /* silent */ }
+    finally { setFriendActionLoading(false); }
+  };
+
+  const handleCancelRequest = async () => {
+    if (friendship.state !== 'outbound_pending') return;
+    setFriendActionLoading(true);
+    try { await cancelFriendRequest(friendship.request.id); } catch { /* silent */ }
+    finally { setFriendActionLoading(false); }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (friendship.state !== 'inbound_pending') return;
+    setFriendActionLoading(true);
+    try { await updateFriendRequest(friendship.request.id, 'accepted'); } catch { /* silent */ }
+    finally { setFriendActionLoading(false); }
+  };
+
+  const handleDeclineRequest = async () => {
+    if (friendship.state !== 'inbound_pending') return;
+    setFriendActionLoading(true);
+    try { await updateFriendRequest(friendship.request.id, 'declined'); } catch { /* silent */ }
+    finally { setFriendActionLoading(false); }
   };
 
   const handleViewFriend = (friend: TaggedMutualFriend) => {
@@ -437,17 +496,40 @@ export function UserProfileModal() {
           >
             Send Message
           </button>
-          <button
-            onClick={handleFriendAction}
-            disabled={friendActionLoading}
-            className={`flex-1 py-2 rounded-lg text-[13px] font-medium border transition-colors disabled:opacity-50 ${
-              isFriend
-                ? 'text-txt-danger border-txt-danger/30 hover:bg-txt-danger/10'
-                : 'text-txt-primary border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10]'
-            }`}
-          >
-            {friendActionLoading ? '...' : isFriend ? 'Remove Friend' : 'Add Friend'}
-          </button>
+
+          {friendship.state === 'none' && (
+            <button onClick={handleAddFriend} disabled={friendActionLoading}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-primary border border-white/[0.08] bg-white/[0.06] hover:bg-white/[0.10] transition-colors disabled:opacity-50">
+              {friendActionLoading ? '...' : 'Add Friend'}
+            </button>
+          )}
+
+          {friendship.state === 'outbound_pending' && (
+            <button onClick={handleCancelRequest} disabled={friendActionLoading}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-amber-400 border border-amber-400/30 hover:bg-amber-400/10 transition-colors disabled:opacity-50">
+              {friendActionLoading ? '...' : 'Cancel Request'}
+            </button>
+          )}
+
+          {friendship.state === 'inbound_pending' && (
+            <>
+              <button onClick={handleAcceptRequest} disabled={friendActionLoading}
+                className="flex-1 py-2 rounded-lg text-[13px] font-medium text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50">
+                {friendActionLoading ? '...' : 'Accept'}
+              </button>
+              <button onClick={handleDeclineRequest} disabled={friendActionLoading}
+                className="py-2 px-3 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50">
+                {friendActionLoading ? '...' : 'Ignore'}
+              </button>
+            </>
+          )}
+
+          {friendship.state === 'friends' && (
+            <button onClick={handleRemoveFriend} disabled={friendActionLoading}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium text-txt-danger border border-txt-danger/30 hover:bg-txt-danger/10 transition-colors disabled:opacity-50">
+              {friendActionLoading ? '...' : 'Remove Friend'}
+            </button>
+          )}
         </div>
       </div>
     </div>

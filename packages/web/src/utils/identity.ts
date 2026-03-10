@@ -41,3 +41,33 @@ export function resolveDisplayIdentity(user: User, homeUser: User | null): User 
   if (isSelf(user, homeUser)) return homeUser;
   return user;
 }
+
+/**
+ * Federation-safe check: do two user-like objects represent the same person?
+ * Uses cascading strategies to handle missing homeUserId on old replicated users.
+ */
+export function canonicalUserMatch(
+  a: { id: string; username: string; homeUserId?: string | null; homeInstance?: string | null },
+  b: { id: string; username: string; homeUserId?: string | null; homeInstance?: string | null },
+): boolean {
+  // 1. Same local ID (same instance)
+  if (a.id === b.id) return true;
+
+  // 2. homeUserId cross-matching
+  if (a.homeUserId && b.homeUserId && a.homeUserId === b.homeUserId) return true;
+  if (a.homeUserId && a.homeUserId === b.id) return true;
+  if (b.homeUserId && b.homeUserId === a.id) return true;
+
+  // 3. Username + home instance fallback (mirrors isSelf resilience)
+  const aBase = parseFederatedUsername(a.username);
+  const bBase = parseFederatedUsername(b.username);
+  if (aBase.baseName !== bBase.baseName) return false;
+
+  const aHome = a.homeInstance ?? aBase.domain ?? null;
+  const bHome = b.homeInstance ?? bBase.domain ?? null;
+
+  if (!aHome && !bHome) return true;                    // Both native to home instance
+  if (!aHome) return bHome === window.location.host;     // a native, b federated
+  if (!bHome) return aHome === window.location.host;     // b native, a federated
+  return aHome === bHome;                                // Both have explicit homes
+}

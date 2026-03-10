@@ -263,6 +263,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+
+      // Load social data so profile modals show correct friendship state.
+      // Runs on each ready (home + remote) — loadFriends/loadRequests fan out
+      // across all connected instances and replace the arrays (idempotent).
+      {
+        const { loadFriends, loadRequests } = useSocialStore.getState();
+        loadFriends();
+        loadRequests();
+      }
       break;
 
     case 'message_created':
