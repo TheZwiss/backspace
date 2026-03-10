@@ -3,7 +3,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { api } from '../../../api/client';
-import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP, ACCENT_PRESETS } from '../../../utils/gradients';
+import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 
@@ -212,17 +212,17 @@ export function AccountPanel() {
         </div>
 
         {/* Live Preview Card */}
-        <div className="rounded-lg overflow-hidden border border-white/[0.06] mb-4">
+        <div className="rounded-lg overflow-hidden border border-white/[0.06] mb-4 bg-surface-channel">
           {/* Banner area */}
           <div
-            className="h-[80px] relative"
+            className="h-[80px]"
             style={displayBannerSrc
               ? { backgroundImage: `url(${displayBannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
               : { background: bannerFallback, opacity: 0.6 }
             }
           />
           {/* Avatar + info */}
-          <div className="px-4 pb-3 bg-surface-channel">
+          <div className="px-4 pb-3">
             <div
               className="mt-[-28px] mb-2 w-fit rounded-full"
               style={{ border: '4px solid var(--color-surface-channel, #1e1e2a)' }}
@@ -244,8 +244,7 @@ export function AccountPanel() {
               )}
             </div>
             <div
-              className="font-semibold text-[15px] leading-tight"
-              style={{ color: effectiveAccent ?? 'var(--color-txt-primary)' }}
+              className="font-semibold text-[15px] leading-tight text-txt-primary"
             >
               {effectiveDisplayName}
             </div>
@@ -410,24 +409,29 @@ export function AccountPanel() {
             </div>
           </div>
 
-          {/* Accent Color */}
+          {/* Banner Color */}
           <div>
-            <label className="block text-xs text-txt-secondary mb-1.5">Accent Color</label>
+            <label className="block text-xs text-txt-secondary mb-1.5">Banner Color</label>
             <div className="grid grid-cols-7 gap-1.5 mb-2">
-              {ACCENT_PRESETS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => { setAccentColor(color); setCustomHex(color); }}
-                  className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110"
-                  style={{
-                    backgroundColor: color,
-                    borderColor: accentColor === color ? 'white' : 'transparent',
-                    boxShadow: accentColor === color ? `0 0 0 2px ${color}40` : 'none',
-                  }}
-                  title={color}
-                />
-              ))}
+              {[0, 1, 2].map((row) =>
+                BANNER_COLOR_PRESETS.map((family) => {
+                  const color = family[row]!;
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => { setAccentColor(color); setCustomHex(color); }}
+                      className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110"
+                      style={{
+                        backgroundColor: color,
+                        borderColor: accentColor === color ? 'white' : 'transparent',
+                        boxShadow: accentColor === color ? `0 0 0 2px ${color}40` : 'none',
+                      }}
+                      title={color}
+                    />
+                  );
+                })
+              )}
             </div>
             <div className="flex items-center gap-2">
               <input

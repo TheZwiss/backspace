@@ -6,19 +6,25 @@
 import type { AvatarColor } from '@backspace/shared';
 
 export interface GradientEntry {
-  gradient: string;
-  glow: string;
+  from: string;      // hex start color
+  to: string;        // hex end color
+  gradient: string;  // CSS linear-gradient (derived from from/to)
+  glow: string;      // hex glow color (hand-curated most prominent color)
+}
+
+function grad(from: string, to: string, glow: string): GradientEntry {
+  return { from, to, gradient: `linear-gradient(135deg, ${from}, ${to})`, glow };
 }
 
 // ── Avatar gradients (user fallbacks) ──
 const AVATAR_GRADIENTS: GradientEntry[] = [
-  { gradient: 'linear-gradient(135deg, #059669, #10b981)', glow: '#10b981' },   // mint
-  { gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)', glow: '#6366f1' },   // sky
-  { gradient: 'linear-gradient(135deg, #a78bfa, #c084fc)', glow: '#c084fc' },   // lavender
-  { gradient: 'linear-gradient(135deg, #f97316, #ef4444)', glow: '#f97316' },   // coral
-  { gradient: 'linear-gradient(135deg, #f43f5e, #ec4899)', glow: '#ec4899' },   // rose
-  { gradient: 'linear-gradient(135deg, #14b8a6, #06b6d4)', glow: '#06b6d4' },   // teal
-  { gradient: 'linear-gradient(135deg, #f59e0b, #eab308)', glow: '#f59e0b' },   // amber
+  grad('#059669', '#10b981', '#10b981'),   // mint
+  grad('#3b82f6', '#6366f1', '#6366f1'),   // sky
+  grad('#a78bfa', '#c084fc', '#c084fc'),   // lavender
+  grad('#f97316', '#ef4444', '#f97316'),   // coral
+  grad('#f43f5e', '#ec4899', '#ec4899'),   // rose
+  grad('#14b8a6', '#06b6d4', '#06b6d4'),   // teal
+  grad('#f59e0b', '#eab308', '#f59e0b'),   // amber
 ];
 
 export const AVATAR_GRADIENT_MAP: Record<AvatarColor, GradientEntry> = {
@@ -33,20 +39,17 @@ export const AVATAR_GRADIENT_MAP: Record<AvatarColor, GradientEntry> = {
 
 // ── Space icon gradients (space fallbacks) ──
 const SPACE_GRADIENTS: GradientEntry[] = [
-  { gradient: 'linear-gradient(135deg, #ef4444, #f97316)', glow: '#f97316' },   // red-orange
-  { gradient: 'linear-gradient(135deg, #ec4899, #f472b6)', glow: '#ec4899' },   // pink
-  { gradient: 'linear-gradient(135deg, #14b8a6, #06b6d4)', glow: '#06b6d4' },   // teal-cyan
-  { gradient: 'linear-gradient(135deg, #f59e0b, #eab308)', glow: '#f59e0b' },   // amber-yellow
-  { gradient: 'linear-gradient(135deg, #3b82f6, #6366f1)', glow: '#6366f1' },   // blue-indigo
-  { gradient: 'linear-gradient(135deg, #a78bfa, #c084fc)', glow: '#c084fc' },   // lavender
-  { gradient: 'linear-gradient(135deg, #059669, #10b981)', glow: '#10b981' },   // mint
+  grad('#ef4444', '#f97316', '#f97316'),   // red-orange
+  grad('#ec4899', '#f472b6', '#ec4899'),   // pink
+  grad('#14b8a6', '#06b6d4', '#06b6d4'),   // teal-cyan
+  grad('#f59e0b', '#eab308', '#f59e0b'),   // amber-yellow
+  grad('#3b82f6', '#6366f1', '#6366f1'),   // blue-indigo
+  grad('#a78bfa', '#c084fc', '#c084fc'),   // lavender
+  grad('#059669', '#10b981', '#10b981'),   // mint
 ];
 
 // ── Home button (DM / Backspace) — fixed indigo-purple gradient ──
-export const HOME_GRADIENT: GradientEntry = {
-  gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-  glow: '#8b5cf6',
-};
+export const HOME_GRADIENT: GradientEntry = grad('#6366f1', '#8b5cf6', '#8b5cf6');
 
 /** djb2 hash → stable unsigned 32-bit integer. */
 function hashString(str: string): number {
@@ -72,11 +75,19 @@ export function getSpaceGradient(id?: string | null, name?: string): GradientEnt
   return SPACE_GRADIENTS[hashString(key) % SPACE_GRADIENTS.length]!;
 }
 
-/** Flat accent-color presets derived from the avatar gradient palette. Both stops per gradient. */
-export const ACCENT_PRESETS: string[] = AVATAR_GRADIENTS.flatMap(g => {
-  const matches = g.gradient.match(/#[0-9a-fA-F]{6}/g);
-  return matches ?? [];
-});
+/** Banner-color presets: 7 families × 3 shades (deep, vibrant, soft). */
+export const BANNER_COLOR_PRESETS: string[][] = [
+  ['#047857', '#10b981', '#6ee7b7'],   // mint
+  ['#4338ca', '#6366f1', '#a5b4fc'],   // sky
+  ['#7c3aed', '#c084fc', '#e9d5ff'],   // lavender
+  ['#c2410c', '#f97316', '#fdba74'],   // coral
+  ['#be185d', '#ec4899', '#f9a8d4'],   // rose
+  ['#0e7490', '#06b6d4', '#67e8f9'],   // teal
+  ['#b45309', '#f59e0b', '#fcd34d'],   // amber
+];
+
+/** @deprecated Use BANNER_COLOR_PRESETS instead. */
+export const ACCENT_PRESETS: string[] = BANNER_COLOR_PRESETS.map(f => f[1]!);
 
 /** Shift each RGB component of a hex color by `amount` (positive = lighter, negative = darker). */
 export function adjustColor(hex: string, amount: number): string {

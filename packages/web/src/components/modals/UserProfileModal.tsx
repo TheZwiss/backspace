@@ -251,7 +251,7 @@ export function UserProfileModal() {
         </div>
 
         {/* Header (avatar + name) */}
-        <div className="px-5 flex-shrink-0">
+        <div className="px-5 flex-shrink-0 relative">
           <div
             className="mt-[-48px] mb-2 w-fit rounded-full"
             style={{ border: '4px solid var(--color-surface-elevated, #1e1e2a)' }}
@@ -269,7 +269,6 @@ export function UserProfileModal() {
             <Username
               username={displayName}
               className="text-[20px] font-bold leading-tight"
-              style={user.accentColor ? { color: user.accentColor } : undefined}
             />
             <div className="text-[14px] text-txt-tertiary mt-0.5">
               {domain ? (
@@ -346,23 +345,6 @@ export function UserProfileModal() {
                 </div>
               </div>
 
-              {/* Accent color */}
-              {user.accentColor && (
-                <div>
-                  <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-                    Accent Color
-                  </span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div
-                      className="w-5 h-5 rounded-full border border-white/10"
-                      style={{ backgroundColor: user.accentColor }}
-                    />
-                    <span className="text-[12px] text-txt-tertiary font-mono">
-                      {user.accentColor}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

@@ -97,7 +97,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
       />
 
       {/* Body */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 relative">
         {/* Avatar */}
         <div
           className="mt-[-40px] mb-3 w-fit rounded-full"
@@ -117,7 +117,6 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
           <Username
             username={user.displayName ?? baseName}
             className="text-[16px] font-semibold leading-tight"
-            style={user.accentColor ? { color: user.accentColor } : undefined}
           />
           <div className="text-[13px] text-txt-tertiary">
             {domain ? (
