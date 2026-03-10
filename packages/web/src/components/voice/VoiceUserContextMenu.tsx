@@ -4,6 +4,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { getActiveRoom, setCameraSubscription } from '../../hooks/useLiveKit';
 
 interface VoiceModMenuItemsProps {
   targetUserId: string;
@@ -196,6 +197,7 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
           onMouseEnter={cancelCloseTimer}
           onMouseLeave={startCloseTimer}
           onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           {channels.map((ch) => (
             <button
@@ -248,6 +250,12 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
   const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
   const perUserVolume = participantVolumes.get(targetUserId) ?? 100;
 
+  const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
+  const participants = useVoiceStore((s) => s.participants);
+  const targetParticipant = participants.find((p) => p.userId === targetUserId);
+  const targetHasCamera = targetParticipant?.isCameraOn ?? false;
+  const isCameraUnwatched = unwatchedCameras.has(targetUserId);
+
   // Click-outside dismissal
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -281,6 +289,8 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
       ref={menuRef}
       className="fixed z-[200] bg-surface-elevated rounded-md shadow-elevation-high min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: position.x, top: position.y }}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       {hasModPerms && (
         <>
@@ -290,6 +300,41 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
               channelId={channelId}
               onAction={onClose}
             />
+          </div>
+          <div className="h-px bg-white/[0.06] mx-1.5" />
+        </>
+      )}
+      {targetHasCamera && (
+        <>
+          <div className="py-1.5">
+            <button
+              onClick={() => {
+                const room = getActiveRoom();
+                const identity = targetParticipant?.identity;
+                if (isCameraUnwatched) {
+                  useVoiceStore.getState().rewatchCamera(targetUserId);
+                  if (identity) setCameraSubscription(room, identity, true);
+                } else {
+                  useVoiceStore.getState().unwatchCamera(targetUserId);
+                  if (identity) setCameraSubscription(room, identity, false);
+                }
+                onClose();
+              }}
+              className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+              style={{ width: 'calc(100% - 12px)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
+                {isCameraUnwatched ? (
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                ) : (
+                  <>
+                    <path d="M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                    <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </>
+                )}
+              </svg>
+              {isCameraUnwatched ? 'Watch Camera' : 'Stop Watching Camera'}
+            </button>
           </div>
           <div className="h-px bg-white/[0.06] mx-1.5" />
         </>

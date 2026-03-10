@@ -19,6 +19,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const isSpeaking = useVoiceStore((s) => s.speakingParticipantIds.has(participant.identity));
   const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
 
   const [, forceUpdate] = useState(0);
@@ -150,6 +151,16 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
                           stroke="white"
                           strokeWidth="2"
                         />
+                      </svg>
+                    </div>
+                  )}
+                  {!isLocal && participant.isCameraOn && (
+                    <div className={`w-5 h-5 ${unwatchedCameras.has(participant.userId) ? 'bg-accent-rose/90' : 'bg-white/20'} rounded-full flex items-center justify-center`}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                        {unwatchedCameras.has(participant.userId) && (
+                          <line x1="1" y1="1" x2="23" y2="23" stroke="white" strokeWidth="2" strokeLinecap="round" />
+                        )}
                       </svg>
                     </div>
                   )}

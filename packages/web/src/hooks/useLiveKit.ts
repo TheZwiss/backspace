@@ -111,6 +111,17 @@ export function setStreamSubscription(room: Room | null, targetIdentity: string,
   });
 }
 
+export function setCameraSubscription(room: Room | null, targetIdentity: string, subscribed: boolean) {
+  if (!room) return;
+  const rp = room.remoteParticipants.get(targetIdentity);
+  if (!rp) return;
+  rp.trackPublications.forEach((pub) => {
+    if (pub.source === Track.Source.Camera) {
+      (pub as RemoteTrackPublication).setSubscribed(subscribed);
+    }
+  });
+}
+
 function parseIdentity(identity: string): { userId: string; username: string } {
   const parts = identity.split(':');
   return { userId: parts[0] ?? identity, username: parts[1] ?? identity };
@@ -167,9 +178,12 @@ export function useLiveKit() {
       let lkVideoTrack: Track | null = null;
       let lkScreenTrack: Track | null = null;
       let hasScreenSharePublication = false;
+      let hasCameraPublication = false;
       p.trackPublications.forEach((pub) => {
         // Detect screen share publication even if unsubscribed
         if (pub.source === Track.Source.ScreenShare) hasScreenSharePublication = true;
+        // Detect camera publication even if unsubscribed (for unwatched cameras)
+        if (pub.source === Track.Source.Camera) hasCameraPublication = true;
 
         const track = pub.track;
         if (!track) return;
@@ -212,7 +226,7 @@ export function useLiveKit() {
         homeUserId,
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
-        isCameraOn: !!videoTrack,
+        isCameraOn: hasCameraPublication && p.isCameraEnabled, // True even when unsubscribed
         isScreenSharing: hasScreenSharePublication, // True even when unsubscribed
         isLocal,
         audioTrack,

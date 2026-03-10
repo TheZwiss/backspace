@@ -39,12 +39,15 @@ interface VoiceState {
   streamVolumes: Map<string, number>;       // userId → 0-200 (100 default)
   streamMutes: Map<string, boolean>;        // userId → muted?
   watchingStreams: Set<string>;             // userIds we're watching
+  unwatchedCameras: Set<string>;           // userIds whose cameras we've opted out of
   streamAttenuationEnabled: boolean;        // global toggle, default true
   streamAttenuationStrength: number;        // 0-100, default 50
   setStreamVolume: (userId: string, volume: number) => void;
   setStreamMute: (userId: string, muted: boolean) => void;
   watchStream: (userId: string) => void;
   unwatchStream: (userId: string) => void;
+  unwatchCamera: (userId: string) => void;
+  rewatchCamera: (userId: string) => void;
   clearStreamVolume: (userId: string) => void;
   clearStreamMute: (userId: string) => void;
   setStreamAttenuationEnabled: (enabled: boolean) => void;
@@ -135,6 +138,7 @@ export const useVoiceStore = create<VoiceState>()(
       streamVolumes: new Map(),
       streamMutes: new Map(),
       watchingStreams: new Set(),
+      unwatchedCameras: new Set(),
       streamAttenuationEnabled: false,
       streamAttenuationStrength: 50,
 
@@ -164,6 +168,20 @@ export const useVoiceStore = create<VoiceState>()(
           const newSet = new Set(state.watchingStreams);
           newSet.delete(userId);
           return { watchingStreams: newSet };
+        });
+      },
+      unwatchCamera: (userId) => {
+        set((state) => {
+          const newSet = new Set(state.unwatchedCameras);
+          newSet.add(userId);
+          return { unwatchedCameras: newSet };
+        });
+      },
+      rewatchCamera: (userId) => {
+        set((state) => {
+          const newSet = new Set(state.unwatchedCameras);
+          newSet.delete(userId);
+          return { unwatchedCameras: newSet };
         });
       },
       clearStreamVolume: (userId) => {
@@ -366,6 +384,7 @@ export const useVoiceStore = create<VoiceState>()(
             streamVolumes: new Map(),
             streamMutes: new Map(),
             watchingStreams: new Set(),
+            unwatchedCameras: new Set(),
             voiceUsers,
           };
         });
@@ -391,6 +410,7 @@ export const useVoiceStore = create<VoiceState>()(
           streamVolumes: new Map(),
           streamMutes: new Map(),
           watchingStreams: new Set(),
+          unwatchedCameras: new Set(),
         });
       },
 
@@ -420,6 +440,7 @@ export const useVoiceStore = create<VoiceState>()(
         streamVolumes: new Map(),
         streamMutes: new Map(),
         watchingStreams: new Set(),
+        unwatchedCameras: new Set(),
         serverMutedUserIds: new Set(),
         serverDeafenedUserIds: new Set(),
       }),
@@ -494,6 +515,7 @@ export const useVoiceStore = create<VoiceState>()(
         merged.streamVolumes = currentState.streamVolumes;
         merged.streamMutes = currentState.streamMutes;
         merged.watchingStreams = currentState.watchingStreams;
+        merged.unwatchedCameras = currentState.unwatchedCameras;
         return merged;
       },
     }
