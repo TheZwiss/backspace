@@ -287,8 +287,8 @@ export function SpaceSettingsModal() {
     }`;
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-xl">
-      <div className="flex gap-4 h-[min(460px,65vh)]">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-2xl">
+      <div className="flex gap-4 h-[min(520px,70vh)]">
         {/* Tabs */}
         <div className="w-32 flex-shrink-0 self-start z-10">
           <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { Toggle } from '../../ui/Toggle';
 import type { InstanceAdminSettings } from '@backspace/shared';
 
 export function GeneralPanel() {
@@ -70,19 +71,7 @@ export function GeneralPanel() {
               <div className="text-sm font-medium text-txt-primary">Open Registration</div>
               <div className="text-xs text-txt-tertiary mt-0.5">Allow new users to create accounts on this instance</div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDraft({ ...draft, registrationOpen: !draft.registrationOpen })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                draft.registrationOpen ? 'bg-accent-primary' : 'bg-interactive-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                  draft.registrationOpen ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <Toggle enabled={draft.registrationOpen} onChange={(v) => setDraft({ ...draft, registrationOpen: v })} />
           </label>
         </div>
       </div>
@@ -96,19 +85,7 @@ export function GeneralPanel() {
               <div className="text-sm font-medium text-txt-primary">Space Discovery</div>
               <div className="text-xs text-txt-tertiary mt-0.5">Allow spaces to appear in the public Explore page</div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDraft({ ...draft, discoveryEnabled: !draft.discoveryEnabled })}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
-                draft.discoveryEnabled ? 'bg-accent-primary' : 'bg-interactive-muted'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                  draft.discoveryEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            <Toggle enabled={draft.discoveryEnabled} onChange={(v) => setDraft({ ...draft, discoveryEnabled: v })} />
           </label>
         </div>
       </div>

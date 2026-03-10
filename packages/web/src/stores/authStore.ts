@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User } from '@backspace/shared';
+import type { User, UserStatus } from '@backspace/shared';
 import { api } from '../api/client';
 import { useChatStore } from './chatStore';
 import { useSpaceStore } from './spaceStore';
@@ -16,7 +16,7 @@ interface AuthState {
   register: (username: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
-  updateProfile: (data: { displayName?: string; avatar?: string; customStatus?: string }) => Promise<void>;
+  updateProfile: (data: { displayName?: string; avatar?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
 }

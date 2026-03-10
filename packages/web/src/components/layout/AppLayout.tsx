@@ -12,7 +12,6 @@ import { CreateChannelModal } from '../modals/CreateChannel';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { SpaceSettingsModal } from '../modals/SpaceSettings';
-import { InstanceSettingsModal } from '../modals/InstanceSettings';
 import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
@@ -274,7 +273,6 @@ export function AppLayout() {
       <InviteModal />
       <UserSettingsModal />
       <SpaceSettingsModal />
-      <InstanceSettingsModal />
       <ChannelSettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
