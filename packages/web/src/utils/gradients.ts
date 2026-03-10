@@ -72,6 +72,12 @@ export function getSpaceGradient(id?: string | null, name?: string): GradientEnt
   return SPACE_GRADIENTS[hashString(key) % SPACE_GRADIENTS.length]!;
 }
 
+/** Flat accent-color presets derived from the avatar gradient palette. Both stops per gradient. */
+export const ACCENT_PRESETS: string[] = AVATAR_GRADIENTS.flatMap(g => {
+  const matches = g.gradient.match(/#[0-9a-fA-F]{6}/g);
+  return matches ?? [];
+});
+
 /** Shift each RGB component of a hex color by `amount` (positive = lighter, negative = darker). */
 export function adjustColor(hex: string, amount: number): string {
   const r = Math.max(0, Math.min(255, parseInt(hex.slice(1, 3), 16) + amount));

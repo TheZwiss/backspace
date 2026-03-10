@@ -3,16 +3,10 @@ import { useAuthStore } from '../../../stores/authStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { api } from '../../../api/client';
-import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP } from '../../../utils/gradients';
+import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP, ACCENT_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 
-const ACCENT_PRESETS = [
-  '#86efac', '#fca5a5', '#c4b5fd', '#7dd3fc',
-  '#fcd34d', '#fda4af', '#fb923c', '#7c6cf6',
-  '#ef4444', '#f97316', '#22d3ee', '#a3e635',
-  '#f472b6', '#818cf8', '#2dd4bf', '#e879f9',
-];
 
 export function AccountPanel() {
   const user = useAuthStore((s) => s.user);
@@ -419,7 +413,7 @@ export function AccountPanel() {
           {/* Accent Color */}
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">Accent Color</label>
-            <div className="grid grid-cols-8 gap-1.5 mb-2">
+            <div className="grid grid-cols-7 gap-1.5 mb-2">
               {ACCENT_PRESETS.map((color) => (
                 <button
                   key={color}
