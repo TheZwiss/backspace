@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ImageCropModal } from '../../ui/ImageCropModal';
-import { Avatar } from '../../ui/Avatar';
+import { getSpaceGradient } from '../../../utils/gradients';
 import { useSpaceStore } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
@@ -256,7 +256,12 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                   )}
                 </>
               ) : (
-                <Avatar name={displayIconName} size={64} />
+                <div
+                  className="w-full h-full rounded-full flex items-center justify-center text-white text-xl font-bold"
+                  style={{ background: getSpaceGradient(space.id, space.name).gradient }}
+                >
+                  {space.name.charAt(0).toUpperCase()}
+                </div>
               )}
               {uploadingIcon && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
