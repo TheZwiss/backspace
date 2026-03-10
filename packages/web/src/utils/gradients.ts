@@ -56,3 +56,11 @@ export function getSpaceGradient(id?: string | null, name?: string): GradientEnt
   const key = id || name || 'unknown';
   return SPACE_GRADIENTS[hashString(key) % SPACE_GRADIENTS.length]!;
 }
+
+/** Shift each RGB component of a hex color by `amount` (positive = lighter, negative = darker). */
+export function adjustColor(hex: string, amount: number): string {
+  const r = Math.max(0, Math.min(255, parseInt(hex.slice(1, 3), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(hex.slice(3, 5), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(hex.slice(5, 7), 16) + amount));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}

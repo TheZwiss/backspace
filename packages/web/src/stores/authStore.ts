@@ -16,7 +16,7 @@ interface AuthState {
   register: (username: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
-  updateProfile: (data: { displayName?: string; avatar?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
+  updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
 }

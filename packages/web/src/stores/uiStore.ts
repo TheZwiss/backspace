@@ -13,6 +13,7 @@ type ModalType =
   | 'imagePreview'
   | 'newDm'
   | 'addDmMember'
+  | 'userProfile'
   | null;
 
 interface Toast {

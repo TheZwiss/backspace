@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { api } from '../../api/client';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { getAvatarGradient } from '../../utils/gradients';
+import { getAvatarGradient, adjustColor } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
 
 interface UserProfilePopoutProps {
@@ -18,14 +19,23 @@ interface UserProfilePopoutProps {
 export function UserProfilePopout({ user, onClose, position }: UserProfilePopoutProps) {
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+  const openModal = useUIStore((s) => s.openModal);
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 
+  const [mutualCounts, setMutualCounts] = useState<{ friends: number; spaces: number } | null>(null);
+
+  useEffect(() => {
+    api.users.getMutuals(user.id)
+      .then((data) => setMutualCounts({ friends: data.mutualFriends.length, spaces: data.mutualSpaces.length }))
+      .catch(() => {});
+  }, [user.id]);
+
   const top = position
-    ? Math.min(Math.max(8, position.top), window.innerHeight - 360)
+    ? Math.min(Math.max(8, position.top), window.innerHeight - 460)
     : undefined;
   const left = position
-    ? Math.min(Math.max(8, position.left), window.innerWidth - 316)
+    ? Math.min(Math.max(8, position.left), window.innerWidth - 356)
     : undefined;
 
   const handleSendMessage = async () => {
@@ -47,9 +57,22 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
     }
   };
 
+  const handleViewFullProfile = () => {
+    onClose();
+    openModal('userProfile', { userId: user.id });
+  };
+
+  // Banner display
+  const bannerSrc = user.banner
+    ? (user.banner.startsWith('http') ? user.banner : api.uploads.url(user.banner))
+    : null;
+  const bannerFallback = user.accentColor
+    ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`
+    : getAvatarGradient(user.homeUserId ?? user.id, displayName).gradient;
+
   return (
     <div
-      className="fixed z-[200] w-[300px] rounded-[12px] overflow-hidden animate-fade-in select-none border border-white/[0.07]"
+      className="fixed z-[200] w-[340px] rounded-[12px] overflow-hidden animate-fade-in select-none border border-white/[0.07]"
       style={{
         ...(position
           ? { top, left }
@@ -62,34 +85,35 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
     >
       {/* Banner */}
       <div
-        className="h-[48px] rounded-t-[12px]"
-        style={{
-          background: getAvatarGradient(user.homeUserId ?? user.id, displayName).gradient,
-          opacity: 0.6,
-        }}
+        className="h-[80px] rounded-t-[12px]"
+        style={bannerSrc
+          ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+          : { background: bannerFallback, opacity: 0.6 }
+        }
       />
 
       {/* Body */}
       <div className="px-4 pb-4">
-        {/* Avatar — negative margin pulls it into the banner while staying in flow */}
+        {/* Avatar */}
         <div
-          className="mt-[-28px] mb-3 w-fit rounded-full"
+          className="mt-[-40px] mb-3 w-fit rounded-full"
           style={{ border: '4px solid rgba(20,20,26,0.85)' }}
         >
           <Avatar
             src={user.avatar}
             name={displayName}
-            size={56}
+            size={80}
             status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
             userId={user.homeUserId ?? user.id}
           />
         </div>
 
-        {/* Name & info — flows naturally after avatar */}
+        {/* Name & info */}
         <div>
           <Username
             username={user.displayName ?? baseName}
-            className="text-[16px] font-semibold text-txt-primary leading-tight"
+            className="text-[16px] font-semibold leading-tight"
+            style={user.accentColor ? { color: user.accentColor } : undefined}
           />
           <div className="text-[13px] text-txt-tertiary">
             {domain ? (
@@ -105,25 +129,65 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
           )}
         </div>
 
-        {/* Divider */}
+        {/* Bio */}
+        {user.bio && (
+          <>
+            <div className="border-t border-white/[0.06] my-3" />
+            <div>
+              <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+                About Me
+              </span>
+              <div className="text-[13px] text-txt-secondary mt-1 whitespace-pre-wrap break-words leading-relaxed [&_strong]:font-semibold [&_strong]:text-txt-primary [&_em]:italic [&_a]:text-accent-primary [&_a]:underline">
+                <ReactMarkdown
+                  allowedElements={['p', 'strong', 'em', 'a', 'br']}
+                  unwrapDisallowed
+                >
+                  {user.bio}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="border-t border-white/[0.06] my-3" />
 
-        {/* Member since */}
-        <div>
-          <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
-            Member Since
-          </span>
-          <span className="text-[12px] text-txt-secondary ml-2">
-            {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
+        {/* Member since + Mutuals */}
+        <div className="space-y-1.5">
+          <div>
+            <span className="text-[11px] uppercase tracking-wide font-semibold text-txt-tertiary">
+              Member Since
+            </span>
+            <span className="text-[12px] text-txt-secondary ml-2">
+              {new Date(user.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+          {mutualCounts && (mutualCounts.friends > 0 || mutualCounts.spaces > 0) && (
+            <div className="text-[12px] text-txt-tertiary">
+              {mutualCounts.friends > 0 && (
+                <span>{mutualCounts.friends} mutual friend{mutualCounts.friends !== 1 ? 's' : ''}</span>
+              )}
+              {mutualCounts.friends > 0 && mutualCounts.spaces > 0 && (
+                <span className="mx-1">&middot;</span>
+              )}
+              {mutualCounts.spaces > 0 && (
+                <span>{mutualCounts.spaces} mutual space{mutualCounts.spaces !== 1 ? 's' : ''}</span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Send Message button */}
+        {/* Actions */}
         <button
           onClick={handleSendMessage}
           className="w-full mt-3 py-2 rounded-lg text-[13px] font-medium text-txt-primary bg-white/[0.06] hover:bg-white/[0.10] border border-white/[0.08] transition-colors"
         >
           Send Message
+        </button>
+        <button
+          onClick={handleViewFullProfile}
+          className="w-full mt-1.5 py-2 rounded-lg text-[13px] font-medium text-txt-tertiary hover:text-txt-secondary bg-transparent hover:bg-white/[0.04] transition-colors"
+        >
+          View Full Profile
         </button>
       </div>
     </div>

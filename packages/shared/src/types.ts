@@ -5,6 +5,9 @@ export interface User {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  banner: string | null;
+  accentColor: string | null;
+  bio: string | null;
   status: UserStatus;
   customStatus: string | null;
   isAdmin: boolean;
@@ -340,6 +343,9 @@ export interface UpdateSpaceRequest {
 export interface UpdateUserRequest {
   displayName?: string;
   avatar?: string;
+  banner?: string;
+  accentColor?: string;
+  bio?: string;
   customStatus?: string;
   status?: UserStatus;
   replicatedInstances?: ReplicatedInstance[];
@@ -404,6 +410,9 @@ export interface Friend {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  banner: string | null;
+  accentColor: string | null;
+  bio: string | null;
   status: UserStatus;
   customStatus: string | null;
   createdAt: number;

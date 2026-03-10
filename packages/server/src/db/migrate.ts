@@ -85,6 +85,14 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'banner', type: 'TEXT' }
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'banner', type: 'TEXT' },
+        { name: 'accent_color', type: 'TEXT' },
+        { name: 'bio', type: 'TEXT' },
+      ]
     }
   ];
 

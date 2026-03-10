@@ -14,10 +14,13 @@ export function resolveAssetUrl(filename: string | null | undefined, origin: str
  * Rewrite the avatar field on a user-like object for remote origins.
  * Mutates in-place for efficiency (called on arrays of members/messages).
  */
-export function normalizeUserAssets<T extends { avatar?: string | null }>(user: T, origin: string): T {
+export function normalizeUserAssets<T extends { avatar?: string | null; banner?: string | null }>(user: T, origin: string): T {
   if (!origin) return user;
   if (user.avatar) {
     user.avatar = resolveAssetUrl(user.avatar, origin) ?? user.avatar;
+  }
+  if (user.banner) {
+    user.banner = resolveAssetUrl(user.banner, origin) ?? user.banner;
   }
   // Qualify users local to the remote instance with their origin domain.
   // These users have no homeInstance (they're native there), so the client

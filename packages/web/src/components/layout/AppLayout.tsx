@@ -15,6 +15,7 @@ import { SpaceSettingsModal } from '../modals/SpaceSettings';
 import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
+import { UserProfileModal } from '../modals/UserProfileModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
@@ -276,6 +277,7 @@ export function AppLayout() {
       <ChannelSettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
+      <UserProfileModal />
       <IncomingCallModal />
       <ImagePreview />
       <PictureInPicture />

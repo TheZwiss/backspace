@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
@@ -38,7 +38,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, customStatus, status, replicatedInstances, homeUserId } = request.body;
+    const { displayName, avatar, banner, accentColor, bio, customStatus, status, replicatedInstances, homeUserId } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -57,6 +57,38 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     if (avatar !== undefined) {
       updateData.avatar = avatar;
+    }
+
+    if (banner !== undefined) {
+      if (banner && typeof banner === 'string' && banner.trim().length > 0) {
+        updateData.banner = banner.trim();
+      } else {
+        updateData.banner = null;
+      }
+    }
+
+    if (accentColor !== undefined) {
+      if (accentColor && typeof accentColor === 'string' && accentColor.trim().length > 0) {
+        const hex = accentColor.trim();
+        if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+          return reply.code(400).send({ error: 'Accent color must be a valid hex color (e.g. #ff0000)', statusCode: 400 });
+        }
+        updateData.accentColor = hex;
+      } else {
+        updateData.accentColor = null;
+      }
+    }
+
+    if (bio !== undefined) {
+      if (bio && typeof bio === 'string') {
+        const trimmed = bio.trim();
+        if (trimmed.length > 190) {
+          return reply.code(400).send({ error: 'Bio must be 190 characters or less', statusCode: 400 });
+        }
+        updateData.bio = trimmed || null;
+      } else {
+        updateData.bio = null;
+      }
     }
 
     if (customStatus !== undefined) {
@@ -148,5 +180,38 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send(sanitizeUser(user));
+  });
+
+  app.get<{ Params: { id: string } }>('/api/users/:id/mutuals', { preHandler: authenticate }, async (request, reply) => {
+    const { id: targetId } = request.params;
+    const myId = request.userId;
+    const db = getDb();
+
+    // Mutual friends: users who are friends with both me and the target
+    const myFriendRows = db.select().from(schema.friends).where(eq(schema.friends.userId, myId)).all();
+    const targetFriendRows = db.select().from(schema.friends).where(eq(schema.friends.userId, targetId)).all();
+    const myFriendIds = new Set(myFriendRows.map((f) => f.friendId));
+    const targetFriendIds = new Set(targetFriendRows.map((f) => f.friendId));
+    const mutualFriendIds = [...myFriendIds].filter((id) => targetFriendIds.has(id));
+
+    const mutualFriends = mutualFriendIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, mutualFriendIds)).all().map(sanitizeUser)
+      : [];
+
+    // Mutual spaces: spaces both me and the target are members of
+    const myMemberships = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.userId, myId)).all();
+    const targetMemberships = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.userId, targetId)).all();
+    const mySpaceIds = new Set(myMemberships.map((m) => m.spaceId));
+    const targetSpaceIds = new Set(targetMemberships.map((m) => m.spaceId));
+    const mutualSpaceIds = [...mySpaceIds].filter((id) => targetSpaceIds.has(id));
+
+    const mutualSpaces = mutualSpaceIds.length > 0
+      ? db.select({ id: schema.spaces.id, name: schema.spaces.name, icon: schema.spaces.icon })
+          .from(schema.spaces)
+          .where(inArray(schema.spaces.id, mutualSpaceIds))
+          .all()
+      : [];
+
+    return reply.code(200).send({ mutualFriends, mutualSpaces });
   });
 }
