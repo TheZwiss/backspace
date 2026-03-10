@@ -18,6 +18,10 @@ import type {
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
+// ─── Heartbeat State ──────────────────────────────────────────────────────────
+const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
 // SQLite's SQLITE_MAX_VARIABLE_NUMBER default is 999.
 // Chunk inArray() calls to stay safely under this limit.
 const BATCH_CHUNK_SIZE = 500;
@@ -193,6 +197,9 @@ class ConnectionManager {
         status: 'offline',
       });
     }
+
+    // Clean up userSpaces (re-populated on next connect via setUserSpaces)
+    this.userSpaces.delete(userId);
   }
 
   getUserConnections(userId: string): Set<WebSocket> {
@@ -527,6 +534,10 @@ class ConnectionManager {
 
   getAllOnlineUserIds(): string[] {
     return Array.from(this.connections.keys());
+  }
+
+  getAllConnections(): Map<string, Set<WebSocket>> {
+    return this.connections;
   }
 
   /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
@@ -965,6 +976,9 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
         return;
       }
 
+      // Any received message proves liveness
+      wsIsAlive.set(ws, true);
+
       if (!authenticated) {
         // First message must be auth
         if (parsed.type !== 'auth' || typeof parsed.token !== 'string') {
@@ -986,6 +1000,10 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
 
           // Add connection
           connectionManager.addConnection(userId, ws);
+
+          // Mark alive for heartbeat detection; browsers auto-respond to ping frames (RFC 6455)
+          wsIsAlive.set(ws, true);
+          ws.on('pong', () => { wsIsAlive.set(ws, true); });
 
           // Build and send ready payload
           const readyData = buildReadyPayload(userId);
@@ -1038,5 +1056,31 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
     ws.on('error', () => {
       clearTimeout(authTimeout);
     });
+  });
+
+  // ─── Heartbeat Sweep ──────────────────────────────────────────────────────
+  // Detect dead connections (e.g. PC shut off without TCP FIN).
+  // Sends protocol-level ping frames; browsers auto-respond with pong (RFC 6455).
+  // Worst-case detection: 30s + 30s + 5s grace = ~65s.
+  const HEARTBEAT_INTERVAL_MS = 30_000;
+
+  heartbeatInterval = setInterval(() => {
+    for (const [, userConnections] of connectionManager.getAllConnections()) {
+      for (const ws of userConnections) {
+        if (wsIsAlive.get(ws) === false) {
+          ws.terminate(); // Emits 'close' → removeConnection → scheduleDisconnect → finalizeDisconnect
+          continue;
+        }
+        wsIsAlive.set(ws, false);
+        if (ws.readyState === 1) ws.ping();
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+
+  app.addHook('onClose', async () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
   });
 }
