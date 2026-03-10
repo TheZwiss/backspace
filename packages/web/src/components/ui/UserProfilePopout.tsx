@@ -6,7 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { getAvatarGradient, adjustColor } from '../../utils/gradients';
+import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
 import { loadFederatedMutuals } from '../../utils/mutuals';
 
@@ -71,8 +71,11 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
     ? (user.banner.startsWith('http') ? user.banner : userApi.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
-    ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`
-    : getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor).gradient;
+    ? mutedGradient(user.accentColor, adjustColor(user.accentColor, -40))
+    : (() => {
+        const g = getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor);
+        return mutedGradient(g.from, g.to);
+      })();
 
   return (
     <div
@@ -92,7 +95,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
         className="h-[80px] rounded-t-[12px]"
         style={bannerSrc
           ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-          : { background: bannerFallback, opacity: 0.6 }
+          : { background: bannerFallback }
         }
       />
 

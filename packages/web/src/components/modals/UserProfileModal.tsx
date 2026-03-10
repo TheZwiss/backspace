@@ -8,7 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
-import { getAvatarGradient, getSpaceGradient, adjustColor } from '../../utils/gradients';
+import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
 import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 
@@ -149,8 +149,11 @@ export function UserProfileModal() {
     ? (user.banner.startsWith('http') ? user.banner : profileApi.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
-    ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`
-    : getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor).gradient;
+    ? mutedGradient(user.accentColor, adjustColor(user.accentColor, -40))
+    : (() => {
+        const g = getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor);
+        return mutedGradient(g.from, g.to);
+      })();
 
   const handleSendMessage = async () => {
     try {
@@ -236,7 +239,7 @@ export function UserProfileModal() {
           className="h-[100px] flex-shrink-0 relative"
           style={bannerSrc
             ? { backgroundImage: `url(${bannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : { background: bannerFallback, opacity: 0.6 }
+            : { background: bannerFallback }
           }
         >
           {/* Close button */}

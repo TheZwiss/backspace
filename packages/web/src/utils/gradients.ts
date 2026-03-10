@@ -89,6 +89,19 @@ export const BANNER_COLOR_PRESETS: string[][] = [
 /** @deprecated Use BANNER_COLOR_PRESETS instead. */
 export const ACCENT_PRESETS: string[] = BANNER_COLOR_PRESETS.map(f => f[1]!);
 
+/** Convert 6-digit hex (#rrggbb) to rgba string. */
+export function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Build a banner-style muted gradient from two hex colors with baked-in alpha. */
+export function mutedGradient(from: string, to: string, alpha = 0.6): string {
+  return `linear-gradient(135deg, ${hexToRgba(from, alpha)}, ${hexToRgba(to, alpha)})`;
+}
+
 /** Shift each RGB component of a hex color by `amount` (positive = lighter, negative = darker). */
 export function adjustColor(hex: string, amount: number): string {
   const r = Math.max(0, Math.min(255, parseInt(hex.slice(1, 3), 16) + amount));

@@ -3,7 +3,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { api } from '../../../api/client';
-import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
+import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 
@@ -86,10 +86,13 @@ export function AccountPanel() {
     : null;
   const displayAvatarSrc = avatarPreview ?? (avatarFilename === '' ? null : currentAvatarSrc);
 
-  // Banner fallback: accent gradient or avatar gradient
+  // Banner fallback: accent gradient or avatar gradient (alpha baked into gradient colors)
   const bannerFallback = effectiveAccent
-    ? `linear-gradient(135deg, ${effectiveAccent}, ${adjustColor(effectiveAccent, -40)})`
-    : getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName, effectiveAvatarColor).gradient;
+    ? mutedGradient(effectiveAccent, adjustColor(effectiveAccent, -40))
+    : (() => {
+        const g = getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName, effectiveAvatarColor);
+        return mutedGradient(g.from, g.to);
+      })();
 
   // ── File selection handlers ──
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,7 +221,7 @@ export function AccountPanel() {
             className="h-[80px]"
             style={displayBannerSrc
               ? { backgroundImage: `url(${displayBannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-              : { background: bannerFallback, opacity: 0.6 }
+              : { background: bannerFallback }
             }
           />
           {/* Avatar + info */}
@@ -339,7 +342,11 @@ export function AccountPanel() {
                 className="w-full h-full"
                 style={displayBannerSrc
                   ? { backgroundImage: `url(${displayBannerSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-                  : { background: bannerFallback, opacity: 0.5 }
+                  : { background: mutedGradient(
+                      effectiveAccent ?? getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName, effectiveAvatarColor).from,
+                      effectiveAccent ? adjustColor(effectiveAccent, -40) : getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName, effectiveAvatarColor).to,
+                      0.5
+                    ) }
                 }
               />
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
