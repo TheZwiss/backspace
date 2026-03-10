@@ -282,6 +282,7 @@ export type ServerEvent =
   | { type: 'join_request_declined'; request: JoinRequest }
   | { type: 'voice_server_muted'; userId: string; channelId: string; spaceId: string; muted: boolean }
   | { type: 'voice_server_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
+  | { type: 'voice_permission_muted'; userId: string; spaceId: string; muted: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
   | { type: 'voice_disconnected'; userId: string; channelId: string }
   | { type: 'member_banned'; spaceId: string; reason: string | null }

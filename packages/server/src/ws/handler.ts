@@ -80,6 +80,8 @@ class ConnectionManager {
   // Server-muted/deafened users (moderator action)
   private serverMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
   private serverDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // Permission-muted users (SPEAK permission revoked while in voice)
+  private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -413,6 +415,17 @@ class ConnectionManager {
   clearServerVoiceState(spaceId: string, userId: string): void {
     this.serverMutedUsers.delete(`${spaceId}:${userId}`);
     this.serverDeafenedUsers.delete(`${spaceId}:${userId}`);
+    this.permissionMutedUsers.delete(`${spaceId}:${userId}`);
+  }
+
+  setPermissionMuted(spaceId: string, userId: string, muted: boolean): void {
+    const key = `${spaceId}:${userId}`;
+    if (muted) this.permissionMutedUsers.add(key);
+    else this.permissionMutedUsers.delete(key);
+  }
+
+  isPermissionMuted(spaceId: string, userId: string): boolean {
+    return this.permissionMutedUsers.has(`${spaceId}:${userId}`);
   }
 
   getAllVoiceUserStates(): Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> {
@@ -569,7 +582,7 @@ function buildReadyPayload(userId: string): {
   folders: SpaceFolder[];
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
-  serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean }>;
+  serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted: boolean }>;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
 } {
@@ -882,7 +895,8 @@ function buildReadyPayload(userId: string): {
   }
 
   // Build server mute/deafen states from DB (authoritative source for all spaces the user belongs to)
-  const serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean }> = {};
+  // Also includes ephemeral permission-mute state from in-memory Set
+  const serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted: boolean }> = {};
   if (spaceIds.length > 0) {
     const allRestrictions = db.select()
       .from(schema.voiceRestrictions)
@@ -890,10 +904,24 @@ function buildReadyPayload(userId: string): {
       .all();
     for (const r of allRestrictions) {
       const key = `${r.spaceId}:${r.userId}`;
-      const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false };
+      const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false, permissionMuted: false };
       if (r.restrictionType === 'mute') existing.serverMuted = true;
       if (r.restrictionType === 'deafen') existing.serverDeafened = true;
       serverVoiceStates[key] = existing;
+    }
+    // Include ephemeral permission-mute state for all voice participants in user's spaces
+    for (const [roomId, room] of connectionManager.getAllRooms()) {
+      if (room.roomType !== 'space') continue;
+      const meta = room.metadata as SpaceRoomMeta;
+      if (!spaceIds.includes(meta.spaceId)) continue;
+      for (const participantId of room.participants) {
+        if (connectionManager.isPermissionMuted(meta.spaceId, participantId)) {
+          const key = `${meta.spaceId}:${participantId}`;
+          const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false, permissionMuted: false };
+          existing.permissionMuted = true;
+          serverVoiceStates[key] = existing;
+        }
+      }
     }
   }
 

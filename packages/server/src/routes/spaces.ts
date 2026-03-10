@@ -19,6 +19,7 @@ import type {
   Role,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { checkVoicePermissions } from '../ws/events.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -662,6 +663,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     // Force target user's client to re-sync with their new permissions
     connectionManager.pushReadyPayload(uid);
+    checkVoicePermissions(id);
 
     // Build response with populated roles
     const updatedMember = db.select()
@@ -829,6 +831,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     for (const m of memberRows) {
       connectionManager.pushReadyPayload(m.userId);
     }
+    checkVoicePermissions(id);
 
     return reply.code(201).send(role);
   });
@@ -871,6 +874,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     for (const m of memberRows) {
       connectionManager.pushReadyPayload(m.userId);
     }
+    checkVoicePermissions(id);
 
     return reply.code(200).send(updated);
   });
@@ -903,6 +907,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     for (const m of memberRows) {
       connectionManager.pushReadyPayload(m.userId);
     }
+    checkVoicePermissions(id);
 
     return reply.code(200).send({ success: true });
   });

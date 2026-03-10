@@ -170,6 +170,7 @@ export function SpaceSidebar() {
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
   const addToast = useUIStore((s) => s.addToast);
+  const floatingPanelHeight = useUIStore((s) => s.floatingPanelHeight);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const instances = useInstanceStore((s) => s.instances);
@@ -246,7 +247,7 @@ export function SpaceSidebar() {
   };
 
   return (
-    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip">
+    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24 }}>
       <SidebarItem
         id="@me"
         name="Direct Messages"

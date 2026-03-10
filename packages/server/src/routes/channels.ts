@@ -6,6 +6,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePermissions } from '../utils/permissions.js';
 import { permissionsToString } from '@backspace/shared/src/permissions.js';
 import { connectionManager } from '../ws/handler.js';
+import { checkVoicePermissions } from '../ws/events.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -356,6 +357,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     // Notify all space members of the permission change
     broadcastOverrideChange(channel.spaceId, id);
+    checkVoicePermissions(channel.spaceId);
 
     return reply.code(200).send({ success: true });
   });
@@ -387,6 +389,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
       // Notify all space members of the permission change
       broadcastOverrideChange(channel.spaceId, id);
+      checkVoicePermissions(channel.spaceId);
 
       return reply.code(200).send({ success: true });
     },

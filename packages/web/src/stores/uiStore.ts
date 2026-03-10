@@ -55,6 +55,8 @@ interface UIState {
   toggleVoiceFullscreen: () => void;
   setVoiceFullscreen: (fullscreen: boolean) => void;
   setPipCollapsed: (collapsed: boolean) => void;
+  floatingPanelHeight: number;
+  setFloatingPanelHeight: (height: number) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -124,6 +126,8 @@ export const useUIStore = create<UIState>()(
       toggleVoiceFullscreen: () => set((state) => ({ voiceFullscreen: !state.voiceFullscreen })),
       setVoiceFullscreen: (fullscreen) => set({ voiceFullscreen: fullscreen }),
       setPipCollapsed: (collapsed) => set({ pipCollapsed: collapsed }),
+      floatingPanelHeight: 140,
+      setFloatingPanelHeight: (height) => set({ floatingPanelHeight: height }),
     }),
     {
       name: 'backspace-ui-settings',

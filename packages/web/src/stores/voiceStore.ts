@@ -99,6 +99,9 @@ interface VoiceState {
   setServerMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
   setServerDeafenedUser: (spaceId: string, userId: string, deafened: boolean) => void;
   clearServerVoiceStates: () => void;
+  // Permission mute state (SPEAK permission revoked while in voice)
+  permissionMutedUserIds: Set<string>; // Stores "spaceId:userId"
+  setPermissionMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
   clearVoiceUsersForOrigin: (origin: string) => void;
@@ -346,7 +349,17 @@ export const useVoiceStore = create<VoiceState>()(
           return { serverDeafenedUserIds: newSet };
         });
       },
-      clearServerVoiceStates: () => set({ serverMutedUserIds: new Set(), serverDeafenedUserIds: new Set() }),
+      clearServerVoiceStates: () => set({ serverMutedUserIds: new Set(), serverDeafenedUserIds: new Set(), permissionMutedUserIds: new Set() }),
+
+      permissionMutedUserIds: new Set(),
+      setPermissionMutedUser: (spaceId, userId, muted) => {
+        set((state) => {
+          const newSet = new Set(state.permissionMutedUserIds);
+          const key = `${spaceId}:${userId}`;
+          if (muted) newSet.add(key); else newSet.delete(key);
+          return { permissionMutedUserIds: newSet };
+        });
+      },
 
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
@@ -458,6 +471,7 @@ export const useVoiceStore = create<VoiceState>()(
         unwatchedCameras: new Set(),
         serverMutedUserIds: new Set(),
         serverDeafenedUserIds: new Set(),
+        permissionMutedUserIds: new Set(),
       }),
     }),
     {
@@ -521,6 +535,7 @@ export const useVoiceStore = create<VoiceState>()(
         // Reconstruct non-persisted Sets/Maps to their defaults
         merged.serverMutedUserIds = currentState.serverMutedUserIds;
         merged.serverDeafenedUserIds = currentState.serverDeafenedUserIds;
+        merged.permissionMutedUserIds = currentState.permissionMutedUserIds;
         merged.voiceUsers = currentState.voiceUsers;
         merged.participants = currentState.participants;
         merged.speakingParticipantIds = currentState.speakingParticipantIds;

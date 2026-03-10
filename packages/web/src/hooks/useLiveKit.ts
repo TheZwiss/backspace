@@ -153,6 +153,7 @@ export function useLiveKit() {
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
@@ -212,7 +213,7 @@ export function useLiveKit() {
         const localMyId = cvId ? getMyUserIdForOrigin(localOrigin) : undefined;
         const localSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
         const localKey = (localSpaceId && localMyId) ? `${localSpaceId}:${localMyId}` : '';
-        isPartMuted = vs.isMuted || vs.serverMutedUserIds.has(localKey);
+        isPartMuted = vs.isMuted || vs.serverMutedUserIds.has(localKey) || vs.permissionMutedUserIds.has(localKey);
         isPartDeafened = vs.isDeafened || vs.serverDeafenedUserIds.has(localKey);
       } else {
         isPartDeafened = userState?.isDeafened ?? useVoiceStore.getState().deafenedUserIds.has(userId);
@@ -270,7 +271,7 @@ export function useLiveKit() {
     const effMyId = cvId ? getMyUserIdForOrigin(effOrigin) : undefined;
     const effSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
     const effKey = (effSpaceId && effMyId) ? `${effSpaceId}:${effMyId}` : '';
-    const effectiveMuted = isMuted || serverMutedUserIds.has(effKey);
+    const effectiveMuted = isMuted || serverMutedUserIds.has(effKey) || permissionMutedUserIds.has(effKey);
     const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(effKey);
 
     const syncMic = async () => {
@@ -337,7 +338,7 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+  }, [isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
 
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
@@ -594,7 +595,7 @@ export function useLiveKit() {
 
   useEffect(() => {
     updateParticipants();
-  }, [voiceUserStates, isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, updateParticipants]);
+  }, [voiceUserStates, isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
 
   useEffect(() => {
     if (!room) return;

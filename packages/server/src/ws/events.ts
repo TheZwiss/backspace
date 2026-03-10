@@ -3,10 +3,40 @@ import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
-import { isMember, getChannelSpaceId, isDmMember, hasPermission, PermissionBits } from '../utils/permissions.js';
+import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import type { MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+
+/**
+ * Re-evaluate SPEAK permission for all participants in voice channels
+ * belonging to the given space. On transition, updates the in-memory
+ * permissionMutedUsers Set and broadcasts voice_permission_muted events.
+ */
+export function checkVoicePermissions(spaceId: string): void {
+  for (const [roomId, room] of connectionManager.getAllRooms()) {
+    if (room.roomType !== 'space') continue;
+    const meta = room.metadata as SpaceRoomMeta;
+    if (meta.spaceId !== spaceId) continue;
+
+    for (const userId of room.participants) {
+      const perms = computePermissions(userId, spaceId, roomId);
+      const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+      const wasMuted = connectionManager.isPermissionMuted(spaceId, userId);
+      const shouldMute = !canSpeak;
+
+      if (shouldMute !== wasMuted) {
+        connectionManager.setPermissionMuted(spaceId, userId, shouldMute);
+        connectionManager.sendToSpace(spaceId, {
+          type: 'voice_permission_muted',
+          userId,
+          spaceId,
+          muted: shouldMute,
+        });
+      }
+    }
+  }
+}
 
 function getMessageWithUser(messageId: string): MessageWithUser | null {
   const db = getDb();
@@ -459,6 +489,22 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
         });
       }
     }
+
+    // Re-check permission mute on re-registration
+    {
+      const perms = computePermissions(userId, spaceId, channelId);
+      const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+      const shouldPermMute = !canSpeak;
+      connectionManager.setPermissionMuted(spaceId, userId, shouldPermMute);
+      if (shouldPermMute) {
+        connectionManager.sendToUser(userId, {
+          type: 'voice_permission_muted',
+          userId,
+          spaceId,
+          muted: true,
+        });
+      }
+    }
     return;
   }
 
@@ -542,6 +588,21 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
       });
     }
   }
+
+  // Check SPEAK permission and apply permission mute if needed
+  {
+    const perms = computePermissions(userId, spaceId, channelId);
+    const canSpeak = (perms & PermissionBits.SPEAK) !== 0n || (perms & PermissionBits.ADMINISTRATOR) !== 0n;
+    if (!canSpeak) {
+      connectionManager.setPermissionMuted(spaceId, userId, true);
+      connectionManager.sendToSpace(spaceId, {
+        type: 'voice_permission_muted',
+        userId,
+        spaceId,
+        muted: true,
+      });
+    }
+  }
 }
 
 function handleVoiceLeave(userId: string): void {
@@ -565,14 +626,16 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
 
   let isSpaceMuted = false;
   let isSpaceDeafened = false;
+  let isPermMuted = false;
   if (userRoom.room.roomType === 'space') {
     const meta = userRoom.room.metadata as SpaceRoomMeta;
     isSpaceMuted = connectionManager.isServerMuted(meta.spaceId, userId);
     isSpaceDeafened = connectionManager.isServerDeafened(meta.spaceId, userId);
+    isPermMuted = connectionManager.isPermissionMuted(meta.spaceId, userId);
   }
 
-  // Server-side enforcement: prevent clients from bypassing server mute/deafen
-  const effectiveMuted = isSpaceMuted ? true : isMuted;
+  // Server-side enforcement: prevent clients from bypassing server mute/deafen/permission mute
+  const effectiveMuted = (isSpaceMuted || isPermMuted) ? true : isMuted;
   const effectiveDeafened = isSpaceDeafened ? true : isDeafened;
 
   connectionManager.setVoiceUserStatus(userId, effectiveMuted, effectiveDeafened, isCameraOn, isScreenSharing);

@@ -184,6 +184,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
         const nextServerMuted = new Set(vsState.serverMutedUserIds);
         const nextServerDeafened = new Set(vsState.serverDeafenedUserIds);
+        const nextPermissionMuted = new Set(vsState.permissionMutedUserIds);
 
         // Clear existing restrictions that belong to spaces on THIS origin
         // (If a space was deleted while offline, its orphaned restrictions remain, which is harmless)
@@ -195,15 +196,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
           const spaceId = key.split(':')[0];
           if (spaceId && originSpaceIds.has(spaceId)) nextServerDeafened.delete(key);
         }
+        for (const key of nextPermissionMuted) {
+          const spaceId = key.split(':')[0];
+          if (spaceId && originSpaceIds.has(spaceId)) nextPermissionMuted.delete(key);
+        }
 
         if (event.serverVoiceStates) {
-          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean }>)) {
+          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted?: boolean }>)) {
             if (state.serverMuted) nextServerMuted.add(uid);
             if (state.serverDeafened) nextServerDeafened.add(uid);
+            if (state.permissionMuted) nextPermissionMuted.add(uid);
           }
         }
         // Single atomic update
-        useVoiceStore.setState({ serverMutedUserIds: nextServerMuted, serverDeafenedUserIds: nextServerDeafened });
+        useVoiceStore.setState({ serverMutedUserIds: nextServerMuted, serverDeafenedUserIds: nextServerDeafened, permissionMutedUserIds: nextPermissionMuted });
 
         // With decoupled state, user intent is never force-set by the server.
         // Effective state (intent || serverEnforcement) is computed reactively
@@ -313,6 +319,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // Broadcast effective state if this targets the current user
       const myMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myMuteId) broadcastVoiceStatus();
+      break;
+    }
+
+    case 'voice_permission_muted': {
+      const { setPermissionMutedUser } = useVoiceStore.getState();
+      setPermissionMutedUser(event.spaceId, event.userId, event.muted);
+      const myPermMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+      if (event.userId === myPermMuteId) broadcastVoiceStatus();
       break;
     }
 
