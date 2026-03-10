@@ -21,9 +21,8 @@ export const PermissionBits = {
   MUTE_MEMBERS:         1n << 22n,
   DEAFEN_MEMBERS:       1n << 23n,
   MOVE_MEMBERS:         1n << 24n,
-  USE_VOICE_ACTIVITY:   1n << 25n,
-  STREAM:               1n << 26n,
-  DISCONNECT_MEMBERS:   1n << 27n,
+  STREAM:               1n << 25n,
+  DISCONNECT_MEMBERS:   1n << 26n,
 } as const;
 
 export type PermissionBit = (typeof PermissionBits)[keyof typeof PermissionBits];
@@ -39,8 +38,7 @@ export const DEFAULT_EVERYONE_PERMISSIONS =
   PermissionBits.ATTACH_FILES |
   PermissionBits.READ_MESSAGE_HISTORY |
   PermissionBits.ADD_REACTIONS |
-  PermissionBits.STREAM |
-  PermissionBits.USE_VOICE_ACTIVITY;
+  PermissionBits.STREAM;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

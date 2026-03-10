@@ -8,6 +8,7 @@ import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../sto
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
@@ -35,6 +36,11 @@ export function VoiceControlBar() {
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
   const isServerMuted = !!(myOriginId && spaceId && serverMutedUserIds.has(`${spaceId}:${myOriginId}`));
   const isServerDeafened = !!(myOriginId && spaceId && serverDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
+  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
+  const channelPerms = useSpaceStore((s) => currentVoiceChannelId ? s.channelPermissions.get(currentVoiceChannelId) : undefined);
+  const isDmCall = !!activeDmCall;
+  const canSpeak = isDmCall || hasPermissionBit(channelPerms, PermissionBits.SPEAK);
+  const canStream = isDmCall || hasPermissionBit(channelPerms, PermissionBits.STREAM);
   const [qualityOpen, setQualityOpen] = useState(false);
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -174,34 +180,38 @@ export function VoiceControlBar() {
         </button>
 
         {/* Camera */}
-        <button
-          onClick={handleCamera}
-          className={isCameraOn ? btnGreen : btnDefault}
-          title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-        >
-          {isCameraOn ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-            </svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
-              <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            </svg>
-          )}
-        </button>
+        {canSpeak && (
+          <button
+            onClick={handleCamera}
+            className={isCameraOn ? btnGreen : btnDefault}
+            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+          >
+            {isCameraOn ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" />
+                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        )}
 
         {/* Screen Share */}
-        <button
-          onClick={handleScreenShare}
-          className={isScreenSharing ? btnGreen : btnDefault}
-          title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
-            <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
-          </svg>
-        </button>
+        {canStream && (
+          <button
+            onClick={handleScreenShare}
+            className={isScreenSharing ? btnGreen : btnDefault}
+            title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20 18C21.1 18 22 17.1 22 16V6C22 4.9 21.1 4 20 4H4C2.9 4 2 4.9 2 6V16C2 17.1 2.9 18 4 18H0V20H24V18H20ZM4 6H20V16H4V6Z" />
+              <path d="M15 11L11 14V12H9V10H11V8L15 11Z" />
+            </svg>
+          </button>
+        )}
 
         {/* Video Quality */}
         <button

@@ -615,9 +615,8 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 | 22 | MUTE_MEMBERS | Server-mute other members |
 | 23 | DEAFEN_MEMBERS | Server-deafen other members |
 | 24 | MOVE_MEMBERS | Move members between voice channels |
-| 25 | USE_VOICE_ACTIVITY | Use voice activity detection |
-| 26 | STREAM | Share screen in voice channels |
-| 27 | DISCONNECT_MEMBERS | Disconnect members from voice channels |
+| 25 | STREAM | Share screen in voice channels |
+| 26 | DISCONNECT_MEMBERS | Disconnect members from voice channels |
 
 **Resolution order:** Owner → @everyone role → Assigned roles (OR'd) → ADMINISTRATOR shortcut → Channel overrides (@everyone → role overrides → member override).
 

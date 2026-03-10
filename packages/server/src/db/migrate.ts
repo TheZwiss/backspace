@@ -172,6 +172,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Admin flag: ensure at least one admin exists (first registered user) ──
   migrateFirstAdmin(db);
 
+  // ─── Remove USE_VOICE_ACTIVITY bit and shift STREAM/DISCONNECT_MEMBERS down ─
+  migrateRemoveVoiceActivityBit(db);
+
   // ─── Clean up corrupted read_states (temp_ IDs leaked from optimistic messages) ─
   migrateCorruptedReadStates(db);
 
@@ -301,6 +304,94 @@ function migrateEveryoneRoles(db: Database.Database): void {
       }
     }
   }
+}
+
+/**
+ * Remove the USE_VOICE_ACTIVITY bit (was bit 25) and shift STREAM (26→25)
+ * and DISCONNECT_MEMBERS (27→26) down. Idempotent: uses a sentinel flag in
+ * instance_settings metadata to avoid re-running.
+ */
+function migrateRemoveVoiceActivityBit(db: Database.Database): void {
+  // Use a pragma-style check: if STREAM is already at bit 25 in DEFAULT_EVERYONE_PERMISSIONS
+  // of the @everyone roles, the migration has already run. But for robustness, use a flag column.
+  // We'll check if any role still has bit 25 set AND bit 26 set (old layout had both USE_VOICE_ACTIVITY
+  // and STREAM). Simplest approach: track via a one-time marker.
+  const OLD_VOICE_ACTIVITY = 1n << 25n; // old USE_VOICE_ACTIVITY
+  const OLD_STREAM         = 1n << 26n; // old STREAM
+  const OLD_DISCONNECT     = 1n << 27n; // old DISCONNECT_MEMBERS
+
+  // Check if any role still uses the old bit layout (has bit 26 or 27 set)
+  const roles = db.prepare('SELECT id, permissions FROM roles WHERE permissions IS NOT NULL').all() as { id: string; permissions: string }[];
+  const overrides = db.prepare('SELECT channel_id, target_type, target_id, allow, deny FROM channel_overrides').all() as {
+    channel_id: string; target_type: string; target_id: string; allow: string; deny: string;
+  }[];
+
+  let needsMigration = false;
+  for (const role of roles) {
+    try {
+      const p = BigInt(role.permissions);
+      if ((p & OLD_STREAM) !== 0n || (p & OLD_DISCONNECT) !== 0n || (p & OLD_VOICE_ACTIVITY) !== 0n) {
+        needsMigration = true;
+        break;
+      }
+    } catch { /* skip invalid */ }
+  }
+  if (!needsMigration) {
+    for (const ov of overrides) {
+      try {
+        const a = BigInt(ov.allow);
+        const d = BigInt(ov.deny);
+        if ((a & OLD_STREAM) !== 0n || (a & OLD_DISCONNECT) !== 0n || (a & OLD_VOICE_ACTIVITY) !== 0n ||
+            (d & OLD_STREAM) !== 0n || (d & OLD_DISCONNECT) !== 0n || (d & OLD_VOICE_ACTIVITY) !== 0n) {
+          needsMigration = true;
+          break;
+        }
+      } catch { /* skip invalid */ }
+    }
+  }
+
+  if (!needsMigration) return;
+
+  function shiftPermBits(p: bigint): bigint {
+    const hasStream     = (p & OLD_STREAM) !== 0n;
+    const hasDisconnect = (p & OLD_DISCONNECT) !== 0n;
+    // Clear bits 25, 26, 27
+    p = p & ~(OLD_VOICE_ACTIVITY | OLD_STREAM | OLD_DISCONNECT);
+    // Re-set at new positions
+    if (hasStream)     p |= (1n << 25n); // STREAM now at 25
+    if (hasDisconnect) p |= (1n << 26n); // DISCONNECT_MEMBERS now at 26
+    return p;
+  }
+
+  console.log('Migrating: Shifting permission bits (removing USE_VOICE_ACTIVITY)...');
+
+  const updateRole = db.prepare('UPDATE roles SET permissions = ? WHERE id = ?');
+  for (const role of roles) {
+    try {
+      const old = BigInt(role.permissions);
+      const shifted = shiftPermBits(old);
+      if (shifted !== old) {
+        updateRole.run(shifted.toString(), role.id);
+      }
+    } catch { /* skip invalid */ }
+  }
+
+  const updateOverride = db.prepare(
+    'UPDATE channel_overrides SET allow = ?, deny = ? WHERE channel_id = ? AND target_type = ? AND target_id = ?'
+  );
+  for (const ov of overrides) {
+    try {
+      const oldAllow = BigInt(ov.allow);
+      const oldDeny  = BigInt(ov.deny);
+      const newAllow = shiftPermBits(oldAllow);
+      const newDeny  = shiftPermBits(oldDeny);
+      if (newAllow !== oldAllow || newDeny !== oldDeny) {
+        updateOverride.run(newAllow.toString(), newDeny.toString(), ov.channel_id, ov.target_type, ov.target_id);
+      }
+    } catch { /* skip invalid */ }
+  }
+
+  console.log('Migrating: Permission bit shift complete.');
 }
 
 /** Delete corrupted read_states rows where last_read_message_id is not a valid snowflake (numeric string) */

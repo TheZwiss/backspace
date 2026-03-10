@@ -44,7 +44,6 @@ const PERMISSION_GROUPS: { name: string; perms: PermDef[] }[] = [
       { bit: PermissionBits.DEAFEN_MEMBERS, label: 'Deafen Members' },
       { bit: PermissionBits.MOVE_MEMBERS, label: 'Move Members' },
       { bit: PermissionBits.DISCONNECT_MEMBERS, label: 'Disconnect Members' },
-      { bit: PermissionBits.USE_VOICE_ACTIVITY, label: 'Voice Activity' },
       { bit: PermissionBits.STREAM, label: 'Stream' },
     ],
   },
