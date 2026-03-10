@@ -582,6 +582,27 @@ export function getApiForOrigin(origin: string): BackspaceApiClient {
   return _getApiForOrigin(origin);
 }
 
+// ─── Hostname → origin resolution (federation) ────────────────────────────────
+// Converts a user's `homeInstance` hostname (e.g. "remote.example.com") to a
+// full origin URL (e.g. "https://remote.example.com") by looking up connected
+// instances.  Registered by instanceStore on import.
+
+let _resolveOriginFromHostname: ((hostname: string) => string) | null = null;
+
+export function setOriginFromHostnameResolver(resolver: (hostname: string) => string): void {
+  _resolveOriginFromHostname = resolver;
+}
+
+/**
+ * Returns the instance origin for a federated user based on their homeInstance.
+ * '' = home/local user, 'https://...' = remote instance.
+ */
+export function resolveUserOrigin(user: { homeInstance?: string | null }): string {
+  const host = user.homeInstance;
+  if (!host || host === window.location.host) return '';
+  return _resolveOriginFromHostname?.(host) ?? '';
+}
+
 // ─── User ID resolution (federation) ──────────────────────────────────────────
 // Same resolver pattern as getApiForOrigin — registered by instanceStore on
 // import to break the circular dependency chain.

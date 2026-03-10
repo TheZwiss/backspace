@@ -4,20 +4,14 @@ import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
-import { api } from '../../api/client';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { useSocialStore } from '../../stores/socialStore';
-import { getAvatarGradient, adjustColor } from '../../utils/gradients';
+import { getAvatarGradient, getSpaceGradient, adjustColor } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
+import { loadFederatedMutuals, type TaggedMutualFriend, type MutualSpace } from '../../utils/mutuals';
 
 type Tab = 'about' | 'friends' | 'spaces';
-
-interface MutualSpace {
-  id: string;
-  name: string;
-  icon: string | null;
-}
 
 export function UserProfileModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -30,31 +24,35 @@ export function UserProfileModal() {
   const removeFriend = useSocialStore((s) => s.removeFriend);
 
   const [user, setUser] = useState<User | null>(null);
+  const [userOrigin, setUserOrigin] = useState('');
   const [activeTab, setActiveTab] = useState<Tab>('about');
-  const [mutualFriends, setMutualFriends] = useState<User[]>([]);
+  const [mutualFriends, setMutualFriends] = useState<TaggedMutualFriend[]>([]);
   const [mutualSpaces, setMutualSpaces] = useState<MutualSpace[]>([]);
   const [loadingMutuals, setLoadingMutuals] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
 
   const isOpen = activeModal === 'userProfile';
   const userId = modalData?.userId as string | undefined;
+  const passedUser = modalData?.user as User | undefined;
+  const passedOrigin = (modalData?.origin as string | undefined) ?? '';
 
   // Determine friendship status
   const isFriend = user ? friends.some((f) => f.id === user.id) : false;
 
-  const loadUser = useCallback(async (id: string) => {
+  const loadUser = useCallback(async (id: string, origin: string) => {
     try {
-      const u = await api.users.get(id);
+      const targetApi = getApiForOrigin(origin);
+      const u = await targetApi.users.get(id);
       setUser(u);
     } catch {
       // User not found
     }
   }, []);
 
-  const loadMutuals = useCallback(async (id: string) => {
+  const loadMutuals = useCallback(async (id: string, targetUser?: User) => {
     setLoadingMutuals(true);
     try {
-      const data = await api.users.getMutuals(id);
+      const data = await loadFederatedMutuals(id, targetUser?.homeUserId);
       setMutualFriends(data.mutualFriends);
       setMutualSpaces(data.mutualSpaces);
     } catch {
@@ -68,15 +66,23 @@ export function UserProfileModal() {
   useEffect(() => {
     if (isOpen && userId) {
       setActiveTab('about');
-      loadUser(userId);
-      loadMutuals(userId);
+      const origin = passedOrigin || (passedUser ? resolveUserOrigin(passedUser) : '');
+      setUserOrigin(origin);
+      // Use the passed user directly (avoids 404 for federated users on local API)
+      if (passedUser) {
+        setUser(passedUser);
+      } else {
+        loadUser(userId, origin);
+      }
+      loadMutuals(userId, passedUser);
     }
-  }, [isOpen, userId, loadUser, loadMutuals]);
+  }, [isOpen, userId, passedUser, passedOrigin, loadUser, loadMutuals]);
 
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
       setUser(null);
+      setUserOrigin('');
       setMutualFriends([]);
       setMutualSpaces([]);
     }
@@ -97,9 +103,10 @@ export function UserProfileModal() {
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 
-  // Banner
+  // Banner — use correct API client for remote users
+  const profileApi = getApiForOrigin(userOrigin);
   const bannerSrc = user.banner
-    ? (user.banner.startsWith('http') ? user.banner : api.uploads.url(user.banner))
+    ? (user.banner.startsWith('http') ? user.banner : profileApi.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
     ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`
@@ -114,8 +121,9 @@ export function UserProfileModal() {
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      const channel = await api.dm.create({ userId: user.id });
-      addDmChannel(channel);
+      const dmApi = getApiForOrigin(userOrigin);
+      const channel = await dmApi.dm.create({ userId: user.id });
+      addDmChannel(channel, userOrigin);
       useUIStore.getState().setShowDms(true);
       closeModal();
       navigate(`/channels/@me/${channel.id}`);
@@ -139,12 +147,14 @@ export function UserProfileModal() {
     }
   };
 
-  const handleViewFriend = (friendId: string) => {
-    loadUser(friendId);
-    loadMutuals(friendId);
+  const handleViewFriend = (friend: TaggedMutualFriend) => {
+    const friendOrigin = friend._instanceOrigin || resolveUserOrigin(friend);
+    setUserOrigin(friendOrigin);
+    setUser(friend);
+    loadMutuals(friend.id, friend);
     setActiveTab('about');
     // Update modal data so re-opening preserves context
-    useUIStore.getState().openModal('userProfile', { userId: friendId });
+    useUIStore.getState().openModal('userProfile', { userId: friend.id, user: friend, origin: friendOrigin });
   };
 
   const handleGoToSpace = (spaceId: string) => {
@@ -317,7 +327,7 @@ export function UserProfileModal() {
                     return (
                       <button
                         key={friend.id}
-                        onClick={() => handleViewFriend(friend.id)}
+                        onClick={() => handleViewFriend(friend)}
                         className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.04] transition-colors text-left"
                       >
                         <Avatar
@@ -334,6 +344,14 @@ export function UserProfileModal() {
                           <div className="text-[11px] text-txt-tertiary capitalize">
                             {friend.status}
                           </div>
+                          {friend._instanceOrigin && (
+                            <div className="flex items-center gap-1 text-[10px] text-txt-tertiary/70 truncate">
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                              </svg>
+                              <span className="truncate">{(() => { try { return new URL(friend._instanceOrigin).host; } catch { return '?'; } })()}</span>
+                            </div>
+                          )}
                         </div>
                       </button>
                     );
@@ -358,28 +376,53 @@ export function UserProfileModal() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {mutualSpaces.map((space) => (
+                  {mutualSpaces.map((space) => {
+                    const spaceApi = getApiForOrigin(space._instanceOrigin);
+                    return (
                     <button
-                      key={space.id}
+                      key={`${space.id}:${space._instanceOrigin}`}
                       onClick={() => handleGoToSpace(space.id)}
                       className="flex items-center gap-3 w-full p-2.5 rounded-lg hover:bg-white/[0.06] transition-colors text-left"
                     >
-                      {space.icon ? (
-                        <img
-                          src={space.icon.startsWith('http') ? space.icon : api.uploads.url(space.icon)}
-                          alt={space.name}
-                          className="w-8 h-8 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center text-[13px] font-semibold text-txt-secondary">
-                          {space.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-[13px] font-medium text-txt-primary truncate">
-                        {space.name}
-                      </span>
+                      <div className="relative shrink-0">
+                        {space.icon ? (
+                          <img
+                            src={space.icon.startsWith('http') ? space.icon : spaceApi.uploads.url(space.icon)}
+                            alt={space.name}
+                            className="w-8 h-8 rounded-lg object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-semibold text-white"
+                            style={{ background: getSpaceGradient(space.id, space.name).gradient }}
+                          >
+                            {space.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        {space._instanceOrigin && (
+                          <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-[#1a1a23] flex items-center justify-center">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex flex-col">
+                        <span className="text-[13px] font-medium text-txt-primary truncate">
+                          {space.name}
+                        </span>
+                        {space._instanceOrigin && (
+                          <span className="text-[10px] text-txt-tertiary/70 truncate flex items-center gap-1">
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" className="shrink-0">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                            </svg>
+                            {(() => { try { return new URL(space._instanceOrigin).host; } catch { return '?'; } })()}
+                          </span>
+                        )}
+                      </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

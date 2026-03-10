@@ -4,11 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
-import { api } from '../../api/client';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
+import { loadFederatedMutuals } from '../../utils/mutuals';
 
 interface UserProfilePopoutProps {
   user: User;
@@ -23,13 +23,16 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 
+  const origin = resolveUserOrigin(user);
+  const userApi = getApiForOrigin(origin);
+
   const [mutualCounts, setMutualCounts] = useState<{ friends: number; spaces: number } | null>(null);
 
   useEffect(() => {
-    api.users.getMutuals(user.id)
+    loadFederatedMutuals(user.id, user.homeUserId)
       .then((data) => setMutualCounts({ friends: data.mutualFriends.length, spaces: data.mutualSpaces.length }))
       .catch(() => {});
-  }, [user.id]);
+  }, [user.id, user.homeUserId]);
 
   const top = position
     ? Math.min(Math.max(8, position.top), window.innerHeight - 460)
@@ -47,8 +50,9 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      const channel = await api.dm.create({ userId: user.id });
-      addDmChannel(channel);
+      const dmApi = getApiForOrigin(origin);
+      const channel = await dmApi.dm.create({ userId: user.id });
+      addDmChannel(channel, origin);
       useUIStore.getState().setShowDms(true);
       onClose();
       navigate(`/channels/@me/${channel.id}`);
@@ -59,12 +63,12 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
   const handleViewFullProfile = () => {
     onClose();
-    openModal('userProfile', { userId: user.id });
+    openModal('userProfile', { userId: user.id, user, origin });
   };
 
   // Banner display
   const bannerSrc = user.banner
-    ? (user.banner.startsWith('http') ? user.banner : api.uploads.url(user.banner))
+    ? (user.banner.startsWith('http') ? user.banner : userApi.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
     ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, or, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
@@ -182,16 +182,31 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(sanitizeUser(user));
   });
 
-  app.get<{ Params: { id: string } }>('/api/users/:id/mutuals', { preHandler: authenticate }, async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { homeUserId?: string } }>(
+    '/api/users/:id/mutuals', { preHandler: authenticate }, async (request, reply) => {
     const { id: targetId } = request.params;
+    const homeUserId = request.query.homeUserId;
     const myId = request.userId;
     const db = getDb();
 
+    // Resolve target: try path ID first, then homeUserId fallback (federation)
+    let resolvedTargetId = targetId;
+    const directUser = db.select().from(schema.users).where(eq(schema.users.id, targetId)).get();
+    if (!directUser && homeUserId) {
+      const fallbackUser = db.select().from(schema.users)
+        .where(or(eq(schema.users.homeUserId, homeUserId), eq(schema.users.id, homeUserId))).get();
+      if (fallbackUser) resolvedTargetId = fallbackUser.id;
+    }
+
     // Mutual friends: users who are friends with both me and the target
-    const myFriendRows = db.select().from(schema.friends).where(eq(schema.friends.userId, myId)).all();
-    const targetFriendRows = db.select().from(schema.friends).where(eq(schema.friends.userId, targetId)).all();
-    const myFriendIds = new Set(myFriendRows.map((f) => f.friendId));
-    const targetFriendIds = new Set(targetFriendRows.map((f) => f.friendId));
+    const myFriendRows = db.select().from(schema.friends).where(
+      or(eq(schema.friends.userId, myId), eq(schema.friends.friendId, myId))
+    ).all();
+    const targetFriendRows = db.select().from(schema.friends).where(
+      or(eq(schema.friends.userId, resolvedTargetId), eq(schema.friends.friendId, resolvedTargetId))
+    ).all();
+    const myFriendIds = new Set(myFriendRows.map(f => f.userId === myId ? f.friendId : f.userId));
+    const targetFriendIds = new Set(targetFriendRows.map(f => f.userId === resolvedTargetId ? f.friendId : f.userId));
     const mutualFriendIds = [...myFriendIds].filter((id) => targetFriendIds.has(id));
 
     const mutualFriends = mutualFriendIds.length > 0
@@ -200,7 +215,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     // Mutual spaces: spaces both me and the target are members of
     const myMemberships = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.userId, myId)).all();
-    const targetMemberships = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.userId, targetId)).all();
+    const targetMemberships = db.select().from(schema.spaceMembers).where(eq(schema.spaceMembers.userId, resolvedTargetId)).all();
     const mySpaceIds = new Set(myMemberships.map((m) => m.spaceId));
     const targetSpaceIds = new Set(targetMemberships.map((m) => m.spaceId));
     const mutualSpaceIds = [...mySpaceIds].filter((id) => targetSpaceIds.has(id));

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
-import { setApiForOriginResolver, setUserIdForOriginResolver, useSpaceStore } from './spaceStore';
+import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -604,4 +604,14 @@ setApiForOriginResolver((origin: string): BackspaceApiClient => {
 setUserIdForOriginResolver((origin: string): string | undefined => {
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
   return instance?.user.id;
+});
+
+// ─── Hostname → origin resolution (federation) ────────────────────────────────
+// Maps a user's homeInstance hostname to its full origin URL.
+
+setOriginFromHostnameResolver((hostname: string): string => {
+  const inst = useInstanceStore.getState().instances.find(i => {
+    try { return new URL(i.origin).host === hostname; } catch { return false; }
+  });
+  return inst?.origin ?? '';
 });
