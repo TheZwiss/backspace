@@ -13,6 +13,8 @@ const EMPTY_MESSAGES: MessageWithUser[] = [];
 
 interface MessageListProps {
   channelId: string;
+  jumpToMessageId?: string | null;
+  onJumpComplete?: () => void;
 }
 
 function isSameGroup(prev: MessageWithUser, curr: MessageWithUser): boolean {
@@ -38,10 +40,11 @@ function shouldShowDateDivider(prev: MessageWithUser | undefined, curr: MessageW
   return prevDate !== currDate;
 }
 
-export function MessageList({ channelId }: MessageListProps) {
+export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: MessageListProps) {
   const messages = useChatStore((s) => s.messages.get(channelId)) ?? EMPTY_MESSAGES;
   const loadMessages = useChatStore((s) => s.loadMessages);
   const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
+  const loadMessagesAround = useChatStore((s) => s.loadMessagesAround);
   const isLoading = useChatStore((s) => s.isLoading);
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
   const ackChannel = useChatStore((s) => s.ackChannel);
@@ -117,6 +120,36 @@ export function MessageList({ channelId }: MessageListProps) {
     observer.observe(content);
     return () => observer.disconnect();
   }, [hasMessages, channelId]);
+
+  // Jump-to-message: scroll to target and highlight
+  useEffect(() => {
+    if (!jumpToMessageId) return;
+
+    const scrollToMessage = () => {
+      const el = document.getElementById(`msg-${jumpToMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('search-highlight');
+        setTimeout(() => el.classList.remove('search-highlight'), 2000);
+        onJumpComplete?.();
+        return true;
+      }
+      return false;
+    };
+
+    // Check if the message is already in the cache
+    if (scrollToMessage()) return;
+
+    // Not in cache — load messages around the target
+    loadMessagesAround(channelId, jumpToMessageId).then(() => {
+      // Wait for React to render the new messages
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToMessage();
+        });
+      });
+    });
+  }, [jumpToMessageId, channelId, loadMessagesAround, onJumpComplete]);
 
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;

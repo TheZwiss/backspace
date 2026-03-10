@@ -155,6 +155,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
 
   const content = (
     <div
+      id={`msg-${message.id}`}
       className={`group relative flex px-5 py-[3px] transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'

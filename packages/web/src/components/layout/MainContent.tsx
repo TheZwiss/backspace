@@ -17,6 +17,8 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { isSelf } from '../../utils/identity';
 import { joinVoiceChannel } from '../../utils/voice';
+import { SearchPopover } from '../chat/SearchPopover';
+import { isDmChannel } from '../../stores/spaceStore';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
@@ -40,6 +42,14 @@ export function MainContent() {
   const openModal = useUIStore((s) => s.openModal);
 
   const voiceContainerRef = useRef<HTMLDivElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
+
+  // Reset search when channel changes
+  useEffect(() => {
+    setSearchOpen(false);
+  }, [currentChannelId]);
 
   // Handle actual browser fullscreen API
   useEffect(() => {
@@ -198,25 +208,28 @@ export function MainContent() {
             </button>
             <MemberListToggleButton />
             <div className="w-[1px] h-5 bg-border-soft mx-1" />
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Search">
+            <button
+              ref={searchButtonRef}
+              onClick={() => setSearchOpen(!searchOpen)}
+              className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}
+              title="Search"
+            >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Inbox">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 3H4.99c-1.11 0-1.98.9-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z" />
-              </svg>
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Help">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" />
-              </svg>
-            </button>
           </div>
         </div>
-        <MessageList channelId={currentChannelId} />
+        <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
         <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} />
+        <SearchPopover
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          anchorRef={searchButtonRef}
+          channelId={currentChannelId}
+          isDm={true}
+          onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+        />
       </div>
     );
   }
@@ -324,11 +337,6 @@ export function MainContent() {
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Threads">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M5.43 21a.996.996 0 01-.98-.8l-.79-4.34H2.5a1 1 0 110-2h.93l-.55-3H1.5a1 1 0 010-2h1.15L1.87 4.86a1 1 0 011.96-.72L4.6 8.86h3.32l-.78-4.72a1 1 0 011.96-.28l.84 5H13.5a1 1 0 110 2h-3.33l.55 3H13.5a1 1 0 110 2h-2.55l.72 3.94a1 1 0 01-.79 1.16 1.034 1.034 0 01-.18.02.996.996 0 01-.98-.82L8.95 15.86H5.63l.72 3.94A1 1 0 015.43 21zM5.86 10.86l.55 3h3.32l-.55-3H5.86z" />
-            </svg>
-          </button>
           <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Notification Settings">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
@@ -341,25 +349,28 @@ export function MainContent() {
           </button>
           <MemberListToggleButton />
           <div className="w-[1px] h-5 bg-border-soft mx-1" />
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Search">
+          <button
+            ref={searchButtonRef}
+            onClick={() => setSearchOpen(!searchOpen)}
+            className={`w-8 h-8 flex items-center justify-center transition-colors rounded-[6px] ${searchOpen ? 'text-txt-primary bg-interactive-active' : 'text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover'}`}
+            title="Search"
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Inbox">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3H4.99c-1.11 0-1.98.9-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z" />
-            </svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Help">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" />
-            </svg>
-          </button>
         </div>
       </div>
-      <MessageList channelId={currentChannelId} />
+      <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
       <MessageInput channelId={currentChannelId} channelName={channel.name} />
+      <SearchPopover
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        anchorRef={searchButtonRef}
+        channelId={currentChannelId}
+        isDm={false}
+        onJumpToMessage={(id) => { setJumpToMessageId(id); setSearchOpen(false); }}
+      />
     </div>
   );
 }

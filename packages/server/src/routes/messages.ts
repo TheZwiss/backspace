@@ -18,7 +18,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
  * Fetch reactions for a set of message IDs.
  * Returns a map from messageId to Reaction[].
  */
-function fetchReactionsForMessages(messageIds: string[]): Map<string, Reaction[]> {
+export function fetchReactionsForMessages(messageIds: string[]): Map<string, Reaction[]> {
   if (messageIds.length === 0) return new Map();
   const db = getDb();
   const reactionRows = db.select()
@@ -56,7 +56,7 @@ function fetchReactionsForMessages(messageIds: string[]): Map<string, Reaction[]
  * Fetch reply-to messages for a set of message IDs.
  * Returns a map from messageId to its reply parent MessageWithUser.
  */
-function fetchReplyToMessages(messages: (typeof schema.messages.$inferSelect)[]): Map<string, MessageWithUser> {
+export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSelect)[]): Map<string, MessageWithUser> {
   const replyToIds = messages
     .map(m => m.replyToId)
     .filter((id): id is string => id !== null && id !== undefined);
@@ -119,7 +119,7 @@ function fetchReplyToMessages(messages: (typeof schema.messages.$inferSelect)[])
   return map;
 }
 
-function buildMessageWithUser(
+export function buildMessageWithUser(
   message: typeof schema.messages.$inferSelect,
   user: typeof schema.users.$inferSelect,
   attachmentRows: (typeof schema.attachments.$inferSelect)[],

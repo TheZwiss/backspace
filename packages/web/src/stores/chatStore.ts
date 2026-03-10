@@ -48,6 +48,7 @@ interface ChatState {
   removeReaction: (messageId: string, emoji: string) => void;
   onReactionAdded: (messageId: string, reaction: any) => void;
   onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
+  loadMessagesAround: (channelId: string, messageId: string) => Promise<void>;
   setTyping: (channelId: string, userId: string, username: string) => void;
   clearTyping: (channelId: string, userId: string) => void;
   getMessages: (channelId: string) => MessageWithUser[];
@@ -195,6 +196,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return olderMessages.length > 0;
     } catch {
       return false;
+    }
+  },
+
+  loadMessagesAround: async (channelId: string, messageId: string) => {
+    const isDm = isDmChannel(channelId);
+    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
+    try {
+      const origin = getChannelOrigin(channelId);
+      const client = getApiForOrigin(origin);
+      const messages = isDm
+        ? await client.dm.messagesAround(channelId, messageId)
+        : await client.channels.messagesAround(channelId, messageId);
+
+      if (origin) {
+        for (const msg of messages) normalizeMessageAssets(msg, origin);
+      }
+
+      set((state) => {
+        const newMessages = new Map(state.messages);
+        newMessages.set(channelId, messages as MessageWithUser[]);
+        const newHasMore = new Map(state.hasMore);
+        newHasMore.set(channelId, true);
+        const newAccessTimes = new Map(state.channelAccessTimes);
+        newAccessTimes.set(channelId, Date.now());
+        return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes };
+      });
+    } catch (err) {
+      console.error('Failed to load messages around:', err);
     }
   },
 

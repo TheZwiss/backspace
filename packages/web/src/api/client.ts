@@ -71,6 +71,7 @@ export class BackspaceApiClient {
     update: (id: string, data: UpdateChannelRequest) => Promise<Channel>;
     delete: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<MessageWithUser[]>;
+    messagesAround: (id: string, messageId: string) => Promise<MessageWithUser[]>;
     sendMessage: (channelId: string, data: CreateMessageRequest) => Promise<MessageWithUser>;
     getOverrides: (channelId: string) => Promise<{ channelId: string; targetType: string; targetId: string; allow: string; deny: string }[]>;
     putOverride: (channelId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<{ success: boolean }>;
@@ -92,6 +93,7 @@ export class BackspaceApiClient {
     create: (data: CreateDmRequest) => Promise<DmChannel>;
     close: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<DmMessageWithUser[]>;
+    messagesAround: (id: string, messageId: string) => Promise<DmMessageWithUser[]>;
     sendMessage: (id: string, data: CreateDmMessageRequest) => Promise<DmMessageWithUser>;
     updateMessage: (id: string, data: UpdateMessageRequest) => Promise<DmMessageWithUser>;
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
@@ -129,6 +131,11 @@ export class BackspaceApiClient {
     create: (spaceId: string, data: { name: string; color?: string; permissions?: string }) => Promise<Role>;
     update: (spaceId: string, roleId: string, data: { name?: string; color?: string; position?: number; permissions?: string }) => Promise<Role>;
     delete: (spaceId: string, roleId: string) => Promise<{ success: boolean }>;
+  };
+
+  readonly search: {
+    channel: (channelId: string, params: { q?: string; from?: string; has?: string; before?: string; after?: string; offset?: number; limit?: number }) => Promise<{ results: MessageWithUser[]; totalCount: number }>;
+    dm: (dmChannelId: string, params: { q?: string; from?: string; has?: string; before?: string; after?: string; offset?: number; limit?: number }) => Promise<{ results: DmMessageWithUser[]; totalCount: number }>;
   };
 
   readonly explore: {
@@ -255,6 +262,11 @@ export class BackspaceApiClient {
         params.set('limit', String(limit));
         return request<MessageWithUser[]>('GET', `/channels/${id}/messages?${params}`);
       },
+      messagesAround: (id: string, messageId: string) => {
+        const params = new URLSearchParams();
+        params.set('messageId', messageId);
+        return request<MessageWithUser[]>('GET', `/channels/${id}/messages/around?${params}`);
+      },
       sendMessage: (channelId: string, data: CreateMessageRequest) =>
         request<MessageWithUser>('POST', `/channels/${channelId}/messages`, data),
       getOverrides: (channelId: string) =>
@@ -286,6 +298,11 @@ export class BackspaceApiClient {
         if (before) params.set('before', before);
         params.set('limit', String(limit));
         return request<DmMessageWithUser[]>('GET', `/dm/${id}/messages?${params}`);
+      },
+      messagesAround: (id: string, messageId: string) => {
+        const params = new URLSearchParams();
+        params.set('messageId', messageId);
+        return request<DmMessageWithUser[]>('GET', `/dm/${id}/messages/around?${params}`);
       },
       sendMessage: (id: string, data: CreateDmMessageRequest) =>
         request<DmMessageWithUser>('POST', `/dm/${id}/messages`, data),
@@ -337,6 +354,31 @@ export class BackspaceApiClient {
         request<Role>('PATCH', `/spaces/${spaceId}/roles/${roleId}`, data),
       delete: (spaceId: string, roleId: string) =>
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/roles/${roleId}`),
+    };
+
+    this.search = {
+      channel: (channelId: string, params: { q?: string; from?: string; has?: string; before?: string; after?: string; offset?: number; limit?: number }) => {
+        const qs = new URLSearchParams();
+        if (params.q) qs.set('q', params.q);
+        if (params.from) qs.set('from', params.from);
+        if (params.has) qs.set('has', params.has);
+        if (params.before) qs.set('before', params.before);
+        if (params.after) qs.set('after', params.after);
+        if (params.offset !== undefined) qs.set('offset', String(params.offset));
+        if (params.limit !== undefined) qs.set('limit', String(params.limit));
+        return request<{ results: MessageWithUser[]; totalCount: number }>('GET', `/channels/${channelId}/search?${qs}`);
+      },
+      dm: (dmChannelId: string, params: { q?: string; from?: string; has?: string; before?: string; after?: string; offset?: number; limit?: number }) => {
+        const qs = new URLSearchParams();
+        if (params.q) qs.set('q', params.q);
+        if (params.from) qs.set('from', params.from);
+        if (params.has) qs.set('has', params.has);
+        if (params.before) qs.set('before', params.before);
+        if (params.after) qs.set('after', params.after);
+        if (params.offset !== undefined) qs.set('offset', String(params.offset));
+        if (params.limit !== undefined) qs.set('limit', String(params.limit));
+        return request<{ results: DmMessageWithUser[]; totalCount: number }>('GET', `/dm/${dmChannelId}/search?${qs}`);
+      },
     };
 
     this.explore = {

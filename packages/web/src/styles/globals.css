@@ -254,3 +254,9 @@
 .animate-gradient-pulse {
   animation: gradientPulse 4s ease-in-out infinite;
 }
+
+@keyframes search-flash {
+  0% { background-color: rgba(124, 108, 246, 0.2); }
+  100% { background-color: transparent; }
+}
+.search-highlight { animation: search-flash 2s ease-out; }
