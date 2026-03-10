@@ -6,6 +6,15 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
 import type { ParticipantInfo } from '../../hooks/useLiveKit';
+import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
+
+/** Stable fallback for useVoiceParticipantMeta when no participant exists */
+const EMPTY_PARTICIPANT: ParticipantInfo = {
+  identity: '', userId: '', username: '', homeUserId: null,
+  isMuted: false, isDeafened: false, isCameraOn: false, isScreenSharing: false,
+  isLocal: false, audioTrack: null, videoTrack: null, screenTrack: null,
+  screenAudioTrack: null, lkVideoTrack: null, lkScreenTrack: null,
+};
 
 const PIP_WIDTH = 320;
 const PIP_HEIGHT = 180;
@@ -307,11 +316,19 @@ export function PictureInPicture() {
     setPipCollapsed(true);
   }, [setPipCollapsed]);
 
+  // Compute displayParticipant before early return so hook is called unconditionally
+  const displayParticipant = useMemo(
+    () => selectedStream?.participant ?? fallbackParticipant,
+    [selectedStream, fallbackParticipant],
+  );
+
+  const { displayName: resolvedName, avatar: resolvedAvatar } =
+    useVoiceParticipantMeta(displayParticipant ?? EMPTY_PARTICIPANT);
+
   if (!shouldShow) return null;
 
-  const displayParticipant = selectedStream?.participant ?? fallbackParticipant;
   const displayName = displayParticipant
-    ? (displayParticipant.isLocal ? `${displayParticipant.username} (You)` : displayParticipant.username)
+    ? (displayParticipant.isLocal ? `${resolvedName} (You)` : resolvedName)
     : channelName;
   const hasVideo = selectedStream !== null;
   const isScreen = selectedStream?.type === 'screen';
@@ -349,7 +366,8 @@ export function PictureInPicture() {
           {displayParticipant ? (
             <div className="relative flex">
               <Avatar
-                name={displayParticipant.username}
+                src={resolvedAvatar}
+                name={resolvedName}
                 size={64}
                 userId={displayParticipant.homeUserId ?? displayParticipant.userId}
               />
