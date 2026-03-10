@@ -3,8 +3,9 @@ import { useAuthStore } from '../../../stores/authStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { api } from '../../../api/client';
-import { getAvatarGradient, adjustColor } from '../../../utils/gradients';
-import type { UserStatus } from '@backspace/shared';
+import { getAvatarGradient, adjustColor, AVATAR_GRADIENT_MAP } from '../../../utils/gradients';
+import { AVATAR_COLORS } from '@backspace/shared';
+import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 
 const ACCENT_PRESETS = [
   '#86efac', '#fca5a5', '#c4b5fd', '#7dd3fc',
@@ -22,6 +23,7 @@ export function AccountPanel() {
   const [status, setStatus] = useState<UserStatus>(user?.status ?? 'online');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [accentColor, setAccentColor] = useState<string | null>(user?.accentColor ?? null);
+  const [avatarColorState, setAvatarColorState] = useState<AvatarColor | null>(user?.avatarColor ?? null);
   const [customHex, setCustomHex] = useState(user?.accentColor ?? '');
 
   // Avatar upload state
@@ -49,6 +51,7 @@ export function AccountPanel() {
       setStatus(user.status ?? 'online');
       setBio(user.bio ?? '');
       setAccentColor(user.accentColor ?? null);
+      setAvatarColorState(user.avatarColor ?? null);
       setCustomHex(user.accentColor ?? '');
       // Reset upload state
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
@@ -58,12 +61,13 @@ export function AccountPanel() {
       setBannerPreview(null);
       setBannerFilename(null);
     }
-  }, [user?.displayName, user?.customStatus, user?.status, user?.bio, user?.accentColor, user?.avatar, user?.banner]);
+  }, [user?.displayName, user?.customStatus, user?.status, user?.bio, user?.accentColor, user?.avatarColor, user?.avatar, user?.banner]);
 
   if (!user) return null;
 
   const effectiveDisplayName = displayName.trim() || user.username;
   const effectiveAccent = accentColor;
+  const effectiveAvatarColor = avatarColorState;
 
   // Change detection
   const hasChanges =
@@ -72,6 +76,7 @@ export function AccountPanel() {
     status !== (user.status ?? 'online') ||
     bio !== (user.bio ?? '') ||
     accentColor !== (user.accentColor ?? null) ||
+    avatarColorState !== (user.avatarColor ?? null) ||
     avatarFilename !== null ||
     bannerFilename !== null;
 
@@ -90,7 +95,7 @@ export function AccountPanel() {
   // Banner fallback: accent gradient or avatar gradient
   const bannerFallback = effectiveAccent
     ? `linear-gradient(135deg, ${effectiveAccent}, ${adjustColor(effectiveAccent, -40)})`
-    : getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName).gradient;
+    : getAvatarGradient(user.homeUserId ?? user.id, effectiveDisplayName, effectiveAvatarColor).gradient;
 
   // ── File selection handlers ──
   const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -173,6 +178,7 @@ export function AccountPanel() {
       if (status !== (user.status ?? 'online')) updates.status = status;
       if (bio !== (user.bio ?? '')) updates.bio = bio.trim();
       if (accentColor !== (user.accentColor ?? null)) updates.accentColor = accentColor ?? '';
+      if (avatarColorState !== (user.avatarColor ?? null)) updates.avatarColor = avatarColorState ?? '';
       if (avatarFilename !== null) updates.avatar = avatarFilename;
       if (bannerFilename !== null) updates.banner = bannerFilename;
 
@@ -192,6 +198,7 @@ export function AccountPanel() {
     setStatus(user.status ?? 'online');
     setBio(user.bio ?? '');
     setAccentColor(user.accentColor ?? null);
+    setAvatarColorState(user.avatarColor ?? null);
     setCustomHex(user.accentColor ?? '');
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     if (bannerPreview) URL.revokeObjectURL(bannerPreview);
@@ -238,6 +245,7 @@ export function AccountPanel() {
                   name={effectiveDisplayName}
                   size={56}
                   userId={user.homeUserId ?? user.id}
+                  user={{ ...user, avatarColor: effectiveAvatarColor } as User}
                 />
               )}
             </div>
@@ -277,6 +285,7 @@ export function AccountPanel() {
                       name={effectiveDisplayName}
                       size={64}
                       userId={user.homeUserId ?? user.id}
+                      user={{ ...user, avatarColor: effectiveAvatarColor } as User}
                     />
                   )}
                 </div>
@@ -381,6 +390,30 @@ export function AccountPanel() {
               onChange={handleBannerSelect}
               className="hidden"
             />
+          </div>
+
+          {/* Avatar Color */}
+          <div>
+            <label className="block text-xs text-txt-secondary mb-1.5">Avatar Color</label>
+            <div className="flex gap-2">
+              {AVATAR_COLORS.map((key) => {
+                const entry = AVATAR_GRADIENT_MAP[key];
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setAvatarColorState(key)}
+                    className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110"
+                    style={{
+                      background: entry.gradient,
+                      borderColor: avatarColorState === key ? 'white' : 'transparent',
+                      boxShadow: avatarColorState === key ? `0 0 0 2px ${entry.glow}40` : 'none',
+                    }}
+                    title={key.charAt(0).toUpperCase() + key.slice(1)}
+                  />
+                );
+              })}
+            </div>
           </div>
 
           {/* Accent Color */}

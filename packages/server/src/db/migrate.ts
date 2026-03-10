@@ -93,6 +93,12 @@ export function runMigrations(db: Database.Database): void {
         { name: 'accent_color', type: 'TEXT' },
         { name: 'bio', type: 'TEXT' },
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'avatar_color', type: 'TEXT' },
+      ]
     }
   ];
 

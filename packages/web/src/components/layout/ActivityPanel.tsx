@@ -35,6 +35,7 @@ export function ActivityPanel() {
         avatar: friend.avatar,
         banner: friend.banner,
         accentColor: friend.accentColor,
+        avatarColor: friend.avatarColor,
         bio: friend.bio,
         status: friend.status,
         customStatus: friend.customStatus,

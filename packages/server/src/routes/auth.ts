@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
+import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -95,6 +96,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const userCount = db.select().from(schema.users).all().length;
     const isFirstUser = userCount === 0 && !homeInstance;
 
+    const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+
     db.insert(schema.users).values({
       id: userId,
       username: trimmedUsername,
@@ -104,6 +107,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       isAdmin: isFirstUser ? 1 : 0,
       homeInstance: homeInstance || null,
       homeUserId: (homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null,
+      avatarColor,
       createdAt: now,
     }).run();
 

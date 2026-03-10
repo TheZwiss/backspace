@@ -14,6 +14,7 @@ export const users = sqliteTable('users', {
   replicatedInstances: text('replicated_instances').default('[]'),
   banner: text('banner'),
   accentColor: text('accent_color'),
+  avatarColor: text('avatar_color'),
   bio: text('bio'),
   createdAt: integer('created_at').notNull(),
 });

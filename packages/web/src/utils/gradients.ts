@@ -3,6 +3,8 @@
  * Deterministic color assignment based on entity ID (snowflake) or name.
  */
 
+import type { AvatarColor } from '@backspace/shared';
+
 export interface GradientEntry {
   gradient: string;
   glow: string;
@@ -18,6 +20,16 @@ const AVATAR_GRADIENTS: GradientEntry[] = [
   { gradient: 'linear-gradient(135deg, #14b8a6, #06b6d4)', glow: '#06b6d4' },   // teal
   { gradient: 'linear-gradient(135deg, #f59e0b, #eab308)', glow: '#f59e0b' },   // amber
 ];
+
+export const AVATAR_GRADIENT_MAP: Record<AvatarColor, GradientEntry> = {
+  mint:     AVATAR_GRADIENTS[0]!,
+  sky:      AVATAR_GRADIENTS[1]!,
+  lavender: AVATAR_GRADIENTS[2]!,
+  coral:    AVATAR_GRADIENTS[3]!,
+  rose:     AVATAR_GRADIENTS[4]!,
+  teal:     AVATAR_GRADIENTS[5]!,
+  amber:    AVATAR_GRADIENTS[6]!,
+};
 
 // ── Space icon gradients (space fallbacks) ──
 const SPACE_GRADIENTS: GradientEntry[] = [
@@ -45,8 +57,11 @@ function hashString(str: string): number {
   return hash;
 }
 
-/** Deterministic gradient for a user avatar. Prefers ID for stability; falls back to name. */
-export function getAvatarGradient(id?: string | null, name?: string): GradientEntry {
+/** Deterministic gradient for a user avatar. Uses stored avatarColor if available; falls back to hash. */
+export function getAvatarGradient(id?: string | null, name?: string, avatarColor?: string | null): GradientEntry {
+  if (avatarColor && avatarColor in AVATAR_GRADIENT_MAP) {
+    return AVATAR_GRADIENT_MAP[avatarColor as AvatarColor];
+  }
   const key = id || name || 'unknown';
   return AVATAR_GRADIENTS[hashString(key) % AVATAR_GRADIENTS.length]!;
 }

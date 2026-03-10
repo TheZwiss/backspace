@@ -18,6 +18,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     avatar: row.avatar,
     banner: row.banner ?? null,
     accentColor: row.accentColor ?? null,
+    avatarColor: (row.avatarColor as User['avatarColor']) ?? null,
     bio: row.bio ?? null,
     status: (row.status ?? 'offline') as User['status'],
     customStatus: row.customStatus,

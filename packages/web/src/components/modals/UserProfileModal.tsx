@@ -150,7 +150,7 @@ export function UserProfileModal() {
     : null;
   const bannerFallback = user.accentColor
     ? `linear-gradient(135deg, ${user.accentColor}, ${adjustColor(user.accentColor, -40)})`
-    : getAvatarGradient(user.homeUserId ?? user.id, displayName).gradient;
+    : getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor).gradient;
 
   const handleSendMessage = async () => {
     try {

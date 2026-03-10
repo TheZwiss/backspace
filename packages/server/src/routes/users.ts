@@ -4,6 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
 import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ReplicatedInstance } from '@backspace/shared';
+import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
 export async function userRoutes(app: FastifyInstance): Promise<void> {
@@ -38,7 +39,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, banner, accentColor, bio, customStatus, status, replicatedInstances, homeUserId } = request.body;
+    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -76,6 +77,18 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         updateData.accentColor = hex;
       } else {
         updateData.accentColor = null;
+      }
+    }
+
+    if (avatarColor !== undefined) {
+      if (avatarColor && typeof avatarColor === 'string' && avatarColor.trim().length > 0) {
+        const trimmed = avatarColor.trim();
+        if (!(AVATAR_COLORS as readonly string[]).includes(trimmed)) {
+          return reply.code(400).send({ error: `Invalid avatar color. Must be one of: ${AVATAR_COLORS.join(', ')}`, statusCode: 400 });
+        }
+        updateData.avatarColor = trimmed;
+      } else {
+        updateData.avatarColor = null;
       }
     }
 

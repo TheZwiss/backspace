@@ -1,5 +1,8 @@
 // ─── User Types ─────────────────────────────────────────────────────────────
 
+export const AVATAR_COLORS = ['mint', 'sky', 'lavender', 'coral', 'rose', 'teal', 'amber'] as const;
+export type AvatarColor = (typeof AVATAR_COLORS)[number];
+
 export interface User {
   id: string;
   username: string;
@@ -7,6 +10,7 @@ export interface User {
   avatar: string | null;
   banner: string | null;
   accentColor: string | null;
+  avatarColor: AvatarColor | null;
   bio: string | null;
   status: UserStatus;
   customStatus: string | null;
@@ -345,6 +349,7 @@ export interface UpdateUserRequest {
   avatar?: string;
   banner?: string;
   accentColor?: string;
+  avatarColor?: string;
   bio?: string;
   customStatus?: string;
   status?: UserStatus;
@@ -412,6 +417,7 @@ export interface Friend {
   avatar: string | null;
   banner: string | null;
   accentColor: string | null;
+  avatarColor: AvatarColor | null;
   bio: string | null;
   status: UserStatus;
   customStatus: string | null;
