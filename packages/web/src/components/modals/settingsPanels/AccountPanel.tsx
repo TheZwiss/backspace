@@ -226,26 +226,15 @@ export function AccountPanel() {
           />
           {/* Avatar + info */}
           <div className="px-4 pb-3">
-            <div
-              className="mt-[-28px] mb-2 w-fit rounded-full"
-              style={{ border: '4px solid var(--color-surface-channel, #1e1e2a)' }}
-            >
-              {displayAvatarSrc ? (
-                <img
-                  src={displayAvatarSrc}
-                  alt="Avatar"
-                  className="w-[56px] h-[56px] rounded-full object-cover"
-                />
-              ) : (
-                <Avatar
-                  src={null}
-                  name={effectiveDisplayName}
-                  size={56}
-                  userId={user.homeUserId ?? user.id}
-                  user={{ ...user, avatarColor: effectiveAvatarColor } as User}
-                />
-              )}
-            </div>
+            <Avatar
+              src={avatarPreview ?? (avatarFilename === '' ? null : user.avatar)}
+              name={effectiveDisplayName}
+              size={56}
+              userId={user.homeUserId ?? user.id}
+              user={{ ...user, avatarColor: effectiveAvatarColor } as User}
+              ring={{ width: 4, color: 'var(--color-surface-channel, #1e1e2a)' }}
+              className="mt-[-32px] mb-2"
+            />
             <div
               className="font-semibold text-[15px] leading-tight text-txt-primary"
             >
