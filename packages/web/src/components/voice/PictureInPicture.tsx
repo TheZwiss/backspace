@@ -347,7 +347,7 @@ export function PictureInPicture() {
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-surface-channel">
           {displayParticipant ? (
-            <div className="relative">
+            <div className="relative flex">
               <Avatar
                 name={displayParticipant.username}
                 size={64}

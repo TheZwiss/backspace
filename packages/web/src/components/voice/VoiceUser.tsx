@@ -3,6 +3,7 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { VoiceUserContextMenu } from './VoiceUserContextMenu';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
 import type { UserTile } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
@@ -28,6 +29,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
   const isLocal = participant.isLocal;
   const avatarUserId = participant.homeUserId ?? participant.userId;
+  const { displayName, avatar } = useVoiceParticipantMeta(participant);
 
   // --- VIDEO & UI ---
 
@@ -90,10 +92,10 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
-          <div className="relative">
+          <div className="relative flex">
             <Avatar
-              src={null}
-              name={participant.username}
+              src={avatar}
+              name={displayName}
               size={large ? 100 : 64}
               userId={avatarUserId}
             />
@@ -110,7 +112,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
             <span
               className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
             >
-              {participant.username}
+              {displayName}
             </span>
             {isLocal && (
               <span className="text-[10px] text-white/40 font-medium">

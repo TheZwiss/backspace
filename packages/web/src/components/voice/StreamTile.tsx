@@ -3,6 +3,7 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { StreamContextMenu } from './StreamContextMenu';
+import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
 
 interface StreamTileProps {
@@ -19,6 +20,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const isLocal = participant.isLocal;
   const userId = participant.userId;
   const avatarUserId = participant.homeUserId ?? userId;
+  const { displayName, avatar } = useVoiceParticipantMeta(participant);
 
   const isWatching = watchingStreams.has(userId);
 
@@ -108,11 +110,11 @@ export function StreamTile({ tile, large }: StreamTileProps) {
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
           <div className="relative">
-            <Avatar src={null} name={participant.username} size={large ? 80 : 48} userId={avatarUserId} />
+            <Avatar src={avatar} name={displayName} size={large ? 80 : 48} userId={avatarUserId} />
           </div>
           <div className="text-center px-4">
             <p className="text-txt-primary text-sm font-semibold">
-              {participant.username} is streaming
+              {displayName} is streaming
             </p>
             {!isLocal && (
               <button
@@ -154,7 +156,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
           <span
             className={`font-semibold text-white truncate ${large ? 'text-base' : 'text-[13px]'}`}
           >
-            {participant.username}
+            {displayName}
           </span>
           {isLocal && (
             <span className="text-[10px] text-white/40 font-medium">(you)</span>
