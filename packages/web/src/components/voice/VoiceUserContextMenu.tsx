@@ -178,6 +178,7 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
           style={{ left: -9999, top: -9999 }}
           onMouseEnter={cancelCloseTimer}
           onMouseLeave={startCloseTimer}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           {channels.map((ch) => (
             <button
@@ -201,19 +202,20 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
 
 // ─── Standalone portalled context menu ─────────────────────────────────────────
 
-interface VoiceModContextMenuProps {
+interface VoiceUserContextMenuProps {
   targetUserId: string;
   channelId: string;
   position: { x: number; y: number };
   onClose: () => void;
+  isLocal: boolean;
 }
 
 /**
- * Full standalone moderation context menu rendered via createPortal to document.body.
- * Escapes any CSS containing-block / overflow clipping from parent transforms.
+ * Unified voice user context menu rendered via createPortal to document.body.
+ * Shows moderation items (if perms) + volume slider (always, for remote users).
  * Includes viewport-aware positioning and click-outside dismissal.
  */
-export function VoiceModContextMenu({ targetUserId, channelId, position, onClose }: VoiceModContextMenuProps) {
+export function VoiceUserContextMenu({ targetUserId, channelId, position, onClose, isLocal }: VoiceUserContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
@@ -224,9 +226,12 @@ export function VoiceModContextMenu({ targetUserId, channelId, position, onClose
   const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
   const hasModPerms = canMuteMembers || canDeafenMembers || canMoveMembers;
 
-  // Click-outside dismissal — always called (hooks must be unconditional)
+  const participantVolumes = useVoiceStore((s) => s.participantVolumes);
+  const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
+  const perUserVolume = participantVolumes.get(targetUserId) ?? 100;
+
+  // Click-outside dismissal
   useEffect(() => {
-    if (!hasModPerms) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
@@ -234,12 +239,12 @@ export function VoiceModContextMenu({ targetUserId, channelId, position, onClose
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [hasModPerms, onClose]);
+  }, [onClose]);
 
   // Viewport-aware positioning — direct DOM mutation, no extra state/render
   useLayoutEffect(() => {
     const el = menuRef.current;
-    if (!hasModPerms || !el) return;
+    if (!el) return;
     const rect = el.getBoundingClientRect();
     let x = position.x;
     let y = position.y;
@@ -249,21 +254,55 @@ export function VoiceModContextMenu({ targetUserId, channelId, position, onClose
     if (y < 8) y = 8;
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
-  }, [position, hasModPerms]);
+  }, [position]);
 
-  if (!hasModPerms) return null;
+  if (isLocal) return null;
 
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[200] bg-surface-elevated rounded-md shadow-elevation-high py-1.5 min-w-[180px] max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin animate-fade-in"
+      className="fixed z-[200] bg-surface-elevated rounded-md shadow-elevation-high min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: position.x, top: position.y }}
     >
-      <VoiceModMenuItems
-        targetUserId={targetUserId}
-        channelId={channelId}
-        onAction={onClose}
-      />
+      {hasModPerms && (
+        <>
+          <div className="py-1.5">
+            <VoiceModMenuItems
+              targetUserId={targetUserId}
+              channelId={channelId}
+              onAction={onClose}
+            />
+          </div>
+          <div className="h-px bg-white/[0.06] mx-1.5" />
+        </>
+      )}
+      <div className="p-3">
+        <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
+          User Volume
+        </div>
+        <div className="flex items-center gap-2">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="text-txt-tertiary flex-shrink-0"
+          >
+            <path d="M3 9v6h4l5 5V4L7 9H3z" />
+          </svg>
+          <input
+            type="range"
+            min="0"
+            max="200"
+            value={perUserVolume}
+            onChange={(e) => setParticipantVolume(targetUserId, parseInt(e.target.value))}
+            className="flex-1 accent-accent-primary h-1"
+          />
+          <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+            {perUserVolume}%
+          </span>
+        </div>
+      </div>
     </div>,
     document.body,
   );

@@ -3,7 +3,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
-import { VoiceModContextMenu } from './VoiceModContextMenu';
+import { VoiceUserContextMenu } from './VoiceUserContextMenu';
 
 const EMPTY_VOICE_USERS: string[] = [];
 
@@ -160,11 +160,12 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
 
       {/* Voice moderation context menu (portalled to body) */}
       {contextMenu && (
-        <VoiceModContextMenu
+        <VoiceUserContextMenu
           targetUserId={contextMenu.userId}
           channelId={channelId}
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
+          isLocal={false}
         />
       )}
     </div>
