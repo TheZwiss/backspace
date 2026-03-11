@@ -64,7 +64,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
       {isOpen && (
         <div
           ref={menuRef}
-          className="fixed z-[200] min-w-[180px] py-1.5 bg-surface-elevated rounded-md shadow-elevation-high animate-fade-in max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin"
+          className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin"
           style={{ left: position.x, top: position.y }}
         >
           {items.map((item, i) => (

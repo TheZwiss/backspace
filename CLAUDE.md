@@ -19,6 +19,23 @@ Backspace has its own visual identity — it is NOT a Discord clone. The design 
 
 When making UI changes, consult the prototype for colors, spacing, materials, and hierarchy. The frontend should converge toward this design.
 
+### Surface Material Tiers
+
+Every surface in Backspace falls into one of these tiers:
+
+| Tier | Class | When to Use |
+|------|-------|-------------|
+| Structural | `bg-surface-*` | Permanent layout (sidebars, chat area, member list) |
+| Strip | `.glass-strip` | Persistent edge chrome (space sidebar) |
+| Bubble | `.glass-bubble` | Persistent floating controls (voice bar, input pill, sticky actions) |
+| Popover | `.glass` | Small floating surfaces (context menus, popovers, autocomplete, tooltips) |
+| Modal | `.glass-modal` | Large center-screen dialogs with backdrop scrim |
+| Pill | `.glass-pill` | Tiny inline decorations (reactions, tags) |
+
+**Rule:** If it floats above the content plane, it's glass. Never use `bg-surface-elevated` for floating/overlay elements — that's for static structural panels only.
+
+**Modal backdrops** use `bg-black/50` — light enough for the glass card's blur to show through.
+
 ## MISSION
 
 Maintain and extend Backspace as a complete, production-quality application. The core application is fully built and deployed. Every change must uphold the same standard: no stubs, no TODOs, no shortcuts. A user must always be able to `docker compose up` and have a fully working chat platform.

@@ -43,7 +43,7 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
         <div
           ref={floatingRef}
           style={style}
-          className="px-3 py-1.5 text-sm font-medium text-txt-primary bg-surface-elevated rounded-md shadow-elevation-high whitespace-nowrap pointer-events-none"
+          className="px-3 py-1.5 text-sm font-medium text-txt-primary glass rounded-md whitespace-nowrap pointer-events-none"
         >
           {content}
         </div>,

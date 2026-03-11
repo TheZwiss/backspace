@@ -51,10 +51,10 @@ export function IncomingCallModal() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60" />
+      <div className="absolute inset-0 bg-black/50" />
 
       {/* Call card */}
-      <div className="relative bg-surface-channel rounded-lg shadow-2xl w-[340px] overflow-hidden">
+      <div className="relative glass-modal rounded-lg w-[340px] overflow-hidden">
         {/* Ring animation background */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] rounded-full bg-status-online/5 animate-ping" style={{ animationDuration: '2s' }} />

@@ -192,7 +192,7 @@ function MoveToSubmenu({ channels, onMove, btnClass, btnStyle }: MoveToSubmenuPr
       {open && ReactDOM.createPortal(
         <div
           ref={flyoutRef}
-          className="fixed z-[210] bg-surface-elevated rounded-md shadow-elevation-high py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
+          className="fixed z-[210] glass rounded-md py-1.5 min-w-[160px] overflow-y-auto scrollbar-thin animate-fade-in"
           style={{ left: -9999, top: -9999 }}
           onMouseEnter={cancelCloseTimer}
           onMouseLeave={startCloseTimer}
@@ -291,7 +291,7 @@ export function VoiceUserContextMenu({ targetUserId, channelId, position, onClos
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[200] bg-surface-elevated rounded-md shadow-elevation-high min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin animate-fade-in"
+      className="fixed z-[200] glass rounded-md min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin animate-fade-in"
       style={{ left: position.x, top: position.y }}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

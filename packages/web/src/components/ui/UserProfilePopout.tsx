@@ -79,16 +79,10 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
   return (
     <div
-      className="fixed z-[200] w-[340px] rounded-[12px] overflow-hidden animate-fade-in select-none border border-white/[0.07]"
-      style={{
-        ...(position
-          ? { top, left }
-          : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
-        backdropFilter: 'blur(20px) saturate(1.2)',
-        WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
-        backgroundColor: 'rgba(20,20,26,0.85)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.25)',
-      }}
+      className="fixed z-[200] w-[340px] rounded-[12px] overflow-hidden animate-fade-in select-none glass-modal"
+      style={position
+        ? { top, left }
+        : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
     >
       {/* Banner */}
       <div

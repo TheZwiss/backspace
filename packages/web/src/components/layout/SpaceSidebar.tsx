@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Tooltip } from '../ui/Tooltip';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
 
@@ -176,12 +177,13 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
   const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   const isOwner = space?.ownerId === getMyUserIdForOrigin((space as any)?._instanceOrigin ?? '');
 
   // Close on click-outside and scroll
   useEffect(() => {
-    if (showTransferModal) return; // Don't close when transfer modal is open
+    if (showTransferModal || showLeaveConfirm) return; // Don't close when sub-dialog is open
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         onClose();
@@ -200,7 +202,7 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
       document.removeEventListener('scroll', handleScroll, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose, showTransferModal]);
+  }, [onClose, showTransferModal, showLeaveConfirm]);
 
   if (!space) return null;
 
@@ -235,7 +237,7 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[9999] min-w-[160px] bg-surface-overlay rounded-lg border border-white/[0.07] shadow-lg py-1 animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-[9999] min-w-[160px] glass rounded-lg py-1 animate-in fade-in zoom-in-95 duration-100"
       style={{ left: clampedX, top: clampedY }}
     >
       <button
@@ -260,15 +262,7 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
       ) : (
         <button
           className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
-          onClick={() => {
-            if (currentSpaceId === spaceId) {
-              navigate('/channels/@me');
-              setCurrentSpace(null);
-              setShowDms(true);
-            }
-            leaveSpace(spaceId);
-            onClose();
-          }}
+          onClick={() => setShowLeaveConfirm(true)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
@@ -276,6 +270,24 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
           Leave Space
         </button>
       )}
+      <ConfirmDialog
+        isOpen={showLeaveConfirm}
+        onClose={() => setShowLeaveConfirm(false)}
+        onConfirm={() => {
+          if (currentSpaceId === spaceId) {
+            navigate('/channels/@me');
+            setCurrentSpace(null);
+            setShowDms(true);
+          }
+          leaveSpace(spaceId);
+          setShowLeaveConfirm(false);
+          onClose();
+        }}
+        title={`Leave ${space.name}`}
+        description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
+        variant="danger"
+        confirmLabel="Leave"
+      />
     </div>,
     document.body,
   );
@@ -351,7 +363,7 @@ function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50">
       <div
         ref={modalRef}
-        className="w-[380px] max-h-[480px] bg-surface-overlay rounded-xl border border-white/[0.07] shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        className="w-[380px] max-h-[480px] glass-modal rounded-xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-white/[0.06]">

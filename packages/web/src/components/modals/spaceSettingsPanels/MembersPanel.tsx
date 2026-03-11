@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar } from '../../ui/Avatar';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { parseFederatedUsername } from '../../../utils/identity';
@@ -28,6 +29,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
   const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ type: 'kick' | 'ban'; userId: string; displayName: string } | null>(null);
 
   // Assignable roles: exclude @everyone (where role.id === spaceId)
   const assignableRoles = roles.filter((r) => r.id !== spaceId);
@@ -170,7 +172,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {canBan && member.userId !== currentUser?.id && !isOwner && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleBan(member.userId); }}
+                          onClick={(e) => { e.stopPropagation(); setPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
                           className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
                         >
                           Ban
@@ -178,7 +180,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
                       )}
                       {canKick && member.userId !== currentUser?.id && !isOwner && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleKick(member.userId); }}
+                          onClick={(e) => { e.stopPropagation(); setPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
                           className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
                         >
                           Kick
@@ -241,6 +243,28 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async () => {
+          if (!pendingAction) return;
+          if (pendingAction.type === 'kick') {
+            await handleKick(pendingAction.userId);
+          } else {
+            await handleBan(pendingAction.userId);
+          }
+          setPendingAction(null);
+        }}
+        title={pendingAction?.type === 'ban' ? `Ban ${pendingAction.displayName}` : `Kick ${pendingAction?.displayName ?? ''}`}
+        description={
+          pendingAction?.type === 'ban'
+            ? 'They will be permanently banned from this space until unbanned.'
+            : 'They can rejoin with an invite link.'
+        }
+        variant={pendingAction?.type === 'ban' ? 'danger' : 'warning'}
+        confirmLabel={pendingAction?.type === 'ban' ? 'Ban' : 'Kick'}
+      />
     </div>
   );
 }

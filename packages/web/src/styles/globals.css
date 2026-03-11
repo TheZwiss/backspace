@@ -56,6 +56,7 @@
 
     /* ── Glass Material ── */
     --glass-bg: rgba(20, 20, 26, 0.52);
+    --glass-modal-bg: rgba(20, 20, 26, 0.82);
     --glass-border: rgba(255, 255, 255, 0.07);
     --glass-highlight: rgba(255, 255, 255, 0.05);
 
@@ -117,6 +118,17 @@
 }
 
 @layer components {
+  /* ── Glass Material Tiers ──
+   * .glass        — Popovers, context menus, autocomplete (small, no backdrop)
+   * .glass-modal  — Center-screen dialogs (large, with backdrop, higher opacity for legibility)
+   * .glass-strip  — Space sidebar edge (no border-radius, directional shadow)
+   * .glass-bubble — Persistent floating controls (voice bar, input pill)
+   * .glass-pill   — Inline decorations (reactions, tags, lighter blur)
+   *
+   * RULE: Every floating surface uses a glass tier. Never use bg-surface-elevated for overlays.
+   * See CLAUDE.md "Surface Material Tiers" for the full decision guide.
+   */
+
   /* Standard glass — popovers, floating elements */
   .glass {
     backdrop-filter: blur(20px) saturate(120%);
@@ -150,6 +162,18 @@
     box-shadow:
       0 2px 8px rgba(0, 0, 0, 0.20),
       0 8px 24px rgba(0, 0, 0, 0.12),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Modal glass — center-screen dialogs with backdrop */
+  .glass-modal {
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-modal-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.30),
+      0 12px 40px rgba(0, 0, 0, 0.20),
       inset 0 1px 0 var(--glass-highlight);
   }
 
@@ -189,6 +213,11 @@
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.20);
   }
   .glass-bubble {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-elevated));
+  }
+  .glass-modal {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     background: rgb(var(--bg-elevated));
