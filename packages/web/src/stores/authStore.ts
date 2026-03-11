@@ -6,6 +6,7 @@ import { useSpaceStore } from './spaceStore';
 import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
+import { syncProfileUpdateToRemotes } from '../utils/profileSync';
 
 interface AuthState {
   token: string | null;
@@ -16,7 +17,7 @@ interface AuthState {
   register: (username: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
-  updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
+  updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; avatarColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
 }
@@ -84,6 +85,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const user = await api.users.update(data);
       set({ user });
+      // Push profile changes to all connected remote instances
+      syncProfileUpdateToRemotes(data).catch((err) => {
+        console.warn('[ProfileSync] Failed to sync to remotes:', err);
+      });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Update failed' });
       throw err;
