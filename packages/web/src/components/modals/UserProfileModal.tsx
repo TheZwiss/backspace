@@ -433,7 +433,7 @@ export function UserProfileModal() {
                         ) : (
                           <div
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-semibold text-white"
-                            style={{ background: getSpaceGradient(space.id, space.name).gradient }}
+                            style={{ background: getSpaceGradient(space.id, space.name, space.avatarColor).gradient }}
                           >
                             {space.name.charAt(0).toUpperCase()}
                           </div>

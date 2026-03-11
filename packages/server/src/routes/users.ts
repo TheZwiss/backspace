@@ -493,7 +493,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const mutualSpaceIds = [...mySpaceIds].filter((id) => targetSpaceIds.has(id));
 
     const mutualSpaces = mutualSpaceIds.length > 0
-      ? db.select({ id: schema.spaces.id, name: schema.spaces.name, icon: schema.spaces.icon })
+      ? db.select({ id: schema.spaces.id, name: schema.spaces.name, icon: schema.spaces.icon, avatarColor: schema.spaces.avatarColor })
           .from(schema.spaces)
           .where(inArray(schema.spaces.id, mutualSpaceIds))
           .all()

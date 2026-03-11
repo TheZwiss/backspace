@@ -11,6 +11,7 @@ export interface MutualSpace {
   id: string;
   name: string;
   icon: string | null;
+  avatarColor: string | null;
   _instanceOrigin: string;
 }
 

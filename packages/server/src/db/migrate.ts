@@ -105,6 +105,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'is_deleted', type: 'INTEGER DEFAULT 0' },
       ]
+    },
+    {
+      name: 'spaces',
+      columns: [
+        { name: 'avatar_color', type: 'TEXT' },
+      ]
     }
   ];
 

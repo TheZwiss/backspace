@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ImageCropModal } from '../../ui/ImageCropModal';
-import { getSpaceGradient } from '../../../utils/gradients';
+import { getSpaceGradient, SPACE_GRADIENT_MAP } from '../../../utils/gradients';
+import { AVATAR_COLORS } from '@backspace/shared';
+import type { AvatarColor } from '@backspace/shared';
 import { useSpaceStore } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
@@ -41,6 +43,8 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const [bannerCropSrc, setBannerCropSrc] = useState<string | null>(null);
   const bannerFileInputRef = useRef<HTMLInputElement>(null);
 
+  const [avatarColorState, setAvatarColorState] = useState<AvatarColor | null>(space?.avatarColor ?? null);
+
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -59,6 +63,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   useEffect(() => {
     if (space) {
       setSpaceName(space.name);
+      setAvatarColorState(space.avatarColor ?? null);
       setIconFilename(null);
       if (iconPreview) {
         URL.revokeObjectURL(iconPreview);
@@ -70,14 +75,15 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         setBannerPreview(null);
       }
     }
-  }, [space?.name, space?.icon, space?.banner]);
+  }, [space?.name, space?.icon, space?.banner, space?.avatarColor]);
 
   if (!space) return null;
 
   const hasNameChange = spaceName.trim() !== space.name;
   const hasIconChange = iconFilename !== null;
   const hasBannerChange = bannerFilename !== null;
-  const hasChanges = hasNameChange || hasIconChange || hasBannerChange;
+  const hasAvatarColorChange = avatarColorState !== (space.avatarColor ?? null);
+  const hasChanges = hasNameChange || hasIconChange || hasBannerChange || hasAvatarColorChange;
 
   const currentIconUrl = space.icon
     ? (space.icon.startsWith('http') ? space.icon : api.uploads.url(space.icon))
@@ -170,13 +176,16 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setSaveError('');
     setSaveSuccess(false);
     try {
-      const updates: { name?: string; icon?: string; banner?: string } = {};
+      const updates: { name?: string; icon?: string; banner?: string; avatarColor?: string } = {};
       if (hasNameChange) updates.name = spaceName.trim();
       if (hasIconChange) {
         updates.icon = iconFilename === '' ? '' : iconFilename!;
       }
       if (hasBannerChange) {
         updates.banner = bannerFilename === '' ? '' : bannerFilename!;
+      }
+      if (hasAvatarColorChange) {
+        updates.avatarColor = avatarColorState ?? '';
       }
       await updateSpace(spaceId, updates);
       setIconFilename(null);
@@ -200,6 +209,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   const handleDiscard = () => {
     setSpaceName(space.name);
+    setAvatarColorState(space.avatarColor ?? null);
     setIconFilename(null);
     if (iconPreview) {
       URL.revokeObjectURL(iconPreview);
@@ -296,7 +306,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
               ) : (
                 <div
                   className="w-full h-full rounded-full flex items-center justify-center text-white text-xl font-bold"
-                  style={{ background: getSpaceGradient(space.id, space.name).gradient }}
+                  style={{ background: getSpaceGradient(space.id, space.name, avatarColorState).gradient }}
                 >
                   {space.name.charAt(0).toUpperCase()}
                 </div>
@@ -326,6 +336,33 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                 Remove
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Space Avatar Color */}
+        <div>
+          <label className="block text-xs text-txt-secondary mb-1.5">
+            Icon Color
+          </label>
+          <div className="flex gap-2">
+            {AVATAR_COLORS.map((key) => {
+              const entry = SPACE_GRADIENT_MAP[key];
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => canManageSpace && setAvatarColorState(key)}
+                  disabled={!canManageSpace}
+                  className="w-7 h-7 rounded-full border-2 transition-all hover:scale-110 disabled:cursor-default disabled:hover:scale-100"
+                  style={{
+                    background: entry.gradient,
+                    borderColor: avatarColorState === key ? 'white' : 'transparent',
+                    boxShadow: avatarColorState === key ? `0 0 0 2px ${entry.glow}40` : 'none',
+                  }}
+                  title={key.charAt(0).toUpperCase() + key.slice(1)}
+                />
+              );
+            })}
           </div>
         </div>
 

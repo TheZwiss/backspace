@@ -14,6 +14,7 @@ interface SidebarItemProps {
   id: string;
   name: string;
   icon?: string | null;
+  avatarColor?: string | null;
   active: boolean;
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
@@ -26,7 +27,7 @@ interface SidebarItemProps {
   tooltipText?: string;
 }
 
-function SidebarItem({ id, name, icon, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -51,9 +52,9 @@ function SidebarItem({ id, name, icon, active, onClick, onContextMenu, type = 's
     // Space type — if it has a custom icon image, no gradient needed
     if (icon) return undefined;
 
-    const spaceGrad = getSpaceGradient(id, name);
+    const spaceGrad = getSpaceGradient(id, name, avatarColor);
     return { background: spaceGrad.gradient };
-  }, [type, id, name, icon, isHovered]);
+  }, [type, id, name, icon, avatarColor, isHovered]);
 
   const getButtonClasses = () => {
     const base = 'w-10 h-10 flex items-center justify-center duration-200 overflow-hidden [transition:border-radius_0.2s,background_0.2s,color_0.2s]';
@@ -562,6 +563,7 @@ export function SpaceSidebar() {
           id={space.id}
           name={space.name}
           icon={space.icon}
+          avatarColor={space.avatarColor}
           active={currentSpaceId === space.id}
           onClick={() => handleSpaceClick(space.id)}
           onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
@@ -588,6 +590,7 @@ export function SpaceSidebar() {
                 id={space.id}
                 name={space.name}
                 icon={space.icon}
+                avatarColor={space.avatarColor}
                 active={currentSpaceId === space.id}
                 onClick={() => handleSpaceClick(space.id)}
                 onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}

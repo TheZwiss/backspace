@@ -38,7 +38,7 @@ export const AVATAR_GRADIENT_MAP: Record<AvatarColor, GradientEntry> = {
 };
 
 // ── Space icon gradients (space fallbacks) ──
-const SPACE_GRADIENTS: GradientEntry[] = [
+export const SPACE_GRADIENTS: GradientEntry[] = [
   grad('#ef4444', '#f97316', '#f97316'),   // red-orange
   grad('#ec4899', '#f472b6', '#ec4899'),   // pink
   grad('#14b8a6', '#06b6d4', '#06b6d4'),   // teal-cyan
@@ -47,6 +47,16 @@ const SPACE_GRADIENTS: GradientEntry[] = [
   grad('#a78bfa', '#c084fc', '#c084fc'),   // lavender
   grad('#059669', '#10b981', '#10b981'),   // mint
 ];
+
+export const SPACE_GRADIENT_MAP: Record<AvatarColor, GradientEntry> = {
+  coral:    SPACE_GRADIENTS[0]!,   // red-orange
+  rose:     SPACE_GRADIENTS[1]!,   // pink
+  teal:     SPACE_GRADIENTS[2]!,   // teal-cyan
+  amber:    SPACE_GRADIENTS[3]!,   // amber-yellow
+  sky:      SPACE_GRADIENTS[4]!,   // blue-indigo
+  lavender: SPACE_GRADIENTS[5]!,   // lavender
+  mint:     SPACE_GRADIENTS[6]!,   // mint
+};
 
 // ── Home button (DM / Backspace) — fixed indigo-purple gradient ──
 export const HOME_GRADIENT: GradientEntry = grad('#6366f1', '#8b5cf6', '#8b5cf6');
@@ -69,8 +79,11 @@ export function getAvatarGradient(id?: string | null, name?: string, avatarColor
   return AVATAR_GRADIENTS[hashString(key) % AVATAR_GRADIENTS.length]!;
 }
 
-/** Deterministic gradient for a space icon. Prefers ID for stability; falls back to name. */
-export function getSpaceGradient(id?: string | null, name?: string): GradientEntry {
+/** Deterministic gradient for a space icon. Uses stored avatarColor if available; falls back to hash. */
+export function getSpaceGradient(id?: string | null, name?: string, avatarColor?: string | null): GradientEntry {
+  if (avatarColor && avatarColor in SPACE_GRADIENT_MAP) {
+    return SPACE_GRADIENT_MAP[avatarColor as AvatarColor];
+  }
   const key = id || name || 'unknown';
   return SPACE_GRADIENTS[hashString(key) % SPACE_GRADIENTS.length]!;
 }

@@ -60,7 +60,7 @@ export class BackspaceApiClient {
     verifyPassword: (password: string) => Promise<VerifyPasswordResponse>;
     changePassword: (data: ChangePasswordRequest) => Promise<ChangePasswordResponse>;
     deleteAccount: (data: DeleteAccountRequest) => Promise<{ success: boolean }>;
-    getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null }[] }>;
+    getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>;
   };
 
   readonly spaces: {
@@ -256,7 +256,7 @@ export class BackspaceApiClient {
         const params = new URLSearchParams();
         if (homeUserId) params.set('homeUserId', homeUserId);
         const qs = params.toString();
-        return request<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null }[] }>(
+        return request<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>(
           'GET', `/users/${id}/mutuals${qs ? `?${qs}` : ''}`
         );
       },

@@ -43,6 +43,7 @@ export interface Space {
   name: string;
   icon: string | null;
   banner: string | null;
+  avatarColor: AvatarColor | null;
   ownerId: string;
   inviteCode: string | null;
   visibility: SpaceVisibility;
@@ -55,6 +56,7 @@ export interface ExploreSpace {
   name: string;
   icon: string | null;
   banner: string | null;
+  avatarColor: AvatarColor | null;
   description: string | null;
   visibility: SpaceVisibility;
   memberCount: number;
@@ -323,6 +325,7 @@ export interface CreateSpaceRequest {
   name: string;
   icon?: string;
   banner?: string;
+  avatarColor?: string;
   visibility?: SpaceVisibility;
   description?: string;
 }
@@ -343,6 +346,7 @@ export interface UpdateSpaceRequest {
   name?: string;
   icon?: string;
   banner?: string;
+  avatarColor?: string;
   visibility?: SpaceVisibility;
   description?: string;
 }

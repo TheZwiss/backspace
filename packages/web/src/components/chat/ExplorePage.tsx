@@ -222,7 +222,7 @@ function SpaceCard({
   const [joinError, setJoinError] = useState('');
   const [iconGradient, setIconGradient] = useState<string | null>(null);
 
-  const fallbackGradient = getSpaceGradient(space.id, space.name).gradient;
+  const fallbackGradient = getSpaceGradient(space.id, space.name, space.avatarColor).gradient;
   const isPublic = space.visibility === 'public';
   const isJoined = space.joined === true;
   const originLabel = space._instanceOrigin

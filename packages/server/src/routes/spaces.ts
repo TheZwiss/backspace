@@ -18,6 +18,7 @@ import type {
   SpaceWithChannelsAndMembers,
   Role,
 } from '@backspace/shared';
+import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { checkVoicePermissions } from '../ws/events.js';
 
@@ -27,6 +28,7 @@ function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
     name: row.name,
     icon: row.icon,
     banner: row.banner ?? null,
+    avatarColor: (row.avatarColor as Space['avatarColor']) ?? null,
     ownerId: row.ownerId,
     inviteCode: row.inviteCode,
     visibility: (row.visibility ?? 'private') as Space['visibility'],
@@ -56,7 +58,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateSpaceRequest }>('/api/spaces', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { name, icon, banner, visibility, description } = request.body;
+    const { name, icon, banner, avatarColor, visibility, description } = request.body;
 
     if (!name || typeof name !== 'string') {
       return reply.code(400).send({ error: 'Space name is required', statusCode: 400 });
@@ -74,6 +76,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     // Validate description
     const safeDescription = description ? description.trim().slice(0, 200) || null : null;
 
+    // Validate avatarColor — assign random if not provided
+    const safeAvatarColor = avatarColor && (AVATAR_COLORS as readonly string[]).includes(avatarColor)
+      ? avatarColor
+      : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+
     const db = getDb();
     const spaceId = generateSnowflake();
     const channelId = generateSnowflake();
@@ -87,6 +94,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         name: trimmedName,
         icon: icon ?? null,
         banner: banner ?? null,
+        avatarColor: safeAvatarColor,
         ownerId: request.userId,
         inviteCode,
         visibility: safeVisibility,
@@ -272,7 +280,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, icon, banner, visibility, description } = request.body;
+    const { name, icon, banner, avatarColor, visibility, description } = request.body;
     const db = getDb();
 
     const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
@@ -300,6 +308,16 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     if (banner !== undefined) {
       updates.banner = banner || null;
+    }
+
+    if (avatarColor !== undefined) {
+      if (avatarColor === '') {
+        updates.avatarColor = null;
+      } else if ((AVATAR_COLORS as readonly string[]).includes(avatarColor)) {
+        updates.avatarColor = avatarColor;
+      } else {
+        return reply.code(400).send({ error: 'Invalid avatar color', statusCode: 400 });
+      }
     }
 
     if (visibility !== undefined) {

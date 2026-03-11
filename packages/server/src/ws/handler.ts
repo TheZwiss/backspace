@@ -7,6 +7,7 @@ import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
   User,
+  Space,
   SpaceWithChannelsAndMembers,
   MemberWithUser,
   Channel,
@@ -793,6 +794,7 @@ function buildReadyPayload(userId: string): {
         name: spaceRow.name,
         icon: spaceRow.icon,
         banner: spaceRow.banner ?? null,
+        avatarColor: (spaceRow.avatarColor as Space['avatarColor']) ?? null,
         ownerId: spaceRow.ownerId,
         inviteCode: spaceRow.inviteCode,
         visibility: (spaceRow.visibility ?? 'private') as SpaceWithChannelsAndMembers['visibility'],
