@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { useSpaceStore } from '../stores/spaceStore';
 import { parseFederatedUsername } from '../utils/identity';
 import type { ParticipantInfo } from './useLiveKit';
+import type { User } from '@backspace/shared';
 
 /**
- * Resolves display metadata (displayName, avatar) for a voice participant
+ * Resolves display metadata (displayName, avatar, user) for a voice participant
  * by looking up member data from the space/DM stores.
  *
  * Reactive — re-renders when member data changes (e.g. user updates avatar mid-call).
@@ -21,6 +22,7 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
       return {
         displayName: member.user.displayName ?? baseName,
         avatar: member.user.avatar ?? null,
+        user: member.user as User,
       };
     }
 
@@ -32,12 +34,13 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
         return {
           displayName: dmMember.displayName ?? baseName,
           avatar: dmMember.avatar ?? null,
+          user: dmMember as User,
         };
       }
     }
 
     // 3. Final fallback — parse username from LiveKit identity
     const { baseName } = parseFederatedUsername(participant.username);
-    return { displayName: baseName, avatar: null };
+    return { displayName: baseName, avatar: null, user: null as User | null };
   }, [members, dmChannels, participant.userId, participant.username]);
 }

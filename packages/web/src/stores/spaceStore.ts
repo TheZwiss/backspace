@@ -60,6 +60,7 @@ interface SpaceState {
   addSpace: (space: Space) => void;
   removeSpace: (spaceId: string) => void;
   updateMemberPresence: (userId: string, status: string) => void;
+  updateUserEverywhere: (user: User) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
   populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => void;
@@ -301,6 +302,20 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       members: state.members.map(m =>
         m.userId === userId ? { ...m, user: { ...m.user, status: status as 'online' | 'idle' | 'dnd' | 'offline' } } : m
       ),
+    }));
+  },
+
+  updateUserEverywhere: (user: User) => {
+    set((state) => ({
+      members: state.members.map(m =>
+        m.userId === user.id ? { ...m, user: { ...m.user, ...user } } : m
+      ),
+      dmChannels: state.dmChannels.map(dm => ({
+        ...dm,
+        members: dm.members.map(m =>
+          m.id === user.id ? { ...m, ...user } : m
+        ),
+      })),
     }));
   },
 

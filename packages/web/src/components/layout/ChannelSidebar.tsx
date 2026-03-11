@@ -236,12 +236,12 @@ export function ChannelSidebar() {
                             zIndex: 2 - i,
                           }}
                         >
-                          <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={22} userId={m.homeUserId ?? m.id} />
+                          <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={22} userId={m.homeUserId ?? m.id} user={m} />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} />
+                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} user={otherMembers[0]} />
                   )}
                   <div className="flex-1 min-w-0">
                     <Username

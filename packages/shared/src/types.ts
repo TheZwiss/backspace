@@ -292,6 +292,7 @@ export type ServerEvent =
   | { type: 'voice_permission_muted'; userId: string; spaceId: string; muted: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
   | { type: 'voice_disconnected'; userId: string; channelId: string }
+  | { type: 'user_updated'; user: User }
   | { type: 'member_banned'; spaceId: string; reason: string | null }
   | { type: 'pong' }
   | { type: 'error'; message: string };

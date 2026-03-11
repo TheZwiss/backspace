@@ -113,6 +113,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
                   size={24}
                   status={status}
                   userId={member?.user.homeUserId ?? userId}
+                  user={member?.user}
                 />
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}

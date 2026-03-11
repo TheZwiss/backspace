@@ -29,7 +29,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
 
   const isLocal = participant.isLocal;
   const avatarUserId = participant.homeUserId ?? participant.userId;
-  const { displayName, avatar } = useVoiceParticipantMeta(participant);
+  const { displayName, avatar, user } = useVoiceParticipantMeta(participant);
 
   // --- VIDEO & UI ---
 
@@ -98,6 +98,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
               name={displayName}
               size={large ? 100 : 64}
               userId={avatarUserId}
+              user={user ?? undefined}
             />
             {isSpeaking && (
               <div className="absolute -inset-1.5 rounded-full ring-[3px] ring-status-online animate-pulse" />

@@ -82,6 +82,7 @@ export function MentionPopover({ query, selectedIndex, onSelect, anchorRef }: Me
                 size={24}
                 status={member.user.status}
                 userId={member.user.homeUserId ?? member.user.id}
+                user={member.user}
               />
               <span
                 className="text-[14px] font-medium truncate"

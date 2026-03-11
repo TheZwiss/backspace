@@ -34,6 +34,7 @@ interface SocialState {
   addIncomingRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
+  updateFriendProfile: (user: User) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
   reset: () => void;
 }
@@ -285,6 +286,20 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     set((state) => ({
       friends: state.friends.map(f =>
         f.id === userId ? { ...f, status: status as Friend['status'] } : f
+      ),
+    }));
+  },
+
+  // Called from WS handler on user_updated to keep friend profile data live
+  updateFriendProfile: (user: User) => {
+    set((state) => ({
+      friends: state.friends.map(f =>
+        f.id === user.id
+          ? { ...f, displayName: user.displayName, avatar: user.avatar,
+              banner: user.banner, accentColor: user.accentColor,
+              avatarColor: user.avatarColor, bio: user.bio,
+              customStatus: user.customStatus, status: user.status }
+          : f
       ),
     }));
   },

@@ -322,7 +322,7 @@ export function PictureInPicture() {
     [selectedStream, fallbackParticipant],
   );
 
-  const { displayName: resolvedName, avatar: resolvedAvatar } =
+  const { displayName: resolvedName, avatar: resolvedAvatar, user: resolvedUser } =
     useVoiceParticipantMeta(displayParticipant ?? EMPTY_PARTICIPANT);
 
   if (!shouldShow) return null;
@@ -370,6 +370,7 @@ export function PictureInPicture() {
                 name={resolvedName}
                 size={64}
                 userId={displayParticipant.homeUserId ?? displayParticipant.userId}
+                user={resolvedUser ?? undefined}
               />
               {speakingParticipantIds.has(displayParticipant.identity) && (
                 <div className="absolute -inset-1 rounded-full ring-2 ring-status-online animate-pulse" />

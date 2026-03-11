@@ -57,6 +57,7 @@ interface ChatState {
   markChannelUnread: (channelId: string) => void;
   ackChannel: (channelId: string) => void;
   onChannelAck: (channelId: string, messageId: string) => void;
+  updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
 }
 
 /** Find which channel a message belongs to by scanning the message cache. */
@@ -591,6 +592,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newUnread = new Set(state.unreadChannels);
       newUnread.delete(channelId);
       return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+  },
+
+  updateUserInMessages: (user: { id: string; [key: string]: any }) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      let changed = false;
+      for (const [channelId, msgs] of newMessages) {
+        let channelChanged = false;
+        const updated = msgs.map(m => {
+          if (m.userId === user.id) {
+            channelChanged = true;
+            return { ...m, user: { ...m.user, ...user } };
+          }
+          return m;
+        });
+        if (channelChanged) { newMessages.set(channelId, updated); changed = true; }
+      }
+      return changed ? { messages: newMessages } : {};
     });
   },
 }));

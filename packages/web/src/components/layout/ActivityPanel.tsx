@@ -68,6 +68,7 @@ export function ActivityPanel() {
           status={isOffline ? 'offline' : friend.status}
           className={isOffline ? 'opacity-60' : undefined}
           userId={friend.homeUserId ?? friend.id}
+          avatarColor={friend.avatarColor}
         />
         <div className="flex-1 min-w-0">
           <Username

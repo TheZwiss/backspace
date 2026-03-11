@@ -310,6 +310,21 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       break;
 
+    case 'user_updated': {
+      if (!isHome) normalizeUserAssets(event.user, origin);
+      useSpaceStore.getState().updateUserEverywhere(event.user);
+      useSocialStore.getState().updateFriendProfile(event.user);
+      useChatStore.getState().updateUserInMessages(event.user);
+      // If this is the current user (other tab changed profile), update authStore
+      const myId = isHome
+        ? useAuthStore.getState().user?.id
+        : getMyUserIdForOrigin(origin);
+      if (event.user.id === myId && isHome) {
+        setUser(event.user);
+      }
+      break;
+    }
+
     case 'voice_state_update':
       if (event.action === 'join') {
         addVoiceUser(event.channelId, event.userId);

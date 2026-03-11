@@ -180,6 +180,50 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Broadcast user_updated for profile field changes
+    const profileFields = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio', 'customStatus'];
+    const hasProfileChange = profileFields.some(f => f in updateData);
+
+    if (hasProfileChange) {
+      const userUpdatedEvent = { type: 'user_updated' as const, user: sanitized };
+      const targetUserIds = new Set<string>();
+
+      // 1. Collect online users who share a space
+      const userSpaces = connectionManager.getUserSpaces(sanitized.id);
+      for (const [uid, spaceIds] of connectionManager.getUserSpaceEntries()) {
+        for (const spaceId of userSpaces) {
+          if (spaceIds.has(spaceId)) { targetUserIds.add(uid); break; }
+        }
+      }
+
+      // 2. Collect DM channel co-members
+      const dmMemberships = db.select().from(schema.dmMembers)
+        .where(eq(schema.dmMembers.userId, sanitized.id)).all();
+      for (const dm of dmMemberships) {
+        const coMembers = db.select().from(schema.dmMembers)
+          .where(eq(schema.dmMembers.dmChannelId, dm.dmChannelId)).all();
+        for (const m of coMembers) targetUserIds.add(m.userId);
+      }
+
+      // 3. Collect friends
+      const friendRows = db.select().from(schema.friends)
+        .where(or(
+          eq(schema.friends.userId, sanitized.id),
+          eq(schema.friends.friendId, sanitized.id),
+        )).all();
+      for (const fr of friendRows) {
+        targetUserIds.add(fr.userId === sanitized.id ? fr.friendId : fr.userId);
+      }
+
+      // 4. Include self (for other tabs/connections)
+      targetUserIds.add(sanitized.id);
+
+      // Send deduplicated — each user gets the event exactly once
+      for (const uid of targetUserIds) {
+        connectionManager.sendToUser(uid, userUpdatedEvent);
+      }
+    }
+
     return reply.code(200).send(sanitized);
   });
 

@@ -13,6 +13,7 @@ interface AvatarProps {
   user?: User;
   userId?: string;
   ring?: { width: number; color: string };
+  avatarColor?: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -54,12 +55,12 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
   return { dot, gap, inset: avatarInset + ringWidth };
 }
 
-export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring }: AvatarProps) {
+export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor }: AvatarProps) {
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
   // Match prototype: 24px→10px, 32-34px→12px, 40px→15px, 56px+→18px
   const fontPx = size <= 24 ? 10 : size <= 34 ? 12 : size <= 44 ? 15 : 18;
-  const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, user?.avatarColor);
+  const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, avatarColor ?? user?.avatarColor);
 
   const ringWidth = ring?.width ?? 0;
   const outerSize = size + ringWidth * 2;
