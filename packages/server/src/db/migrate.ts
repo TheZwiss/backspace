@@ -204,6 +204,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Clean up orphaned data from deleted users and channels ────────────────
   migrateOrphanedData(db);
 
+  // ─── Lowercase all existing usernames ────────────────────────────────────────
+  migrateLowercaseUsernames(db);
+
   console.log('Migrations complete.');
 }
 
@@ -545,6 +548,35 @@ function migrateOrphanedData(db: Database.Database): void {
  * Frees plain usernames for native user creation and makes all federated users
  * visually consistent. Safe because JWTs validate by userId, not username.
  */
+/**
+ * Lowercase all existing native usernames. Skips federated users (contain @)
+ * and tombstoned users (!deleted: prefix). If lowercasing would cause a collision,
+ * skip that user to avoid data loss.
+ */
+function migrateLowercaseUsernames(db: Database.Database): void {
+  const rows = db.prepare(
+    "SELECT id, username FROM users WHERE username NOT LIKE '%@%' AND username NOT LIKE '!deleted:%'"
+  ).all() as { id: string; username: string }[];
+
+  const needsUpdate = rows.filter(r => r.username !== r.username.toLowerCase());
+  if (needsUpdate.length === 0) return;
+
+  const checkExisting = db.prepare('SELECT id FROM users WHERE username = ?');
+  const update = db.prepare('UPDATE users SET username = ? WHERE id = ?');
+
+  for (const row of needsUpdate) {
+    const lower = row.username.toLowerCase();
+    // Check for collision (another user already has the lowercase version)
+    const existing = checkExisting.get(lower) as { id: string } | undefined;
+    if (existing && existing.id !== row.id) {
+      console.log(`Migrating: Skipping lowercase of "${row.username}" — "${lower}" already taken by user ${existing.id}`);
+      continue;
+    }
+    update.run(lower, row.id);
+    console.log(`Migrating: Lowercased username "${row.username}" → "${lower}"`);
+  }
+}
+
 function migrateReplicatedUsernames(db: Database.Database): void {
   const rows = db.prepare(
     "SELECT id, username, home_instance FROM users WHERE home_instance IS NOT NULL AND username NOT LIKE '%@%'"

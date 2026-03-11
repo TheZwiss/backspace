@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -167,7 +167,6 @@ function InstanceDivider({ label, disconnected }: { label: string; disconnected:
 function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: number; y: number; onClose: () => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
-  const currentUserId = useAuthStore((s) => s.user?.id);
   const leaveSpace = useSpaceStore((s) => s.leaveSpace);
   const generateInvite = useSpaceStore((s) => s.generateInvite);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -177,7 +176,7 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
   const navigate = useNavigate();
   const [showTransferModal, setShowTransferModal] = useState(false);
 
-  const isOwner = space?.ownerId === currentUserId;
+  const isOwner = space?.ownerId === getMyUserIdForOrigin((space as any)?._instanceOrigin ?? '');
 
   // Close on click-outside and scroll
   useEffect(() => {

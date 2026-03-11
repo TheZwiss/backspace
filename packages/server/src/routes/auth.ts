@@ -28,7 +28,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
     }
 
-    const trimmedUsername = username.trim();
+    const trimmedUsername = username.trim().toLowerCase();
 
     // Replicated registrations (homeInstance provided) may use username@domain format
     // for collision fallback. Local registrations use strict alphanumeric+underscore.
@@ -44,8 +44,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         const localPart = trimmedUsername.slice(0, atIndex);
         const domainPart = trimmedUsername.slice(atIndex + 1);
 
-        if (localPart.length < 3 || localPart.length > 32 || !/^[a-zA-Z0-9_]+$/.test(localPart)) {
-          return reply.code(400).send({ error: 'Username local part must be 3-32 alphanumeric/underscore characters', statusCode: 400 });
+        if (localPart.length < 3 || localPart.length > 32 || !/^[a-z0-9_]+$/.test(localPart)) {
+          return reply.code(400).send({ error: 'Username local part must be 3-32 lowercase alphanumeric/underscore characters', statusCode: 400 });
         }
         if (domainPart.length === 0 || domainPart.length > 253 || !/^[a-zA-Z0-9._-]+$/.test(domainPart)) {
           return reply.code(400).send({ error: 'Username domain part is invalid', statusCode: 400 });
@@ -63,8 +63,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (trimmedUsername.length < 3 || trimmedUsername.length > 32) {
         return reply.code(400).send({ error: 'Username must be between 3 and 32 characters', statusCode: 400 });
       }
-      if (!/^[a-zA-Z0-9_]+$/.test(trimmedUsername)) {
-        return reply.code(400).send({ error: 'Username can only contain letters, numbers, and underscores', statusCode: 400 });
+      if (!/^[a-z0-9_]+$/.test(trimmedUsername)) {
+        return reply.code(400).send({ error: 'Username can only contain lowercase letters, numbers, and underscores', statusCode: 400 });
       }
     }
 
@@ -142,14 +142,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ available: false, reason: 'Username is required' });
     }
 
-    const trimmed = raw.trim();
+    const trimmed = raw.trim().toLowerCase();
 
     // Format validation (same rules as registration)
     if (trimmed.length < 3 || trimmed.length > 32) {
       return reply.code(200).send({ available: false, reason: 'Username must be between 3 and 32 characters' });
     }
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
-      return reply.code(200).send({ available: false, reason: 'Username can only contain letters, numbers, and underscores' });
+    if (!/^[a-z0-9_]+$/.test(trimmed)) {
+      return reply.code(200).send({ available: false, reason: 'Username can only contain lowercase letters, numbers, and underscores' });
     }
 
     // Check registration is open
@@ -187,7 +187,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
 
-    const user = db.select().from(schema.users).where(eq(schema.users.username, username.trim())).get();
+    const user = db.select().from(schema.users).where(eq(schema.users.username, username.trim().toLowerCase())).get();
     if (!user) {
       return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
     }

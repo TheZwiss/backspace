@@ -6,7 +6,7 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
-import { getApiForOrigin } from '../../../stores/spaceStore';
+import { getApiForOrigin, getMyUserIdForOrigin } from '../../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 
 interface OverviewPanelProps {
@@ -23,7 +23,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const navigate = useNavigate();
 
   const space = spaces.find((s) => s.id === spaceId);
-  const isOwner = space?.ownerId === currentUser?.id;
+  const isOwner = space?.ownerId === getMyUserIdForOrigin((space as any)?._instanceOrigin ?? '');
   const myPerms = spacePermissions.get(spaceId);
   const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 

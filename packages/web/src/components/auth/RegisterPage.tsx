@@ -71,9 +71,9 @@ export function RegisterPage() {
       return;
     }
 
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+    if (!/^[a-z0-9_]+$/.test(trimmed)) {
       setUsernameStatus('invalid');
-      setUsernameStatusMessage('Username can only contain letters, numbers, and underscores');
+      setUsernameStatusMessage('Username can only contain lowercase letters, numbers, and underscores');
       return;
     }
 
@@ -141,8 +141,8 @@ export function RegisterPage() {
       setError('Username must be between 3 and 32 characters');
       return;
     }
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
-      setError('Username can only contain letters, numbers, and underscores');
+    if (!/^[a-z0-9_]+$/.test(trimmed)) {
+      setError('Username can only contain lowercase letters, numbers, and underscores');
       return;
     }
     if (usernameStatus === 'taken' || usernameStatus === 'invalid') {
@@ -250,7 +250,7 @@ export function RegisterPage() {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
                   className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
                   autoFocus
                   autoComplete="username"
