@@ -54,6 +54,7 @@ interface SpaceState {
   updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
   deleteSpace: (spaceId: string) => Promise<void>;
   joinSpace: (spaceId: string, inviteCode: string) => Promise<void>;
+  leaveSpace: (spaceId: string) => Promise<void>;
   joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
   generateInvite: (spaceId: string) => Promise<string>;
   createChannel: (spaceId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
@@ -234,6 +235,19 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }));
   },
 
+  leaveSpace: async (spaceId: string) => {
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = (space as TaggedSpace)?._instanceOrigin ?? '';
+    const targetApi = getApiForOrigin(origin);
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) return;
+    await targetApi.spaces.removeMember(spaceId, userId);
+    set((state) => ({
+      spaces: state.spaces.filter(s => s.id !== spaceId),
+      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+    }));
+  },
+
   joinSpace: async (spaceId: string, inviteCode: string) => {
     const space =await api.spaces.join(spaceId, { inviteCode });
     set((state) => {
@@ -253,6 +267,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
       const remoteApi = getApiForOrigin(origin);
       const space =await remoteApi.spaces.joinByCode(inviteCode);
+      if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
+      if (space.banner) space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
       set((state) => {
         if (state.spaces.find(s => s.id === space.id)) return state;
         return { spaces: [...state.spaces, { ...space, _instanceOrigin: origin } as TaggedSpace] };
@@ -460,6 +476,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => {
+    // Normalize remote asset URLs before creating the tagged object
+    if (origin) {
+      if (space.icon) space.icon = resolveAssetUrl(space.icon, origin) ?? space.icon;
+      if (space.banner) space.banner = resolveAssetUrl(space.banner, origin) ?? space.banner;
+    }
+
     const tagged: TaggedSpace = {
       id: space.id,
       name: space.name,

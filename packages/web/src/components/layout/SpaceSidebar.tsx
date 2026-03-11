@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { Tooltip } from '../ui/Tooltip';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
@@ -14,6 +16,7 @@ interface SidebarItemProps {
   icon?: string | null;
   active: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   type?: 'space' | 'dm' | 'action';
   actionType?: 'add' | 'join' | 'explore';
   hasUnread?: boolean;
@@ -23,7 +26,7 @@ interface SidebarItemProps {
   tooltipText?: string;
 }
 
-function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -122,6 +125,7 @@ function SidebarItem({ id, name, icon, active, onClick, type = 'space', actionTy
       className="relative flex items-center mb-1.5 w-full justify-center"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onContextMenu={onContextMenu}
     >
       {/* Pill Indicator */}
       {(type === 'space' || type === 'dm') && (
@@ -160,6 +164,77 @@ function InstanceDivider({ label, disconnected }: { label: string; disconnected:
   );
 }
 
+function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: number; y: number; onClose: () => void }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const leaveSpace = useSpaceStore((s) => s.leaveSpace);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
+  const setShowDms = useUIStore((s) => s.setShowDms);
+  const navigate = useNavigate();
+
+  const isOwner = space?.ownerId === currentUserId;
+
+  // Close on click-outside and scroll
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    const handleScroll = () => onClose();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('scroll', handleScroll, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('scroll', handleScroll, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Don't render for owners (no menu items)
+  if (isOwner || !space) return null;
+
+  // Viewport-aware clamping
+  const menuWidth = 180;
+  const menuHeight = 40;
+  const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
+  const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
+
+  return ReactDOM.createPortal(
+    <div
+      ref={menuRef}
+      className="fixed z-[9999] min-w-[160px] bg-surface-overlay rounded-lg border border-white/[0.07] shadow-lg py-1 animate-in fade-in zoom-in-95 duration-100"
+      style={{ left: clampedX, top: clampedY }}
+    >
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
+        onClick={() => {
+          if (currentSpaceId === spaceId) {
+            navigate('/channels/@me');
+            setCurrentSpace(null);
+            setShowDms(true);
+          }
+          leaveSpace(spaceId);
+          onClose();
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+        </svg>
+        Leave Space
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
 export function SpaceSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -176,6 +251,16 @@ export function SpaceSidebar() {
   const instances = useInstanceStore((s) => s.instances);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Single context menu state
+  const [contextMenu, setContextMenu] = useState<{ spaceId: string; x: number; y: number } | null>(null);
+
+  const handleSpaceContextMenu = useCallback((spaceId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ spaceId, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   // Group spaces by origin
   const groupedSpaces = useMemo(() => {
@@ -268,6 +353,7 @@ export function SpaceSidebar() {
           icon={space.icon}
           active={currentSpaceId === space.id}
           onClick={() => handleSpaceClick(space.id)}
+          onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
           hasUnread={unreadSpaceIds.has(space.id)}
         />
       ))}
@@ -292,6 +378,7 @@ export function SpaceSidebar() {
                 icon={space.icon}
                 active={currentSpaceId === space.id}
                 onClick={() => handleSpaceClick(space.id)}
+                onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
                 hasUnread={unreadSpaceIds.has(space.id)}
                 dimmed={isDimmed}
                 federationBadge
@@ -332,6 +419,14 @@ export function SpaceSidebar() {
         actionType="explore"
       />
 
+      {contextMenu && (
+        <SpaceContextMenu
+          spaceId={contextMenu.spaceId}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={closeContextMenu}
+        />
+      )}
     </nav>
   );
 }
