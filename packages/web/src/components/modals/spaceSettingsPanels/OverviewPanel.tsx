@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { getSpaceGradient } from '../../../utils/gradients';
 import { useSpaceStore } from '../../../stores/spaceStore';
@@ -46,6 +46,15 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Transfer ownership state
+  const members = useSpaceStore((s) => s.members);
+  const transferOwnership = useSpaceStore((s) => s.transferOwnership);
+  const addToast = useUIStore((s) => s.addToast);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [transferSearch, setTransferSearch] = useState('');
+  const [transferTargetId, setTransferTargetId] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
 
   useEffect(() => {
     if (space) {
@@ -218,6 +227,35 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     }
   };
 
+  // Transfer ownership logic
+  const transferCandidates = useMemo(() => {
+    const candidates = members.filter(m => m.userId !== currentUser?.id);
+    if (!transferSearch.trim()) return candidates;
+    const q = transferSearch.toLowerCase();
+    return candidates.filter(m =>
+      m.user.displayName?.toLowerCase().includes(q) ||
+      m.user.username.toLowerCase().includes(q)
+    );
+  }, [members, currentUser?.id, transferSearch]);
+
+  const transferTarget = transferTargetId ? members.find(m => m.userId === transferTargetId) : null;
+
+  const handleTransfer = async () => {
+    if (!transferTargetId) return;
+    setTransferring(true);
+    try {
+      await transferOwnership(spaceId, transferTargetId);
+      addToast(`Ownership transferred to ${transferTarget?.user.displayName || transferTarget?.user.username}`, 'success', 3000);
+      setShowTransfer(false);
+      setTransferTargetId(null);
+      setTransferSearch('');
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to transfer ownership', 'warning', 3000);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
   const displayIconSrc = iconPreview ?? (iconFilename === '' ? null : currentIconUrl);
   const displayIconName = space.name;
   const displayBannerSrc = bannerPreview ?? (bannerFilename === '' ? null : currentBannerUrl);
@@ -380,14 +418,117 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {isOwner && (
           <div>
             <div className="text-[11px] font-semibold text-txt-danger uppercase tracking-wider mb-1.5">Danger Zone</div>
-            <div className="rounded-lg bg-white/[0.02] p-3.5">
-              <p className="text-xs text-txt-tertiary mb-3">Permanently delete this space and all its data. This cannot be undone.</p>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
-              >
-                {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
-              </button>
+            <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+              {/* Transfer Ownership */}
+              <div>
+                <p className="text-xs text-txt-tertiary mb-3">Transfer ownership to another member. You will become a regular member.</p>
+                {showTransfer ? (
+                  transferTargetId && transferTarget ? (
+                    /* Confirm step */
+                    <div className="space-y-3">
+                      <div className="p-2.5 rounded-lg bg-accent-amber/10 border border-accent-amber/20">
+                        <p className="text-sm text-txt-secondary">
+                          Transfer ownership to{' '}
+                          <span className="font-semibold text-txt-primary">{transferTarget.user.displayName || transferTarget.user.username}</span>?
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setTransferTargetId(null)}
+                          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
+                          disabled={transferring}
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={handleTransfer}
+                          disabled={transferring}
+                          className="px-3 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                        >
+                          {transferring ? 'Transferring...' : 'Transfer'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Member picker */
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={transferSearch}
+                        onChange={(e) => setTransferSearch(e.target.value)}
+                        placeholder="Search members..."
+                        className="w-full px-3 py-1.5 bg-surface-input rounded text-sm text-txt-primary placeholder-txt-tertiary outline-none focus:ring-1 focus:ring-accent-primary/50"
+                        autoFocus
+                      />
+                      <div className="max-h-[160px] overflow-y-auto space-y-0.5">
+                        {transferCandidates.length === 0 ? (
+                          <p className="text-xs text-txt-tertiary text-center py-3">No members found</p>
+                        ) : (
+                          transferCandidates.map((member) => {
+                            const avatarUrl = member.user.avatar
+                              ? (member.user.avatar.startsWith('http') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
+                              : null;
+                            return (
+                              <button
+                                key={member.userId}
+                                onClick={() => setTransferTargetId(member.userId)}
+                                className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-full bg-surface-input flex-shrink-0 overflow-hidden flex items-center justify-center">
+                                  {avatarUrl ? (
+                                    <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-txt-secondary">
+                                      {(member.user.displayName || member.user.username).charAt(0).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-start min-w-0">
+                                  <span className="text-sm text-txt-primary truncate max-w-full">
+                                    {member.user.displayName || member.user.username}
+                                  </span>
+                                  {member.user.displayName && (
+                                    <span className="text-[11px] text-txt-tertiary truncate max-w-full">
+                                      {member.user.username}
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                      <button
+                        onClick={() => { setShowTransfer(false); setTransferSearch(''); }}
+                        className="text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )
+                ) : (
+                  <button
+                    onClick={() => setShowTransfer(true)}
+                    className="px-4 py-2 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors"
+                  >
+                    Transfer Ownership
+                  </button>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-white/[0.05]" />
+
+              {/* Delete Space */}
+              <div>
+                <p className="text-xs text-txt-tertiary mb-3">Permanently delete this space and all its data. This cannot be undone.</p>
+                <button
+                  onClick={handleDelete}
+                  className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
+                >
+                  {confirmDelete ? 'Click again to confirm deletion' : 'Delete Space'}
+                </button>
+              </div>
             </div>
           </div>
         )}

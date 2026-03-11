@@ -68,6 +68,7 @@ interface SpaceState {
   populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => void;
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
   removeInstanceSpaces: (origin: string) => void;
+  transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
   findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
 }
 
@@ -522,6 +523,24 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       spacePermissions,
       channelPermissions,
       channelOriginMap,
+    }));
+  },
+
+  transferOwnership: async (spaceId: string, newOwnerId: string) => {
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = (space as TaggedSpace)?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    const updated = await client.spaces.transferOwnership(spaceId, newOwnerId);
+    if (origin && updated.icon) {
+      updated.icon = resolveAssetUrl(updated.icon, origin) ?? updated.icon;
+    }
+    if (origin && updated.banner) {
+      updated.banner = resolveAssetUrl(updated.banner, origin) ?? updated.banner;
+    }
+    set((state) => ({
+      spaces: state.spaces.map(s =>
+        s.id === spaceId ? { ...s, ...updated, _instanceOrigin: origin } as TaggedSpace : s
+      ),
     }));
   },
 
