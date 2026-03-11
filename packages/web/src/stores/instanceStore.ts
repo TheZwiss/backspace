@@ -163,54 +163,80 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Step 1: Verify password against HOME instance
+      // Step 1: Verify password against the instance we're currently browsing
       const { valid } = await api.users.verifyPassword(password);
       if (!valid) {
         throw new Error('Incorrect password');
       }
 
-      // Step 2: Try register on remote, then fall back to login
-      const homeInstance = window.location.host;
+      // Step 2: Compute the user's true home identity
+      // If we're a federated user (e.g. youruser@nova browsing orbit),
+      // homeInstance points to the real home, not window.location.host.
+      const trueHomeHost = currentUser.homeInstance ?? window.location.host;
+      const bareUsername = currentUser.username.includes('@')
+        ? currentUser.username.split('@')[0]!
+        : currentUser.username;
+      const trueHomeUserId = currentUser.homeUserId ?? currentUser.id;
+      const targetHost = new URL(origin).host;
+      const targetIsHome = targetHost === trueHomeHost;
+
       const tempClient = createApiClient(origin, () => null);
 
       let response: AuthResponse | null = null;
-      const finalUsername = `${currentUser.username}@${homeInstance}`;
+      let finalUsername: string;
 
-      // 2a: Attempt registration with namespaced username
-      try {
-        response = await tempClient.auth.register({
-          username: finalUsername,
-          password,
-          displayName: displayName || currentUser.displayName || undefined,
-          homeInstance,
-          homeUserId: currentUser.id,
-        });
-      } catch (err) {
-        const message = (err as Error).message;
-        if (message.includes('already taken') || message.includes('409') ||
-            message.includes('Registration is currently closed') || message.includes('403')) {
-          // Already registered or registration closed — fall through to login
-        } else {
-          throw err;
-        }
-      }
-
-      // 2b: If registration didn't work, try login
-      if (!response) {
+      if (targetIsHome) {
+        // Target IS the user's home instance — they already have a native account.
+        // Just login with bare username, no registration or homeInstance params.
+        finalUsername = bareUsername;
         try {
           response = await tempClient.auth.login({
-            username: finalUsername,
+            username: bareUsername,
             password,
           });
         } catch {
-          // Namespaced login failed — try legacy plain username as fallback
+          throw new DifferentPasswordError(bareUsername);
+        }
+      } else {
+        // Target is a remote/third-party instance — register as user@homeHost
+        finalUsername = `${bareUsername}@${trueHomeHost}`;
+
+        // 2a: Attempt registration with namespaced username
+        try {
+          response = await tempClient.auth.register({
+            username: finalUsername,
+            password,
+            displayName: displayName || currentUser.displayName || undefined,
+            homeInstance: trueHomeHost,
+            homeUserId: trueHomeUserId,
+          });
+        } catch (err) {
+          const message = (err as Error).message;
+          if (message.includes('already taken') || message.includes('409') ||
+              message.includes('Registration is currently closed') || message.includes('403')) {
+            // Already registered or registration closed — fall through to login
+          } else {
+            throw err;
+          }
+        }
+
+        // 2b: If registration didn't work, try login
+        if (!response) {
           try {
             response = await tempClient.auth.login({
-              username: currentUser.username,
+              username: finalUsername,
               password,
             });
           } catch {
-            throw new DifferentPasswordError(currentUser.username);
+            // Namespaced login failed — try legacy plain username as fallback
+            try {
+              response = await tempClient.auth.login({
+                username: bareUsername,
+                password,
+              });
+            } catch {
+              throw new DifferentPasswordError(bareUsername);
+            }
           }
         }
       }
@@ -242,10 +268,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
-      // Sync full home profile to new remote (fire-and-forget)
-      syncProfileToRemote(instance).catch((err) => {
-        console.warn(`[ProfileSync] Initial sync to ${origin} failed:`, err);
-      });
+      // Sync home profile to new remote (fire-and-forget).
+      // Skip when target is home — home is the source of truth for profile data.
+      if (!targetIsHome) {
+        syncProfileToRemote(instance).catch((err) => {
+          console.warn(`[ProfileSync] Initial sync to ${origin} failed:`, err);
+        });
+      }
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
