@@ -15,6 +15,7 @@ export interface User {
   status: UserStatus;
   customStatus: string | null;
   isAdmin: boolean;
+  isDeleted?: boolean;
   createdAt: number;
   homeInstance: string | null;
   homeUserId: string | null;
@@ -481,4 +482,18 @@ export interface VerifyPasswordRequest {
 
 export interface VerifyPasswordResponse {
   valid: boolean;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword?: string;  // Required on home, optional for federated users
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  token: string;
+}
+
+export interface DeleteAccountRequest {
+  password: string;
+  username: string;  // Must match — confirmation safeguard
 }

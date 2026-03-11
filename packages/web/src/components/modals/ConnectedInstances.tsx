@@ -266,6 +266,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
   const removeInstance = useInstanceStore((s) => s.removeInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
+  const hasPendingSync = useInstanceStore((s) => s.hasPendingPasswordSync)(inst.origin);
 
   const [showReauth, setShowReauth] = useState(false);
   const [reauthPassword, setReauthPassword] = useState('');
@@ -306,6 +307,11 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
             </div>
             {(inst.status === 'disconnected' || inst.status === 'error') && inst.error && (
               <div className="text-xs text-accent-amber mt-0.5">{inst.error}</div>
+            )}
+            {hasPendingSync && inst.status === 'connected' && (
+              <div className="text-xs text-accent-amber mt-0.5" title="Password not synced — re-authenticate to sync">
+                Password not synced
+              </div>
             )}
           </div>
         </div>

@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
+import { useInstanceStore } from '../../../stores/instanceStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
+import { DeleteAccountModal } from '../DeleteAccountModal';
 import { api } from '../../../api/client';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
+import type { FederationOpResult } from '../../../utils/federationOps';
 
 
 export function AccountPanel() {
@@ -56,6 +59,23 @@ export function AccountPanel() {
       setBannerFilename(null);
     }
   }, [user?.displayName, user?.customStatus, user?.status, user?.bio, user?.accentColor, user?.avatarColor, user?.avatar, user?.banner]);
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordResults, setPasswordResults] = useState<FederationOpResult[] | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // Delete account state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const instances = useInstanceStore((s) => s.instances);
+  const changePassword = useAuthStore((s) => s.changePassword);
 
   if (!user) return null;
 
@@ -186,6 +206,43 @@ export function AccountPanel() {
       setError(err instanceof Error ? err.message : 'Failed to update profile');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess('');
+    setPasswordResults(null);
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const results = await changePassword(currentPassword, newPassword);
+      setPasswordSuccess('Password changed successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+
+      if (results.length > 0) {
+        setPasswordResults(results);
+      }
+
+      setTimeout(() => {
+        setPasswordSuccess('');
+        setPasswordResults(null);
+      }, 5000);
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -524,6 +581,124 @@ export function AccountPanel() {
         </div>
       </div>
 
+      {/* ── Password ── */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Password</div>
+        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+          <div>
+            <label className="block text-xs text-txt-secondary mb-1.5">Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+                placeholder="Enter current password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  {showCurrentPassword ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                  ) : (
+                    <>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-txt-secondary mb-1.5">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+                placeholder="Minimum 6 characters"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  {showNewPassword ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                  ) : (
+                    <>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-txt-secondary mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              placeholder="Confirm new password"
+            />
+          </div>
+
+          {passwordError && (
+            <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
+          )}
+          {passwordSuccess && (
+            <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-xs">{passwordSuccess}</div>
+          )}
+          {passwordResults && passwordResults.length > 0 && (
+            <div className="space-y-1">
+              {passwordResults.map(r => (
+                <div key={r.origin} className="flex items-center justify-between text-xs px-2 py-1 rounded bg-white/[0.02]">
+                  <span className="text-txt-secondary">{r.origin}</span>
+                  {r.success ? (
+                    <span className="text-status-online">Synced</span>
+                  ) : (
+                    <span className="text-txt-danger" title={r.error}>Failed — will sync on reconnect</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleChangePassword}
+            disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
+            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {passwordLoading ? 'Changing...' : 'Change Password'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Danger Zone ── */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Danger Zone</div>
+        <div className="rounded-lg bg-accent-rose/5 border border-accent-rose/20 p-3.5">
+          <p className="text-sm text-txt-secondary mb-3">
+            Once you delete your account, there is no going back. Your messages will remain but be attributed to "Deleted User".
+          </p>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="px-4 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Delete Account
+          </button>
+        </div>
+      </div>
+
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}
@@ -571,6 +746,11 @@ export function AccountPanel() {
         title="Crop Banner"
         cropShape="rect"
         aspectRatio={3}
+      />
+
+      <DeleteAccountModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
       />
     </div>
   );

@@ -23,6 +23,7 @@ interface CachedInstanceToken {
   token: string;
   label: string;
   username: string;
+  pendingPasswordSync?: boolean;
 }
 
 const STORAGE_KEY_PREFIX = 'backspace_instances';
@@ -57,8 +58,10 @@ function loadCachedTokens(userId: string): Record<string, CachedInstanceToken> {
   }
 }
 
-function saveCachedTokens(instances: ConnectedInstance[], userId: string): void {
+function saveCachedTokens(instances: ConnectedInstance[], userId: string, pendingSyncFlags?: Record<string, boolean>): void {
   const cache: Record<string, CachedInstanceToken> = {};
+  // Load existing cache to preserve pendingPasswordSync flags
+  const existing = loadCachedTokens(userId);
   for (const inst of instances) {
     // Skip tokenless placeholders — writing an empty token would cause
     // autoConnectAll to find a truthy cached entry with an empty bearer token
@@ -67,6 +70,7 @@ function saveCachedTokens(instances: ConnectedInstance[], userId: string): void 
       token: inst.token,
       label: inst.label,
       username: inst.username,
+      pendingPasswordSync: pendingSyncFlags?.[inst.origin] ?? existing[inst.origin]?.pendingPasswordSync,
     };
   }
   localStorage.setItem(storageKey(userId), JSON.stringify(cache));
@@ -125,6 +129,9 @@ interface InstanceState {
   setInstanceStatus: (origin: string, status: ConnectedInstance['status'], error?: string) => void;
   reconnectInstance: (origin: string) => Promise<void>;
   reauthenticateInstance: (origin: string, password: string) => Promise<void>;
+  updateInstanceToken: (origin: string, newToken: string) => void;
+  setPendingPasswordSync: (origin: string, pending: boolean) => void;
+  hasPendingPasswordSync: (origin: string) => boolean;
   syncInstanceList: () => Promise<void>;
   autoConnectAll: () => Promise<void>;
   reset: () => void;
@@ -423,6 +430,42 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       password,
       currentUser?.displayName || undefined,
     );
+
+    // Clear pending password sync — connectToRemote uses the current password
+    // which updates the remote's stored hash through register/login
+    get().setPendingPasswordSync(origin, false);
+  },
+
+  updateInstanceToken: (origin: string, newToken: string) => {
+    set((state) => ({
+      instances: state.instances.map(i => {
+        if (i.origin !== origin) return i;
+        // Recreate API client with new token
+        const newApi = createApiClient(origin, () => newToken);
+        return { ...i, token: newToken, api: newApi };
+      }),
+    }));
+
+    const userId = useAuthStore.getState().user?.id;
+    if (userId) saveCachedTokens(get().instances, userId);
+
+    // Reconnect WebSocket with new token
+    disconnectInstance(origin);
+    connectInstance(origin, newToken);
+  },
+
+  setPendingPasswordSync: (origin: string, pending: boolean) => {
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) return;
+    const flags: Record<string, boolean> = { [origin]: pending };
+    saveCachedTokens(get().instances, userId, flags);
+  },
+
+  hasPendingPasswordSync: (origin: string) => {
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) return false;
+    const cached = loadCachedTokens(userId);
+    return cached[origin]?.pendingPasswordSync === true;
   },
 
   syncInstanceList: async () => {

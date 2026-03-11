@@ -29,15 +29,28 @@ import type {
   InstanceAdminSettings,
   InstanceInfoResponse,
   VerifyPasswordResponse,
+  ChangePasswordRequest,
+  ChangePasswordResponse,
+  DeleteAccountRequest,
   ExploreSpace,
   JoinRequest,
   Role,
 } from '@backspace/shared';
 
+export class RateLimitError extends Error {
+  readonly retryAfter: number;
+  constructor(retryAfter: number) {
+    super('Rate limit exceeded');
+    this.name = 'RateLimitError';
+    this.retryAfter = retryAfter;
+  }
+}
+
 export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
     login: (data: LoginRequest) => Promise<AuthResponse>;
+    checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
   };
 
   readonly users: {
@@ -45,6 +58,8 @@ export class BackspaceApiClient {
     update: (data: UpdateUserRequest) => Promise<User>;
     get: (id: string) => Promise<User>;
     verifyPassword: (password: string) => Promise<VerifyPasswordResponse>;
+    changePassword: (data: ChangePasswordRequest) => Promise<ChangePasswordResponse>;
+    deleteAccount: (data: DeleteAccountRequest) => Promise<{ success: boolean }>;
     getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null }[] }>;
   };
 
@@ -63,6 +78,7 @@ export class BackspaceApiClient {
     getBans: (spaceId: string) => Promise<{ spaceId: string; userId: string; reason: string | null; bannedBy: string; createdAt: number; user: any; moderator: any }[]>;
     ban: (spaceId: string, userId: string, reason?: string) => Promise<{ success: boolean }>;
     unban: (spaceId: string, userId: string) => Promise<{ success: boolean }>;
+    transferOwnership: (spaceId: string, newOwnerId: string) => Promise<Space>;
   };
 
   readonly channels: {
@@ -174,6 +190,12 @@ export class BackspaceApiClient {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const body = await response.json().catch(() => ({}));
+          const retryAfter = (body as { retryAfter?: number }).retryAfter
+            ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
+          throw new RateLimitError(retryAfter);
+        }
         const error = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
       }
@@ -198,6 +220,12 @@ export class BackspaceApiClient {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          const body = await response.json().catch(() => ({}));
+          const retryAfter = (body as { retryAfter?: number }).retryAfter
+            ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
+          throw new RateLimitError(retryAfter);
+        }
         const error = await response.json().catch(() => ({ error: 'Upload failed' }));
         throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
       }
@@ -210,6 +238,8 @@ export class BackspaceApiClient {
         request<AuthResponse>('POST', '/auth/register', data, false),
       login: (data: LoginRequest) =>
         request<AuthResponse>('POST', '/auth/login', data, false),
+      checkUsername: (username: string) =>
+        request<{ available: boolean; reason?: string }>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
     };
 
     this.users = {
@@ -218,6 +248,10 @@ export class BackspaceApiClient {
       get: (id: string) => request<User>('GET', `/users/${id}`),
       verifyPassword: (password: string) =>
         request<VerifyPasswordResponse>('POST', '/users/@me/verify-password', { password }),
+      changePassword: (data: ChangePasswordRequest) =>
+        request<ChangePasswordResponse>('POST', '/users/@me/change-password', data),
+      deleteAccount: (data: DeleteAccountRequest) =>
+        request<{ success: boolean }>('DELETE', '/users/@me', data),
       getMutuals: (id: string, homeUserId?: string) => {
         const params = new URLSearchParams();
         if (homeUserId) params.set('homeUserId', homeUserId);
@@ -248,6 +282,8 @@ export class BackspaceApiClient {
         request<{ success: boolean }>('POST', `/spaces/${spaceId}/bans`, { userId, reason }),
       unban: (spaceId: string, userId: string) =>
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/bans/${userId}`),
+      transferOwnership: (spaceId: string, newOwnerId: string) =>
+        request<Space>('PATCH', `/spaces/${spaceId}/transfer-ownership`, { newOwnerId }),
     };
 
     this.channels = {

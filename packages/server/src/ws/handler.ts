@@ -532,6 +532,65 @@ class ConnectionManager {
     }
   }
 
+  /** Force-disconnect all WebSocket connections for a user (e.g. account deletion). */
+  forceDisconnectUser(userId: string): void {
+    // Cancel any pending offline timeout
+    const timeout = this.pendingOfflineTimeouts.get(userId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingOfflineTimeouts.delete(userId);
+    }
+
+    // Leave voice room if in one
+    const left = this.leaveCurrentRoom(userId);
+    this.clearVoiceUserStatus(userId);
+    if (left) {
+      if (left.room.roomType === 'space') {
+        const meta = left.room.metadata as SpaceRoomMeta;
+        this.sendToSpace(meta.spaceId, {
+          type: 'voice_state_update',
+          channelId: left.roomId,
+          userId,
+          action: 'leave',
+        });
+      } else {
+        this.sendToDmMembers(left.roomId, {
+          type: 'voice_state_update',
+          channelId: left.roomId,
+          userId,
+          action: 'leave',
+        });
+      }
+    }
+
+    // Destroy any ringing DM rooms where this user is the caller
+    for (const [roomId, room] of this.voiceRooms) {
+      if (room.roomType === 'dm') {
+        const meta = room.metadata as DmRoomMeta;
+        if (meta.state === 'ringing' && meta.callerId === userId) {
+          this.destroyRoom(roomId);
+          this.sendToDmMembers(roomId, {
+            type: 'dm_call_ended',
+            dmChannelId: roomId,
+          });
+        }
+      }
+    }
+
+    // Close all WebSocket connections
+    const connections = this.connections.get(userId);
+    if (connections) {
+      for (const ws of connections) {
+        this.wsToUser.delete(ws);
+        try { ws.close(4001, 'Account deleted'); } catch { /* ignore */ }
+      }
+      this.connections.delete(userId);
+    }
+
+    // Clean up user spaces
+    this.userSpaces.delete(userId);
+  }
+
   getAllOnlineUserIds(): string[] {
     return Array.from(this.connections.keys());
   }
@@ -991,11 +1050,20 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           const payload = verifyJwt(parsed.token);
           userId = payload.userId;
           username = payload.username;
+
+          // Reject deleted users
+          const db = getDb();
+          const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+          if (!userRow || userRow.isDeleted) {
+            ws.send(JSON.stringify({ type: 'error', message: 'This account has been deleted' }));
+            ws.close();
+            return;
+          }
+
           authenticated = true;
           clearTimeout(authTimeout);
 
           // Update user status to online
-          const db = getDb();
           db.update(schema.users).set({ status: 'online' }).where(eq(schema.users.id, userId)).run();
 
           // Add connection

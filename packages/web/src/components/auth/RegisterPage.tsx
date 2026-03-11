@@ -6,7 +6,9 @@ import { ImageCropModal } from '../ui/ImageCropModal';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { AvatarColor } from '@backspace/shared';
-import { api } from '../../api/client';
+import { api, RateLimitError } from '../../api/client';
+
+type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function RegisterPage() {
   // Step state
@@ -17,6 +19,12 @@ export function RegisterPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Username availability check
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+  const [usernameStatusMessage, setUsernameStatusMessage] = useState('');
+  const usernameCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const usernameCheckAbortRef = useRef<AbortController | null>(null);
 
   // Step 2 fields
   const [displayName, setDisplayName] = useState('');
@@ -30,6 +38,7 @@ export function RegisterPage() {
 
   const [error, setError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [retryAfter, setRetryAfter] = useState(0);
 
   const register = useAuthStore((s) => s.register);
   const updateProfile = useAuthStore((s) => s.updateProfile);
@@ -41,6 +50,82 @@ export function RegisterPage() {
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     };
   }, [avatarPreview]);
+
+  // Debounced username availability check
+  useEffect(() => {
+    // Clear previous timer and abort
+    if (usernameCheckTimerRef.current) clearTimeout(usernameCheckTimerRef.current);
+    if (usernameCheckAbortRef.current) usernameCheckAbortRef.current.abort();
+
+    const trimmed = username.trim();
+
+    if (trimmed.length === 0) {
+      setUsernameStatus('idle');
+      setUsernameStatusMessage('');
+      return;
+    }
+
+    if (trimmed.length < 3 || trimmed.length > 32) {
+      setUsernameStatus(trimmed.length > 0 ? 'invalid' : 'idle');
+      setUsernameStatusMessage(trimmed.length > 0 ? 'Username must be between 3 and 32 characters' : '');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+      setUsernameStatus('invalid');
+      setUsernameStatusMessage('Username can only contain letters, numbers, and underscores');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    setUsernameStatusMessage('Checking availability...');
+
+    usernameCheckTimerRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      usernameCheckAbortRef.current = controller;
+
+      try {
+        const result = await api.auth.checkUsername(trimmed);
+        if (controller.signal.aborted) return;
+
+        if (result.reason) {
+          setUsernameStatus('invalid');
+          setUsernameStatusMessage(result.reason);
+        } else if (result.available) {
+          setUsernameStatus('available');
+          setUsernameStatusMessage('Username is available');
+        } else {
+          setUsernameStatus('taken');
+          setUsernameStatusMessage('Username is already taken');
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        // Network error or rate limit — fall back to idle silently
+        setUsernameStatus('idle');
+        setUsernameStatusMessage('');
+      }
+    }, 500);
+
+    return () => {
+      if (usernameCheckTimerRef.current) clearTimeout(usernameCheckTimerRef.current);
+      if (usernameCheckAbortRef.current) usernameCheckAbortRef.current.abort();
+    };
+  }, [username]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retryAfter]);
 
   // ── Step 1 validation ──
   const handleContinue = (e: React.FormEvent) => {
@@ -58,6 +143,9 @@ export function RegisterPage() {
     }
     if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
       setError('Username can only contain letters, numbers, and underscores');
+      return;
+    }
+    if (usernameStatus === 'taken' || usernameStatus === 'invalid') {
       return;
     }
     if (!password) {
@@ -116,7 +204,12 @@ export function RegisterPage() {
 
       navigate('/channels/@me');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      if (err instanceof RateLimitError) {
+        setRetryAfter(err.retryAfter);
+        setError('');
+      } else {
+        setError(err instanceof Error ? err.message : 'Registration failed');
+      }
       setIsRegistering(false);
     }
   };
@@ -124,6 +217,8 @@ export function RegisterPage() {
   const effectiveDisplayName = displayName.trim() || username.trim();
   const initial = effectiveDisplayName.charAt(0).toUpperCase();
   const gradient = AVATAR_GRADIENT_MAP[avatarColor];
+
+  const isDisabled = isRegistering || retryAfter > 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
@@ -160,6 +255,31 @@ export function RegisterPage() {
                   autoFocus
                   autoComplete="username"
                 />
+                {usernameStatus !== 'idle' && (
+                  <div className={`mt-1.5 flex items-center gap-1.5 text-xs ${
+                    usernameStatus === 'available' ? 'text-status-online' :
+                    usernameStatus === 'checking' ? 'text-txt-tertiary' :
+                    'text-txt-danger'
+                  }`}>
+                    {usernameStatus === 'checking' && (
+                      <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    )}
+                    {usernameStatus === 'available' && (
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    {(usernameStatus === 'taken' || usernameStatus === 'invalid') && (
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                    <span>{usernameStatusMessage}</span>
+                  </div>
+                )}
               </div>
 
               <div className="mb-5">
@@ -190,7 +310,8 @@ export function RegisterPage() {
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+                disabled={usernameStatus === 'taken' || usernameStatus === 'invalid'}
+                className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue
               </button>
@@ -209,6 +330,13 @@ export function RegisterPage() {
               <h1 className="text-2xl font-bold text-txt-primary">Make it yours</h1>
               <p className="text-txt-tertiary text-sm mt-1">Personalize your profile, or skip for now</p>
             </div>
+
+            {retryAfter > 0 && (
+              <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
+                <p className="font-medium text-accent-amber">Too many attempts</p>
+                <p className="text-txt-secondary mt-0.5">Try again in {retryAfter}s</p>
+              </div>
+            )}
 
             {error && (
               <div className="mb-4 p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
@@ -297,16 +425,20 @@ export function RegisterPage() {
             <button
               type="button"
               onClick={() => handleRegister(false)}
-              disabled={isRegistering}
+              disabled={isDisabled}
               className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isRegistering ? 'Creating account...' : 'Get Started'}
+              {retryAfter > 0
+                ? `Try again in ${retryAfter}s`
+                : isRegistering
+                  ? 'Creating account...'
+                  : 'Get Started'}
             </button>
 
             <div className="flex items-center justify-between mt-3">
               <button
                 type="button"
-                onClick={() => { setError(''); setDirection('back'); setStep(1); }}
+                onClick={() => { setError(''); setRetryAfter(0); setDirection('back'); setStep(1); }}
                 disabled={isRegistering}
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
               >
@@ -315,7 +447,7 @@ export function RegisterPage() {
               <button
                 type="button"
                 onClick={() => handleRegister(true)}
-                disabled={isRegistering}
+                disabled={isDisabled}
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
               >
                 Skip for now

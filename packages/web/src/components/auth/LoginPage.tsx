@@ -1,14 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { RateLimitError } from '../../api/client';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [retryAfter, setRetryAfter] = useState(0);
   const login = useAuthStore((s) => s.login);
   const isLoading = useAuthStore((s) => s.isLoading);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retryAfter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +43,16 @@ export function LoginPage() {
       await login(username.trim(), password);
       navigate('/channels/@me');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      if (err instanceof RateLimitError) {
+        setRetryAfter(err.retryAfter);
+        setError('');
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed');
+      }
     }
   };
+
+  const isDisabled = isLoading || retryAfter > 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
@@ -41,6 +64,13 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
+          {retryAfter > 0 && (
+            <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
+              <p className="font-medium text-accent-amber">Too many login attempts</p>
+              <p className="text-txt-secondary mt-0.5">Try again in {retryAfter}s</p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
               {error}
@@ -76,10 +106,14 @@ export function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isDisabled}
             className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Logging in...' : 'Log In'}
+            {retryAfter > 0
+              ? `Try again in ${retryAfter}s`
+              : isLoading
+                ? 'Logging in...'
+                : 'Log In'}
           </button>
 
           <p className="mt-3 text-sm text-txt-tertiary">

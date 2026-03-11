@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, or, inArray } from 'drizzle-orm';
+import { eq, or, and, inArray } from 'drizzle-orm';
+import crypto from 'crypto';
 import { getDb, schema } from '../db/index.js';
-import { authenticate, verifyPassword } from '../utils/auth.js';
+import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ReplicatedInstance } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
@@ -12,8 +13,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!user) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    if (!user || user.isDeleted) {
+      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
     }
 
     return reply.code(200).send(sanitizeUser(user));
@@ -36,6 +37,139 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const valid = await verifyPassword(password, user.passwordHash);
     const response: VerifyPasswordResponse = { valid };
     return reply.code(200).send(response);
+  });
+
+  // POST /api/users/@me/change-password — change account password
+  app.post<{ Body: ChangePasswordRequest }>('/api/users/@me/change-password', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const { currentPassword, newPassword } = request.body;
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      return reply.code(400).send({ error: 'New password must be at least 6 characters', statusCode: 400 });
+    }
+
+    const db = getDb();
+    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!user) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    // Native users (no homeInstance) must provide current password
+    if (!user.homeInstance) {
+      if (!currentPassword || typeof currentPassword !== 'string') {
+        return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
+      }
+      const valid = await verifyPassword(currentPassword, user.passwordHash);
+      if (!valid) {
+        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+      }
+    }
+    // Federated users: JWT auth is sufficient — skip old password verification
+
+    const newHash = await hashPassword(newPassword);
+    db.update(schema.users).set({ passwordHash: newHash }).where(eq(schema.users.id, request.userId)).run();
+
+    // Issue fresh JWT
+    const token = signJwt({ userId: user.id, username: user.username });
+    const response: ChangePasswordResponse = { token };
+    return reply.code(200).send(response);
+  });
+
+  // DELETE /api/users/@me — delete (tombstone) account
+  app.delete<{ Body: DeleteAccountRequest }>('/api/users/@me', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 3, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const { password, username } = request.body;
+
+    if (!username || typeof username !== 'string') {
+      return reply.code(400).send({ error: 'Username confirmation is required', statusCode: 400 });
+    }
+
+    const db = getDb();
+    const user = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!user) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    // Verify username matches (confirmation safeguard)
+    if (user.username !== username) {
+      return reply.code(400).send({ error: 'Username does not match', statusCode: 400 });
+    }
+
+    // Native users must verify password; federated users rely on JWT auth
+    if (!user.homeInstance) {
+      if (!password || typeof password !== 'string') {
+        return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
+      }
+      const valid = await verifyPassword(password, user.passwordHash);
+      if (!valid) {
+        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+      }
+    }
+
+    // Check if user owns any spaces
+    const ownedSpaces = db.select({ id: schema.spaces.id, name: schema.spaces.name })
+      .from(schema.spaces)
+      .where(eq(schema.spaces.ownerId, request.userId))
+      .all();
+    if (ownedSpaces.length > 0) {
+      return reply.code(400).send({
+        error: 'You must transfer ownership or delete all spaces you own before deleting your account',
+        statusCode: 400,
+        ownedSpaces,
+      });
+    }
+
+    // Run all cleanup in a single transaction
+    db.transaction((tx) => {
+      const uid = request.userId;
+
+      // Remove from spaces, roles, friends, DMs, read states, reactions, folders, bans, join requests, voice restrictions, channel overrides
+      tx.delete(schema.spaceMembers).where(eq(schema.spaceMembers.userId, uid)).run();
+      tx.delete(schema.memberRoles).where(eq(schema.memberRoles.userId, uid)).run();
+      tx.delete(schema.friends).where(or(eq(schema.friends.userId, uid), eq(schema.friends.friendId, uid))).run();
+      tx.delete(schema.friendRequests).where(or(eq(schema.friendRequests.fromId, uid), eq(schema.friendRequests.toId, uid))).run();
+      tx.delete(schema.dmMembers).where(eq(schema.dmMembers.userId, uid)).run();
+      tx.delete(schema.readStates).where(eq(schema.readStates.userId, uid)).run();
+      tx.delete(schema.reactions).where(eq(schema.reactions.userId, uid)).run();
+      tx.delete(schema.dmReactions).where(eq(schema.dmReactions.userId, uid)).run();
+      tx.delete(schema.spaceFolders).where(eq(schema.spaceFolders.userId, uid)).run();
+
+      // Conditional deletes for tables that may reference userId
+      try { tx.delete(schema.bans).where(eq(schema.bans.userId, uid)).run(); } catch { /* table may not exist */ }
+      try { tx.delete(schema.joinRequests).where(eq(schema.joinRequests.userId, uid)).run(); } catch { /* table may not exist */ }
+      try { tx.delete(schema.voiceRestrictions).where(eq(schema.voiceRestrictions.userId, uid)).run(); } catch { /* table may not exist */ }
+
+      // Remove member-type channel overrides for this user
+      tx.delete(schema.channelOverrides).where(
+        and(eq(schema.channelOverrides.targetType, 'member'), eq(schema.channelOverrides.targetId, uid))
+      ).run();
+
+      // Tombstone user row — rename username to free it for reuse
+      tx.update(schema.users).set({
+        username: `!deleted:${uid}`,
+        passwordHash: crypto.randomBytes(32).toString('hex'), // unusable random string
+        displayName: null,
+        avatar: null,
+        banner: null,
+        bio: null,
+        customStatus: null,
+        accentColor: null,
+        avatarColor: null,
+        replicatedInstances: '[]',
+        isDeleted: 1,
+        status: 'offline',
+        isAdmin: 0,
+      }).where(eq(schema.users.id, uid)).run();
+    });
+
+    // Force-close all WebSocket connections
+    connectionManager.forceDisconnectUser(request.userId);
+
+    return reply.code(200).send({ success: true });
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {

@@ -13,7 +13,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     config: {
       rateLimit: {
         max: 10,
-        timeWindow: '15 minutes',
+        timeWindow: '2 minutes',
         keyGenerator: (request: any) => request.ip,
       },
     },
@@ -128,11 +128,49 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(response);
   });
 
+  app.get<{ Querystring: { username?: string } }>('/api/auth/check-username', {
+    config: {
+      rateLimit: {
+        max: 30,
+        timeWindow: '1 minute',
+        keyGenerator: (request: any) => request.ip,
+      },
+    },
+  }, async (request, reply) => {
+    const raw = request.query.username;
+    if (!raw || typeof raw !== 'string') {
+      return reply.code(400).send({ available: false, reason: 'Username is required' });
+    }
+
+    const trimmed = raw.trim();
+
+    // Format validation (same rules as registration)
+    if (trimmed.length < 3 || trimmed.length > 32) {
+      return reply.code(200).send({ available: false, reason: 'Username must be between 3 and 32 characters' });
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+      return reply.code(200).send({ available: false, reason: 'Username can only contain letters, numbers, and underscores' });
+    }
+
+    // Check registration is open
+    const db = getDb();
+    const instanceRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    const registrationOpen = instanceRow?.registrationOpen !== null && instanceRow?.registrationOpen !== undefined
+      ? instanceRow.registrationOpen === 1
+      : config.registrationOpen;
+    if (!registrationOpen) {
+      return reply.code(403).send({ available: false, reason: 'Registration is currently closed' });
+    }
+
+    const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmed)).get();
+    return reply.code(200).send({ available: !existing });
+  });
+
   app.post<{ Body: LoginRequest }>('/api/auth/login', {
     config: {
       rateLimit: {
-        max: 10,
-        timeWindow: '15 minutes',
+        max: 15,
+        timeWindow: '2 minutes',
         keyGenerator: (request: any) => request.ip,
       },
     },
@@ -152,6 +190,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const user = db.select().from(schema.users).where(eq(schema.users.username, username.trim())).get();
     if (!user) {
       return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+    }
+
+    if (user.isDeleted) {
+      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
     }
 
     const validPassword = await verifyPassword(password, user.passwordHash);

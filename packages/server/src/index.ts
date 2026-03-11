@@ -43,6 +43,12 @@ async function main(): Promise<void> {
     max: 200,
     timeWindow: '1 minute',
     keyGenerator: (request) => (request as any).userId || request.ip,
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: 'Rate limit exceeded',
+      retryAfter: Math.ceil(context.ttl / 1000),
+    }),
   });
 
   await app.register(websocket);

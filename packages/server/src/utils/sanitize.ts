@@ -2,6 +2,28 @@ import type { User, ReplicatedInstance } from '@backspace/shared';
 import { schema } from '../db/index.js';
 
 export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
+  // Tombstoned (deleted) users — return anonymized profile
+  if (row.isDeleted === 1) {
+    return {
+      id: row.id,
+      username: 'Deleted User',
+      displayName: null,
+      avatar: null,
+      banner: null,
+      accentColor: null,
+      avatarColor: null,
+      bio: null,
+      status: 'offline',
+      customStatus: null,
+      isAdmin: false,
+      isDeleted: true,
+      createdAt: row.createdAt,
+      homeInstance: null,
+      homeUserId: null,
+      replicatedInstances: [],
+    };
+  }
+
   let replicatedInstances: ReplicatedInstance[] = [];
   if (row.replicatedInstances) {
     try {

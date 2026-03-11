@@ -7,6 +7,7 @@ import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
 import { syncProfileUpdateToRemotes } from '../utils/profileSync';
+import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
 
 interface AuthState {
   token: string | null;
@@ -18,6 +19,8 @@ interface AuthState {
   logout: () => void;
   loadUser: () => Promise<void>;
   updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; avatarColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<FederationOpResult[]>;
+  deleteAccount: (password: string, username: string) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
 }
@@ -101,6 +104,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : 'Update failed' });
       throw err;
     }
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    // Change on home instance
+    const response = await api.users.changePassword({ currentPassword, newPassword });
+
+    // Update token in state and localStorage
+    localStorage.setItem('backspace_token', response.token);
+    set({ token: response.token });
+
+    // Propagate to remote instances (best-effort)
+    const remoteResults = await changePasswordOnRemotes(newPassword);
+    return remoteResults;
+  },
+
+  deleteAccount: async (password: string, username: string) => {
+    // Delete on all remote instances first (best-effort)
+    await deleteAccountOnRemotes();
+
+    // Delete on home instance
+    await api.users.deleteAccount({ password, username });
+
+    // Clear all state
+    localStorage.removeItem('backspace_token');
+    resetUserStores();
+    set({ token: null, user: null });
   },
 
   setUser: (user: User) => set({ user }),

@@ -99,6 +99,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'avatar_color', type: 'TEXT' },
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'is_deleted', type: 'INTEGER DEFAULT 0' },
+      ]
     }
   ];
 
@@ -191,6 +197,9 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Clean up corrupted read_states (temp_ IDs leaked from optimistic messages) ─
   migrateCorruptedReadStates(db);
+
+  // ─── Free usernames from already-tombstoned users ───────────────────────────
+  migrateDeletedUsernames(db);
 
   console.log('Migrations complete.');
 }
@@ -415,6 +424,21 @@ function migrateCorruptedReadStates(db: Database.Database): void {
   ).run();
   if (deleted.changes > 0) {
     console.log(`Migrating: Cleaned up ${deleted.changes} corrupted read_states rows`);
+  }
+}
+
+/** Rename already-tombstoned users so their original username can be reused */
+function migrateDeletedUsernames(db: Database.Database): void {
+  const rows = db.prepare(
+    "SELECT id, username FROM users WHERE is_deleted = 1 AND username NOT LIKE '!deleted:%'"
+  ).all() as { id: string; username: string }[];
+
+  if (rows.length === 0) return;
+
+  const update = db.prepare('UPDATE users SET username = ? WHERE id = ?');
+  for (const row of rows) {
+    update.run(`!deleted:${row.id}`, row.id);
+    console.log(`Migrating: Freed username "${row.username}" from deleted user ${row.id}`);
   }
 }
 

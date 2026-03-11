@@ -953,6 +953,54 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
+  // PATCH /api/spaces/:id/transfer-ownership — Transfer space ownership
+  app.patch<{ Params: { id: string }; Body: { newOwnerId: string } }>('/api/spaces/:id/transfer-ownership', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { newOwnerId } = request.body;
+    const db = getDb();
+
+    if (!newOwnerId || typeof newOwnerId !== 'string') {
+      return reply.code(400).send({ error: 'newOwnerId is required', statusCode: 400 });
+    }
+
+    const server = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!server) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+    }
+
+    if (!isSpaceOwner(id, request.userId)) {
+      return reply.code(403).send({ error: 'Only the space owner can transfer ownership', statusCode: 403 });
+    }
+
+    if (newOwnerId === request.userId) {
+      return reply.code(400).send({ error: 'You are already the owner', statusCode: 400 });
+    }
+
+    // Verify new owner is a member
+    if (!isMember(id, newOwnerId)) {
+      return reply.code(400).send({ error: 'New owner must be a member of the space', statusCode: 400 });
+    }
+
+    db.update(schema.spaces).set({ ownerId: newOwnerId }).where(eq(schema.spaces.id, id)).run();
+
+    const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!updated) {
+      return reply.code(500).send({ error: 'Failed to transfer ownership', statusCode: 500 });
+    }
+
+    const spaceData = rowToSpace(updated);
+
+    // Broadcast space_updated so all clients see the new owner
+    connectionManager.sendToSpace(id, {
+      type: 'space_updated',
+      space: spaceData,
+    });
+
+    return reply.code(200).send(spaceData);
+  });
+
   // ─── Ban Management ───────────────────────────────────────────────────────
 
   // GET /api/spaces/:id/bans - List bans
