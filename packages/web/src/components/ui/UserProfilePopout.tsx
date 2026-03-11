@@ -108,6 +108,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
           size={80}
           status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
           userId={user.homeUserId ?? user.id}
+          user={user}
           ring={{ width: 4, color: 'rgba(20,20,26,0.85)' }}
           className="mt-[-44px] mb-3"
         />

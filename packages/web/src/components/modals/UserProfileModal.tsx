@@ -261,6 +261,7 @@ export function UserProfileModal() {
             size={96}
             status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
             userId={user.homeUserId ?? user.id}
+            user={user}
             ring={{ width: 4, color: 'var(--color-surface-elevated, #1e1e2a)' }}
             className="mt-[-52px] mb-2"
           />
@@ -373,6 +374,7 @@ export function UserProfileModal() {
                           size={40}
                           status={friend.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
                           userId={friend.homeUserId ?? friend.id}
+                          avatarColor={friend.avatarColor}
                         />
                         <div className="min-w-0">
                           <div className="text-[13px] font-medium text-txt-primary truncate">
