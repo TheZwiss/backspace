@@ -18,7 +18,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const { username, password, displayName, homeInstance, homeUserId } = request.body;
+    const { username, password, displayName, avatarColor: requestedAvatarColor, homeInstance, homeUserId } = request.body;
 
     if (!username || typeof username !== 'string') {
       return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
@@ -96,7 +96,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const userCount = db.select().from(schema.users).all().length;
     const isFirstUser = userCount === 0 && !homeInstance;
 
-    const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+    const avatarColor = (requestedAvatarColor && (AVATAR_COLORS as readonly string[]).includes(requestedAvatarColor))
+      ? requestedAvatarColor
+      : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
     db.insert(schema.users).values({
       id: userId,

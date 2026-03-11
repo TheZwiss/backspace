@@ -14,12 +14,21 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, displayName?: string) => Promise<void>;
+  register: (username: string, password: string, displayName?: string, avatarColor?: string) => Promise<void>;
   logout: () => void;
   loadUser: () => Promise<void>;
   updateProfile: (data: { displayName?: string; avatar?: string; banner?: string; accentColor?: string; avatarColor?: string; bio?: string; customStatus?: string; status?: UserStatus }) => Promise<void>;
   setUser: (user: User) => void;
   clearError: () => void;
+}
+
+/** Reset all user-scoped stores to prevent data leaking between sessions */
+function resetUserStores() {
+  useChatStore.getState().clearAllMessages();
+  useSpaceStore.getState().populateFromReady('', [], [], []);
+  useSocialStore.getState().reset();
+  useVoiceStore.getState().resetSession();
+  useInstanceStore.getState().reset();
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -32,6 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.login({ username, password });
+      resetUserStores();
       localStorage.setItem('backspace_token', response.token);
       set({ token: response.token, user: response.user, isLoading: false });
       // Auto-connect to remote instances (fire-and-forget)
@@ -42,12 +52,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  register: async (username: string, password: string, displayName?: string) => {
+  register: async (username: string, password: string, displayName?: string, avatarColor?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.auth.register({ username, password, displayName });
+      const response = await api.auth.register({ username, password, displayName, avatarColor });
+      resetUserStores();
       localStorage.setItem('backspace_token', response.token);
       set({ token: response.token, user: response.user, isLoading: false });
+      // Auto-connect to remote instances (fire-and-forget)
+      useInstanceStore.getState().autoConnectAll().catch(() => {});
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Registration failed' });
       throw err;
@@ -56,12 +69,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('backspace_token');
-    // Clear all user-scoped state to prevent data leaking between sessions
-    useChatStore.getState().clearAllMessages();
-    useSpaceStore.getState().populateFromReady('', [], [], []);
-    useSocialStore.getState().reset();
-    useVoiceStore.getState().clearAllVoiceUsers();
-    useInstanceStore.getState().reset();
+    resetUserStores();
     set({ token: null, user: null });
   },
 

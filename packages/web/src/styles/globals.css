@@ -260,3 +260,18 @@
   100% { background-color: transparent; }
 }
 .search-highlight { animation: search-flash 2s ease-out; }
+
+@keyframes stepForward {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes stepBack {
+  from { transform: translateX(-24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-step-forward {
+  animation: stepForward 0.25s ease-out;
+}
+.animate-step-back {
+  animation: stepBack 0.25s ease-out;
+}

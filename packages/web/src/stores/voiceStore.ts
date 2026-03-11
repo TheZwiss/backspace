@@ -104,6 +104,7 @@ interface VoiceState {
   setPermissionMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
   getVoiceUsers: (channelId: string) => string[];
   clearAllVoiceUsers: () => void;
+  resetSession: () => void;
   clearVoiceUsersForOrigin: (origin: string) => void;
   leaveVoice: () => void;
   handleForceDisconnect: () => void;
@@ -364,6 +365,38 @@ export const useVoiceStore = create<VoiceState>()(
       getVoiceUsers: (channelId) => get().voiceUsers.get(channelId) ?? [],
 
       clearAllVoiceUsers: () => set({ voiceUsers: new Map(), voiceUserStates: new Map() }),
+
+      resetSession: () => set({
+        // Connection state
+        voiceUsers: new Map(),
+        voiceUserStates: new Map(),
+        currentVoiceChannelId: null,
+        participants: [],
+        speakingParticipantIds: new Set(),
+        connectionError: null,
+        isLiveKitConnected: false,
+        connectionQuality: 'unknown',
+        focusedParticipantId: null,
+        // Call state
+        incomingCall: null,
+        outgoingCall: null,
+        activeDmCall: null,
+        // Per-session media state
+        isCameraOn: false,
+        isScreenSharing: false,
+        // Per-session maps
+        participantVolumes: new Map(),
+        participantMutes: new Map(),
+        deafenedUserIds: new Set(),
+        streamVolumes: new Map(),
+        streamMutes: new Map(),
+        watchingStreams: new Set(),
+        unwatchedCameras: new Set(),
+        // Server-enforced restrictions
+        serverMutedUserIds: new Set(),
+        serverDeafenedUserIds: new Set(),
+        permissionMutedUserIds: new Set(),
+      }),
 
       clearVoiceUsersForOrigin: (origin: string) => {
         const { channelOriginMap } = useSpaceStore.getState();

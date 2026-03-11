@@ -305,9 +305,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'presence_update':
       updateMemberPresence(event.userId, event.status);
-      if (isHome) {
-        useSocialStore.getState().updateFriendPresence(event.userId, event.status);
-      }
+      useSocialStore.getState().updateFriendPresence(event.userId, event.status);
       break;
 
     case 'user_updated': {

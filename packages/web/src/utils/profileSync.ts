@@ -30,6 +30,7 @@ export async function syncProfileToRemote(inst: ConnectedInstance): Promise<void
       accentColor: homeUser.accentColor || undefined,
       bio: homeUser.bio || undefined,
       customStatus: homeUser.customStatus || undefined,
+      status: homeUser.status || undefined,
     };
 
     // Sync avatar
@@ -66,8 +67,8 @@ export async function syncProfileToRemote(inst: ConnectedInstance): Promise<void
 
 // ─── Incremental sync (profile update) ──────────────────────────────────────
 
-/** Sync-eligible text fields (no status, replicatedInstances, homeUserId). */
-const SYNC_FIELDS = ['displayName', 'avatarColor', 'accentColor', 'bio', 'customStatus'] as const;
+/** Sync-eligible text fields (no replicatedInstances, homeUserId). */
+const SYNC_FIELDS = ['displayName', 'avatarColor', 'accentColor', 'bio', 'customStatus', 'status'] as const;
 
 /**
  * Push a partial profile update to all connected remote instances.

@@ -303,6 +303,7 @@ export interface RegisterRequest {
   username: string;
   password: string;
   displayName?: string;
+  avatarColor?: string;
   homeInstance?: string;
   homeUserId?: string;
 }
