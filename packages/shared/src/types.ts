@@ -123,7 +123,7 @@ export interface SpaceFolder {
 
 // ─── Channel Types ──────────────────────────────────────────────────────────
 
-export type ChannelType = 'text' | 'voice' | 'video';
+export type ChannelType = 'text' | 'voice';
 
 export interface Channel {
   id: string;

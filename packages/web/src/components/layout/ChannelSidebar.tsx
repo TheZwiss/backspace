@@ -98,7 +98,7 @@ export function ChannelSidebar() {
   const canCreateInvite = hasPermissionBit(mySpacePerms, PermissionBits.CREATE_INVITE);
 
   const textChannels = channels.filter(c => c.type === 'text');
-  const voiceChannels = channels.filter(c => c.type === 'voice' || c.type === 'video');
+  const voiceChannels = channels.filter(c => c.type === 'voice');
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);

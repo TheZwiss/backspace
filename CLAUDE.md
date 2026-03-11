@@ -352,7 +352,7 @@ CREATE TABLE channels (
     id TEXT PRIMARY KEY,
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    type TEXT NOT NULL,            -- 'text' | 'voice' | 'video'
+    type TEXT NOT NULL,            -- 'text' | 'voice'
     topic TEXT,
     position INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL
@@ -846,7 +846,7 @@ All core features are implemented and live:
 
 - **Auth:** Registration (first user = admin), login, JWT sessions, username availability check
 - **Spaces:** Create, join by invite, space settings, delete, ownership transfer
-- **Channels:** Text, voice, video types with position ordering
+- **Channels:** Text and voice types with position ordering (voice channels support video/screen share)
 - **Messaging:** Send, edit, delete, replies, attachments, reactions, typing indicators, read states
 - **Permissions:** Full RBAC with roles, per-channel overrides, computed permissions
 - **Voice/Video:** LiveKit integration, mute/deafen, camera, screen share with VP9

@@ -72,7 +72,7 @@ export function MainContent() {
 
   // 2. LOGIC AND EARLY RETURNS
   const channel = channels.find(c => c.id === currentChannelId);
-  const isVoiceChannel = channel?.type === 'voice' || channel?.type === 'video';
+  const isVoiceChannel = channel?.type === 'voice';
 
   if (showDms || isExplorePage || !currentSpaceId) {
     if (!currentChannelId) {

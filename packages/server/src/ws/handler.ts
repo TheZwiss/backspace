@@ -923,7 +923,7 @@ function buildReadyPayload(userId: string): {
   const voiceStates: Record<string, string[]> = {};
   for (const space of spaces) {
     for (const ch of space.channels) {
-      if (ch.type === 'voice' || ch.type === 'video') {
+      if (ch.type === 'voice') {
         const participants = connectionManager.getRoomParticipants(ch.id);
         if (participants.size > 0) {
           voiceStates[ch.id] = Array.from(participants);

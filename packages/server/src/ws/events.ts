@@ -1348,7 +1348,7 @@ function handleVoiceMove(event: Record<string, unknown>, userId: string): void {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Target channel not found in this space' });
     return;
   }
-  if (targetChannel.type !== 'voice' && targetChannel.type !== 'video') {
+  if (targetChannel.type !== 'voice') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Target channel is not a voice channel' });
     return;
   }

@@ -32,7 +32,7 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   const canDisconnectMembers = hasPermissionBit(myPerms, PermissionBits.DISCONNECT_MEMBERS);
 
   const otherVoiceChannels = channels.filter(
-    (c) => (c.type === 'voice' || c.type === 'video') && c.id !== channelId,
+    (c) => c.type === 'voice' && c.id !== channelId,
   );
 
   const voiceOrigin = getChannelOrigin(channelId);

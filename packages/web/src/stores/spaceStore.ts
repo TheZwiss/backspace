@@ -57,7 +57,7 @@ interface SpaceState {
   leaveSpace: (spaceId: string) => Promise<void>;
   joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
   generateInvite: (spaceId: string) => Promise<string>;
-  createChannel: (spaceId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => Promise<Channel>;
+  createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
   addSpace: (space: Space) => void;
   removeSpace: (spaceId: string) => void;
@@ -294,7 +294,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     return result.inviteCode;
   },
 
-  createChannel: async (spaceId: string, name: string, type: 'text' | 'voice' | 'video', topic?: string) => {
+  createChannel: async (spaceId: string, name: string, type: 'text' | 'voice', topic?: string) => {
     const channel = await api.channels.create(spaceId, { name, type, topic });
     set((state) => {
       if (state.channels.some(c => c.id === channel.id)) return state;

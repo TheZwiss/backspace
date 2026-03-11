@@ -117,8 +117,8 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Channel name must be between 1 and 100 characters', statusCode: 400 });
     }
 
-    if (!type || !['text', 'voice', 'video'].includes(type)) {
-      return reply.code(400).send({ error: 'Channel type must be "text", "voice", or "video"', statusCode: 400 });
+    if (!type || !['text', 'voice'].includes(type)) {
+      return reply.code(400).send({ error: 'Channel type must be "text" or "voice"', statusCode: 400 });
     }
 
     // Get max position for ordering

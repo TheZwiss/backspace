@@ -5,7 +5,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 
 export function CreateChannelModal() {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'text' | 'voice' | 'video'>('text');
+  const [type, setType] = useState<'text' | 'voice'>('text');
   const [topic, setTopic] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -58,7 +58,7 @@ export function CreateChannelModal() {
             Channel Type
           </label>
           <div className="space-y-2">
-            {(['text', 'voice', 'video'] as const).map((t) => (
+            {(['text', 'voice'] as const).map((t) => (
               <label
                 key={t}
                 className={`flex items-center gap-3 p-3 rounded cursor-pointer border ${
@@ -82,16 +82,12 @@ export function CreateChannelModal() {
                   {t === 'voice' && (
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5L6 9H2V15H6L11 19V5ZM15.54 8.46C16.48 9.4 17 10.67 17 12S16.48 14.6 15.54 15.54L14.12 14.12C14.69 13.55 15 12.79 15 12S14.69 10.45 14.12 9.88L15.54 8.46Z" /></svg>
                   )}
-                  {t === 'video' && (
-                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7C17 6.45 16.55 6 16 6H4C3.45 6 3 6.45 3 7V17C3 17.55 3.45 18 4 18H16C16.55 18 17 17.55 17 17V13.5L21 17.5V6.5L17 10.5Z" /></svg>
-                  )}
                 </div>
                 <div>
                   <div className="text-sm font-medium text-txt-primary capitalize">{t}</div>
                   <div className="text-xs text-txt-tertiary">
                     {t === 'text' && 'Send messages, images, and files'}
                     {t === 'voice' && 'Hang out with voice and video'}
-                    {t === 'video' && 'Share your screen and camera'}
                   </div>
                 </div>
               </label>
@@ -107,7 +103,7 @@ export function CreateChannelModal() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+            className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
             placeholder="new-channel"
             autoFocus
           />
@@ -122,7 +118,7 @@ export function CreateChannelModal() {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
               placeholder="What's this channel about?"
             />
           </div>

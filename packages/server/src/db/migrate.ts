@@ -213,6 +213,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Lowercase all existing usernames ────────────────────────────────────────
   migrateLowercaseUsernames(db);
 
+  // ─── Convert video channels to voice (video type removed) ─────────────────
+  migrateVideoChannels(db);
+
   console.log('Migrations complete.');
 }
 
@@ -580,6 +583,14 @@ function migrateLowercaseUsernames(db: Database.Database): void {
     }
     update.run(lower, row.id);
     console.log(`Migrating: Lowercased username "${row.username}" → "${lower}"`);
+  }
+}
+
+/** Convert any existing video channels to voice (video type removed — voice channels have full video capability) */
+function migrateVideoChannels(db: Database.Database): void {
+  const result = db.prepare("UPDATE channels SET type = 'voice' WHERE type = 'video'").run();
+  if (result.changes > 0) {
+    console.log(`Migrating: Converted ${result.changes} video channel(s) to voice`);
   }
 }
 
