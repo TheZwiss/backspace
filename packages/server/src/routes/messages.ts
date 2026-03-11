@@ -13,6 +13,7 @@ import type {
   Reaction,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 
 /**
  * Fetch reactions for a set of message IDs.
@@ -417,11 +418,20 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You cannot delete this message', statusCode: 403 });
     }
 
+    // Collect attachment filenames before deleting
+    const attachmentRows = db.select({ filename: schema.attachments.filename })
+      .from(schema.attachments)
+      .where(eq(schema.attachments.messageId, id))
+      .all();
+
     // Delete attachments and message atomically
     db.transaction((tx) => {
       tx.delete(schema.attachments).where(eq(schema.attachments.messageId, id)).run();
       tx.delete(schema.messages).where(eq(schema.messages.id, id)).run();
     });
+
+    // Clean up files from disk after transaction commits
+    deleteAttachmentFiles(attachmentRows);
 
     // Broadcast deletion
     connectionManager.sendToSpace(spaceId, {

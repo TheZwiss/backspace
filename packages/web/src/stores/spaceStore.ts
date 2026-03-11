@@ -46,6 +46,7 @@ interface SpaceState {
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
   closeDm: (id: string) => Promise<void>;
+  leaveDm: (id: string) => Promise<void>;
   loadSpaces: () => Promise<void>;
   loadSpaceDetail: (spaceId: string) => Promise<void>;
   loadDmChannels: () => Promise<void>;
@@ -125,6 +126,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = get().channelOriginMap.get(id) || '';
     const targetApi = getApiForOrigin(origin);
     await targetApi.dm.close(id);
+    set((state) => ({
+      dmChannels: state.dmChannels.filter(c => c.id !== id)
+    }));
+  },
+
+  leaveDm: async (id) => {
+    const origin = get().channelOriginMap.get(id) || '';
+    const targetApi = getApiForOrigin(origin);
+    await targetApi.dm.leave(id);
     set((state) => ({
       dmChannels: state.dmChannels.filter(c => c.id !== id)
     }));

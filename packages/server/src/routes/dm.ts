@@ -17,6 +17,7 @@ import type {
   Reaction,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -638,6 +639,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.clearVoiceUserStatus(request.userId);
     }
 
+    // Check DM channel ownership before leaving
+    const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+
     // Delete dm_members row
     db.delete(schema.dmMembers)
       .where(and(
@@ -646,18 +650,59 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ))
       .run();
 
-    // Broadcast dm_member_removed to remaining members
+    // Check remaining members
     const remainingMembers = db.select()
       .from(schema.dmMembers)
       .where(eq(schema.dmMembers.dmChannelId, id))
       .all();
 
-    for (const member of remainingMembers) {
-      connectionManager.sendToUser(member.userId, {
-        type: 'dm_member_removed',
-        dmChannelId: id,
-        userId: request.userId,
-      });
+    if (remainingMembers.length > 0) {
+      // Transfer ownership if the leaving user was the owner
+      const nextOwner = remainingMembers[0];
+      if (dmChannel && dmChannel.ownerId === request.userId && nextOwner) {
+        db.update(schema.dmChannels)
+          .set({ ownerId: nextOwner.userId })
+          .where(eq(schema.dmChannels.id, id))
+          .run();
+      }
+
+      // Broadcast dm_member_removed to remaining members
+      for (const member of remainingMembers) {
+        connectionManager.sendToUser(member.userId, {
+          type: 'dm_member_removed',
+          dmChannelId: id,
+          userId: request.userId,
+        });
+      }
+    } else {
+      // Last member left — clean up the entire DM channel
+      // Collect attachment filenames for disk cleanup
+      const msgIds = db.select({ id: schema.dmMessages.id })
+        .from(schema.dmMessages)
+        .where(eq(schema.dmMessages.dmChannelId, id))
+        .all()
+        .map(m => m.id);
+
+      const filesToDelete: { filename: string }[] = [];
+      if (msgIds.length > 0) {
+        const attachmentRows = db.select({ filename: schema.attachments.filename })
+          .from(schema.attachments)
+          .where(inArray(schema.attachments.dmMessageId, msgIds))
+          .all();
+        filesToDelete.push(...attachmentRows);
+
+        // Delete attachments and reactions before cascade
+        db.transaction((tx) => {
+          tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
+          tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
+        });
+      }
+
+      // Delete the DM channel (cascades to dm_messages)
+      db.delete(schema.dmChannels).where(eq(schema.dmChannels.id, id)).run();
+
+      // Clean up files from disk
+      deleteAttachmentFiles(filesToDelete);
     }
 
     // Send dm_channel_closed to the leaving user
@@ -903,6 +948,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You can only delete your own messages', statusCode: 403 });
     }
 
+    // Collect attachment filenames before deleting
+    const attachmentRows = db.select({ filename: schema.attachments.filename })
+      .from(schema.attachments)
+      .where(eq(schema.attachments.dmMessageId, id))
+      .all();
+
     // Delete attachments, reactions, and message atomically
     db.transaction((tx) => {
       tx.delete(schema.attachments)
@@ -917,6 +968,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(schema.dmMessages.id, id))
         .run();
     });
+
+    // Clean up files from disk after transaction commits
+    deleteAttachmentFiles(attachmentRows);
 
     // Broadcast to all DM members
     const dmMembers = db.select()

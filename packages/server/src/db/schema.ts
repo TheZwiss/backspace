@@ -69,7 +69,7 @@ export const messages = sqliteTable('messages', {
 export const attachments = sqliteTable('attachments', {
   id: text('id').primaryKey(),
   messageId: text('message_id').references(() => messages.id, { onDelete: 'cascade' }),
-  dmMessageId: text('dm_message_id'),
+  dmMessageId: text('dm_message_id').references(() => dmMessages.id, { onDelete: 'cascade' }),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
   mimetype: text('mimetype').notNull(),
@@ -127,7 +127,7 @@ export const reactions = sqliteTable('reactions', {
 
 export const dmReactions = sqliteTable('dm_reactions', {
   id: text('id').primaryKey(),
-  dmMessageId: text('dm_message_id').notNull(),
+  dmMessageId: text('dm_message_id').notNull().references(() => dmMessages.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
   createdAt: integer('created_at').notNull(),
@@ -206,7 +206,7 @@ export const bans = sqliteTable('bans', {
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   reason: text('reason'),
-  bannedBy: text('banned_by').notNull().references(() => users.id),
+  bannedBy: text('banned_by').references(() => users.id),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId] }),
@@ -227,7 +227,7 @@ export const voiceRestrictions = sqliteTable('voice_restrictions', {
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   restrictionType: text('restriction_type').notNull(), // 'mute' | 'deafen'
-  moderatorId: text('moderator_id').notNull().references(() => users.id),
+  moderatorId: text('moderator_id').references(() => users.id),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId, table.restrictionType] }),

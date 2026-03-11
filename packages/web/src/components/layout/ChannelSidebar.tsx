@@ -15,6 +15,7 @@ import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
+import { ContextMenu } from '../ui/ContextMenu';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -208,7 +209,7 @@ export function ChannelSidebar() {
                 ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
                 : otherMembers[0]?.displayName ?? otherMembers[0]?.username;
 
-              return (
+              const dmItem = (
                 <div
                   key={dm.id}
                   onClick={() => handleChannelClick(dm.id)}
@@ -281,6 +282,36 @@ export function ChannelSidebar() {
                   </button>
                 </div>
               );
+
+              if (isGroup) {
+                return (
+                  <ContextMenu
+                    key={dm.id}
+                    items={[
+                      {
+                        label: 'Leave Group',
+                        danger: true,
+                        icon: (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                          </svg>
+                        ),
+                        onClick: () => {
+                          if (currentChannelId === dm.id) {
+                            navigate('/channels/@me');
+                            setCurrentChannel(null);
+                          }
+                          useSpaceStore.getState().leaveDm(dm.id);
+                        },
+                      },
+                    ]}
+                  >
+                    {dmItem}
+                  </ContextMenu>
+                );
+              }
+
+              return dmItem;
             })}
             {dmChannels.length === 0 && (
               <p className="px-2 py-4 text-[13px] text-txt-tertiary italic opacity-60">No DM conversations yet.</p>

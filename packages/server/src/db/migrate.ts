@@ -201,6 +201,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Free usernames from already-tombstoned users ───────────────────────────
   migrateDeletedUsernames(db);
 
+  // ─── Clean up orphaned data from deleted users and channels ────────────────
+  migrateOrphanedData(db);
+
   console.log('Migrations complete.');
 }
 
@@ -440,6 +443,101 @@ function migrateDeletedUsernames(db: Database.Database): void {
     update.run(`!deleted:${row.id}`, row.id);
     console.log(`Migrating: Freed username "${row.username}" from deleted user ${row.id}`);
   }
+}
+
+/**
+ * Clean up orphaned data left behind by user deletions and channel removals:
+ * 1. DM channels with zero members
+ * 2. DM attachments/reactions referencing non-existent dm_messages
+ * 3. Read states referencing non-existent channels
+ * 4. Stale moderator references (bans.banned_by, voice_restrictions.moderator_id, join_requests.decided_by)
+ */
+function migrateOrphanedData(db: Database.Database): void {
+  // 1. Delete DM channels with zero members (cascade cleans dm_messages)
+  const orphanedDms = db.prepare(`
+    SELECT dc.id FROM dm_channels dc
+    WHERE NOT EXISTS (SELECT 1 FROM dm_members dm WHERE dm.dm_channel_id = dc.id)
+  `).all() as { id: string }[];
+
+  if (orphanedDms.length > 0) {
+    const deleteAttachments = db.prepare(
+      'DELETE FROM attachments WHERE dm_message_id IN (SELECT id FROM dm_messages WHERE dm_channel_id = ?)'
+    );
+    const deleteReactions = db.prepare(
+      'DELETE FROM dm_reactions WHERE dm_message_id IN (SELECT id FROM dm_messages WHERE dm_channel_id = ?)'
+    );
+    const deleteDmChannel = db.prepare('DELETE FROM dm_channels WHERE id = ?');
+
+    for (const { id } of orphanedDms) {
+      deleteAttachments.run(id);
+      deleteReactions.run(id);
+      deleteDmChannel.run(id);
+    }
+    console.log(`Migrating: Cleaned up ${orphanedDms.length} orphaned DM channels`);
+  }
+
+  // 2. Delete orphaned DM attachments referencing non-existent dm_messages
+  const orphanedAtts = db.prepare(`
+    DELETE FROM attachments
+    WHERE dm_message_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM dm_messages WHERE dm_messages.id = attachments.dm_message_id)
+  `).run();
+  if (orphanedAtts.changes > 0) {
+    console.log(`Migrating: Cleaned up ${orphanedAtts.changes} orphaned DM attachments`);
+  }
+
+  // 3. Delete orphaned DM reactions referencing non-existent dm_messages
+  const orphanedReactions = db.prepare(`
+    DELETE FROM dm_reactions
+    WHERE NOT EXISTS (SELECT 1 FROM dm_messages WHERE dm_messages.id = dm_reactions.dm_message_id)
+  `).run();
+  if (orphanedReactions.changes > 0) {
+    console.log(`Migrating: Cleaned up ${orphanedReactions.changes} orphaned DM reactions`);
+  }
+
+  // 4. Delete orphaned read_states referencing non-existent channels (or DM channels)
+  const orphanedReadStates = db.prepare(`
+    DELETE FROM read_states
+    WHERE NOT EXISTS (SELECT 1 FROM channels WHERE channels.id = read_states.channel_id)
+      AND NOT EXISTS (SELECT 1 FROM dm_channels WHERE dm_channels.id = read_states.channel_id)
+  `).run();
+  if (orphanedReadStates.changes > 0) {
+    console.log(`Migrating: Cleaned up ${orphanedReadStates.changes} orphaned read_states`);
+  }
+
+  // 5. Nullify stale moderator references pointing to deleted users
+  try {
+    const staleBans = db.prepare(`
+      UPDATE bans SET banned_by = NULL
+      WHERE banned_by IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = bans.banned_by AND users.is_deleted = 0)
+    `).run();
+    if (staleBans.changes > 0) {
+      console.log(`Migrating: Nullified ${staleBans.changes} stale bans.banned_by references`);
+    }
+  } catch { /* bans table may not exist yet */ }
+
+  try {
+    const staleVoice = db.prepare(`
+      UPDATE voice_restrictions SET moderator_id = NULL
+      WHERE moderator_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = voice_restrictions.moderator_id AND users.is_deleted = 0)
+    `).run();
+    if (staleVoice.changes > 0) {
+      console.log(`Migrating: Nullified ${staleVoice.changes} stale voice_restrictions.moderator_id references`);
+    }
+  } catch { /* voice_restrictions table may not exist yet */ }
+
+  try {
+    const staleJoinReqs = db.prepare(`
+      UPDATE join_requests SET decided_by = NULL
+      WHERE decided_by IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = join_requests.decided_by AND users.is_deleted = 0)
+    `).run();
+    if (staleJoinReqs.changes > 0) {
+      console.log(`Migrating: Nullified ${staleJoinReqs.changes} stale join_requests.decided_by references`);
+    }
+  } catch { /* join_requests table may not exist yet */ }
 }
 
 /**
