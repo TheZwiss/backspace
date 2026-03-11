@@ -4,17 +4,27 @@ import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { VoiceUserContextMenu } from './VoiceUserContextMenu';
+import { wsSend } from '../../hooks/useWebSocket';
+import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 const EMPTY_VOICE_USERS: string[] = [];
+
+interface VoiceChannelDragState {
+  userId: string;
+  fromChannelId: string;
+}
 
 interface VoiceChannelProps {
   channelId: string;
   channelName: string;
   onClick: () => void;
   locked?: boolean;
+  dragState?: VoiceChannelDragState | null;
+  onDragStart?: (userId: string) => void;
+  onDragEnd?: () => void;
 }
 
-export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceChannelProps) {
+export function VoiceChannel({ channelId, channelName, onClick, locked, dragState, onDragStart, onDragEnd }: VoiceChannelProps) {
   const voiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
@@ -35,6 +45,16 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
   const myUser = useAuthStore((s) => s.user);
   const isActive = currentVoiceChannel === channelId;
 
+  // Drag-and-drop permission check
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const myPerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
+  const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
+
+  // Drop target highlight state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const isValidDropTarget = dragState !== null && dragState !== undefined && dragState.fromChannelId !== channelId;
+
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; userId: string } | null>(null);
 
@@ -48,7 +68,37 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
   );
 
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        if (isValidDropTarget) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setIsDragOver(true);
+        }
+      }}
+      onDragEnter={(e) => {
+        if (isValidDropTarget) {
+          e.preventDefault();
+          setIsDragOver(true);
+        }
+      }}
+      onDragLeave={(e) => {
+        // Only clear when leaving the container (not entering a child)
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (dragState && dragState.fromChannelId !== channelId) {
+          const voiceOrigin = getChannelOrigin(dragState.fromChannelId);
+          wsSend({ type: 'voice_move', userId: dragState.userId, targetChannelId: channelId }, voiceOrigin);
+          onDragEnd?.();
+        }
+      }}
+      className={isDragOver && isValidDropTarget ? 'rounded-[8px] ring-1 ring-accent-mint/40' : ''}
+    >
       <button
         onClick={onClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
@@ -101,10 +151,23 @@ export function VoiceChannel({ channelId, channelName, onClick, locked }: VoiceC
             const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${userId}`);
             const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
 
+            const isDraggable = canMoveMembers && userId !== myUser?.id;
+            const isBeingDragged = dragState?.userId === userId && dragState?.fromChannelId === channelId;
+
             return (
               <div
                 key={userId}
-                className="flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors"
+                className={`flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors ${
+                  isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
+                } ${isBeingDragged ? 'opacity-50' : ''}`}
+                draggable={isDraggable}
+                onDragStart={(e) => {
+                  if (!isDraggable) return;
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', userId);
+                  onDragStart?.(userId);
+                }}
+                onDragEnd={() => onDragEnd?.()}
                 onContextMenu={(e) => handleContextMenu(e, userId)}
               >
                 <Avatar

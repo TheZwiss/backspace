@@ -366,7 +366,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'voice_moved': {
       // The local user was moved to a different channel by a moderator
-      const myMovedId = useAuthStore.getState().user?.id;
+      const myMovedId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myMovedId) {
         // Import dynamically to avoid circular deps — joinVoiceChannel handles
         // leaving old channel, setting new channel, and triggering LiveKit reconnect

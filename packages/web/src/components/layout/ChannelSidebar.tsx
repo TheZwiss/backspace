@@ -39,6 +39,9 @@ export function ChannelSidebar() {
   const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
   const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
+
+  // Drag-and-drop state for moving users between voice channels
+  const [voiceDragState, setVoiceDragState] = useState<{ userId: string; fromChannelId: string } | null>(null);
   const isServerMuted = !!(myOriginId && spaceId && serverMutedUserIds.has(`${spaceId}:${myOriginId}`));
   const isServerDeafened = !!(myOriginId && spaceId && serverDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
   const isPermissionMuted = !!(myOriginId && spaceId && permissionMutedUserIds.has(`${spaceId}:${myOriginId}`));
@@ -470,6 +473,9 @@ export function ChannelSidebar() {
                   channelName={channel.name}
                   onClick={() => canConnect && handleVoiceJoin(channel.id)}
                   locked={!canConnect}
+                  dragState={voiceDragState}
+                  onDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
+                  onDragEnd={() => setVoiceDragState(null)}
                 />
               );
             })}
