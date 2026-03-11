@@ -169,9 +169,11 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
   const currentUserId = useAuthStore((s) => s.user?.id);
   const leaveSpace = useSpaceStore((s) => s.leaveSpace);
+  const generateInvite = useSpaceStore((s) => s.generateInvite);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const setShowDms = useUIStore((s) => s.setShowDms);
+  const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
 
   const isOwner = space?.ownerId === currentUserId;
@@ -198,12 +200,25 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
     };
   }, [onClose]);
 
-  // Don't render for owners (no menu items)
-  if (isOwner || !space) return null;
+  if (!space) return null;
+
+  const handleInvite = async () => {
+    try {
+      const code = await generateInvite(spaceId);
+      const origin = (space as any)._instanceOrigin || window.location.origin;
+      const url = `${origin}/invite/${code}`;
+      await navigator.clipboard.writeText(url);
+      addToast('Invite link copied to clipboard', 'success', 3000);
+    } catch {
+      addToast('Failed to generate invite', 'warning', 3000);
+    }
+    onClose();
+  };
 
   // Viewport-aware clamping
   const menuWidth = 180;
-  const menuHeight = 40;
+  const itemCount = isOwner ? 1 : 2;
+  const menuHeight = itemCount * 32 + 8;
   const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
   const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
 
@@ -214,22 +229,33 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
       style={{ left: clampedX, top: clampedY }}
     >
       <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
-        onClick={() => {
-          if (currentSpaceId === spaceId) {
-            navigate('/channels/@me');
-            setCurrentSpace(null);
-            setShowDms(true);
-          }
-          leaveSpace(spaceId);
-          onClose();
-        }}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-txt-primary hover:bg-white/[0.06] transition-colors"
+        onClick={handleInvite}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+          <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
         </svg>
-        Leave Space
+        Invite People
       </button>
+      {!isOwner && (
+        <button
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
+          onClick={() => {
+            if (currentSpaceId === spaceId) {
+              navigate('/channels/@me');
+              setCurrentSpace(null);
+              setShowDms(true);
+            }
+            leaveSpace(spaceId);
+            onClose();
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+          </svg>
+          Leave Space
+        </button>
+      )}
     </div>,
     document.body,
   );

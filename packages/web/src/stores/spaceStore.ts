@@ -239,7 +239,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const space = get().spaces.find(s => s.id === spaceId);
     const origin = (space as TaggedSpace)?._instanceOrigin ?? '';
     const targetApi = getApiForOrigin(origin);
-    const userId = useAuthStore.getState().user?.id;
+    const userId = getMyUserIdForOrigin(origin);
     if (!userId) return;
     await targetApi.spaces.removeMember(spaceId, userId);
     set((state) => ({
