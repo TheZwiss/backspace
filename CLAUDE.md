@@ -38,7 +38,7 @@ Every surface in Backspace falls into one of these tiers:
 
 ## MISSION
 
-Maintain and extend Backspace as a complete, production-quality application. The core application is fully built and deployed. Every change must uphold the same standard: no stubs, no TODOs, no shortcuts. A user must always be able to `docker compose up` and have a fully working chat platform.
+Maintain and extend Backspace as a complete, production-quality application. The core application is fully built and deployed across multiple instances with federation support. Every change must uphold the same standard: no stubs, no TODOs, no shortcuts. A user must always be able to `docker compose up` and have a fully working chat platform.
 
 ## CRITICAL RULES
 
@@ -71,6 +71,7 @@ Maintain and extend Backspace as a complete, production-quality application. The
 | Markdown | react-markdown + remark-gfm | react-markdown, remark-gfm |
 | Syntax Highlighting | prism-react-renderer | prism-react-renderer |
 | HTML Parsing | Cheerio (server-side URL metadata) | cheerio |
+| Image Cropping | react-easy-crop | react-easy-crop |
 | Desktop | Electron 33 | electron, electron-builder |
 | Testing | Vitest + Testing Library | vitest, @testing-library/react, jsdom |
 | Monorepo | pnpm workspaces | pnpm |
@@ -86,8 +87,9 @@ Backspace/
 ├── tsconfig.base.json
 ├── Dockerfile
 ├── docker-compose.yml
+├── Caddyfile
 ├── deploy.sh
-├── Makefile
+├── install.sh
 ├── .env.example
 ├── .gitignore
 ├── README.md
@@ -117,6 +119,9 @@ Backspace/
 │   │       │   ├── messages.ts
 │   │       │   ├── uploads.ts
 │   │       │   ├── dm.ts
+│   │       │   ├── explore.ts
+│   │       │   ├── search.ts
+│   │       │   ├── instance.ts
 │   │       │   ├── livekit.ts
 │   │       │   ├── social.ts
 │   │       │   ├── settings.ts
@@ -127,7 +132,9 @@ Backspace/
 │   │       └── utils/
 │   │           ├── auth.ts
 │   │           ├── snowflake.ts
-│   │           └── permissions.ts
+│   │           ├── permissions.ts
+│   │           ├── sanitize.ts
+│   │           └── fileCleanup.ts
 │   ├── web/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
@@ -150,17 +157,33 @@ Backspace/
 │   │       │   ├── voiceStore.ts
 │   │       │   ├── socialStore.ts
 │   │       │   ├── settingsStore.ts
+│   │       │   ├── exploreStore.ts
+│   │       │   ├── instanceStore.ts
 │   │       │   └── uiStore.ts
 │   │       ├── hooks/
 │   │       │   ├── useWebSocket.ts
 │   │       │   ├── useLiveKit.ts
 │   │       │   ├── useAuth.ts
 │   │       │   ├── useTrackStats.ts
-│   │       │   └── useAudioTrackPlayer.ts
+│   │       │   ├── useAudioTrackPlayer.ts
+│   │       │   ├── useFederationToasts.ts
+│   │       │   ├── useFloatingPosition.ts
+│   │       │   ├── useGridLayout.ts
+│   │       │   └── useVoiceParticipantMeta.ts
 │   │       ├── utils/
 │   │       │   ├── permissions.ts
 │   │       │   ├── livekitInternals.ts
-│   │       │   └── screenShare.ts
+│   │       │   ├── screenShare.ts
+│   │       │   ├── assetUrls.ts
+│   │       │   ├── colorExtractor.ts
+│   │       │   ├── cropImage.ts
+│   │       │   ├── federationOps.ts
+│   │       │   ├── gradients.ts
+│   │       │   ├── identity.ts
+│   │       │   ├── inviteParser.ts
+│   │       │   ├── mutuals.ts
+│   │       │   ├── profileSync.ts
+│   │       │   └── voice.ts
 │   │       ├── components/
 │   │       │   ├── layout/
 │   │       │   │   ├── AppLayout.tsx
@@ -182,7 +205,9 @@ Backspace/
 │   │       │   │   ├── MentionPopover.tsx
 │   │       │   │   ├── MentionBadge.tsx
 │   │       │   │   ├── Embed.tsx
-│   │       │   │   └── FriendsPage.tsx
+│   │       │   │   ├── FriendsPage.tsx
+│   │       │   │   ├── ExplorePage.tsx
+│   │       │   │   └── SearchPopover.tsx
 │   │       │   ├── voice/
 │   │       │   │   ├── VoiceChannel.tsx
 │   │       │   │   ├── VoiceChatPanel.tsx
@@ -196,7 +221,9 @@ Backspace/
 │   │       │   │   ├── GlobalAudioRenderer.tsx
 │   │       │   │   ├── SoundController.tsx
 │   │       │   │   ├── ConnectionInfoPopover.tsx
-│   │       │   │   └── ScreenShareSettingsPopover.tsx
+│   │       │   │   ├── ScreenShareSettingsPopover.tsx
+│   │       │   │   ├── StreamContextMenu.tsx
+│   │       │   │   └── VoiceUserContextMenu.tsx
 │   │       │   ├── auth/
 │   │       │   │   ├── LoginPage.tsx
 │   │       │   │   └── RegisterPage.tsx
@@ -209,14 +236,35 @@ Backspace/
 │   │       │   │   ├── SpaceSettings.tsx
 │   │       │   │   ├── ChannelSettingsModal.tsx
 │   │       │   │   ├── NewDmModal.tsx
-│   │       │   │   └── AddDmMemberModal.tsx
+│   │       │   │   ├── AddDmMemberModal.tsx
+│   │       │   │   ├── ConnectedInstances.tsx
+│   │       │   │   ├── DeleteAccountModal.tsx
+│   │       │   │   ├── UserProfileModal.tsx
+│   │       │   │   ├── settingsPanels/
+│   │       │   │   │   ├── AccountPanel.tsx
+│   │       │   │   │   ├── ConnectionsPanel.tsx
+│   │       │   │   │   ├── VoicePanel.tsx
+│   │       │   │   │   └── InstancePanel.tsx
+│   │       │   │   ├── spaceSettingsPanels/
+│   │       │   │   │   ├── OverviewPanel.tsx
+│   │       │   │   │   ├── RolesPanel.tsx
+│   │       │   │   │   ├── MembersPanel.tsx
+│   │       │   │   │   └── BansPanel.tsx
+│   │       │   │   └── instanceSettingsPanels/
+│   │       │   │       ├── GeneralPanel.tsx
+│   │       │   │       └── StreamingPanel.tsx
 │   │       │   └── ui/
 │   │       │       ├── Avatar.tsx
 │   │       │       ├── Modal.tsx
 │   │       │       ├── Tooltip.tsx
 │   │       │       ├── ContextMenu.tsx
 │   │       │       ├── LoadingSpinner.tsx
-│   │       │       └── UserProfilePopout.tsx
+│   │       │       ├── UserProfilePopout.tsx
+│   │       │       ├── ConfirmDialog.tsx
+│   │       │       ├── ImageCropModal.tsx
+│   │       │       ├── ToastContainer.tsx
+│   │       │       ├── Toggle.tsx
+│   │       │       └── Username.tsx
 │   │       ├── test/
 │   │       │   └── setup.ts
 │   │       └── styles/
@@ -246,6 +294,14 @@ CREATE TABLE users (
     status TEXT DEFAULT 'offline',
     custom_status TEXT,
     is_admin INTEGER DEFAULT 0,
+    home_instance TEXT,              -- federation home instance domain
+    home_user_id TEXT,               -- user ID on home instance
+    replicated_instances TEXT DEFAULT '[]',  -- JSON array of federated instances
+    banner TEXT,                     -- profile banner image
+    accent_color TEXT,               -- profile accent color
+    avatar_color TEXT,               -- avatar background color
+    bio TEXT,                        -- user biography
+    is_deleted INTEGER DEFAULT 0,    -- soft-delete flag
     created_at INTEGER NOT NULL
 );
 
@@ -254,8 +310,12 @@ CREATE TABLE spaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     icon TEXT,
+    banner TEXT,                     -- space banner image
+    avatar_color TEXT,               -- space icon background color
     owner_id TEXT NOT NULL REFERENCES users(id),
     invite_code TEXT UNIQUE,
+    visibility TEXT DEFAULT 'private',  -- 'public' | 'request' | 'private'
+    description TEXT,                -- space description
     created_at INTEGER NOT NULL
 );
 
@@ -419,6 +479,9 @@ CREATE TABLE space_folder_members (
 -- Instance Settings (singleton row, id=1)
 CREATE TABLE instance_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
+    instance_name TEXT DEFAULT 'Backspace',  -- federation instance name
+    worker_id INTEGER,                       -- Snowflake worker ID for federation
+    discovery_enabled INTEGER NOT NULL DEFAULT 1,  -- space discovery toggle
     max_bitrate_kbps INTEGER NOT NULL DEFAULT 20000,
     min_bitrate_kbps INTEGER NOT NULL DEFAULT 500,
     bitrate_step_kbps INTEGER NOT NULL DEFAULT 500,
@@ -426,7 +489,40 @@ CREATE TABLE instance_settings (
     allowed_framerates TEXT NOT NULL DEFAULT '30,45,60',
     max_resolution INTEGER NOT NULL DEFAULT 1080,
     max_framerate INTEGER NOT NULL DEFAULT 60,
+    registration_open INTEGER,               -- explicit registration override (null = use env)
     updated_at INTEGER NOT NULL
+);
+
+-- Bans
+CREATE TABLE bans (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT,
+    banned_by TEXT REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (space_id, user_id)
+);
+
+-- Join Requests
+CREATE TABLE join_requests (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'accepted' | 'declined'
+    decided_by TEXT REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER
+);
+
+-- Voice Restrictions
+CREATE TABLE voice_restrictions (
+    space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    restriction_type TEXT NOT NULL,   -- 'mute' | 'deafen'
+    moderator_id TEXT REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (space_id, user_id, restriction_type)
 );
 ```
 
@@ -434,28 +530,42 @@ CREATE TABLE instance_settings (
 
 ```
 # Auth
-POST   /api/auth/register          { username, password, displayName? }     → { token, user }
+POST   /api/auth/register          { username, password, displayName?, avatarColor? }  → { token, user }
 POST   /api/auth/login             { username, password }                   → { token, user }
+GET    /api/auth/check-username    ?username=                               → { available, reason? }
 
 # Users
 GET    /api/users/@me              (auth)                                   → { user }
-PATCH  /api/users/@me              (auth) { displayName?, avatar?, customStatus?, status? } → { user }
+PATCH  /api/users/@me              (auth) { displayName?, avatar?, banner?, accentColor?,
+                                     avatarColor?, bio?, customStatus?, status?,
+                                     replicatedInstances?, homeUserId? }    → { user }
 GET    /api/users/:id              (auth)                                   → { user }
+POST   /api/users/@me/verify-password (auth) { password }                   → { valid }
+POST   /api/users/@me/change-password (auth) { currentPassword?, newPassword } → { token }
+DELETE /api/users/@me              (auth) { password, username }             → { success }
+GET    /api/users/:id/mutuals      (auth) ?homeUserId=                      → { mutualFriends[], mutualSpaces[] }
 
 # Spaces
-POST   /api/spaces                (auth) { name, icon? }                  → { space }
+POST   /api/spaces                (auth) { name, icon?, banner?, avatarColor?, visibility?, description? } → { space }
 GET    /api/spaces                (auth)                                   → { spaces[] }
 GET    /api/spaces/:id            (auth)                                   → { space, channels[], members[], roles[] }
-PATCH  /api/spaces/:id            (auth, MANAGE_SPACE) { name?, icon? }   → { space }
+PATCH  /api/spaces/:id            (auth, MANAGE_SPACE) { name?, icon?, banner?,
+                                     avatarColor?, visibility?, description? } → { space }
 DELETE /api/spaces/:id            (auth, owner)                            → { success }
 POST   /api/spaces/:id/invite     (auth, CREATE_INVITE)                   → { inviteCode }
 POST   /api/spaces/:id/join       (auth) { inviteCode }                   → { space }
 POST   /api/spaces/join           (auth) { inviteCode }                   → { space }
+PATCH  /api/spaces/:id/transfer-ownership (auth, owner) { newOwnerId }    → { space }
 
 # Members
 GET    /api/spaces/:id/members    (auth, member)                          → { members[] }
-PATCH  /api/spaces/:id/members/:uid (auth, MANAGE_ROLES) { roles }       → { member }
+PATCH  /api/spaces/:id/members/:uid (auth, MANAGE_ROLES) { roleIds }     → { member }
 DELETE /api/spaces/:id/members/:uid (auth, KICK_MEMBERS|self)             → { success }
+
+# Bans
+GET    /api/spaces/:id/bans       (auth, BAN_MEMBERS)                     → { bans[] }
+POST   /api/spaces/:id/bans       (auth, BAN_MEMBERS) { userId, reason? } → { success }
+DELETE /api/spaces/:id/bans/:uid  (auth, BAN_MEMBERS)                     → { success }
 
 # Roles
 POST   /api/spaces/:id/roles      (auth, MANAGE_ROLES) { name, color?, permissions? } → { role }
@@ -480,6 +590,20 @@ GET    /api/channels/:id/messages  (auth, member) ?before=&limit=50       → { 
 POST   /api/channels/:id/messages  (auth, SEND_MESSAGES) { content, attachments?, replyToId? } → { message }
 PATCH  /api/messages/:id           (auth, author) { content }              → { message }
 DELETE /api/messages/:id           (auth, author|MANAGE_MESSAGES)           → { success }
+
+# Search
+GET    /api/channels/:id/search    (auth, member) ?q=&from=&has=&before=&after= → { results[], totalCount }
+GET    /api/channels/:id/messages/around (auth, member) ?messageId=        → { messages[] }
+GET    /api/dm/:id/search          (auth, member) ?q=&from=&has=&before=&after= → { results[], totalCount }
+GET    /api/dm/:id/messages/around (auth, member) ?messageId=              → { messages[] }
+
+# Explore / Discovery
+GET    /api/spaces/explore         (auth) ?q=&limit=&offset=              → { spaces[], total, discoveryEnabled }
+POST   /api/spaces/:id/public-join (auth)                                  → { space }
+POST   /api/spaces/:id/request-join (auth) { message? }                    → { request }
+GET    /api/spaces/:id/join-requests (auth, MANAGE_SPACE)                  → { requests[] }
+PATCH  /api/spaces/:id/join-requests/:rid (auth, MANAGE_SPACE) { action }  → { request }
+GET    /api/users/@me/join-requests (auth) ?status=                        → { requests[] }
 
 # File Uploads
 POST   /api/uploads                (auth) multipart file                   → { attachment }
@@ -508,9 +632,14 @@ GET    /api/social/search          (auth) ?q=                              → {
 # Voice/Video
 POST   /api/livekit/token          (auth) { channelId }                    → { token }
 
+# Instance Info (public)
+GET    /api/instance/info          (public)                                → { name, version, registrationOpen }
+
 # Instance Settings (admin)
 GET    /api/settings/streaming     (auth)                                   → { streamingLimits }
 PATCH  /api/settings/streaming     (auth, admin) { maxBitrateKbps?, ... }  → { streamingLimits }
+GET    /api/settings/instance      (auth, admin)                            → { instanceName, registrationOpen, discoveryEnabled }
+PATCH  /api/settings/instance      (auth, admin) { instanceName?, registrationOpen?, discoveryEnabled? } → { settings }
 
 # Utilities
 GET    /api/utils/metadata         (auth) ?url=                            → { title?, description?, image?, siteName? }
@@ -549,6 +678,11 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'voice_leave' }
 { type: 'voice_status', isMuted?, isDeafened?, isCameraOn?, isScreenSharing? }
 { type: 'voice_disconnect', userId }
+
+# Voice Moderation
+{ type: 'voice_server_mute', userId, muted }
+{ type: 'voice_server_deafen', userId, deafened }
+{ type: 'voice_move', userId, targetChannelId }
 
 # DM Calls
 { type: 'dm_call_start', dmChannelId }
@@ -589,12 +723,18 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 # Members & Presence
 { type: 'member_joined', spaceId, member: MemberWithUser }
 { type: 'member_left', spaceId, userId }
+{ type: 'member_banned', spaceId, reason }
 { type: 'presence_update', userId, status }
+{ type: 'user_updated', user }
 
 # Voice
 { type: 'voice_state_update', channelId, userId, action: 'join' | 'leave' }
 { type: 'voice_status_update', userId, isMuted, isDeafened, isCameraOn, isScreenSharing }
 { type: 'voice_disconnected', userId, channelId }
+{ type: 'voice_server_muted', userId, spaceId, muted }
+{ type: 'voice_server_deafened', userId, spaceId, deafened }
+{ type: 'voice_permission_muted', userId, spaceId, muted }
+{ type: 'voice_moved', userId, oldChannelId, newChannelId }
 
 # DM Calls
 { type: 'dm_call_incoming', dmChannelId, callerId, callerName }
@@ -606,6 +746,11 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'friend_request_received', request }
 { type: 'friend_request_accepted', friend }
 { type: 'friend_removed', userId }
+
+# Discovery
+{ type: 'join_request_received', request }
+{ type: 'join_request_accepted', request, space? }
+{ type: 'join_request_declined', request }
 ```
 
 ## PERMISSION SYSTEM
@@ -640,6 +785,9 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 ## ENVIRONMENT VARIABLES
 
 ```env
+# Domain (required for Caddy reverse proxy)
+DOMAIN=example.com                 # Your server's public domain name
+
 # Server
 PORT=3000                          # HTTP/WS listen port
 HOST=0.0.0.0                      # Bind address
@@ -652,33 +800,39 @@ LIVEKIT_URL=                       # WebSocket URL to LiveKit server
 LIVEKIT_API_KEY=                   # LiveKit API key
 LIVEKIT_API_SECRET=                # LiveKit API secret
 
-# Storage
-UPLOAD_DIR=./data/uploads          # File upload directory
-DB_PATH=./data/backspace.db        # SQLite database path
-MAX_UPLOAD_SIZE=104857600          # Max upload size in bytes (100MB)
+# Max file upload size in bytes (default: 100MB)
+MAX_UPLOAD_SIZE=104857600
 
 # Registration
 REGISTRATION_OPEN=true             # Set to false to disable new user signup
+
+# Docker Compose profile — uncomment to enable LiveKit voice service
+# COMPOSE_PROFILES=voice
 ```
 
 ## DEPLOYMENT
 
-**Live instance:** `https://nova.ddns.net` — Raspberry Pi behind OpenResty reverse proxy with HSTS.
+**Live instances:**
+- `https://nova.ddns.net` — Raspberry Pi (primary)
+- `https://orbit.ddns.net` — VM (secondary)
 
 **Infrastructure:**
-- Docker container (`backspace`) on port 3000
-- External Docker volume: `backspace-data` (mounted at `/app/data`)
-- External Docker network: `backspace-net` (shared with reverse proxy)
-- LiveKit server at `wss://nova.ddns.net/livekit`
+- Caddy reverse proxy with automatic HTTPS (replaces OpenResty)
+- `Caddyfile` — Reverse proxy config, routes `/livekit/*` to LiveKit, everything else to Backspace
+- Docker Compose with three services: `backspace`, `caddy`, `livekit` (optional via `COMPOSE_PROFILES=voice`)
+- Data stored in `./data/` bind mount (DB + uploads)
+
+**Setup:**
+- `./install.sh` — Interactive first-time production installer (generates `.env`, `livekit.yaml`, starts services)
+- Manual: copy `.env.example` to `.env`, configure, run `docker compose up -d --build`
 
 **Deploy commands:**
-- `./deploy.sh` — Syncs code via rsync to Pi, triggers `docker compose up -d --build`
-- `./deploy.sh --local` — Use local IP (192.168.1.10)
-- `./deploy.sh --remote` — Use remote DNS (nova.ddns.net)
-- `make deploy` — Same as deploy.sh
-- `make logs` — Watch Docker logs on Pi
-- `make shell` — SSH into running container
-- `make status` — Check container status
+- `./deploy.sh` — Syncs code via rsync to both instances, triggers rebuild
+- `./deploy.sh pi` — Deploy to Pi only (nova.ddns.net)
+- `./deploy.sh vm` — Deploy to VM only (orbit.ddns.net)
+- `./deploy.sh all` — Deploy to both
+- `./deploy.sh --local` — Force Pi via LAN IP (192.168.1.10)
+- `./deploy.sh --remote` — Force Pi via public DNS
 
 **Development:**
 ```bash
@@ -690,8 +844,8 @@ pnpm dev           # Starts server (:3005) + Vite (:5173) with proxy
 
 All core features are implemented and live:
 
-- **Auth:** Registration (first user = admin), login, JWT sessions
-- **Spaces:** Create, join by invite, space settings, delete
+- **Auth:** Registration (first user = admin), login, JWT sessions, username availability check
+- **Spaces:** Create, join by invite, space settings, delete, ownership transfer
 - **Channels:** Text, voice, video types with position ordering
 - **Messaging:** Send, edit, delete, replies, attachments, reactions, typing indicators, read states
 - **Permissions:** Full RBAC with roles, per-channel overrides, computed permissions
@@ -702,7 +856,14 @@ All core features are implemented and live:
 - **Friends:** Send/accept/decline requests, friend list, user search
 - **Audio Processing:** RNNoise noise suppression, echo cancellation, auto gain control, per-user volume
 - **File Uploads:** Multipart upload, immutable cache headers, directory traversal protection
-- **Admin Panel:** Instance-level streaming limits (bitrate, resolution, framerate bounds)
 - **URL Previews:** Server-side metadata extraction with Cheerio
 - **Desktop:** Electron wrapper with tray, notifications, badge count
-- **Docker:** Multi-stage build, health checks, persistent volume
+- **Docker:** Multi-stage build, health checks, Caddy auto-HTTPS
+- **Federation:** Multi-instance user replication, home instance tracking, connected instances UI, profile sync
+- **Discovery:** Public/request/private space visibility, explore page, join requests with approval workflow
+- **Moderation:** Space bans with reason/moderator audit trail, voice restrictions (server mute/deafen), member move/disconnect
+- **Search:** Full-text message search with filters (from, has, before, after), jump-to-message context
+- **User Profiles:** Banner, bio, accent color, avatar color, mutual friends/spaces, soft-delete accounts
+- **Space Profiles:** Banner, avatar color, description, visibility settings
+- **Account Management:** Password change, account deletion with owned-space safeguards, username availability check
+- **Instance Settings:** Instance name, registration toggle, discovery toggle, persistent admin config

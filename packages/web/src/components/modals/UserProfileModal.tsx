@@ -232,8 +232,8 @@ export function UserProfileModal() {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
-      <div className="absolute inset-0 bg-surface-overlay" onClick={closeModal} />
-      <div className="relative max-w-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col bg-surface-elevated rounded-lg shadow-xl animate-slide-up overflow-hidden">
+      <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
+      <div className="relative max-w-lg w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col glass-modal rounded-lg animate-slide-up overflow-hidden">
         {/* Banner */}
         <div
           className="h-[100px] flex-shrink-0 relative"
@@ -262,7 +262,7 @@ export function UserProfileModal() {
             status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
             userId={user.homeUserId ?? user.id}
             user={user}
-            ring={{ width: 4, color: 'var(--color-surface-elevated, #1e1e2a)' }}
+            ring={{ width: 4, color: 'rgba(20,20,26,0.82)' }}
             className="mt-[-52px] mb-2"
           />
 
