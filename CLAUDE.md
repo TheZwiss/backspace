@@ -680,8 +680,8 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'voice_disconnect', userId }
 
 # Voice Moderation
-{ type: 'voice_server_mute', userId, muted }
-{ type: 'voice_server_deafen', userId, deafened }
+{ type: 'voice_space_mute', userId, muted }
+{ type: 'voice_space_deafen', userId, deafened }
 { type: 'voice_move', userId, targetChannelId }
 
 # DM Calls
@@ -731,8 +731,8 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'voice_state_update', channelId, userId, action: 'join' | 'leave' }
 { type: 'voice_status_update', userId, isMuted, isDeafened, isCameraOn, isScreenSharing }
 { type: 'voice_disconnected', userId, channelId }
-{ type: 'voice_server_muted', userId, spaceId, muted }
-{ type: 'voice_server_deafened', userId, spaceId, deafened }
+{ type: 'voice_space_muted', userId, spaceId, muted }
+{ type: 'voice_space_deafened', userId, spaceId, deafened }
 { type: 'voice_permission_muted', userId, spaceId, muted }
 { type: 'voice_moved', userId, oldChannelId, newChannelId }
 
@@ -774,8 +774,8 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 | 14 | ADD_REACTIONS | Add emoji reactions |
 | 20 | CONNECT | Join voice channels |
 | 21 | SPEAK | Transmit audio in voice |
-| 22 | MUTE_MEMBERS | Server-mute other members |
-| 23 | DEAFEN_MEMBERS | Server-deafen other members |
+| 22 | MUTE_MEMBERS | Space-mute other members |
+| 23 | DEAFEN_MEMBERS | Space-deafen other members |
 | 24 | MOVE_MEMBERS | Move members between voice channels |
 | 25 | STREAM | Share screen in voice channels |
 | 26 | DISCONNECT_MEMBERS | Disconnect members from voice channels |

@@ -182,34 +182,34 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
 
-        const nextServerMuted = new Set(vsState.serverMutedUserIds);
-        const nextServerDeafened = new Set(vsState.serverDeafenedUserIds);
+        const nextSpaceMuted = new Set(vsState.spaceMutedUserIds);
+        const nextSpaceDeafened = new Set(vsState.spaceDeafenedUserIds);
         const nextPermissionMuted = new Set(vsState.permissionMutedUserIds);
 
         // Clear existing restrictions that belong to spaces on THIS origin
         // (If a space was deleted while offline, its orphaned restrictions remain, which is harmless)
-        for (const key of nextServerMuted) {
+        for (const key of nextSpaceMuted) {
           const spaceId = key.split(':')[0];
-          if (spaceId && originSpaceIds.has(spaceId)) nextServerMuted.delete(key);
+          if (spaceId && originSpaceIds.has(spaceId)) nextSpaceMuted.delete(key);
         }
-        for (const key of nextServerDeafened) {
+        for (const key of nextSpaceDeafened) {
           const spaceId = key.split(':')[0];
-          if (spaceId && originSpaceIds.has(spaceId)) nextServerDeafened.delete(key);
+          if (spaceId && originSpaceIds.has(spaceId)) nextSpaceDeafened.delete(key);
         }
         for (const key of nextPermissionMuted) {
           const spaceId = key.split(':')[0];
           if (spaceId && originSpaceIds.has(spaceId)) nextPermissionMuted.delete(key);
         }
 
-        if (event.serverVoiceStates) {
-          for (const [uid, state] of Object.entries(event.serverVoiceStates as Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted?: boolean }>)) {
-            if (state.serverMuted) nextServerMuted.add(uid);
-            if (state.serverDeafened) nextServerDeafened.add(uid);
+        if (event.spaceVoiceStates) {
+          for (const [uid, state] of Object.entries(event.spaceVoiceStates as Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted?: boolean }>)) {
+            if (state.spaceMuted) nextSpaceMuted.add(uid);
+            if (state.spaceDeafened) nextSpaceDeafened.add(uid);
             if (state.permissionMuted) nextPermissionMuted.add(uid);
           }
         }
         // Single atomic update
-        useVoiceStore.setState({ serverMutedUserIds: nextServerMuted, serverDeafenedUserIds: nextServerDeafened, permissionMutedUserIds: nextPermissionMuted });
+        useVoiceStore.setState({ spaceMutedUserIds: nextSpaceMuted, spaceDeafenedUserIds: nextSpaceDeafened, permissionMutedUserIds: nextPermissionMuted });
 
         // With decoupled state, user intent is never force-set by the server.
         // Effective state (intent || serverEnforcement) is computed reactively
@@ -335,9 +335,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
       setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened, event.isCameraOn, event.isScreenSharing);
       break;
 
-    case 'voice_server_muted': {
-      const { setServerMutedUser } = useVoiceStore.getState();
-      setServerMutedUser(event.spaceId, event.userId, event.muted);
+    case 'voice_space_muted': {
+      const { setSpaceMutedUser } = useVoiceStore.getState();
+      setSpaceMutedUser(event.spaceId, event.userId, event.muted);
       // Broadcast effective state if this targets the current user
       const myMuteId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myMuteId) broadcastVoiceStatus();
@@ -352,9 +352,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    case 'voice_server_deafened': {
-      const { setServerDeafenedUser } = useVoiceStore.getState();
-      setServerDeafenedUser(event.spaceId, event.userId, event.deafened);
+    case 'voice_space_deafened': {
+      const { setSpaceDeafenedUser } = useVoiceStore.getState();
+      setSpaceDeafenedUser(event.spaceId, event.userId, event.deafened);
       // Broadcast effective state if this targets the current user
       const myDeafenId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myDeafenId) {

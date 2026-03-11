@@ -18,8 +18,8 @@ interface VoiceModMenuItemsProps {
  * Use inside any container — no portal or positioning logic.
  */
 export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceModMenuItemsProps) {
-  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
 
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
@@ -38,18 +38,18 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   const voiceOrigin = getChannelOrigin(channelId);
   const spaceId = useSpaceStore((s) => s.channelToSpaceMap.get(channelId));
 
-  const isServerMuted = serverMutedUserIds.has(`${spaceId}:${targetUserId}`);
-  const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
+  const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${targetUserId}`);
+  const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
 
   if (!canMuteMembers && !canDeafenMembers && !canMoveMembers && !canDisconnectMembers) return null;
 
-  const handleServerMute = () => {
-    wsSend({ type: 'voice_server_mute', userId: targetUserId, muted: !isServerMuted }, voiceOrigin);
+  const handleSpaceMute = () => {
+    wsSend({ type: 'voice_space_mute', userId: targetUserId, muted: !isSpaceMuted }, voiceOrigin);
     onAction();
   };
 
-  const handleServerDeafen = () => {
-    wsSend({ type: 'voice_server_deafen', userId: targetUserId, deafened: !isServerDeafened }, voiceOrigin);
+  const handleSpaceDeafen = () => {
+    wsSend({ type: 'voice_space_deafen', userId: targetUserId, deafened: !isSpaceDeafened }, voiceOrigin);
     onAction();
   };
 
@@ -69,26 +69,26 @@ export function VoiceModMenuItems({ targetUserId, channelId, onAction }: VoiceMo
   return (
     <>
       {canMuteMembers && (
-        <button onClick={handleServerMute} className={btnClass} style={btnStyle}>
+        <button onClick={handleSpaceMute} className={btnClass} style={btnStyle}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-            {isServerMuted && (
+            {isSpaceMuted && (
               <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             )}
           </svg>
-          {isServerMuted ? 'Server Unmute' : 'Server Mute'}
+          {isSpaceMuted ? 'Space Unmute' : 'Space Mute'}
         </button>
       )}
       {canDeafenMembers && (
-        <button onClick={handleServerDeafen} className={btnClass} style={btnStyle}>
+        <button onClick={handleSpaceDeafen} className={btnClass} style={btnStyle}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
             <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-            {isServerDeafened && (
+            {isSpaceDeafened && (
               <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
             )}
           </svg>
-          {isServerDeafened ? 'Server Undeafen' : 'Server Deafen'}
+          {isSpaceDeafened ? 'Space Undeafen' : 'Space Deafen'}
         </button>
       )}
       {canDisconnectMembers && (

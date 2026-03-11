@@ -247,15 +247,15 @@ export type ClientEvent =
   | { type: 'dm_call_reject'; dmChannelId: string }
   | { type: 'dm_call_end'; dmChannelId: string }
   | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
-  | { type: 'voice_server_mute'; userId: string; muted: boolean }
-  | { type: 'voice_server_deafen'; userId: string; deafened: boolean }
+  | { type: 'voice_space_mute'; userId: string; muted: boolean }
+  | { type: 'voice_space_deafen'; userId: string; deafened: boolean }
   | { type: 'voice_move'; userId: string; targetChannelId: string }
   | { type: 'voice_disconnect'; userId: string }
   | { type: 'ping' };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; serverVoiceStates?: Record<string, { serverMuted: boolean; serverDeafened: boolean }> }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -290,8 +290,8 @@ export type ServerEvent =
   | { type: 'join_request_received'; request: JoinRequest }
   | { type: 'join_request_accepted'; request: JoinRequest; space: SpaceWithChannelsAndMembers }
   | { type: 'join_request_declined'; request: JoinRequest }
-  | { type: 'voice_server_muted'; userId: string; channelId: string; spaceId: string; muted: boolean }
-  | { type: 'voice_server_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
+  | { type: 'voice_space_muted'; userId: string; channelId: string; spaceId: string; muted: boolean }
+  | { type: 'voice_space_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
   | { type: 'voice_permission_muted'; userId: string; spaceId: string; muted: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
   | { type: 'voice_disconnected'; userId: string; channelId: string }

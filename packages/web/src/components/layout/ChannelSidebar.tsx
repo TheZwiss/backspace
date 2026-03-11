@@ -36,14 +36,14 @@ export function ChannelSidebar() {
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
   const myOriginId = useSpaceStore((s) => currentVoiceChannelId ? getMyUserIdForOrigin(getChannelOrigin(currentVoiceChannelId)) : s.members.find(m => m.userId === user?.id)?.userId ?? user?.id);
-  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
 
   // Drag-and-drop state for moving users between voice channels
   const [voiceDragState, setVoiceDragState] = useState<{ userId: string; fromChannelId: string } | null>(null);
-  const isServerMuted = !!(myOriginId && spaceId && serverMutedUserIds.has(`${spaceId}:${myOriginId}`));
-  const isServerDeafened = !!(myOriginId && spaceId && serverDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
+  const isSpaceMuted = !!(myOriginId && spaceId && spaceMutedUserIds.has(`${spaceId}:${myOriginId}`));
+  const isSpaceDeafened = !!(myOriginId && spaceId && spaceDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
   const isPermissionMuted = !!(myOriginId && spaceId && permissionMutedUserIds.has(`${spaceId}:${myOriginId}`));
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,7 +64,7 @@ export function ChannelSidebar() {
   }, [setFloatingPanelHeight]);
 
   const handleMicToggle = async () => {
-    if (isServerMuted || isServerDeafened || isPermissionMuted) return;
+    if (isSpaceMuted || isSpaceDeafened || isPermissionMuted) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
     broadcastVoiceStatus();
@@ -75,7 +75,7 @@ export function ChannelSidebar() {
   };
 
   const handleDeafenToggle = async () => {
-    if (isServerDeafened) return;
+    if (isSpaceDeafened) return;
     toggleDeafen();
     broadcastVoiceStatus();
     broadcastDeafenViaLiveKit();
@@ -133,8 +133,8 @@ export function ChannelSidebar() {
           user={user}
           isMuted={isMuted}
           isDeafened={isDeafened}
-          isServerMuted={isServerMuted}
-          isServerDeafened={isServerDeafened}
+          isSpaceMuted={isSpaceMuted}
+          isSpaceDeafened={isSpaceDeafened}
           isPermissionMuted={isPermissionMuted}
           onMicToggle={handleMicToggle}
           onDeafenToggle={handleDeafenToggle}
@@ -496,8 +496,8 @@ function UserAreaPanel({
   user,
   isMuted,
   isDeafened,
-  isServerMuted,
-  isServerDeafened,
+  isSpaceMuted,
+  isSpaceDeafened,
   isPermissionMuted,
   onMicToggle,
   onDeafenToggle,
@@ -506,8 +506,8 @@ function UserAreaPanel({
   user: any;
   isMuted: boolean;
   isDeafened: boolean;
-  isServerMuted: boolean;
-  isServerDeafened: boolean;
+  isSpaceMuted: boolean;
+  isSpaceDeafened: boolean;
   isPermissionMuted: boolean;
   onMicToggle: () => void;
   onDeafenToggle: () => void;
@@ -823,15 +823,15 @@ function UserAreaPanel({
           <button
             onClick={onMicToggle}
             className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
-              (isServerMuted || isServerDeafened || isPermissionMuted) ? 'text-accent-amber cursor-not-allowed'
+              (isSpaceMuted || isSpaceDeafened || isPermissionMuted) ? 'text-accent-amber cursor-not-allowed'
                 : isMuted || isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={(isPermissionMuted) ? 'Muted (No Speak Permission)' : (isServerMuted || isServerDeafened) ? 'Server Muted' : isMuted ? 'Unmute' : 'Mute'}
+            title={(isPermissionMuted) ? 'Muted (No Speak Permission)' : (isSpaceMuted || isSpaceDeafened) ? 'Space Muted' : isMuted ? 'Unmute' : 'Mute'}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
               <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-              {(isMuted || isDeafened || isServerMuted || isServerDeafened || isPermissionMuted) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+              {(isMuted || isDeafened || isSpaceMuted || isSpaceDeafened || isPermissionMuted) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
             </svg>
           </button>
           {/* Input chevron */}
@@ -851,14 +851,14 @@ function UserAreaPanel({
           <button
             onClick={onDeafenToggle}
             className={`w-8 h-8 flex items-center justify-center hover:bg-interactive-hover rounded-l-[4px] transition-colors ${
-              isServerDeafened ? 'text-accent-amber cursor-not-allowed'
+              isSpaceDeafened ? 'text-accent-amber cursor-not-allowed'
                 : isDeafened ? 'text-txt-danger' : 'text-txt-tertiary hover:text-txt-primary'
             }`}
-            title={isServerDeafened ? 'Server Deafened' : isDeafened ? 'Undeafen' : 'Deafen'}
+            title={isSpaceDeafened ? 'Space Deafened' : isDeafened ? 'Undeafen' : 'Deafen'}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-              {(isDeafened || isServerDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+              {(isDeafened || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
             </svg>
           </button>
           {/* Output chevron */}

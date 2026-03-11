@@ -31,8 +31,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
   const localIsDeafened = useVoiceStore((s) => s.isDeafened);
   const localIsMuted = useVoiceStore((s) => s.isMuted);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
-  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
   const participantMutes = useVoiceStore((s) => s.participantMutes);
   const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
@@ -147,8 +147,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
             const hasCamera = participant?.isCameraOn ?? wsStatus?.isCameraOn ?? false;
             const isScreenSharing = participant?.isScreenSharing ?? wsStatus?.isScreenSharing ?? false;
             const spaceId = channelToSpaceMap.get(channelId);
-            const isServerMuted = serverMutedUserIds.has(`${spaceId}:${userId}`);
-            const isServerDeafened = serverDeafenedUserIds.has(`${spaceId}:${userId}`);
+            const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
+            const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
             const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
 
             const isDraggable = canMoveMembers && userId !== myUser?.id;
@@ -181,8 +181,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {(isServerMuted || isServerDeafened || isPermissionMuted) && (
-                    <span title={isPermissionMuted ? "Muted (No Speak Permission)" : isServerMuted ? "Server Muted" : "Muted (Server Deafened)"}>
+                  {(isSpaceMuted || isSpaceDeafened || isPermissionMuted) && (
+                    <span title={isPermissionMuted ? "Muted (No Speak Permission)" : isSpaceMuted ? "Space Muted" : "Muted (Space Deafened)"}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
@@ -190,22 +190,22 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
                       </svg>
                     </span>
                   )}
-                  {isServerDeafened && (
-                    <span title="Server Deafened">
+                  {isSpaceDeafened && (
+                    <span title="Space Deafened">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
                         <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                         <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
                     </span>
                   )}
-                  {!isServerMuted && !isServerDeafened && !isPermissionMuted && isMuted && (
+                  {!isSpaceMuted && !isSpaceDeafened && !isPermissionMuted && isMuted && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
                       <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
                       <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
                       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                   )}
-                  {!isServerDeafened && isParticipantDeafened && (
+                  {!isSpaceDeafened && isParticipantDeafened && (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
                       <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
                       <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />

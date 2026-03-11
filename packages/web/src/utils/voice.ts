@@ -15,16 +15,16 @@ import { wsSend } from '../hooks/useWebSocket';
  */
 export function broadcastVoiceStatus(overrideOrigin?: string): void {
   const vs = useVoiceStore.getState();
-  const { isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId, serverMutedUserIds, serverDeafenedUserIds } = vs;
+  const { isMuted, isDeafened, isCameraOn, isScreenSharing, currentVoiceChannelId, spaceMutedUserIds, spaceDeafenedUserIds } = vs;
   if (!currentVoiceChannelId) return;
 
   const origin = overrideOrigin ?? getChannelOrigin(currentVoiceChannelId);
   const myId = getMyUserIdForOrigin(origin);
   const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
-  const serverKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
+  const spaceKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
 
-  const effectiveMuted = isMuted || serverMutedUserIds.has(serverKey);
-  const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(serverKey);
+  const effectiveMuted = isMuted || spaceMutedUserIds.has(spaceKey);
+  const effectiveDeafened = isDeafened || spaceDeafenedUserIds.has(spaceKey);
 
   wsSend({ type: 'voice_status', isMuted: effectiveMuted, isDeafened: effectiveDeafened, isCameraOn, isScreenSharing }, origin);
 }
@@ -35,14 +35,14 @@ export function broadcastVoiceStatus(overrideOrigin?: string): void {
  */
 export function broadcastDeafenViaLiveKit(): void {
   const vs = useVoiceStore.getState();
-  const { isDeafened, currentVoiceChannelId, serverDeafenedUserIds } = vs;
+  const { isDeafened, currentVoiceChannelId, spaceDeafenedUserIds } = vs;
   if (!currentVoiceChannelId) return;
 
   const origin = getChannelOrigin(currentVoiceChannelId);
   const myId = getMyUserIdForOrigin(origin);
   const spaceId = useSpaceStore.getState().channelToSpaceMap.get(currentVoiceChannelId);
-  const serverKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
-  const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(serverKey);
+  const spaceKey = (spaceId && myId) ? `${spaceId}:${myId}` : '';
+  const effectiveDeafened = isDeafened || spaceDeafenedUserIds.has(spaceKey);
 
   import('../hooks/useLiveKit').then(({ getActiveRoom }) => {
     const room = getActiveRoom();

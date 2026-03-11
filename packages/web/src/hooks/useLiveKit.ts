@@ -151,8 +151,8 @@ export function useLiveKit() {
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
-  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
@@ -213,8 +213,8 @@ export function useLiveKit() {
         const localMyId = cvId ? getMyUserIdForOrigin(localOrigin) : undefined;
         const localSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
         const localKey = (localSpaceId && localMyId) ? `${localSpaceId}:${localMyId}` : '';
-        isPartMuted = vs.isMuted || vs.serverMutedUserIds.has(localKey) || vs.permissionMutedUserIds.has(localKey);
-        isPartDeafened = vs.isDeafened || vs.serverDeafenedUserIds.has(localKey);
+        isPartMuted = vs.isMuted || vs.spaceMutedUserIds.has(localKey) || vs.permissionMutedUserIds.has(localKey);
+        isPartDeafened = vs.isDeafened || vs.spaceDeafenedUserIds.has(localKey);
       } else {
         isPartDeafened = userState?.isDeafened ?? useVoiceStore.getState().deafenedUserIds.has(userId);
         if (userState) isPartMuted = userState.isMuted;
@@ -271,8 +271,8 @@ export function useLiveKit() {
     const effMyId = cvId ? getMyUserIdForOrigin(effOrigin) : undefined;
     const effSpaceId = cvId ? useSpaceStore.getState().channelToSpaceMap.get(cvId) : null;
     const effKey = (effSpaceId && effMyId) ? `${effSpaceId}:${effMyId}` : '';
-    const effectiveMuted = isMuted || serverMutedUserIds.has(effKey) || permissionMutedUserIds.has(effKey);
-    const effectiveDeafened = isDeafened || serverDeafenedUserIds.has(effKey);
+    const effectiveMuted = isMuted || spaceMutedUserIds.has(effKey) || permissionMutedUserIds.has(effKey);
+    const effectiveDeafened = isDeafened || spaceDeafenedUserIds.has(effKey);
 
     const syncMic = async () => {
       try {
@@ -338,7 +338,7 @@ export function useLiveKit() {
     return () => {
       unsubscribe();
     };
-  }, [isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
 
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
@@ -403,7 +403,7 @@ export function useLiveKit() {
         const connMyId = cvIdConn ? getMyUserIdForOrigin(connOrigin) : undefined;
         const connSpaceId = cvIdConn ? useSpaceStore.getState().channelToSpaceMap.get(cvIdConn) : null;
         const connKey = (connSpaceId && connMyId) ? `${connSpaceId}:${connMyId}` : '';
-        const effDeaf = vsConn.isDeafened || vsConn.serverDeafenedUserIds.has(connKey);
+        const effDeaf = vsConn.isDeafened || vsConn.spaceDeafenedUserIds.has(connKey);
         if (effDeaf) {
           const encoder = new TextEncoder();
           newRoom.localParticipant.publishData(
@@ -595,7 +595,7 @@ export function useLiveKit() {
 
   useEffect(() => {
     updateParticipants();
-  }, [voiceUserStates, isMuted, isDeafened, serverMutedUserIds, serverDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
+  }, [voiceUserStates, isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, updateParticipants]);
 
   useEffect(() => {
     if (!room) return;

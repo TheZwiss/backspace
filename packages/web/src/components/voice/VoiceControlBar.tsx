@@ -32,10 +32,10 @@ export function VoiceControlBar() {
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
   const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
   const myOriginId = useSpaceStore((s) => currentVoiceChannelId ? getMyUserIdForOrigin(getChannelOrigin(currentVoiceChannelId)) : s.members.find(m => m.userId === myUser?.id)?.userId ?? myUser?.id);
-  const serverMutedUserIds = useVoiceStore((s) => s.serverMutedUserIds);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
-  const isServerMuted = !!(myOriginId && spaceId && serverMutedUserIds.has(`${spaceId}:${myOriginId}`));
-  const isServerDeafened = !!(myOriginId && spaceId && serverDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
+  const isSpaceMuted = !!(myOriginId && spaceId && spaceMutedUserIds.has(`${spaceId}:${myOriginId}`));
+  const isSpaceDeafened = !!(myOriginId && spaceId && spaceDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
   const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const channelPerms = useSpaceStore((s) => currentVoiceChannelId ? s.channelPermissions.get(currentVoiceChannelId) : undefined);
   const isDmCall = !!activeDmCall;
@@ -45,7 +45,7 @@ export function VoiceControlBar() {
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleMute = React.useCallback(async () => {
-    if (isServerMuted || isServerDeafened) return;
+    if (isSpaceMuted || isSpaceDeafened) return;
     const wasDeafened = useVoiceStore.getState().isDeafened;
     toggleMic();
     broadcastVoiceStatus();
@@ -53,14 +53,14 @@ export function VoiceControlBar() {
     if (wasDeafened && !useVoiceStore.getState().isDeafened) {
       broadcastDeafenViaLiveKit();
     }
-  }, [isServerMuted, isServerDeafened, toggleMic]);
+  }, [isSpaceMuted, isSpaceDeafened, toggleMic]);
 
   const handleDeafen = React.useCallback(async () => {
-    if (isServerDeafened) return;
+    if (isSpaceDeafened) return;
     toggleDeafen();
     broadcastVoiceStatus();
     broadcastDeafenViaLiveKit();
-  }, [isServerDeafened, toggleDeafen]);
+  }, [isSpaceDeafened, toggleDeafen]);
 
   const handleCamera = async () => {
     const room = getActiveRoom();
@@ -147,35 +147,35 @@ export function VoiceControlBar() {
         {/* Mute */}
         <button
           onClick={handleMute}
-          className={(isServerMuted || isServerDeafened)
+          className={(isSpaceMuted || isSpaceDeafened)
             ? `${btnBase} bg-accent-amber/20 text-accent-amber cursor-not-allowed`
             : isMuted || isDeafened
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={(isServerMuted || isServerDeafened) ? (isMuted ? 'Server Muted (self-muted)' : 'Server Muted') : isMuted ? 'Unmute (M)' : 'Mute (M)'}
+          title={(isSpaceMuted || isSpaceDeafened) ? (isMuted ? 'Space Muted (self-muted)' : 'Space Muted') : isMuted ? 'Unmute (M)' : 'Mute (M)'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-            {(isMuted || isDeafened || isServerMuted || isServerDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+            {(isMuted || isDeafened || isSpaceMuted || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
           </svg>
         </button>
 
         {/* Deafen */}
         <button
           onClick={handleDeafen}
-          className={isServerDeafened
+          className={isSpaceDeafened
             ? `${btnBase} bg-accent-amber/20 text-accent-amber cursor-not-allowed`
             : isDeafened
               ? `${btnBase} bg-accent-rose/20 text-txt-danger hover:bg-accent-rose/30`
               : btnDefault
           }
-          title={isServerDeafened ? 'Server Deafened' : isDeafened ? 'Undeafen (D)' : 'Deafen (D)'}
+          title={isSpaceDeafened ? 'Space Deafened' : isDeafened ? 'Undeafen (D)' : 'Deafen (D)'}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-            {(isDeafened || isServerDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
+            {(isDeafened || isSpaceDeafened) && <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />}
           </svg>
         </button>
 

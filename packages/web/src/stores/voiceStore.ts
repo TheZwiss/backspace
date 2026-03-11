@@ -93,12 +93,12 @@ interface VoiceState {
   voiceUserStates: Map<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   setVoiceUserStatus: (userId: string, isMuted: boolean, isDeafened: boolean, isCameraOn: boolean, isScreenSharing: boolean) => void;
   clearVoiceUserStatus: (userId: string) => void;
-  // Server mute/deafen state (moderator action)
-  serverMutedUserIds: Set<string>; // Stores "spaceId:userId"
-  serverDeafenedUserIds: Set<string>; // Stores "spaceId:userId"
-  setServerMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
-  setServerDeafenedUser: (spaceId: string, userId: string, deafened: boolean) => void;
-  clearServerVoiceStates: () => void;
+  // Space mute/deafen state (moderator action)
+  spaceMutedUserIds: Set<string>; // Stores "spaceId:userId"
+  spaceDeafenedUserIds: Set<string>; // Stores "spaceId:userId"
+  setSpaceMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
+  setSpaceDeafenedUser: (spaceId: string, userId: string, deafened: boolean) => void;
+  clearSpaceVoiceStates: () => void;
   // Permission mute state (SPEAK permission revoked while in voice)
   permissionMutedUserIds: Set<string>; // Stores "spaceId:userId"
   setPermissionMutedUser: (spaceId: string, userId: string, muted: boolean) => void;
@@ -332,25 +332,25 @@ export const useVoiceStore = create<VoiceState>()(
         });
       },
 
-      serverMutedUserIds: new Set(),
-      serverDeafenedUserIds: new Set(),
-      setServerMutedUser: (spaceId, userId, muted) => {
+      spaceMutedUserIds: new Set(),
+      spaceDeafenedUserIds: new Set(),
+      setSpaceMutedUser: (spaceId, userId, muted) => {
         set((state) => {
-          const newSet = new Set(state.serverMutedUserIds);
+          const newSet = new Set(state.spaceMutedUserIds);
           const key = `${spaceId}:${userId}`;
           if (muted) newSet.add(key); else newSet.delete(key);
-          return { serverMutedUserIds: newSet };
+          return { spaceMutedUserIds: newSet };
         });
       },
-      setServerDeafenedUser: (spaceId, userId, deafened) => {
+      setSpaceDeafenedUser: (spaceId, userId, deafened) => {
         set((state) => {
-          const newSet = new Set(state.serverDeafenedUserIds);
+          const newSet = new Set(state.spaceDeafenedUserIds);
           const key = `${spaceId}:${userId}`;
           if (deafened) newSet.add(key); else newSet.delete(key);
-          return { serverDeafenedUserIds: newSet };
+          return { spaceDeafenedUserIds: newSet };
         });
       },
-      clearServerVoiceStates: () => set({ serverMutedUserIds: new Set(), serverDeafenedUserIds: new Set(), permissionMutedUserIds: new Set() }),
+      clearSpaceVoiceStates: () => set({ spaceMutedUserIds: new Set(), spaceDeafenedUserIds: new Set(), permissionMutedUserIds: new Set() }),
 
       permissionMutedUserIds: new Set(),
       setPermissionMutedUser: (spaceId, userId, muted) => {
@@ -392,9 +392,9 @@ export const useVoiceStore = create<VoiceState>()(
         streamMutes: new Map(),
         watchingStreams: new Set(),
         unwatchedCameras: new Set(),
-        // Server-enforced restrictions
-        serverMutedUserIds: new Set(),
-        serverDeafenedUserIds: new Set(),
+        // Space-enforced restrictions
+        spaceMutedUserIds: new Set(),
+        spaceDeafenedUserIds: new Set(),
         permissionMutedUserIds: new Set(),
       }),
 
@@ -502,8 +502,8 @@ export const useVoiceStore = create<VoiceState>()(
         streamMutes: new Map(),
         watchingStreams: new Set(),
         unwatchedCameras: new Set(),
-        serverMutedUserIds: new Set(),
-        serverDeafenedUserIds: new Set(),
+        spaceMutedUserIds: new Set(),
+        spaceDeafenedUserIds: new Set(),
         permissionMutedUserIds: new Set(),
       }),
     }),
@@ -566,8 +566,8 @@ export const useVoiceStore = create<VoiceState>()(
       merge: (persistedState: any, currentState: VoiceState) => {
         const merged = { ...currentState, ...persistedState };
         // Reconstruct non-persisted Sets/Maps to their defaults
-        merged.serverMutedUserIds = currentState.serverMutedUserIds;
-        merged.serverDeafenedUserIds = currentState.serverDeafenedUserIds;
+        merged.spaceMutedUserIds = currentState.spaceMutedUserIds;
+        merged.spaceDeafenedUserIds = currentState.spaceDeafenedUserIds;
         merged.permissionMutedUserIds = currentState.permissionMutedUserIds;
         merged.voiceUsers = currentState.voiceUsers;
         merged.participants = currentState.participants;

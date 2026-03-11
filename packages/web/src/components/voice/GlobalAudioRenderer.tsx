@@ -68,7 +68,7 @@ function AudioTrackElement({
 export function GlobalAudioRenderer() {
   const participants = useVoiceStore((s) => s.participants);
   const isDeafenedIntent = useVoiceStore((s) => s.isDeafened);
-  const serverDeafenedUserIds = useVoiceStore((s) => s.serverDeafenedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const outputVolume = useVoiceStore((s) => s.outputVolume);
   const participantVolumes = useVoiceStore((s) => s.participantVolumes);
@@ -83,8 +83,8 @@ export function GlobalAudioRenderer() {
   // Compute effective deafened: user intent || server enforcement
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
   const myOriginId = currentVoiceChannelId ? getMyUserIdForOrigin(getChannelOrigin(currentVoiceChannelId)) : undefined;
-  const serverKey = (spaceId && myOriginId) ? `${spaceId}:${myOriginId}` : '';
-  const isDeafened = isDeafenedIntent || serverDeafenedUserIds.has(serverKey);
+  const spaceKey = (spaceId && myOriginId) ? `${spaceId}:${myOriginId}` : '';
+  const isDeafened = isDeafenedIntent || spaceDeafenedUserIds.has(spaceKey);
 
   // Determine if someone is currently speaking (for stream attenuation)
   const someoneIsSpeaking = participants.some((p) => !p.isLocal && speakingParticipantIds.has(p.identity));

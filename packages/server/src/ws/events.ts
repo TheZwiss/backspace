@@ -180,11 +180,11 @@ export function handleClientEvent(
     case 'voice_status':
       handleVoiceStatus(event, userId);
       break;
-    case 'voice_server_mute':
-      handleVoiceServerMute(event, userId);
+    case 'voice_space_mute':
+      handleVoiceSpaceMute(event, userId);
       break;
-    case 'voice_server_deafen':
-      handleVoiceServerDeafen(event, userId);
+    case 'voice_space_deafen':
+      handleVoiceSpaceDeafen(event, userId);
       break;
     case 'voice_move':
       handleVoiceMove(event, userId);
@@ -470,18 +470,18 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
       .all();
     for (const r of restrictions) {
       if (r.restrictionType === 'mute') {
-        connectionManager.setServerMuted(spaceId, userId, true);
+        connectionManager.setSpaceMuted(spaceId, userId, true);
         connectionManager.sendToUser(userId, {
-          type: 'voice_server_muted',
+          type: 'voice_space_muted',
           userId,
           channelId,
           spaceId,
           muted: true,
         });
       } else if (r.restrictionType === 'deafen') {
-        connectionManager.setServerDeafened(spaceId, userId, true);
+        connectionManager.setSpaceDeafened(spaceId, userId, true);
         connectionManager.sendToUser(userId, {
-          type: 'voice_server_deafened',
+          type: 'voice_space_deafened',
           userId,
           channelId,
           spaceId,
@@ -569,18 +569,18 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
 
   for (const r of restrictions) {
     if (r.restrictionType === 'mute') {
-      connectionManager.setServerMuted(spaceId, userId, true);
+      connectionManager.setSpaceMuted(spaceId, userId, true);
       connectionManager.sendToSpace(spaceId, {
-        type: 'voice_server_muted',
+        type: 'voice_space_muted',
         userId,
         channelId,
         spaceId,
         muted: true,
       });
     } else if (r.restrictionType === 'deafen') {
-      connectionManager.setServerDeafened(spaceId, userId, true);
+      connectionManager.setSpaceDeafened(spaceId, userId, true);
       connectionManager.sendToSpace(spaceId, {
-        type: 'voice_server_deafened',
+        type: 'voice_space_deafened',
         userId,
         channelId,
         spaceId,
@@ -629,8 +629,8 @@ function handleVoiceStatus(event: Record<string, unknown>, userId: string): void
   let isPermMuted = false;
   if (userRoom.room.roomType === 'space') {
     const meta = userRoom.room.metadata as SpaceRoomMeta;
-    isSpaceMuted = connectionManager.isServerMuted(meta.spaceId, userId);
-    isSpaceDeafened = connectionManager.isServerDeafened(meta.spaceId, userId);
+    isSpaceMuted = connectionManager.isSpaceMuted(meta.spaceId, userId);
+    isSpaceDeafened = connectionManager.isSpaceDeafened(meta.spaceId, userId);
     isPermMuted = connectionManager.isPermissionMuted(meta.spaceId, userId);
   }
 
@@ -1198,7 +1198,7 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
 
 // ─── Voice Moderation Handlers ──────────────────────────────────────────────
 
-function handleVoiceServerMute(event: Record<string, unknown>, userId: string): void {
+function handleVoiceSpaceMute(event: Record<string, unknown>, userId: string): void {
   const targetUserId = event.userId as string;
   const muted = event.muted === true;
 
@@ -1220,13 +1220,13 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
     return;
   }
 
-  // Cannot server-mute yourself
+  // Cannot space-mute yourself
   if (targetUserId === userId) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot server-mute yourself' });
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot space-mute yourself' });
     return;
   }
 
-  connectionManager.setServerMuted(meta.spaceId, targetUserId, muted);
+  connectionManager.setSpaceMuted(meta.spaceId, targetUserId, muted);
 
   // Persist to DB
   const db = getDb();
@@ -1250,7 +1250,7 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
 
   // Broadcast to all space members
   connectionManager.sendToSpace(meta.spaceId, {
-    type: 'voice_server_muted',
+    type: 'voice_space_muted',
     userId: targetUserId,
     channelId: targetRoom.roomId,
     spaceId: meta.spaceId,
@@ -1258,7 +1258,7 @@ function handleVoiceServerMute(event: Record<string, unknown>, userId: string): 
   });
 }
 
-function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string): void {
+function handleVoiceSpaceDeafen(event: Record<string, unknown>, userId: string): void {
   const targetUserId = event.userId as string;
   const deafened = event.deafened === true;
 
@@ -1280,11 +1280,11 @@ function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string)
   }
 
   if (targetUserId === userId) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot server-deafen yourself' });
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Cannot space-deafen yourself' });
     return;
   }
 
-  connectionManager.setServerDeafened(meta.spaceId, targetUserId, deafened);
+  connectionManager.setSpaceDeafened(meta.spaceId, targetUserId, deafened);
 
   // Persist to DB
   const db = getDb();
@@ -1307,7 +1307,7 @@ function handleVoiceServerDeafen(event: Record<string, unknown>, userId: string)
   }
 
   connectionManager.sendToSpace(meta.spaceId, {
-    type: 'voice_server_deafened',
+    type: 'voice_space_deafened',
     userId: targetUserId,
     channelId: targetRoom.roomId,
     spaceId: meta.spaceId,

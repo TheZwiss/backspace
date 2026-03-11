@@ -82,9 +82,9 @@ class ConnectionManager {
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
-  // Server-muted/deafened users (moderator action)
-  private serverMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
-  private serverDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // Space-muted/deafened users (moderator action)
+  private spaceMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // Permission-muted users (SPEAK permission revoked while in voice)
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
 
@@ -317,7 +317,7 @@ class ConnectionManager {
     
     if (room.roomType === 'space') {
       const meta = room.metadata as SpaceRoomMeta;
-      this.clearServerVoiceState(meta.spaceId, userId);
+      this.clearSpaceVoiceState(meta.spaceId, userId);
     }
 
     // Auto-cleanup empty space rooms (they're lazy-created)
@@ -400,29 +400,29 @@ class ConnectionManager {
     this.voiceUserStates.delete(userId);
   }
 
-  setServerMuted(spaceId: string, userId: string, muted: boolean): void {
+  setSpaceMuted(spaceId: string, userId: string, muted: boolean): void {
     const key = `${spaceId}:${userId}`;
-    if (muted) this.serverMutedUsers.add(key);
-    else this.serverMutedUsers.delete(key);
+    if (muted) this.spaceMutedUsers.add(key);
+    else this.spaceMutedUsers.delete(key);
   }
 
-  isServerMuted(spaceId: string, userId: string): boolean {
-    return this.serverMutedUsers.has(`${spaceId}:${userId}`);
+  isSpaceMuted(spaceId: string, userId: string): boolean {
+    return this.spaceMutedUsers.has(`${spaceId}:${userId}`);
   }
 
-  setServerDeafened(spaceId: string, userId: string, deafened: boolean): void {
+  setSpaceDeafened(spaceId: string, userId: string, deafened: boolean): void {
     const key = `${spaceId}:${userId}`;
-    if (deafened) this.serverDeafenedUsers.add(key);
-    else this.serverDeafenedUsers.delete(key);
+    if (deafened) this.spaceDeafenedUsers.add(key);
+    else this.spaceDeafenedUsers.delete(key);
   }
 
-  isServerDeafened(spaceId: string, userId: string): boolean {
-    return this.serverDeafenedUsers.has(`${spaceId}:${userId}`);
+  isSpaceDeafened(spaceId: string, userId: string): boolean {
+    return this.spaceDeafenedUsers.has(`${spaceId}:${userId}`);
   }
 
-  clearServerVoiceState(spaceId: string, userId: string): void {
-    this.serverMutedUsers.delete(`${spaceId}:${userId}`);
-    this.serverDeafenedUsers.delete(`${spaceId}:${userId}`);
+  clearSpaceVoiceState(spaceId: string, userId: string): void {
+    this.spaceMutedUsers.delete(`${spaceId}:${userId}`);
+    this.spaceDeafenedUsers.delete(`${spaceId}:${userId}`);
     this.permissionMutedUsers.delete(`${spaceId}:${userId}`);
   }
 
@@ -653,7 +653,7 @@ function buildReadyPayload(userId: string): {
   folders: SpaceFolder[];
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
-  serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted: boolean }>;
+  spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
 } {
@@ -966,9 +966,9 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  // Build server mute/deafen states from DB (authoritative source for all spaces the user belongs to)
+  // Build space mute/deafen states from DB (authoritative source for all spaces the user belongs to)
   // Also includes ephemeral permission-mute state from in-memory Set
-  const serverVoiceStates: Record<string, { serverMuted: boolean; serverDeafened: boolean; permissionMuted: boolean }> = {};
+  const spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> = {};
   if (spaceIds.length > 0) {
     const allRestrictions = db.select()
       .from(schema.voiceRestrictions)
@@ -976,10 +976,10 @@ function buildReadyPayload(userId: string): {
       .all();
     for (const r of allRestrictions) {
       const key = `${r.spaceId}:${r.userId}`;
-      const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false, permissionMuted: false };
-      if (r.restrictionType === 'mute') existing.serverMuted = true;
-      if (r.restrictionType === 'deafen') existing.serverDeafened = true;
-      serverVoiceStates[key] = existing;
+      const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+      if (r.restrictionType === 'mute') existing.spaceMuted = true;
+      if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
+      spaceVoiceStates[key] = existing;
     }
     // Include ephemeral permission-mute state for all voice participants in user's spaces
     for (const [roomId, room] of connectionManager.getAllRooms()) {
@@ -989,9 +989,9 @@ function buildReadyPayload(userId: string): {
       for (const participantId of room.participants) {
         if (connectionManager.isPermissionMuted(meta.spaceId, participantId)) {
           const key = `${meta.spaceId}:${participantId}`;
-          const existing = serverVoiceStates[key] ?? { serverMuted: false, serverDeafened: false, permissionMuted: false };
+          const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
           existing.permissionMuted = true;
-          serverVoiceStates[key] = existing;
+          spaceVoiceStates[key] = existing;
         }
       }
     }
@@ -1008,7 +1008,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, serverVoiceStates, readStates, activeCalls };
+  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

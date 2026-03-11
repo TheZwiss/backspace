@@ -178,9 +178,9 @@ export class SpeakingDetector {
         if (spaceId) {
           const myOriginId = getMyUserIdForOrigin(getChannelOrigin(channelId));
           if (myOriginId) {
-            const serverKey = `${spaceId}:${myOriginId}`;
-            effectiveMuted = effectiveMuted || store.serverMutedUserIds.has(serverKey);
-            effectiveDeafened = effectiveDeafened || store.serverDeafenedUserIds.has(serverKey);
+            const spaceKey = `${spaceId}:${myOriginId}`;
+            effectiveMuted = effectiveMuted || store.spaceMutedUserIds.has(spaceKey);
+            effectiveDeafened = effectiveDeafened || store.spaceDeafenedUserIds.has(spaceKey);
           }
         }
       }
