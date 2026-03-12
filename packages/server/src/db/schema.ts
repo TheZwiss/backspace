@@ -42,6 +42,14 @@ export const spaceMembers = sqliteTable('space_members', {
   pk: primaryKey({ columns: [table.spaceId, table.userId] }),
 }));
 
+export const channelCategories = sqliteTable('channel_categories', {
+  id: text('id').primaryKey(),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').default(0),
+  createdAt: integer('created_at').notNull(),
+});
+
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey(),
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
@@ -49,6 +57,7 @@ export const channels = sqliteTable('channels', {
   type: text('type').notNull(),
   topic: text('topic'),
   position: integer('position').default(0),
+  categoryId: text('category_id'),
   createdAt: integer('created_at').notNull(),
 });
 

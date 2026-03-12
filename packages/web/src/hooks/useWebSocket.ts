@@ -651,6 +651,55 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    // ─── Category events (all origins) ────────────────────────────────────
+
+    case 'category_created': {
+      const { currentSpaceId: catSpaceId, categories: curCategories, setCategories: setCats, categoryOriginMap: catOriginMap } = useSpaceStore.getState();
+      catOriginMap.set(event.category.id, origin);
+      if (event.spaceId === catSpaceId) {
+        if (!curCategories.some(c => c.id === event.category.id)) {
+          setCats([...curCategories, event.category].sort((a, b) => a.position - b.position));
+        }
+      }
+      break;
+    }
+
+    case 'category_updated': {
+      const { currentSpaceId: catSpaceId2, categories: curCategories2, setCategories: setCats2 } = useSpaceStore.getState();
+      if (event.spaceId === catSpaceId2) {
+        setCats2(curCategories2.map(c => c.id === event.category.id ? event.category : c).sort((a, b) => a.position - b.position));
+      }
+      break;
+    }
+
+    case 'category_deleted': {
+      const { currentSpaceId: catSpaceId3, categories: curCategories3, setCategories: setCats3, channels: curChsForCat, setChannels: setChsForCat, categoryOriginMap: catOriginMap3 } = useSpaceStore.getState();
+      catOriginMap3.delete(event.categoryId);
+      if (event.spaceId === catSpaceId3) {
+        setCats3(curCategories3.filter(c => c.id !== event.categoryId));
+        // Null out categoryId on affected channels (server already did this, but sync local state)
+        setChsForCat(curChsForCat.map(ch => ch.categoryId === event.categoryId ? { ...ch, categoryId: null } : ch));
+      }
+      break;
+    }
+
+    case 'channel_layout_updated': {
+      const { currentSpaceId: layoutSpaceId, setChannels: setLayoutChannels, setCategories: setLayoutCategories, channelPermissions: layoutChPerms, channelToSpaceMap: layoutCtsMap, channelOriginMap: layoutCoMap } = useSpaceStore.getState();
+      if (event.spaceId === layoutSpaceId) {
+        setLayoutChannels(event.channels.sort((a, b) => a.position - b.position));
+        setLayoutCategories(event.categories.sort((a, b) => a.position - b.position));
+        // Update permission maps from the new layout
+        for (const ch of event.channels) {
+          layoutCtsMap.set(ch.id, event.spaceId);
+          layoutCoMap.set(ch.id, origin);
+          if (ch.myPermissions) {
+            layoutChPerms.set(ch.id, ch.myPermissions);
+          }
+        }
+      }
+      break;
+    }
+
     // ─── Join request events (home-only) ────────────────────────────────
 
     case 'join_request_received': {

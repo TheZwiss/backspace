@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Space, Channel, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
+import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
@@ -26,6 +26,7 @@ interface SpaceState {
   spaces: TaggedSpace[];
   currentSpaceId: string | null;
   channels: Channel[];
+  categories: ChannelCategory[];
   members: MemberWithUser[];
   roles: Role[];
   folders: SpaceFolder[];
@@ -35,9 +36,11 @@ interface SpaceState {
   spacePermissions: Map<string, string>; // spaceId → myPermissions decimal string
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
+  categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
+  setCategories: (categories: ChannelCategory[]) => void;
   setMembers: (members: MemberWithUser[]) => void;
   setRoles: (roles: Role[]) => void;
   setDmChannels: (channels: DmChannel[]) => void;
@@ -57,8 +60,12 @@ interface SpaceState {
   leaveSpace: (spaceId: string) => Promise<void>;
   joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
   generateInvite: (spaceId: string) => Promise<string>;
-  createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string) => Promise<Channel>;
+  createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => Promise<Channel>;
   deleteChannel: (channelId: string) => Promise<void>;
+  createCategory: (spaceId: string, name: string) => Promise<ChannelCategory>;
+  updateCategory: (categoryId: string, data: { name?: string; position?: number }) => Promise<void>;
+  deleteCategory: (categoryId: string) => Promise<void>;
+  updateChannelLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => Promise<void>;
   addSpace: (space: Space) => void;
   removeSpace: (spaceId: string) => void;
   updateMemberPresence: (userId: string, status: string) => void;
@@ -76,6 +83,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   spaces: [],
   currentSpaceId: null,
   channels: [],
+  categories: [],
   members: [],
   roles: [],
   folders: [],
@@ -85,10 +93,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   spacePermissions: new Map(),
   channelPermissions: new Map(),
   channelOriginMap: new Map(),
+  categoryOriginMap: new Map(),
 
   setSpaces: (spaces) => set({ spaces }),
   setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),
   setChannels: (channels) => set({ channels }),
+  setCategories: (categories) => set({ categories }),
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
   setDmChannels: (dmChannels) => set({ dmChannels }),
@@ -185,6 +195,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       set({
         currentSpaceId: spaceId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
+        categories: (detail.categories || []).sort((a, b) => a.position - b.position),
         members: detail.members,
         roles: detail.roles.sort((a, b) => b.position - a.position),
         spacePermissions,
@@ -294,8 +305,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     return result.inviteCode;
   },
 
-  createChannel: async (spaceId: string, name: string, type: 'text' | 'voice', topic?: string) => {
-    const channel = await api.channels.create(spaceId, { name, type, topic });
+  createChannel: async (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => {
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    const channel = await client.channels.create(spaceId, { name, type, topic, categoryId });
     set((state) => {
       if (state.channels.some(c => c.id === channel.id)) return state;
       return { channels: [...state.channels, channel].sort((a, b) => a.position - b.position) };
@@ -308,6 +322,47 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set((state) => ({
       channels: state.channels.filter(c => c.id !== channelId),
     }));
+  },
+
+  createCategory: async (spaceId: string, name: string) => {
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    const category = await client.categories.create(spaceId, name);
+    // Will be added via WS event, but add optimistically
+    set((state) => {
+      if (state.categories.some(c => c.id === category.id)) return state;
+      return { categories: [...state.categories, category].sort((a, b) => a.position - b.position) };
+    });
+    return category;
+  },
+
+  updateCategory: async (categoryId: string, data: { name?: string; position?: number }) => {
+    const cat = get().categories.find(c => c.id === categoryId);
+    if (!cat) return;
+    const space = get().spaces.find(s => s.id === cat.spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    await client.categories.update(categoryId, data);
+    // WS event will update the store
+  },
+
+  deleteCategory: async (categoryId: string) => {
+    const cat = get().categories.find(c => c.id === categoryId);
+    if (!cat) return;
+    const space = get().spaces.find(s => s.id === cat.spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    await client.categories.delete(categoryId);
+    // WS events will update the store
+  },
+
+  updateChannelLayout: async (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => {
+    const space = get().spaces.find(s => s.id === spaceId);
+    const origin = space?._instanceOrigin ?? '';
+    const client = getApiForOrigin(origin);
+    await client.channels.updateLayout(spaceId, data);
+    // WS event will broadcast the updated layout
   },
 
   addSpace: (space: Space) => {
@@ -386,6 +441,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const spacePermissions = new Map(get().spacePermissions);
     const channelPermissions = new Map(get().channelPermissions);
     const channelOriginMap = new Map(get().channelOriginMap);
+    const categoryOriginMap = new Map(get().categoryOriginMap);
 
     // If home, clear home-origin entries first to avoid stale data
     if (isHome) {
@@ -435,6 +491,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           channelPermissions.set(ch.id, ch.myPermissions);
         }
       }
+      if (srv.categories) {
+        for (const cat of srv.categories) {
+          categoryOriginMap.set(cat.id, origin);
+        }
+      }
     }
 
     // DM channels: process from any origin, normalize remote assets
@@ -467,6 +528,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       spacePermissions,
       channelPermissions,
       channelOriginMap,
+      categoryOriginMap,
     };
 
     // Only set folders from home origin

@@ -6,6 +6,7 @@ import type {
   Space,
   SpaceWithChannelsAndMembers,
   Channel,
+  ChannelCategory,
   MessageWithUser,
   MemberWithUser,
   Attachment,
@@ -92,6 +93,13 @@ export class BackspaceApiClient {
     getOverrides: (channelId: string) => Promise<{ channelId: string; targetType: string; targetId: string; allow: string; deny: string }[]>;
     putOverride: (channelId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<{ success: boolean }>;
     deleteOverride: (channelId: string, targetType: string, targetId: string) => Promise<{ success: boolean }>;
+    updateLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) => Promise<{ success: boolean }>;
+  };
+
+  readonly categories: {
+    create: (spaceId: string, name: string) => Promise<ChannelCategory>;
+    update: (id: string, data: { name?: string; position?: number }) => Promise<ChannelCategory>;
+    delete: (id: string) => Promise<{ success: boolean }>;
   };
 
   readonly messages: {
@@ -313,6 +321,17 @@ export class BackspaceApiClient {
         request<{ success: boolean }>('PUT', `/channels/${channelId}/overrides`, data),
       deleteOverride: (channelId: string, targetType: string, targetId: string) =>
         request<{ success: boolean }>('DELETE', `/channels/${channelId}/overrides/${targetType}/${targetId}`),
+      updateLayout: (spaceId: string, data: { channels: Array<{ id: string; position: number; categoryId: string | null }>; categories: Array<{ id: string; position: number }> }) =>
+        request<{ success: boolean }>('PATCH', `/spaces/${spaceId}/channel-layout`, data),
+    };
+
+    this.categories = {
+      create: (spaceId: string, name: string) =>
+        request<ChannelCategory>('POST', `/spaces/${spaceId}/categories`, { name }),
+      update: (id: string, data: { name?: string; position?: number }) =>
+        request<ChannelCategory>('PATCH', `/categories/${id}`, data),
+      delete: (id: string) =>
+        request<{ success: boolean }>('DELETE', `/categories/${id}`),
     };
 
     this.messages = {

@@ -111,6 +111,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'avatar_color', type: 'TEXT' },
       ]
+    },
+    {
+      name: 'channels',
+      columns: [
+        { name: 'category_id', type: 'TEXT' },
+      ]
     }
   ];
 
@@ -165,6 +171,17 @@ export function runMigrations(db: Database.Database): void {
       decided_by TEXT REFERENCES users(id),
       created_at INTEGER NOT NULL,
       decided_at INTEGER
+    );
+  `);
+
+  // Ensure channel_categories table exists (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_categories (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      position INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL
     );
   `);
 

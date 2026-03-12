@@ -14,6 +14,7 @@ import type {
   UpdateMemberRequest,
   Space,
   Channel,
+  ChannelCategory,
   MemberWithUser,
   SpaceWithChannelsAndMembers,
   Role,
@@ -45,6 +46,7 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
     type: row.type as Channel['type'],
     topic: row.topic,
     position: row.position ?? 0,
+    categoryId: row.categoryId ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -239,6 +241,19 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       })
       .filter((m): m is MemberWithUser => m !== null);
 
+    // Fetch categories for this space
+    const categoryRows = db.select()
+      .from(schema.channelCategories)
+      .where(eq(schema.channelCategories.spaceId, id))
+      .all();
+    const categories: ChannelCategory[] = categoryRows.map(c => ({
+      id: c.id,
+      spaceId: c.spaceId,
+      name: c.name,
+      position: c.position ?? 0,
+      createdAt: c.createdAt,
+    }));
+
     // Compute space-level permissions for the requesting user
     const spacePerms = computePermissions(request.userId, id);
 
@@ -259,6 +274,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const result: SpaceWithChannelsAndMembers = {
       ...rowToSpace(server),
       channels: visibleChannels,
+      categories,
       members,
       roles: roles.map(r => ({
         id: r.id,

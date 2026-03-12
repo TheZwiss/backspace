@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import type { Channel } from '@backspace/shared';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -96,9 +97,213 @@ export function ChannelSidebar() {
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const canManageChannels = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_CHANNELS);
   const canCreateInvite = hasPermissionBit(mySpacePerms, PermissionBits.CREATE_INVITE);
+  const categories = useSpaceStore((s) => s.categories);
 
-  const textChannels = channels.filter(c => c.type === 'text');
-  const voiceChannels = channels.filter(c => c.type === 'voice');
+  // Drag state for channel/category reordering
+  const [channelDragState, setChannelDragState] = useState<{ dragType: 'channel' | 'category'; dragId: string } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after'; type: 'channel' | 'category' } | null>(null);
+
+  // Collapse state — persisted in localStorage
+  const collapseKey = `backspace:collapsed-categories:${currentSpaceId}`;
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(collapseKey);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+  const toggleCollapse = useCallback((categoryId: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) next.delete(categoryId);
+      else next.add(categoryId);
+      try { localStorage.setItem(collapseKey, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, [collapseKey]);
+
+  // Group channels by category
+  const sortedCategories = useMemo(() =>
+    [...categories].sort((a, b) => a.position - b.position), [categories]);
+  const uncategorizedChannels = useMemo(() =>
+    channels.filter(c => !c.categoryId).sort((a, b) => a.position - b.position), [channels]);
+  const channelsByCategory = useMemo(() => {
+    const map = new Map<string, typeof channels>();
+    for (const ch of channels) {
+      if (!ch.categoryId) continue;
+      let arr = map.get(ch.categoryId);
+      if (!arr) { arr = []; map.set(ch.categoryId, arr); }
+      arr.push(ch);
+    }
+    for (const [key, arr] of map) {
+      map.set(key, arr.sort((a, b) => a.position - b.position));
+    }
+    return map;
+  }, [channels]);
+
+  // Check if a collapsed category has unread channels
+  const categoryHasUnread = useCallback((categoryId: string) => {
+    const chs = channelsByCategory.get(categoryId) ?? [];
+    return chs.some(ch => unreadChannels.has(ch.id));
+  }, [channelsByCategory, unreadChannels]);
+
+  // DnD handlers
+  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
+    if (!canManageChannels) return;
+    e.dataTransfer.setData('application/x-channel-id', channelId);
+    e.dataTransfer.effectAllowed = 'move';
+    setChannelDragState({ dragType: 'channel', dragId: channelId });
+  }, [canManageChannels]);
+
+  const handleCategoryDragStart = useCallback((e: React.DragEvent, categoryId: string) => {
+    if (!canManageChannels) return;
+    e.dataTransfer.setData('application/x-category-id', categoryId);
+    e.dataTransfer.effectAllowed = 'move';
+    setChannelDragState({ dragType: 'category', dragId: categoryId });
+  }, [canManageChannels]);
+
+  const handleDragEnd = useCallback(() => {
+    setChannelDragState(null);
+    setDropIndicator(null);
+  }, []);
+
+  const handleChannelDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'channel' | 'category') => {
+    if (!channelDragState) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const position = e.clientY < midY ? 'before' : 'after';
+    setDropIndicator({ targetId, position, type });
+  }, [channelDragState]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (!channelDragState || !currentSpaceId || !dropIndicator) {
+      setChannelDragState(null);
+      setDropIndicator(null);
+      return;
+    }
+
+    const dragChannelId = e.dataTransfer.getData('application/x-channel-id');
+    const dragCategoryId = e.dataTransfer.getData('application/x-category-id');
+
+    if (dragChannelId && dropIndicator) {
+      // Channel drag — compute new layout
+      const allChannelsCopy = channels.map(ch => ({
+        id: ch.id,
+        position: ch.position,
+        categoryId: ch.categoryId,
+      }));
+
+      if (dropIndicator.type === 'channel') {
+        // Dropping on a channel — take its categoryId and insert near it
+        const targetCh = channels.find(c => c.id === dropIndicator.targetId);
+        if (targetCh) {
+          const dragCh = allChannelsCopy.find(c => c.id === dragChannelId);
+          if (dragCh) {
+            dragCh.categoryId = targetCh.categoryId;
+          }
+        }
+      } else if (dropIndicator.type === 'category') {
+        // Dropping on a category header — move channel into that category
+        const dragCh = allChannelsCopy.find(c => c.id === dragChannelId);
+        if (dragCh) {
+          dragCh.categoryId = dropIndicator.targetId;
+        }
+      }
+
+      // Recalculate positions: group by category and assign sequential positions
+      const grouped = new Map<string | null, typeof allChannelsCopy>();
+      for (const ch of allChannelsCopy) {
+        const key = ch.categoryId;
+        let arr = grouped.get(key);
+        if (!arr) { arr = []; grouped.set(key, arr); }
+        arr.push(ch);
+      }
+
+      // Within each group, move dragged channel to correct position
+      for (const [, arr] of grouped) {
+        arr.sort((a, b) => a.position - b.position);
+        const dragIdx = arr.findIndex(c => c.id === dragChannelId);
+        if (dragIdx === -1) continue;
+        const dragItem = arr[dragIdx]!;
+        arr.splice(dragIdx, 1);
+
+        // Find target position
+        if (dropIndicator.type === 'channel') {
+          const targetIdx = arr.findIndex(c => c.id === dropIndicator.targetId);
+          if (targetIdx !== -1) {
+            const insertIdx = dropIndicator.position === 'before' ? targetIdx : targetIdx + 1;
+            arr.splice(insertIdx, 0, dragItem);
+          } else {
+            arr.push(dragItem);
+          }
+        } else {
+          // Dropped on category header — add at start
+          arr.unshift(dragItem);
+        }
+        // Reassign positions
+        arr.forEach((ch, i) => { ch.position = i; });
+      }
+
+      const channelUpdates = allChannelsCopy.map(ch => ({
+        id: ch.id,
+        position: ch.position,
+        categoryId: ch.categoryId,
+      }));
+      const categoryUpdates = sortedCategories.map(c => ({
+        id: c.id,
+        position: c.position,
+      }));
+
+      // Optimistic update
+      useSpaceStore.getState().setChannels(
+        channels.map(ch => {
+          const update = channelUpdates.find(u => u.id === ch.id);
+          if (update) return { ...ch, position: update.position, categoryId: update.categoryId };
+          return ch;
+        }).sort((a, b) => a.position - b.position)
+      );
+
+      useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: categoryUpdates });
+    } else if (dragCategoryId && dropIndicator?.type === 'category') {
+      // Category drag — reorder categories
+      const catsCopy = sortedCategories.map(c => ({ id: c.id, position: c.position }));
+      const dragIdx = catsCopy.findIndex(c => c.id === dragCategoryId);
+      if (dragIdx !== -1) {
+        const dragItem = catsCopy[dragIdx]!;
+        catsCopy.splice(dragIdx, 1);
+        const targetIdx = catsCopy.findIndex(c => c.id === dropIndicator.targetId);
+        if (targetIdx !== -1) {
+          const insertIdx = dropIndicator.position === 'before' ? targetIdx : targetIdx + 1;
+          catsCopy.splice(insertIdx, 0, dragItem);
+        } else {
+          catsCopy.push(dragItem);
+        }
+        catsCopy.forEach((c, i) => { c.position = i; });
+
+        const channelUpdates = channels.map(ch => ({
+          id: ch.id,
+          position: ch.position,
+          categoryId: ch.categoryId,
+        }));
+
+        // Optimistic update
+        useSpaceStore.getState().setCategories(
+          categories.map(cat => {
+            const update = catsCopy.find(u => u.id === cat.id);
+            if (update) return { ...cat, position: update.position };
+            return cat;
+          }).sort((a, b) => a.position - b.position)
+        );
+
+        useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: catsCopy });
+      }
+    }
+
+    setChannelDragState(null);
+    setDropIndicator(null);
+  }, [channelDragState, dropIndicator, channels, sortedCategories, categories, currentSpaceId]);
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);
@@ -362,125 +567,174 @@ export function ChannelSidebar() {
         )}
       </div>
 
-      {/* Channels */}
-      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[21px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }}>
-        {/* Text Channels */}
-        <div>
-          <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
-            <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-70">
-                <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
-              </svg>
-              <span className="text-[11px] font-medium uppercase tracking-[0.06em]" style={{ color: '#484854' }}>Text Channels</span>
-            </div>
-            {canManageChannels && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openModal('createChannel');
-                }}
-                className="text-txt-tertiary hover:text-txt-primary transition-colors"
-                title="Create Channel"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <div className="space-y-[2px]">
-            {textChannels.map((channel) => {
-              const isActive = currentChannelId === channel.id;
-              const isUnread = unreadChannels.has(channel.id) && !isActive;
-              return (
+      {/* Channels — dynamic category layout */}
+      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+        {/* Uncategorized channels */}
+        {uncategorizedChannels.length > 0 && (
+          <div className="mb-[19px]">
+            {canManageChannels && sortedCategories.length === 0 && (
+              <div className="flex items-center justify-end px-1 mb-1">
                 <button
-                  key={channel.id}
-                  onClick={() => handleChannelClick(channel.id)}
-                  className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
-                    isActive
-                      ? 'bg-surface-elevated text-txt-primary'
-                      : isUnread
-                        ? 'text-white hover:text-white hover:bg-interactive-hover'
-                        : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
-                  }`}
+                  onClick={() => openModal('createChannel')}
+                  className="text-txt-tertiary hover:text-txt-primary transition-colors"
+                  title="Create Channel"
                 >
-                  {isActive && (
-                    <div
-                      className="absolute -left-[2px] top-1/2 -translate-y-1/2 w-[3px] bg-white rounded-r-full"
-                      style={{ height: '55%', opacity: 0.7 }}
-                    />
-                  )}
-                  {isUnread && (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent-rose" />
-                  )}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
-                    <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
                   </svg>
-                  <span className={`truncate text-[15px] flex-1 text-left ${isUnread ? 'font-semibold' : 'font-medium'}`}>{channel.name}</span>
-                  {canManageChannels && (
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openModal('channelSettings', { channelId: channel.id });
-                      }}
-                    >
-                      <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-                    </svg>
-                  )}
                 </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Voice Channels */}
-        <div>
-          <div className="flex items-center justify-between px-1 mb-1 group cursor-pointer">
-            <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-70">
-                <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
-              </svg>
-              <span className="text-[11px] font-medium uppercase tracking-[0.06em]" style={{ color: '#484854' }}>Voice Channels</span>
-            </div>
-            {canManageChannels && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openModal('createChannel');
-                }}
-                className="text-txt-tertiary hover:text-txt-primary transition-colors"
-                title="Create Channel"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
-                </svg>
-              </button>
+              </div>
             )}
-          </div>
-          <div className="space-y-[2px]">
-            {voiceChannels.map((channel) => {
-              const chPerms = channelPermissions.get(channel.id);
-              const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
-              return (
-                <VoiceChannel
+            <div className="space-y-[2px]">
+              {uncategorizedChannels.map((channel) => (
+                <ChannelItem
                   key={channel.id}
-                  channelId={channel.id}
-                  channelName={channel.name}
-                  onClick={() => canConnect && handleVoiceJoin(channel.id)}
-                  locked={!canConnect}
-                  dragState={voiceDragState}
-                  onDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
-                  onDragEnd={() => setVoiceDragState(null)}
+                  channel={channel}
+                  isActive={currentChannelId === channel.id}
+                  isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
+                  canManage={canManageChannels}
+                  isDragging={channelDragState?.dragType === 'channel' && channelDragState.dragId === channel.id}
+                  dropIndicator={dropIndicator?.targetId === channel.id ? dropIndicator.position : null}
+                  onChannelClick={channel.type === 'voice' ? (() => {
+                    const chPerms = channelPermissions.get(channel.id);
+                    const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
+                    if (canConnect) handleVoiceJoin(channel.id);
+                  }) : (() => handleChannelClick(channel.id))}
+                  onSettingsClick={() => openModal('channelSettings', { channelId: channel.id })}
+                  onDragStart={(e) => handleChannelDragStart(e, channel.id)}
+                  onDragOver={(e) => handleChannelDragOver(e, channel.id, 'channel')}
+                  onDragEnd={handleDragEnd}
+                  voiceDragState={voiceDragState}
+                  onVoiceDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
+                  onVoiceDragEnd={() => setVoiceDragState(null)}
+                  channelPermissions={channelPermissions}
+                  handleVoiceJoin={handleVoiceJoin}
                 />
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Categories with their channels */}
+        {sortedCategories.map((category) => {
+          const catChannels = channelsByCategory.get(category.id) ?? [];
+          const isCollapsed = collapsedCategories.has(category.id);
+          const hasUnread = isCollapsed && categoryHasUnread(category.id);
+
+          return (
+            <div key={category.id} className="mb-[19px]">
+              {/* Category header */}
+              <div
+                className={`flex items-center justify-between px-1 mb-1 group cursor-pointer ${
+                  channelDragState?.dragType === 'category' && channelDragState.dragId === category.id ? 'opacity-50' : ''
+                } ${dropIndicator?.targetId === category.id && dropIndicator.type === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
+                draggable={canManageChannels}
+                onDragStart={(e) => handleCategoryDragStart(e, category.id)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => handleChannelDragOver(e, category.id, 'category')}
+                onClick={() => toggleCollapse(category.id)}
+              >
+                <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors min-w-0">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`opacity-70 transition-transform flex-shrink-0 ${isCollapsed ? '-rotate-90' : ''}`}>
+                    <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
+                  </svg>
+                  <span className="text-[11px] font-medium uppercase tracking-[0.06em] truncate" style={{ color: '#484854' }}>{category.name}</span>
+                  {hasUnread && (
+                    <div className="ml-1 w-1.5 h-1.5 rounded-full bg-accent-rose flex-shrink-0" />
+                  )}
+                </div>
+                {canManageChannels && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openModal('createChannel', { categoryId: category.id });
+                    }}
+                    className="text-txt-tertiary hover:text-txt-primary transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                    title="Create Channel"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Category channels (hidden when collapsed, unless active) */}
+              {!isCollapsed && (
+                <div className="space-y-[2px]">
+                  {catChannels.map((channel) => (
+                    <ChannelItem
+                      key={channel.id}
+                      channel={channel}
+                      isActive={currentChannelId === channel.id}
+                      isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
+                      canManage={canManageChannels}
+                      isDragging={channelDragState?.dragType === 'channel' && channelDragState.dragId === channel.id}
+                      dropIndicator={dropIndicator?.targetId === channel.id ? dropIndicator.position : null}
+                      onChannelClick={channel.type === 'voice' ? (() => {
+                        const chPerms = channelPermissions.get(channel.id);
+                        const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
+                        if (canConnect) handleVoiceJoin(channel.id);
+                      }) : (() => handleChannelClick(channel.id))}
+                      onSettingsClick={() => openModal('channelSettings', { channelId: channel.id })}
+                      onDragStart={(e) => handleChannelDragStart(e, channel.id)}
+                      onDragOver={(e) => handleChannelDragOver(e, channel.id, 'channel')}
+                      onDragEnd={handleDragEnd}
+                      voiceDragState={voiceDragState}
+                      onVoiceDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
+                      onVoiceDragEnd={() => setVoiceDragState(null)}
+                      channelPermissions={channelPermissions}
+                      handleVoiceJoin={handleVoiceJoin}
+                    />
+                  ))}
+                  {catChannels.length === 0 && (
+                    <div className="px-2 py-2 text-[12px] text-txt-tertiary italic opacity-40">No channels</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* "Create Channel" button if categories exist but no uncategorized channels */}
+        {sortedCategories.length > 0 && canManageChannels && (
+          <div className="px-1">
+            <button
+              onClick={() => openModal('createChannel')}
+              className="w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
+                <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
+              </svg>
+              <span className="text-[13px] font-medium">Create Channel</span>
+            </button>
+          </div>
+        )}
+
+        {/* Create category button */}
+        {canManageChannels && (
+          <div className="px-1">
+            <button
+              onClick={async () => {
+                if (!currentSpaceId) return;
+                const name = prompt('Category name:');
+                if (name?.trim()) {
+                  try {
+                    await useSpaceStore.getState().createCategory(currentSpaceId, name.trim());
+                  } catch (err) {
+                    console.error('Failed to create category:', err);
+                  }
+                }
+              }}
+              className="w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
+                <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
+              </svg>
+              <span className="text-[13px] font-medium">Create Category</span>
+            </button>
+          </div>
+        )}
 
       </div>
 
@@ -886,6 +1140,122 @@ function UserAreaPanel({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Channel Item (unified text + voice) ──────────────────────────────────── */
+
+function ChannelItem({
+  channel,
+  isActive,
+  isUnread,
+  canManage,
+  isDragging,
+  dropIndicator,
+  onChannelClick,
+  onSettingsClick,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  voiceDragState,
+  onVoiceDragStart,
+  onVoiceDragEnd,
+  channelPermissions,
+  handleVoiceJoin,
+}: {
+  channel: Channel;
+  isActive: boolean;
+  isUnread: boolean;
+  canManage: boolean;
+  isDragging: boolean;
+  dropIndicator: 'before' | 'after' | null;
+  onChannelClick: () => void;
+  onSettingsClick: () => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  voiceDragState: { userId: string; fromChannelId: string } | null;
+  onVoiceDragStart: (userId: string) => void;
+  onVoiceDragEnd: () => void;
+  channelPermissions: Map<string, string>;
+  handleVoiceJoin: (channelId: string) => void;
+}) {
+  if (channel.type === 'voice') {
+    const chPerms = channelPermissions.get(channel.id);
+    const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
+    return (
+      <div
+        className={`relative ${isDragging ? 'opacity-50' : ''}`}
+        draggable={canManage}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+        <VoiceChannel
+          channelId={channel.id}
+          channelName={channel.name}
+          onClick={() => canConnect && handleVoiceJoin(channel.id)}
+          locked={!canConnect}
+          dragState={voiceDragState}
+          onDragStart={onVoiceDragStart}
+          onDragEnd={onVoiceDragEnd}
+        />
+        {dropIndicator === 'after' && <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`relative ${isDragging ? 'opacity-50' : ''}`}
+      draggable={canManage}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+    >
+      {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+      <button
+        onClick={onChannelClick}
+        className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
+          isActive
+            ? 'bg-surface-elevated text-txt-primary'
+            : isUnread
+              ? 'text-white hover:text-white hover:bg-interactive-hover'
+              : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+        }`}
+      >
+        {isActive && (
+          <div
+            className="absolute -left-[2px] top-1/2 -translate-y-1/2 w-[3px] bg-white rounded-r-full"
+            style={{ height: '55%', opacity: 0.7 }}
+          />
+        )}
+        {isUnread && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-accent-rose" />
+        )}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0 text-[#6e6e7a]">
+          <path d="M5.88657 21C5.57547 21 5.3399 20.7189 5.39427 20.4126L6.00001 17H2.59511C2.28449 17 2.04905 16.7198 2.10259 16.4138L2.27759 15.4138C2.31946 15.1746 2.52722 15 2.77011 15H6.35001L7.41001 9H4.00511C3.69449 9 3.45905 8.71977 3.51259 8.41381L3.68759 7.41381C3.72946 7.17456 3.93722 7 4.18011 7H7.76001L8.39677 3.41262C8.43914 3.17391 8.64664 3 8.88907 3H9.87344C10.1845 3 10.4201 3.28107 10.3657 3.58738L9.76001 7H15.76L16.3968 3.41262C16.4391 3.17391 16.6466 3 16.8891 3H17.8734C18.1845 3 18.4201 3.28107 18.3657 3.58738L17.76 7H21.1649C21.4755 7 21.711 7.28023 21.6574 7.58619L21.4824 8.58619C21.4406 8.82544 21.2328 9 20.9899 9H17.41L16.35 15H19.7549C20.0655 15 20.301 15.2802 20.2474 15.5862L20.0724 16.5862C20.0306 16.8254 19.8228 17 19.5799 17H16L15.3632 20.5874C15.3209 20.8261 15.1134 21 14.8709 21H13.8866C13.5755 21 13.3399 20.7189 13.3943 20.4126L14 17H8.00001L7.36325 20.5874C7.32088 20.8261 7.11337 21 6.87094 21H5.88657ZM9.41001 9L8.35001 15H14.35L15.41 9H9.41001Z" />
+        </svg>
+        <span className={`truncate text-[15px] flex-1 text-left ${isUnread ? 'font-semibold' : 'font-medium'}`}>{channel.name}</span>
+        {canManage && (
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSettingsClick();
+            }}
+          >
+            <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+          </svg>
+        )}
+      </button>
+      {dropIndicator === 'after' && <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
     </div>
   );
 }

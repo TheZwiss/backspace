@@ -78,6 +78,7 @@ export interface JoinRequest {
 
 export interface SpaceWithChannelsAndMembers extends Space {
   channels: Channel[];
+  categories: ChannelCategory[];
   members: MemberWithUser[];
   roles: Role[];
   myPermissions?: string; // Computed per-user BigInt decimal string (space-level)
@@ -125,6 +126,14 @@ export interface SpaceFolder {
 
 export type ChannelType = 'text' | 'voice';
 
+export interface ChannelCategory {
+  id: string;
+  spaceId: string;
+  name: string;
+  position: number;
+  createdAt: number;
+}
+
 export interface Channel {
   id: string;
   spaceId: string;
@@ -132,6 +141,7 @@ export interface Channel {
   type: ChannelType;
   topic: string | null;
   position: number;
+  categoryId: string | null;
   createdAt: number;
   lastMessageId?: string | null;
   myPermissions?: string; // Computed per-user BigInt decimal string
@@ -297,6 +307,10 @@ export type ServerEvent =
   | { type: 'voice_disconnected'; userId: string; channelId: string }
   | { type: 'user_updated'; user: User }
   | { type: 'member_banned'; spaceId: string; reason: string | null }
+  | { type: 'category_created'; category: ChannelCategory; spaceId: string }
+  | { type: 'category_updated'; category: ChannelCategory; spaceId: string }
+  | { type: 'category_deleted'; categoryId: string; spaceId: string }
+  | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -334,12 +348,14 @@ export interface CreateChannelRequest {
   name: string;
   type: ChannelType;
   topic?: string;
+  categoryId?: string;
 }
 
 export interface UpdateChannelRequest {
   name?: string;
   topic?: string;
   position?: number;
+  categoryId?: string | null;
 }
 
 export interface UpdateSpaceRequest {

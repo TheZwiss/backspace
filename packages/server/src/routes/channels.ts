@@ -11,6 +11,7 @@ import type {
   CreateChannelRequest,
   UpdateChannelRequest,
   Channel,
+  ChannelCategory,
 } from '@backspace/shared';
 
 function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
@@ -20,6 +21,17 @@ function rowToChannel(row: typeof schema.channels.$inferSelect): Channel {
     name: row.name,
     type: row.type as Channel['type'],
     topic: row.topic,
+    position: row.position ?? 0,
+    categoryId: row.categoryId ?? null,
+    createdAt: row.createdAt,
+  };
+}
+
+function rowToCategory(row: typeof schema.channelCategories.$inferSelect): ChannelCategory {
+  return {
+    id: row.id,
+    spaceId: row.spaceId,
+    name: row.name,
     position: row.position ?? 0,
     createdAt: row.createdAt,
   };
@@ -96,7 +108,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, type, topic } = request.body;
+    const { name, type, topic, categoryId } = request.body;
     const db = getDb();
 
     const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
@@ -121,6 +133,18 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Channel type must be "text" or "voice"', statusCode: 400 });
     }
 
+    // Validate categoryId if provided
+    let validCategoryId: string | null = null;
+    if (categoryId) {
+      const cat = db.select().from(schema.channelCategories)
+        .where(and(eq(schema.channelCategories.id, categoryId), eq(schema.channelCategories.spaceId, id)))
+        .get();
+      if (!cat) {
+        return reply.code(400).send({ error: 'Category not found in this space', statusCode: 400 });
+      }
+      validCategoryId = categoryId;
+    }
+
     // Get max position for ordering
     const existingChannels = db.select()
       .from(schema.channels)
@@ -139,6 +163,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       type,
       topic: topic?.trim() || null,
       position: maxPosition + 1,
+      categoryId: validCategoryId,
       createdAt: now,
     }).run();
 
@@ -172,7 +197,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, topic, position } = request.body;
+    const { name, topic, position, categoryId } = request.body;
     const db = getDb();
 
     const channel = db.select().from(schema.channels).where(eq(schema.channels.id, id)).get();
@@ -204,6 +229,20 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Position must be a non-negative number', statusCode: 400 });
       }
       updates.position = position;
+    }
+
+    if (categoryId !== undefined) {
+      if (categoryId === null) {
+        updates.categoryId = null;
+      } else {
+        const cat = db.select().from(schema.channelCategories)
+          .where(and(eq(schema.channelCategories.id, categoryId), eq(schema.channelCategories.spaceId, spaceId)))
+          .get();
+        if (!cat) {
+          return reply.code(400).send({ error: 'Category not found in this space', statusCode: 400 });
+        }
+        updates.categoryId = categoryId;
+      }
     }
 
     if (Object.keys(updates).length === 0) {
@@ -394,4 +433,281 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ success: true });
     },
   );
+
+  // ─── Channel Category Endpoints ─────────────────────────────────────────────
+
+  // POST /api/spaces/:id/categories - Create a category
+  app.post<{ Params: { id: string }; Body: { name: string } }>('/api/spaces/:id/categories', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { name } = request.body;
+    const db = getDb();
+
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_CHANNELS)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
+    }
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return reply.code(400).send({ error: 'Category name is required', statusCode: 400 });
+    }
+
+    const trimmedName = name.trim();
+    if (trimmedName.length > 100) {
+      return reply.code(400).send({ error: 'Category name must be 100 characters or less', statusCode: 400 });
+    }
+
+    const existing = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.spaceId, id))
+      .all();
+    const maxPos = existing.reduce((max, c) => Math.max(max, c.position ?? 0), -1);
+
+    const categoryId = generateSnowflake();
+    const now = Date.now();
+
+    db.insert(schema.channelCategories).values({
+      id: categoryId,
+      spaceId: id,
+      name: trimmedName,
+      position: maxPos + 1,
+      createdAt: now,
+    }).run();
+
+    const category = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, categoryId)).get();
+    if (!category) {
+      return reply.code(500).send({ error: 'Failed to create category', statusCode: 500 });
+    }
+
+    const categoryData = rowToCategory(category);
+    connectionManager.sendToSpace(id, {
+      type: 'category_created',
+      category: categoryData,
+      spaceId: id,
+    });
+
+    return reply.code(201).send(categoryData);
+  });
+
+  // PATCH /api/categories/:id - Update a category
+  app.patch<{ Params: { id: string }; Body: { name?: string; position?: number } }>('/api/categories/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { name, position } = request.body;
+    const db = getDb();
+
+    const category = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, id)).get();
+    if (!category) {
+      return reply.code(404).send({ error: 'Category not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_CHANNELS)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
+    }
+
+    const updates: Partial<typeof schema.channelCategories.$inferInsert> = {};
+
+    if (name !== undefined) {
+      const trimmedName = name.trim();
+      if (!trimmedName || trimmedName.length > 100) {
+        return reply.code(400).send({ error: 'Category name must be 1-100 characters', statusCode: 400 });
+      }
+      updates.name = trimmedName;
+    }
+
+    if (position !== undefined) {
+      if (typeof position !== 'number' || position < 0) {
+        return reply.code(400).send({ error: 'Position must be a non-negative number', statusCode: 400 });
+      }
+      updates.position = position;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
+    }
+
+    db.update(schema.channelCategories).set(updates)
+      .where(eq(schema.channelCategories.id, id)).run();
+
+    const updated = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, id)).get();
+    if (!updated) {
+      return reply.code(500).send({ error: 'Failed to update category', statusCode: 500 });
+    }
+
+    const categoryData = rowToCategory(updated);
+    connectionManager.sendToSpace(category.spaceId, {
+      type: 'category_updated',
+      category: categoryData,
+      spaceId: category.spaceId,
+    });
+
+    return reply.code(200).send(categoryData);
+  });
+
+  // DELETE /api/categories/:id - Delete a category
+  app.delete<{ Params: { id: string } }>('/api/categories/:id', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    const category = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, id)).get();
+    if (!category) {
+      return reply.code(404).send({ error: 'Category not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_CHANNELS)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
+    }
+
+    const spaceId = category.spaceId;
+
+    db.transaction((tx) => {
+      // Null out categoryId on all channels in this category
+      tx.update(schema.channels).set({ categoryId: null })
+        .where(eq(schema.channels.categoryId, id)).run();
+      // Delete the category
+      tx.delete(schema.channelCategories)
+        .where(eq(schema.channelCategories.id, id)).run();
+    });
+
+    // Broadcast category deletion
+    connectionManager.sendToSpace(spaceId, {
+      type: 'category_deleted',
+      categoryId: id,
+      spaceId,
+    });
+
+    // Also broadcast updated layout so channels reflect null categoryId
+    broadcastChannelLayout(spaceId);
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // PATCH /api/spaces/:id/channel-layout - Batch reorder channels + categories
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      channels: Array<{ id: string; position: number; categoryId: string | null }>;
+      categories: Array<{ id: string; position: number }>;
+    };
+  }>('/api/spaces/:id/channel-layout', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { channels: channelUpdates, categories: categoryUpdates } = request.body;
+    const db = getDb();
+
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Space not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, id, PermissionBits.MANAGE_CHANNELS)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
+    }
+
+    if (!Array.isArray(channelUpdates) || !Array.isArray(categoryUpdates)) {
+      return reply.code(400).send({ error: 'channels and categories arrays are required', statusCode: 400 });
+    }
+
+    // Validate all channel IDs belong to this space
+    const spaceChannels = db.select().from(schema.channels)
+      .where(eq(schema.channels.spaceId, id)).all();
+    const spaceChannelIds = new Set(spaceChannels.map(ch => ch.id));
+    for (const ch of channelUpdates) {
+      if (!spaceChannelIds.has(ch.id)) {
+        return reply.code(400).send({ error: `Channel ${ch.id} does not belong to this space`, statusCode: 400 });
+      }
+      if (typeof ch.position !== 'number' || ch.position < 0) {
+        return reply.code(400).send({ error: 'All positions must be non-negative numbers', statusCode: 400 });
+      }
+    }
+
+    // Validate all category IDs belong to this space
+    const spaceCategories = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.spaceId, id)).all();
+    const spaceCategoryIds = new Set(spaceCategories.map(c => c.id));
+    for (const cat of categoryUpdates) {
+      if (!spaceCategoryIds.has(cat.id)) {
+        return reply.code(400).send({ error: `Category ${cat.id} does not belong to this space`, statusCode: 400 });
+      }
+      if (typeof cat.position !== 'number' || cat.position < 0) {
+        return reply.code(400).send({ error: 'All positions must be non-negative numbers', statusCode: 400 });
+      }
+    }
+
+    // Validate category references in channels
+    for (const ch of channelUpdates) {
+      if (ch.categoryId !== null && !spaceCategoryIds.has(ch.categoryId)) {
+        return reply.code(400).send({ error: `Category ${ch.categoryId} does not belong to this space`, statusCode: 400 });
+      }
+    }
+
+    // Apply all updates in a transaction
+    db.transaction((tx) => {
+      for (const ch of channelUpdates) {
+        tx.update(schema.channels)
+          .set({ position: ch.position, categoryId: ch.categoryId })
+          .where(eq(schema.channels.id, ch.id))
+          .run();
+      }
+      for (const cat of categoryUpdates) {
+        tx.update(schema.channelCategories)
+          .set({ position: cat.position })
+          .where(eq(schema.channelCategories.id, cat.id))
+          .run();
+      }
+    });
+
+    // Broadcast the updated layout to all space members with per-user channel filtering
+    broadcastChannelLayout(id);
+
+    return reply.code(200).send({ success: true });
+  });
+}
+
+/**
+ * Broadcast updated channel layout to all space members.
+ * Each user gets only the channels they can view (VIEW_CHANNEL check).
+ */
+function broadcastChannelLayout(spaceId: string): void {
+  const db = getDb();
+  const allChannels = db.select().from(schema.channels)
+    .where(eq(schema.channels.spaceId, spaceId)).all();
+  const allCategories = db.select().from(schema.channelCategories)
+    .where(eq(schema.channelCategories.spaceId, spaceId)).all();
+
+  const categoryData = allCategories.map(rowToCategory);
+
+  for (const [userId, spaceIds] of connectionManager.getUserSpaceEntries()) {
+    if (!spaceIds.has(spaceId)) continue;
+
+    const visibleChannels: Channel[] = [];
+    for (const ch of allChannels) {
+      const perms = computePermissions(userId, spaceId, ch.id);
+      if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        visibleChannels.push({
+          ...rowToChannel(ch),
+          myPermissions: permissionsToString(perms),
+        });
+      }
+    }
+
+    connectionManager.sendToUser(userId, {
+      type: 'channel_layout_updated',
+      spaceId,
+      channels: visibleChannels,
+      categories: categoryData,
+    });
+  }
 }

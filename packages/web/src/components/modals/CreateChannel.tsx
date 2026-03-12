@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -7,14 +7,24 @@ export function CreateChannelModal() {
   const [name, setName] = useState('');
   const [type, setType] = useState<'text' | 'voice'>('text');
   const [topic, setTopic] = useState('');
+  const [categoryId, setCategoryId] = useState<string | ''>('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const activeModal = useUIStore((s) => s.activeModal);
+  const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const createChannel = useSpaceStore((s) => s.createChannel);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const categories = useSpaceStore((s) => s.categories);
 
   const isOpen = activeModal === 'createChannel';
+
+  // Pre-select category when opened from a category's + button
+  useEffect(() => {
+    if (isOpen && modalData.categoryId) {
+      setCategoryId(modalData.categoryId as string);
+    }
+  }, [isOpen, modalData.categoryId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,11 +42,12 @@ export function CreateChannelModal() {
 
     setIsLoading(true);
     try {
-      await createChannel(currentSpaceId, name.trim(), type, topic.trim() || undefined);
+      await createChannel(currentSpaceId, name.trim(), type, topic.trim() || undefined, categoryId || undefined);
       closeModal();
       setName('');
       setTopic('');
       setType('text');
+      setCategoryId('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create channel');
     } finally {
@@ -121,6 +132,24 @@ export function CreateChannelModal() {
               className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
               placeholder="What's this channel about?"
             />
+          </div>
+        )}
+
+        {categories.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
+              Category
+            </label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
+            >
+              <option value="">No Category</option>
+              {[...categories].sort((a, b) => a.position - b.position).map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
           </div>
         )}
 

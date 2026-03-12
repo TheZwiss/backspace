@@ -11,6 +11,7 @@ import type {
   SpaceWithChannelsAndMembers,
   MemberWithUser,
   Channel,
+  ChannelCategory,
   DmChannel,
   ServerEvent,
   SpaceFolder,
@@ -694,6 +695,24 @@ function buildReadyPayload(userId: string): {
       arr.push(ch);
     }
 
+    // Batch: all categories for all spaces (1 query instead of N)
+    const allCategories = batchInArray(
+      spaceIds,
+      ids => db.select().from(schema.channelCategories).where(inArray(schema.channelCategories.spaceId, ids)).all(),
+    );
+    const categoriesBySpace = new Map<string, ChannelCategory[]>();
+    for (const cat of allCategories) {
+      let arr = categoriesBySpace.get(cat.spaceId);
+      if (!arr) { arr = []; categoriesBySpace.set(cat.spaceId, arr); }
+      arr.push({
+        id: cat.id,
+        spaceId: cat.spaceId,
+        name: cat.name,
+        position: cat.position ?? 0,
+        createdAt: cat.createdAt,
+      });
+    }
+
     // Batch: last message ID per channel (1 query instead of N×C)
     const allChannelIds = allChannels.map(ch => ch.id);
     const lastMsgMap = new Map<string, string>();
@@ -782,6 +801,7 @@ function buildReadyPayload(userId: string): {
             type: ch.type as Channel['type'],
             topic: ch.topic,
             position: ch.position ?? 0,
+            categoryId: ch.categoryId ?? null,
             createdAt: ch.createdAt,
             lastMessageId: lastMsgMap.get(ch.id) ?? null,
             myPermissions: permissionsToString(chPerms),
@@ -801,6 +821,7 @@ function buildReadyPayload(userId: string): {
         description: spaceRow.description ?? null,
         createdAt: spaceRow.createdAt,
         channels: visibleChannels,
+        categories: categoriesBySpace.get(spaceRow.id) ?? [],
         members,
         roles: roles.map(r => ({
           id: r.id,
