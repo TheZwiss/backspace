@@ -38,6 +38,7 @@ interface SpaceState {
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
+  _layoutFromTrueHome: boolean;
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
@@ -98,6 +99,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   channelPermissions: new Map(),
   channelOriginMap: new Map(),
   categoryOriginMap: new Map(),
+  _layoutFromTrueHome: false,
 
   setSpaces: (spaces) => set({ spaces }),
   setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),
@@ -425,12 +427,26 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     // Optimistic: apply the layout immediately
     set({ spaceLayout: items });
 
+    const homeOrigin = getLayoutHomeOrigin();
+    const homeApi = getApiForOrigin(homeOrigin);
+
     try {
-      const result = await api.spaceLayout.update({ items, folders });
+      const result = await homeApi.spaceLayout.update({ items, folders });
       // Server may have resolved new:* IDs
       set({ spaceLayout: result.items, folders: result.folders });
     } catch (err) {
-      console.error('Failed to save space layout:', err);
+      // If true home is remote and unreachable, fall back to browsing instance
+      if (homeOrigin) {
+        console.warn(`Layout save to home (${homeOrigin}) failed, falling back to local:`, err);
+        try {
+          const result = await api.spaceLayout.update({ items, folders });
+          set({ spaceLayout: result.items, folders: result.folders });
+        } catch (fallbackErr) {
+          console.error('Failed to save space layout:', fallbackErr);
+        }
+      } else {
+        console.error('Failed to save space layout:', err);
+      }
     }
   },
 
@@ -552,8 +568,22 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       categoryOriginMap,
     };
 
-    // Only set folders and layout from home origin
-    if (isHome) {
+    // Determine if this origin is the user's true home (federation-aware)
+    const currentUser = useAuthStore.getState().user;
+    const isTrueHome = !!currentUser?.homeInstance && origin !== '' && (() => {
+      try { return new URL(origin).host === currentUser.homeInstance; } catch { return false; }
+    })();
+
+    // Accept layout from true home (authoritative) or browsing instance (fallback)
+    if (isTrueHome) {
+      // Authoritative: true home always wins
+      update.folders = folders || [];
+      if (spaceLayout !== undefined) {
+        update.spaceLayout = spaceLayout ?? null;
+      }
+      update._layoutFromTrueHome = true;
+    } else if (isHome && !get()._layoutFromTrueHome) {
+      // Fallback: browsing instance's layout, only until true home connects
       update.folders = folders || [];
       if (spaceLayout !== undefined) {
         update.spaceLayout = spaceLayout ?? null;
@@ -676,6 +706,16 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
+      // If the removed origin was the true home, reset the layout authority flag
+      // so the browsing instance's layout can serve as fallback again
+      const currentUser = useAuthStore.getState().user;
+      let resetLayoutFlag = false;
+      if (currentUser?.homeInstance && origin !== '') {
+        try {
+          resetLayoutFlag = new URL(origin).host === currentUser.homeInstance;
+        } catch { /* ignore */ }
+      }
+
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -686,6 +726,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
           : null,
+        ...(resetLayoutFlag ? { _layoutFromTrueHome: false } : {}),
       };
     });
   },
@@ -755,6 +796,17 @@ export function resolveUserOrigin(user: { homeInstance?: string | null }): strin
   const host = user.homeInstance;
   if (!host || host === window.location.host) return '';
   return _resolveOriginFromHostname?.(host) ?? '';
+}
+
+/**
+ * Returns the origin that is authoritative for this user's space layout.
+ * '' = browsing instance (native users, or true home not yet connected).
+ * 'https://...' = connected remote that is the user's true home.
+ */
+export function getLayoutHomeOrigin(): string {
+  const user = useAuthStore.getState().user;
+  if (!user?.homeInstance) return '';
+  return _resolveOriginFromHostname?.(user.homeInstance) ?? '';
 }
 
 // ─── User ID resolution (federation) ──────────────────────────────────────────

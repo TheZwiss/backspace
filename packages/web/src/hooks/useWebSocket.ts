@@ -698,7 +698,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'space_layout_updated': {
-      if (!isHome) break;
+      // Accept layout updates from browsing instance OR true home
+      const layoutUser = useAuthStore.getState().user;
+      const isLayoutTrueHome = !!layoutUser?.homeInstance && origin !== '' && (() => {
+        try { return new URL(origin).host === layoutUser.homeInstance; } catch { return false; }
+      })();
+      if (!isHome && !isLayoutTrueHome) break;
       const { setSpaceLayout } = useSpaceStore.getState();
       setSpaceLayout(event.layout);
       useSpaceStore.setState({ folders: event.folders });
