@@ -392,8 +392,8 @@ export function ChannelSidebar() {
     return (
       <>
       <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
-        <div className="h-12 px-[10px] flex items-center border-b border-border-hard z-10">
-          <button className="flex-1 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base transition-colors">
+        <div className="py-3 px-[10px] flex items-center border-b border-border-hard z-10">
+          <button className="flex-1 min-h-8 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base transition-colors">
             Find or start a conversation
           </button>
         </div>
@@ -576,10 +576,10 @@ export function ChannelSidebar() {
     <>
     <div className="w-60 md:w-full bg-surface-channel flex flex-col flex-shrink-0 select-none md:pl-[72px] border-r border-border-hard">
       {/* Space header */}
-      <div className="h-12 flex items-center border-b border-border-hard z-10 group/header">
+      <div className="py-3 flex items-stretch border-b border-border-hard z-10 group/header">
         <button
           onClick={() => openModal('spaceSettings')}
-          className="flex-1 h-full px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
+          className="flex-1 min-h-8 px-4 flex items-center justify-between hover:bg-interactive-hover transition-colors min-w-0"
         >
           <div className="min-w-0">
             <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate leading-tight block">{space.name}</span>
@@ -596,7 +596,7 @@ export function ChannelSidebar() {
         {canCreateInvite && (
           <button
             onClick={() => openModal('invite')}
-            className="w-10 h-full flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex-shrink-0"
+            className="w-10 min-h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary hover:bg-interactive-hover transition-all flex-shrink-0"
             title="Invite People"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
