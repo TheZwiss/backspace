@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable-Italic.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -76,7 +92,8 @@
 
   html, body, #root {
     @apply h-full w-full overflow-hidden bg-surface-base text-txt-message;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
