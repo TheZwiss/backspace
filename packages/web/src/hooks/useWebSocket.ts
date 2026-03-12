@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
+import { registerSelfId } from '../utils/identity';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -88,6 +89,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
   switch (event.type) {
     case 'ready':
+      // Register this user's ID for cross-instance self-identification
+      registerSelfId(event.user.id);
+
       if (isHome) {
         setUser(event.user);
         useSettingsStore.getState().setIsAdmin(event.user.isAdmin ?? false);

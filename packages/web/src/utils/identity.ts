@@ -11,6 +11,20 @@ export function parseFederatedUsername(username: string): { baseName: string; do
   return { baseName: username.slice(0, atIndex), domain: username.slice(atIndex + 1) };
 }
 
+// ─── Cross-instance self-ID registry ─────────────────────────────────────────
+// Tracks all Snowflake IDs that belong to the current user across connected
+// instances (home + remotes). Populated from WS `ready` events.
+
+const _knownSelfIds = new Set<string>();
+
+export function registerSelfId(id: string): void {
+  _knownSelfIds.add(id);
+}
+
+export function clearSelfIds(): void {
+  _knownSelfIds.clear();
+}
+
 /**
  * Stateless check: is `user` a replicated alias of `homeUser`?
  * Uses the immutable (username, homeInstance) composite key —
@@ -23,12 +37,15 @@ export function isSelf(
   if (!homeUser) return false;
   // Same instance, same ID — trivial case
   if (user.id === homeUser.id) return true;
+  // Cross-instance: check all known user IDs from connected instances
+  if (_knownSelfIds.has(user.id)) return true;
   // Replicated user: homeInstance matches our origin
   if (!user.homeInstance) return false;
   if (user.homeInstance !== window.location.host) return false;
   // Username: "youruser" or "youruser@nova.ddns.net" → base must match
   const { baseName } = parseFederatedUsername(user.username);
-  return baseName === homeUser.username;
+  const { baseName: homeBase } = parseFederatedUsername(homeUser.username);
+  return baseName === homeBase;
 }
 
 /**

@@ -7,6 +7,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { isSelf } from '../../utils/identity';
 import type { MessageWithUser } from '@backspace/shared';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
@@ -247,7 +248,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
 
   if (isDm) {
     const dm = dmChannels.find(d => d.id === channelId);
-    const otherUser = dm?.members.find(m => m.id !== authUser?.id);
+    const otherUser = dm?.members.find(m => !isSelf(m, authUser));
     const displayName = otherUser?.displayName ?? otherUser?.username ?? 'Unknown';
     const username = otherUser?.username ?? 'unknown';
     const isFriend = otherUser ? friends.some(f => f.id === otherUser.id) : false;

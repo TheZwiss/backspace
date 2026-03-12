@@ -8,6 +8,7 @@ import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
 import { syncProfileUpdateToRemotes } from '../utils/profileSync';
 import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
+import { clearSelfIds } from '../utils/identity';
 
 interface AuthState {
   token: string | null;
@@ -27,6 +28,7 @@ interface AuthState {
 
 /** Reset all user-scoped stores to prevent data leaking between sessions */
 function resetUserStores() {
+  clearSelfIds();
   useChatStore.getState().clearAllMessages();
   useSpaceStore.getState().populateFromReady('', [], [], []);
   useSocialStore.getState().reset();
