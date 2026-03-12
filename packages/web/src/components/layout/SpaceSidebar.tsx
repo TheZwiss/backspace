@@ -12,28 +12,13 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
 
 type ResolvedItem =
   | { type: 'space'; space: TaggedSpace }
-  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[]; collapsed: boolean };
-
-// ─── localStorage keys ────────────────────────────────────────────────────
-
-const COLLAPSED_KEY = 'backspace:collapsed-space-folders';
-
-function getCollapsedFolders(): Set<string> {
-  try {
-    const raw = localStorage.getItem(COLLAPSED_KEY);
-    if (raw) return new Set(JSON.parse(raw));
-  } catch { /* ignore */ }
-  return new Set();
-}
-
-function setCollapsedFolders(ids: Set<string>): void {
-  localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...ids]));
-}
+  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[] };
 
 // ─── Folder color presets ─────────────────────────────────────────────────
 
@@ -231,21 +216,25 @@ function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
   );
 }
 
-// ─── Collapsed folder icon (2×2 grid) ─────────────────────────────────────
+// ─── Folder icon (2×2 grid with glass-pill) ───────────────────────────────
 
-function CollapsedFolderIcon({ spaces, color }: { spaces: TaggedSpace[]; color: string | null }) {
+function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpace[]; color: string | null; isActive: boolean; isHovered: boolean }) {
   const display = spaces.slice(0, 4);
   const remaining = spaces.length - 4;
+  const borderColor = color ? `rgba(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)}, 0.3)` : undefined;
   return (
-    <div className="relative w-10 h-10 rounded-[13px] flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-      {color && <div className="absolute inset-0 opacity-[0.12]" style={{ background: color }} />}
+    <div
+      className={`relative w-10 h-10 flex items-center justify-center overflow-hidden glass-pill [transition:border-radius_0.2s] ${
+        isActive || isHovered ? 'rounded-[13px]' : 'rounded-[16px]'
+      }`}
+      style={borderColor ? { borderColor } : undefined}
+    >
       <div className="grid grid-cols-2 gap-[2px] w-[28px] h-[28px] relative z-[1]">
         {display.map((s) => (
           <div key={s.id} className="w-[13px] h-[13px]">
             <MiniSpaceIcon space={s} />
           </div>
         ))}
-        {/* Fill empty cells */}
         {display.length < 4 && Array.from({ length: 4 - display.length }).map((_, i) => (
           <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-white/[0.04]" />
         ))}
@@ -336,6 +325,158 @@ function FolderContextMenu({ folder, x, y, onClose, onRename, onColorChange, onU
         </svg>
         Ungroup
       </button>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── FolderFlyout ─────────────────────────────────────────────────────────
+
+function FolderFlyout({
+  folder,
+  spaces,
+  anchorEl,
+  currentSpaceId,
+  unreadSpaceIds,
+  disconnectedOrigins,
+  renamingFolderId,
+  onClose,
+  onSpaceClick,
+  onSpaceContextMenu,
+  onRename,
+  onDragStart,
+}: {
+  folder: SpaceFolder;
+  spaces: TaggedSpace[];
+  anchorEl: HTMLDivElement;
+  currentSpaceId: string | null;
+  unreadSpaceIds: Set<string>;
+  disconnectedOrigins: Set<string>;
+  renamingFolderId: string | null;
+  onClose: () => void;
+  onSpaceClick: (spaceId: string) => void;
+  onSpaceContextMenu: (spaceId: string, e: React.MouseEvent) => void;
+  onRename: (name: string) => void;
+  onDragStart: (e: React.DragEvent, spaceId: string) => void;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(anchorEl);
+  anchorRef.current = anchorEl;
+  const floatingRef = useRef<HTMLDivElement>(null);
+
+  const { style } = useFloatingPosition(anchorRef, floatingRef, {
+    placement: 'right',
+    offset: 12,
+  });
+
+  // Close on click-outside and Escape
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        floatingRef.current && !floatingRef.current.contains(e.target as Node) &&
+        !anchorEl.contains(e.target as Node)
+      ) {
+        onClose();
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, anchorEl]);
+
+  const isRenaming = renamingFolderId === folder.id;
+
+  return ReactDOM.createPortal(
+    <div
+      ref={floatingRef}
+      className="w-[220px] max-h-[360px] overflow-y-auto glass rounded-lg py-1.5 animate-in fade-in zoom-in-95 duration-100"
+      style={style}
+    >
+      {/* Folder header */}
+      {(folder.name || isRenaming) && (
+        <div className="px-3 pb-1.5 pt-0.5">
+          {isRenaming ? (
+            <input
+              autoFocus
+              className="w-full bg-surface-input text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-accent-mint/40"
+              defaultValue={folder.name || ''}
+              onBlur={(e) => onRename(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onRename(e.currentTarget.value);
+                if (e.key === 'Escape') onClose();
+              }}
+            />
+          ) : (
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary">
+              {folder.name}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Space rows */}
+      {spaces.map((space) => {
+        const isActive = currentSpaceId === space.id;
+        const hasUnread = unreadSpaceIds.has(space.id) && !isActive;
+        const origin = space._instanceOrigin;
+        const isFederated = !!origin;
+        const isDimmed = isFederated && disconnectedOrigins.has(origin);
+        const icon = space.icon;
+        const grad = !icon ? getSpaceGradient(space.id, space.name, space.avatarColor) : null;
+
+        return (
+          <button
+            key={space.id}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
+              isDimmed ? 'opacity-40 saturate-50' : ''
+            } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
+            style={{ width: 'calc(100% - 8px)' }}
+            draggable
+            onDragStart={(e) => onDragStart(e, space.id)}
+            onClick={() => {
+              onSpaceClick(space.id);
+              onClose();
+            }}
+            onContextMenu={(e) => {
+              onSpaceContextMenu(space.id, e);
+              onClose();
+            }}
+          >
+            {/* Space icon */}
+            <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
+              {icon ? (
+                <img
+                  src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+
+            {/* Name */}
+            <span className="text-sm text-txt-primary truncate flex-1 text-left">{space.name}</span>
+
+            {/* Federation badge */}
+            {isFederated && !isDimmed && (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80 flex-shrink-0">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+            )}
+
+            {/* Unread dot */}
+            {hasUnread && (
+              <div className="w-2 h-2 rounded-full bg-white flex-shrink-0" />
+            )}
+          </button>
+        );
+      })}
     </div>,
     document.body,
   );
@@ -638,6 +779,96 @@ function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose
   );
 }
 
+// ─── FolderSlot (single icon slot for a folder) ──────────────────────────
+
+function FolderSlot({
+  folder,
+  folderSpaces,
+  isActive,
+  hasUnread,
+  isFlyoutOpen,
+  isDragging,
+  dropIndicator,
+  onToggleFlyout,
+  onContextMenu,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+  anchorRef,
+}: {
+  folder: SpaceFolder;
+  folderSpaces: TaggedSpace[];
+  isActive: boolean;
+  hasUnread: boolean;
+  isFlyoutOpen: boolean;
+  isDragging: boolean;
+  dropIndicator: 'before' | 'after' | 'merge' | null;
+  onToggleFlyout: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  anchorRef: (el: HTMLDivElement | null) => void;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const getPillHeight = () => {
+    if (isActive) return 'h-8';
+    if (isHovered) return 'h-4';
+    if (hasUnread) return 'h-2';
+    return 'h-2 scale-0';
+  };
+
+  const iconContent = (
+    <button onClick={onToggleFlyout}>
+      <FolderIcon spaces={folderSpaces} color={folder.color} isActive={isActive || isFlyoutOpen} isHovered={isHovered} />
+    </button>
+  );
+
+  return (
+    <div
+      ref={anchorRef}
+      className={`relative flex items-center mb-1.5 w-full justify-center ${isDragging ? 'opacity-50' : ''}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onContextMenu={onContextMenu}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
+    >
+      {/* Drop indicators */}
+      {dropIndicator === 'before' && (
+        <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+      )}
+      {dropIndicator === 'after' && (
+        <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+      )}
+      {dropIndicator === 'merge' && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="w-12 h-12 rounded-[16px] ring-2 ring-accent-mint/60" />
+        </div>
+      )}
+
+      {/* Pill indicator */}
+      <div className="absolute -left-0 w-2 h-10 flex items-center">
+        <div className={`bg-white rounded-r-full transition-all duration-200 origin-left ${getPillHeight()} w-1`} />
+      </div>
+
+      {isFlyoutOpen ? (
+        iconContent
+      ) : (
+        <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
+          {iconContent}
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 // ─── SpaceSidebar (main component) ────────────────────────────────────────
 
 export function SpaceSidebar() {
@@ -660,22 +891,9 @@ export function SpaceSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Collapsed folders state
-  const [collapsedFolderIds, setCollapsedFolderIdsState] = useState(getCollapsedFolders);
-  const setCollapsedFolderIds = useCallback((ids: Set<string>) => {
-    setCollapsedFolderIdsState(ids);
-    setCollapsedFolders(ids);
-  }, []);
-
-  const toggleFolderCollapse = useCallback((folderId: string) => {
-    setCollapsedFolderIdsState(prev => {
-      const next = new Set(prev);
-      if (next.has(folderId)) next.delete(folderId);
-      else next.add(folderId);
-      setCollapsedFolders(next);
-      return next;
-    });
-  }, []);
+  // Flyout state
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const folderAnchorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Context menus
   const [contextMenu, setContextMenu] = useState<{ spaceId: string; x: number; y: number } | null>(null);
@@ -743,7 +961,6 @@ export function SpaceSidebar() {
                 type: 'folder',
                 folder,
                 spaces: folderSpaces,
-                collapsed: collapsedFolderIds.has(folder.id),
               });
               for (const s of folderSpaces) accountedSpaceIds.add(s.id);
             }
@@ -760,7 +977,7 @@ export function SpaceSidebar() {
     }
 
     return result;
-  }, [spaceLayout, spaces, spaceMap, folderMap, collapsedFolderIds]);
+  }, [spaceLayout, spaces, spaceMap, folderMap]);
 
   // Compute which spaces have unread channels
   const unreadSpaceIds = useMemo(() => {
@@ -943,7 +1160,6 @@ export function SpaceSidebar() {
               spaceIds: [targetItem.space.id, dragSpace.id],
             },
             spaces: [targetItem.space, dragSpace],
-            collapsed: false,
           };
           newLayout[targetIdx] = newFolder;
         } else if (targetItem.type === 'folder') {
@@ -1023,6 +1239,7 @@ export function SpaceSidebar() {
   }, [resolvedLayout, persistLayout]);
 
   const handleUngroup = useCallback((folderId: string) => {
+    setOpenFolderId(null);
     const newLayout = resolvedLayout.flatMap(item => {
       if (item.type === 'folder' && item.folder.id === folderId) {
         return item.spaces.map(s => ({ type: 'space' as const, space: s }));
@@ -1057,6 +1274,13 @@ export function SpaceSidebar() {
   const folderHasActive = useCallback((folderSpaces: TaggedSpace[]) => {
     return currentSpaceId ? folderSpaces.some(s => s.id === currentSpaceId) : false;
   }, [currentSpaceId]);
+
+  // Auto-close flyout when its folder dissolves
+  useEffect(() => {
+    if (openFolderId && !resolvedLayout.some(i => i.type === 'folder' && i.folder.id === openFolderId)) {
+      setOpenFolderId(null);
+    }
+  }, [openFolderId, resolvedLayout]);
 
   return (
     <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24 }}>
@@ -1101,152 +1325,36 @@ export function SpaceSidebar() {
           );
         }
 
-        // Folder
-        const { folder, spaces: folderSpaces, collapsed } = item;
+        // Folder — always a single icon slot
+        const { folder, spaces: folderSpaces } = item;
         const isActive = folderHasActive(folderSpaces);
         const hasUnread = folderHasUnread(folderSpaces);
+        const isFlyoutOpen = openFolderId === folder.id;
 
-        if (collapsed) {
-          // Collapsed folder — single icon
-          return (
-            <div
-              key={`folder-${folder.id}`}
-              className={`relative flex items-center mb-1.5 w-full justify-center ${
-                dragState?.dragType === 'folder' && dragState.dragId === folder.id ? 'opacity-50' : ''
-              }`}
-              draggable
-              onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
-              onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
-              onDragEnd={handleDragEnd}
-              onDrop={handleDrop}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
-              }}
-            >
-              {/* Drop indicators */}
-              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'before' && (
-                <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
-              )}
-              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'after' && (
-                <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
-              )}
-              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'merge' && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-                  <div className="w-12 h-12 rounded-[16px] ring-2 ring-accent-mint/60" />
-                </div>
-              )}
-
-              {/* Pill indicator */}
-              <div className="absolute -left-0 w-2 h-10 flex items-center">
-                <div className={`bg-white rounded-r-full transition-all duration-200 origin-left ${
-                  isActive ? 'h-8' : hasUnread ? 'h-2' : 'h-2 scale-0'
-                } w-1`} />
-              </div>
-
-              <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
-                <button onClick={() => toggleFolderCollapse(folder.id)}>
-                  <CollapsedFolderIcon spaces={folderSpaces} color={folder.color} />
-                </button>
-              </Tooltip>
-            </div>
-          );
-        }
-
-        // Expanded folder
         return (
-          <div
+          <FolderSlot
             key={`folder-${folder.id}`}
-            className="w-full flex flex-col items-center"
+            folder={folder}
+            folderSpaces={folderSpaces}
+            isActive={isActive}
+            hasUnread={hasUnread}
+            isFlyoutOpen={isFlyoutOpen}
+            isDragging={dragState?.dragType === 'folder' && dragState.dragId === folder.id}
+            dropIndicator={dropIndicator?.targetId === folder.id ? dropIndicator.position : null}
+            onToggleFlyout={() => setOpenFolderId(isFlyoutOpen ? null : folder.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
+            }}
+            onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
             onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
+            onDragEnd={handleDragEnd}
             onDrop={handleDrop}
-          >
-            {/* Top separator with folder toggle */}
-            <div
-              className="flex items-center justify-center w-full my-1 cursor-pointer"
-              draggable
-              onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
-              onDragEnd={handleDragEnd}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
-              }}
-            >
-              {/* Drop indicator for folder header */}
-              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'before' && (
-                <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
-              )}
-              <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
-                <button
-                  onClick={() => toggleFolderCollapse(folder.id)}
-                  className="relative flex items-center justify-center w-12"
-                >
-                  <div className="w-8 h-[2px] rounded-full" style={{ background: folder.color || 'rgba(255,255,255,0.08)' }} />
-                </button>
-              </Tooltip>
-            </div>
-
-            {/* Folder rename input */}
-            {renamingFolderId === folder.id && (
-              <div className="w-full px-3 mb-1">
-                <input
-                  autoFocus
-                  className="w-full bg-surface-input text-[10px] text-txt-primary rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-accent-mint/40"
-                  defaultValue={folder.name || ''}
-                  onBlur={(e) => handleFolderRename(folder.id, e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleFolderRename(folder.id, e.currentTarget.value);
-                    if (e.key === 'Escape') setRenamingFolderId(null);
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Folder member spaces */}
-            <div className="relative w-full flex flex-col items-center">
-              {/* Left accent line */}
-              <div
-                className="absolute left-[10px] top-0 bottom-0 w-[2px] rounded-full"
-                style={{ background: folder.color || 'rgba(255,255,255,0.06)' }}
-              />
-
-              {folderSpaces.map((space) => {
-                const { isFederated, isDimmed, tooltipText } = getFederationInfo(space);
-                return (
-                  <SidebarItem
-                    key={space.id}
-                    id={space.id}
-                    name={space.name}
-                    icon={space.icon}
-                    avatarColor={space.avatarColor}
-                    active={currentSpaceId === space.id}
-                    onClick={() => handleSpaceClick(space.id)}
-                    onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
-                    hasUnread={unreadSpaceIds.has(space.id)}
-                    dimmed={isDimmed}
-                    federationBadge={isFederated}
-                    federationDisconnected={isDimmed}
-                    tooltipText={tooltipText}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, space.id, 'space', folder.id)}
-                    onDragOver={(e) => handleDragOver(e, space.id, 'space')}
-                    onDragEnd={handleDragEnd}
-                    onDrop={handleDrop}
-                    isDragging={dragState?.dragType === 'space' && dragState.dragId === space.id}
-                    dropIndicator={dropIndicator?.targetId === space.id ? dropIndicator.position : null}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Bottom separator */}
-            <div className="flex items-center justify-center w-full my-1">
-              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'after' && (
-                <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
-              )}
-              <div className="w-8 h-[2px] rounded-full" style={{ background: folder.color || 'rgba(255,255,255,0.08)' }} />
-            </div>
-          </div>
+            anchorRef={(el) => {
+              if (el) folderAnchorRefs.current.set(folder.id, el);
+              else folderAnchorRefs.current.delete(folder.id);
+            }}
+          />
         );
       })}
 
@@ -1294,11 +1402,39 @@ export function SpaceSidebar() {
           x={folderContextMenu.x}
           y={folderContextMenu.y}
           onClose={() => setFolderContextMenu(null)}
-          onRename={() => setRenamingFolderId(folderContextMenu.folder.id)}
+          onRename={() => {
+            setRenamingFolderId(folderContextMenu.folder.id);
+            setOpenFolderId(folderContextMenu.folder.id);
+          }}
           onColorChange={(color) => handleFolderColorChange(folderContextMenu.folder.id, color)}
           onUngroup={() => handleUngroup(folderContextMenu.folder.id)}
         />
       )}
+
+      {openFolderId && (() => {
+        const folderItem = resolvedLayout.find(
+          (i): i is ResolvedItem & { type: 'folder' } =>
+            i.type === 'folder' && i.folder.id === openFolderId
+        );
+        const anchor = folderAnchorRefs.current.get(openFolderId);
+        if (!folderItem || !anchor) return null;
+        return (
+          <FolderFlyout
+            folder={folderItem.folder}
+            spaces={folderItem.spaces}
+            anchorEl={anchor}
+            currentSpaceId={currentSpaceId}
+            unreadSpaceIds={unreadSpaceIds}
+            disconnectedOrigins={disconnectedOrigins}
+            renamingFolderId={renamingFolderId}
+            onClose={() => setOpenFolderId(null)}
+            onSpaceClick={handleSpaceClick}
+            onSpaceContextMenu={handleSpaceContextMenu}
+            onRename={(name) => handleFolderRename(openFolderId, name)}
+            onDragStart={(e, spaceId) => handleDragStart(e, spaceId, 'space', openFolderId)}
+          />
+        );
+      })()}
     </nav>
   );
 }
