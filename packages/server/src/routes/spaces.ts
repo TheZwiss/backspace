@@ -420,10 +420,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Only the space owner can delete the space', statusCode: 403 });
     }
 
-    // Delete all channels (messages cascade), members, then server atomically
+    // Delete all channels (messages cascade), members, folder refs, then space atomically
     db.transaction((tx) => {
       tx.delete(schema.channels).where(eq(schema.channels.spaceId, id)).run();
       tx.delete(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).run();
+      tx.delete(schema.spaceFolderMembers).where(eq(schema.spaceFolderMembers.spaceId, id)).run();
       tx.delete(schema.spaces).where(eq(schema.spaces.id, id)).run();
     });
 

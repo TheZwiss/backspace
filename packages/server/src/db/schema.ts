@@ -191,7 +191,7 @@ export const spaceFolders = sqliteTable('space_folders', {
 
 export const spaceFolderMembers = sqliteTable('space_folder_members', {
   folderId: text('folder_id').notNull().references(() => spaceFolders.id, { onDelete: 'cascade' }),
-  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull(), // No FK — federated space IDs don't exist locally
   position: integer('position').default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.folderId, table.spaceId] }),

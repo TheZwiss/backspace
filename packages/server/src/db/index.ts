@@ -174,7 +174,8 @@ function createTables(db: Database.Database): void {
 
     CREATE TABLE IF NOT EXISTS space_folder_members (
       folder_id TEXT NOT NULL REFERENCES space_folders(id) ON DELETE CASCADE,
-      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL,
+      position INTEGER DEFAULT 0,
       PRIMARY KEY (folder_id, space_id)
     );
 

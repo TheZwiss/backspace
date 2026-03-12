@@ -251,6 +251,28 @@ export function runMigrations(db: Database.Database): void {
     }
   }
 
+  // ─── Remove FK constraint from space_folder_members (federated spaces) ────
+  {
+    const tableInfo = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='space_folder_members'"
+    ).get() as { sql: string } | undefined;
+
+    if (tableInfo && tableInfo.sql.includes('REFERENCES spaces')) {
+      console.log('Migrating: Removing FK constraint from space_folder_members...');
+      db.exec(`
+        CREATE TABLE space_folder_members_new (
+          folder_id TEXT NOT NULL REFERENCES space_folders(id) ON DELETE CASCADE,
+          space_id TEXT NOT NULL,
+          position INTEGER DEFAULT 0,
+          PRIMARY KEY (folder_id, space_id)
+        );
+        INSERT INTO space_folder_members_new SELECT folder_id, space_id, position FROM space_folder_members;
+        DROP TABLE space_folder_members;
+        ALTER TABLE space_folder_members_new RENAME TO space_folder_members;
+      `);
+    }
+  }
+
   console.log('Migrations complete.');
 }
 
