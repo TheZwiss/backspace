@@ -43,6 +43,8 @@ interface VoiceState {
   streamMutes: Map<string, boolean>;        // userId → muted?
   watchingStreams: Set<string>;             // userIds we're watching
   unwatchedCameras: Set<string>;           // userIds whose cameras we've opted out of
+  soundEffectVolume: number;                 // 0-200 (100 = default)
+  setSoundEffectVolume: (volume: number) => void;
   streamAttenuationEnabled: boolean;        // global toggle, default true
   streamAttenuationStrength: number;        // 0-100, default 50
   setStreamVolume: (userId: string, volume: number) => void;
@@ -149,6 +151,9 @@ export const useVoiceStore = create<VoiceState>()(
           return { participantMutes: newMap };
         });
       },
+
+      soundEffectVolume: 100,
+      setSoundEffectVolume: (volume) => set({ soundEffectVolume: volume }),
 
       // Stream widget state
       streamVolumes: new Map(),
@@ -509,7 +514,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -542,6 +547,9 @@ export const useVoiceStore = create<VoiceState>()(
         if (version < 7) {
           // No data migration needed — Sets will be populated from server on next connect
         }
+        if (version < 8) {
+          persistedState.soundEffectVolume = 100;
+        }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -560,6 +568,7 @@ export const useVoiceStore = create<VoiceState>()(
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,
+        soundEffectVolume: state.soundEffectVolume,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
       }),

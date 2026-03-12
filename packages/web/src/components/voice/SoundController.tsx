@@ -4,6 +4,11 @@ import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AudioManager } from '../../audio/AudioManager';
 
+/** Compute the effective sound effect gain: base volume (0.8) scaled by the user's SFX slider (0–200). */
+function getSfxVolume(): number {
+  return 0.8 * (useVoiceStore.getState().soundEffectVolume / 100);
+}
+
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
@@ -31,37 +36,39 @@ export function SoundController() {
     const unsubscribeVoice = useVoiceStore.subscribe((state) => {
       if (isInitialMount.current) return;
 
+      const sfxOpts = { volume: getSfxVolume() };
+
       // Mute/Unmute
       if (state.isMuted !== prevIsMuted.current) {
-        audioManager.playSound(state.isMuted ? 'mute' : 'unmute');
+        audioManager.playSound(state.isMuted ? 'mute' : 'unmute', sfxOpts);
         prevIsMuted.current = state.isMuted;
       }
 
       // Deafen/Undeafen
       if (state.isDeafened !== prevIsDeafened.current) {
-        audioManager.playSound(state.isDeafened ? 'deafen' : 'undeafen');
+        audioManager.playSound(state.isDeafened ? 'deafen' : 'undeafen', sfxOpts);
         prevIsDeafened.current = state.isDeafened;
       }
 
       // Camera Toggle
       if (state.isCameraOn !== prevIsCameraOn.current) {
-        audioManager.playSound(state.isCameraOn ? 'camera_on' : 'camera_off');
+        audioManager.playSound(state.isCameraOn ? 'camera_on' : 'camera_off', sfxOpts);
         prevIsCameraOn.current = state.isCameraOn;
       }
 
       // Screen Share Toggle (Self)
       if (state.isScreenSharing !== prevIsScreenSharing.current) {
-        audioManager.playSound(state.isScreenSharing ? 'stream_started' : 'stream_ended');
+        audioManager.playSound(state.isScreenSharing ? 'stream_started' : 'stream_ended', sfxOpts);
         prevIsScreenSharing.current = state.isScreenSharing;
       }
 
       // Disconnect (Self)
       if (prevIsConnected.current && !state.isLiveKitConnected) {
-        audioManager.playSound('disconnect');
+        audioManager.playSound('disconnect', sfxOpts);
       }
       // Connect (Self)
       if (!prevIsConnected.current && state.isLiveKitConnected) {
-        audioManager.playSound('user_join');
+        audioManager.playSound('user_join', sfxOpts);
       }
       prevIsConnected.current = state.isLiveKitConnected;
 
@@ -73,28 +80,28 @@ export function SoundController() {
         // Someone joined voice (Others only)
         state.participants.forEach(p => {
           if (!prevParticipantIds.current.has(p.userId) && p.userId !== currentUser?.id) {
-            audioManager.playSound('user_join');
+            audioManager.playSound('user_join', sfxOpts);
           }
         });
 
         // Someone left voice (Others only)
         prevParticipantIds.current.forEach(userId => {
           if (!currentParticipantIds.has(userId) && userId !== currentUser?.id) {
-            audioManager.playSound('user_leave');
+            audioManager.playSound('user_leave', sfxOpts);
           }
         });
 
         // Someone started screen sharing (Others only)
         state.participants.forEach(p => {
           if (p.isScreenSharing && !prevScreenShareUserIds.current.has(p.userId) && p.userId !== currentUser?.id) {
-            audioManager.playSound('stream_user_joined');
+            audioManager.playSound('stream_user_joined', sfxOpts);
           }
         });
 
         // Someone stopped screen sharing (Others only)
         prevScreenShareUserIds.current.forEach(userId => {
           if (!currentScreenShareUserIds.has(userId) && userId !== currentUser?.id) {
-            audioManager.playSound('stream_user_left');
+            audioManager.playSound('stream_user_left', sfxOpts);
           }
         });
       }
@@ -104,7 +111,7 @@ export function SoundController() {
 
       // Incoming Call (Ringing)
       if (state.incomingCall && !incomingCallLoop.current) {
-        audioManager.playSound('call_ringing', { loop: true }).then(source => {
+        audioManager.playSound('call_ringing', { loop: true, volume: getSfxVolume() }).then(source => {
           incomingCallLoop.current = source;
         });
       } else if (!state.incomingCall && incomingCallLoop.current) {
@@ -114,7 +121,7 @@ export function SoundController() {
 
       // Outgoing Call (Calling)
       if (state.outgoingCall && !outgoingCallLoop.current) {
-        audioManager.playSound('call_calling', { loop: true }).then(source => {
+        audioManager.playSound('call_calling', { loop: true, volume: getSfxVolume() }).then(source => {
           outgoingCallLoop.current = source;
         });
       } else if (!state.outgoingCall && outgoingCallLoop.current) {
@@ -132,7 +139,7 @@ export function SoundController() {
         const newEvents = state.realtimeMessageEvents.slice(prevState.realtimeMessageEvents.length);
         for (const { message } of newEvents) {
           if (message.userId !== currentUser?.id) {
-            audioManager.playSound('message');
+            audioManager.playSound('message', { volume: getSfxVolume() });
             break; // one sound per batch
           }
         }

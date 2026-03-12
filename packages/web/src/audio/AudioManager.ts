@@ -12,6 +12,7 @@ export class AudioManager {
   private silentGain: GainNode | null = null;
   private analyser: AnalyserNode | null = null;
   private masterCompressor: DynamicsCompressorNode | null = null;
+  private masterBoost: GainNode | null = null;
   
   private currentInputDeviceId: string = 'default';
   private desiredOutputDeviceId: string = 'default';
@@ -61,6 +62,11 @@ export class AudioManager {
     this.masterCompressor.ratio.value = 4;         // gentle limiting, no ducking
     this.masterCompressor.attack.value = 0.0005;   // 0.5ms — catch transient peaks
     this.masterCompressor.release.value = 0.01;    // 10ms — recover quickly
+    // +3dB boost before the limiter — drives a hotter signal into the
+    // compressor, raising perceived loudness while peaks are still caught.
+    this.masterBoost = this.ctx.createGain();
+    this.masterBoost.gain.value = 1.41; // +3dB
+    this.masterBoost.connect(this.masterCompressor);
     this.masterCompressor.connect(this.ctx.destination);
 
     this.inputGain.connect(this.inputDestination);
@@ -168,10 +174,10 @@ export class AudioManager {
     source.loop = options.loop || false;
 
     const gainNode = this.ctx.createGain();
-    gainNode.gain.value = options.volume ?? 0.5;
+    gainNode.gain.value = options.volume ?? 0.8;
 
     source.connect(gainNode);
-    gainNode.connect(this.masterCompressor!);
+    gainNode.connect(this.masterBoost!);
 
     source.start(0);
     return source;
@@ -373,14 +379,14 @@ export class AudioManager {
   }
 
   /**
-   * Returns the master output bus (DynamicsCompressorNode → ctx.destination).
+   * Returns the master output bus (masterBoost → masterCompressor → ctx.destination).
    * All audio (remote voice, streams, effects) routes through this node.
-   * The compressor prevents clipping when multiple sources sum together.
+   * The +3dB boost raises perceived loudness; the compressor catches peaks.
    * Output device is controlled via setSinkId on the underlying AudioContext.
    */
   getMasterOutput(): AudioNode {
     if (!this.ctx) this.initContext();
-    return this.masterCompressor!;
+    return this.masterBoost!;
   }
 
   getContext(): AudioContext | null {
