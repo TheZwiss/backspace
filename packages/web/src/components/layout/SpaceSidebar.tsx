@@ -899,6 +899,7 @@ export function SpaceSidebar() {
     for (const space of spaces) {
       if (!accountedSpaceIds.has(space.id)) {
         result.push({ type: 'space', space });
+        accountedSpaceIds.add(space.id);
       }
     }
 

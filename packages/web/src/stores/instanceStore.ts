@@ -478,25 +478,38 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
 
-    // Build the replicated instances list from all connected remotes
-    const replicatedInstances: ReplicatedInstance[] = instances.map(inst => ({
+    // Build perspective-correct replicated instance lists.
+    // Each instance should store references to OTHER instances, never itself.
+    const homeOrigin = window.location.origin;
+    const homeUsername = currentUser.username.includes('@')
+      ? currentUser.username.split('@')[0]!
+      : currentUser.username;
+
+    // Home list: all remotes (home never references itself)
+    const homeList: ReplicatedInstance[] = instances.map(inst => ({
       origin: inst.origin,
       username: inst.username,
     }));
 
     // Push to home instance
-    const homePromise = api.users.update({ replicatedInstances }).catch((err) => {
+    const homePromise = api.users.update({ replicatedInstances: homeList }).catch((err) => {
       console.warn('Failed to sync instance list to home:', err);
     });
 
-    // Push to each remote instance
-    const remotePromises = instances
-      .filter(inst => inst.status === 'connected')
-      .map(inst =>
-        inst.api.users.update({ replicatedInstances }).catch((err) => {
-          console.warn(`Failed to sync instance list to ${inst.origin}:`, err);
-        })
-      );
+    // Push perspective-correct list to each remote instance:
+    // include home + all OTHER remotes, but exclude the remote's own origin
+    const connectedInstances = instances.filter(inst => inst.status === 'connected');
+    const remotePromises = connectedInstances.map(inst => {
+      const listForRemote: ReplicatedInstance[] = [
+        { origin: homeOrigin, username: homeUsername },
+        ...instances
+          .filter(other => other.origin !== inst.origin)
+          .map(other => ({ origin: other.origin, username: other.username })),
+      ];
+      return inst.api.users.update({ replicatedInstances: listForRemote }).catch((err) => {
+        console.warn(`Failed to sync instance list to ${inst.origin}:`, err);
+      });
+    });
 
     await Promise.all([homePromise, ...remotePromises]);
   },
@@ -518,6 +531,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     for (const ri of currentUser.replicatedInstances) {
       const origin = ri.origin || `https://${ri.domain}`;
+      // Never connect to ourselves — home WS is managed separately
+      if (origin === window.location.origin) continue;
       if (get().instances.some(i => i.origin === origin)) continue; // already loaded
       const entry = cached[origin];
       if (entry) {
