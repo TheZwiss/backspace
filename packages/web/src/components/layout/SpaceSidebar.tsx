@@ -1257,7 +1257,7 @@ export function SpaceSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5" />
+      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
 
       {/* Unified space list (ordered by user layout) */}
       {resolvedLayout.map((item) => {
@@ -1322,7 +1322,7 @@ export function SpaceSidebar() {
         );
       })}
 
-      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5" />
+      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5 shrink-0" />
 
       <SidebarItem
         id="add-space"
