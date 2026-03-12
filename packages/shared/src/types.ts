@@ -16,6 +16,7 @@ export interface User {
   customStatus: string | null;
   isAdmin: boolean;
   isDeleted?: boolean;
+  profileUpdatedAt?: number;
   createdAt: number;
   homeInstance: string | null;
   homeUserId: string | null;
@@ -271,7 +272,7 @@ export type ClientEvent =
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -317,7 +318,7 @@ export type ServerEvent =
   | { type: 'category_updated'; category: ChannelCategory; spaceId: string }
   | { type: 'category_deleted'; categoryId: string; spaceId: string }
   | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
-  | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[] }
+  | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -385,6 +386,7 @@ export interface UpdateUserRequest {
   status?: UserStatus;
   replicatedInstances?: ReplicatedInstance[];
   homeUserId?: string;
+  profileUpdatedAt?: number;
 }
 
 export interface UpdateMemberRequest {

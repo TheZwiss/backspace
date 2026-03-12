@@ -107,7 +107,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout);
+      populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout, event.layoutUpdatedAt);
 
       // Cache authoritative identity for this origin (federation-safe)
       if (!isHome) {
@@ -698,15 +698,13 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'space_layout_updated': {
-      // Accept layout updates from browsing instance OR true home
-      const layoutUser = useAuthStore.getState().user;
-      const isLayoutTrueHome = !!layoutUser?.homeInstance && origin !== '' && (() => {
-        try { return new URL(origin).host === layoutUser.homeInstance; } catch { return false; }
-      })();
-      if (!isHome && !isLayoutTrueHome) break;
-      const { setSpaceLayout } = useSpaceStore.getState();
-      setSpaceLayout(event.layout);
-      useSpaceStore.setState({ folders: event.folders });
+      // LWW: only accept if incoming timestamp >= current
+      const incomingTs = event.updatedAt ?? 0;
+      const currentTs = useSpaceStore.getState()._layoutUpdatedAt;
+      if (incomingTs >= currentTs) {
+        useSpaceStore.getState().setSpaceLayout(event.layout);
+        useSpaceStore.setState({ folders: event.folders, _layoutUpdatedAt: incomingTs });
+      }
       break;
     }
 

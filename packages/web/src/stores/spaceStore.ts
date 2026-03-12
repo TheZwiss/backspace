@@ -38,7 +38,7 @@ interface SpaceState {
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
-  _layoutFromTrueHome: boolean;
+  _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
   setChannels: (channels: Channel[]) => void;
@@ -76,11 +76,38 @@ interface SpaceState {
   removeMember: (userId: string) => void;
   setSpaceLayout: (layout: SpaceLayoutItem[] | null) => void;
   updateSpaceLayout: (items: SpaceLayoutItem[], folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>) => Promise<void>;
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null) => void;
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => void;
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
   removeInstanceSpaces: (origin: string) => void;
   transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
   findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
+}
+
+/**
+ * Push the current layout to a specific origin whose layout was older.
+ * Used when populateFromReady receives a stale layout from an instance.
+ */
+async function pushLayoutToOrigin(
+  origin: string,
+  layout: SpaceLayoutItem[] | null,
+  folders: SpaceFolder[],
+  updatedAt: number,
+): Promise<void> {
+  try {
+    const targetApi = getApiForOrigin(origin);
+    // Build folder map from SpaceFolder[]
+    const folderMap: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    for (const f of folders) {
+      folderMap[f.id] = { name: f.name, color: f.color, spaceIds: f.spaceIds };
+    }
+    await targetApi.spaceLayout.update({
+      items: layout ?? [],
+      folders: folderMap,
+      updatedAt,
+    });
+  } catch (err) {
+    console.warn(`[SpaceStore] Failed to push layout to ${origin || 'home'}:`, err);
+  }
 }
 
 export const useSpaceStore = create<SpaceState>((set, get) => ({
@@ -99,7 +126,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   channelPermissions: new Map(),
   channelOriginMap: new Map(),
   categoryOriginMap: new Map(),
-  _layoutFromTrueHome: false,
+  _layoutUpdatedAt: 0,
 
   setSpaces: (spaces) => set({ spaces }),
   setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),
@@ -424,33 +451,43 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   setSpaceLayout: (layout) => set({ spaceLayout: layout }),
 
   updateSpaceLayout: async (items, folders) => {
-    // Optimistic: apply the layout immediately
-    set({ spaceLayout: items });
+    const now = Date.now();
+    // Optimistic: apply the layout immediately with new timestamp
+    set({ spaceLayout: items, _layoutUpdatedAt: now });
 
-    const homeOrigin = getLayoutHomeOrigin();
-    const homeApi = getApiForOrigin(homeOrigin);
+    // Push to ALL connected instances in parallel (browsing + remotes)
+    const targets: { origin: string; apiClient: BackspaceApiClient }[] = [
+      { origin: '', apiClient: api },
+    ];
 
+    // Dynamically import instanceStore to avoid circular dep
     try {
-      const result = await homeApi.spaceLayout.update({ items, folders });
-      // Server may have resolved new:* IDs
-      set({ spaceLayout: result.items, folders: result.folders });
-    } catch (err) {
-      // If true home is remote and unreachable, fall back to browsing instance
-      if (homeOrigin) {
-        console.warn(`Layout save to home (${homeOrigin}) failed, falling back to local:`, err);
-        try {
-          const result = await api.spaceLayout.update({ items, folders });
-          set({ spaceLayout: result.items, folders: result.folders });
-        } catch (fallbackErr) {
-          console.error('Failed to save space layout:', fallbackErr);
-        }
-      } else {
-        console.error('Failed to save space layout:', err);
+      const { useInstanceStore } = await import('./instanceStore');
+      const connected = useInstanceStore.getState().instances.filter(i => i.status === 'connected');
+      for (const inst of connected) {
+        targets.push({ origin: inst.origin, apiClient: inst.api });
+      }
+    } catch { /* instanceStore not available yet */ }
+
+    const results = await Promise.allSettled(
+      targets.map(t => t.apiClient.spaceLayout.update({ items, folders, updatedAt: now }))
+    );
+
+    // Use the first successful response to resolve new:* IDs
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const resolved = result.value;
+        set({
+          spaceLayout: resolved.items,
+          folders: resolved.folders,
+          _layoutUpdatedAt: resolved.updatedAt ?? now,
+        });
+        break;
       }
     }
   },
 
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null) => {
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => {
     const isHome = !origin;
 
     // Tag all incoming servers with their instance origin
@@ -568,26 +605,19 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       categoryOriginMap,
     };
 
-    // Determine if this origin is the user's true home (federation-aware)
-    const currentUser = useAuthStore.getState().user;
-    const isTrueHome = !!currentUser?.homeInstance && origin !== '' && (() => {
-      try { return new URL(origin).host === currentUser.homeInstance; } catch { return false; }
-    })();
-
-    // Accept layout from true home (authoritative) or browsing instance (fallback)
-    if (isTrueHome) {
-      // Authoritative: true home always wins
+    // LWW layout merge: accept incoming layout only if its timestamp is >= ours
+    const incomingTs = layoutUpdatedAt ?? 0;
+    const currentTs = get()._layoutUpdatedAt;
+    if (incomingTs >= currentTs) {
+      // Incoming is same age or newer — accept
       update.folders = folders || [];
       if (spaceLayout !== undefined) {
         update.spaceLayout = spaceLayout ?? null;
       }
-      update._layoutFromTrueHome = true;
-    } else if (isHome && !get()._layoutFromTrueHome) {
-      // Fallback: browsing instance's layout, only until true home connects
-      update.folders = folders || [];
-      if (spaceLayout !== undefined) {
-        update.spaceLayout = spaceLayout ?? null;
-      }
+      (update as any)._layoutUpdatedAt = incomingTs;
+    } else {
+      // Our layout is newer — push back to this instance
+      pushLayoutToOrigin(origin, get().spaceLayout, get().folders, currentTs);
     }
 
     set(update as any);
@@ -706,16 +736,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
-      // If the removed origin was the true home, reset the layout authority flag
-      // so the browsing instance's layout can serve as fallback again
-      const currentUser = useAuthStore.getState().user;
-      let resetLayoutFlag = false;
-      if (currentUser?.homeInstance && origin !== '') {
-        try {
-          resetLayoutFlag = new URL(origin).host === currentUser.homeInstance;
-        } catch { /* ignore */ }
-      }
-
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -726,7 +746,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
           : null,
-        ...(resetLayoutFlag ? { _layoutFromTrueHome: false } : {}),
       };
     });
   },

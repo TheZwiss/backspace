@@ -117,6 +117,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'category_id', type: 'TEXT' },
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'profile_updated_at', type: 'INTEGER' },
+      ]
     }
   ];
 
@@ -232,6 +238,9 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Convert video channels to voice (video type removed) ─────────────────
   migrateVideoChannels(db);
+
+  // ─── Backfill profile_updated_at from created_at ──────────────────────────
+  migrateProfileUpdatedAt(db);
 
   // ─── Ensure user_space_layout table exists ────────────────────────────────
   db.exec(`
@@ -648,6 +657,16 @@ function migrateVideoChannels(db: Database.Database): void {
   const result = db.prepare("UPDATE channels SET type = 'voice' WHERE type = 'video'").run();
   if (result.changes > 0) {
     console.log(`Migrating: Converted ${result.changes} video channel(s) to voice`);
+  }
+}
+
+/** Backfill profile_updated_at from created_at for existing users */
+function migrateProfileUpdatedAt(db: Database.Database): void {
+  const result = db.prepare(
+    'UPDATE users SET profile_updated_at = created_at WHERE profile_updated_at IS NULL'
+  ).run();
+  if (result.changes > 0) {
+    console.log(`Migrating: Backfilled profile_updated_at for ${result.changes} user(s)`);
   }
 }
 

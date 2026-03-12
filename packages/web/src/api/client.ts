@@ -67,7 +67,7 @@ export class BackspaceApiClient {
   };
 
   readonly spaceLayout: {
-    update: (data: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> }) => Promise<{ items: SpaceLayoutItem[]; folders: SpaceFolder[] }>;
+    update: (data: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>; updatedAt?: number }) => Promise<{ items: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }>;
   };
 
   readonly spaces: {
@@ -278,7 +278,7 @@ export class BackspaceApiClient {
 
     this.spaceLayout = {
       update: (data) =>
-        request<{ items: SpaceLayoutItem[]; folders: SpaceFolder[] }>('PUT', '/users/@me/space-layout', data),
+        request<{ items: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }>('PUT', '/users/@me/space-layout', data),
     };
 
     this.spaces = {

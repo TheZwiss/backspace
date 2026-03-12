@@ -255,7 +255,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId } = request.body;
+    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -370,6 +370,28 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
     }
 
+    // LWW guard: if the caller provided a profileUpdatedAt and profile fields changed,
+    // reject stale writes by comparing timestamps
+    const profileFields = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio', 'customStatus'];
+    const hasProfileChange = profileFields.some(f => f in updateData);
+
+    if (hasProfileChange) {
+      if (profileUpdatedAt !== undefined && typeof profileUpdatedAt === 'number') {
+        const currentUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+        if (currentUser) {
+          const storedTs = currentUser.profileUpdatedAt ?? currentUser.createdAt;
+          if (profileUpdatedAt < storedTs) {
+            // Incoming data is older — return current state without updating
+            return reply.code(200).send(sanitizeUser(currentUser));
+          }
+        }
+        (updateData as Record<string, unknown>).profileUpdatedAt = profileUpdatedAt;
+      } else {
+        // No explicit timestamp — stamp with server time (local edits)
+        (updateData as Record<string, unknown>).profileUpdatedAt = Date.now();
+      }
+    }
+
     db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
 
     const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
@@ -396,10 +418,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    // Broadcast user_updated for profile field changes
-    const profileFields = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio', 'customStatus'];
-    const hasProfileChange = profileFields.some(f => f in updateData);
-
+    // Broadcast user_updated for profile field changes (reuse hasProfileChange from LWW guard above)
     if (hasProfileChange) {
       const userUpdatedEvent = { type: 'user_updated' as const, user: sanitized };
       const targetUserIds = new Set<string>();
@@ -444,9 +463,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/users/@me/space-layout — save sidebar layout (reorder, folders)
-  app.put<{ Body: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> } }>(
+  app.put<{ Body: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>; updatedAt?: number } }>(
     '/api/users/@me/space-layout', { preHandler: authenticate }, async (request, reply) => {
-    const { items, folders } = request.body;
+    const { items, folders, updatedAt: incomingTs } = request.body;
     const userId = request.userId;
 
     if (!Array.isArray(items)) {
@@ -471,6 +490,39 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const db = getDb();
+
+    // LWW guard: reject stale layout writes
+    if (incomingTs !== undefined && typeof incomingTs === 'number') {
+      const existingLayout = db.select().from(schema.userSpaceLayout)
+        .where(eq(schema.userSpaceLayout.userId, userId)).get();
+      if (existingLayout && incomingTs < existingLayout.updatedAt) {
+        // Incoming layout is older — return current state without updating
+        const currentItems: SpaceLayoutItem[] = JSON.parse(existingLayout.layout);
+        const currentFolderRows = db.select().from(schema.spaceFolders)
+          .where(eq(schema.spaceFolders.userId, userId))
+          .orderBy(schema.spaceFolders.position)
+          .all();
+        const currentFolders: SpaceFolder[] = currentFolderRows.map(folder => {
+          const memberRows = db.select()
+            .from(schema.spaceFolderMembers)
+            .where(eq(schema.spaceFolderMembers.folderId, folder.id))
+            .orderBy(schema.spaceFolderMembers.position)
+            .all();
+          return {
+            id: folder.id,
+            userId: folder.userId,
+            name: folder.name,
+            color: folder.color,
+            position: folder.position ?? 0,
+            spaceIds: memberRows.map(m => m.spaceId),
+          };
+        });
+        return reply.code(200).send({ items: currentItems, folders: currentFolders, updatedAt: existingLayout.updatedAt });
+      }
+    }
+
+    // Resolve the effective timestamp for this write
+    const effectiveTs = (incomingTs !== undefined && typeof incomingTs === 'number') ? incomingTs : Date.now();
 
     // Map new:* folder keys to server-generated IDs
     const newIdMap = new Map<string, string>();
@@ -553,14 +605,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(schema.userSpaceLayout.userId, userId)).get();
       if (existing) {
         tx.update(schema.userSpaceLayout)
-          .set({ layout: JSON.stringify(finalItems), updatedAt: Date.now() })
+          .set({ layout: JSON.stringify(finalItems), updatedAt: effectiveTs })
           .where(eq(schema.userSpaceLayout.userId, userId))
           .run();
       } else {
         tx.insert(schema.userSpaceLayout).values({
           userId,
           layout: JSON.stringify(finalItems),
-          updatedAt: Date.now(),
+          updatedAt: effectiveTs,
         }).run();
       }
     });
@@ -592,14 +644,17 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    const layoutUpdatedAt = finalLayout?.updatedAt ?? effectiveTs;
+
     // Broadcast to user's other connections (multi-tab sync)
     connectionManager.sendToUser(userId, {
       type: 'space_layout_updated',
       layout: finalItems,
       folders: responseFolders,
+      updatedAt: layoutUpdatedAt,
     });
 
-    return reply.code(200).send({ items: finalItems, folders: responseFolders });
+    return reply.code(200).send({ items: finalItems, folders: responseFolders, updatedAt: layoutUpdatedAt });
   });
 
   app.get<{ Params: { id: string } }>('/api/users/:id', { preHandler: authenticate }, async (request, reply) => {
