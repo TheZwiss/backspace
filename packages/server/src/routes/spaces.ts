@@ -1089,15 +1089,15 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const userIds = [...new Set(banRows.map(b => b.userId))];
     const bannedByIds = [...new Set(banRows.map(b => b.bannedBy))];
-    const allUserIds = [...new Set([...userIds, ...bannedByIds])];
-    const users = db.select().from(schema.users)
-      .where(inArray(schema.users.id, allUserIds))
-      .all();
+    const allUserIds = [...new Set([...userIds, ...bannedByIds].filter((id): id is string => id !== null))];
+    const users = allUserIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, allUserIds)).all()
+      : [];
     const userMap = new Map(users.map(u => [u.id, u]));
 
     const bans = banRows.map(b => {
       const user = userMap.get(b.userId);
-      const moderator = userMap.get(b.bannedBy);
+      const moderator = b.bannedBy ? userMap.get(b.bannedBy) : undefined;
       return {
         spaceId: b.spaceId,
         userId: b.userId,

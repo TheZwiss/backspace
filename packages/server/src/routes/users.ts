@@ -4,10 +4,11 @@ import crypto from 'crypto';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { generateSnowflake } from '../utils/snowflake.js';
 
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
@@ -440,6 +441,165 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(200).send(sanitized);
+  });
+
+  // PUT /api/users/@me/space-layout — save sidebar layout (reorder, folders)
+  app.put<{ Body: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> } }>(
+    '/api/users/@me/space-layout', { preHandler: authenticate }, async (request, reply) => {
+    const { items, folders } = request.body;
+    const userId = request.userId;
+
+    if (!Array.isArray(items)) {
+      return reply.code(400).send({ error: 'items must be an array', statusCode: 400 });
+    }
+    if (!folders || typeof folders !== 'object') {
+      return reply.code(400).send({ error: 'folders must be an object', statusCode: 400 });
+    }
+
+    // Validate items
+    for (const item of items) {
+      if (!item || (item.t !== 's' && item.t !== 'f') || typeof item.id !== 'string') {
+        return reply.code(400).send({ error: 'Each item must have t ("s" or "f") and id string', statusCode: 400 });
+      }
+    }
+
+    // Validate folders
+    for (const [key, folder] of Object.entries(folders)) {
+      if (!Array.isArray(folder.spaceIds)) {
+        return reply.code(400).send({ error: `Folder "${key}" must have spaceIds array`, statusCode: 400 });
+      }
+    }
+
+    const db = getDb();
+
+    // Map new:* folder keys to server-generated IDs
+    const newIdMap = new Map<string, string>();
+    for (const key of Object.keys(folders)) {
+      if (key.startsWith('new:')) {
+        newIdMap.set(key, generateSnowflake());
+      }
+    }
+
+    db.transaction((tx) => {
+      // Get existing folder IDs for this user
+      const existingFolders = tx.select({ id: schema.spaceFolders.id })
+        .from(schema.spaceFolders)
+        .where(eq(schema.spaceFolders.userId, userId))
+        .all();
+      const existingFolderIds = new Set(existingFolders.map(f => f.id));
+
+      // Determine which folders to keep (ones in the request, with resolved IDs)
+      const keepFolderIds = new Set<string>();
+      for (const [key, folder] of Object.entries(folders)) {
+        const resolvedId = newIdMap.get(key) ?? key;
+        keepFolderIds.add(resolvedId);
+
+        if (key.startsWith('new:')) {
+          // Create new folder
+          tx.insert(schema.spaceFolders).values({
+            id: resolvedId,
+            userId,
+            name: folder.name,
+            color: folder.color,
+            position: 0,
+            createdAt: Date.now(),
+          }).run();
+        } else if (existingFolderIds.has(key)) {
+          // Update existing folder
+          tx.update(schema.spaceFolders)
+            .set({ name: folder.name, color: folder.color })
+            .where(and(eq(schema.spaceFolders.id, key), eq(schema.spaceFolders.userId, userId)))
+            .run();
+        }
+
+        // Clear and re-insert folder members with position
+        tx.delete(schema.spaceFolderMembers)
+          .where(eq(schema.spaceFolderMembers.folderId, resolvedId))
+          .run();
+
+        for (let i = 0; i < folder.spaceIds.length; i++) {
+          const spaceId = folder.spaceIds[i];
+          if (!spaceId) continue;
+          tx.insert(schema.spaceFolderMembers).values({
+            folderId: resolvedId,
+            spaceId,
+            position: i,
+          }).run();
+        }
+      }
+
+      // Delete folders that are no longer in the request
+      for (const existingId of existingFolderIds) {
+        if (!keepFolderIds.has(existingId)) {
+          tx.delete(schema.spaceFolderMembers)
+            .where(eq(schema.spaceFolderMembers.folderId, existingId))
+            .run();
+          tx.delete(schema.spaceFolders)
+            .where(and(eq(schema.spaceFolders.id, existingId), eq(schema.spaceFolders.userId, userId)))
+            .run();
+        }
+      }
+
+      // Replace new:* keys in items array with server-generated IDs
+      const finalItems: SpaceLayoutItem[] = items.map(item => {
+        if (item.t === 'f' && newIdMap.has(item.id)) {
+          return { t: 'f' as const, id: newIdMap.get(item.id)! };
+        }
+        return item;
+      });
+
+      // Upsert user_space_layout
+      const existing = tx.select().from(schema.userSpaceLayout)
+        .where(eq(schema.userSpaceLayout.userId, userId)).get();
+      if (existing) {
+        tx.update(schema.userSpaceLayout)
+          .set({ layout: JSON.stringify(finalItems), updatedAt: Date.now() })
+          .where(eq(schema.userSpaceLayout.userId, userId))
+          .run();
+      } else {
+        tx.insert(schema.userSpaceLayout).values({
+          userId,
+          layout: JSON.stringify(finalItems),
+          updatedAt: Date.now(),
+        }).run();
+      }
+    });
+
+    // Build response: fetch final state
+    const finalLayout = db.select().from(schema.userSpaceLayout)
+      .where(eq(schema.userSpaceLayout.userId, userId)).get();
+    const finalItems: SpaceLayoutItem[] = finalLayout ? JSON.parse(finalLayout.layout) : [];
+
+    const finalFolderRows = db.select().from(schema.spaceFolders)
+      .where(eq(schema.spaceFolders.userId, userId))
+      .orderBy(schema.spaceFolders.position)
+      .all();
+
+    const responseFolders: SpaceFolder[] = [];
+    for (const folder of finalFolderRows) {
+      const memberRows = db.select()
+        .from(schema.spaceFolderMembers)
+        .where(eq(schema.spaceFolderMembers.folderId, folder.id))
+        .orderBy(schema.spaceFolderMembers.position)
+        .all();
+      responseFolders.push({
+        id: folder.id,
+        userId: folder.userId,
+        name: folder.name,
+        color: folder.color,
+        position: folder.position ?? 0,
+        spaceIds: memberRows.map(m => m.spaceId),
+      });
+    }
+
+    // Broadcast to user's other connections (multi-tab sync)
+    connectionManager.sendToUser(userId, {
+      type: 'space_layout_updated',
+      layout: finalItems,
+      folders: responseFolders,
+    });
+
+    return reply.code(200).send({ items: finalItems, folders: responseFolders });
   });
 
   app.get<{ Params: { id: string } }>('/api/users/:id', { preHandler: authenticate }, async (request, reply) => {

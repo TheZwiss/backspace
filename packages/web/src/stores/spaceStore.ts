@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
+import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
@@ -30,6 +30,7 @@ interface SpaceState {
   members: MemberWithUser[];
   roles: Role[];
   folders: SpaceFolder[];
+  spaceLayout: SpaceLayoutItem[] | null;
   dmChannels: DmChannel[];
   channelToSpaceMap: Map<string, string>;
   channelLastMessageIds: Map<string, string>;
@@ -72,7 +73,9 @@ interface SpaceState {
   updateUserEverywhere: (user: User) => void;
   addMember: (member: MemberWithUser) => void;
   removeMember: (userId: string) => void;
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => void;
+  setSpaceLayout: (layout: SpaceLayoutItem[] | null) => void;
+  updateSpaceLayout: (items: SpaceLayoutItem[], folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>) => Promise<void>;
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null) => void;
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
   removeInstanceSpaces: (origin: string) => void;
   transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
@@ -87,6 +90,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   members: [],
   roles: [],
   folders: [],
+  spaceLayout: null,
   dmChannels: [],
   channelToSpaceMap: new Map(),
   channelLastMessageIds: new Map(),
@@ -415,7 +419,22 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     }));
   },
 
-  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[]) => {
+  setSpaceLayout: (layout) => set({ spaceLayout: layout }),
+
+  updateSpaceLayout: async (items, folders) => {
+    // Optimistic: apply the layout immediately
+    set({ spaceLayout: items });
+
+    try {
+      const result = await api.spaceLayout.update({ items, folders });
+      // Server may have resolved new:* IDs
+      set({ spaceLayout: result.items, folders: result.folders });
+    } catch (err) {
+      console.error('Failed to save space layout:', err);
+    }
+  },
+
+  populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null) => {
     const isHome = !origin;
 
     // Tag all incoming servers with their instance origin
@@ -533,9 +552,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       categoryOriginMap,
     };
 
-    // Only set folders from home origin
+    // Only set folders and layout from home origin
     if (isHome) {
       update.folders = folders || [];
+      if (spaceLayout !== undefined) {
+        update.spaceLayout = spaceLayout ?? null;
+      }
     }
 
     set(update as any);

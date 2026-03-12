@@ -473,7 +473,15 @@ CREATE TABLE space_folders (
 CREATE TABLE space_folder_members (
     folder_id TEXT NOT NULL REFERENCES space_folders(id) ON DELETE CASCADE,
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+    position INTEGER DEFAULT 0,          -- ordering within folder
     PRIMARY KEY (folder_id, space_id)
+);
+
+-- User Space Layout (per-user sidebar ordering)
+CREATE TABLE user_space_layout (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    layout TEXT NOT NULL DEFAULT '[]',   -- JSON array of {t:'s',id} | {t:'f',id} items
+    updated_at INTEGER NOT NULL
 );
 
 -- Instance Settings (singleton row, id=1)
@@ -544,6 +552,7 @@ POST   /api/users/@me/verify-password (auth) { password }                   → 
 POST   /api/users/@me/change-password (auth) { currentPassword?, newPassword } → { token }
 DELETE /api/users/@me              (auth) { password, username }             → { success }
 GET    /api/users/:id/mutuals      (auth) ?homeUserId=                      → { mutualFriends[], mutualSpaces[] }
+PUT    /api/users/@me/space-layout  (auth) { items, folders }               → { items, folders }
 
 # Spaces
 POST   /api/spaces                (auth) { name, icon?, banner?, avatarColor?, visibility?, description? } → { space }
@@ -693,7 +702,7 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 
 ### Server → Client
 ```
-{ type: 'ready', user, spaces, dmChannels, folders, voiceStates, readStates, activeCalls }
+{ type: 'ready', user, spaces, dmChannels, folders, spaceLayout, voiceStates, readStates, activeCalls }
 { type: 'pong' }
 
 # Server Messages
@@ -751,6 +760,9 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'join_request_received', request }
 { type: 'join_request_accepted', request, space? }
 { type: 'join_request_declined', request }
+
+# Space Layout
+{ type: 'space_layout_updated', layout: SpaceLayoutItem[], folders: SpaceFolder[] }
 ```
 
 ## PERMISSION SYSTEM

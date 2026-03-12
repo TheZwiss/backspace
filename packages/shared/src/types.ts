@@ -122,6 +122,12 @@ export interface SpaceFolder {
   spaceIds: string[];
 }
 
+// ─── Space Layout Types ────────────────────────────────────────────────────
+
+export type SpaceLayoutItem =
+  | { t: 's'; id: string }
+  | { t: 'f'; id: string };
+
 // ─── Channel Types ──────────────────────────────────────────────────────────
 
 export type ChannelType = 'text' | 'voice';
@@ -265,7 +271,7 @@ export type ClientEvent =
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
@@ -311,6 +317,7 @@ export type ServerEvent =
   | { type: 'category_updated'; category: ChannelCategory; spaceId: string }
   | { type: 'category_deleted'; categoryId: string; spaceId: string }
   | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
+  | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[] }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 

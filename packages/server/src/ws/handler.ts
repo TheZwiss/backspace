@@ -15,6 +15,7 @@ import type {
   DmChannel,
   ServerEvent,
   SpaceFolder,
+  SpaceLayoutItem,
   ReadState,
   ActiveCallInfo,
 } from '@backspace/shared';
@@ -652,6 +653,7 @@ function buildReadyPayload(userId: string): {
   spaces: SpaceWithChannelsAndMembers[];
   dmChannels: DmChannel[];
   folders: SpaceFolder[];
+  spaceLayout: SpaceLayoutItem[] | null;
   voiceStates: Record<string, string[]>;
   voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
   spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
@@ -926,6 +928,7 @@ function buildReadyPayload(userId: string): {
     const folderSpaceIds = db.select()
       .from(schema.spaceFolderMembers)
       .where(eq(schema.spaceFolderMembers.folderId, folder.id))
+      .orderBy(schema.spaceFolderMembers.position)
       .all()
       .map(m => m.spaceId);
 
@@ -938,6 +941,11 @@ function buildReadyPayload(userId: string): {
       spaceIds: folderSpaceIds,
     });
   }
+
+  // Get user space layout
+  const layoutRow = db.select().from(schema.userSpaceLayout)
+    .where(eq(schema.userSpaceLayout.userId, userId)).get();
+  const spaceLayout: SpaceLayoutItem[] | null = layoutRow ? JSON.parse(layoutRow.layout) : null;
 
   // Build voice states — tell the client who is currently in voice channels
   // across all their spaces
@@ -1029,7 +1037,7 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, spaces, dmChannels, folders, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls };
+  return { user, spaces, dmChannels, folders, spaceLayout, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

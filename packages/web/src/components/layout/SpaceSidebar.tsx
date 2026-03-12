@@ -2,14 +2,52 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import type { TaggedSpace } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Tooltip } from '../ui/Tooltip';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
+
+// ─── Resolved layout types ─────────────────────────────────────────────────
+
+type ResolvedItem =
+  | { type: 'space'; space: TaggedSpace }
+  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[]; collapsed: boolean };
+
+// ─── localStorage keys ────────────────────────────────────────────────────
+
+const COLLAPSED_KEY = 'backspace:collapsed-space-folders';
+
+function getCollapsedFolders(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function setCollapsedFolders(ids: Set<string>): void {
+  localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...ids]));
+}
+
+// ─── Folder color presets ─────────────────────────────────────────────────
+
+const FOLDER_COLORS = [
+  { name: 'mint', value: '#86efac' },
+  { name: 'peach', value: '#fbbf93' },
+  { name: 'lavender', value: '#c4b5fd' },
+  { name: 'sky', value: '#7dd3fc' },
+  { name: 'amber', value: '#fcd34d' },
+  { name: 'rose', value: '#fda4af' },
+  { name: 'coral', value: '#fb7185' },
+];
+
+// ─── SidebarItem ─────────────────────────────────────────────────────────
 
 interface SidebarItemProps {
   id: string;
@@ -26,9 +64,16 @@ interface SidebarItemProps {
   federationBadge?: boolean;
   federationDisconnected?: boolean;
   tooltipText?: string;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
+  isDragging?: boolean;
+  dropIndicator?: 'before' | 'after' | 'merge' | null;
 }
 
-function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText }: SidebarItemProps) {
+function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMenu, type = 'space', actionType, hasUnread, dimmed, federationBadge, federationDisconnected, tooltipText, draggable, onDragStart, onDragOver, onDragEnd, onDrop, isDragging, dropIndicator }: SidebarItemProps) {
   const [isHovered, setIsHovered] = useState(false);
   const firstLetter = name.charAt(0).toUpperCase();
 
@@ -106,7 +151,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   );
 
   const innerContent = (
-    <div className="relative">
+    <div className={`relative ${dropIndicator === 'merge' ? 'scale-110 ring-2 ring-accent-mint/60 rounded-[16px]' : ''} transition-transform duration-150`}>
       {buttonContent}
       {federationBadge && (
         <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-base flex items-center justify-center">
@@ -124,11 +169,24 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
   return (
     <div
-      className="relative flex items-center mb-1.5 w-full justify-center"
+      className={`relative flex items-center mb-1.5 w-full justify-center ${isDragging ? 'opacity-50' : ''}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onContextMenu={onContextMenu}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
     >
+      {/* Drop indicator lines */}
+      {dropIndicator === 'before' && (
+        <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+      )}
+      {dropIndicator === 'after' && (
+        <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+      )}
+
       {/* Pill Indicator */}
       {(type === 'space' || type === 'dm') && (
         <div className="absolute -left-0 w-2 h-10 flex items-center">
@@ -149,22 +207,141 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   );
 }
 
-function InstanceDivider({ label, disconnected }: { label: string; disconnected: boolean }) {
+// ─── Mini space icon for collapsed folder ──────────────────────────────────
+
+function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
+  const icon = space.icon;
+  if (icon) {
+    return (
+      <img
+        src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+        alt=""
+        className="w-full h-full object-cover rounded-[3px]"
+      />
+    );
+  }
+  const grad = getSpaceGradient(space.id, space.name, space.avatarColor);
   return (
-    <Tooltip content={label} position="right" delay={300}>
-      <div className="relative flex items-center justify-center w-full my-2">
-        <div className="absolute inset-x-5 h-[1px] bg-interactive-muted/30 rounded-full" />
-        <div className={`relative z-[1] w-5 h-5 rounded-full bg-surface-base flex items-center justify-center ${
-          disconnected ? 'text-accent-amber' : 'text-txt-tertiary'
-        }`}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-          </svg>
-        </div>
-      </div>
-    </Tooltip>
+    <div
+      className="w-full h-full rounded-[3px] flex items-center justify-center text-white"
+      style={{ background: grad.gradient }}
+    >
+      <span className="text-[7px] font-bold leading-none">{space.name.charAt(0).toUpperCase()}</span>
+    </div>
   );
 }
+
+// ─── Collapsed folder icon (2×2 grid) ─────────────────────────────────────
+
+function CollapsedFolderIcon({ spaces, color }: { spaces: TaggedSpace[]; color: string | null }) {
+  const display = spaces.slice(0, 4);
+  const remaining = spaces.length - 4;
+  return (
+    <div className="relative w-10 h-10 rounded-[13px] flex items-center justify-center overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+      {color && <div className="absolute inset-0 opacity-[0.12]" style={{ background: color }} />}
+      <div className="grid grid-cols-2 gap-[2px] w-[28px] h-[28px] relative z-[1]">
+        {display.map((s) => (
+          <div key={s.id} className="w-[13px] h-[13px]">
+            <MiniSpaceIcon space={s} />
+          </div>
+        ))}
+        {/* Fill empty cells */}
+        {display.length < 4 && Array.from({ length: 4 - display.length }).map((_, i) => (
+          <div key={`empty-${i}`} className="w-[13px] h-[13px] rounded-[3px] bg-white/[0.04]" />
+        ))}
+      </div>
+      {remaining > 0 && (
+        <div className="absolute bottom-0 right-0 text-[7px] font-bold text-txt-tertiary bg-surface-base rounded-tl-sm px-0.5">
+          +{remaining}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Folder context menu ──────────────────────────────────────────────────
+
+function FolderContextMenu({ folder, x, y, onClose, onRename, onColorChange, onUngroup }: {
+  folder: SpaceFolder;
+  x: number;
+  y: number;
+  onClose: () => void;
+  onRename: () => void;
+  onColorChange: (color: string | null) => void;
+  onUngroup: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  const menuWidth = 200;
+  const menuHeight = 140;
+  const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
+  const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
+
+  return ReactDOM.createPortal(
+    <div
+      ref={menuRef}
+      className="fixed z-[9999] min-w-[160px] glass rounded-lg py-1 animate-in fade-in zoom-in-95 duration-100"
+      style={{ left: clampedX, top: clampedY }}
+    >
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-txt-primary hover:bg-white/[0.06] transition-colors"
+        onClick={() => { onRename(); onClose(); }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+        </svg>
+        Rename Folder
+      </button>
+      <div className="px-3 py-1.5">
+        <p className="text-[11px] text-txt-tertiary mb-1.5">Folder Color</p>
+        <div className="flex gap-1.5">
+          <button
+            className={`w-5 h-5 rounded-full border-2 ${!folder.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
+            onClick={() => { onColorChange(null); onClose(); }}
+            title="Default"
+          />
+          {FOLDER_COLORS.map((c) => (
+            <button
+              key={c.name}
+              className={`w-5 h-5 rounded-full border-2 ${folder.color === c.value ? 'border-white/40' : 'border-transparent'}`}
+              style={{ background: c.value }}
+              onClick={() => { onColorChange(c.value); onClose(); }}
+              title={c.name}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="h-[1px] bg-white/[0.06] mx-2 my-1" />
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
+        onClick={() => { onUngroup(); onClose(); }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V8h-2v4H10v2h4v4h2v-4h4v-2h-4z" />
+        </svg>
+        Ungroup
+      </button>
+    </div>,
+    document.body,
+  );
+}
+
+// ─── SpaceContextMenu ─────────────────────────────────────────────────────
 
 function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: number; y: number; onClose: () => void }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -292,6 +469,8 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
     document.body,
   );
 }
+
+// ─── TransferOwnershipModal ───────────────────────────────────────────────
 
 function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -459,12 +638,17 @@ function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose
   );
 }
 
+// ─── SpaceSidebar (main component) ────────────────────────────────────────
+
 export function SpaceSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
+  const folders = useSpaceStore((s) => s.folders);
+  const spaceLayout = useSpaceStore((s) => s.spaceLayout);
+  const updateSpaceLayout = useSpaceStore((s) => s.updateSpaceLayout);
   const showDms = useUIStore((s) => s.showDms);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
@@ -476,8 +660,31 @@ export function SpaceSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Single context menu state
+  // Collapsed folders state
+  const [collapsedFolderIds, setCollapsedFolderIdsState] = useState(getCollapsedFolders);
+  const setCollapsedFolderIds = useCallback((ids: Set<string>) => {
+    setCollapsedFolderIdsState(ids);
+    setCollapsedFolders(ids);
+  }, []);
+
+  const toggleFolderCollapse = useCallback((folderId: string) => {
+    setCollapsedFolderIdsState(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      setCollapsedFolders(next);
+      return next;
+    });
+  }, []);
+
+  // Context menus
   const [contextMenu, setContextMenu] = useState<{ spaceId: string; x: number; y: number } | null>(null);
+  const [folderContextMenu, setFolderContextMenu] = useState<{ folder: SpaceFolder; x: number; y: number } | null>(null);
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+
+  // DnD state
+  const [dragState, setDragState] = useState<{ dragId: string; dragType: 'space' | 'folder'; sourceFolderId?: string } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after' | 'merge' } | null>(null);
 
   const handleSpaceContextMenu = useCallback((spaceId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -485,20 +692,6 @@ export function SpaceSidebar() {
   }, []);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
-
-  // Group spaces by origin
-  const groupedSpaces = useMemo(() => {
-    const home = spaces.filter(s => !(s as any)._instanceOrigin);
-    const remoteMap = new Map<string, typeof spaces>();
-    for (const s of spaces) {
-      const origin = (s as any)._instanceOrigin;
-      if (!origin) continue;
-      const list = remoteMap.get(origin) || [];
-      list.push(s);
-      remoteMap.set(origin, list);
-    }
-    return { home, remoteGroups: Array.from(remoteMap.entries()) };
-  }, [spaces]);
 
   // Set of disconnected origins
   const disconnectedOrigins = useMemo(() => {
@@ -510,6 +703,64 @@ export function SpaceSidebar() {
     }
     return set;
   }, [instances]);
+
+  // Build space lookup map
+  const spaceMap = useMemo(() => {
+    const map = new Map<string, TaggedSpace>();
+    for (const s of spaces) map.set(s.id, s);
+    return map;
+  }, [spaces]);
+
+  // Build folder lookup map
+  const folderMap = useMemo(() => {
+    const map = new Map<string, SpaceFolder>();
+    for (const f of folders) map.set(f.id, f);
+    return map;
+  }, [folders]);
+
+  // Reconciled layout: merge spaceLayout with actual spaces and folders
+  const resolvedLayout = useMemo((): ResolvedItem[] => {
+    const memberSpaceIds = new Set(spaces.map(s => s.id));
+    const result: ResolvedItem[] = [];
+    const accountedSpaceIds = new Set<string>();
+
+    if (spaceLayout && spaceLayout.length > 0) {
+      for (const item of spaceLayout) {
+        if (item.t === 's') {
+          const space = spaceMap.get(item.id);
+          if (space) {
+            result.push({ type: 'space', space });
+            accountedSpaceIds.add(item.id);
+          }
+        } else if (item.t === 'f') {
+          const folder = folderMap.get(item.id);
+          if (folder) {
+            const folderSpaces = folder.spaceIds
+              .map(sid => spaceMap.get(sid))
+              .filter((s): s is TaggedSpace => !!s);
+            if (folderSpaces.length > 0) {
+              result.push({
+                type: 'folder',
+                folder,
+                spaces: folderSpaces,
+                collapsed: collapsedFolderIds.has(folder.id),
+              });
+              for (const s of folderSpaces) accountedSpaceIds.add(s.id);
+            }
+          }
+        }
+      }
+    }
+
+    // Append any spaces not in the layout (newly joined, etc.)
+    for (const space of spaces) {
+      if (!accountedSpaceIds.has(space.id)) {
+        result.push({ type: 'space', space });
+      }
+    }
+
+    return result;
+  }, [spaceLayout, spaces, spaceMap, folderMap, collapsedFolderIds]);
 
   // Compute which spaces have unread channels
   const unreadSpaceIds = useMemo(() => {
@@ -529,9 +780,9 @@ export function SpaceSidebar() {
     return false;
   }, [unreadChannels, dmChannels]);
 
-  const handleSpaceClick = (spaceId: string) => {
-    const space = spaces.find(s => s.id === spaceId);
-    const origin = (space as any)?._instanceOrigin;
+  const handleSpaceClick = useCallback((spaceId: string) => {
+    const space = spaceMap.get(spaceId);
+    const origin = space?._instanceOrigin;
     if (origin && disconnectedOrigins.has(origin)) {
       const inst = instances.find(i => i.origin === origin);
       addToast(`Reconnecting to ${inst?.label || 'remote instance'}...`, 'warning', 4000);
@@ -540,7 +791,7 @@ export function SpaceSidebar() {
     setCurrentSpace(spaceId);
     setShowDms(false);
     navigate(`/channels/${spaceId}`);
-  };
+  }, [spaceMap, disconnectedOrigins, instances, addToast, setCurrentSpace, setShowDms, navigate]);
 
   const handleDmClick = () => {
     setShowDms(true);
@@ -555,6 +806,258 @@ export function SpaceSidebar() {
     navigate('/explore');
   };
 
+  // ─── DnD handlers ──────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback((e: React.DragEvent, id: string, type: 'space' | 'folder', sourceFolderId?: string) => {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragState({ dragId: id, dragType: type, sourceFolderId });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, targetId: string, targetType: 'space' | 'folder') => {
+    if (!dragState) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const height = rect.height;
+
+    let position: 'before' | 'after' | 'merge';
+    if (targetType === 'folder' || dragState.dragType === 'space') {
+      // Space items: top 25% = before, middle 50% = merge, bottom 25% = after
+      if (relY < height * 0.25) {
+        position = 'before';
+      } else if (relY > height * 0.75) {
+        position = 'after';
+      } else {
+        // Merge zone: only if dragging a space onto another space or folder
+        if (dragState.dragType === 'space' && dragState.dragId !== targetId) {
+          position = 'merge';
+        } else {
+          position = relY < height * 0.5 ? 'before' : 'after';
+        }
+      }
+    } else {
+      // Folder dragging: only before/after, no merge
+      position = relY < height * 0.5 ? 'before' : 'after';
+    }
+
+    setDropIndicator({ targetId, position });
+  }, [dragState]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragState(null);
+    setDropIndicator(null);
+  }, []);
+
+  // Build layout items and folder payload from resolvedLayout for persistence
+  const buildLayoutPayload = useCallback((resolved: ResolvedItem[]) => {
+    const items: SpaceLayoutItem[] = [];
+    const folderPayload: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+
+    for (const item of resolved) {
+      if (item.type === 'space') {
+        items.push({ t: 's', id: item.space.id });
+      } else {
+        items.push({ t: 'f', id: item.folder.id });
+        folderPayload[item.folder.id] = {
+          name: item.folder.name,
+          color: item.folder.color,
+          spaceIds: item.spaces.map(s => s.id),
+        };
+      }
+    }
+
+    return { items, folderPayload };
+  }, []);
+
+  const persistLayout = useCallback((resolved: ResolvedItem[]) => {
+    const { items, folderPayload } = buildLayoutPayload(resolved);
+    updateSpaceLayout(items, folderPayload);
+  }, [buildLayoutPayload, updateSpaceLayout]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (!dragState || !dropIndicator) {
+      handleDragEnd();
+      return;
+    }
+
+    const { dragId, dragType, sourceFolderId } = dragState;
+    const { targetId, position } = dropIndicator;
+
+    // Don't drop on self
+    if (dragId === targetId && position !== 'merge') {
+      handleDragEnd();
+      return;
+    }
+
+    // Work with a mutable copy of the resolved layout
+    let newLayout = resolvedLayout.map(item => {
+      if (item.type === 'folder') {
+        return { ...item, spaces: [...item.spaces], folder: { ...item.folder } };
+      }
+      return { ...item };
+    }) as ResolvedItem[];
+
+    if (dragType === 'space') {
+      const dragSpace = spaceMap.get(dragId);
+      if (!dragSpace) { handleDragEnd(); return; }
+
+      // Remove from source
+      if (sourceFolderId) {
+        // Remove from folder
+        const folderItem = newLayout.find(i => i.type === 'folder' && i.folder.id === sourceFolderId) as (ResolvedItem & { type: 'folder' }) | undefined;
+        if (folderItem) {
+          folderItem.spaces = folderItem.spaces.filter(s => s.id !== dragId);
+          folderItem.folder = { ...folderItem.folder, spaceIds: folderItem.spaces.map(s => s.id) };
+        }
+      } else {
+        // Remove standalone
+        newLayout = newLayout.filter(item => !(item.type === 'space' && item.space.id === dragId));
+      }
+
+      if (position === 'merge') {
+        // Find the target
+        const targetIdx = newLayout.findIndex(item =>
+          (item.type === 'space' && item.space.id === targetId) ||
+          (item.type === 'folder' && item.folder.id === targetId)
+        );
+        if (targetIdx === -1) { handleDragEnd(); return; }
+
+        const targetItem = newLayout[targetIdx];
+        if (!targetItem) { handleDragEnd(); return; }
+
+        if (targetItem.type === 'space') {
+          // Create new folder with both spaces
+          const tempId = `new:${Date.now()}`;
+          const newFolder: ResolvedItem = {
+            type: 'folder',
+            folder: {
+              id: tempId,
+              userId: '',
+              name: null,
+              color: null,
+              position: 0,
+              spaceIds: [targetItem.space.id, dragSpace.id],
+            },
+            spaces: [targetItem.space, dragSpace],
+            collapsed: false,
+          };
+          newLayout[targetIdx] = newFolder;
+        } else if (targetItem.type === 'folder') {
+          // Add to existing folder
+          targetItem.spaces.push(dragSpace);
+          targetItem.folder = { ...targetItem.folder, spaceIds: targetItem.spaces.map(s => s.id) };
+        }
+      } else {
+        // Reorder: insert before or after target
+        const targetIdx = newLayout.findIndex(item =>
+          (item.type === 'space' && item.space.id === targetId) ||
+          (item.type === 'folder' && item.folder.id === targetId)
+        );
+        if (targetIdx === -1) { handleDragEnd(); return; }
+
+        const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
+        const newItem: ResolvedItem = { type: 'space', space: dragSpace };
+        newLayout.splice(insertIdx, 0, newItem);
+      }
+
+      // Dissolve folders with < 2 members
+      newLayout = newLayout.flatMap(item => {
+        if (item.type === 'folder' && item.spaces.length < 2) {
+          if (item.spaces.length === 1 && item.spaces[0]) {
+            return [{ type: 'space' as const, space: item.spaces[0] }];
+          }
+          return []; // 0 members, remove entirely
+        }
+        return [item];
+      });
+
+    } else if (dragType === 'folder') {
+      // Remove the folder from its current position
+      const dragIdx = newLayout.findIndex(i => i.type === 'folder' && i.folder.id === dragId);
+      if (dragIdx === -1) { handleDragEnd(); return; }
+      const dragItem = newLayout.splice(dragIdx, 1)[0];
+      if (!dragItem) { handleDragEnd(); return; }
+
+      // Insert at target position
+      const targetIdx = newLayout.findIndex(item =>
+        (item.type === 'space' && item.space.id === targetId) ||
+        (item.type === 'folder' && item.folder.id === targetId)
+      );
+      if (targetIdx === -1) {
+        newLayout.push(dragItem);
+      } else {
+        const insertIdx = position === 'before' ? targetIdx : targetIdx + 1;
+        newLayout.splice(insertIdx, 0, dragItem);
+      }
+    }
+
+    persistLayout(newLayout);
+    handleDragEnd();
+  }, [dragState, dropIndicator, resolvedLayout, spaceMap, handleDragEnd, persistLayout]);
+
+  // ─── Folder actions ──────────────────────────────────────────────────
+
+  const handleFolderRename = useCallback((folderId: string, name: string) => {
+    const newLayout = resolvedLayout.map(item => {
+      if (item.type === 'folder' && item.folder.id === folderId) {
+        return { ...item, folder: { ...item.folder, name: name.trim() || null } };
+      }
+      return item;
+    });
+    persistLayout(newLayout);
+    setRenamingFolderId(null);
+  }, [resolvedLayout, persistLayout]);
+
+  const handleFolderColorChange = useCallback((folderId: string, color: string | null) => {
+    const newLayout = resolvedLayout.map(item => {
+      if (item.type === 'folder' && item.folder.id === folderId) {
+        return { ...item, folder: { ...item.folder, color } };
+      }
+      return item;
+    });
+    persistLayout(newLayout);
+  }, [resolvedLayout, persistLayout]);
+
+  const handleUngroup = useCallback((folderId: string) => {
+    const newLayout = resolvedLayout.flatMap(item => {
+      if (item.type === 'folder' && item.folder.id === folderId) {
+        return item.spaces.map(s => ({ type: 'space' as const, space: s }));
+      }
+      return [item];
+    });
+    persistLayout(newLayout);
+  }, [resolvedLayout, persistLayout]);
+
+  // ─── Helpers for rendering ──────────────────────────────────────────
+
+  const getFederationInfo = useCallback((space: TaggedSpace) => {
+    const origin = space._instanceOrigin;
+    const isFederated = !!origin;
+    const isDimmed = isFederated && disconnectedOrigins.has(origin);
+    let tooltipText = space.name;
+    if (isFederated) {
+      try {
+        const hostLabel = new URL(origin).host;
+        tooltipText = `${space.name} \u00b7 ${hostLabel}`;
+      } catch { /* ignore */ }
+    }
+    return { isFederated, isDimmed, tooltipText };
+  }, [disconnectedOrigins]);
+
+  // Check if a folder has any unread spaces
+  const folderHasUnread = useCallback((folderSpaces: TaggedSpace[]) => {
+    return folderSpaces.some(s => unreadSpaceIds.has(s.id));
+  }, [unreadSpaceIds]);
+
+  // Check if folder has any active space
+  const folderHasActive = useCallback((folderSpaces: TaggedSpace[]) => {
+    return currentSpaceId ? folderSpaces.some(s => s.id === currentSpaceId) : false;
+  }, [currentSpaceId]);
+
   return (
     <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24 }}>
       <SidebarItem
@@ -568,52 +1071,182 @@ export function SpaceSidebar() {
 
       <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
 
-      {/* Home spaces */}
-      {groupedSpaces.home.map((space) => (
-        <SidebarItem
-          key={space.id}
-          id={space.id}
-          name={space.name}
-          icon={space.icon}
-          avatarColor={space.avatarColor}
-          active={currentSpaceId === space.id}
-          onClick={() => handleSpaceClick(space.id)}
-          onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
-          hasUnread={unreadSpaceIds.has(space.id)}
-          tooltipText={space.name}
-        />
-      ))}
-
-      {/* Remote instance groups */}
-      {groupedSpaces.remoteGroups.map(([origin, groupSpaces]) => {
-        const inst = instances.find(i => i.origin === origin);
-        const hostLabel = (() => { try { return new URL(origin).host; } catch { return '?'; } })();
-        const label = inst?.label || hostLabel;
-        const isDimmed = disconnectedOrigins.has(origin);
-        return (
-          <React.Fragment key={origin}>
-            <InstanceDivider
-              label={isDimmed ? `${label} (disconnected)` : label}
-              disconnected={isDimmed}
+      {/* Unified space list (ordered by user layout) */}
+      {resolvedLayout.map((item) => {
+        if (item.type === 'space') {
+          const { isFederated, isDimmed, tooltipText } = getFederationInfo(item.space);
+          return (
+            <SidebarItem
+              key={item.space.id}
+              id={item.space.id}
+              name={item.space.name}
+              icon={item.space.icon}
+              avatarColor={item.space.avatarColor}
+              active={currentSpaceId === item.space.id}
+              onClick={() => handleSpaceClick(item.space.id)}
+              onContextMenu={(e) => handleSpaceContextMenu(item.space.id, e)}
+              hasUnread={unreadSpaceIds.has(item.space.id)}
+              dimmed={isDimmed}
+              federationBadge={isFederated}
+              federationDisconnected={isDimmed}
+              tooltipText={tooltipText}
+              draggable
+              onDragStart={(e) => handleDragStart(e, item.space.id, 'space')}
+              onDragOver={(e) => handleDragOver(e, item.space.id, 'space')}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
+              isDragging={dragState?.dragType === 'space' && dragState.dragId === item.space.id}
+              dropIndicator={dropIndicator?.targetId === item.space.id ? dropIndicator.position : null}
             />
-            {groupSpaces.map((space) => (
-              <SidebarItem
-                key={space.id}
-                id={space.id}
-                name={space.name}
-                icon={space.icon}
-                avatarColor={space.avatarColor}
-                active={currentSpaceId === space.id}
-                onClick={() => handleSpaceClick(space.id)}
-                onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
-                hasUnread={unreadSpaceIds.has(space.id)}
-                dimmed={isDimmed}
-                federationBadge
-                federationDisconnected={isDimmed}
-                tooltipText={`${space.name} \u00b7 ${hostLabel}`}
+          );
+        }
+
+        // Folder
+        const { folder, spaces: folderSpaces, collapsed } = item;
+        const isActive = folderHasActive(folderSpaces);
+        const hasUnread = folderHasUnread(folderSpaces);
+
+        if (collapsed) {
+          // Collapsed folder — single icon
+          return (
+            <div
+              key={`folder-${folder.id}`}
+              className={`relative flex items-center mb-1.5 w-full justify-center ${
+                dragState?.dragType === 'folder' && dragState.dragId === folder.id ? 'opacity-50' : ''
+              }`}
+              draggable
+              onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
+              onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
+              onDragEnd={handleDragEnd}
+              onDrop={handleDrop}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
+              }}
+            >
+              {/* Drop indicators */}
+              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'before' && (
+                <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+              )}
+              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'after' && (
+                <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+              )}
+              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'merge' && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <div className="w-12 h-12 rounded-[16px] ring-2 ring-accent-mint/60" />
+                </div>
+              )}
+
+              {/* Pill indicator */}
+              <div className="absolute -left-0 w-2 h-10 flex items-center">
+                <div className={`bg-white rounded-r-full transition-all duration-200 origin-left ${
+                  isActive ? 'h-8' : hasUnread ? 'h-2' : 'h-2 scale-0'
+                } w-1`} />
+              </div>
+
+              <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
+                <button onClick={() => toggleFolderCollapse(folder.id)}>
+                  <CollapsedFolderIcon spaces={folderSpaces} color={folder.color} />
+                </button>
+              </Tooltip>
+            </div>
+          );
+        }
+
+        // Expanded folder
+        return (
+          <div
+            key={`folder-${folder.id}`}
+            className="w-full flex flex-col items-center"
+            onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
+            onDrop={handleDrop}
+          >
+            {/* Top separator with folder toggle */}
+            <div
+              className="flex items-center justify-center w-full my-1 cursor-pointer"
+              draggable
+              onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
+              onDragEnd={handleDragEnd}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
+              }}
+            >
+              {/* Drop indicator for folder header */}
+              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'before' && (
+                <div className="absolute top-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+              )}
+              <Tooltip content={folder.name || `Folder (${folderSpaces.length})`} position="right" delay={300}>
+                <button
+                  onClick={() => toggleFolderCollapse(folder.id)}
+                  className="relative flex items-center justify-center w-12"
+                >
+                  <div className="w-8 h-[2px] rounded-full" style={{ background: folder.color || 'rgba(255,255,255,0.08)' }} />
+                </button>
+              </Tooltip>
+            </div>
+
+            {/* Folder rename input */}
+            {renamingFolderId === folder.id && (
+              <div className="w-full px-3 mb-1">
+                <input
+                  autoFocus
+                  className="w-full bg-surface-input text-[10px] text-txt-primary rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-accent-mint/40"
+                  defaultValue={folder.name || ''}
+                  onBlur={(e) => handleFolderRename(folder.id, e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleFolderRename(folder.id, e.currentTarget.value);
+                    if (e.key === 'Escape') setRenamingFolderId(null);
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Folder member spaces */}
+            <div className="relative w-full flex flex-col items-center">
+              {/* Left accent line */}
+              <div
+                className="absolute left-[10px] top-0 bottom-0 w-[2px] rounded-full"
+                style={{ background: folder.color || 'rgba(255,255,255,0.06)' }}
               />
-            ))}
-          </React.Fragment>
+
+              {folderSpaces.map((space) => {
+                const { isFederated, isDimmed, tooltipText } = getFederationInfo(space);
+                return (
+                  <SidebarItem
+                    key={space.id}
+                    id={space.id}
+                    name={space.name}
+                    icon={space.icon}
+                    avatarColor={space.avatarColor}
+                    active={currentSpaceId === space.id}
+                    onClick={() => handleSpaceClick(space.id)}
+                    onContextMenu={(e) => handleSpaceContextMenu(space.id, e)}
+                    hasUnread={unreadSpaceIds.has(space.id)}
+                    dimmed={isDimmed}
+                    federationBadge={isFederated}
+                    federationDisconnected={isDimmed}
+                    tooltipText={tooltipText}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, space.id, 'space', folder.id)}
+                    onDragOver={(e) => handleDragOver(e, space.id, 'space')}
+                    onDragEnd={handleDragEnd}
+                    onDrop={handleDrop}
+                    isDragging={dragState?.dragType === 'space' && dragState.dragId === space.id}
+                    dropIndicator={dropIndicator?.targetId === space.id ? dropIndicator.position : null}
+                  />
+                );
+              })}
+            </div>
+
+            {/* Bottom separator */}
+            <div className="flex items-center justify-center w-full my-1">
+              {dropIndicator?.targetId === folder.id && dropIndicator.position === 'after' && (
+                <div className="absolute bottom-0 left-3 right-3 h-[2px] bg-accent-mint rounded-full z-10" />
+              )}
+              <div className="w-8 h-[2px] rounded-full" style={{ background: folder.color || 'rgba(255,255,255,0.08)' }} />
+            </div>
+          </div>
         );
       })}
 
@@ -652,6 +1285,18 @@ export function SpaceSidebar() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={closeContextMenu}
+        />
+      )}
+
+      {folderContextMenu && (
+        <FolderContextMenu
+          folder={folderContextMenu.folder}
+          x={folderContextMenu.x}
+          y={folderContextMenu.y}
+          onClose={() => setFolderContextMenu(null)}
+          onRename={() => setRenamingFolderId(folderContextMenu.folder.id)}
+          onColorChange={(color) => handleFolderColorChange(folderContextMenu.folder.id, color)}
+          onUngroup={() => handleUngroup(folderContextMenu.folder.id)}
         />
       )}
     </nav>

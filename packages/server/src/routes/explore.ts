@@ -68,6 +68,19 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
     .where(eq(schema.channels.spaceId, spaceId))
     .all();
 
+  const categories = db.select()
+    .from(schema.channelCategories)
+    .where(eq(schema.channelCategories.spaceId, spaceId))
+    .orderBy(schema.channelCategories.position)
+    .all()
+    .map(c => ({
+      id: c.id,
+      spaceId: c.spaceId,
+      name: c.name,
+      position: c.position ?? 0,
+      createdAt: c.createdAt,
+    }));
+
   const roles = db.select()
     .from(schema.roles)
     .where(eq(schema.roles.spaceId, spaceId))
@@ -135,6 +148,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
         type: ch.type as Channel['type'],
         topic: ch.topic,
         position: ch.position ?? 0,
+        categoryId: ch.categoryId ?? null,
         createdAt: ch.createdAt,
         myPermissions: permissionsToString(chPerms),
       });
@@ -153,6 +167,7 @@ function buildFullSpace(spaceId: string, forUserId: string): SpaceWithChannelsAn
     description: space.description ?? null,
     createdAt: space.createdAt,
     channels: visibleChannels,
+    categories,
     members,
     roles: roles.map(r => ({
       id: r.id,

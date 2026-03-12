@@ -192,9 +192,16 @@ export const spaceFolders = sqliteTable('space_folders', {
 export const spaceFolderMembers = sqliteTable('space_folder_members', {
   folderId: text('folder_id').notNull().references(() => spaceFolders.id, { onDelete: 'cascade' }),
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  position: integer('position').default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.folderId, table.spaceId] }),
 }));
+
+export const userSpaceLayout = sqliteTable('user_space_layout', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  layout: text('layout').notNull().default('[]'),
+  updatedAt: integer('updated_at').notNull(),
+});
 
 export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),

@@ -233,6 +233,24 @@ export function runMigrations(db: Database.Database): void {
   // ─── Convert video channels to voice (video type removed) ─────────────────
   migrateVideoChannels(db);
 
+  // ─── Ensure user_space_layout table exists ────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_space_layout (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      layout TEXT NOT NULL DEFAULT '[]',
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
+  // ─── Add position column to space_folder_members ──────────────────────────
+  {
+    const sfmColumns = db.pragma('table_info(space_folder_members)') as { name: string }[];
+    if (!sfmColumns.some(c => c.name === 'position')) {
+      db.exec('ALTER TABLE space_folder_members ADD COLUMN position INTEGER DEFAULT 0');
+      console.log('Migrating: Added position column to space_folder_members');
+    }
+  }
+
   console.log('Migrations complete.');
 }
 

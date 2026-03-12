@@ -107,7 +107,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      populateFromReady(origin, event.spaces, event.folders, event.dmChannels);
+      populateFromReady(origin, event.spaces, event.folders, event.dmChannels, event.spaceLayout);
 
       // Cache authoritative identity for this origin (federation-safe)
       if (!isHome) {
@@ -694,6 +694,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+      break;
+    }
+
+    case 'space_layout_updated': {
+      if (!isHome) break;
+      const { setSpaceLayout } = useSpaceStore.getState();
+      setSpaceLayout(event.layout);
+      useSpaceStore.setState({ folders: event.folders });
       break;
     }
 

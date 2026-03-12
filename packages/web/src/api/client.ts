@@ -36,6 +36,8 @@ import type {
   ExploreSpace,
   JoinRequest,
   Role,
+  SpaceLayoutItem,
+  SpaceFolder,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -62,6 +64,10 @@ export class BackspaceApiClient {
     changePassword: (data: ChangePasswordRequest) => Promise<ChangePasswordResponse>;
     deleteAccount: (data: DeleteAccountRequest) => Promise<{ success: boolean }>;
     getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>;
+  };
+
+  readonly spaceLayout: {
+    update: (data: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> }) => Promise<{ items: SpaceLayoutItem[]; folders: SpaceFolder[] }>;
   };
 
   readonly spaces: {
@@ -268,6 +274,11 @@ export class BackspaceApiClient {
           'GET', `/users/${id}/mutuals${qs ? `?${qs}` : ''}`
         );
       },
+    };
+
+    this.spaceLayout = {
+      update: (data) =>
+        request<{ items: SpaceLayoutItem[]; folders: SpaceFolder[] }>('PUT', '/users/@me/space-layout', data),
     };
 
     this.spaces = {
