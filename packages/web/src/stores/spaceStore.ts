@@ -318,7 +318,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   deleteChannel: async (channelId: string) => {
-    await api.channels.delete(channelId);
+    const origin = get().channelOriginMap.get(channelId) ?? '';
+    const channelApi = getApiForOrigin(origin);
+    await channelApi.channels.delete(channelId);
     set((state) => ({
       channels: state.channels.filter(c => c.id !== channelId),
     }));

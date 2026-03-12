@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -7,6 +7,7 @@ import { isMember, hasPermission, getChannelSpaceId, PermissionBits, computePerm
 import { permissionsToString } from '@backspace/shared/src/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import { checkVoicePermissions } from '../ws/events.js';
+import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import type {
   CreateChannelRequest,
   UpdateChannelRequest,
@@ -285,6 +286,21 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing MANAGE_CHANNELS permission', statusCode: 403 });
     }
 
+    // Disconnect voice users before deletion
+    const participants = connectionManager.getRoomParticipants(id);
+    if (participants.size > 0) {
+      for (const participantId of Array.from(participants)) {
+        connectionManager.leaveRoom(id, participantId);
+        connectionManager.clearVoiceUserStatus(participantId);
+        connectionManager.sendToSpace(spaceId, {
+          type: 'voice_state_update', channelId: id, userId: participantId, action: 'leave',
+        });
+        connectionManager.sendToUser(participantId, {
+          type: 'voice_disconnected', userId: participantId, channelId: id,
+        });
+      }
+    }
+
     // Collect viewers BEFORE deleting (overrides CASCADE-delete with the channel)
     const viewerIds: string[] = [];
     for (const [uid, spaceIds] of connectionManager.getUserSpaceEntries()) {
@@ -296,9 +312,25 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // Collect attachment filenames BEFORE cascade deletes DB records
+    const channelMsgIds = db.select({ id: schema.messages.id })
+      .from(schema.messages).where(eq(schema.messages.channelId, id)).all().map(m => m.id);
+
+    let attachmentRows: { filename: string }[] = [];
+    if (channelMsgIds.length > 0) {
+      attachmentRows = db.select({ filename: schema.attachments.filename })
+        .from(schema.attachments).where(inArray(schema.attachments.messageId, channelMsgIds)).all();
+    }
+
+    // Clean up read_states (no FK, rows would be orphaned)
+    db.delete(schema.readStates).where(eq(schema.readStates.channelId, id)).run();
+
     // Delete messages in channel (attachments cascade), then channel
     db.delete(schema.messages).where(eq(schema.messages.channelId, id)).run();
     db.delete(schema.channels).where(eq(schema.channels.id, id)).run();
+
+    // Delete attachment files from disk
+    deleteAttachmentFiles(attachmentRows);
 
     // Broadcast channel_deleted only to users who could see the channel
     const deleteEvent = { type: 'channel_deleted' as const, channelId: id, spaceId };

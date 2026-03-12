@@ -624,6 +624,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
           useChatStore.setState({ unreadChannels: newUnread, readStates: newRS });
         }
       }
+      // Clean up voice users for the deleted channel
+      {
+        const vs = useVoiceStore.getState();
+        if (vs.voiceUsers.has(event.channelId)) {
+          const newVoiceUsers = new Map(vs.voiceUsers);
+          newVoiceUsers.delete(event.channelId);
+          useVoiceStore.setState({ voiceUsers: newVoiceUsers });
+        }
+      }
       {
         const { currentChannelId } = useChatStore.getState();
         if (currentChannelId === event.channelId) {
