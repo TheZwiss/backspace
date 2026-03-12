@@ -137,7 +137,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   );
 
   const innerContent = (
-    <div className={`relative ${dropIndicator === 'merge' ? 'scale-110 ring-2 ring-accent-mint/60 rounded-[16px]' : ''} transition-transform duration-150`}>
+    <div className={`relative ${dropIndicator === 'merge' ? 'scale-110 ring-2 ring-accent-mint/60 rounded-full' : ''} transition-transform duration-150`}>
       {buttonContent}
       {federationBadge && (
         <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-base flex items-center justify-center">
@@ -1147,7 +1147,7 @@ export function SpaceSidebar() {
         hasUnread={hasDmUnread}
       />
 
-      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
+      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5" />
 
       {/* Unified space list (ordered by user layout) */}
       {resolvedLayout.map((item) => {
@@ -1212,7 +1212,7 @@ export function SpaceSidebar() {
         );
       })}
 
-      <div className="w-8 h-[2px] bg-interactive-muted rounded-full mb-1.5" />
+      <div className="w-8 h-[2px] bg-white/[0.06] rounded-full mb-1.5" />
 
       <SidebarItem
         id="add-space"
