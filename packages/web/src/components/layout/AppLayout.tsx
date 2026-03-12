@@ -240,6 +240,20 @@ export function AppLayout() {
     }
   }, [spaceId, channelId, channels, navigate]);
 
+  // Guard: redirect when URL channelId no longer exists (deleted, permission revoked, etc.)
+  useEffect(() => {
+    if (!spaceId || spaceId === '@me' || !channelId) return;
+    if (channels.length === 0) return;
+
+    const { channelToSpaceMap } = useSpaceStore.getState();
+    const firstCh = channels[0];
+    if (!firstCh || channelToSpaceMap.get(firstCh.id) !== spaceId) return;
+
+    if (!channels.some(c => c.id === channelId)) {
+      navigate(`/channels/${spaceId}`, { replace: true });
+    }
+  }, [spaceId, channelId, channels, navigate]);
+
   if (isLoading || !user) {
     return (
       <div className="h-screen flex items-center justify-center bg-surface-chat">

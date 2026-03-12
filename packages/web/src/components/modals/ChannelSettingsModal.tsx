@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
-import { useChatStore } from '../../stores/chatStore';
 import { api } from '../../api/client';
 import { PermissionBits, permissionsToString, stringToPermissions, hasPermissionBit } from '../../utils/permissions';
 
@@ -24,8 +22,6 @@ export function ChannelSettingsModal() {
   const channels = useSpaceStore((s) => s.channels);
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
-  const currentChannelId = useChatStore((s) => s.currentChannelId);
-  const navigate = useNavigate();
 
   const [isPrivate, setIsPrivate] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -116,9 +112,6 @@ export function ChannelSettingsModal() {
       const channelApi = getApiForOrigin(space?._instanceOrigin ?? '');
       await channelApi.channels.delete(channelId);
       closeModal();
-      if (currentChannelId === channelId) {
-        navigate('/channels/@me');
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete channel');
       setIsDeleting(false);

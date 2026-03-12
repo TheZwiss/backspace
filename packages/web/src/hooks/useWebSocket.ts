@@ -633,18 +633,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
           useVoiceStore.setState({ voiceUsers: newVoiceUsers });
         }
       }
-      {
-        const { currentChannelId } = useChatStore.getState();
-        if (currentChannelId === event.channelId) {
-          const { channels: remainingChannels } = useSpaceStore.getState();
-          const firstText = remainingChannels.find(c => c.type === 'text');
-          if (firstText) {
-            useChatStore.getState().setCurrentChannel(firstText.id);
-          } else {
-            useChatStore.getState().setCurrentChannel(null);
-          }
-        }
-      }
       break;
     }
 
