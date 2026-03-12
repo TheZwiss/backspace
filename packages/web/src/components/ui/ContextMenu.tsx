@@ -19,6 +19,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setPosition({ x: e.clientX, y: e.clientY });
     setIsOpen(true);
   };

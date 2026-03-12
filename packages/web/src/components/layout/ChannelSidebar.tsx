@@ -50,20 +50,19 @@ export function ChannelSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const floatingPanelRef = useRef<HTMLDivElement>(null);
+  const [floatingPanelEl, setFloatingPanelEl] = useState<HTMLDivElement | null>(null);
   const floatingPanelHeight = useUIStore((s) => s.floatingPanelHeight);
   const setFloatingPanelHeight = useUIStore((s) => s.setFloatingPanelHeight);
 
   useEffect(() => {
-    const el = floatingPanelRef.current;
-    if (!el) return;
+    if (!floatingPanelEl) return;
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) setFloatingPanelHeight(entry.contentRect.height);
     });
-    ro.observe(el);
+    ro.observe(floatingPanelEl);
     return () => ro.disconnect();
-  }, [setFloatingPanelHeight]);
+  }, [floatingPanelEl, setFloatingPanelHeight]);
 
   const handleMicToggle = async () => {
     if (isSpaceMuted || isSpaceDeafened || isPermissionMuted) return;
@@ -108,6 +107,11 @@ export function ChannelSidebar() {
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [deleteCategoryLoading, setDeleteCategoryLoading] = useState(false);
 
+  // Sidebar background context menu state
+  const [sidebarMenuOpen, setSidebarMenuOpen] = useState(false);
+  const [sidebarMenuPos, setSidebarMenuPos] = useState({ x: 0, y: 0 });
+  const sidebarMenuRef = useRef<HTMLDivElement>(null);
+
   // Collapse state — persisted in localStorage
   const collapseKey = `backspace:collapsed-categories:${currentSpaceId}`;
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(() => {
@@ -150,6 +154,36 @@ export function ChannelSidebar() {
     const chs = channelsByCategory.get(categoryId) ?? [];
     return chs.some(ch => unreadChannels.has(ch.id));
   }, [channelsByCategory, unreadChannels]);
+
+  // Sidebar background context menu: close on click/scroll, viewport clamp
+  useEffect(() => {
+    if (!sidebarMenuOpen) return;
+    const close = () => setSidebarMenuOpen(false);
+    document.addEventListener('click', close);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [sidebarMenuOpen]);
+
+  useEffect(() => {
+    if (sidebarMenuOpen && sidebarMenuRef.current) {
+      const rect = sidebarMenuRef.current.getBoundingClientRect();
+      const pos = { ...sidebarMenuPos };
+      if (rect.right > window.innerWidth) pos.x = window.innerWidth - rect.width - 8;
+      if (rect.bottom > window.innerHeight) pos.y = window.innerHeight - rect.height - 8;
+      if (pos.x < 8) pos.x = 8;
+      if (pos.y < 8) pos.y = 8;
+      if (pos.x !== sidebarMenuPos.x || pos.y !== sidebarMenuPos.y) setSidebarMenuPos(pos);
+    }
+  }, [sidebarMenuOpen, sidebarMenuPos]);
+
+  const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setSidebarMenuPos({ x: e.clientX, y: e.clientY });
+    setSidebarMenuOpen(true);
+  }, []);
 
   // DnD handlers
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
@@ -332,7 +366,7 @@ export function ChannelSidebar() {
 
   // Floating bottom panel — shared between DM view and server view
   const floatingPanel = user ? (
-    <div ref={floatingPanelRef} data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
+    <div ref={setFloatingPanelEl} data-pip-obstacle="bottom" className="fixed bottom-0 left-0 right-0 z-[105] p-2 md:right-auto md:w-[296px] md:bottom-[10px] md:left-[10px] md:p-0">
       <div className="glass-bubble rounded-[14px]">
         {/* Voice controls (expands when connected) */}
         {(currentVoiceChannelId || activeDmCall) && <VoiceControls />}
@@ -573,7 +607,7 @@ export function ChannelSidebar() {
       </div>
 
       {/* Channels — dynamic category layout */}
-      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()} onContextMenu={handleSidebarContextMenu}>
         {/* Uncategorized channels */}
         {uncategorizedChannels.length > 0 && (
           <div className="mb-[19px]">
@@ -722,32 +756,28 @@ export function ChannelSidebar() {
           );
         })}
 
-        {/* "Create Channel" button if categories exist but no uncategorized channels */}
-        {sortedCategories.length > 0 && canManageChannels && (
-          <div className="px-1">
-            <button
-              onClick={() => openModal('createChannel')}
-              className="w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
-                <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
-              </svg>
-              <span className="text-[13px] font-medium">Create Channel</span>
-            </button>
-          </div>
-        )}
-
-        {/* Create category button */}
+        {/* Create channel / category buttons */}
         {canManageChannels && (
-          <div className="px-1">
+          <div className="px-1 mt-4 pt-3 border-t border-white/[0.06]">
+            {sortedCategories.length > 0 && (
+              <button
+                onClick={() => openModal('createChannel')}
+                className="w-full flex items-center gap-1.5 px-[10px] py-1 rounded-[6px] text-txt-tertiary/60 hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 opacity-70">
+                  <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
+                </svg>
+                <span className="text-[12px]">Create Channel</span>
+              </button>
+            )}
             <button
               onClick={() => openModal('createCategory')}
-              className="w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
+              className="w-full flex items-center gap-1.5 px-[10px] py-1 rounded-[6px] text-txt-tertiary/60 hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0 opacity-70">
                 <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
               </svg>
-              <span className="text-[13px] font-medium">Create Category</span>
+              <span className="text-[12px]">Create Category</span>
             </button>
           </div>
         )}
@@ -756,6 +786,70 @@ export function ChannelSidebar() {
 
     </div>
     {floatingPanel}
+    {/* Sidebar background context menu */}
+    {sidebarMenuOpen && (
+      <div
+        ref={sidebarMenuRef}
+        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in"
+        style={{ left: sidebarMenuPos.x, top: sidebarMenuPos.y }}
+      >
+        {canManageChannels && (
+          <button
+            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+            style={{ width: 'calc(100% - 12px)' }}
+            onClick={(e) => { e.stopPropagation(); openModal('createChannel'); setSidebarMenuOpen(false); }}
+          >
+            <span className="w-4 h-4">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M2.5 12.5v-9l5-2v9l-5 2zm6-9v9l5-2v-9l-5 2z" opacity="0.5" />
+                <path d="M5.72 12.885l.18-.085V3.2L2.1 4.9v8.5l3.62-1.515zM7.1 3.2v9.6l3.8-1.6V2.7L7.1 3.2z" />
+              </svg>
+            </span>
+            Create Channel
+          </button>
+        )}
+        {canManageChannels && (
+          <button
+            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+            style={{ width: 'calc(100% - 12px)' }}
+            onClick={(e) => { e.stopPropagation(); openModal('createCategory'); setSidebarMenuOpen(false); }}
+          >
+            <span className="w-4 h-4">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+              </svg>
+            </span>
+            Create Category
+          </button>
+        )}
+        {canCreateInvite && (
+          <button
+            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+            style={{ width: 'calc(100% - 12px)' }}
+            onClick={(e) => { e.stopPropagation(); openModal('invite'); setSidebarMenuOpen(false); }}
+          >
+            <span className="w-4 h-4">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
+              </svg>
+            </span>
+            Invite People
+          </button>
+        )}
+        <button
+          className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
+          style={{ width: 'calc(100% - 12px)' }}
+          onClick={(e) => { e.stopPropagation(); openModal('spaceSettings'); setSidebarMenuOpen(false); }}
+        >
+          <span className="w-4 h-4">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" />
+            </svg>
+          </span>
+          Space Settings
+        </button>
+      </div>
+    )}
     <ConfirmDialog
       isOpen={deleteCategoryId !== null}
       onClose={() => setDeleteCategoryId(null)}
