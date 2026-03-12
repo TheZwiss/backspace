@@ -893,8 +893,23 @@ export function SpaceSidebar() {
       position = relY < height * 0.5 ? 'before' : 'after';
     }
 
+    // Normalize 'before' to previous item's 'after' so the drop indicator
+    // always renders from a single DOM element, eliminating sub-pixel jump
+    if (position === 'before') {
+      const targetIdx = resolvedLayout.findIndex(item =>
+        (item.type === 'space' && item.space.id === targetId) ||
+        (item.type === 'folder' && item.folder.id === targetId)
+      );
+      if (targetIdx > 0) {
+        const prevItem = resolvedLayout[targetIdx - 1]!;
+        const prevId = prevItem.type === 'space' ? prevItem.space.id : prevItem.folder.id;
+        setDropIndicator({ targetId: prevId, position: 'after' });
+        return;
+      }
+    }
+
     setDropIndicator({ targetId, position });
-  }, [dragState]);
+  }, [dragState, resolvedLayout]);
 
   const handleDragEnd = useCallback(() => {
     setDragState(null);
