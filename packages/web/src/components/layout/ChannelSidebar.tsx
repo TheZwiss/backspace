@@ -17,6 +17,7 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 import { ContextMenu } from '../ui/ContextMenu';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -102,6 +103,10 @@ export function ChannelSidebar() {
   // Drag state for channel/category reordering
   const [channelDragState, setChannelDragState] = useState<{ dragType: 'channel' | 'category'; dragId: string } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after'; type: 'channel' | 'category' } | null>(null);
+
+  // Delete category confirmation state
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [deleteCategoryLoading, setDeleteCategoryLoading] = useState(false);
 
   // Collapse state — persisted in localStorage
   const collapseKey = `backspace:collapsed-categories:${currentSpaceId}`;
@@ -621,43 +626,64 @@ export function ChannelSidebar() {
           const isCollapsed = collapsedCategories.has(category.id);
           const hasUnread = isCollapsed && categoryHasUnread(category.id);
 
+          const categoryHeader = (
+                <div
+                  className={`flex items-center justify-between px-1 mb-1 group cursor-pointer ${
+                    channelDragState?.dragType === 'category' && channelDragState.dragId === category.id ? 'opacity-50' : ''
+                  } ${dropIndicator?.targetId === category.id && dropIndicator.type === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
+                  draggable={canManageChannels}
+                  onDragStart={(e) => handleCategoryDragStart(e, category.id)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleChannelDragOver(e, category.id, 'category')}
+                  onClick={() => toggleCollapse(category.id)}
+                >
+                  <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors min-w-0">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`opacity-70 transition-transform flex-shrink-0 ${isCollapsed ? '-rotate-90' : ''}`}>
+                      <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
+                    </svg>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.06em] truncate" style={{ color: '#484854' }}>{category.name}</span>
+                    {hasUnread && (
+                      <div className="ml-1 w-1.5 h-1.5 rounded-full bg-accent-rose flex-shrink-0" />
+                    )}
+                  </div>
+                  {canManageChannels && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openModal('createChannel', { categoryId: category.id });
+                      }}
+                      className="text-txt-tertiary hover:text-txt-primary transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      title="Create Channel"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+          );
+
           return (
             <div key={category.id} className="mb-[19px]">
               {/* Category header */}
-              <div
-                className={`flex items-center justify-between px-1 mb-1 group cursor-pointer ${
-                  channelDragState?.dragType === 'category' && channelDragState.dragId === category.id ? 'opacity-50' : ''
-                } ${dropIndicator?.targetId === category.id && dropIndicator.type === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
-                draggable={canManageChannels}
-                onDragStart={(e) => handleCategoryDragStart(e, category.id)}
-                onDragEnd={handleDragEnd}
-                onDragOver={(e) => handleChannelDragOver(e, category.id, 'category')}
-                onClick={() => toggleCollapse(category.id)}
-              >
-                <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors min-w-0">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={`opacity-70 transition-transform flex-shrink-0 ${isCollapsed ? '-rotate-90' : ''}`}>
-                    <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
-                  </svg>
-                  <span className="text-[11px] font-medium uppercase tracking-[0.06em] truncate" style={{ color: '#484854' }}>{category.name}</span>
-                  {hasUnread && (
-                    <div className="ml-1 w-1.5 h-1.5 rounded-full bg-accent-rose flex-shrink-0" />
-                  )}
-                </div>
-                {canManageChannels && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openModal('createChannel', { categoryId: category.id });
-                    }}
-                    className="text-txt-tertiary hover:text-txt-primary transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                    title="Create Channel"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
+              {canManageChannels ? (
+                <ContextMenu
+                  items={[
+                    {
+                      label: 'Delete Category',
+                      danger: true,
+                      icon: (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                        </svg>
+                      ),
+                      onClick: () => setDeleteCategoryId(category.id),
+                    },
+                  ]}
+                >
+                  {categoryHeader}
+                </ContextMenu>
+              ) : categoryHeader}
 
               {/* Category channels (hidden when collapsed, unless active) */}
               {!isCollapsed && (
@@ -715,17 +741,7 @@ export function ChannelSidebar() {
         {canManageChannels && (
           <div className="px-1">
             <button
-              onClick={async () => {
-                if (!currentSpaceId) return;
-                const name = prompt('Category name:');
-                if (name?.trim()) {
-                  try {
-                    await useSpaceStore.getState().createCategory(currentSpaceId, name.trim());
-                  } catch (err) {
-                    console.error('Failed to create category:', err);
-                  }
-                }
-              }}
+              onClick={() => openModal('createCategory')}
               className="w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover transition-colors"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="flex-shrink-0">
@@ -740,6 +756,27 @@ export function ChannelSidebar() {
 
     </div>
     {floatingPanel}
+    <ConfirmDialog
+      isOpen={deleteCategoryId !== null}
+      onClose={() => setDeleteCategoryId(null)}
+      onConfirm={async () => {
+        if (!deleteCategoryId) return;
+        setDeleteCategoryLoading(true);
+        try {
+          await useSpaceStore.getState().deleteCategory(deleteCategoryId);
+          setDeleteCategoryId(null);
+        } catch {
+          // deleteCategory already shows a toast on error
+        } finally {
+          setDeleteCategoryLoading(false);
+        }
+      }}
+      title="Delete Category"
+      description="Are you sure you want to delete this category? Channels in this category will be moved to uncategorized — no channels will be deleted."
+      confirmLabel="Delete"
+      variant="danger"
+      loading={deleteCategoryLoading}
+    />
     </>
   );
 }

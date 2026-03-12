@@ -85,11 +85,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
     const spaceId = generateSnowflake();
+    const textCategoryId = generateSnowflake();
+    const voiceCategoryId = generateSnowflake();
     const channelId = generateSnowflake();
+    const voiceChannelId = generateSnowflake();
     const now = Date.now();
     const inviteCode = generateInviteCode();
 
-    // Create server, owner membership, default channel, and @everyone role atomically
+    // Create server, owner membership, default categories + channels, and @everyone role atomically
     db.transaction((tx) => {
       tx.insert(schema.spaces).values({
         id: spaceId,
@@ -110,12 +113,42 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         joinedAt: now,
       }).run();
 
+      // Default categories
+      tx.insert(schema.channelCategories).values({
+        id: textCategoryId,
+        spaceId,
+        name: 'text-channels',
+        position: 0,
+        createdAt: now,
+      }).run();
+
+      tx.insert(schema.channelCategories).values({
+        id: voiceCategoryId,
+        spaceId,
+        name: 'voice-channels',
+        position: 1,
+        createdAt: now,
+      }).run();
+
+      // Default text channel in text-channels category
       tx.insert(schema.channels).values({
         id: channelId,
         spaceId,
         name: 'general',
         type: 'text',
         position: 0,
+        categoryId: textCategoryId,
+        createdAt: now,
+      }).run();
+
+      // Default voice channel in voice-channels category
+      tx.insert(schema.channels).values({
+        id: voiceChannelId,
+        spaceId,
+        name: 'voice',
+        type: 'voice',
+        position: 0,
+        categoryId: voiceCategoryId,
         createdAt: now,
       }).run();
 

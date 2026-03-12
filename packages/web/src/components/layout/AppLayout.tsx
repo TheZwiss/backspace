@@ -9,6 +9,7 @@ import { ImagePreview } from '../chat/ImagePreview';
 import { CreateSpaceModal } from '../modals/CreateSpace';
 import { JoinSpaceModal } from '../modals/JoinSpace';
 import { CreateChannelModal } from '../modals/CreateChannel';
+import { CreateCategoryModal } from '../modals/CreateCategory';
 import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { SpaceSettingsModal } from '../modals/SpaceSettings';
@@ -271,6 +272,7 @@ export function AppLayout() {
       <CreateSpaceModal />
       <JoinSpaceModal />
       <CreateChannelModal />
+      <CreateCategoryModal />
       <InviteModal />
       <UserSettingsModal />
       <SpaceSettingsModal />

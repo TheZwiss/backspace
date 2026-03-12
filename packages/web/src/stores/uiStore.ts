@@ -6,6 +6,7 @@ type ModalType =
   | 'createSpace'
   | 'joinSpace'
   | 'createChannel'
+  | 'createCategory'
   | 'invite'
   | 'userSettings'
   | 'spaceSettings'
