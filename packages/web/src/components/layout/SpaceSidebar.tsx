@@ -736,6 +736,7 @@ export function SpaceSidebar() {
   // DnD state
   const [dragState, setDragState] = useState<{ dragId: string; dragType: 'space' | 'folder'; sourceFolderId?: string } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after' | 'merge' } | null>(null);
+  const dropIndicatorRef = useRef(dropIndicator);
 
   const handleSpaceContextMenu = useCallback((spaceId: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -903,16 +904,19 @@ export function SpaceSidebar() {
       if (targetIdx > 0) {
         const prevItem = resolvedLayout[targetIdx - 1]!;
         const prevId = prevItem.type === 'space' ? prevItem.space.id : prevItem.folder.id;
+        dropIndicatorRef.current = { targetId: prevId, position: 'after' };
         setDropIndicator({ targetId: prevId, position: 'after' });
         return;
       }
     }
 
+    dropIndicatorRef.current = { targetId, position };
     setDropIndicator({ targetId, position });
   }, [dragState, resolvedLayout]);
 
   const handleDragEnd = useCallback(() => {
     setDragState(null);
+    dropIndicatorRef.current = null;
     setDropIndicator(null);
   }, []);
 
@@ -944,13 +948,15 @@ export function SpaceSidebar() {
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    if (!dragState || !dropIndicator) {
+    e.stopPropagation();
+    const indicator = dropIndicatorRef.current;
+    if (!dragState || !indicator) {
       handleDragEnd();
       return;
     }
 
     const { dragId, dragType, sourceFolderId } = dragState;
-    const { targetId, position } = dropIndicator;
+    const { targetId, position } = indicator;
 
     // Don't drop on self
     if (dragId === targetId && position !== 'merge') {
@@ -1061,7 +1067,7 @@ export function SpaceSidebar() {
 
     persistLayout(newLayout);
     handleDragEnd();
-  }, [dragState, dropIndicator, resolvedLayout, spaceMap, handleDragEnd, persistLayout]);
+  }, [dragState, resolvedLayout, spaceMap, handleDragEnd, persistLayout]);
 
   // ─── Folder actions ──────────────────────────────────────────────────
 
@@ -1131,7 +1137,7 @@ export function SpaceSidebar() {
   }, [openFolderId, resolvedLayout]);
 
   return (
-    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24 }}>
+    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24 }} onDragOver={(e) => { if (dragState) e.preventDefault(); }} onDrop={handleDrop}>
       <SidebarItem
         id="@me"
         name="Direct Messages"
