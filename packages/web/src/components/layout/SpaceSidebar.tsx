@@ -346,6 +346,8 @@ function FolderFlyout({
   onSpaceContextMenu,
   onRename,
   onDragStart,
+  onReorder,
+  onParentDragEnd,
 }: {
   folder: SpaceFolder;
   spaces: TaggedSpace[];
@@ -359,6 +361,8 @@ function FolderFlyout({
   onSpaceContextMenu: (spaceId: string, e: React.MouseEvent) => void;
   onRename: (name: string) => void;
   onDragStart: (e: React.DragEvent, spaceId: string) => void;
+  onReorder: (reorderedSpaceIds: string[]) => void;
+  onParentDragEnd: () => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(anchorEl);
   anchorRef.current = anchorEl;
@@ -369,12 +373,86 @@ function FolderFlyout({
     offset: 12,
   });
 
+  // Intra-folder DnD state
+  const [flyoutDrop, setFlyoutDrop] = useState<{
+    targetSpaceId: string;
+    position: 'before' | 'after';
+  } | null>(null);
+  const flyoutDropRef = useRef(flyoutDrop);
+  flyoutDropRef.current = flyoutDrop;
+
+  const handleFlyoutDragOver = useCallback((e: React.DragEvent, targetSpaceId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const position: 'before' | 'after' = relY < rect.height * 0.5 ? 'before' : 'after';
+
+    // Normalize 'before' to previous item's 'after' so a single indicator renders
+    if (position === 'before') {
+      const idx = spaces.findIndex(s => s.id === targetSpaceId);
+      if (idx > 0) {
+        const prevId = spaces[idx - 1]!.id;
+        setFlyoutDrop({ targetSpaceId: prevId, position: 'after' });
+        return;
+      }
+    }
+
+    setFlyoutDrop({ targetSpaceId, position });
+  }, [spaces]);
+
+  const handleFlyoutDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const indicator = flyoutDropRef.current;
+    const dragId = e.dataTransfer.getData('text/plain');
+    if (!indicator || !dragId) {
+      setFlyoutDrop(null);
+      onParentDragEnd();
+      return;
+    }
+
+    // Don't reorder if dropping on self in same position
+    const currentIds = spaces.map(s => s.id);
+    const dragIdx = currentIds.indexOf(dragId);
+    if (dragIdx === -1) {
+      // Dragged space is not in this folder — let parent handle it
+      setFlyoutDrop(null);
+      onParentDragEnd();
+      return;
+    }
+
+    // Remove dragged space and re-insert at target position
+    const without = currentIds.filter(id => id !== dragId);
+    const targetIdx = without.indexOf(indicator.targetSpaceId);
+    if (targetIdx === -1) {
+      setFlyoutDrop(null);
+      onParentDragEnd();
+      return;
+    }
+
+    const insertIdx = indicator.position === 'before' ? targetIdx : targetIdx + 1;
+    without.splice(insertIdx, 0, dragId);
+
+    onReorder(without);
+    setFlyoutDrop(null);
+    onParentDragEnd();
+  }, [spaces, onReorder, onParentDragEnd]);
+
+  const handleFlyoutDragEnd = useCallback(() => {
+    setFlyoutDrop(null);
+    onParentDragEnd();
+  }, [onParentDragEnd]);
+
   // Close on click-outside and Escape
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
         floatingRef.current && !floatingRef.current.contains(e.target as Node) &&
-        !anchorEl.contains(e.target as Node)
+        !anchorEl.contains(e.target as Node) &&
+        !(e.target as HTMLElement).closest?.('[data-flyout-safe]')
       ) {
         onClose();
       }
@@ -421,7 +499,7 @@ function FolderFlyout({
       )}
 
       {/* Space rows */}
-      {spaces.map((space) => {
+      {spaces.map((space, idx) => {
         const isActive = currentSpaceId === space.id;
         const hasUnread = unreadSpaceIds.has(space.id) && !isActive;
         const origin = space._instanceOrigin;
@@ -431,51 +509,64 @@ function FolderFlyout({
         const grad = !icon ? getSpaceGradient(space.id, space.name, space.avatarColor) : null;
 
         return (
-          <button
-            key={space.id}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
-              isDimmed ? 'opacity-40 saturate-50' : ''
-            } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
-            style={{ width: 'calc(100% - 8px)' }}
-            draggable
-            onDragStart={(e) => onDragStart(e, space.id)}
-            onClick={() => {
-              onSpaceClick(space.id);
-              onClose();
-            }}
-            onContextMenu={(e) => {
-              onSpaceContextMenu(space.id, e);
-              onClose();
-            }}
-          >
-            {/* Space icon */}
-            <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
-              {icon ? (
-                <img
-                  src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
+          <React.Fragment key={space.id}>
+            {/* Drop indicator: before first item */}
+            {idx === 0 && flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === 'before' && (
+              <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
+            )}
+
+            <button
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 mx-1 rounded-md transition-colors ${
+                isDimmed ? 'opacity-40 saturate-50' : ''
+              } ${isActive ? 'bg-white/[0.10]' : 'hover:bg-white/[0.06]'}`}
+              style={{ width: 'calc(100% - 8px)' }}
+              draggable
+              onDragStart={(e) => onDragStart(e, space.id)}
+              onDragOver={(e) => handleFlyoutDragOver(e, space.id)}
+              onDrop={handleFlyoutDrop}
+              onDragEnd={handleFlyoutDragEnd}
+              onClick={() => {
+                onSpaceClick(space.id);
+                onClose();
+              }}
+              onContextMenu={(e) => {
+                onSpaceContextMenu(space.id, e);
+              }}
+            >
+              {/* Space icon */}
+              <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
+                {icon ? (
+                  <img
+                    src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[13px] font-bold text-white">{space.name.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+
+              {/* Name */}
+              <span className="text-sm text-txt-primary truncate flex-1 text-left">{space.name}</span>
+
+              {/* Federation badge */}
+              {isFederated && !isDimmed && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80 flex-shrink-0">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                </svg>
               )}
-            </div>
 
-            {/* Name */}
-            <span className="text-sm text-txt-primary truncate flex-1 text-left">{space.name}</span>
+              {/* Unread dot */}
+              {hasUnread && (
+                <div className="w-2 h-2 rounded-full bg-white flex-shrink-0" />
+              )}
+            </button>
 
-            {/* Federation badge */}
-            {isFederated && !isDimmed && (
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80 flex-shrink-0">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-              </svg>
+            {/* Drop indicator: after item */}
+            {flyoutDrop?.targetSpaceId === space.id && flyoutDrop.position === 'after' && (
+              <div className="h-0.5 bg-accent-mint rounded-full mx-2.5 my-0.5" />
             )}
-
-            {/* Unread dot */}
-            {hasUnread && (
-              <div className="w-2 h-2 rounded-full bg-white flex-shrink-0" />
-            )}
-          </button>
+          </React.Fragment>
         );
       })}
     </div>,
@@ -556,6 +647,7 @@ function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: numb
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
+      data-flyout-safe
       className="fixed z-[9999] min-w-[160px] glass rounded-lg py-1 animate-in fade-in zoom-in-95 duration-100"
       style={{ left: clampedX, top: clampedY }}
     >
@@ -946,6 +1038,23 @@ export function SpaceSidebar() {
     updateSpaceLayout(items, folderPayload);
   }, [buildLayoutPayload, updateSpaceLayout]);
 
+  const handleReorderInFolder = useCallback((folderId: string, reorderedSpaceIds: string[]) => {
+    const newLayout = resolvedLayout.map(item => {
+      if (item.type === 'folder' && item.folder.id === folderId) {
+        const reorderedSpaces = reorderedSpaceIds
+          .map(id => item.spaces.find(s => s.id === id))
+          .filter((s): s is TaggedSpace => !!s);
+        return {
+          ...item,
+          spaces: reorderedSpaces,
+          folder: { ...item.folder, spaceIds: reorderedSpaceIds },
+        };
+      }
+      return item;
+    }) as ResolvedItem[];
+    persistLayout(newLayout);
+  }, [resolvedLayout, persistLayout]);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1286,6 +1395,8 @@ export function SpaceSidebar() {
             onSpaceContextMenu={handleSpaceContextMenu}
             onRename={(name) => handleFolderRename(openFolderId, name)}
             onDragStart={(e, spaceId) => handleDragStart(e, spaceId, 'space', openFolderId)}
+            onReorder={(ids) => handleReorderInFolder(openFolderId!, ids)}
+            onParentDragEnd={handleDragEnd}
           />
         );
       })()}
