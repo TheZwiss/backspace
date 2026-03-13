@@ -175,7 +175,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
                   src={avatar}
                   name={displayName}
                   size={24}
-                  status={status}
+
                   userId={member?.user.homeUserId ?? userId}
                   user={member?.user}
                   className={speakingUserIds.has(userId) ? 'rounded-full ring-2 ring-status-online' : ''}
