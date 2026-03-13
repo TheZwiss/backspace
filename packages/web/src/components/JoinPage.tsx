@@ -15,9 +15,19 @@ export function JoinPage() {
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const loadUser = useAuthStore((s) => s.loadUser);
+  const isAuthLoading = useAuthStore((s) => s.isLoading);
   const joinByCode = useSpaceStore((s) => s.joinByCode);
   const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
+
+  // Hydrate auth store when token exists — useAuth() can't be used here because
+  // it hard-redirects to /login when there's no token, and JoinPage is a public route.
+  useEffect(() => {
+    if (token && !user && !isAuthLoading) {
+      loadUser();
+    }
+  }, [token, user, isAuthLoading, loadUser]);
 
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -257,10 +267,10 @@ export function JoinPage() {
               /* Authenticated user */
               <button
                 onClick={handleJoin}
-                disabled={isJoining}
+                disabled={isJoining || isAuthLoading}
                 className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isJoining ? 'Joining...' : 'Join Space'}
+                {isAuthLoading ? 'Loading...' : isJoining ? 'Joining...' : 'Join Space'}
               </button>
             ) : (
               /* Unauthenticated user */
@@ -277,47 +287,80 @@ export function JoinPage() {
                 >
                   Create an account
                 </Link>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border-subtle" />
+                  <span className="text-xs text-txt-tertiary">or</span>
+                  <div className="flex-1 h-px bg-border-subtle" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => { setPhase('other-instance'); setError(''); }}
+                  className="block w-full py-2.5 bg-surface-input hover:bg-surface-input/80 text-txt-primary font-medium rounded transition-colors text-center"
+                >
+                  I use another instance
+                </button>
               </div>
             )}
-
-            {/* Other instance section */}
-            <details className="mt-5 group">
-              <summary className="text-xs text-txt-tertiary hover:text-txt-secondary cursor-pointer select-none transition-colors">
-                I use Backspace on another instance
-              </summary>
-              <form onSubmit={handleOtherInstanceRedirect} className="mt-3">
-                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
-                  Your instance domain
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={otherDomain}
-                    onChange={(e) => setOtherDomain(e.target.value)}
-                    placeholder="e.g. my-instance.com"
-                    className="flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!otherDomain.trim()}
-                    className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
-                  >
-                    Go
-                  </button>
-                </div>
-                <p className="text-xs text-txt-tertiary mt-1.5">
-                  You'll be redirected to your home instance to complete joining.
-                </p>
-              </form>
-            </details>
           </>
+        )}
+
+        {/* Phase: other-instance — domain input for federation redirect */}
+        {phase === 'other-instance' && (
+          <form onSubmit={handleOtherInstanceRedirect}>
+            <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
+              Your instance domain
+            </label>
+            <div className="flex gap-2 mb-1.5">
+              <input
+                type="text"
+                value={otherDomain}
+                onChange={(e) => setOtherDomain(e.target.value)}
+                placeholder="e.g. my-instance.com"
+                className="flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={!otherDomain.trim()}
+                className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+              >
+                Go
+              </button>
+            </div>
+            <p className="text-xs text-txt-tertiary mb-4">
+              You'll be redirected to your home instance to complete joining.
+            </p>
+            <button
+              type="button"
+              onClick={() => { setPhase('preview'); setOtherDomain(''); setError(''); }}
+              className="px-4 py-2.5 text-txt-tertiary hover:text-txt-secondary text-sm transition-colors"
+            >
+              Back
+            </button>
+          </form>
         )}
 
         {/* Phase: connect — password prompt for federation */}
         {phase === 'connect' && (
           <form onSubmit={handleConnect}>
-            <p className="text-txt-secondary text-sm mb-4">
-              Connect to <span className="text-txt-primary font-medium">{hostDisplay}</span> to join this space.
+            {/* Identity card */}
+            <div className="flex items-center gap-3 bg-surface-input rounded-lg p-3 mb-3">
+              <Avatar
+                src={user?.avatar ? `/api/uploads/${user.avatar}` : null}
+                name={user?.displayName || user?.username || '?'}
+                size={40}
+                avatarColor={user?.avatarColor}
+              />
+              <div className="min-w-0">
+                <p className="text-txt-primary font-medium text-sm truncate">{user?.displayName || user?.username}</p>
+                <p className="text-txt-tertiary text-xs truncate">@{user?.username}</p>
+              </div>
+            </div>
+            <p className="text-txt-tertiary text-xs mb-4">
+              Connecting to <span className="text-txt-secondary font-medium">{hostDisplay}</span>
             </p>
             <div className="mb-4">
               <label className="block text-xs text-txt-tertiary mb-1">
