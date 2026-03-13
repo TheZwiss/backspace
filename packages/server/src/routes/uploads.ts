@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import type { Attachment } from '@backspace/shared';
+import { generateThumbnail, isResizableImage } from '../utils/thumbnail.js';
 
 export async function uploadRoutes(app: FastifyInstance): Promise<void> {
   // Ensure upload directory exists
@@ -57,6 +58,12 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     const now = Date.now();
     const db = getDb();
 
+    // Generate thumbnail for resizable images (non-blocking — upload succeeds regardless)
+    let thumbnailFilename: string | null = null;
+    if (isResizableImage(mimetype)) {
+      thumbnailFilename = await generateThumbnail(filepath, mimetype, config.uploadDir);
+    }
+
     // Save attachment record
     db.insert(schema.attachments).values({
       id,
@@ -64,6 +71,7 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       originalName,
       mimetype,
       size,
+      thumbnailFilename,
       createdAt: now,
     }).run();
 
@@ -74,6 +82,7 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       originalName,
       mimetype,
       size,
+      thumbnailFilename: thumbnailFilename ?? undefined,
       createdAt: now,
     };
 

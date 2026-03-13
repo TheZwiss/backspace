@@ -13,7 +13,7 @@
     "build": "pnpm --filter @backspace/shared build && pnpm --filter @backspace/server build & pnpm --filter @backspace/web build"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "sharp"]
   },
   "engines": {
     "node": ">=20.0.0",

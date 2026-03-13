@@ -45,6 +45,12 @@ export function runMigrations(db: Database.Database): void {
       ]
     },
     {
+      name: 'attachments',
+      columns: [
+        { name: 'thumbnail_filename', type: 'TEXT' }
+      ]
+    },
+    {
       name: 'dm_channels',
       columns: [
         { name: 'owner_id', type: 'TEXT' }

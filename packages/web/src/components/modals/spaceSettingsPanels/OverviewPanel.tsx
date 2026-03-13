@@ -110,7 +110,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setIconPreview(previewUrl);
     setCropSrc(null);
 
-    const file = new File([blob], 'icon.png', { type: 'image/png' });
+    const file = new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
     setUploadingIcon(true);
     try {
       const spaceApi = getApiForOrigin(space._instanceOrigin);
@@ -148,7 +148,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     setBannerPreview(previewUrl);
     setBannerCropSrc(null);
 
-    const file = new File([blob], 'banner.png', { type: 'image/png' });
+    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
       const spaceApi = getApiForOrigin(space._instanceOrigin);
@@ -601,6 +601,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         title="Crop Space Icon"
         cropShape="round"
         aspectRatio={1}
+        maxOutputDimension={512}
       />
 
       <ImageCropModal
@@ -611,6 +612,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         title="Crop Space Banner"
         cropShape="rect"
         aspectRatio={16 / 9}
+        maxOutputDimension={1920}
       />
     </>
   );

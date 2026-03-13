@@ -85,6 +85,7 @@ export const attachments = sqliteTable('attachments', {
   originalName: text('original_name').notNull(),
   mimetype: text('mimetype').notNull(),
   size: integer('size').notNull(),
+  thumbnailFilename: text('thumbnail_filename'),
   createdAt: integer('created_at').notNull(),
 });
 

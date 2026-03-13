@@ -105,6 +105,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
             src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:'))
               ? src : `/api/uploads/${src}`}
             alt={name}
+            loading="lazy"
             className="w-full h-full rounded-full object-cover"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';

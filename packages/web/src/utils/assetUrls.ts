@@ -43,7 +43,7 @@ export function normalizeUserAssets<T extends { avatar?: string | null; banner?:
  * Rewrite user.avatar and attachment filenames on a message for remote origins.
  * Also normalizes nested replyTo message assets. Mutates in-place.
  */
-export function normalizeMessageAssets<T extends { user: { avatar?: string | null }; attachments?: { filename: string }[]; replyTo?: { user: { avatar?: string | null }; attachments?: { filename: string }[] } | null }>(
+export function normalizeMessageAssets<T extends { user: { avatar?: string | null }; attachments?: { filename: string; thumbnailFilename?: string | null }[]; replyTo?: { user: { avatar?: string | null }; attachments?: { filename: string; thumbnailFilename?: string | null }[] } | null }>(
   message: T,
   origin: string,
 ): T {
@@ -52,6 +52,9 @@ export function normalizeMessageAssets<T extends { user: { avatar?: string | nul
   if (message.attachments) {
     for (const att of message.attachments) {
       att.filename = resolveAssetUrl(att.filename, origin) ?? att.filename;
+      if (att.thumbnailFilename) {
+        att.thumbnailFilename = resolveAssetUrl(att.thumbnailFilename, origin) ?? att.thumbnailFilename;
+      }
     }
   }
   // Normalize reply-to message assets (remote replies have relative URLs)
@@ -60,6 +63,9 @@ export function normalizeMessageAssets<T extends { user: { avatar?: string | nul
     if (message.replyTo.attachments) {
       for (const att of message.replyTo.attachments) {
         att.filename = resolveAssetUrl(att.filename, origin) ?? att.filename;
+        if (att.thumbnailFilename) {
+          att.thumbnailFilename = resolveAssetUrl(att.thumbnailFilename, origin) ?? att.thumbnailFilename;
+        }
       }
     }
   }

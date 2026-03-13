@@ -209,6 +209,7 @@ export interface Attachment {
   originalName: string;
   mimetype: string;
   size: number;
+  thumbnailFilename?: string | null;
   createdAt: number;
 }
 

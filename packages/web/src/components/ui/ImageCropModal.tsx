@@ -11,6 +11,8 @@ interface ImageCropModalProps {
   title?: string;
   aspectRatio?: number;
   cropShape?: 'round' | 'rect';
+  maxOutputDimension?: number;
+  outputType?: string;
 }
 
 export function ImageCropModal({
@@ -21,6 +23,8 @@ export function ImageCropModal({
   title = 'Crop Image',
   aspectRatio = 1,
   cropShape = 'round',
+  maxOutputDimension,
+  outputType,
 }: ImageCropModalProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -35,7 +39,10 @@ export function ImageCropModal({
     if (!croppedAreaPixels) return;
     setIsProcessing(true);
     try {
-      const blob = await cropImage(imageSrc, croppedAreaPixels);
+      const blob = await cropImage(imageSrc, croppedAreaPixels, outputType ?? 'image/webp', {
+        maxDimension: maxOutputDimension,
+        outputType,
+      });
       onCropComplete(blob);
       onClose();
     } catch {

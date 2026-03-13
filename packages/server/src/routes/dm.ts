@@ -83,6 +83,7 @@ export function buildDmMessageWithUser(
       originalName: a.originalName,
       mimetype: a.mimetype,
       size: a.size,
+      thumbnailFilename: a.thumbnailFilename ?? null,
       createdAt: a.createdAt,
     })),
     reactions,

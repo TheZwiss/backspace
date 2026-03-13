@@ -263,11 +263,14 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                 {message.attachments.map((att) => {
                   const isImage = att.mimetype.startsWith('image/');
                   const attUrl = att.filename.startsWith('http') ? att.filename : `/api/uploads/${att.filename}`;
+                  const thumbUrl = att.thumbnailFilename
+                    ? (att.thumbnailFilename.startsWith('http') ? att.thumbnailFilename : `/api/uploads/${att.thumbnailFilename}`)
+                    : null;
                   if (isImage) {
                     return (
                       <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]">
                         <img
-                          src={attUrl}
+                          src={thumbUrl ?? attUrl}
                           alt={att.originalName}
                           className="max-w-full max-h-[350px] object-contain cursor-pointer hover:brightness-95 transition-all"
                           onClick={() => openImagePreview(attUrl)}

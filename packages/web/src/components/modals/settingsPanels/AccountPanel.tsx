@@ -139,7 +139,7 @@ export function AccountPanel() {
     const previewUrl = URL.createObjectURL(blob);
     setAvatarPreview(previewUrl);
     setAvatarCropSrc(null);
-    const file = new File([blob], 'avatar.png', { type: 'image/png' });
+    const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
     setUploadingAvatar(true);
     try {
       const attachment = await api.uploads.upload(file);
@@ -158,7 +158,7 @@ export function AccountPanel() {
     const previewUrl = URL.createObjectURL(blob);
     setBannerPreview(previewUrl);
     setBannerCropSrc(null);
-    const file = new File([blob], 'banner.png', { type: 'image/png' });
+    const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
       const attachment = await api.uploads.upload(file);
@@ -737,6 +737,7 @@ export function AccountPanel() {
         title="Crop Avatar"
         cropShape="round"
         aspectRatio={1}
+        maxOutputDimension={512}
       />
       <ImageCropModal
         isOpen={bannerCropSrc !== null}
@@ -746,6 +747,7 @@ export function AccountPanel() {
         title="Crop Banner"
         cropShape="rect"
         aspectRatio={3}
+        maxOutputDimension={1920}
       />
 
       <DeleteAccountModal
