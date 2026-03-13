@@ -182,7 +182,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             />
           </div>
         ) : (
-          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-[3px] select-none w-full text-right whitespace-nowrap leading-[1.375rem]`}>
+          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 select-none w-full text-right whitespace-nowrap leading-[1.375rem]`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
