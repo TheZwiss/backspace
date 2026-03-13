@@ -156,7 +156,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const content = (
     <div
       id={`msg-${message.id}`}
-      className={`group relative flex px-5 py-[3px] transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
+      className={`group relative flex gap-4 px-5 py-[3px] transition-colors ${isFirstInGroup || message.replyTo ? 'mt-[1.0625rem]' : ''} ${
         isMentioned
           ? 'bg-accent-amber/10 border-l-2 border-l-accent-amber hover:bg-accent-amber/15'
           : 'hover:bg-[rgba(255,255,255,0.025)]'
@@ -170,7 +170,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
       )}
 
       {/* Avatar or timestamp column */}
-      <div className="w-14 flex-shrink-0 flex items-start justify-start">
+      <div className="w-10 flex-shrink-0 flex items-start justify-start">
         {isFirstInGroup || message.replyTo ? (
           <div className="mt-0.5">
             <Avatar
@@ -182,7 +182,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
             />
           </div>
         ) : (
-          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-[3px] select-none w-full text-center leading-[1.375rem]`}>
+          <span className={`text-[11px] text-txt-tertiary opacity-0 group-hover:opacity-100 mt-[3px] select-none w-full text-right whitespace-nowrap leading-[1.375rem]`}>
             {formatHoverTime(message.createdAt)}
           </span>
         )}
@@ -254,25 +254,6 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               </div>
             )}
 
-            {/* Reactions */}
-            {Object.keys(reactionGroups).length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {Object.entries(reactionGroups).map(([emoji, { count, me }]) => (
-                  <button
-                    key={emoji}
-                    onClick={() => toggleReaction(emoji)}
-                    className={`glass-pill flex items-center gap-1 rounded-[6px] cursor-pointer transition-all duration-[120ms] ease-out ${
-                      me ? 'glass-pill-mine' : ''
-                    }`}
-                    style={{ padding: '2px 8px', fontSize: '13px', lineHeight: 1 }}
-                  >
-                    <span style={{ fontSize: '14px', lineHeight: 1 }}>{emoji}</span>
-                    <span className={`font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`} style={{ fontSize: '12px' }}>{count}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
             {/* Embeds */}
             {!isEditing && firstUrl && <Embed url={firstUrl} />}
 
@@ -318,6 +299,25 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                     </a>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Reactions */}
+            {Object.keys(reactionGroups).length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(reactionGroups).map(([emoji, { count, me }]) => (
+                  <button
+                    key={emoji}
+                    onClick={() => toggleReaction(emoji)}
+                    className={`glass-pill flex items-center gap-1 rounded-[6px] cursor-pointer transition-all duration-[120ms] ease-out ${
+                      me ? 'glass-pill-mine' : ''
+                    }`}
+                    style={{ padding: '2px 8px', fontSize: '13px', lineHeight: 1 }}
+                  >
+                    <span style={{ fontSize: '14px', lineHeight: 1 }}>{emoji}</span>
+                    <span className={`font-semibold ${me ? 'text-accent-mint' : 'text-txt-secondary'}`} style={{ fontSize: '12px' }}>{count}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
