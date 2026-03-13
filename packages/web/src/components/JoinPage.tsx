@@ -8,7 +8,7 @@ import { parseInviteInput } from '../utils/inviteParser';
 import { Avatar } from './ui/Avatar';
 import type { InvitePreview } from '@backspace/shared';
 
-type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance';
+type JoinPhase = 'preview' | 'connect' | 'fallback' | 'other-instance' | 'already-member';
 
 export function JoinPage() {
   const { inviteCode: rawInviteCode } = useParams<{ inviteCode: string }>();
@@ -106,7 +106,13 @@ export function JoinPage() {
         setPhase('connect');
         setError('');
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to join space');
+        const msg = err instanceof Error ? err.message : 'Failed to join space';
+        if (msg.toLowerCase().includes('already a member')) {
+          setPhase('already-member');
+          setError('');
+        } else {
+          setError(msg);
+        }
       }
     } finally {
       setIsJoining(false);
@@ -130,7 +136,13 @@ export function JoinPage() {
         setFallbackPassword('');
         setError('');
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to connect');
+        const msg = err instanceof Error ? err.message : 'Failed to connect';
+        if (msg.toLowerCase().includes('already a member')) {
+          setPhase('already-member');
+          setError('');
+        } else {
+          setError(msg);
+        }
       }
     } finally {
       setIsJoining(false);
@@ -148,7 +160,13 @@ export function JoinPage() {
       const space = await joinByCode(parsed.code, parsed.origin);
       navigate(`/channels/${space.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to log in');
+      const msg = err instanceof Error ? err.message : 'Failed to log in';
+      if (msg.toLowerCase().includes('already a member')) {
+        setPhase('already-member');
+        setError('');
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsJoining(false);
     }
@@ -295,6 +313,14 @@ export function JoinPage() {
                   >
                     Log in
                   </button>
+                  {' · '}
+                  <button
+                    type="button"
+                    onClick={() => { setPhase('other-instance'); setError(''); }}
+                    className="text-accent-primary hover:underline"
+                  >
+                    I use another instance
+                  </button>
                 </p>
               </div>
             ) : token ? (
@@ -431,6 +457,11 @@ export function JoinPage() {
           </form>
         )}
 
+        {/* Phase: already-member — green success with auto-redirect */}
+        {phase === 'already-member' && preview && (
+          <AlreadyMemberCard spaceName={preview.spaceName} spaceId={preview.spaceId} navigate={navigate} />
+        )}
+
         {/* Phase: fallback — different password on remote */}
         {phase === 'fallback' && (
           <form onSubmit={handleFallbackLogin}>
@@ -481,6 +512,31 @@ export function JoinPage() {
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+function AlreadyMemberCard({ spaceName, spaceId, navigate }: { spaceName: string; spaceId: string; navigate: (path: string) => void }) {
+  useEffect(() => {
+    const timer = setTimeout(() => navigate(`/channels/${spaceId}`), 2000);
+    return () => clearTimeout(timer);
+  }, [spaceId, navigate]);
+
+  return (
+    <div className="text-center">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-accent-mint/10 flex items-center justify-center">
+        <svg className="w-6 h-6 text-accent-mint" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <p className="text-txt-primary font-medium mb-1">You're already in {spaceName}!</p>
+      <p className="text-txt-tertiary text-xs mb-4">Redirecting you now...</p>
+      <button
+        onClick={() => navigate(`/channels/${spaceId}`)}
+        className="px-6 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors"
+      >
+        Go to {spaceName}
+      </button>
     </div>
   );
 }

@@ -53,6 +53,7 @@ export interface Space {
 }
 
 export interface InvitePreview {
+  spaceId: string;
   spaceName: string;
   description: string | null;
   icon: string | null;

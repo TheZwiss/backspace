@@ -1103,6 +1103,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const instanceName = settings?.instanceName ?? 'Backspace';
 
     return reply.code(200).send({
+      spaceId: space.id,
       spaceName: space.name,
       description: space.description ?? null,
       icon: space.icon ?? null,
