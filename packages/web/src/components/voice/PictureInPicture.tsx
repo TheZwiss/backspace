@@ -70,10 +70,27 @@ interface SelectedStream {
 
 function selectPipStream(
   participants: ParticipantInfo[],
-  focusedId: string | null,
+  lastFocusedId: string | null,
   watchingStreams: Set<string>,
 ): SelectedStream | null {
-  // Priority 1: Screen share from a user we're watching
+  // Priority 1: Last-focused stream tile (identity:stream suffix → screen share)
+  if (lastFocusedId?.endsWith(':stream')) {
+    const identity = lastFocusedId.slice(0, -':stream'.length);
+    const focused = participants.find(p => p.identity === identity);
+    if (focused?.screenTrack) {
+      return { participant: focused, track: focused.screenTrack, type: 'screen' };
+    }
+  }
+
+  // Priority 2: Last-focused user tile (identity match → camera)
+  if (lastFocusedId && !lastFocusedId.endsWith(':stream')) {
+    const focused = participants.find(p => p.identity === lastFocusedId);
+    if (focused?.videoTrack) {
+      return { participant: focused, track: focused.videoTrack, type: 'camera' };
+    }
+  }
+
+  // Priority 3: Screen share from a user we're watching
   const screenSharer = participants.find(
     p => p.screenTrack !== null && watchingStreams.has(p.userId),
   );
@@ -81,21 +98,13 @@ function selectPipStream(
     return { participant: screenSharer, track: screenSharer.screenTrack, type: 'screen' };
   }
 
-  // Priority 2: Focused participant with camera
-  if (focusedId) {
-    const focused = participants.find(p => p.identity === focusedId);
-    if (focused?.videoTrack) {
-      return { participant: focused, track: focused.videoTrack, type: 'camera' };
-    }
-  }
-
-  // Priority 3: Remote participant with camera
+  // Priority 4: Remote participant with camera
   const remoteWithCamera = participants.find(p => !p.isLocal && p.videoTrack !== null);
   if (remoteWithCamera?.videoTrack) {
     return { participant: remoteWithCamera, track: remoteWithCamera.videoTrack, type: 'camera' };
   }
 
-  // Priority 4: Local participant with camera
+  // Priority 5: Local participant with camera
   const localWithCamera = participants.find(p => p.isLocal && p.videoTrack !== null);
   if (localWithCamera?.videoTrack) {
     return { participant: localWithCamera, track: localWithCamera.videoTrack, type: 'camera' };
@@ -159,16 +168,60 @@ export function PictureInPicture() {
     prevWouldShow.current = wouldShow;
   }, [wouldShow, setPipCollapsed]);
 
+  // Track last speaker for avatar fallback (persists after they stop speaking)
+  const lastSpeakerRef = useRef<string | null>(null);
+  useEffect(() => {
+    for (const id of speakingParticipantIds) {
+      const p = participants.find(pp => pp.identity === id && !pp.isLocal);
+      if (p) {
+        lastSpeakerRef.current = p.identity;
+        break;
+      }
+    }
+  }, [speakingParticipantIds, participants]);
+
+  // Track last non-null focusedParticipantId so PiP persists when grid focus clears
+  const lastFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusedParticipantId) {
+      lastFocusRef.current = focusedParticipantId;
+    }
+  }, [focusedParticipantId]);
+
+  // Clear stale last-focus when the focused participant/track is gone
+  const effectiveLastFocus = useMemo(() => {
+    const id = lastFocusRef.current;
+    if (!id) return null;
+    if (id.endsWith(':stream')) {
+      const identity = id.slice(0, -':stream'.length);
+      const p = participants.find(pp => pp.identity === identity);
+      if (p?.screenTrack) return id;
+    } else {
+      const p = participants.find(pp => pp.identity === id);
+      if (p?.videoTrack) return id;
+    }
+    // Focused content is gone — clear ref
+    lastFocusRef.current = null;
+    return null;
+  }, [participants]);
+
   // Stream selection
   const selectedStream = useMemo(
-    () => selectPipStream(participants, focusedParticipantId, watchingStreams),
-    [participants, focusedParticipantId, watchingStreams],
+    () => selectPipStream(participants, effectiveLastFocus, watchingStreams),
+    [participants, effectiveLastFocus, watchingStreams],
   );
 
-  // Fallback participant for avatar (most relevant remote, or first participant)
+  // Fallback participant for avatar (last speaker > first remote > local)
   const fallbackParticipant = useMemo(() => {
+    // Currently speaking remote
     const speaking = participants.find(p => !p.isLocal && speakingParticipantIds.has(p.identity));
     if (speaking) return speaking;
+    // Last speaker (persists after they stop)
+    if (lastSpeakerRef.current) {
+      const last = participants.find(p => p.identity === lastSpeakerRef.current);
+      if (last) return last;
+    }
+    // Any remote
     const remote = participants.find(p => !p.isLocal);
     if (remote) return remote;
     return participants[0] ?? null;
