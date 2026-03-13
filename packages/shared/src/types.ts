@@ -52,6 +52,15 @@ export interface Space {
   createdAt: number;
 }
 
+export interface InvitePreview {
+  spaceName: string;
+  description: string | null;
+  icon: string | null;
+  avatarColor: AvatarColor | null;
+  memberCount: number;
+  instanceName: string;
+}
+
 export interface ExploreSpace {
   id: string;
   name: string;

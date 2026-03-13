@@ -4,13 +4,12 @@ import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, NotConnectedError } from '../../stores/spaceStore';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { parseInviteInput } from '../../utils/inviteParser';
 
 type JoinPhase = 'input' | 'connect' | 'fallback';
 
 export function JoinSpaceModal() {
-  const { inviteCode: urlInviteCode } = useParams<{ inviteCode?: string }>();
   const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,12 +30,9 @@ export function JoinSpaceModal() {
 
   const isOpen = activeModal === 'joinSpace';
 
-  // Pre-fill from URL param and reset state on open/close
+  // Reset state on close
   useEffect(() => {
-    if (isOpen) {
-      if (urlInviteCode) setInviteCode(urlInviteCode);
-    } else {
-      // Reset all state when modal closes
+    if (!isOpen) {
       setInviteCode('');
       setError('');
       setPhase('input');
@@ -46,7 +42,7 @@ export function JoinSpaceModal() {
       setFallbackUsername('');
       setFallbackPassword('');
     }
-  }, [isOpen, urlInviteCode]);
+  }, [isOpen]);
 
   const joinAndNavigate = async (code: string, origin?: string) => {
     const space = await joinByCode(code, origin || undefined);

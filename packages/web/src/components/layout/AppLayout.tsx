@@ -34,7 +34,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { AudioManager } from '../../audio/AudioManager';
 
 export function AppLayout() {
-  const { spaceId, channelId, inviteCode } = useParams<{ spaceId?: string; channelId?: string; inviteCode?: string }>();
+  const { spaceId, channelId } = useParams<{ spaceId?: string; channelId?: string }>();
   const navigate = useNavigate();
   
   // Global interaction handler to resume AudioContext
@@ -91,7 +91,6 @@ export function AppLayout() {
   const loadMessages = useChatStore((s) => s.loadMessages);
   const setIsMobile = useUIStore((s) => s.setIsMobile);
   const setShowDms = useUIStore((s) => s.setShowDms);
-  const openModal = useUIStore((s) => s.openModal);
 
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isMobile = useUIStore((s) => s.isMobile);
@@ -199,12 +198,6 @@ export function AppLayout() {
       setCurrentSpace(null);
     }
   }, [spaceId, setCurrentSpace, loadSpaceDetail, setShowDms]);
-
-  useEffect(() => {
-    if (inviteCode) {
-      openModal('joinSpace');
-    }
-  }, [inviteCode, openModal]);
 
   useEffect(() => {
     if (channelId) {

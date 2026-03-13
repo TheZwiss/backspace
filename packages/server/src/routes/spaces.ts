@@ -1085,6 +1085,33 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(spaceData);
   });
 
+  // GET /api/spaces/invite/:code/preview — Public invite preview (no auth)
+  app.get<{ Params: { code: string } }>('/api/spaces/invite/:code/preview', async (request, reply) => {
+    const { code } = request.params;
+    const db = getDb();
+
+    const space = db.select().from(schema.spaces).where(eq(schema.spaces.inviteCode, code)).get();
+    if (!space) {
+      return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
+    }
+
+    const memberCount = db.select().from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.spaceId, space.id))
+      .all().length;
+
+    const settings = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    const instanceName = settings?.instanceName ?? 'Backspace';
+
+    return reply.code(200).send({
+      spaceName: space.name,
+      description: space.description ?? null,
+      icon: space.icon ?? null,
+      avatarColor: space.avatarColor ?? null,
+      memberCount,
+      instanceName,
+    });
+  });
+
   // ─── Ban Management ───────────────────────────────────────────────────────
 
   // GET /api/spaces/:id/bans - List bans

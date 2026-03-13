@@ -38,6 +38,7 @@ import type {
   Role,
   SpaceLayoutItem,
   SpaceFolder,
+  InvitePreview,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -86,6 +87,7 @@ export class BackspaceApiClient {
     ban: (spaceId: string, userId: string, reason?: string) => Promise<{ success: boolean }>;
     unban: (spaceId: string, userId: string) => Promise<{ success: boolean }>;
     transferOwnership: (spaceId: string, newOwnerId: string) => Promise<Space>;
+    invitePreview: (code: string) => Promise<InvitePreview>;
   };
 
   readonly channels: {
@@ -303,6 +305,8 @@ export class BackspaceApiClient {
         request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/bans/${userId}`),
       transferOwnership: (spaceId: string, newOwnerId: string) =>
         request<Space>('PATCH', `/spaces/${spaceId}/transfer-ownership`, { newOwnerId }),
+      invitePreview: (code: string) =>
+        request<InvitePreview>('GET', `/spaces/invite/${encodeURIComponent(code)}/preview`, undefined, false),
     };
 
     this.channels = {

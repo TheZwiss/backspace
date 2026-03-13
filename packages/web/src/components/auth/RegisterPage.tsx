@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ImageCropModal } from '../ui/ImageCropModal';
@@ -43,6 +43,8 @@ export function RegisterPage() {
   const register = useAuthStore((s) => s.register);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirect = searchParams.get('redirect');
 
   // Cleanup blob URL on unmount
   useEffect(() => {
@@ -202,7 +204,11 @@ export function RegisterPage() {
         }
       }
 
-      navigate('/channels/@me');
+      if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+        navigate(redirect);
+      } else {
+        navigate('/channels/@me');
+      }
     } catch (err) {
       if (err instanceof RateLimitError) {
         setRetryAfter(err.retryAfter);
@@ -318,7 +324,7 @@ export function RegisterPage() {
 
               <p className="mt-3 text-sm text-txt-tertiary">
                 Already have an account?{' '}
-                <Link to="/login" className="text-accent-primary hover:underline">
+                <Link to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
                   Log In
                 </Link>
               </p>

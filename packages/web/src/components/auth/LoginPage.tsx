@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { RateLimitError } from '../../api/client';
 
@@ -11,6 +11,8 @@ export function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const isLoading = useAuthStore((s) => s.isLoading);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirect = searchParams.get('redirect');
 
   useEffect(() => {
     if (retryAfter <= 0) return;
@@ -41,7 +43,11 @@ export function LoginPage() {
 
     try {
       await login(username.trim(), password);
-      navigate('/channels/@me');
+      if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+        navigate(redirect);
+      } else {
+        navigate('/channels/@me');
+      }
     } catch (err) {
       if (err instanceof RateLimitError) {
         setRetryAfter(err.retryAfter);
@@ -118,7 +124,7 @@ export function LoginPage() {
 
           <p className="mt-3 text-sm text-txt-tertiary">
             Need an account?{' '}
-            <Link to="/register" className="text-accent-primary hover:underline">
+            <Link to={`/register${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
               Register
             </Link>
           </p>

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { LoginPage } from './components/auth/LoginPage';
 import { RegisterPage } from './components/auth/RegisterPage';
 import { AppLayout } from './components/layout/AppLayout';
+import { JoinPage } from './components/JoinPage';
 import { useAuthStore } from './stores/authStore';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -13,7 +14,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AuthRedirect({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
-  if (token) return <Navigate to="/channels/@me" replace />;
+  const [searchParams] = useSearchParams();
+  const redirect = searchParams.get('redirect');
+  if (token) {
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      return <Navigate to={redirect} replace />;
+    }
+    return <Navigate to="/channels/@me" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -46,11 +54,7 @@ export function App() {
       />
       <Route
         path="/join/:inviteCode"
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
+        element={<JoinPage />}
       />
       <Route
         path="/explore"
