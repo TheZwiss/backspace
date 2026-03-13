@@ -17,6 +17,7 @@ export function JoinPage() {
   const user = useAuthStore((s) => s.user);
   const loadUser = useAuthStore((s) => s.loadUser);
   const isAuthLoading = useAuthStore((s) => s.isLoading);
+  const logout = useAuthStore((s) => s.logout);
   const joinByCode = useSpaceStore((s) => s.joinByCode);
   const connectToRemote = useInstanceStore((s) => s.connectToRemote);
   const loginToRemote = useInstanceStore((s) => s.loginToRemote);
@@ -234,7 +235,7 @@ export function JoinPage() {
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
             <Avatar
-              src={preview.icon ? (parsed?.origin ? `${parsed.origin}/api/uploads/${preview.icon}` : `/api/uploads/${preview.icon}`) : null}
+              src={preview.icon ? (parsed?.origin ? `${parsed.origin}/api/uploads/${preview.icon}` : preview.icon) : null}
               name={preview.spaceName}
               size={72}
               avatarColor={preview.avatarColor}
@@ -263,14 +264,46 @@ export function JoinPage() {
         {/* Phase: preview — main join UI */}
         {phase === 'preview' && (
           <>
-            {token ? (
-              /* Authenticated user */
+            {token && user ? (
+              /* Authenticated user — show identity card + join */
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 bg-surface-input rounded-lg p-3">
+                  <Avatar
+                    src={user.avatar || null}
+                    name={user.displayName || user.username}
+                    size={40}
+                    avatarColor={user.avatarColor}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-txt-primary font-medium text-sm truncate">{user.displayName || user.username}</p>
+                    <p className="text-txt-tertiary text-xs truncate">@{user.username}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleJoin}
+                  disabled={isJoining}
+                  className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isJoining ? 'Joining...' : `Join as ${user.displayName || user.username}`}
+                </button>
+                <p className="text-center text-xs text-txt-tertiary">
+                  Not you?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { logout(); navigate(`/login${redirectParam}`); }}
+                    className="text-accent-primary hover:underline"
+                  >
+                    Log in
+                  </button>
+                </p>
+              </div>
+            ) : token ? (
+              /* Token exists but user still loading */
               <button
-                onClick={handleJoin}
-                disabled={isJoining || isAuthLoading}
+                disabled
                 className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isAuthLoading ? 'Loading...' : isJoining ? 'Joining...' : 'Join Space'}
+                Loading...
               </button>
             ) : (
               /* Unauthenticated user */
@@ -349,7 +382,7 @@ export function JoinPage() {
             {/* Identity card */}
             <div className="flex items-center gap-3 bg-surface-input rounded-lg p-3 mb-3">
               <Avatar
-                src={user?.avatar ? `/api/uploads/${user.avatar}` : null}
+                src={user?.avatar || null}
                 name={user?.displayName || user?.username || '?'}
                 size={40}
                 avatarColor={user?.avatarColor}
