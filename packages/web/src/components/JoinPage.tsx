@@ -178,10 +178,11 @@ export function JoinPage() {
     const domain = otherDomain.trim();
     if (!domain) return;
 
-    // Build the qualified invite code: code@thisHost
-    const thisHost = window.location.host;
+    // Build the qualified invite code: code@originHost
+    // If the invite is already qualified (arrived via redirect), preserve the original origin
+    const originHost = parsed?.origin ? new URL(parsed.origin).host : window.location.host;
     const code = parsed?.code || rawInviteCode || '';
-    const qualifiedCode = `${code}@${thisHost}`;
+    const qualifiedCode = `${code}@${originHost}`;
     const targetUrl = `https://${domain}/join/${encodeURIComponent(qualifiedCode)}`;
     window.location.href = targetUrl;
   };
