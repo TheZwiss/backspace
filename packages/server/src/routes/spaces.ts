@@ -290,13 +290,29 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     // Compute space-level permissions for the requesting user
     const spacePerms = computePermissions(request.userId, id);
 
+    // Batch-fetch all channel overrides for @everyone (role = spaceId) to determine isPrivate
+    const everyoneOverrides = db.select().from(schema.channelOverrides)
+      .where(and(
+        eq(schema.channelOverrides.targetType, 'role'),
+        eq(schema.channelOverrides.targetId, id),
+      ))
+      .all();
+    const privateChannelIds = new Set<string>();
+    for (const o of everyoneOverrides) {
+      const denyBits = BigInt(o.deny || '0');
+      if ((denyBits & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        privateChannelIds.add(o.channelId);
+      }
+    }
+
     // Filter channels by VIEW_CHANNEL permission and attach per-channel myPermissions
-    const visibleChannels: (Channel & { myPermissions: string })[] = [];
+    const visibleChannels: (Channel & { isPrivate: boolean; myPermissions: string })[] = [];
     for (const ch of channels) {
       const perms = computePermissions(request.userId, id, ch.id);
       if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
         visibleChannels.push({
           ...rowToChannel(ch),
+          isPrivate: privateChannelIds.has(ch.id),
           myPermissions: permissionsToString(perms),
         });
       }

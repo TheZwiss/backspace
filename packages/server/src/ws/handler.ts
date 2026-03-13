@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
@@ -698,6 +698,25 @@ function buildReadyPayload(userId: string): {
       arr.push(ch);
     }
 
+    // Batch: determine which channels are private (VIEW_CHANNEL denied on @everyone)
+    // @everyone role ID equals the space ID, so we query for overrides targeting role = spaceId
+    const allEveroneOverrides = batchInArray(
+      spaceIds,
+      ids => db.select().from(schema.channelOverrides).where(
+        and(
+          eq(schema.channelOverrides.targetType, 'role'),
+          inArray(schema.channelOverrides.targetId, ids),
+        )
+      ).all(),
+    );
+    const privateChannelIds = new Set<string>();
+    for (const o of allEveroneOverrides) {
+      const denyBits = BigInt(o.deny || '0');
+      if ((denyBits & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        privateChannelIds.add(o.channelId);
+      }
+    }
+
     // Batch: all categories for all spaces (1 query instead of N)
     const allCategories = batchInArray(
       spaceIds,
@@ -805,6 +824,7 @@ function buildReadyPayload(userId: string): {
             topic: ch.topic,
             position: ch.position ?? 0,
             categoryId: ch.categoryId ?? null,
+            isPrivate: privateChannelIds.has(ch.id),
             createdAt: ch.createdAt,
             lastMessageId: lastMsgMap.get(ch.id) ?? null,
             myPermissions: permissionsToString(chPerms),

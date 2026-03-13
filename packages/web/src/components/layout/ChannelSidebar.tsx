@@ -130,14 +130,20 @@ export function ChannelSidebar() {
     });
   }, [collapseKey]);
 
+  // Filter channels by VIEW_CHANNEL (defense-in-depth — server already filters,
+  // but this catches transient races where channels and permissions are briefly out of sync)
+  const visibleChannels = useMemo(() =>
+    channels.filter(ch => hasPermissionBit(channelPermissions.get(ch.id), PermissionBits.VIEW_CHANNEL)),
+    [channels, channelPermissions]);
+
   // Group channels by category
   const sortedCategories = useMemo(() =>
     [...categories].sort((a, b) => a.position - b.position), [categories]);
   const uncategorizedChannels = useMemo(() =>
-    channels.filter(c => !c.categoryId).sort((a, b) => a.position - b.position), [channels]);
+    visibleChannels.filter(c => !c.categoryId).sort((a, b) => a.position - b.position), [visibleChannels]);
   const channelsByCategory = useMemo(() => {
     const map = new Map<string, typeof channels>();
-    for (const ch of channels) {
+    for (const ch of visibleChannels) {
       if (!ch.categoryId) continue;
       let arr = map.get(ch.categoryId);
       if (!arr) { arr = []; map.set(ch.categoryId, arr); }
@@ -147,7 +153,7 @@ export function ChannelSidebar() {
       map.set(key, arr.sort((a, b) => a.position - b.position));
     }
     return map;
-  }, [channels]);
+  }, [visibleChannels]);
 
   // Check if a collapsed category has unread channels
   const categoryHasUnread = useCallback((categoryId: string) => {

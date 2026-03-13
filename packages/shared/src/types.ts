@@ -149,6 +149,7 @@ export interface Channel {
   topic: string | null;
   position: number;
   categoryId: string | null;
+  isPrivate?: boolean;
   createdAt: number;
   lastMessageId?: string | null;
   myPermissions?: string; // Computed per-user BigInt decimal string

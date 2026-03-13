@@ -21,6 +21,7 @@ interface VoiceState {
   isScreenSharing: boolean;
   participants: ParticipantInfo[];
   speakingParticipantIds: Set<string>;
+  speakingUserIds: Set<string>;
   connectionError: string | null;
   isLiveKitConnected: boolean;
   connectionQuality: 'excellent' | 'good' | 'poor' | 'lost' | 'unknown';
@@ -124,6 +125,7 @@ export const useVoiceStore = create<VoiceState>()(
       isScreenSharing: false,
       participants: [],
       speakingParticipantIds: new Set(),
+      speakingUserIds: new Set(),
       connectionError: null,
       isLiveKitConnected: false,
       connectionQuality: 'unknown',
@@ -264,7 +266,14 @@ export const useVoiceStore = create<VoiceState>()(
       }),
 
       setParticipants: (participants) => set({ participants }),
-      setSpeakingParticipants: (ids) => set({ speakingParticipantIds: ids }),
+      setSpeakingParticipants: (ids) => {
+        const userIds = new Set<string>();
+        for (const id of ids) {
+          const sep = id.indexOf(':');
+          if (sep !== -1) userIds.add(id.substring(0, sep));
+        }
+        set({ speakingParticipantIds: ids, speakingUserIds: userIds });
+      },
       setConnectionError: (error) => set({ connectionError: error }),
       setIsLiveKitConnected: (connected) => set({ isLiveKitConnected: connected }),
       setConnectionQuality: (quality) => set({ connectionQuality: quality }),
@@ -378,6 +387,7 @@ export const useVoiceStore = create<VoiceState>()(
         currentVoiceChannelId: null,
         participants: [],
         speakingParticipantIds: new Set(),
+        speakingUserIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
         connectionQuality: 'unknown',
@@ -437,6 +447,7 @@ export const useVoiceStore = create<VoiceState>()(
             isScreenSharing: false,
             participants: [],
             speakingParticipantIds: new Set(),
+            speakingUserIds: new Set(),
             connectionError: null,
             isLiveKitConnected: false,
             connectionQuality: 'unknown',
@@ -464,6 +475,7 @@ export const useVoiceStore = create<VoiceState>()(
           isScreenSharing: false,
           participants: [],
           speakingParticipantIds: new Set(),
+          speakingUserIds: new Set(),
           connectionError: null,
           isLiveKitConnected: false,
           connectionQuality: 'unknown',
@@ -488,6 +500,7 @@ export const useVoiceStore = create<VoiceState>()(
         isScreenSharing: false,
         participants: [],
         speakingParticipantIds: new Set(),
+        speakingUserIds: new Set(),
         connectionError: null,
         isLiveKitConnected: false,
         connectionQuality: 'unknown',
@@ -581,6 +594,7 @@ export const useVoiceStore = create<VoiceState>()(
         merged.voiceUsers = currentState.voiceUsers;
         merged.participants = currentState.participants;
         merged.speakingParticipantIds = currentState.speakingParticipantIds;
+        merged.speakingUserIds = currentState.speakingUserIds;
         merged.deafenedUserIds = currentState.deafenedUserIds;
         merged.voiceUserStates = currentState.voiceUserStates;
         merged.participantVolumes = currentState.participantVolumes;

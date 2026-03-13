@@ -39,6 +39,24 @@ function rowToCategory(row: typeof schema.channelCategories.$inferSelect): Chann
 }
 
 /**
+ * Check if a channel is private by looking for a VIEW_CHANNEL deny on @everyone.
+ * The @everyone role ID equals the space ID.
+ */
+function isChannelPrivate(channelId: string, spaceId: string): boolean {
+  const db = getDb();
+  const override = db.select().from(schema.channelOverrides).where(
+    and(
+      eq(schema.channelOverrides.channelId, channelId),
+      eq(schema.channelOverrides.targetType, 'role'),
+      eq(schema.channelOverrides.targetId, spaceId),
+    )
+  ).get();
+  if (!override) return false;
+  const denyBits = BigInt(override.deny || '0');
+  return (denyBits & PermissionBits.VIEW_CHANNEL) !== 0n;
+}
+
+/**
  * After a channel override changes, notify each space member:
  * - VIEW_CHANNEL holders receive channel_updated (with their myPermissions)
  * - Non-viewers receive channel_deleted to remove the channel from their UI
@@ -49,6 +67,7 @@ function broadcastOverrideChange(spaceId: string, channelId: string): void {
   if (!channel) return;
 
   const channelData = rowToChannel(channel);
+  const priv = isChannelPrivate(channelId, spaceId);
 
   for (const [userId, spaceIds] of connectionManager.getUserSpaceEntries()) {
     if (!spaceIds.has(spaceId)) continue;
@@ -57,7 +76,7 @@ function broadcastOverrideChange(spaceId: string, channelId: string): void {
     if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
       connectionManager.sendToUser(userId, {
         type: 'channel_updated',
-        channel: { ...channelData, myPermissions: permissionsToString(perms) },
+        channel: { ...channelData, isPrivate: priv, myPermissions: permissionsToString(perms) },
         spaceId,
       });
     } else {
@@ -184,7 +203,7 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
         connectionManager.sendToUser(userId, {
           type: 'channel_created',
-          channel: { ...channelData, myPermissions: permissionsToString(perms) },
+          channel: { ...channelData, isPrivate: false, myPermissions: permissionsToString(perms) },
           spaceId: id,
         });
       }
@@ -400,11 +419,26 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Validate that allow/deny are valid bigint strings
+    let allowBits: bigint;
+    let denyBits: bigint;
     try {
-      BigInt(allow || '0');
-      BigInt(deny || '0');
+      allowBits = BigInt(allow || '0');
+      denyBits = BigInt(deny || '0');
     } catch {
       return reply.code(400).send({ error: 'allow and deny must be valid decimal integer strings', statusCode: 400 });
+    }
+
+    // Privilege escalation guard: non-admin users can only grant permissions they possess
+    const callerPerms = computePermissions(request.userId, channel.spaceId);
+    if ((callerPerms & PermissionBits.ADMINISTRATOR) === 0n) {
+      const escalatedAllow = allowBits & ~callerPerms;
+      if (escalatedAllow !== 0n) {
+        return reply.code(403).send({ error: 'Cannot grant permissions you do not possess', statusCode: 403 });
+      }
+      const escalatedDeny = denyBits & ~callerPerms;
+      if (escalatedDeny !== 0n) {
+        return reply.code(403).send({ error: 'Cannot deny permissions you do not possess', statusCode: 403 });
+      }
     }
 
     // Upsert: delete existing then insert
@@ -730,6 +764,7 @@ function broadcastChannelLayout(spaceId: string): void {
       if ((perms & PermissionBits.VIEW_CHANNEL) !== 0n) {
         visibleChannels.push({
           ...rowToChannel(ch),
+          isPrivate: isChannelPrivate(ch.id, spaceId),
           myPermissions: permissionsToString(perms),
         });
       }

@@ -412,90 +412,79 @@ function migrateEveryoneRoles(db: Database.Database): void {
 
 /**
  * Remove the USE_VOICE_ACTIVITY bit (was bit 25) and shift STREAM (26→25)
- * and DISCONNECT_MEMBERS (27→26) down. Idempotent: uses a sentinel flag in
- * instance_settings metadata to avoid re-running.
+ * and DISCONNECT_MEMBERS (27→26) down.
+ *
+ * Gated behind a persistent `voice_bit_migrated` flag in instance_settings
+ * because the old and new bit positions overlap (STREAM moved into the same
+ * bit 25 that USE_VOICE_ACTIVITY occupied), making bit-inspection unreliable
+ * as an idempotency check. The previous version of this function had exactly
+ * that bug — it re-ran on every startup and silently stripped STREAM and
+ * DISCONNECT_MEMBERS from every role.
+ *
+ * On first run with the flag: repairs @everyone roles by re-adding STREAM,
+ * then sets the flag so it never runs again.
  */
 function migrateRemoveVoiceActivityBit(db: Database.Database): void {
-  // Use a pragma-style check: if STREAM is already at bit 25 in DEFAULT_EVERYONE_PERMISSIONS
-  // of the @everyone roles, the migration has already run. But for robustness, use a flag column.
-  // We'll check if any role still has bit 25 set AND bit 26 set (old layout had both USE_VOICE_ACTIVITY
-  // and STREAM). Simplest approach: track via a one-time marker.
-  const OLD_VOICE_ACTIVITY = 1n << 25n; // old USE_VOICE_ACTIVITY
-  const OLD_STREAM         = 1n << 26n; // old STREAM
-  const OLD_DISCONNECT     = 1n << 27n; // old DISCONNECT_MEMBERS
-
-  // Check if any role still uses the old bit layout (has bit 26 or 27 set)
-  const roles = db.prepare('SELECT id, permissions FROM roles WHERE permissions IS NOT NULL').all() as { id: string; permissions: string }[];
-  const overrides = db.prepare('SELECT channel_id, target_type, target_id, allow, deny FROM channel_overrides').all() as {
-    channel_id: string; target_type: string; target_id: string; allow: string; deny: string;
-  }[];
-
-  let needsMigration = false;
-  for (const role of roles) {
-    try {
-      const p = BigInt(role.permissions);
-      if ((p & OLD_STREAM) !== 0n || (p & OLD_DISCONNECT) !== 0n || (p & OLD_VOICE_ACTIVITY) !== 0n) {
-        needsMigration = true;
-        break;
-      }
-    } catch { /* skip invalid */ }
-  }
-  if (!needsMigration) {
-    for (const ov of overrides) {
-      try {
-        const a = BigInt(ov.allow);
-        const d = BigInt(ov.deny);
-        if ((a & OLD_STREAM) !== 0n || (a & OLD_DISCONNECT) !== 0n || (a & OLD_VOICE_ACTIVITY) !== 0n ||
-            (d & OLD_STREAM) !== 0n || (d & OLD_DISCONNECT) !== 0n || (d & OLD_VOICE_ACTIVITY) !== 0n) {
-          needsMigration = true;
-          break;
-        }
-      } catch { /* skip invalid */ }
-    }
+  // Ensure the flag column exists
+  const cols = db.pragma('table_info(instance_settings)') as { name: string }[];
+  if (!cols.some(c => c.name === 'voice_bit_migrated')) {
+    db.exec('ALTER TABLE instance_settings ADD COLUMN voice_bit_migrated INTEGER DEFAULT 0');
   }
 
-  if (!needsMigration) return;
+  // Check if already migrated
+  const row = db.prepare('SELECT voice_bit_migrated FROM instance_settings WHERE id = 1').get() as
+    { voice_bit_migrated: number } | undefined;
+  if (row && row.voice_bit_migrated === 1) return;
 
-  function shiftPermBits(p: bigint): bigint {
-    const hasStream     = (p & OLD_STREAM) !== 0n;
-    const hasDisconnect = (p & OLD_DISCONNECT) !== 0n;
-    // Clear bits 25, 26, 27
-    p = p & ~(OLD_VOICE_ACTIVITY | OLD_STREAM | OLD_DISCONNECT);
-    // Re-set at new positions
-    if (hasStream)     p |= (1n << 25n); // STREAM now at 25
-    if (hasDisconnect) p |= (1n << 26n); // DISCONNECT_MEMBERS now at 26
-    return p;
-  }
+  // The bit-shifting migration already ran (possibly many times) via the old
+  // broken code. All roles are already on the new layout (STREAM=25,
+  // DISCONNECT_MEMBERS=26). The damage is that repeated re-runs wiped those
+  // bits. Repair what we can:
 
-  console.log('Migrating: Shifting permission bits (removing USE_VOICE_ACTIVITY)...');
-
+  const STREAM_BIT = 1n << 25n;
   const updateRole = db.prepare('UPDATE roles SET permissions = ? WHERE id = ?');
-  for (const role of roles) {
+
+  // Repair @everyone roles: re-add STREAM where it's missing.
+  // @everyone role id === space id, so join on that.
+  const spaces = db.prepare('SELECT id FROM spaces').all() as { id: string }[];
+  for (const space of spaces) {
+    const role = db.prepare('SELECT id, permissions FROM roles WHERE id = ?').get(space.id) as
+      { id: string; permissions: string } | undefined;
+    if (!role?.permissions) continue;
     try {
-      const old = BigInt(role.permissions);
-      const shifted = shiftPermBits(old);
-      if (shifted !== old) {
-        updateRole.run(shifted.toString(), role.id);
+      const perms = BigInt(role.permissions);
+      if ((perms & STREAM_BIT) === 0n) {
+        updateRole.run((perms | STREAM_BIT).toString(), role.id);
+        console.log(`Repair: Re-added STREAM to @everyone role for space ${space.id}`);
       }
     } catch { /* skip invalid */ }
   }
 
-  const updateOverride = db.prepare(
-    'UPDATE channel_overrides SET allow = ?, deny = ? WHERE channel_id = ? AND target_type = ? AND target_id = ?'
-  );
-  for (const ov of overrides) {
+  // For non-@everyone roles, warn about potentially lost bits so admins can
+  // manually re-enable STREAM / DISCONNECT_MEMBERS if needed.
+  const customRoles = db.prepare(
+    'SELECT id, space_id, name, permissions FROM roles WHERE id NOT IN (SELECT id FROM spaces) AND permissions IS NOT NULL'
+  ).all() as { id: string; space_id: string; name: string; permissions: string }[];
+
+  let warnCount = 0;
+  for (const role of customRoles) {
     try {
-      const oldAllow = BigInt(ov.allow);
-      const oldDeny  = BigInt(ov.deny);
-      const newAllow = shiftPermBits(oldAllow);
-      const newDeny  = shiftPermBits(oldDeny);
-      if (newAllow !== oldAllow || newDeny !== oldDeny) {
-        updateOverride.run(newAllow.toString(), newDeny.toString(), ov.channel_id, ov.target_type, ov.target_id);
+      const perms = BigInt(role.permissions);
+      if ((perms & STREAM_BIT) === 0n) {
+        warnCount++;
       }
     } catch { /* skip invalid */ }
   }
+  if (warnCount > 0) {
+    console.log(
+      `Repair: ${warnCount} custom role(s) may be missing STREAM/DISCONNECT_MEMBERS permissions ` +
+      `due to a previous migration bug. Admins can re-enable these in Space Settings → Roles.`
+    );
+  }
 
-  console.log('Migrating: Permission bit shift complete.');
+  // Set flag so this never runs again
+  db.prepare('UPDATE instance_settings SET voice_bit_migrated = 1 WHERE id = 1').run();
+  console.log('Migrating: Voice permission bit migration flagged as complete.');
 }
 
 /** Delete corrupted read_states rows where last_read_message_id is not a valid snowflake (numeric string) */

@@ -612,6 +612,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (event.spaceId === curSpaceId3) {
         setChannels3(curChannels3.filter(c => c.id !== event.channelId));
       }
+      // If the user is currently viewing the deleted channel, clear it
+      const { currentChannelId: deletedViewChannelId } = useChatStore.getState();
+      if (deletedViewChannelId === event.channelId) {
+        useChatStore.getState().setCurrentChannel(null);
+      }
       chPermsMap3.delete(event.channelId);
       ctsMap3.delete(event.channelId);
       coMap3.delete(event.channelId);
