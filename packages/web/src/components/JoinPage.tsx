@@ -214,7 +214,7 @@ export function JoinPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
-        <div className="w-full max-w-[420px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10 text-center">
+        <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent-rose/10 flex items-center justify-center">
             <svg className="w-8 h-8 text-accent-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -248,7 +248,7 @@ export function JoinPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
-      <div className="w-full max-w-[420px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
+      <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         {/* Space preview */}
         <div className="text-center mb-6">
           <div className="flex justify-center mb-4">
@@ -342,22 +342,22 @@ export function JoinPage() {
                 </Link>
                 <Link
                   to={`/register${redirectParam}`}
-                  className="block w-full py-2.5 bg-surface-input hover:bg-surface-input/80 text-txt-primary font-medium rounded transition-colors text-center"
+                  className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
                 >
                   Create an account
                 </Link>
 
                 {/* Divider */}
                 <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-border-subtle" />
+                  <div className="flex-1 h-px bg-border-soft" />
                   <span className="text-xs text-txt-tertiary">or</span>
-                  <div className="flex-1 h-px bg-border-subtle" />
+                  <div className="flex-1 h-px bg-border-soft" />
                 </div>
 
                 <button
                   type="button"
                   onClick={() => { setPhase('other-instance'); setError(''); }}
-                  className="block w-full py-2.5 bg-surface-input hover:bg-surface-input/80 text-txt-primary font-medium rounded transition-colors text-center"
+                  className="block w-full py-2.5 bg-surface-input hover:bg-surface-elevated text-txt-primary font-medium rounded transition-colors text-center"
                 >
                   I use another instance
                 </button>
@@ -378,7 +378,7 @@ export function JoinPage() {
                 value={otherDomain}
                 onChange={(e) => setOtherDomain(e.target.value)}
                 placeholder="e.g. my-instance.com"
-                className="flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="flex-1 px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
                 autoFocus
               />
               <button
@@ -422,15 +422,15 @@ export function JoinPage() {
               Connecting to <span className="text-txt-secondary font-medium">{hostDisplay}</span>
             </p>
             <div className="mb-4">
-              <label className="block text-xs text-txt-tertiary mb-1">
-                Enter your password to connect
+              <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">
+                Password
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your account password"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
                 disabled={isJoining}
                 autoFocus
               />
@@ -470,24 +470,24 @@ export function JoinPage() {
             </div>
             <div className="mb-4 space-y-3">
               <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Username</label>
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">Username</label>
                 <input
                   type="text"
                   value={fallbackUsername}
                   onChange={(e) => setFallbackUsername(e.target.value)}
                   placeholder="Your username on this instance"
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                  className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
                   disabled={isJoining}
                 />
               </div>
               <div>
-                <label className="block text-xs text-txt-tertiary mb-1">Password for this instance</label>
+                <label className="block text-xs font-bold text-txt-secondary uppercase mb-1.5">Password for this instance</label>
                 <input
                   type="password"
                   value={fallbackPassword}
                   onChange={(e) => setFallbackPassword(e.target.value)}
                   placeholder="Password on the remote instance"
-                  className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                  className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
                   disabled={isJoining}
                   autoFocus
                 />
