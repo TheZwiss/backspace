@@ -16,6 +16,7 @@ export interface User {
   customStatus: string | null;
   isAdmin: boolean;
   isDeleted?: boolean;
+  discoverable?: boolean;
   profileUpdatedAt?: number;
   createdAt: number;
   homeInstance: string | null;
@@ -312,6 +313,8 @@ export type ServerEvent =
   | { type: 'dm_member_added'; dmChannelId: string; user: User }
   | { type: 'dm_member_removed'; dmChannelId: string; userId: string }
   | { type: 'friend_removed'; userId: string }
+  | { type: 'friend_request_cancelled'; requestId: string; userId: string }
+  | { type: 'friend_request_declined'; requestId: string; userId: string }
   | { type: 'channel_created'; channel: Channel; spaceId: string }
   | { type: 'channel_updated'; channel: Channel; spaceId: string }
   | { type: 'channel_deleted'; channelId: string; spaceId: string }
@@ -399,6 +402,7 @@ export interface UpdateUserRequest {
   replicatedInstances?: ReplicatedInstance[];
   homeUserId?: string;
   profileUpdatedAt?: number;
+  discoverable?: boolean;
 }
 
 export interface UpdateMemberRequest {
@@ -469,6 +473,25 @@ export interface Friend {
   addedAt: number;
   homeUserId: string | null;
   homeInstance: string | null;
+}
+
+export interface DiscoverUser {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  banner: string | null;
+  avatarColor: AvatarColor | null;
+  bio: string | null;
+  status: UserStatus;
+  customStatus: string | null;
+  createdAt: number;
+  homeInstance: string | null;
+  homeUserId: string | null;
+  mutualFriendCount: number;
+  mutualSpaceCount: number;
+  relationship: 'none' | 'friends' | 'outbound_pending' | 'inbound_pending';
+  requestId?: string;
 }
 
 export type FriendRequestStatus = 'pending' | 'accepted' | 'declined';

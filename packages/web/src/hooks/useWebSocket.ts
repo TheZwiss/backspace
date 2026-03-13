@@ -495,6 +495,24 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    case 'friend_request_cancelled': {
+      const { removeRequestById } = useSocialStore.getState();
+      removeRequestById(event.requestId, origin);
+      import('../stores/discoverStore').then(({ useDiscoverStore }) => {
+        useDiscoverStore.getState().updateRelationship(event.userId, origin, 'none');
+      });
+      break;
+    }
+
+    case 'friend_request_declined': {
+      const { removeRequestById } = useSocialStore.getState();
+      removeRequestById(event.requestId, origin);
+      import('../stores/discoverStore').then(({ useDiscoverStore }) => {
+        useDiscoverStore.getState().updateRelationship(event.userId, origin, 'none');
+      });
+      break;
+    }
+
     // ─── Channel ack (all origins) ──────────────────────────────────────────
 
     case 'channel_ack': {

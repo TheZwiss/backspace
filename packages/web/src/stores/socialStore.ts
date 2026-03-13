@@ -26,7 +26,7 @@ interface SocialState {
   error: string | null;
   loadFriends: () => Promise<void>;
   loadRequests: () => Promise<void>;
-  sendFriendRequest: (username: string) => Promise<void>;
+  sendFriendRequest: (username: string) => Promise<string | undefined>;
   updateFriendRequest: (id: string, status: 'accepted' | 'declined') => Promise<void>;
   cancelFriendRequest: (id: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
@@ -36,6 +36,7 @@ interface SocialState {
   updateFriendPresence: (userId: string, status: string) => void;
   updateFriendProfile: (user: User) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
+  removeRequestById: (requestId: string, origin: string) => void;
   reset: () => void;
 }
 
@@ -117,10 +118,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const atIndex = username.lastIndexOf('@');
+      let res: { success: boolean; requestId?: string };
 
       if (atIndex === -1) {
         // No @ → local user on home instance
-        await api.social.sendRequest(username);
+        res = await api.social.sendRequest(username);
       } else {
         const baseName = username.slice(0, atIndex);
         const domain = username.slice(atIndex + 1);
@@ -128,7 +130,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         // Check if domain matches home instance
         if (domain === window.location.host) {
           // Strip domain, send to home API
-          await api.social.sendRequest(baseName);
+          res = await api.social.sendRequest(baseName);
         } else {
           // Find a connected instance matching this domain
           const instances = useInstanceStore.getState().instances;
@@ -149,11 +151,12 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           }
 
           // On the remote instance, the user is just "alice", not "alice@orbit"
-          await match.api.social.sendRequest(baseName);
+          res = await match.api.social.sendRequest(baseName);
         }
       }
 
       await get().loadRequests();
+      return res.requestId;
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
       throw err;
@@ -278,6 +281,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   removeFriendLocally: (userId: string, origin: string) => {
     set((state) => ({
       friends: state.friends.filter(f => !(f.id === userId && f._instanceOrigin === origin)),
+    }));
+  },
+
+  // Called from WS handler when a friend request is cancelled or declined
+  removeRequestById: (requestId: string, origin: string) => {
+    set((state) => ({
+      requests: state.requests.filter(r => !(r.id === requestId && r._instanceOrigin === origin)),
     }));
   },
 

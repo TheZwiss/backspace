@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, or, ne, like } from 'drizzle-orm';
+import { eq, and, or, ne, like, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -9,6 +9,7 @@ import type {
   FriendRequest,
   SendFriendRequest,
   UpdateFriendRequest,
+  DiscoverUser,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
@@ -170,7 +171,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       request: friendRequestPayload,
     });
 
-    return reply.code(201).send({ success: true });
+    return reply.code(201).send({ success: true, requestId: id });
   });
 
   // PATCH /api/social/requests/:id - Accept/Decline a friend request
@@ -229,6 +230,13 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
         .set({ status })
         .where(eq(schema.friendRequests.id, id))
         .run();
+
+      // Broadcast to the original sender so their UI updates in real-time
+      connectionManager.sendToUser(friendRequest.fromId, {
+        type: 'friend_request_declined',
+        requestId: id,
+        userId: request.userId,
+      });
     }
 
     return reply.code(200).send({ success: true });
@@ -259,6 +267,13 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.friendRequests.id, id))
       .run();
 
+    // Broadcast to the recipient so their UI updates in real-time
+    connectionManager.sendToUser(friendRequest.toId, {
+      type: 'friend_request_cancelled',
+      requestId: id,
+      userId: request.userId,
+    });
+
     return reply.code(200).send({ success: true });
   });
 
@@ -281,6 +296,137 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.code(200).send({ success: true });
+  });
+
+  // GET /api/social/discover - Discover users on this instance
+  app.get<{ Querystring: { q?: string; limit?: string; offset?: string } }>('/api/social/discover', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const db = getDb();
+    const q = request.query.q?.trim() || '';
+    const limit = Math.min(Math.max(parseInt(request.query.limit || '24', 10) || 24, 1), 100);
+    const offset = Math.max(parseInt(request.query.offset || '0', 10) || 0, 0);
+    const myId = request.userId;
+
+    // Build WHERE clause
+    const conditions = [
+      eq(schema.users.discoverable, 1),
+      eq(schema.users.isDeleted, 0),
+      ne(schema.users.id, myId),
+      // Exclude replicated federated users — each instance only surfaces its own native users.
+      // Federated users are discovered through the parallel fetch across connected instances.
+      sql`(${schema.users.homeInstance} IS NULL OR ${schema.users.homeInstance} = '')`,
+    ];
+
+    if (q) {
+      const pattern = `%${q}%`;
+      conditions.push(or(
+        like(schema.users.username, pattern),
+        like(schema.users.displayName, pattern),
+      )!);
+    }
+
+    // Get total count
+    const countResult = db.select({ count: sql<number>`count(*)` })
+      .from(schema.users)
+      .where(and(...conditions))
+      .get();
+    const total = countResult?.count ?? 0;
+
+    if (total === 0) {
+      return reply.code(200).send({ users: [], total: 0 });
+    }
+
+    // Pre-load my social graph
+    const myFriendRows = db.select().from(schema.friends).where(
+      or(eq(schema.friends.userId, myId), eq(schema.friends.friendId, myId))
+    ).all();
+    const myFriendIds = new Set(myFriendRows.map(f => f.userId === myId ? f.friendId : f.userId));
+
+    const mySpaceRows = db.select({ spaceId: schema.spaceMembers.spaceId })
+      .from(schema.spaceMembers)
+      .where(eq(schema.spaceMembers.userId, myId))
+      .all();
+    const mySpaceIds = new Set(mySpaceRows.map(s => s.spaceId));
+
+    const outboundRequests = db.select().from(schema.friendRequests).where(
+      and(eq(schema.friendRequests.fromId, myId), eq(schema.friendRequests.status, 'pending'))
+    ).all();
+    const outboundMap = new Map(outboundRequests.map(r => [r.toId, r.id]));
+
+    const inboundRequests = db.select().from(schema.friendRequests).where(
+      and(eq(schema.friendRequests.toId, myId), eq(schema.friendRequests.status, 'pending'))
+    ).all();
+    const inboundMap = new Map(inboundRequests.map(r => [r.fromId, r.id]));
+
+    // Fetch page of users
+    const userRows = db.select()
+      .from(schema.users)
+      .where(and(...conditions))
+      .orderBy(sql`created_at DESC`)
+      .limit(limit)
+      .offset(offset)
+      .all();
+
+    // Compute mutual counts + relationship for each user
+    const discoverUsers: DiscoverUser[] = userRows.map(row => {
+      const u = sanitizeUser(row);
+
+      // Mutual friends
+      const theirFriendRows = db.select().from(schema.friends).where(
+        or(eq(schema.friends.userId, row.id), eq(schema.friends.friendId, row.id))
+      ).all();
+      const theirFriendIds = new Set(theirFriendRows.map(f => f.userId === row.id ? f.friendId : f.userId));
+      const mutualFriendCount = [...myFriendIds].filter(id => theirFriendIds.has(id)).length;
+
+      // Mutual spaces
+      const theirSpaceRows = db.select({ spaceId: schema.spaceMembers.spaceId })
+        .from(schema.spaceMembers)
+        .where(eq(schema.spaceMembers.userId, row.id))
+        .all();
+      const theirSpaceIds = new Set(theirSpaceRows.map(s => s.spaceId));
+      const mutualSpaceCount = [...mySpaceIds].filter(id => theirSpaceIds.has(id)).length;
+
+      // Relationship
+      let relationship: DiscoverUser['relationship'] = 'none';
+      let requestId: string | undefined;
+      if (myFriendIds.has(row.id)) {
+        relationship = 'friends';
+      } else if (outboundMap.has(row.id)) {
+        relationship = 'outbound_pending';
+        requestId = outboundMap.get(row.id);
+      } else if (inboundMap.has(row.id)) {
+        relationship = 'inbound_pending';
+        requestId = inboundMap.get(row.id);
+      }
+
+      return {
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        avatar: u.avatar,
+        banner: u.banner,
+        avatarColor: u.avatarColor,
+        bio: u.bio,
+        status: u.status,
+        customStatus: u.customStatus,
+        createdAt: u.createdAt,
+        homeInstance: u.homeInstance,
+        homeUserId: u.homeUserId,
+        mutualFriendCount,
+        mutualSpaceCount,
+        relationship,
+        ...(requestId ? { requestId } : {}),
+      };
+    });
+
+    // Sort: mutual friends DESC, then created_at DESC
+    discoverUsers.sort((a, b) => {
+      if (b.mutualFriendCount !== a.mutualFriendCount) return b.mutualFriendCount - a.mutualFriendCount;
+      return b.createdAt - a.createdAt;
+    });
+
+    return reply.code(200).send({ users: discoverUsers, total });
   });
 
   // GET /api/social/search?q=... - Search for users to add as friends
