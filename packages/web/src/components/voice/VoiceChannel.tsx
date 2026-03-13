@@ -36,6 +36,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
   const participantMutes = useVoiceStore((s) => s.participantMutes);
   const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
+  const speakingUserIds = useVoiceStore((s) => s.speakingUserIds);
   const currentUserId = useVoiceStore((s) => {
     const local = s.participants.find(p => p.isLocal);
     return local?.userId ?? null;
@@ -177,6 +178,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, dragStat
                   status={status}
                   userId={member?.user.homeUserId ?? userId}
                   user={member?.user}
+                  className={speakingUserIds.has(userId) ? 'rounded-full ring-2 ring-status-online' : ''}
                 />
                 <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
                 {/* Status badges */}
