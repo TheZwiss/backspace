@@ -132,6 +132,12 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'profile_updated_at', type: 'INTEGER' },
       ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'discoverable', type: 'INTEGER DEFAULT 1' },
+      ]
     }
   ];
 

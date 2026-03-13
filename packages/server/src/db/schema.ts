@@ -17,6 +17,7 @@ export const users = sqliteTable('users', {
   avatarColor: text('avatar_color'),
   bio: text('bio'),
   isDeleted: integer('is_deleted').default(0),
+  discoverable: integer('discoverable').default(1),
   profileUpdatedAt: integer('profile_updated_at'),
   createdAt: integer('created_at').notNull(),
 });

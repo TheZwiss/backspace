@@ -26,6 +26,7 @@ import type {
   CreateDmMessageRequest,
   Friend,
   FriendRequest,
+  DiscoverUser,
   InstanceStreamingLimits,
   InstanceAdminSettings,
   InstanceInfoResponse,
@@ -136,11 +137,12 @@ export class BackspaceApiClient {
   readonly social: {
     friends: () => Promise<Friend[]>;
     requests: () => Promise<FriendRequest[]>;
-    sendRequest: (username: string) => Promise<{ success: boolean }>;
+    sendRequest: (username: string) => Promise<{ success: boolean; requestId?: string }>;
     updateRequest: (id: string, status: 'accepted' | 'declined') => Promise<{ success: boolean }>;
     removeFriend: (id: string) => Promise<{ success: boolean }>;
     cancelRequest: (id: string) => Promise<{ success: boolean }>;
     search: (q: string) => Promise<User[]>;
+    discover: (q?: string, limit?: number, offset?: number) => Promise<{ users: DiscoverUser[]; total: number }>;
   };
 
   readonly livekit: {
@@ -389,12 +391,19 @@ export class BackspaceApiClient {
     this.social = {
       friends: () => request<Friend[]>('GET', '/social/friends'),
       requests: () => request<FriendRequest[]>('GET', '/social/requests'),
-      sendRequest: (username: string) => request<{ success: boolean }>('POST', '/social/requests', { username }),
+      sendRequest: (username: string) => request<{ success: boolean; requestId?: string }>('POST', '/social/requests', { username }),
       updateRequest: (id: string, status: 'accepted' | 'declined') =>
         request<{ success: boolean }>('PATCH', `/social/requests/${id}`, { status }),
       removeFriend: (id: string) => request<{ success: boolean }>('DELETE', `/social/friends/${id}`),
       cancelRequest: (id: string) => request<{ success: boolean }>('DELETE', `/social/requests/${id}`),
       search: (q: string) => request<User[]>('GET', `/social/search?q=${encodeURIComponent(q)}`),
+      discover: (q?: string, limit = 24, offset = 0) => {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+        return request<{ users: DiscoverUser[]; total: number }>('GET', `/social/discover?${params}`);
+      },
     };
 
     this.livekit = {

@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
@@ -154,31 +156,14 @@ export function FriendsPage() {
         );
       case 'add':
         return (
-          <div className="flex-1 p-8">
-            <h2 className="text-base font-bold text-txt-primary uppercase mb-2">Add Friend</h2>
-            <p className="text-sm text-txt-tertiary mb-4">You can add friends with their Backspace username.</p>
-            <form onSubmit={handleAddFriend} className="relative mb-8">
-              <input
-                type="text"
-                placeholder="You can add a friend with their username"
-                value={addUsername}
-                onChange={(e) => setAddUsername(e.target.value)}
-                className="w-full bg-surface-base text-txt-primary px-4 py-3 rounded-lg border border-transparent focus:border-txt-link outline-none transition-all placeholder:text-txt-tertiary/50"
-              />
-              <button
-                type="submit"
-                disabled={!addUsername.trim() || isLoading}
-                className="absolute right-2 top-1.5 px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:bg-accent-primary text-white text-sm font-medium rounded transition-colors"
-              >
-                Send Friend Request
-              </button>
-            </form>
-            {addStatus && (
-              <div className={`text-sm p-3 rounded-lg border ${addStatus.type === 'success' ? 'text-txt-positive border-status-online/20 bg-status-online/5' : 'text-txt-danger border-accent-rose/20 bg-accent-rose/5'}`}>
-                {addStatus.message}
-              </div>
-            )}
-          </div>
+          <AddFriendTab
+            addUsername={addUsername}
+            setAddUsername={setAddUsername}
+            addStatus={addStatus}
+            isLoading={isLoading}
+            onSubmit={handleAddFriend}
+            onOpenDm={handleOpenDm}
+          />
         );
     }
   };
@@ -226,6 +211,370 @@ export function FriendsPage() {
     </div>
   );
 }
+
+// ─── Add Friend Tab ─────────────────────────────────────────────────────────
+
+function AddFriendTab({
+  addUsername,
+  setAddUsername,
+  addStatus,
+  isLoading,
+  onSubmit,
+  onOpenDm,
+}: {
+  addUsername: string;
+  setAddUsername: (v: string) => void;
+  addStatus: { type: 'success' | 'error'; message: string } | null;
+  isLoading: boolean;
+  onSubmit: (e: React.FormEvent) => void;
+  onOpenDm: (userId: string, origin: string) => void;
+}) {
+  const discoverUsers = useDiscoverStore((s) => s.users);
+  const discoverLoading = useDiscoverStore((s) => s.isLoading);
+  const discoverQuery = useDiscoverStore((s) => s.searchQuery);
+  const setDiscoverQuery = useDiscoverStore((s) => s.setSearchQuery);
+  const fetchUsers = useDiscoverStore((s) => s.fetchUsers);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch discovery on mount
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const handleDiscoverSearch = useCallback((value: string) => {
+    setDiscoverQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchUsers(value || undefined);
+    }, 300);
+  }, [setDiscoverQuery, fetchUsers]);
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="p-6 pb-4">
+        <h2 className="text-base font-bold text-txt-primary uppercase mb-2">Add Friend</h2>
+        <p className="text-sm text-txt-tertiary mb-4">You can add friends with their Backspace username.</p>
+        <form onSubmit={onSubmit} className="relative mb-4">
+          <input
+            type="text"
+            placeholder="You can add a friend with their username"
+            value={addUsername}
+            onChange={(e) => setAddUsername(e.target.value)}
+            className="w-full bg-surface-base text-txt-primary px-4 py-3 rounded-lg border border-transparent focus:border-txt-link outline-none transition-all placeholder:text-txt-tertiary/50"
+          />
+          <button
+            type="submit"
+            disabled={!addUsername.trim() || isLoading}
+            className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:bg-accent-primary text-white text-sm font-medium rounded transition-colors"
+          >
+            Send Friend Request
+          </button>
+        </form>
+        {addStatus && (
+          <div className={`text-sm p-3 rounded-lg border mb-4 ${addStatus.type === 'success' ? 'text-txt-positive border-status-online/20 bg-status-online/5' : 'text-txt-danger border-accent-rose/20 bg-accent-rose/5'}`}>
+            {addStatus.message}
+          </div>
+        )}
+      </div>
+
+      {/* Discover People section */}
+      <div className="px-6 pb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
+          </svg>
+          <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary">Discover People</span>
+        </div>
+
+        {/* Discover search */}
+        <div className="relative mb-4">
+          <input
+            type="text"
+            placeholder="Search people..."
+            value={discoverQuery}
+            onChange={(e) => handleDiscoverSearch(e.target.value)}
+            className="w-full bg-surface-base text-txt-primary text-sm px-3 py-1.5 rounded-[4px] outline-none placeholder:text-txt-tertiary/50 focus:ring-1 focus:ring-accent-primary transition-all"
+          />
+          {discoverQuery && (
+            <button
+              onClick={() => handleDiscoverSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Grid */}
+        {discoverLoading && discoverUsers.length === 0 ? (
+          <div className="flex items-center justify-center h-32">
+            <LoadingSpinner />
+          </div>
+        ) : discoverUsers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 opacity-60">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-2">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+            <p className="text-txt-tertiary text-sm">
+              {discoverQuery
+                ? 'No users match your search.'
+                : 'No discoverable users yet — invite people to join!'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {discoverUsers.map((user) => (
+              <UserDiscoverCard
+                key={`${user.id}:${user._instanceOrigin}`}
+                user={user}
+                onOpenDm={onOpenDm}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── User Discover Card ─────────────────────────────────────────────────────
+
+function UserDiscoverCard({
+  user,
+  onOpenDm,
+}: {
+  user: TaggedDiscoverUser;
+  onOpenDm: (userId: string, origin: string) => void;
+}) {
+  const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
+  const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
+  const updateRelationship = useDiscoverStore((s) => s.updateRelationship);
+  const openModal = useUIStore((s) => s.openModal);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const displayName = user.displayName ?? user.username;
+  const baseName = user.username.includes('@') ? user.username.split('@')[0]! : user.username;
+  const gradient = getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor);
+  const originLabel = user._instanceOrigin
+    ? (() => { try { return new URL(user._instanceOrigin).host; } catch { return user._instanceOrigin; } })()
+    : null;
+
+  const avatarUrl = user.avatar
+    ? (user.avatar.startsWith('http') ? user.avatar : `/api/uploads/${user.avatar}`)
+    : null;
+  const bannerUrl = user.banner
+    ? (user.banner.startsWith('http') ? user.banner : `/api/uploads/${user.banner}`)
+    : null;
+
+  const handleSendRequest = async () => {
+    setActionLoading(true);
+    setError('');
+    try {
+      // For federated users, use user@host format
+      const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
+      const requestId = await sendFriendRequest(username);
+      updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!user.requestId) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      await updateFriendRequest(user.requestId, 'accepted');
+      updateRelationship(user.id, user._instanceOrigin, 'friends');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDecline = async () => {
+    if (!user.requestId) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      await updateFriendRequest(user.requestId, 'declined');
+      updateRelationship(user.id, user._instanceOrigin, 'none');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to decline request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelRequest = async () => {
+    if (!user.requestId) return;
+    setActionLoading(true);
+    setError('');
+    try {
+      const origin = user._instanceOrigin;
+      const client = origin
+        ? (useInstanceStore.getState().instances.find(i => i.origin === origin)?.api ?? api)
+        : api;
+      await client.social.cancelRequest(user.requestId);
+      updateRelationship(user.id, user._instanceOrigin, 'none');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel request');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenProfile = () => {
+    openModal('userProfile', { userId: user.id, user, origin: user._instanceOrigin });
+  };
+
+  const handleMessage = () => {
+    onOpenDm(user.id, user._instanceOrigin);
+  };
+
+  return (
+    <div className="bg-surface-channel rounded-lg border border-border-soft hover:border-border-hard overflow-hidden flex flex-col transition-colors">
+      {/* Banner area */}
+      <div className="h-24 relative overflow-hidden">
+        {bannerUrl ? (
+          <img src={bannerUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0" style={{ background: gradient.gradient }} />
+        )}
+        <div
+          className="absolute bottom-0 inset-x-0 h-12"
+          style={{ background: 'linear-gradient(to top, rgba(20,20,26,0.9), transparent)' }}
+        />
+        {originLabel && (
+          <div className="absolute top-2 right-2 z-[2]">
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold backdrop-blur-sm bg-black/30 text-txt-secondary">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="opacity-60">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+              {originLabel}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Overlapping avatar */}
+      <div className="relative px-4 -mt-7 z-10">
+        <button onClick={handleOpenProfile} className="block">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="w-12 h-12 rounded-full object-cover ring-[3px] ring-surface-channel shadow-lg"
+            />
+          ) : (
+            <div
+              className="w-12 h-12 rounded-full ring-[3px] ring-surface-channel shadow-lg flex items-center justify-center text-lg font-bold text-white/90"
+              style={{ background: gradient.gradient }}
+            >
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="px-4 pt-1.5 pb-3.5 flex flex-col flex-1">
+        <button onClick={handleOpenProfile} className="text-left group">
+          <h3 className="text-[14px] font-bold text-txt-primary truncate group-hover:underline">{displayName}</h3>
+          <p className="text-[12px] text-txt-tertiary truncate">@{user.username}</p>
+        </button>
+
+        {user.bio && (
+          <p className="text-[12px] text-txt-secondary line-clamp-2 mt-1.5 flex-1">{user.bio}</p>
+        )}
+        {!user.bio && <div className="flex-1" />}
+
+        {/* Mutuals */}
+        {(user.mutualFriendCount > 0 || user.mutualSpaceCount > 0) && (
+          <div className="flex items-center gap-2.5 text-[11px] text-txt-tertiary mt-2 mb-2.5">
+            {user.mutualFriendCount > 0 && (
+              <span>{user.mutualFriendCount} mutual {user.mutualFriendCount === 1 ? 'friend' : 'friends'}</span>
+            )}
+            {user.mutualFriendCount > 0 && user.mutualSpaceCount > 0 && (
+              <span className="text-txt-tertiary/40">·</span>
+            )}
+            {user.mutualSpaceCount > 0 && (
+              <span>{user.mutualSpaceCount} mutual {user.mutualSpaceCount === 1 ? 'space' : 'spaces'}</span>
+            )}
+          </div>
+        )}
+        {user.mutualFriendCount === 0 && user.mutualSpaceCount === 0 && <div className="mt-2" />}
+
+        {/* Error */}
+        {error && (
+          <div className="text-[11px] text-txt-danger mb-1.5 truncate">{error}</div>
+        )}
+
+        {/* Action button */}
+        {user.relationship === 'none' && (
+          <button
+            onClick={handleSendRequest}
+            disabled={actionLoading}
+            className="w-full py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+          >
+            {actionLoading ? 'Sending...' : 'Send Friend Request'}
+          </button>
+        )}
+        {user.relationship === 'outbound_pending' && (
+          <button
+            onClick={handleCancelRequest}
+            disabled={actionLoading || !user.requestId}
+            className="w-full py-1.5 bg-accent-amber/15 hover:bg-accent-amber/25 text-accent-amber text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+          >
+            {actionLoading ? 'Cancelling...' : 'Request Pending'}
+          </button>
+        )}
+        {user.relationship === 'inbound_pending' && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleAccept}
+              disabled={actionLoading}
+              className="flex-1 py-1.5 bg-status-online/20 hover:bg-status-online/30 text-status-online text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+            >
+              Accept
+            </button>
+            <button
+              onClick={handleDecline}
+              disabled={actionLoading}
+              className="flex-1 py-1.5 bg-accent-rose/15 hover:bg-accent-rose/25 text-accent-rose text-[13px] font-medium rounded transition-colors disabled:opacity-50"
+            >
+              Decline
+            </button>
+          </div>
+        )}
+        {user.relationship === 'friends' && (
+          <button
+            onClick={handleMessage}
+            className="w-full py-1.5 bg-accent-mint/15 hover:bg-accent-mint/25 text-accent-mint text-[13px] font-medium rounded transition-colors"
+          >
+            Message
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared Components ──────────────────────────────────────────────────────
 
 function TabButton({ children, active, onClick }: { children: React.ReactNode, active: boolean, onClick: () => void }) {
   return (

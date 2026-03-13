@@ -255,7 +255,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt } = request.body;
+    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt, discoverable } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -364,6 +364,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (currentUser?.homeInstance && typeof homeUserId === 'string' && homeUserId.length > 0) {
         updateData.homeUserId = homeUserId;
       }
+    }
+
+    if (discoverable !== undefined) {
+      if (typeof discoverable !== 'boolean') {
+        return reply.code(400).send({ error: 'discoverable must be a boolean', statusCode: 400 });
+      }
+      (updateData as Record<string, unknown>).discoverable = discoverable ? 1 : 0;
     }
 
     if (Object.keys(updateData).length === 0) {

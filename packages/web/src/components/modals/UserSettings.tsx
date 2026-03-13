@@ -4,10 +4,11 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from './settingsPanels/AccountPanel';
 import { VoicePanel } from './settingsPanels/VoicePanel';
+import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
 import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
 
-type SettingsTab = 'account' | 'voice' | 'connections' | 'instance';
+type SettingsTab = 'account' | 'voice' | 'privacy' | 'connections' | 'instance';
 
 export function UserSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -24,7 +25,7 @@ export function UserSettingsModal() {
   useEffect(() => {
     if (isOpen) {
       const requested = modalData.tab as SettingsTab | undefined;
-      if (requested && ['account', 'voice', 'connections', 'instance'].includes(requested)) {
+      if (requested && ['account', 'voice', 'privacy', 'connections', 'instance'].includes(requested)) {
         // Only allow instance tab for admins
         if (requested === 'instance' && !isAdmin) {
           setTab('account');
@@ -59,6 +60,9 @@ export function UserSettingsModal() {
             <button onClick={() => setTab('voice')} className={tabClass('voice')}>
               Voice
             </button>
+            <button onClick={() => setTab('privacy')} className={tabClass('privacy')}>
+              Privacy
+            </button>
             <button onClick={() => setTab('connections')} className={tabClass('connections')}>
               Connections
             </button>
@@ -82,6 +86,7 @@ export function UserSettingsModal() {
         <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
           {tab === 'account' && <AccountPanel />}
           {tab === 'voice' && <VoicePanel />}
+          {tab === 'privacy' && <PrivacyPanel />}
           {tab === 'connections' && <ConnectionsPanel />}
           {tab === 'instance' && isAdmin && <InstancePanel />}
         </div>
