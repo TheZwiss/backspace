@@ -1,6 +1,9 @@
 import Database from 'better-sqlite3';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
 import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
+import { generateThumbnail, isResizableImage } from '../utils/thumbnail.js';
 
 export function runMigrations(db: Database.Database): void {
   console.log('Checking for database migrations...');
@@ -678,4 +681,60 @@ function migrateReplicatedUsernames(db: Database.Database): void {
     update.run(newUsername, row.id);
     console.log(`Migrating: Renamed replicated user "${row.username}" → "${newUsername}"`);
   }
+}
+
+/**
+ * Async backfill: generate thumbnails for all existing image attachments that
+ * don't have one yet. Runs once after server startup, gated by a persistent
+ * flag in instance_settings so it never re-runs.
+ *
+ * Call this AFTER the server is listening — it's fire-and-forget and doesn't
+ * block startup.
+ */
+export async function backfillThumbnails(db: Database.Database, uploadDir: string): Promise<void> {
+  // Ensure the flag column exists
+  const cols = db.pragma('table_info(instance_settings)') as { name: string }[];
+  if (!cols.some(c => c.name === 'thumbnails_backfilled')) {
+    db.exec('ALTER TABLE instance_settings ADD COLUMN thumbnails_backfilled INTEGER DEFAULT 0');
+  }
+
+  const row = db.prepare('SELECT thumbnails_backfilled FROM instance_settings WHERE id = 1').get() as
+    { thumbnails_backfilled: number } | undefined;
+  if (row && row.thumbnails_backfilled === 1) return;
+
+  // Find all image attachments without a thumbnail
+  const rows = db.prepare(
+    "SELECT id, filename, mimetype FROM attachments WHERE thumbnail_filename IS NULL"
+  ).all() as { id: string; filename: string; mimetype: string }[];
+
+  const candidates = rows.filter(r => isResizableImage(r.mimetype));
+  if (candidates.length === 0) {
+    db.prepare('UPDATE instance_settings SET thumbnails_backfilled = 1 WHERE id = 1').run();
+    return;
+  }
+
+  console.log(`Backfill: Generating thumbnails for ${candidates.length} existing image(s)...`);
+
+  const update = db.prepare('UPDATE attachments SET thumbnail_filename = ? WHERE id = ?');
+  let generated = 0;
+  let skipped = 0;
+
+  for (const att of candidates) {
+    const originalPath = path.join(uploadDir, path.basename(att.filename));
+    if (!fs.existsSync(originalPath)) {
+      skipped++;
+      continue;
+    }
+
+    const thumbName = await generateThumbnail(originalPath, att.mimetype, uploadDir);
+    if (thumbName) {
+      update.run(thumbName, att.id);
+      generated++;
+    } else {
+      skipped++;
+    }
+  }
+
+  console.log(`Backfill: Generated ${generated} thumbnail(s), skipped ${skipped} (small or missing)`);
+  db.prepare('UPDATE instance_settings SET thumbnails_backfilled = 1 WHERE id = 1').run();
 }

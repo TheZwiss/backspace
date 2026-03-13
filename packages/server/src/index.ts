@@ -5,8 +5,9 @@ import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
-import { getDb } from './db/index.js';
+import { getDb, getRawDb } from './db/index.js';
 import { seedDatabase } from './db/seed.js';
+import { backfillThumbnails } from './db/migrate.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { spaceRoutes } from './routes/spaces.js';
@@ -110,6 +111,11 @@ async function main(): Promise<void> {
     app.log.error(err);
     process.exit(1);
   }
+
+  // Fire-and-forget: backfill thumbnails for existing images (runs once)
+  backfillThumbnails(getRawDb(), config.uploadDir).catch(err => {
+    console.error('Thumbnail backfill failed (non-fatal):', err);
+  });
 
   const shutdown = async () => {
     console.log('Shutting down...');
