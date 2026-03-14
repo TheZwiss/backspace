@@ -49,6 +49,11 @@ export async function generateThumbnail(
       return null;
     }
 
+    // Skip animated images — Sharp would flatten to a single static frame
+    if (metadata.pages && metadata.pages > 1) {
+      return null;
+    }
+
     const originalFilename = path.basename(originalPath);
     const thumbName = thumbFilename(originalFilename);
     const thumbPath = path.join(uploadDir, thumbName);

@@ -53,25 +53,10 @@ function getDiskFiles(): DiskFile[] {
   }
 }
 
-function getReferencedFilenames(): Set<string> {
+/** Filenames referenced by user/space profiles (avatars, banners, icons). */
+function getProfileReferencedFilenames(): Set<string> {
   const db = getDb();
   const referenced = new Set<string>();
-
-  // Attachment filenames
-  const attachmentRows = db.select({ filename: schema.attachments.filename })
-    .from(schema.attachments).all();
-  for (const row of attachmentRows) {
-    referenced.add(path.basename(row.filename));
-  }
-
-  // Attachment thumbnails
-  const thumbRows = db.select({ thumbnailFilename: schema.attachments.thumbnailFilename })
-    .from(schema.attachments)
-    .where(isNotNull(schema.attachments.thumbnailFilename))
-    .all();
-  for (const row of thumbRows) {
-    if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
-  }
 
   // User avatars
   const avatarRows = db.select({ avatar: schema.users.avatar })
@@ -107,6 +92,30 @@ function getReferencedFilenames(): Set<string> {
     .all();
   for (const row of spaceBannerRows) {
     if (row.banner) referenced.add(path.basename(row.banner));
+  }
+
+  return referenced;
+}
+
+/** All filenames referenced anywhere: attachments + profiles. */
+function getReferencedFilenames(): Set<string> {
+  const db = getDb();
+  const referenced = getProfileReferencedFilenames();
+
+  // Attachment filenames
+  const attachmentRows = db.select({ filename: schema.attachments.filename })
+    .from(schema.attachments).all();
+  for (const row of attachmentRows) {
+    referenced.add(path.basename(row.filename));
+  }
+
+  // Attachment thumbnails
+  const thumbRows = db.select({ thumbnailFilename: schema.attachments.thumbnailFilename })
+    .from(schema.attachments)
+    .where(isNotNull(schema.attachments.thumbnailFilename))
+    .all();
+  for (const row of thumbRows) {
+    if (row.thumbnailFilename) referenced.add(path.basename(row.thumbnailFilename));
   }
 
   return referenced;
@@ -210,12 +219,13 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
   const db = getDb();
   const orphans = getOrphanedFiles();
   const unlinked = getUnlinkedAttachments();
+  const profileReferenced = getProfileReferencedFilenames();
   const errors: string[] = [];
   let deletedFiles = 0;
   let freedBytes = 0;
   let deletedAttachmentRecords = 0;
 
-  // Delete orphaned disk files
+  // Phase 1: Delete orphaned disk files (not referenced by any DB record)
   for (const orphan of orphans) {
     if (!dryRun) {
       try {
@@ -229,13 +239,15 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
     freedBytes += orphan.size;
   }
 
-  // Delete stale unlinked attachment records (and their disk files)
+  // Phase 2: Clean up stale unlinked attachment records.
+  // Files referenced by user/space profiles (avatars, banners, icons) are
+  // preserved on disk — only the orphaned attachment DB record is removed.
   for (const att of unlinked) {
+    const fileInUseByProfile = profileReferenced.has(path.basename(att.filename));
     if (!dryRun) {
       try {
-        deleteUploadFile(att.filename);
-        if (att.thumbnailFilename) {
-          deleteUploadFile(att.thumbnailFilename);
+        if (!fileInUseByProfile) {
+          deleteUploadFile(att.filename);
         }
         db.delete(schema.attachments)
           .where(eq(schema.attachments.id, att.id))
@@ -246,7 +258,9 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
       }
     }
     deletedAttachmentRecords++;
-    freedBytes += att.size;
+    if (!fileInUseByProfile) {
+      freedBytes += att.size;
+    }
   }
 
   return {

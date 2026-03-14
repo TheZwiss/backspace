@@ -10,6 +10,17 @@ import { pipeline } from 'stream/promises';
 import type { Attachment } from '@backspace/shared';
 import { generateThumbnail, isResizableImage } from '../utils/thumbnail.js';
 
+const EXT_MIMETYPES: Record<string, string> = {
+  '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.png': 'image/png', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+  '.avif': 'image/avif', '.tiff': 'image/tiff', '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav',
+  '.flac': 'audio/flac', '.aac': 'audio/aac', '.opus': 'audio/opus',
+  '.pdf': 'application/pdf',
+};
+
 export async function uploadRoutes(app: FastifyInstance): Promise<void> {
   // Ensure upload directory exists
   if (!fs.existsSync(config.uploadDir)) {
@@ -101,11 +112,13 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'File not found', statusCode: 404 });
     }
 
-    // Get mimetype from DB or guess from extension
+    // Get mimetype from DB, falling back to extension-based lookup for thumbnails/orphans
     const db = getDb();
     const attachment = db.select().from(schema.attachments).where(eq(schema.attachments.filename, safeName)).get();
-    const mimetype = attachment?.mimetype ?? 'application/octet-stream';
     const originalName = attachment?.originalName ?? safeName;
+    const mimetype = attachment?.mimetype
+      ?? EXT_MIMETYPES[path.extname(safeName).toLowerCase()]
+      ?? 'application/octet-stream';
 
     // Set caching headers
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
