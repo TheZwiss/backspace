@@ -10,12 +10,14 @@ import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser } from '../utils/userDeletion.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 
-/** Validates that a URL is a safe asset URL (relative upload path or http/https) */
+/** Validates that a URL is a safe asset URL (relative upload path, bare filename, or http/https) */
 function isValidAssetUrl(url: string | null | undefined): boolean {
   if (!url || url.trim().length === 0) return true; // empty/null = clearing
   const trimmed = url.trim();
   if (trimmed.startsWith('/api/uploads/')) return true;
   if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return true;
+  // Accept bare filenames (the existing convention) — no slashes, no traversal
+  if (!trimmed.includes('/') && !trimmed.includes('\\') && !trimmed.includes('..')) return true;
   return false;
 }
 
