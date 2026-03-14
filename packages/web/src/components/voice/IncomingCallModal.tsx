@@ -54,20 +54,23 @@ export function IncomingCallModal() {
       <div className="absolute inset-0 bg-black/50" />
 
       {/* Call card */}
-      <div className="relative glass-modal rounded-lg w-[340px] overflow-hidden animate-fade-in animate-slide-up">
-        {/* Ripple rings */}
+      <div className="relative glass-modal call-refraction rounded-lg w-[340px] overflow-hidden animate-fade-in animate-slide-up">
+        {/* Liquid ripple orbs — soft radial gradients with blur */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div
-            className="absolute top-1/2 left-1/2 w-[160px] h-[160px] rounded-full border border-status-online/30 animate-call-ripple"
-          />
-          <div
-            className="absolute top-1/2 left-1/2 w-[160px] h-[160px] rounded-full border border-status-online/30 animate-call-ripple"
-            style={{ animationDelay: '1.5s' }}
-          />
+          {[0, 1.3, 2.6].map((delay, i) => (
+            <div
+              key={i}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180px] h-[180px] rounded-full blur-xl animate-call-ripple"
+              style={{
+                animationDelay: `${delay}s`,
+                background: 'radial-gradient(circle, rgba(134,239,172,0.18) 0%, rgba(134,239,172,0.06) 35%, rgba(134,239,172,0.02) 55%, transparent 70%)',
+              }}
+            />
+          ))}
         </div>
 
         {/* Content */}
-        <div className="relative p-8 flex flex-col items-center gap-4">
+        <div className="relative z-[2] p-8 flex flex-col items-center gap-4">
           {/* Caller avatar */}
           <div className="rounded-full animate-call-glow">
             <Avatar

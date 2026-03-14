@@ -350,35 +350,94 @@
 }
 
 /* ── Incoming Call Animations ── */
-@keyframes callRipple {
-  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.6; }
-  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+
+/* Liquid ripple: soft gradient orb that expands and dissolves */
+@keyframes callRippleLiquid {
+  0% {
+    scale: 0.3;
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.12;
+  }
+  100% {
+    scale: 2.8;
+    opacity: 0;
+  }
 }
 
-@keyframes callGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(134, 239, 172, 0.15); }
-  50% { box-shadow: 0 0 30px rgba(134, 239, 172, 0.25); }
+/* Soft multi-layered halo around avatar */
+@keyframes callGlowSoft {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(134, 239, 172, 0.06),
+      0 0 40px rgba(134, 239, 172, 0.04),
+      0 0 80px rgba(134, 239, 172, 0.02);
+  }
+  50% {
+    box-shadow:
+      0 0 24px rgba(134, 239, 172, 0.12),
+      0 0 48px rgba(134, 239, 172, 0.06),
+      0 0 96px rgba(134, 239, 172, 0.03);
+  }
 }
 
-@keyframes callButtonGlow {
-  0%, 100% { box-shadow: 0 0 12px rgba(134, 239, 172, 0.15); }
-  50% { box-shadow: 0 0 20px rgba(134, 239, 172, 0.3); }
+/* Traveling light refraction across glass card surface */
+@keyframes callRefraction {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* Gentle breathing glow on accept button */
+@keyframes callButtonBreath {
+  0%, 100% {
+    box-shadow:
+      0 0 12px rgba(134, 239, 172, 0.08),
+      0 0 28px rgba(134, 239, 172, 0.04);
+  }
+  50% {
+    box-shadow:
+      0 0 18px rgba(134, 239, 172, 0.16),
+      0 0 36px rgba(134, 239, 172, 0.06);
+  }
 }
 
 .animate-call-ripple {
-  animation: callRipple 3s ease-out infinite;
+  animation: callRippleLiquid 4s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
 }
 
 .animate-call-glow {
-  animation: callGlow 3s ease-in-out infinite;
+  animation: callGlowSoft 4s ease-in-out infinite;
 }
 
 .animate-call-button-glow {
-  animation: callButtonGlow 2s ease-in-out infinite;
+  animation: callButtonBreath 3s ease-in-out infinite;
+}
+
+/* Light refraction shimmer overlay on the call card */
+.call-refraction::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(134, 239, 172, 0.03) 42%,
+    rgba(134, 239, 172, 0.05) 50%,
+    rgba(134, 239, 172, 0.03) 58%,
+    transparent 65%,
+    transparent 100%
+  );
+  animation: callRefraction 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-call-ripple,
   .animate-call-glow,
   .animate-call-button-glow { animation: none !important; }
+  .call-refraction::after { animation: none !important; opacity: 0; }
 }
