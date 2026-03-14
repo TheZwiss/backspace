@@ -527,7 +527,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 8,
+      version: 9,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -563,6 +563,9 @@ export const useVoiceStore = create<VoiceState>()(
         if (version < 8) {
           persistedState.soundEffectVolume = 100;
         }
+        if (version < 9) {
+          delete persistedState.currentVoiceChannelId;
+        }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -570,7 +573,6 @@ export const useVoiceStore = create<VoiceState>()(
       // noiseSuppression is intentionally excluded — always true internally,
       // managed automatically by AudioManager based on RNNoise state.
       partialize: (state) => ({
-        currentVoiceChannelId: state.currentVoiceChannelId,
         isMuted: state.isMuted,
         isDeafened: state.isDeafened,
         inputVolume: state.inputVolume,

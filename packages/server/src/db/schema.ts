@@ -19,6 +19,7 @@ export const users = sqliteTable('users', {
   isDeleted: integer('is_deleted').default(0),
   discoverable: integer('discoverable').default(1),
   profileUpdatedAt: integer('profile_updated_at'),
+  passwordChangedAt: integer('password_changed_at'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -82,6 +83,7 @@ export const attachments = sqliteTable('attachments', {
   id: text('id').primaryKey(),
   messageId: text('message_id').references(() => messages.id, { onDelete: 'cascade' }),
   dmMessageId: text('dm_message_id').references(() => dmMessages.id, { onDelete: 'cascade' }),
+  uploaderId: text('uploader_id'),
   filename: text('filename').notNull(),
   originalName: text('original_name').notNull(),
   mimetype: text('mimetype').notNull(),
@@ -112,7 +114,12 @@ export const dmMessages = sqliteTable('dm_messages', {
   content: text('content'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  replyToFk: foreignKey({
+    columns: [table.replyToId],
+    foreignColumns: [table.id],
+  }).onDelete('set null'),
+}));
 
 export const friends = sqliteTable('friends', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),

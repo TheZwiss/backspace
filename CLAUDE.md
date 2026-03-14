@@ -318,6 +318,7 @@ CREATE TABLE users (
     avatar_color TEXT,               -- avatar background color
     bio TEXT,                        -- user biography
     is_deleted INTEGER DEFAULT 0,    -- soft-delete flag
+    password_changed_at INTEGER,     -- token revocation: tokens issued before this are rejected
     created_at INTEGER NOT NULL
 );
 
@@ -400,6 +401,7 @@ CREATE TABLE attachments (
     id TEXT PRIMARY KEY,
     message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
     dm_message_id TEXT,
+    uploader_id TEXT,                -- user who uploaded (null for legacy uploads)
     filename TEXT NOT NULL,
     original_name TEXT NOT NULL,
     mimetype TEXT NOT NULL,

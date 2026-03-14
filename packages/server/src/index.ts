@@ -29,6 +29,7 @@ import fs from 'fs';
 
 async function main(): Promise<void> {
   const app = Fastify({
+    trustProxy: true,
     logger: {
       level: 'info',
     },

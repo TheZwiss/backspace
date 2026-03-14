@@ -5,8 +5,9 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import type { MessageWithUser, Attachment, DmMessageWithUser } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -113,7 +114,8 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
   };
 }
 
-// Typing timeout tracking
+// Typing timeout tracking (capped to prevent unbounded growth)
+const MAX_TYPING_ENTRIES = 10_000;
 const typingTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
 export function handleClientEvent(
@@ -216,6 +218,11 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
+  if (content.length > MAX_MESSAGE_LENGTH) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less` });
+    return;
+  }
+
   const spaceId = getChannelSpaceId(channelId);
   if (!spaceId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Channel not found' });
@@ -261,6 +268,11 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
 
   if (!content || typeof content !== 'string' || content.trim().length === 0) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'content is required' });
+    return;
+  }
+
+  if (content.length > MAX_MESSAGE_LENGTH) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less` });
     return;
   }
 
@@ -321,9 +333,18 @@ function handleMessageDelete(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
-  // Delete attachments then message
-  db.delete(schema.attachments).where(eq(schema.attachments.messageId, messageId)).run();
-  db.delete(schema.messages).where(eq(schema.messages.id, messageId)).run();
+  // Collect attachment filenames before deletion
+  const attachmentRows = db.select({ filename: schema.attachments.filename })
+    .from(schema.attachments).where(eq(schema.attachments.messageId, messageId)).all();
+
+  // Delete attachments + message atomically, file cleanup outside transaction
+  db.transaction((tx) => {
+    tx.delete(schema.attachments).where(eq(schema.attachments.messageId, messageId)).run();
+    tx.delete(schema.messages).where(eq(schema.messages.id, messageId)).run();
+  });
+
+  // Clean up files from disk (outside transaction — file I/O)
+  deleteAttachmentFiles(attachmentRows);
 
   connectionManager.sendToChannel(spaceId, message.channelId, {
     type: 'message_deleted',
@@ -356,6 +377,9 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
     userId,
     username,
   }, userId);
+
+  // Safety cap: skip if Map is at max capacity (auto-expiry handles normal cleanup)
+  if (!existing && typingTimeouts.size >= MAX_TYPING_ENTRIES) return;
 
   // Auto-expire typing after 5 seconds
   const timeout = setTimeout(() => {
@@ -674,12 +698,33 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
     return;
   }
 
+  if (hasContent && content!.length > MAX_MESSAGE_LENGTH) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less` });
+    return;
+  }
+
   if (!isDmMember(dmChannelId, userId)) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'Not a member of this DM channel' });
     return;
   }
 
   const db = getDb();
+
+  // Verify attachment ownership before linking
+  if (hasAttachments) {
+    for (const attId of attachmentIds) {
+      const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
+      if (!att || att.messageId || att.dmMessageId) {
+        connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid or already-used attachment' });
+        return;
+      }
+      if (att.uploaderId && att.uploaderId !== userId) {
+        connectionManager.sendToUser(userId, { type: 'error', message: 'You do not own this attachment' });
+        return;
+      }
+    }
+  }
+
   const messageId = generateSnowflake();
   const now = Date.now();
 
@@ -760,6 +805,11 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     return;
   }
 
+  if (content.length > MAX_MESSAGE_LENGTH) {
+    connectionManager.sendToUser(userId, { type: 'error', message: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less` });
+    return;
+  }
+
   const db = getDb();
   const msg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!msg) {
@@ -814,6 +864,10 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
     return;
   }
 
+  // Collect attachment filenames before deletion
+  const dmAttachmentRows = db.select({ filename: schema.attachments.filename })
+    .from(schema.attachments).where(eq(schema.attachments.dmMessageId, messageId)).all();
+
   // Delete attachments linked to this DM message
   db.delete(schema.attachments)
     .where(eq(schema.attachments.dmMessageId, messageId))
@@ -828,6 +882,9 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   db.delete(schema.dmMessages)
     .where(eq(schema.dmMessages.id, messageId))
     .run();
+
+  // Clean up files from disk
+  deleteAttachmentFiles(dmAttachmentRows);
 
   const dmMembers = db.select()
     .from(schema.dmMembers)

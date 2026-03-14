@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
+import { useAuthStore } from '../../stores/authStore';
 
 interface EmbedProps {
   url: string;
@@ -17,26 +17,28 @@ export function Embed({ url }: EmbedProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
-    
-    // Simple fetch from our new API
+    const controller = new AbortController();
+
+    const token = useAuthStore.getState().token;
     fetch(`/api/utils/metadata?url=${encodeURIComponent(url)}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('backspace_token')}`
-      }
+        'Authorization': `Bearer ${token}`
+      },
+      signal: controller.signal,
     })
       .then(res => res.json())
       .then(data => {
-        if (isMounted && data.title) {
+        if (data.title) {
           setMetadata(data);
         }
         setIsLoading(false);
       })
-      .catch(() => {
-        if (isMounted) setIsLoading(false);
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setIsLoading(false);
       });
 
-    return () => { isMounted = false; };
+    return () => { controller.abort(); };
   }, [url]);
 
   if (isLoading || !metadata) return null;
@@ -50,9 +52,9 @@ export function Embed({ url }: EmbedProps) {
           </div>
         )}
         {metadata.title && (
-          <a 
-            href={url} 
-            target="_blank" 
+          <a
+            href={url}
+            target="_blank"
             rel="noopener noreferrer"
             className="text-[16px] text-txt-link font-semibold hover:underline block mb-2"
           >
@@ -67,9 +69,9 @@ export function Embed({ url }: EmbedProps) {
       </div>
       {metadata.image && (
         <div className="w-[80px] h-[80px] m-3 flex-shrink-0">
-          <img 
-            src={metadata.image} 
-            alt="" 
+          <img
+            src={metadata.image}
+            alt=""
             className="w-full h-full object-cover rounded-[4px]"
           />
         </div>

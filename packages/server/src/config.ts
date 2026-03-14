@@ -39,6 +39,7 @@ export const config = {
   host: env('HOST', '0.0.0.0'),
   jwtSecret: env('JWT_SECRET'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
+  domain: envOptional('DOMAIN'),
 
   livekit: {
     url: envOptional('LIVEKIT_URL'),
@@ -51,3 +52,10 @@ export const config = {
   maxUploadSize: envInt('MAX_UPLOAD_SIZE', 104857600),
   registrationOpen: envBool('REGISTRATION_OPEN', true),
 } as const;
+
+if (config.jwtSecret.length < 32) {
+  throw new Error(
+    `JWT_SECRET must be at least 32 characters (got ${config.jwtSecret.length}). ` +
+    `Generate one with: openssl rand -hex 32`
+  );
+}

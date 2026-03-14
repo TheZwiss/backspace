@@ -5,7 +5,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { MemberWithUser } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MemberWithUser } from '@backspace/shared';
 
 interface MessageInputProps {
   channelId: string;
@@ -76,9 +76,13 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     }, 3000);
   }, [channelId]);
 
+  const remaining = MAX_MESSAGE_LENGTH - content.length;
+  const isOverLimit = remaining < 0;
+
   const handleSubmit = async () => {
     const trimmed = content.trim();
     if (!trimmed && files.length === 0) return;
+    if (isOverLimit) return;
 
     setIsUploading(true);
     setMentionState(null);
@@ -362,6 +366,13 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
             </div>
+          )}
+
+          {/* Character counter (shows when near or over limit) */}
+          {content.length > MAX_MESSAGE_LENGTH - 200 && (
+            <span className={`text-[12px] font-medium tabular-nums flex-shrink-0 px-1 ${isOverLimit ? 'text-accent-rose' : 'text-txt-tertiary'}`}>
+              {remaining}
+            </span>
           )}
 
           {/* GIF button */}

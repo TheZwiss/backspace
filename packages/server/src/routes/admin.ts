@@ -188,7 +188,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const hash = await hashPassword(temporaryPassword);
 
       db.update(schema.users)
-        .set({ passwordHash: hash })
+        .set({ passwordHash: hash, passwordChangedAt: Date.now() })
         .where(eq(schema.users.id, targetId))
         .run();
 

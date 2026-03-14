@@ -10,6 +10,15 @@ import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser } from '../utils/userDeletion.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 
+/** Validates that a URL is a safe asset URL (relative upload path or http/https) */
+function isValidAssetUrl(url: string | null | undefined): boolean {
+  if (!url || url.trim().length === 0) return true; // empty/null = clearing
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/api/uploads/')) return true;
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) return true;
+  return false;
+}
+
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
     const db = getDb();
@@ -48,8 +57,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body;
 
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-      return reply.code(400).send({ error: 'New password must be at least 6 characters', statusCode: 400 });
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+      return reply.code(400).send({ error: 'New password must be at least 8 characters', statusCode: 400 });
     }
 
     const db = getDb();
@@ -58,20 +67,17 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    // Native users (no homeInstance) must provide current password
-    if (!user.homeInstance) {
-      if (!currentPassword || typeof currentPassword !== 'string') {
-        return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
-      }
-      const valid = await verifyPassword(currentPassword, user.passwordHash);
-      if (!valid) {
-        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
-      }
+    // All users must provide current password (federated users have a local password hash)
+    if (!currentPassword || typeof currentPassword !== 'string') {
+      return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
     }
-    // Federated users: JWT auth is sufficient — skip old password verification
+    const valid = await verifyPassword(currentPassword, user.passwordHash);
+    if (!valid) {
+      return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+    }
 
     const newHash = await hashPassword(newPassword);
-    db.update(schema.users).set({ passwordHash: newHash }).where(eq(schema.users.id, request.userId)).run();
+    db.update(schema.users).set({ passwordHash: newHash, passwordChangedAt: Date.now() }).where(eq(schema.users.id, request.userId)).run();
 
     // Issue fresh JWT
     const token = signJwt({ userId: user.id, username: user.username });
@@ -157,11 +163,27 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // Track old files for cleanup after update
+    let oldAvatar: string | null = null;
+    let oldBanner: string | null = null;
+    if (avatar !== undefined || banner !== undefined) {
+      const current = db.select({ avatar: schema.users.avatar, banner: schema.users.banner })
+        .from(schema.users).where(eq(schema.users.id, request.userId)).get();
+      oldAvatar = current?.avatar ?? null;
+      oldBanner = current?.banner ?? null;
+    }
+
     if (avatar !== undefined) {
+      if (!isValidAssetUrl(avatar)) {
+        return reply.code(400).send({ error: 'Avatar URL must be a relative upload path or http/https URL', statusCode: 400 });
+      }
       updateData.avatar = avatar;
     }
 
     if (banner !== undefined) {
+      if (!isValidAssetUrl(banner)) {
+        return reply.code(400).send({ error: 'Banner URL must be a relative upload path or http/https URL', statusCode: 400 });
+      }
       if (banner && typeof banner === 'string' && banner.trim().length > 0) {
         updateData.banner = banner.trim();
       } else {
@@ -228,17 +250,36 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (!Array.isArray(replicatedInstances)) {
         return reply.code(400).send({ error: 'replicatedInstances must be an array', statusCode: 400 });
       }
-      // Validate each entry has (origin or domain) and username strings
+      if (replicatedInstances.length > 20) {
+        return reply.code(400).send({ error: 'Maximum 20 replicated instances', statusCode: 400 });
+      }
+      const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
       for (const inst of replicatedInstances) {
-        if (!inst || typeof inst.username !== 'string') {
-          return reply.code(400).send({ error: 'Each replicated instance must have username string', statusCode: 400 });
+        if (!inst || typeof inst.username !== 'string' || inst.username.trim().length === 0) {
+          return reply.code(400).send({ error: 'Each replicated instance must have a non-empty username string', statusCode: 400 });
+        }
+        if (inst.username.length > 255) {
+          return reply.code(400).send({ error: 'Instance username must be 255 characters or less', statusCode: 400 });
         }
         if (typeof inst.origin !== 'string' && typeof inst.domain !== 'string') {
           return reply.code(400).send({ error: 'Each replicated instance must have origin or domain string', statusCode: 400 });
         }
-      }
-      if (replicatedInstances.length > 50) {
-        return reply.code(400).send({ error: 'Maximum 50 replicated instances', statusCode: 400 });
+        if (typeof inst.origin === 'string') {
+          if (inst.origin.length > 512) {
+            return reply.code(400).send({ error: 'Instance origin must be 512 characters or less', statusCode: 400 });
+          }
+          if (!inst.origin.startsWith('https://') && !inst.origin.startsWith('http://')) {
+            return reply.code(400).send({ error: 'Instance origin must start with https:// or http://', statusCode: 400 });
+          }
+        }
+        if (typeof inst.domain === 'string') {
+          if (inst.domain.length > 253) {
+            return reply.code(400).send({ error: 'Instance domain must be 253 characters or less', statusCode: 400 });
+          }
+          if (!domainRegex.test(inst.domain)) {
+            return reply.code(400).send({ error: 'Instance domain contains invalid characters', statusCode: 400 });
+          }
+        }
       }
       updateData.replicatedInstances = JSON.stringify(replicatedInstances);
     }
@@ -285,6 +326,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
+
+    // Clean up old avatar/banner files that were replaced
+    if (avatar !== undefined && oldAvatar && oldAvatar !== (avatar || null) && !oldAvatar.startsWith('http')) {
+      deleteUploadFile(oldAvatar);
+    }
+    if (banner !== undefined && oldBanner && oldBanner !== (updateData.banner ?? null) && !oldBanner.startsWith('http')) {
+      deleteUploadFile(oldBanner);
+    }
 
     const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     if (!updatedUser) {

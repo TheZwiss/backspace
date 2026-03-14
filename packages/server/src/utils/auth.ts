@@ -18,6 +18,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export interface JwtPayload {
   userId: string;
   username: string;
+  iat?: number;
 }
 
 export function signJwt(payload: JwtPayload): string {
@@ -28,7 +29,7 @@ export function signJwt(payload: JwtPayload): string {
 }
 
 export function verifyJwt(token: string): JwtPayload {
-  const decoded = jwt.verify(token, config.jwtSecret) as JwtPayload;
+  const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
   return decoded;
 }
 
@@ -45,10 +46,31 @@ export async function authenticate(
   const token = authHeader.slice(7);
   try {
     const payload = verifyJwt(token);
+
+    // Verify user exists and is not deleted/revoked
+    const db = getDb();
+    const user = db.select({
+      id: schema.users.id,
+      isDeleted: schema.users.isDeleted,
+      passwordChangedAt: schema.users.passwordChangedAt,
+    }).from(schema.users).where(eq(schema.users.id, payload.userId)).get();
+
+    if (!user || user.isDeleted === 1) {
+      return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
+    }
+
+    // Reject tokens issued before the last password change (token revocation)
+    if (user.passwordChangedAt && payload.iat) {
+      // JWT iat is in seconds, passwordChangedAt is in milliseconds
+      if (payload.iat < Math.floor(user.passwordChangedAt / 1000)) {
+        return reply.code(401).send({ error: 'Token has been revoked — please log in again', statusCode: 401 });
+      }
+    }
+
     (request as FastifyRequest & { userId: string; username: string }).userId = payload.userId;
     (request as FastifyRequest & { userId: string; username: string }).username = payload.username;
   } catch {
-    reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
+    return reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
   }
 }
 
@@ -59,7 +81,7 @@ export async function requireAdmin(
   const db = getDb();
   const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
   if (!caller || caller.isAdmin !== 1) {
-    reply.code(403).send({ error: 'Only instance admins can perform this action', statusCode: 403 });
+    return reply.code(403).send({ error: 'Only instance admins can perform this action', statusCode: 403 });
   }
 }
 

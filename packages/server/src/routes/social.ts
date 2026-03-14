@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, or, ne, like, sql } from 'drizzle-orm';
+import { eq, and, or, ne, like, sql, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -284,6 +284,16 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const { id } = request.params;
     const db = getDb();
 
+    // Check friendship exists before deleting
+    const existing = db.select().from(schema.friends).where(or(
+      and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, id)),
+      and(eq(schema.friends.userId, id), eq(schema.friends.friendId, request.userId))
+    )).get();
+
+    if (!existing) {
+      return reply.code(404).send({ error: 'You are not friends with this user', statusCode: 404 });
+    }
+
     db.delete(schema.friends).where(or(
       and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, id)),
       and(eq(schema.friends.userId, id), eq(schema.friends.friendId, request.userId))
@@ -301,6 +311,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/social/discover - Discover users on this instance
   app.get<{ Querystring: { q?: string; limit?: string; offset?: string } }>('/api/social/discover', {
     preHandler: authenticate,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const db = getDb();
     const q = request.query.q?.trim() || '';
@@ -368,23 +379,58 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       .offset(offset)
       .all();
 
+    // Batch fetch friends and space memberships for all page users
+    const pageUserIds = userRows.map(r => r.id);
+
+    // Batch fetch all friends for page users
+    const pageFriendRows = pageUserIds.length > 0
+      ? db.select().from(schema.friends).where(
+          or(
+            inArray(schema.friends.userId, pageUserIds),
+            inArray(schema.friends.friendId, pageUserIds),
+          )
+        ).all()
+      : [];
+
+    // Build Map<userId, Set<friendId>> for page users
+    const friendIdsByUser = new Map<string, Set<string>>();
+    for (const f of pageFriendRows) {
+      // Map both directions
+      if (pageUserIds.includes(f.userId)) {
+        if (!friendIdsByUser.has(f.userId)) friendIdsByUser.set(f.userId, new Set());
+        friendIdsByUser.get(f.userId)!.add(f.friendId);
+      }
+      if (pageUserIds.includes(f.friendId)) {
+        if (!friendIdsByUser.has(f.friendId)) friendIdsByUser.set(f.friendId, new Set());
+        friendIdsByUser.get(f.friendId)!.add(f.userId);
+      }
+    }
+
+    // Batch fetch all space memberships for page users
+    const pageSpaceMemberRows = pageUserIds.length > 0
+      ? db.select({ userId: schema.spaceMembers.userId, spaceId: schema.spaceMembers.spaceId })
+          .from(schema.spaceMembers)
+          .where(inArray(schema.spaceMembers.userId, pageUserIds))
+          .all()
+      : [];
+
+    // Build Map<userId, Set<spaceId>> for page users
+    const spaceIdsByUser = new Map<string, Set<string>>();
+    for (const sm of pageSpaceMemberRows) {
+      if (!spaceIdsByUser.has(sm.userId)) spaceIdsByUser.set(sm.userId, new Set());
+      spaceIdsByUser.get(sm.userId)!.add(sm.spaceId);
+    }
+
     // Compute mutual counts + relationship for each user
     const discoverUsers: DiscoverUser[] = userRows.map(row => {
       const u = sanitizeUser(row);
 
-      // Mutual friends
-      const theirFriendRows = db.select().from(schema.friends).where(
-        or(eq(schema.friends.userId, row.id), eq(schema.friends.friendId, row.id))
-      ).all();
-      const theirFriendIds = new Set(theirFriendRows.map(f => f.userId === row.id ? f.friendId : f.userId));
+      // Mutual friends (using batch-fetched data)
+      const theirFriendIds = friendIdsByUser.get(row.id) ?? new Set();
       const mutualFriendCount = [...myFriendIds].filter(id => theirFriendIds.has(id)).length;
 
-      // Mutual spaces
-      const theirSpaceRows = db.select({ spaceId: schema.spaceMembers.spaceId })
-        .from(schema.spaceMembers)
-        .where(eq(schema.spaceMembers.userId, row.id))
-        .all();
-      const theirSpaceIds = new Set(theirSpaceRows.map(s => s.spaceId));
+      // Mutual spaces (using batch-fetched data)
+      const theirSpaceIds = spaceIdsByUser.get(row.id) ?? new Set();
       const mutualSpaceCount = [...mySpaceIds].filter(id => theirSpaceIds.has(id)).length;
 
       // Relationship
@@ -432,6 +478,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/social/search?q=... - Search for users to add as friends
   app.get<{ Querystring: { q: string } }>('/api/social/search', {
     preHandler: authenticate,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const { q } = request.query;
     const db = getDb();

@@ -5,12 +5,13 @@ import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { hasPermission, getChannelSpaceId, PermissionBits } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
-import type {
-  CreateMessageRequest,
-  UpdateMessageRequest,
-  PaginatedQuery,
-  MessageWithUser,
-  Reaction,
+import {
+  MAX_MESSAGE_LENGTH,
+  type CreateMessageRequest,
+  type UpdateMessageRequest,
+  type PaginatedQuery,
+  type MessageWithUser,
+  type Reaction,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -272,9 +273,27 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
     }
 
+    if (content && content.length > MAX_MESSAGE_LENGTH) {
+      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+    }
+
     const db = getDb();
     const messageId = generateSnowflake();
     const now = Date.now();
+
+    // Verify attachment ownership before linking
+    if (attachmentIds && attachmentIds.length > 0) {
+      for (const attId of attachmentIds) {
+        const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
+        if (!att || att.messageId || att.dmMessageId) {
+          return reply.code(400).send({ error: 'Invalid or already-used attachment', statusCode: 400 });
+        }
+        // Skip ownership check for legacy uploads (null uploaderId)
+        if (att.uploaderId && att.uploaderId !== request.userId) {
+          return reply.code(400).send({ error: 'You do not own this attachment', statusCode: 400 });
+        }
+      }
+    }
 
     // Insert message and link attachments atomically
     db.transaction((tx) => {
@@ -339,6 +358,10 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
       return reply.code(400).send({ error: 'Content is required', statusCode: 400 });
+    }
+
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
     }
 
     const db = getDb();

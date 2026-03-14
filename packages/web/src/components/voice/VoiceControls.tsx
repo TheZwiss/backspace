@@ -76,7 +76,7 @@ export function VoiceControls() {
   const handleDisconnect = () => {
     const { activeDmCall } = useVoiceStore.getState();
     if (activeDmCall) {
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }); // DM calls are home-only
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
       useVoiceStore.getState().setActiveDmCall(null);
     } else {
       wsSend({ type: 'voice_leave' }, voiceOrigin);

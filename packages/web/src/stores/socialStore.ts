@@ -242,8 +242,9 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         if (result.status !== 'fulfilled') return;
         const origin = searches[i]!.origin;
         for (const user of result.value) {
-          if (seen.has(user.id)) continue;
-          seen.add(user.id);
+          const dedupeKey = `${origin ?? ''}:${user.id}`;
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
           if (origin) normalizeUserAssets(user, origin);
           allUsers.push(user);
         }

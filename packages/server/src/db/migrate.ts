@@ -138,6 +138,18 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'discoverable', type: 'INTEGER DEFAULT 1' },
       ]
+    },
+    {
+      name: 'attachments',
+      columns: [
+        { name: 'uploader_id', type: 'TEXT' },
+      ]
+    },
+    {
+      name: 'users',
+      columns: [
+        { name: 'password_changed_at', type: 'INTEGER' },
+      ]
     }
   ];
 
@@ -175,7 +187,7 @@ export function runMigrations(db: Database.Database): void {
       space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       reason TEXT,
-      banned_by TEXT NOT NULL REFERENCES users(id),
+      banned_by TEXT REFERENCES users(id),
       created_at INTEGER NOT NULL,
       PRIMARY KEY (space_id, user_id)
     );
@@ -212,7 +224,7 @@ export function runMigrations(db: Database.Database): void {
       space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       restriction_type TEXT NOT NULL,
-      moderator_id TEXT NOT NULL REFERENCES users(id),
+      moderator_id TEXT REFERENCES users(id),
       created_at INTEGER NOT NULL,
       PRIMARY KEY (space_id, user_id, restriction_type)
     );
@@ -244,6 +256,9 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Free usernames from already-tombstoned users ───────────────────────────
   migrateDeletedUsernames(db);
+
+  // ─── Fix nullable moderator columns (bans.banned_by, voice_restrictions.moderator_id) ─
+  migrateNullableModeratorColumns(db);
 
   // ─── Clean up orphaned data from deleted users and channels ────────────────
   migrateOrphanedData(db);
@@ -297,7 +312,97 @@ export function runMigrations(db: Database.Database): void {
     }
   }
 
+  // ─── Add FK constraint to dm_messages.reply_to_id ────────────────────────
+  migrateDmMessagesReplyToFk(db);
+
+  // ─── Add indexes on FK columns for query performance ─────────────────────
+  migrateAddIndexes(db);
+
   console.log('Migrations complete.');
+}
+
+/** Add FK constraint to dm_messages.reply_to_id (SQLite requires table recreation) */
+function migrateDmMessagesReplyToFk(db: Database.Database): void {
+  const tableInfo = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='dm_messages'"
+  ).get() as { sql: string } | undefined;
+
+  // Only migrate if reply_to_id exists but has no FK reference
+  if (!tableInfo) return;
+  if (!tableInfo.sql.includes('reply_to_id')) return;
+  if (tableInfo.sql.includes('REFERENCES dm_messages')) return;
+
+  console.log('Migrating: Adding FK constraint to dm_messages.reply_to_id...');
+  db.exec(`
+    CREATE TABLE dm_messages_new (
+      id TEXT PRIMARY KEY,
+      dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
+      content TEXT,
+      edited_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
+    DROP TABLE dm_messages;
+    ALTER TABLE dm_messages_new RENAME TO dm_messages;
+    CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
+    CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
+  `);
+}
+
+/** Add database indexes on FK columns to prevent full table scans */
+function migrateAddIndexes(db: Database.Database): void {
+  // Fast-path: skip if indexes already exist
+  const existing = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_messages_channel_id'"
+  ).get();
+  if (existing) return;
+
+  console.log('Migrating: Adding database indexes...');
+
+  const indexes = [
+    // Hot paths: message listing, channel sidebar
+    'CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages(channel_id)',
+    'CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id)',
+    'CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_channels_space_id ON channels(space_id)',
+
+    // Member lookups & permission checks
+    'CREATE INDEX IF NOT EXISTS idx_space_members_user_id ON space_members(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_member_roles_user_id_space_id ON member_roles(user_id, space_id)',
+    'CREATE INDEX IF NOT EXISTS idx_roles_space_id ON roles(space_id)',
+    'CREATE INDEX IF NOT EXISTS idx_channel_overrides_channel_id ON channel_overrides(channel_id)',
+    'CREATE INDEX IF NOT EXISTS idx_dm_members_user_id ON dm_members(user_id)',
+
+    // Reactions
+    'CREATE INDEX IF NOT EXISTS idx_reactions_message_id ON reactions(message_id)',
+    'CREATE INDEX IF NOT EXISTS idx_dm_reactions_dm_message_id ON dm_reactions(dm_message_id)',
+
+    // Attachments
+    'CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON attachments(message_id)',
+    'CREATE INDEX IF NOT EXISTS idx_attachments_dm_message_id ON attachments(dm_message_id)',
+
+    // Social
+    'CREATE INDEX IF NOT EXISTS idx_friends_user_id ON friends(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id)',
+    'CREATE INDEX IF NOT EXISTS idx_friend_requests_to_id ON friend_requests(to_id)',
+    'CREATE INDEX IF NOT EXISTS idx_friend_requests_from_id ON friend_requests(from_id)',
+
+    // Moderation & discovery
+    'CREATE INDEX IF NOT EXISTS idx_bans_space_id ON bans(space_id)',
+    'CREATE INDEX IF NOT EXISTS idx_join_requests_space_id_status ON join_requests(space_id, status)',
+    'CREATE INDEX IF NOT EXISTS idx_voice_restrictions_space_id ON voice_restrictions(space_id)',
+
+    // Read states
+    'CREATE INDEX IF NOT EXISTS idx_read_states_user_id ON read_states(user_id)',
+
+    // Categories
+    'CREATE INDEX IF NOT EXISTS idx_channel_categories_space_id ON channel_categories(space_id)',
+  ];
+
+  db.exec(indexes.join(';\n'));
 }
 
 /** Convert legacy JSON array permissions (e.g. '["VIEW_CHANNEL"]') to decimal strings */
@@ -524,6 +629,63 @@ function migrateDeletedUsernames(db: Database.Database): void {
   for (const row of rows) {
     update.run(`!deleted:${row.id}`, row.id);
     console.log(`Migrating: Freed username "${row.username}" from deleted user ${row.id}`);
+  }
+}
+
+/**
+ * Fix DDL for bans and voice_restrictions tables: make banned_by and moderator_id nullable.
+ * The original CREATE TABLE statements used NOT NULL, but these columns must be nullable
+ * to handle cases where the moderator account is later deleted.
+ */
+function migrateNullableModeratorColumns(db: Database.Database): void {
+  // Fix bans.banned_by: NOT NULL → nullable
+  {
+    const tableInfo = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='bans'"
+    ).get() as { sql: string } | undefined;
+
+    if (tableInfo && tableInfo.sql.includes('banned_by TEXT NOT NULL')) {
+      console.log('Migrating: Making bans.banned_by nullable...');
+      db.exec(`
+        CREATE TABLE bans_new (
+          space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          reason TEXT,
+          banned_by TEXT REFERENCES users(id),
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (space_id, user_id)
+        );
+        INSERT INTO bans_new SELECT space_id, user_id, reason, banned_by, created_at FROM bans;
+        DROP TABLE bans;
+        ALTER TABLE bans_new RENAME TO bans;
+        CREATE INDEX IF NOT EXISTS idx_bans_space_id ON bans(space_id);
+      `);
+    }
+  }
+
+  // Fix voice_restrictions.moderator_id: NOT NULL → nullable
+  {
+    const tableInfo = db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='voice_restrictions'"
+    ).get() as { sql: string } | undefined;
+
+    if (tableInfo && tableInfo.sql.includes('moderator_id TEXT NOT NULL')) {
+      console.log('Migrating: Making voice_restrictions.moderator_id nullable...');
+      db.exec(`
+        CREATE TABLE voice_restrictions_new (
+          space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          restriction_type TEXT NOT NULL,
+          moderator_id TEXT REFERENCES users(id),
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (space_id, user_id, restriction_type)
+        );
+        INSERT INTO voice_restrictions_new SELECT space_id, user_id, restriction_type, moderator_id, created_at FROM voice_restrictions;
+        DROP TABLE voice_restrictions;
+        ALTER TABLE voice_restrictions_new RENAME TO voice_restrictions;
+        CREATE INDEX IF NOT EXISTS idx_voice_restrictions_space_id ON voice_restrictions(space_id);
+      `);
+    }
   }
 }
 

@@ -387,7 +387,7 @@ export function useLiveKit() {
     }
     
     try {
-      const client = isDm ? getApiForOrigin('') : getApiForOrigin(getChannelOrigin(channelId));
+      const client = getApiForOrigin(getChannelOrigin(channelId));
       const { token, url } = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
       if (gen !== _connectGeneration) return;
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });

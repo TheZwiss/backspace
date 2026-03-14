@@ -1,3 +1,7 @@
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+export const MAX_MESSAGE_LENGTH = 4000;
+
 // ─── User Types ─────────────────────────────────────────────────────────────
 
 export const AVATAR_COLORS = ['mint', 'sky', 'lavender', 'coral', 'rose', 'teal', 'amber'] as const;

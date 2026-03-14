@@ -18,7 +18,7 @@ import { MemberListToggleButton } from './MemberListToggleButton';
 import { isSelf } from '../../utils/identity';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
-import { isDmChannel } from '../../stores/spaceStore';
+import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
 
 export function MainContent() {
   // 1. ALL HOOKS AT THE TOP
@@ -93,13 +93,13 @@ export function MainContent() {
     const handleStartVoiceCall = () => {
       if (!currentChannelId) return;
       useVoiceStore.getState().setOutgoingCall({ dmChannelId: currentChannelId });
-      wsSend({ type: 'dm_call_start', dmChannelId: currentChannelId });
+      wsSend({ type: 'dm_call_start', dmChannelId: currentChannelId }, getChannelOrigin(currentChannelId));
     };
 
     const handleCancelCall = () => {
       if (!currentChannelId) return;
       useVoiceStore.getState().setOutgoingCall(null);
-      wsSend({ type: 'dm_call_end', dmChannelId: currentChannelId });
+      wsSend({ type: 'dm_call_end', dmChannelId: currentChannelId }, getChannelOrigin(currentChannelId));
     };
 
     if (isInDmCall) {

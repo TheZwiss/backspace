@@ -68,8 +68,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    if (password.length < 6) {
-      return reply.code(400).send({ error: 'Password must be at least 6 characters', statusCode: 400 });
+    if (password.length < 8) {
+      return reply.code(400).send({ error: 'Password must be at least 8 characters', statusCode: 400 });
     }
 
     const db = getDb();

@@ -321,6 +321,11 @@ export function UserProfileModal() {
                     <ReactMarkdown
                       allowedElements={['p', 'strong', 'em', 'a', 'br']}
                       unwrapDisallowed
+                      components={{
+                        a: ({ href, children }) => (
+                          <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                        ),
+                      }}
                     >
                       {user.bio}
                     </ReactMarkdown>

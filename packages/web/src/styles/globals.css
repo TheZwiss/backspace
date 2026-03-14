@@ -348,3 +348,37 @@
 .animate-step-back {
   animation: stepBack 0.25s ease-out;
 }
+
+/* ── Incoming Call Animations ── */
+@keyframes callRipple {
+  0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+}
+
+@keyframes callGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(134, 239, 172, 0.15); }
+  50% { box-shadow: 0 0 30px rgba(134, 239, 172, 0.25); }
+}
+
+@keyframes callButtonGlow {
+  0%, 100% { box-shadow: 0 0 12px rgba(134, 239, 172, 0.15); }
+  50% { box-shadow: 0 0 20px rgba(134, 239, 172, 0.3); }
+}
+
+.animate-call-ripple {
+  animation: callRipple 3s ease-out infinite;
+}
+
+.animate-call-glow {
+  animation: callGlow 3s ease-in-out infinite;
+}
+
+.animate-call-button-glow {
+  animation: callButtonGlow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-call-ripple,
+  .animate-call-glow,
+  .animate-call-button-glow { animation: none !important; }
+}

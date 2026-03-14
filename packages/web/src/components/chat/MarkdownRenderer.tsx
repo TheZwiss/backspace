@@ -192,6 +192,8 @@ function buildComponents(): Components {
         alt={alt ?? ''}
         className="max-w-full max-h-[350px] rounded-md mt-1"
         loading="lazy"
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
       />
     ),
 

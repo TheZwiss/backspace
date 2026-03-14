@@ -1,20 +1,21 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, or, desc, lt, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, lt, inArray, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
-import type {
-  DmChannel,
-  DmMessage,
-  DmMessageWithUser,
-  CreateDmRequest,
-  CreateDmMessageRequest,
-  AddDmMemberRequest,
-  PaginatedQuery,
-  Attachment,
-  Reaction,
+import {
+  MAX_MESSAGE_LENGTH,
+  type DmChannel,
+  type DmMessage,
+  type DmMessageWithUser,
+  type CreateDmRequest,
+  type CreateDmMessageRequest,
+  type AddDmMemberRequest,
+  type PaginatedQuery,
+  type Attachment,
+  type Reaction,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -210,47 +211,90 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ))
       .all();
 
-    const dmChannels: DmChannel[] = [];
+    if (memberships.length === 0) {
+      return reply.code(200).send([]);
+    }
 
-    for (const membership of memberships) {
-      const dmChannel = db.select()
-        .from(schema.dmChannels)
-        .where(eq(schema.dmChannels.id, membership.dmChannelId))
-        .get();
+    const dmChannelIds = memberships.map(m => m.dmChannelId);
 
-      if (!dmChannel) continue;
+    // Batch fetch all DM channels
+    const channelRows = db.select().from(schema.dmChannels)
+      .where(inArray(schema.dmChannels.id, dmChannelIds)).all();
+    const channelMap = new Map(channelRows.map(c => [c.id, c]));
 
-      const dmMemberRows = db.select()
-        .from(schema.dmMembers)
-        .where(eq(schema.dmMembers.dmChannelId, membership.dmChannelId))
-        .all();
+    // Batch fetch all DM members
+    const allMemberRows = db.select().from(schema.dmMembers)
+      .where(inArray(schema.dmMembers.dmChannelId, dmChannelIds)).all();
+    const membersByChannel = new Map<string, string[]>();
+    for (const m of allMemberRows) {
+      if (!membersByChannel.has(m.dmChannelId)) membersByChannel.set(m.dmChannelId, []);
+      membersByChannel.get(m.dmChannelId)!.push(m.userId);
+    }
 
-      const memberUserIds = dmMemberRows.map(m => m.userId);
-      const users = memberUserIds.length > 0
-        ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-        : [];
+    // Batch fetch all unique users
+    const allUserIds = [...new Set(allMemberRows.map(m => m.userId))];
+    const userRows = allUserIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, allUserIds)).all()
+      : [];
+    const userMap = new Map(userRows.map(u => [u.id, u]));
 
-      // Get last message
-      const allMessages = db.select()
+    // Batch fetch last message per DM channel:
+    // Get the max created_at per channel, then fetch matching messages
+    const maxTimestamps = db.select({
+      dmChannelId: schema.dmMessages.dmChannelId,
+      maxCreatedAt: sql<number>`MAX(${schema.dmMessages.createdAt})`.as('max_created_at'),
+    })
+      .from(schema.dmMessages)
+      .where(inArray(schema.dmMessages.dmChannelId, dmChannelIds))
+      .groupBy(schema.dmMessages.dmChannelId)
+      .all();
+
+    const lastMessageMap = new Map<string, { id: string; dmChannelId: string; userId: string; content: string | null; createdAt: number }>();
+    if (maxTimestamps.length > 0) {
+      // Build conditions to fetch the actual message rows matching max timestamps
+      const conditions = maxTimestamps.map(t =>
+        and(eq(schema.dmMessages.dmChannelId, t.dmChannelId), eq(schema.dmMessages.createdAt, t.maxCreatedAt!))
+      );
+      const lastMessages = db.select()
         .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, membership.dmChannelId))
-        .orderBy(desc(schema.dmMessages.createdAt))
-        .limit(1)
+        .where(or(...conditions))
         .all();
+      for (const m of lastMessages) {
+        // In case of ties, keep the first one per channel
+        if (!lastMessageMap.has(m.dmChannelId)) {
+          lastMessageMap.set(m.dmChannelId, {
+            id: m.id, dmChannelId: m.dmChannelId, userId: m.userId,
+            content: m.content, createdAt: m.createdAt,
+          });
+        }
+      }
+    }
 
-      const lastMessage = allMessages[0] ?? null;
+    // Assemble results
+    const dmChannels: DmChannel[] = [];
+    for (const channelId of dmChannelIds) {
+      const channel = channelMap.get(channelId);
+      if (!channel) continue;
+
+      const memberIds = membersByChannel.get(channelId) ?? [];
+      const members = memberIds
+        .map(id => userMap.get(id))
+        .filter((u): u is NonNullable<typeof u> => u !== undefined)
+        .map(sanitizeUser);
+
+      const lastMsg = lastMessageMap.get(channelId) ?? null;
 
       dmChannels.push({
-        id: dmChannel.id,
-        ownerId: dmChannel.ownerId ?? null,
-        createdAt: dmChannel.createdAt,
-        members: users.map(sanitizeUser),
-        lastMessage: lastMessage ? {
-          id: lastMessage.id,
-          dmChannelId: lastMessage.dmChannelId,
-          userId: lastMessage.userId,
-          content: lastMessage.content,
-          createdAt: lastMessage.createdAt,
+        id: channel.id,
+        ownerId: channel.ownerId ?? null,
+        createdAt: channel.createdAt,
+        members,
+        lastMessage: lastMsg ? {
+          id: lastMsg.id,
+          dmChannelId: lastMsg.dmChannelId,
+          userId: lastMsg.userId,
+          content: lastMsg.content,
+          createdAt: lastMsg.createdAt,
         } : null,
       });
     }
@@ -848,9 +892,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
     }
 
+    if (content && content.length > MAX_MESSAGE_LENGTH) {
+      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
+    }
+
     const db = getDb();
     const messageId = generateSnowflake();
     const now = Date.now();
+
+    // Verify attachment ownership before linking
+    if (attachmentIds && attachmentIds.length > 0) {
+      for (const attId of attachmentIds) {
+        const att = db.select().from(schema.attachments).where(eq(schema.attachments.id, attId)).get();
+        if (!att || att.messageId || att.dmMessageId) {
+          return reply.code(400).send({ error: 'Invalid or already-used attachment', statusCode: 400 });
+        }
+        if (att.uploaderId && att.uploaderId !== request.userId) {
+          return reply.code(400).send({ error: 'You do not own this attachment', statusCode: 400 });
+        }
+      }
+    }
 
     // Insert message and link attachments atomically
     db.transaction((tx) => {
@@ -893,6 +954,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     if (!content || typeof content !== 'string' || content.trim().length === 0) {
       return reply.code(400).send({ error: 'Message content is required', statusCode: 400 });
+    }
+
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
     }
 
     const db = getDb();

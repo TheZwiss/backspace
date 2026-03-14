@@ -238,8 +238,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Restore DM call state from server (home only)
-      if (isHome) {
+      // Restore DM call state from server (all origins — federated DMs live on remote instances)
+      {
         const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall } = useVoiceStore.getState();
         const myId = event.user.id;
         if (event.activeCalls && event.activeCalls.length > 0) {
@@ -521,10 +521,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    // ─── DM call events (home-only) ─────────────────────────────────────────
+    // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {
-      if (!isHome) break;
       const { setIncomingCall } = useVoiceStore.getState();
       setIncomingCall({
         dmChannelId: event.dmChannelId,
@@ -535,7 +534,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_accepted': {
-      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -544,7 +542,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_rejected': {
-      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -553,7 +550,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_ended': {
-      if (!isHome) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);

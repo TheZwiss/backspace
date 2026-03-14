@@ -3,7 +3,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isMember, isSpaceOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
+import { isMember, isBanned, isSpaceOwner, hasPermission, computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import type {
@@ -282,6 +282,10 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'This space does not allow public joins', statusCode: 403 });
     }
 
+    if (isBanned(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
+    }
+
     if (isMember(id, request.userId)) {
       return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
     }
@@ -343,6 +347,10 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
 
     if (space.visibility !== 'request') {
       return reply.code(403).send({ error: 'This space does not accept join requests', statusCode: 403 });
+    }
+
+    if (isBanned(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are banned from this space', statusCode: 403 });
     }
 
     if (isMember(id, request.userId)) {
@@ -410,6 +418,9 @@ export async function exploreRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const statusFilter = request.query.status ?? 'pending';
+    if (!['pending', 'accepted', 'declined'].includes(statusFilter)) {
+      return reply.code(400).send({ error: 'Status must be one of: pending, accepted, declined', statusCode: 400 });
+    }
     const rows = db.select().from(schema.joinRequests)
       .where(and(
         eq(schema.joinRequests.spaceId, id),

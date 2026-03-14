@@ -89,6 +89,8 @@ class ConnectionManager {
   private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // Permission-muted users (SPEAK permission revoked while in voice)
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // Per-user WebSocket rate limiters (shared across all tabs/connections)
+  private userRateLimiters: Map<string, WsRateLimiter> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -203,6 +205,9 @@ class ConnectionManager {
 
     // Clean up userSpaces (re-populated on next connect via setUserSpaces)
     this.userSpaces.delete(userId);
+
+    // Clean up per-user rate limiter
+    this.userRateLimiters.delete(userId);
   }
 
   getUserConnections(userId: string): Set<WebSocket> {
@@ -212,6 +217,15 @@ class ConnectionManager {
   isUserOnline(userId: string): boolean {
     const conns = this.connections.get(userId);
     return conns !== undefined && conns.size > 0;
+  }
+
+  getUserRateLimiter(userId: string): WsRateLimiter {
+    let limiter = this.userRateLimiters.get(userId);
+    if (!limiter) {
+      limiter = new WsRateLimiter();
+      this.userRateLimiters.set(userId, limiter);
+    }
+    return limiter;
   }
 
   setUserSpaces(userId: string, spaceIds: string[]): void {
@@ -1068,7 +1082,6 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
     let authenticated = false;
     let userId: string | undefined;
     let username: string | undefined;
-    const rateLimiter = new WsRateLimiter();
 
     // Set auth timeout - must authenticate within 10 seconds
     const authTimeout = setTimeout(() => {
@@ -1104,13 +1117,21 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           userId = payload.userId;
           username = payload.username;
 
-          // Reject deleted users
+          // Reject deleted users and revoked tokens
           const db = getDb();
           const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
           if (!userRow || userRow.isDeleted) {
             ws.send(JSON.stringify({ type: 'error', message: 'This account has been deleted' }));
             ws.close();
             return;
+          }
+          // Token revocation: reject tokens issued before last password change
+          if (userRow.passwordChangedAt && payload.iat) {
+            if (payload.iat < Math.floor(userRow.passwordChangedAt / 1000)) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Token has been revoked' }));
+              ws.close();
+              return;
+            }
           }
 
           authenticated = true;
@@ -1155,15 +1176,22 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
         return;
       }
 
-      // Rate limit all post-auth, non-ping messages
-      if (!rateLimiter.consume()) {
+      // Rate limit all post-auth, non-ping messages (per-user, shared across tabs)
+      if (!connectionManager.getUserRateLimiter(userId!).consume()) {
         ws.send(JSON.stringify({ type: 'error', message: 'Rate limited' }));
         return;
       }
 
       // Handle authenticated events
       if (userId && username) {
-        handleClientEvent(parsed, userId, username);
+        try {
+          handleClientEvent(parsed, userId, username);
+        } catch (err) {
+          app.log.error({ err, eventType: parsed.type, userId }, 'Unhandled error in WS event handler');
+          try {
+            ws.send(JSON.stringify({ type: 'error', message: 'Internal server error' }));
+          } catch { /* ws may already be closed */ }
+        }
       }
     });
 

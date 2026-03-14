@@ -595,14 +595,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  updateUserInMessages: (user: { id: string; [key: string]: any }) => {
+  updateUserInMessages: (user: { id: string; homeUserId?: string | null; [key: string]: any }) => {
     set((state) => {
       const newMessages = new Map(state.messages);
       let changed = false;
       for (const [channelId, msgs] of newMessages) {
         let channelChanged = false;
         const updated = msgs.map(m => {
-          if (m.userId === user.id) {
+          const matches = m.userId === user.id ||
+            (user.homeUserId && m.user?.homeUserId && m.user.homeUserId === user.homeUserId);
+          if (matches) {
             channelChanged = true;
             return { ...m, user: { ...m.user, ...user } };
           }

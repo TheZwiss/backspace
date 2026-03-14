@@ -7,6 +7,7 @@ import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, Pe
 import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
+import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
 import type {
   CreateSpaceRequest,
   UpdateSpaceRequest,
@@ -367,6 +368,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       updates.name = trimmedName;
     }
 
+    // Track old files for cleanup after update
+    const oldIcon = server.icon;
+    const oldBanner = server.banner;
+
     if (icon !== undefined) {
       updates.icon = icon || null;
     }
@@ -404,6 +409,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     db.update(schema.spaces).set(updates).where(eq(schema.spaces.id, id)).run();
 
+    // Clean up old icon/banner files that were replaced
+    if (icon !== undefined && oldIcon && oldIcon !== (icon || null) && !oldIcon.startsWith('http')) {
+      deleteUploadFile(oldIcon);
+    }
+    if (banner !== undefined && oldBanner && oldBanner !== (banner || null) && !oldBanner.startsWith('http')) {
+      deleteUploadFile(oldBanner);
+    }
+
     const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();
     if (!updated) {
       return reply.code(500).send({ error: 'Failed to update space', statusCode: 500 });
@@ -436,6 +449,24 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Only the space owner can delete the space', statusCode: 403 });
     }
 
+    // Collect all attachment files before cascade-deleting DB records
+    const channelIds = db.select({ id: schema.channels.id })
+      .from(schema.channels).where(eq(schema.channels.spaceId, id)).all().map(c => c.id);
+
+    let attachmentRows: { filename: string }[] = [];
+    if (channelIds.length > 0) {
+      const messageIds = db.select({ id: schema.messages.id })
+        .from(schema.messages).where(inArray(schema.messages.channelId, channelIds)).all().map(m => m.id);
+      if (messageIds.length > 0) {
+        attachmentRows = db.select({ filename: schema.attachments.filename })
+          .from(schema.attachments).where(inArray(schema.attachments.messageId, messageIds)).all();
+      }
+    }
+
+    // Capture space icon/banner before deletion
+    const spaceIcon = server.icon;
+    const spaceBanner = server.banner;
+
     // Delete all channels (messages cascade), members, folder refs, then space atomically
     db.transaction((tx) => {
       tx.delete(schema.channels).where(eq(schema.channels.spaceId, id)).run();
@@ -443,6 +474,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       tx.delete(schema.spaceFolderMembers).where(eq(schema.spaceFolderMembers.spaceId, id)).run();
       tx.delete(schema.spaces).where(eq(schema.spaces.id, id)).run();
     });
+
+    // Clean up all attachment files from disk
+    deleteAttachmentFiles(attachmentRows);
+
+    // Clean up space icon/banner files
+    if (spaceIcon && !spaceIcon.startsWith('http')) deleteUploadFile(spaceIcon);
+    if (spaceBanner && !spaceBanner.startsWith('http')) deleteUploadFile(spaceBanner);
 
     return reply.code(200).send({ success: true });
   });

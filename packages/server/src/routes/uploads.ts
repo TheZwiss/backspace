@@ -78,6 +78,7 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     // Save attachment record
     db.insert(schema.attachments).values({
       id,
+      uploaderId: request.userId,
       filename,
       originalName,
       mimetype,
@@ -120,12 +121,16 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       ?? EXT_MIMETYPES[path.extname(safeName).toLowerCase()]
       ?? 'application/octet-stream';
 
-    // Set caching headers
+    // Set caching and security headers
     reply.header('Cache-Control', 'public, max-age=31536000, immutable');
     reply.header('Content-Type', mimetype);
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'");
+    reply.header('X-Frame-Options', 'DENY');
 
-    // For non-image files, set Content-Disposition to download
-    if (!mimetype.startsWith('image/') && !mimetype.startsWith('video/') && !mimetype.startsWith('audio/')) {
+    // For non-media files and SVGs, force download instead of inline rendering
+    const isSvg = mimetype === 'image/svg+xml';
+    if (isSvg || (!mimetype.startsWith('image/') && !mimetype.startsWith('video/') && !mimetype.startsWith('audio/'))) {
       reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
     }
 

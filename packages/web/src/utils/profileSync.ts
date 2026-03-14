@@ -62,7 +62,7 @@ async function pushProfileToRemote(inst: ConnectedInstance, homeUser: NonNullabl
     try {
       const blob = await downloadAsset(homeUser.avatar);
       const attachment = await inst.api.uploads.upload(new File([blob], homeUser.avatar));
-      payload.avatar = attachment.filename;
+      payload.avatar = `/api/uploads/${attachment.filename}`;
     } catch (err) {
       console.warn('[ProfileSync] Failed to upload avatar to remote:', err);
     }
@@ -75,7 +75,7 @@ async function pushProfileToRemote(inst: ConnectedInstance, homeUser: NonNullabl
     try {
       const blob = await downloadAsset(homeUser.banner);
       const attachment = await inst.api.uploads.upload(new File([blob], homeUser.banner));
-      payload.banner = attachment.filename;
+      payload.banner = `/api/uploads/${attachment.filename}`;
     } catch (err) {
       console.warn('[ProfileSync] Failed to upload banner to remote:', err);
     }
@@ -108,7 +108,7 @@ async function pullProfileFromRemote(inst: ConnectedInstance): Promise<void> {
     try {
       const blob = await downloadAsset(remoteUser.avatar, inst.origin);
       const attachment = await api.uploads.upload(new File([blob], remoteUser.avatar.split('/').pop() || 'avatar'));
-      payload.avatar = attachment.filename;
+      payload.avatar = `/api/uploads/${attachment.filename}`;
     } catch (err) {
       console.warn('[ProfileSync] Failed to download/upload avatar from remote:', err);
     }
@@ -121,7 +121,7 @@ async function pullProfileFromRemote(inst: ConnectedInstance): Promise<void> {
     try {
       const blob = await downloadAsset(remoteUser.banner, inst.origin);
       const attachment = await api.uploads.upload(new File([blob], remoteUser.banner.split('/').pop() || 'banner'));
-      payload.banner = attachment.filename;
+      payload.banner = `/api/uploads/${attachment.filename}`;
     } catch (err) {
       console.warn('[ProfileSync] Failed to download/upload banner from remote:', err);
     }
@@ -206,7 +206,7 @@ export async function syncProfileUpdateToRemotes(update: Partial<UpdateUserReque
           if (avatarBlob && avatarFilename) {
             try {
               const attachment = await inst.api.uploads.upload(new File([avatarBlob], avatarFilename));
-              perInstPayload.avatar = attachment.filename;
+              perInstPayload.avatar = `/api/uploads/${attachment.filename}`;
             } catch (err) {
               console.warn(`[ProfileSync] Failed to upload avatar to ${inst.origin}:`, err);
             }
@@ -220,7 +220,7 @@ export async function syncProfileUpdateToRemotes(update: Partial<UpdateUserReque
           if (bannerBlob && bannerFilename) {
             try {
               const attachment = await inst.api.uploads.upload(new File([bannerBlob], bannerFilename));
-              perInstPayload.banner = attachment.filename;
+              perInstPayload.banner = `/api/uploads/${attachment.filename}`;
             } catch (err) {
               console.warn(`[ProfileSync] Failed to upload banner to ${inst.origin}:`, err);
             }
