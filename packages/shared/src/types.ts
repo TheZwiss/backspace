@@ -561,3 +561,63 @@ export interface DeleteAccountRequest {
   password: string;
   username: string;  // Must match — confirmation safeguard
 }
+
+// ─── Storage Management Types ─────────────────────────────────────────────
+
+export interface StorageBreakdown {
+  type: string;   // 'image' | 'video' | 'audio' | 'document' | 'other'
+  count: number;
+  size: number;
+}
+
+export interface StorageStats {
+  totalFiles: number;
+  totalSize: number;
+  referencedFiles: number;
+  referencedSize: number;
+  orphanedFiles: number;
+  orphanedSize: number;
+  unlinkedAttachments: number;
+  unlinkedSize: number;
+  breakdown: StorageBreakdown[];
+}
+
+export interface OrphanedFile {
+  filename: string;
+  size: number;
+  modifiedAt: number;
+}
+
+export interface CleanupResult {
+  dryRun: boolean;
+  deletedFiles: number;
+  freedBytes: number;
+  deletedAttachmentRecords: number;
+  errors: string[];
+}
+
+// ─── Admin User Management Types ──────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatar: string | null;
+  avatarColor: string | null;
+  status: string;
+  isAdmin: boolean;
+  isDeleted: boolean;
+  homeInstance: string | null;
+  createdAt: number;
+}
+
+export interface AdminUserListResponse {
+  users: AdminUser[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminResetPasswordResponse {
+  temporaryPassword: string;
+}

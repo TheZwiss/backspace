@@ -97,7 +97,7 @@ export function AddDmMemberModal() {
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
           placeholder="Search for a user..."
-          className="w-full px-3 py-2 bg-surface-input text-txt-primary placeholder-txt-tertiary/60 rounded-[4px] text-[14px] outline-none focus:ring-1 focus:ring-accent-primary"
+          className="input-search w-full py-2 text-[14px]"
           disabled={memberCount >= 10}
         />
 

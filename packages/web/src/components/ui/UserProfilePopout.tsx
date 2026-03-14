@@ -68,7 +68,7 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
 
   // Banner display
   const bannerSrc = user.banner
-    ? (user.banner.startsWith('http') ? user.banner : userApi.uploads.url(user.banner))
+    ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : userApi.uploads.url(user.banner))
     : null;
   const bannerFallback = user.accentColor
     ? mutedGradient(user.accentColor, adjustColor(user.accentColor, -40))

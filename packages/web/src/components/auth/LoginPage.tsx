@@ -91,7 +91,7 @@ export function LoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
+              className="input-standard w-full py-2.5"
               autoFocus
               autoComplete="username"
             />
@@ -105,7 +105,7 @@ export function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
+              className="input-standard w-full py-2.5"
               autoComplete="current-password"
             />
           </div>

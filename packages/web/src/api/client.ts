@@ -34,6 +34,12 @@ import type {
   ChangePasswordRequest,
   ChangePasswordResponse,
   DeleteAccountRequest,
+  StorageStats,
+  OrphanedFile,
+  CleanupResult,
+  AdminUserListResponse,
+  AdminUser,
+  AdminResetPasswordResponse,
   ExploreSpace,
   JoinRequest,
   Role,
@@ -179,6 +185,16 @@ export class BackspaceApiClient {
     getJoinRequests: (spaceId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
     decideJoinRequest: (spaceId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
     myJoinRequests: (status?: string) => Promise<{ requests: JoinRequest[] }>;
+  };
+
+  readonly admin: {
+    storageStats: () => Promise<StorageStats>;
+    storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
+    storageCleanup: (dryRun?: boolean) => Promise<CleanupResult>;
+    listUsers: (params?: { q?: string; page?: number; pageSize?: number; showDeleted?: boolean }) => Promise<AdminUserListResponse>;
+    setUserRole: (userId: string, isAdmin: boolean) => Promise<AdminUser>;
+    resetUserPassword: (userId: string) => Promise<AdminResetPasswordResponse>;
+    deleteUser: (userId: string) => Promise<{ success: boolean }>;
   };
 
   constructor(baseUrl: string, getToken: () => string | null) {
@@ -486,6 +502,26 @@ export class BackspaceApiClient {
         if (status) params.set('status', status);
         return request<{ requests: JoinRequest[] }>('GET', `/users/@me/join-requests?${params}`);
       },
+    };
+
+    this.admin = {
+      storageStats: () => request<StorageStats>('GET', '/admin/storage/stats'),
+      storageOrphans: () => request<{ orphans: OrphanedFile[] }>('GET', '/admin/storage/orphans'),
+      storageCleanup: (dryRun = false) => request<CleanupResult>('POST', '/admin/storage/cleanup', { dryRun }),
+      listUsers: (params) => {
+        const qs = new URLSearchParams();
+        if (params?.q) qs.set('q', params.q);
+        if (params?.page !== undefined) qs.set('page', String(params.page));
+        if (params?.pageSize !== undefined) qs.set('pageSize', String(params.pageSize));
+        if (params?.showDeleted) qs.set('showDeleted', 'true');
+        return request<AdminUserListResponse>('GET', `/admin/users?${qs}`);
+      },
+      setUserRole: (userId, isAdmin) =>
+        request<AdminUser>('PATCH', `/admin/users/${userId}/role`, { isAdmin }),
+      resetUserPassword: (userId) =>
+        request<AdminResetPasswordResponse>('POST', `/admin/users/${userId}/reset-password`),
+      deleteUser: (userId) =>
+        request<{ success: boolean }>('DELETE', `/admin/users/${userId}`),
     };
   }
 }

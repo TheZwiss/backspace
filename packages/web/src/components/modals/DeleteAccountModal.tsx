@@ -247,7 +247,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                           <select
                             value={space.transferTo}
                             onChange={(e) => handleTransferTo(space.id, e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-surface-input rounded text-xs text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+                            className="input-standard w-full px-2.5 py-1.5 text-xs"
                           >
                             <option value="">Select new owner...</option>
                             {space.members.map(m => (
@@ -282,7 +282,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
 
           {/* Step 2: Confirmation */}
           {step === 'confirm' && (
-            <>
+            <form onSubmit={(e) => { e.preventDefault(); handleConfirmDelete(); }} className="space-y-4">
               <div className="bg-accent-rose/10 border border-accent-rose/20 rounded-lg p-3.5">
                 <p className="text-sm text-txt-danger font-medium">This action is permanent and cannot be undone.</p>
               </div>
@@ -295,7 +295,7 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   type="text"
                   value={confirmUsername}
                   onChange={(e) => setConfirmUsername(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-rose"
+                  className="input-danger w-full"
                   placeholder={user.username}
                 />
               </div>
@@ -306,8 +306,9 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-rose"
+                  className="input-danger w-full"
                   placeholder="Enter your password"
+                  autoComplete="current-password"
                 />
               </div>
 
@@ -323,14 +324,14 @@ export function DeleteAccountModal({ isOpen, onClose }: DeleteAccountModalProps)
                   Back
                 </button>
                 <button
-                  onClick={handleConfirmDelete}
+                  type="submit"
                   disabled={isLoading || confirmUsername !== user.username || !confirmPassword}
                   className="flex-1 py-2 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Deleting...' : 'Delete My Account'}
                 </button>
               </div>
-            </>
+            </form>
           )}
 
           {/* Step 3: Federation Progress */}

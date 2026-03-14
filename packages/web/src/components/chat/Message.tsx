@@ -229,7 +229,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={handleEditSubmit}
-              className="w-full p-3 bg-surface-input rounded-lg text-txt-primary outline-none resize-none text-[15px] leading-[1.5] shadow-inner"
+              className="input-standard w-full p-3 rounded-lg resize-none text-[15px] leading-[1.5] shadow-inner"
               rows={2}
               autoFocus
             />
@@ -262,9 +262,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
               <div className="mt-1 grid gap-2">
                 {message.attachments.map((att) => {
                   const isImage = att.mimetype.startsWith('image/');
-                  const attUrl = att.filename.startsWith('http') ? att.filename : `/api/uploads/${att.filename}`;
+                  const attUrl = att.filename.startsWith('http') || att.filename.startsWith('/') ? att.filename : `/api/uploads/${att.filename}`;
                   const thumbUrl = att.thumbnailFilename
-                    ? (att.thumbnailFilename.startsWith('http') ? att.thumbnailFilename : `/api/uploads/${att.thumbnailFilename}`)
+                    ? (att.thumbnailFilename.startsWith('http') || att.thumbnailFilename.startsWith('/') ? att.thumbnailFilename : `/api/uploads/${att.thumbnailFilename}`)
                     : null;
                   if (isImage) {
                     return (

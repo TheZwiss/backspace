@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
+import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
+import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 
-type SubTab = 'general' | 'streaming';
+type SubTab = 'general' | 'streaming' | 'storage' | 'users';
 
 export function InstancePanel() {
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
@@ -33,11 +35,19 @@ export function InstancePanel() {
         <button onClick={() => setSubTab('streaming')} className={pillClass('streaming')}>
           Streaming
         </button>
+        <button onClick={() => setSubTab('storage')} className={pillClass('storage')}>
+          Storage
+        </button>
+        <button onClick={() => setSubTab('users')} className={pillClass('users')}>
+          Users
+        </button>
       </div>
 
       {/* Content */}
       {subTab === 'general' && <GeneralPanel />}
       {subTab === 'streaming' && <StreamingPanel />}
+      {subTab === 'storage' && <StoragePanel />}
+      {subTab === 'users' && <UsersPanel />}
     </div>
   );
 }

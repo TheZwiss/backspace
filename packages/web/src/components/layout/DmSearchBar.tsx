@@ -370,7 +370,7 @@ export function DmSearchBar() {
             onChange={(e) => { setQuery(e.target.value); setSelectedIndex(0); }}
             onKeyDown={handleKeyDown}
             placeholder="Search..."
-            className="flex-1 min-w-0 bg-transparent text-txt-primary placeholder-txt-tertiary/60 text-[13px] font-medium outline-none py-[5px]"
+            className="input-embedded flex-1 min-w-0 text-[13px] font-medium py-[5px]"
           />
         </div>
       ) : (

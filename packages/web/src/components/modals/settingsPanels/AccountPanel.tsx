@@ -498,7 +498,7 @@ export function AccountPanel() {
                   }
                 }}
                 placeholder="#hex"
-                className="w-24 px-2 py-1.5 bg-surface-input rounded text-xs text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary font-mono"
+                className="input-standard w-24 px-2 py-1.5 text-xs font-mono"
                 maxLength={7}
               />
               {accentColor && (
@@ -530,7 +530,7 @@ export function AccountPanel() {
                 }}
                 rows={3}
                 placeholder="Tell the world about yourself..."
-                className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary resize-none"
+                className="input-standard w-full resize-none"
                 maxLength={190}
               />
               <span className="absolute bottom-2 right-2 text-[10px] text-txt-tertiary">
@@ -550,7 +550,7 @@ export function AccountPanel() {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as UserStatus)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary appearance-none"
+              className="input-standard w-full appearance-none"
             >
               <option value="online">Online</option>
               <option value="idle">Idle</option>
@@ -564,7 +564,7 @@ export function AccountPanel() {
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard w-full"
             />
           </div>
 
@@ -574,7 +574,7 @@ export function AccountPanel() {
               type="text"
               value={customStatus}
               onChange={(e) => setCustomStatus(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard w-full"
               placeholder="What are you up to?"
             />
           </div>
@@ -584,7 +584,8 @@ export function AccountPanel() {
       {/* ── Password ── */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Password</div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+        <form onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }} className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+          <input type="text" autoComplete="username" value={user.username} readOnly tabIndex={-1} className="sr-only" />
           <div>
             <label className="block text-xs text-txt-secondary mb-1.5">Current Password</label>
             <div className="relative">
@@ -592,8 +593,9 @@ export function AccountPanel() {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-3 py-2 pr-10 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full pr-10"
                 placeholder="Enter current password"
+                autoComplete="current-password"
               />
               <button
                 type="button"
@@ -620,8 +622,9 @@ export function AccountPanel() {
                 type={showNewPassword ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-3 py-2 pr-10 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full pr-10"
                 placeholder="Minimum 6 characters"
+                autoComplete="new-password"
               />
               <button
                 type="button"
@@ -647,8 +650,9 @@ export function AccountPanel() {
               type="password"
               value={confirmNewPassword}
               onChange={(e) => setConfirmNewPassword(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard w-full"
               placeholder="Confirm new password"
+              autoComplete="new-password"
             />
           </div>
 
@@ -674,13 +678,13 @@ export function AccountPanel() {
           )}
 
           <button
-            onClick={handleChangePassword}
+            type="submit"
             disabled={passwordLoading || !currentPassword || !newPassword || !confirmNewPassword}
             className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {passwordLoading ? 'Changing...' : 'Change Password'}
           </button>
-        </div>
+        </form>
       </div>
 
       {/* ── Danger Zone ── */}

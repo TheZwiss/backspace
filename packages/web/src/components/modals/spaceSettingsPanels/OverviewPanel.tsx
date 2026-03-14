@@ -437,7 +437,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
             type="text"
             value={spaceName}
             onChange={(e) => setSpaceName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+            className="input-standard w-full"
             disabled={!canManageSpace}
           />
         </div>
@@ -494,7 +494,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         value={transferSearch}
                         onChange={(e) => setTransferSearch(e.target.value)}
                         placeholder="Search members..."
-                        className="w-full px-3 py-1.5 bg-surface-input rounded text-sm text-txt-primary placeholder-txt-tertiary outline-none focus:ring-1 focus:ring-accent-primary/50"
+                        className="input-search w-full"
                         autoFocus
                       />
                       <div className="max-h-[160px] overflow-y-auto space-y-0.5">
@@ -503,7 +503,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
                         ) : (
                           transferCandidates.map((member) => {
                             const avatarUrl = member.user.avatar
-                              ? (member.user.avatar.startsWith('http') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
+                              ? (member.user.avatar.startsWith('http') || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
                               : null;
                             return (
                               <button

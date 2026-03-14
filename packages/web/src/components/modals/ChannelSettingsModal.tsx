@@ -638,7 +638,7 @@ function PermissionsTab({
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
                   placeholder="Search members..."
-                  className="w-full px-2.5 py-1.5 text-sm bg-surface-input rounded mb-1 text-txt-primary placeholder-txt-muted outline-none"
+                  className="input-search w-full mb-1"
                   autoFocus
                 />
               </div>

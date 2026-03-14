@@ -83,7 +83,7 @@ export function UserSettingsModal() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
+        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin px-1">
           {tab === 'account' && <AccountPanel />}
           {tab === 'voice' && <VoicePanel />}
           {tab === 'privacy' && <PrivacyPanel />}

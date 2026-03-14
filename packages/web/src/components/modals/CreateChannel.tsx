@@ -114,7 +114,7 @@ export function CreateChannelModal() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
+            className="input-standard w-full"
             placeholder="new-channel"
             autoFocus
           />
@@ -129,7 +129,7 @@ export function CreateChannelModal() {
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
+              className="input-standard w-full"
               placeholder="What's this channel about?"
             />
           </div>
@@ -143,7 +143,7 @@ export function CreateChannelModal() {
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
+              className="input-standard w-full"
             >
               <option value="">No Category</option>
               {[...categories].sort((a, b) => a.position - b.position).map((cat) => (

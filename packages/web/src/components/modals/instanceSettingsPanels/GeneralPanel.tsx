@@ -56,7 +56,7 @@ export function GeneralPanel() {
             value={draft.instanceName}
             onChange={(e) => setDraft({ ...draft, instanceName: e.target.value.slice(0, 32) })}
             placeholder="Backspace"
-            className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary placeholder:text-txt-tertiary"
+            className="input-standard w-full"
           />
           <div className="text-[11px] text-txt-tertiary text-right mt-1">{draft.instanceName.length}/32</div>
         </div>

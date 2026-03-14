@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
-import { authenticate } from '../utils/auth.js';
+import { authenticate, requireAdmin } from '../utils/auth.js';
 import { config } from '../config.js';
 import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
 
@@ -33,14 +33,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/settings/streaming — admin only
-  app.patch<{ Body: Partial<InstanceStreamingLimits> }>('/api/settings/streaming', { preHandler: authenticate }, async (request, reply) => {
+  app.patch<{ Body: Partial<InstanceStreamingLimits> }>('/api/settings/streaming', { preHandler: [authenticate, requireAdmin] }, async (request, reply) => {
     const db = getDb();
-
-    // Verify caller is an instance admin
-    const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!caller || caller.isAdmin !== 1) {
-      return reply.code(403).send({ error: 'Only instance admins can modify streaming settings', statusCode: 403 });
-    }
 
     const body = request.body;
     const updateData: Record<string, number | string> = { updatedAt: Date.now() };
@@ -129,13 +123,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/settings/instance — admin only, returns instance admin settings
-  app.get('/api/settings/instance', { preHandler: authenticate }, async (request, reply) => {
+  app.get('/api/settings/instance', { preHandler: [authenticate, requireAdmin] }, async (_request, reply) => {
     const db = getDb();
-
-    const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!caller || caller.isAdmin !== 1) {
-      return reply.code(403).send({ error: 'Only instance admins can view instance settings', statusCode: 403 });
-    }
 
     const row = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     if (!row) {
@@ -152,13 +141,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/settings/instance — admin only, updates instance admin settings
-  app.patch<{ Body: Partial<InstanceAdminSettings> }>('/api/settings/instance', { preHandler: authenticate }, async (request, reply) => {
+  app.patch<{ Body: Partial<InstanceAdminSettings> }>('/api/settings/instance', { preHandler: [authenticate, requireAdmin] }, async (request, reply) => {
     const db = getDb();
-
-    const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    if (!caller || caller.isAdmin !== 1) {
-      return reply.code(403).send({ error: 'Only instance admins can modify instance settings', statusCode: 403 });
-    }
 
     const body = request.body;
     const updateData: Record<string, number | string> = { updatedAt: Date.now() };

@@ -102,7 +102,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
       >
         {src ? (
           <img
-            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:'))
+            src={(src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('/'))
               ? src : `/api/uploads/${src}`}
             alt={name}
             loading="lazy"

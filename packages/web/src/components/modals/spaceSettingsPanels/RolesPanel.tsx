@@ -278,7 +278,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
                 type="text"
                 value={draftName}
                 onChange={(e) => setDraftName(e.target.value)}
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary text-sm"
+                className="input-standard w-full"
               />
             </div>
             <div>
@@ -312,7 +312,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
                     const v = e.target.value;
                     if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setDraftColor(v);
                   }}
-                  className="w-20 px-2 py-1 bg-surface-input rounded text-xs text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary font-mono"
+                  className="input-standard w-20 px-2 py-1 text-xs font-mono"
                   maxLength={7}
                 />
               </div>

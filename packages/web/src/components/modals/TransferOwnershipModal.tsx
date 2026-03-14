@@ -120,7 +120,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search members..."
-                className="w-full px-3 py-1.5 bg-surface-input rounded text-sm text-txt-primary placeholder-txt-tertiary outline-none focus:ring-1 focus:ring-accent-primary/50"
+                className="input-search w-full"
                 autoFocus
               />
             </div>
@@ -130,7 +130,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               ) : (
                 filteredMembers.map((member) => {
                   const avatarUrl = member.user.avatar
-                    ? (member.user.avatar.startsWith('http') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
+                    ? (member.user.avatar.startsWith('http') || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
                     : null;
                   return (
                     <button

@@ -215,7 +215,7 @@ export function CreateSpaceModal() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+            className="input-standard w-full"
             placeholder="My Awesome Space"
             autoFocus
           />
@@ -263,7 +263,7 @@ export function CreateSpaceModal() {
             onChange={(e) => setDescription(e.target.value.slice(0, 200))}
             placeholder="A short description for your space..."
             rows={3}
-            className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary resize-none placeholder:text-txt-tertiary"
+            className="input-standard w-full resize-none"
           />
           <div className="text-[11px] text-txt-tertiary text-right">{description.length}/200</div>
         </div>

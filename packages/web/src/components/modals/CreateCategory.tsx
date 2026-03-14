@@ -57,7 +57,7 @@ export function CreateCategoryModal() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 bg-surface-input border border-border-soft rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-colors"
+            className="input-standard w-full"
             placeholder="new-category"
             autoFocus
           />

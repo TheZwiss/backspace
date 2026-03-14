@@ -106,7 +106,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
               onChange={(e) => setUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !isLoading && url.trim() && handleProbe()}
               placeholder="https://instance.example.com"
-              className="flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard flex-1"
               disabled={isLoading}
             />
             <button
@@ -138,7 +138,8 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             </div>
           </div>
 
-          <div className="space-y-2">
+          <form onSubmit={(e) => { e.preventDefault(); handleConnect(); }} className="space-y-2">
+            <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
             <div>
               <label className="block text-xs text-txt-tertiary mb-1">
                 Enter your password to connect to {new URL(probeResult.origin).host}
@@ -147,24 +148,24 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !isLoading && password && handleConnect()}
                 placeholder="Your account password"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
+                autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
                 Your password is verified locally, then used to create or access your account on the remote instance.
               </div>
             </div>
             <button
-              onClick={handleConnect}
+              type="submit"
               disabled={isLoading || !password}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
               {isLoading ? 'Connecting...' : 'Connect'}
             </button>
-          </div>
+          </form>
 
           <div className="flex gap-2">
             <button
@@ -199,7 +200,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             An account already exists on this instance with a different password. Enter the credentials you used on that instance.
           </div>
 
-          <div className="space-y-2">
+          <form onSubmit={(e) => { e.preventDefault(); handleFallbackLogin(); }} className="space-y-2">
             <div>
               <label className="block text-xs text-txt-tertiary mb-1">Username</label>
               <input
@@ -207,8 +208,9 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
                 value={fallbackUsername}
                 onChange={(e) => setFallbackUsername(e.target.value)}
                 placeholder="Your username on this instance"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
+                autoComplete="username"
               />
             </div>
             <div>
@@ -217,21 +219,21 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
                 type="password"
                 value={fallbackPassword}
                 onChange={(e) => setFallbackPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !isLoading && fallbackUsername && fallbackPassword && handleFallbackLogin()}
                 placeholder="Password on the remote instance"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
+                autoComplete="current-password"
               />
             </div>
             <button
-              onClick={handleFallbackLogin}
+              type="submit"
               disabled={isLoading || !fallbackUsername || !fallbackPassword}
               className="w-full px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
             >
               {isLoading ? 'Logging in...' : 'Login & Connect'}
             </button>
-          </div>
+          </form>
 
           <div className="flex gap-2">
             <button
@@ -345,26 +347,28 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
 
       {/* Inline re-authentication prompt */}
       {showReauth && (
-        <div className="space-y-2 pt-1">
+        <form onSubmit={(e) => { e.preventDefault(); handleReauth(); }} className="space-y-2 pt-1">
+          <input type="text" autoComplete="username" value={inst.username} readOnly tabIndex={-1} className="sr-only" />
           <div className="flex gap-2">
             <input
               type="password"
               value={reauthPassword}
               onChange={(e) => setReauthPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !reauthLoading && reauthPassword && handleReauth()}
               placeholder="Your account password"
-              className="flex-1 px-3 py-1.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard flex-1 py-1.5"
               disabled={reauthLoading}
               autoFocus
+              autoComplete="current-password"
             />
             <button
-              onClick={handleReauth}
+              type="submit"
               disabled={reauthLoading || !reauthPassword}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
             >
               {reauthLoading ? 'Connecting...' : 'Connect'}
             </button>
             <button
+              type="button"
               onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
               className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
@@ -376,7 +380,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
               {reauthError}
             </div>
           )}
-        </div>
+        </form>
       )}
     </div>
   );

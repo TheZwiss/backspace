@@ -203,6 +203,33 @@
   .glass-pill-mine:hover {
     background: rgba(134, 239, 172, 0.16);
   }
+
+  /* ── Input Tiers ── */
+  .input-standard {
+    @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-2 focus:ring-accent-primary focus:border-accent-primary/30
+           transition-colors;
+  }
+  .input-search {
+    @apply bg-surface-input rounded px-3 py-1.5 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-1 focus:ring-accent-primary focus:border-accent-primary/30
+           transition-colors;
+  }
+  .input-embedded {
+    @apply bg-transparent text-txt-primary
+           placeholder:text-txt-tertiary/60 outline-none;
+  }
+  .input-danger {
+    @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-2 focus:ring-accent-rose focus:border-accent-rose/30
+           transition-colors;
+  }
 }
 
 /* Accessibility: fall back to solid surfaces when transparency is reduced */

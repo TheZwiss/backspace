@@ -142,7 +142,7 @@ export function StreamingPanel() {
                   const v = Number(e.target.value);
                   if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
                 }}
-                className="w-24 px-2 py-1 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary"
+                className="input-standard w-24 px-2 py-1"
               />
               <span className="text-[12px] text-txt-tertiary">kbps</span>
             </div>

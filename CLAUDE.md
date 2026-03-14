@@ -36,6 +36,19 @@ Every surface in Backspace falls into one of these tiers:
 
 **Modal backdrops** use `bg-black/50` — light enough for the glass card's blur to show through.
 
+### Input Tiers
+
+Every text input, textarea, and select uses one of these CSS classes (defined in `globals.css`):
+
+| Tier | Class | When to Use | Focus |
+|------|-------|-------------|-------|
+| Standard | `.input-standard` | Form fields in modals, settings, auth pages | `ring-2` primary |
+| Search | `.input-search` | Search bars, filter inputs, compact lookups | `ring-1` primary |
+| Embedded | `.input-embedded` | Inside glass containers (chat input, search popover, DM search) | none |
+| Danger | `.input-danger` | Destructive confirmations (delete account) | `ring-2` rose |
+
+**Rule:** No resting border — the sunken `surface-input` background provides differentiation. Override padding/size with utility classes when needed (e.g. `input-standard w-full py-2.5` for taller auth inputs).
+
 ## MISSION
 
 Maintain and extend Backspace as a complete, production-quality application. The core application is fully built and deployed across multiple instances with federation support. Every change must uphold the same standard: no stubs, no TODOs, no shortcuts. A user must always be able to `docker compose up` and have a fully working chat platform.
@@ -112,6 +125,7 @@ Backspace/
 │   │       │   ├── seed.ts
 │   │       │   └── migrate.ts
 │   │       ├── routes/
+│   │       │   ├── admin.ts
 │   │       │   ├── auth.ts
 │   │       │   ├── users.ts
 │   │       │   ├── spaces.ts
@@ -134,7 +148,8 @@ Backspace/
 │   │           ├── snowflake.ts
 │   │           ├── permissions.ts
 │   │           ├── sanitize.ts
-│   │           └── fileCleanup.ts
+│   │           ├── fileCleanup.ts
+│   │           └── storageJanitor.ts
 │   ├── web/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
@@ -252,7 +267,8 @@ Backspace/
 │   │       │   │   │   └── BansPanel.tsx
 │   │       │   │   └── instanceSettingsPanels/
 │   │       │   │       ├── GeneralPanel.tsx
-│   │       │   │       └── StreamingPanel.tsx
+│   │       │   │       ├── StreamingPanel.tsx
+│   │       │   │       └── StoragePanel.tsx
 │   │       │   └── ui/
 │   │       │       ├── Avatar.tsx
 │   │       │       ├── Modal.tsx
@@ -649,6 +665,15 @@ GET    /api/settings/streaming     (auth)                                   → 
 PATCH  /api/settings/streaming     (auth, admin) { maxBitrateKbps?, ... }  → { streamingLimits }
 GET    /api/settings/instance      (auth, admin)                            → { instanceName, registrationOpen, discoveryEnabled }
 PATCH  /api/settings/instance      (auth, admin) { instanceName?, registrationOpen?, discoveryEnabled? } → { settings }
+
+# Admin
+GET    /api/admin/storage/stats    (auth, admin)                           → StorageStats
+GET    /api/admin/storage/orphans  (auth, admin)                           → { orphans: OrphanedFile[] }
+POST   /api/admin/storage/cleanup  (auth, admin) { dryRun?: boolean }      → CleanupResult
+GET    /api/admin/users            (auth, admin) ?q=&page=&pageSize=&showDeleted= → AdminUserListResponse
+PATCH  /api/admin/users/:id/role   (auth, admin) { isAdmin: boolean }      → AdminUser
+POST   /api/admin/users/:id/reset-password (auth, admin)                   → { temporaryPassword }
+DELETE /api/admin/users/:id        (auth, admin)                           → { success }
 
 # Utilities
 GET    /api/utils/metadata         (auth) ?url=                            → { title?, description?, image?, siteName? }

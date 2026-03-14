@@ -22,6 +22,7 @@ import { utilRoutes } from './routes/utils.js';
 import { instanceRoutes } from './routes/instance.js';
 import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
+import { adminRoutes } from './routes/admin.js';
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
 import fs from 'fs';
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
   await app.register(instanceRoutes);
   await app.register(exploreRoutes);
   await app.register(searchRoutes);
+  await app.register(adminRoutes);
   await app.register(registerWebSocket);
 
   app.get('/api/health', async () => {

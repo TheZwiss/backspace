@@ -379,7 +379,7 @@ export function JoinPage() {
                 value={otherDomain}
                 onChange={(e) => setOtherDomain(e.target.value)}
                 placeholder="e.g. my-instance.com"
-                className="flex-1 px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard flex-1 py-2.5"
                 autoFocus
               />
               <button
@@ -406,6 +406,7 @@ export function JoinPage() {
         {/* Phase: connect — password prompt for federation */}
         {phase === 'connect' && (
           <form onSubmit={handleConnect}>
+            <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
             {/* Identity card */}
             <div className="flex items-center gap-3 bg-surface-input rounded-lg p-3 mb-3">
               <Avatar
@@ -431,9 +432,10 @@ export function JoinPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your account password"
-                className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full py-2.5"
                 disabled={isJoining}
                 autoFocus
+                autoComplete="current-password"
               />
               <p className="text-xs text-txt-tertiary mt-1">
                 Your password is verified locally, then used to create or access your account on the remote instance.
@@ -477,8 +479,9 @@ export function JoinPage() {
                   value={fallbackUsername}
                   onChange={(e) => setFallbackUsername(e.target.value)}
                   placeholder="Your username on this instance"
-                  className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                  className="input-standard w-full py-2.5"
                   disabled={isJoining}
+                  autoComplete="username"
                 />
               </div>
               <div>
@@ -488,9 +491,10 @@ export function JoinPage() {
                   value={fallbackPassword}
                   onChange={(e) => setFallbackPassword(e.target.value)}
                   placeholder="Password on the remote instance"
-                  className="w-full px-3 py-2.5 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                  className="input-standard w-full py-2.5"
                   disabled={isJoining}
                   autoFocus
+                  autoComplete="current-password"
                 />
               </div>
             </div>

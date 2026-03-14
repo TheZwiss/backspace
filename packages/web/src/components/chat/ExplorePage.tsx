@@ -83,7 +83,7 @@ export function ExplorePage() {
             placeholder="Search spaces..."
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full bg-surface-base text-txt-primary text-sm px-3 py-1.5 rounded-[4px] outline-none placeholder:text-txt-tertiary/50 focus:ring-1 focus:ring-accent-primary transition-all"
+            className="input-search w-full"
           />
           {searchQuery && (
             <button
@@ -230,10 +230,10 @@ function SpaceCard({
     : null;
 
   const iconUrl = space.icon
-    ? (space.icon.startsWith('http') ? space.icon : `/api/uploads/${space.icon}`)
+    ? (space.icon.startsWith('http') || space.icon.startsWith('/') ? space.icon : `/api/uploads/${space.icon}`)
     : null;
   const bannerUrl = space.banner
-    ? (space.banner.startsWith('http') ? space.banner : `/api/uploads/${space.banner}`)
+    ? (space.banner.startsWith('http') || space.banner.startsWith('/') ? space.banner : `/api/uploads/${space.banner}`)
     : null;
 
   // Extract dominant colors from icon when no banner is set
@@ -412,7 +412,7 @@ function SpaceCard({
               onChange={(e) => setRequestMessage(e.target.value.slice(0, 200))}
               placeholder="Why do you want to join? (optional)"
               rows={2}
-              className="w-full px-3 py-2 bg-surface-input rounded text-sm text-txt-primary outline-none focus:ring-1 focus:ring-accent-primary resize-none placeholder:text-txt-tertiary"
+              className="input-standard w-full resize-none"
             />
             <div className="flex gap-2">
               <button

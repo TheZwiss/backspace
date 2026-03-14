@@ -257,7 +257,7 @@ export function RegisterPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                  className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
+                  className="input-standard w-full py-2.5"
                   autoFocus
                   autoComplete="username"
                 />
@@ -296,7 +296,7 @@ export function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
+                  className="input-standard w-full py-2.5"
                   autoComplete="new-password"
                 />
               </div>
@@ -309,7 +309,7 @@ export function RegisterPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all"
+                  className="input-standard w-full py-2.5"
                   autoComplete="new-password"
                 />
               </div>
@@ -396,7 +396,7 @@ export function RegisterPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={username.trim() || 'Display name'}
-                className="w-full px-3 py-2.5 bg-surface-input border-none rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary transition-all placeholder:text-txt-tertiary"
+                className="input-standard w-full py-2.5"
                 autoComplete="name"
               />
             </div>

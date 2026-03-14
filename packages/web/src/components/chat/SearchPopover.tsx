@@ -172,7 +172,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search messages..."
-            className="flex-1 bg-transparent text-txt-primary text-[14px] placeholder-txt-tertiary outline-none"
+            className="input-embedded flex-1 text-[14px]"
           />
           {query && (
             <button
@@ -210,7 +210,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
                 value={fromFilter}
                 onChange={(e) => setFromFilter(e.target.value)}
                 placeholder="username"
-                className="w-full bg-surface-input rounded px-2 py-1 text-[13px] text-txt-primary placeholder-txt-tertiary outline-none"
+                className="input-search w-full px-2 py-1 text-[13px]"
               />
             </div>
             <div>
@@ -218,7 +218,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
               <select
                 value={hasFilter}
                 onChange={(e) => setHasFilter(e.target.value)}
-                className="w-full bg-surface-input rounded px-2 py-1 text-[13px] text-txt-primary outline-none appearance-none cursor-pointer"
+                className="input-search w-full px-2 py-1 text-[13px] appearance-none cursor-pointer"
               >
                 <option value="">Any</option>
                 <option value="file">File</option>
@@ -232,7 +232,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
                 type="date"
                 value={beforeFilter}
                 onChange={(e) => setBeforeFilter(e.target.value)}
-                className="w-full bg-surface-input rounded px-2 py-1 text-[13px] text-txt-primary outline-none"
+                className="input-search w-full px-2 py-1 text-[13px]"
               />
             </div>
             <div>
@@ -241,7 +241,7 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
                 type="date"
                 value={afterFilter}
                 onChange={(e) => setAfterFilter(e.target.value)}
-                className="w-full bg-surface-input rounded px-2 py-1 text-[13px] text-txt-primary outline-none"
+                className="input-search w-full px-2 py-1 text-[13px]"
               />
             </div>
           </div>

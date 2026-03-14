@@ -268,7 +268,7 @@ function AddFriendTab({
             placeholder="You can add a friend with their username"
             value={addUsername}
             onChange={(e) => setAddUsername(e.target.value)}
-            className="w-full bg-surface-base text-txt-primary px-4 py-3 rounded-lg border border-transparent focus:border-txt-link outline-none transition-all placeholder:text-txt-tertiary/50"
+            className="input-search w-full px-4 py-3 rounded-lg"
           />
           <button
             type="submit"
@@ -301,7 +301,7 @@ function AddFriendTab({
             placeholder="Search people..."
             value={discoverQuery}
             onChange={(e) => handleDiscoverSearch(e.target.value)}
-            className="w-full bg-surface-base text-txt-primary text-sm px-3 py-1.5 rounded-[4px] outline-none placeholder:text-txt-tertiary/50 focus:ring-1 focus:ring-accent-primary transition-all"
+            className="input-search w-full"
           />
           {discoverQuery && (
             <button
@@ -371,10 +371,10 @@ function UserDiscoverCard({
     : null;
 
   const avatarUrl = user.avatar
-    ? (user.avatar.startsWith('http') ? user.avatar : `/api/uploads/${user.avatar}`)
+    ? (user.avatar.startsWith('http') || user.avatar.startsWith('/') ? user.avatar : `/api/uploads/${user.avatar}`)
     : null;
   const bannerUrl = user.banner
-    ? (user.banner.startsWith('http') ? user.banner : `/api/uploads/${user.banner}`)
+    ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : `/api/uploads/${user.banner}`)
     : null;
 
   const handleSendRequest = async () => {

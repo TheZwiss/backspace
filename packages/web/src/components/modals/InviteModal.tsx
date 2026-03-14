@@ -67,7 +67,7 @@ export function InviteModal() {
           type="text"
           value={isLoading ? 'Generating...' : inviteUrl}
           readOnly
-          className="invite-code-input flex-1 px-3 py-2 bg-surface-input rounded text-txt-primary outline-none font-mono text-xs"
+          className="input-standard invite-code-input flex-1 font-mono text-xs"
         />
         <button
           onClick={handleCopy}

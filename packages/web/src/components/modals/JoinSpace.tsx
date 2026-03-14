@@ -146,7 +146,7 @@ export function JoinSpaceModal() {
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
-              className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary outline-none focus:ring-2 focus:ring-accent-primary"
+              className="input-standard w-full"
               placeholder="e.g. abc123 or https://instance.com/join/abc123"
               autoFocus
             />
@@ -177,6 +177,7 @@ export function JoinSpaceModal() {
       {/* Phase: connect — password prompt to connect to remote instance */}
       {phase === 'connect' && (
         <form onSubmit={handleConnect}>
+          <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
           <p className="text-txt-secondary text-sm mb-4">
             Connect to <span className="text-txt-primary font-medium">{hostDisplay}</span> to join this space.
           </p>
@@ -190,9 +191,10 @@ export function JoinSpaceModal() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your account password"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
+                autoComplete="current-password"
               />
               <div className="text-xs text-txt-tertiary mt-1">
                 Your password is verified locally, then used to create or access your account on the remote instance.
@@ -247,8 +249,9 @@ export function JoinSpaceModal() {
                 value={fallbackUsername}
                 onChange={(e) => setFallbackUsername(e.target.value)}
                 placeholder="Your username on this instance"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
+                autoComplete="username"
               />
             </div>
             <div>
@@ -258,9 +261,10 @@ export function JoinSpaceModal() {
                 value={fallbackPassword}
                 onChange={(e) => setFallbackPassword(e.target.value)}
                 placeholder="Password on the remote instance"
-                className="w-full px-3 py-2 bg-surface-input rounded text-txt-primary text-sm outline-none focus:ring-2 focus:ring-accent-primary"
+                className="input-standard w-full"
                 disabled={isLoading}
                 autoFocus
+                autoComplete="current-password"
               />
             </div>
           </div>

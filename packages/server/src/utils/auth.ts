@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { eq } from 'drizzle-orm';
 import { config } from '../config.js';
+import { getDb, schema } from '../db/index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
 const SALT_ROUNDS = 12;
@@ -47,6 +49,17 @@ export async function authenticate(
     (request as FastifyRequest & { userId: string; username: string }).username = payload.username;
   } catch {
     reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
+  }
+}
+
+export async function requireAdmin(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const db = getDb();
+  const caller = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+  if (!caller || caller.isAdmin !== 1) {
+    reply.code(403).send({ error: 'Only instance admins can perform this action', statusCode: 403 });
   }
 }
 

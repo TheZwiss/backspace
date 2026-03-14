@@ -126,7 +126,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
         )
       ) : icon ? (
         <img
-          src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+          src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
           alt={name}
           className="w-full h-full object-cover"
         />
@@ -200,7 +200,7 @@ function MiniSpaceIcon({ space }: { space: TaggedSpace }) {
   if (icon) {
     return (
       <img
-        src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+        src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
         alt=""
         className="w-full h-full object-cover rounded-[3px]"
       />
@@ -482,7 +482,7 @@ function FolderFlyout({
           {isRenaming ? (
             <input
               autoFocus
-              className="w-full bg-surface-input text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary rounded px-1.5 py-0.5 outline-none focus:ring-1 focus:ring-accent-mint/40"
+              className="input-search w-full px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-txt-tertiary"
               defaultValue={folder.name || ''}
               onBlur={(e) => onRename(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -537,7 +537,7 @@ function FolderFlyout({
               <div className="w-8 h-8 rounded-[10px] flex-shrink-0 overflow-hidden flex items-center justify-center" style={grad ? { background: grad.gradient } : undefined}>
                 {icon ? (
                   <img
-                    src={icon.startsWith('http') ? icon : `/api/uploads/${icon}`}
+                    src={icon.startsWith('http') || icon.startsWith('/') ? icon : `/api/uploads/${icon}`}
                     alt=""
                     className="w-full h-full object-cover"
                   />
