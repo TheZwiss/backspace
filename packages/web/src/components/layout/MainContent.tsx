@@ -206,8 +206,6 @@ export function MainContent() {
                 <path d="M14 8.00598C14 10.211 12.206 12.006 10 12.006C7.795 12.006 6 10.211 6 8.00598C6 5.80098 7.794 4.00598 10 4.00598C12.206 4.00598 14 5.80098 14 8.00598ZM2 19.006C2 15.473 5.29 13.006 10 13.006C14.711 13.006 18 15.473 18 19.006V20.006H2V19.006ZM20 20.006H22V19.006C22 16.451 20.178 14.471 17.532 13.471C19.461 14.601 20 16.561 20 19.006V20.006Z" />
               </svg>
             </button>
-            <MemberListToggleButton />
-            <div className="w-[1px] h-5 bg-border-soft mx-1" />
             <button
               ref={searchButtonRef}
               onClick={() => setSearchOpen(!searchOpen)}
@@ -218,6 +216,8 @@ export function MainContent() {
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
+            <div className="w-[1px] h-5 bg-border-soft mx-1" />
+            <MemberListToggleButton />
           </div>
         </div>
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
@@ -347,8 +347,6 @@ export function MainContent() {
               <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
             </svg>
           </button>
-          <MemberListToggleButton />
-          <div className="w-[1px] h-5 bg-border-soft mx-1" />
           <button
             ref={searchButtonRef}
             onClick={() => setSearchOpen(!searchOpen)}
@@ -359,6 +357,8 @@ export function MainContent() {
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
+          <div className="w-[1px] h-5 bg-border-soft mx-1" />
+          <MemberListToggleButton />
         </div>
       </div>
       <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />

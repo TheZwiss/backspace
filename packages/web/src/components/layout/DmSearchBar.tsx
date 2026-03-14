@@ -359,7 +359,7 @@ export function DmSearchBar() {
   return (
     <div ref={anchorRef} className="flex-1 min-w-0">
       {active ? (
-        <div className="flex-1 min-h-8 bg-surface-base rounded-[4px] flex items-center px-2 gap-1.5">
+        <div className="flex-1 min-h-8 bg-surface-input rounded-[4px] flex items-center px-2 gap-1.5 border border-white/[0.06] shadow-input">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
             <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
           </svg>
@@ -376,7 +376,7 @@ export function DmSearchBar() {
       ) : (
         <button
           onClick={open}
-          className="w-full min-h-8 bg-surface-base text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left hover:bg-surface-base transition-colors"
+          className="w-full min-h-8 bg-surface-input text-txt-tertiary text-[13px] font-medium py-[5px] px-2 rounded-[4px] text-left border border-white/[0.06] shadow-input hover:border-white/[0.1] transition-colors"
         >
           Find or start a conversation
         </button>
