@@ -40,8 +40,7 @@ export function RegisterPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [retryAfter, setRetryAfter] = useState(0);
 
-  const register = useAuthStore((s) => s.register);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const initSession = useAuthStore((s) => s.initSession);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
@@ -192,17 +191,27 @@ export function RegisterPage() {
     try {
       const dn = skip ? undefined : displayName.trim() || undefined;
       const ac = skip ? undefined : avatarColor;
-      await register(username.trim(), password, dn, ac);
 
-      // Upload avatar if chosen (non-fatal — account already created)
+      // Step 1: Register via API — store token in localStorage for API auth,
+      // but NOT in Zustand yet so AuthRedirect doesn't fire prematurely
+      const response = await api.auth.register({
+        username: username.trim(), password, displayName: dn, avatarColor: ac,
+      });
+      localStorage.setItem('backspace_token', response.token);
+
+      // Step 2: Upload avatar while still on the register page
+      let finalUser = response.user;
       if (!skip && avatarFile) {
         try {
           const attachment = await api.uploads.upload(avatarFile);
-          await updateProfile({ avatar: attachment.filename });
+          finalUser = await api.users.update({ avatar: attachment.filename });
         } catch {
           // Avatar upload failed — user can set it later in settings
         }
       }
+
+      // Step 3: Activate session — sets Zustand token, triggers AuthRedirect
+      initSession(response.token, finalUser);
 
       if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
         navigate(redirect);

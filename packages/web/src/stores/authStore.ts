@@ -15,6 +15,7 @@ interface AuthState {
   user: User | null;
   isLoading: boolean;
   error: string | null;
+  initSession: (token: string, user: User) => void;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, displayName?: string, avatarColor?: string) => Promise<void>;
   logout: () => void;
@@ -42,15 +43,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   error: null,
 
+  initSession: (token: string, user: User) => {
+    resetUserStores();
+    localStorage.setItem('backspace_token', token);
+    set({ token, user, isLoading: false });
+    useInstanceStore.getState().autoConnectAll().catch(() => {});
+  },
+
   login: async (username: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.login({ username, password });
-      resetUserStores();
-      localStorage.setItem('backspace_token', response.token);
-      set({ token: response.token, user: response.user, isLoading: false });
-      // Auto-connect to remote instances (fire-and-forget)
-      useInstanceStore.getState().autoConnectAll().catch(() => {});
+      get().initSession(response.token, response.user);
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Login failed' });
       throw err;
@@ -61,11 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.auth.register({ username, password, displayName, avatarColor });
-      resetUserStores();
-      localStorage.setItem('backspace_token', response.token);
-      set({ token: response.token, user: response.user, isLoading: false });
-      // Auto-connect to remote instances (fire-and-forget)
-      useInstanceStore.getState().autoConnectAll().catch(() => {});
+      get().initSession(response.token, response.user);
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Registration failed' });
       throw err;
