@@ -39,7 +39,7 @@ function formatHoverTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|media\.klipy\.com)\/.+$/;
+const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|static\.klipy\.com)\/.+$/;
 
 function isGifOnlyMessage(content: string | null): boolean {
   if (!content) return false;
