@@ -47,8 +47,6 @@ import type {
   SpaceFolder,
   InvitePreview,
   GifResult,
-  StickerPack,
-  Sticker,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -196,16 +194,6 @@ export class BackspaceApiClient {
     enabled: () => Promise<{ enabled: boolean }>;
   };
 
-  readonly stickers: {
-    getPacks: (spaceId: string) => Promise<{ packs: StickerPack[] }>;
-    createPack: (spaceId: string, data: { name: string; description?: string }) => Promise<StickerPack>;
-    updatePack: (spaceId: string, packId: string, data: { name?: string; description?: string }) => Promise<StickerPack>;
-    deletePack: (spaceId: string, packId: string) => Promise<{ success: boolean }>;
-    uploadSticker: (spaceId: string, packId: string, file: File, name: string, tags?: string) => Promise<Sticker>;
-    deleteSticker: (stickerId: string) => Promise<{ success: boolean }>;
-    myStickers: () => Promise<{ packs: StickerPack[] }>;
-  };
-
   readonly admin: {
     storageStats: () => Promise<StorageStats>;
     storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
@@ -216,7 +204,7 @@ export class BackspaceApiClient {
     deleteUser: (userId: string) => Promise<{ success: boolean }>;
   };
 
-  constructor(baseUrl: string, getToken: () => string | null) {
+  constructor(baseUrl: string, getToken: () => string | null, onUnauthorized?: () => void) {
     async function request<T>(
       method: string,
       path: string,
@@ -236,13 +224,30 @@ export class BackspaceApiClient {
         }
       }
 
-      const response = await fetch(`${baseUrl}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}${path}`, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw new Error('Request timed out');
+        }
+        throw err;
+      }
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 401 && requireAuth && onUnauthorized) {
+          onUnauthorized();
+        }
         if (response.status === 429) {
           const body = await response.json().catch(() => ({}));
           const retryAfter = (body as { retryAfter?: number }).retryAfter
@@ -266,13 +271,30 @@ export class BackspaceApiClient {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${baseUrl}/uploads`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/uploads`, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: controller.signal,
+        });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw new Error('Request timed out');
+        }
+        throw err;
+      }
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
+        if (response.status === 401 && onUnauthorized) {
+          onUnauthorized();
+        }
         if (response.status === 429) {
           const body = await response.json().catch(() => ({}));
           const retryAfter = (body as { retryAfter?: number }).retryAfter
@@ -540,42 +562,6 @@ export class BackspaceApiClient {
       enabled: () => request<{ enabled: boolean }>('GET', '/gif/enabled'),
     };
 
-    this.stickers = {
-      getPacks: (spaceId: string) =>
-        request<{ packs: StickerPack[] }>('GET', `/spaces/${spaceId}/sticker-packs`),
-      createPack: (spaceId: string, data: { name: string; description?: string }) =>
-        request<StickerPack>('POST', `/spaces/${spaceId}/sticker-packs`, data),
-      updatePack: (spaceId: string, packId: string, data: { name?: string; description?: string }) =>
-        request<StickerPack>('PATCH', `/spaces/${spaceId}/sticker-packs/${packId}`, data),
-      deletePack: (spaceId: string, packId: string) =>
-        request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/sticker-packs/${packId}`),
-      uploadSticker: async (spaceId: string, packId: string, file: File, name: string, tags = '') => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('name', name);
-        formData.append('tags', tags);
-
-        const token = getToken();
-        const headers: Record<string, string> = {};
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
-        const response = await fetch(`${baseUrl}/spaces/${spaceId}/sticker-packs/${packId}/stickers`, {
-          method: 'POST',
-          headers,
-          body: formData,
-        });
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-          throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
-        }
-        return response.json() as Promise<Sticker>;
-      },
-      deleteSticker: (stickerId: string) =>
-        request<{ success: boolean }>('DELETE', `/stickers/${stickerId}`),
-      myStickers: () =>
-        request<{ packs: StickerPack[] }>('GET', '/users/@me/stickers'),
-    };
-
     this.admin = {
       storageStats: () => request<StorageStats>('GET', '/admin/storage/stats'),
       storageOrphans: () => request<{ orphans: OrphanedFile[] }>('GET', '/admin/storage/orphans'),
@@ -598,9 +584,23 @@ export class BackspaceApiClient {
   }
 }
 
-export const api = new BackspaceApiClient('/api', () => localStorage.getItem('backspace_token'));
+function handleUnauthorized(): void {
+  localStorage.removeItem('backspace_token');
+  if (
+    !window.location.pathname.startsWith('/login') &&
+    !window.location.pathname.startsWith('/register')
+  ) {
+    window.location.href = '/login';
+  }
+}
 
-export function createApiClient(origin: string, getToken: () => string | null): BackspaceApiClient {
+export const api = new BackspaceApiClient(
+  '/api',
+  () => localStorage.getItem('backspace_token'),
+  handleUnauthorized,
+);
+
+export function createApiClient(origin: string, getToken: () => string | null, onUnauthorized?: () => void): BackspaceApiClient {
   const baseUrl = origin ? `${origin}/api` : '/api';
-  return new BackspaceApiClient(baseUrl, getToken);
+  return new BackspaceApiClient(baseUrl, getToken, onUnauthorized);
 }

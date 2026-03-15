@@ -27,7 +27,7 @@ COPY packages/server/ packages/server/
 COPY packages/web/ packages/web/
 
 # Build the web frontend
-RUN cd packages/web && pnpm run build
+RUN pnpm --filter @backspace/web build
 
 # ============================================================
 # Stage 2: Production runtime

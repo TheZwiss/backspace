@@ -38,7 +38,6 @@ interface ChatState {
   clearAllMessages: () => void;
   loadMoreMessages: (channelId: string) => Promise<boolean>;
   sendMessage: (channelId: string, content: string, attachmentIds?: string[]) => Promise<void>;
-  sendStickerMessage: (channelId: string, stickerId: string) => Promise<void>;
   editMessage: (messageId: string, content: string, channelId: string) => Promise<void>;
   deleteMessage: (messageId: string, channelId: string) => Promise<void>;
   addMessage: (channelId: string, message: MessageWithUser) => void;
@@ -286,45 +285,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Real message will arrive via WebSocket and replace the temp one
     } catch {
       // Rollback: remove the optimistic message on failure
-      get().removeMessage(tempId, channelId);
-    }
-  },
-
-  sendStickerMessage: async (channelId: string, stickerId: string) => {
-    const isDm = isDmChannel(channelId);
-    const currentUser = useAuthStore.getState().user;
-    const origin = getChannelOrigin(channelId);
-    const client = getApiForOrigin(origin);
-
-    // Optimistic message
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    if (currentUser) {
-      const optimisticMessage: MessageWithUser = {
-        id: tempId,
-        channelId: isDm ? '' : channelId,
-        userId: currentUser.id,
-        content: null,
-        replyToId: null,
-        editedAt: null,
-        createdAt: Date.now(),
-        user: currentUser,
-        attachments: [],
-        reactions: [],
-        stickerId,
-      };
-      if (isDm) {
-        (optimisticMessage as any).dmChannelId = channelId;
-      }
-      get().addMessage(channelId, optimisticMessage);
-    }
-
-    try {
-      if (isDm) {
-        await client.dm.sendMessage(channelId, { stickerId });
-      } else {
-        await client.channels.sendMessage(channelId, { content: '', stickerId });
-      }
-    } catch {
       get().removeMessage(tempId, channelId);
     }
   },

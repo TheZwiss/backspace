@@ -192,8 +192,6 @@ export interface MessageWithUser extends Message {
   attachments: Attachment[];
   reactions: Reaction[];
   replyTo?: MessageWithUser | null;
-  stickerId?: string | null;
-  sticker?: Sticker | null;
 }
 
 // ─── Reaction Types ────────────────────────────────────────────────────────
@@ -257,8 +255,6 @@ export interface DmMessageWithUser extends DmMessage {
   attachments: Attachment[];
   reactions: Reaction[];
   replyTo?: DmMessageWithUser | null;
-  stickerId?: string | null;
-  sticker?: Sticker | null;
 }
 
 // ─── WebSocket Event Types ──────────────────────────────────────────────────
@@ -342,11 +338,6 @@ export type ServerEvent =
   | { type: 'category_deleted'; categoryId: string; spaceId: string }
   | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
   | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }
-  | { type: 'sticker_pack_created'; spaceId: string; pack: StickerPack }
-  | { type: 'sticker_pack_updated'; spaceId: string; pack: StickerPack }
-  | { type: 'sticker_pack_deleted'; spaceId: string; packId: string }
-  | { type: 'sticker_created'; spaceId: string; sticker: Sticker }
-  | { type: 'sticker_deleted'; spaceId: string; stickerId: string }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -426,7 +417,6 @@ export interface CreateMessageRequest {
   content: string;
   attachments?: string[];
   replyToId?: string;
-  stickerId?: string;
 }
 
 export interface UpdateMessageRequest {
@@ -458,7 +448,6 @@ export interface CreateDmMessageRequest {
   content?: string;
   attachments?: string[];
   replyToId?: string;
-  stickerId?: string;
 }
 
 export interface PaginatedQuery {
@@ -537,34 +526,6 @@ export interface GifResult {
   url: string;
   width: number;
   height: number;
-}
-
-// ─── Sticker Types ──────────────────────────────────────────────────────────
-
-export interface Sticker {
-  id: string;
-  packId: string;
-  spaceId: string;
-  name: string;
-  tags: string;
-  filename: string;
-  mimetype: string;
-  size: number;
-  width: number | null;
-  height: number | null;
-  uploadedBy: string;
-  createdAt: number;
-}
-
-export interface StickerPack {
-  id: string;
-  spaceId: string;
-  name: string;
-  description: string | null;
-  createdBy: string;
-  createdAt: number;
-  stickers: Sticker[];
-  spaceName?: string;
 }
 
 // ─── Instance Settings Types ────────────────────────────────────────────────

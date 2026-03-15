@@ -408,10 +408,37 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   removeSpace: (spaceId: string) => {
-    set((state) => ({
-      spaces: state.spaces.filter(s => s.id !== spaceId),
-      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
-    }));
+    set((state) => {
+      // Collect channel IDs belonging to this space for map cleanup
+      const channelIdsToRemove = new Set<string>();
+      for (const [channelId, sid] of state.channelToSpaceMap) {
+        if (sid === spaceId) channelIdsToRemove.add(channelId);
+      }
+
+      const channelToSpaceMap = new Map(state.channelToSpaceMap);
+      const channelPermissions = new Map(state.channelPermissions);
+      const channelOriginMap = new Map(state.channelOriginMap);
+      const channelLastMessageIds = new Map(state.channelLastMessageIds);
+      const spacePermissions = new Map(state.spacePermissions);
+
+      for (const channelId of channelIdsToRemove) {
+        channelToSpaceMap.delete(channelId);
+        channelPermissions.delete(channelId);
+        channelOriginMap.delete(channelId);
+        channelLastMessageIds.delete(channelId);
+      }
+      spacePermissions.delete(spaceId);
+
+      return {
+        spaces: state.spaces.filter(s => s.id !== spaceId),
+        currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+        channelToSpaceMap,
+        channelPermissions,
+        channelOriginMap,
+        channelLastMessageIds,
+        spacePermissions,
+      };
+    });
   },
 
   updateMemberPresence: (userId: string, status: string) => {

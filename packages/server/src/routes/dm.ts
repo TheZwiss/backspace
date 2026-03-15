@@ -68,29 +68,6 @@ export function buildDmMessageWithUser(
   reactions: Reaction[] = [],
   replyTo: DmMessageWithUser | null = null,
 ): DmMessageWithUser {
-  const stickerId = (message as any).stickerId ?? null;
-  // Lazy import to avoid circular dependency
-  let sticker = null;
-  if (stickerId) {
-    const db = getDb();
-    const row = db.select().from(schema.stickers).where(eq(schema.stickers.id, stickerId)).get();
-    if (row) {
-      sticker = {
-        id: row.id,
-        packId: row.packId,
-        spaceId: row.spaceId,
-        name: row.name,
-        tags: row.tags ?? '',
-        filename: row.filename,
-        mimetype: row.mimetype,
-        size: row.size,
-        width: row.width,
-        height: row.height,
-        uploadedBy: row.uploadedBy,
-        createdAt: row.createdAt,
-      };
-    }
-  }
   return {
     id: message.id,
     dmChannelId: message.dmChannelId,
@@ -112,8 +89,6 @@ export function buildDmMessageWithUser(
     })),
     reactions,
     replyTo,
-    stickerId,
-    sticker,
   };
 }
 
@@ -906,7 +881,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     },
   }, async (request, reply) => {
     const { id } = request.params;
-    const { content, attachments: attachmentIds, replyToId, stickerId } = request.body;
+    const { content, attachments: attachmentIds, replyToId } = request.body;
 
     if (!isDmMember(id, request.userId)) {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
@@ -914,22 +889,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const hasContent = content && typeof content === 'string' && content.trim().length > 0;
     const hasAttachments = attachmentIds && attachmentIds.length > 0;
-    const hasSticker = stickerId && typeof stickerId === 'string';
 
-    if (!hasContent && !hasAttachments && !hasSticker) {
-      return reply.code(400).send({ error: 'Message must have content, attachments, or a sticker', statusCode: 400 });
+    if (!hasContent && !hasAttachments) {
+      return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
     }
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
       return reply.code(400).send({ error: `Message content must be ${MAX_MESSAGE_LENGTH} characters or less`, statusCode: 400 });
-    }
-
-    // Validate sticker exists if provided
-    if (hasSticker) {
-      const sticker = getDb().select().from(schema.stickers).where(eq(schema.stickers.id, stickerId!)).get();
-      if (!sticker) {
-        return reply.code(400).send({ error: 'Sticker not found', statusCode: 400 });
-      }
     }
 
     const db = getDb();
@@ -957,7 +923,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         userId: request.userId,
         replyToId: replyToId || null,
         content: content?.trim() || null,
-        stickerId: stickerId || null,
         createdAt: now,
       }).run();
 

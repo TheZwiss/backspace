@@ -6,15 +6,19 @@ import './styles/globals.css';
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { hasError: boolean; error: Error | null }
+  { hasError: boolean; error: Error | null; showStack: boolean }
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, showStack: false };
   }
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, errorInfo.componentStack);
   }
 
   render() {
@@ -25,28 +29,72 @@ class ErrorBoundary extends React.Component<
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#232428',
-          color: '#ffffff',
-          fontFamily: 'sans-serif',
+          backgroundColor: '#0b0b10',
+          color: '#efefef',
+          fontFamily: "'DM Sans', sans-serif",
           flexDirection: 'column',
           gap: '16px',
+          padding: '24px',
         }}>
           <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Something went wrong</h1>
-          <p style={{ color: '#abacb2' }}>{this.state.error?.message}</p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 24px',
-              backgroundColor: '#5865f2',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '14px',
-            }}
-          >
-            Reload
-          </button>
+          <p style={{ color: '#a0a0aa', maxWidth: '480px', textAlign: 'center' }}>{this.state.error?.message}</p>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              style={{
+                padding: '8px 24px',
+                backgroundColor: '#7c6cf6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '8px 24px',
+                backgroundColor: 'transparent',
+                color: '#a0a0aa',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Reload Page
+            </button>
+          </div>
+          {this.state.error?.stack && (
+            <details
+              open={this.state.showStack}
+              onToggle={(e) => this.setState({ showStack: (e.target as HTMLDetailsElement).open })}
+              style={{ maxWidth: '600px', width: '100%', marginTop: '8px' }}
+            >
+              <summary style={{ color: '#a0a0aa', cursor: 'pointer', fontSize: '13px' }}>
+                Error details
+              </summary>
+              <pre style={{
+                marginTop: '8px',
+                padding: '12px',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                borderRadius: '8px',
+                fontSize: '11px',
+                color: '#a0a0aa',
+                overflow: 'auto',
+                maxHeight: '200px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}>
+                {this.state.error.stack}
+              </pre>
+            </details>
+          )}
         </div>
       );
     }

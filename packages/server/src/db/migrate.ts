@@ -153,18 +153,6 @@ export function runMigrations(db: Database.Database): void {
     },
     // gif_api_key is handled by migrateRenameGifApiKey() — do NOT add it here
     // or it will race with the tenor_api_key → gif_api_key rename migration
-    {
-      name: 'messages',
-      columns: [
-        { name: 'sticker_id', type: 'TEXT' },
-      ]
-    },
-    {
-      name: 'dm_messages',
-      columns: [
-        { name: 'sticker_id', type: 'TEXT' },
-      ]
-    }
   ];
 
   for (const table of tables) {
@@ -329,35 +317,6 @@ export function runMigrations(db: Database.Database): void {
   // ─── Add FK constraint to dm_messages.reply_to_id ────────────────────────
   migrateDmMessagesReplyToFk(db);
 
-  // ─── Ensure sticker tables exist ─────────────────────────────────────────
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS sticker_packs (
-      id TEXT PRIMARY KEY,
-      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      description TEXT,
-      created_by TEXT NOT NULL REFERENCES users(id),
-      created_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS stickers (
-      id TEXT PRIMARY KEY,
-      pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
-      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      tags TEXT DEFAULT '',
-      filename TEXT NOT NULL,
-      mimetype TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      width INTEGER,
-      height INTEGER,
-      uploaded_by TEXT NOT NULL REFERENCES users(id),
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_sticker_packs_space_id ON sticker_packs(space_id);
-    CREATE INDEX IF NOT EXISTS idx_stickers_pack_id ON stickers(pack_id);
-    CREATE INDEX IF NOT EXISTS idx_stickers_space_id ON stickers(space_id);
-  `);
-
   // ─── Rename tenor_api_key → gif_api_key (Klipy pivot) ────────────────────
   migrateRenameGifApiKey(db);
 
@@ -380,46 +339,22 @@ function migrateDmMessagesReplyToFk(db: Database.Database): void {
 
   console.log('Migrating: Adding FK constraint to dm_messages.reply_to_id...');
 
-  // Check if sticker_id column exists (may have been added by column migration)
-  const dmCols = db.pragma('table_info(dm_messages)') as { name: string }[];
-  const hasStickerId = dmCols.some(c => c.name === 'sticker_id');
-
-  if (hasStickerId) {
-    db.exec(`
-      CREATE TABLE dm_messages_new (
-        id TEXT PRIMARY KEY,
-        dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
-        content TEXT,
-        sticker_id TEXT,
-        edited_at INTEGER,
-        created_at INTEGER NOT NULL
-      );
-      INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, sticker_id, edited_at, created_at FROM dm_messages;
-      DROP TABLE dm_messages;
-      ALTER TABLE dm_messages_new RENAME TO dm_messages;
-      CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
-      CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
-    `);
-  } else {
-    db.exec(`
-      CREATE TABLE dm_messages_new (
-        id TEXT PRIMARY KEY,
-        dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
-        user_id TEXT NOT NULL REFERENCES users(id),
-        reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
-        content TEXT,
-        edited_at INTEGER,
-        created_at INTEGER NOT NULL
-      );
-      INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
-      DROP TABLE dm_messages;
-      ALTER TABLE dm_messages_new RENAME TO dm_messages;
-      CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
-      CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
-    `);
-  }
+  db.exec(`
+    CREATE TABLE dm_messages_new (
+      id TEXT PRIMARY KEY,
+      dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
+      content TEXT,
+      edited_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
+    DROP TABLE dm_messages;
+    ALTER TABLE dm_messages_new RENAME TO dm_messages;
+    CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
+    CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
+  `);
 }
 
 /** Ensure gif_api_key column exists in instance_settings, migrating from tenor_api_key if present */

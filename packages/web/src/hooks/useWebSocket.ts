@@ -333,6 +333,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         addVoiceUser(event.channelId, event.userId);
       } else {
         removeVoiceUser(event.channelId, event.userId);
+        clearVoiceUserStatus(event.userId);
       }
       break;
 
@@ -752,20 +753,6 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'join_request_declined': {
       if (!isHome) break;
       console.log('[WebSocket] Join request declined for space', event.request.spaceId);
-      break;
-    }
-
-    // ─── Sticker events (all origins) ────────────────────────────────────
-
-    case 'sticker_pack_created':
-    case 'sticker_pack_updated':
-    case 'sticker_pack_deleted':
-    case 'sticker_created':
-    case 'sticker_deleted': {
-      // Invalidate the sticker picker cache so next open fetches fresh data
-      import('../components/chat/StickerPicker').then(({ invalidateStickerCache }) => {
-        invalidateStickerCache();
-      });
       break;
     }
 

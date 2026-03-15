@@ -10,17 +10,17 @@ mac:
   target:
     - dmg
     - zip
-  icon: null
+  icon: build/icon.icns
 win:
   target:
     - nsis
-  icon: null
+  icon: build/icon.ico
 linux:
   target:
     - AppImage
     - deb
   category: Network
-  icon: null
+  icon: build/icons
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

@@ -8,7 +8,6 @@ import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { hydrateSticker } from '../routes/messages.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -100,7 +99,6 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     }
   }
 
-  const stickerId = (message as any).stickerId ?? null;
   return {
     id: message.id,
     channelId: message.channelId,
@@ -113,8 +111,6 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     attachments,
     reactions,
     replyTo,
-    stickerId,
-    sticker: hydrateSticker(stickerId),
   };
 }
 

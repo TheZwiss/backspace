@@ -28,7 +28,7 @@ export function EmojiPicker({ onEmojiSelect }: EmojiPickerProps) {
         skinTonePosition="search"
         previewPosition="none"
         navPosition="bottom"
-        perLine={9}
+        perLine={10}
         maxFrequentRows={2}
         emojiSize={24}
         emojiButtonSize={32}
