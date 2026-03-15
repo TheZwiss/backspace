@@ -46,6 +46,9 @@ import type {
   SpaceLayoutItem,
   SpaceFolder,
   InvitePreview,
+  GifResult,
+  StickerPack,
+  Sticker,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -185,6 +188,22 @@ export class BackspaceApiClient {
     getJoinRequests: (spaceId: string, status?: string) => Promise<{ requests: JoinRequest[] }>;
     decideJoinRequest: (spaceId: string, requestId: string, action: 'accept' | 'decline') => Promise<JoinRequest>;
     myJoinRequests: (status?: string) => Promise<{ requests: JoinRequest[] }>;
+  };
+
+  readonly gif: {
+    trending: (limit?: number, pos?: string) => Promise<{ results: GifResult[]; next: string }>;
+    search: (q: string, limit?: number, pos?: string) => Promise<{ results: GifResult[]; next: string }>;
+    enabled: () => Promise<{ enabled: boolean }>;
+  };
+
+  readonly stickers: {
+    getPacks: (spaceId: string) => Promise<{ packs: StickerPack[] }>;
+    createPack: (spaceId: string, data: { name: string; description?: string }) => Promise<StickerPack>;
+    updatePack: (spaceId: string, packId: string, data: { name?: string; description?: string }) => Promise<StickerPack>;
+    deletePack: (spaceId: string, packId: string) => Promise<{ success: boolean }>;
+    uploadSticker: (spaceId: string, packId: string, file: File, name: string, tags?: string) => Promise<Sticker>;
+    deleteSticker: (stickerId: string) => Promise<{ success: boolean }>;
+    myStickers: () => Promise<{ packs: StickerPack[] }>;
   };
 
   readonly admin: {
@@ -502,6 +521,59 @@ export class BackspaceApiClient {
         if (status) params.set('status', status);
         return request<{ requests: JoinRequest[] }>('GET', `/users/@me/join-requests?${params}`);
       },
+    };
+
+    this.gif = {
+      trending: (limit = 30, pos?: string) => {
+        const params = new URLSearchParams();
+        params.set('limit', String(limit));
+        if (pos) params.set('pos', pos);
+        return request<{ results: GifResult[]; next: string }>('GET', `/gif/trending?${params}`);
+      },
+      search: (q: string, limit = 30, pos?: string) => {
+        const params = new URLSearchParams();
+        params.set('q', q);
+        params.set('limit', String(limit));
+        if (pos) params.set('pos', pos);
+        return request<{ results: GifResult[]; next: string }>('GET', `/gif/search?${params}`);
+      },
+      enabled: () => request<{ enabled: boolean }>('GET', '/gif/enabled'),
+    };
+
+    this.stickers = {
+      getPacks: (spaceId: string) =>
+        request<{ packs: StickerPack[] }>('GET', `/spaces/${spaceId}/sticker-packs`),
+      createPack: (spaceId: string, data: { name: string; description?: string }) =>
+        request<StickerPack>('POST', `/spaces/${spaceId}/sticker-packs`, data),
+      updatePack: (spaceId: string, packId: string, data: { name?: string; description?: string }) =>
+        request<StickerPack>('PATCH', `/spaces/${spaceId}/sticker-packs/${packId}`, data),
+      deletePack: (spaceId: string, packId: string) =>
+        request<{ success: boolean }>('DELETE', `/spaces/${spaceId}/sticker-packs/${packId}`),
+      uploadSticker: async (spaceId: string, packId: string, file: File, name: string, tags = '') => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('name', name);
+        formData.append('tags', tags);
+
+        const token = getToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const response = await fetch(`${baseUrl}/spaces/${spaceId}/sticker-packs/${packId}/stickers`, {
+          method: 'POST',
+          headers,
+          body: formData,
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+          throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
+        }
+        return response.json() as Promise<Sticker>;
+      },
+      deleteSticker: (stickerId: string) =>
+        request<{ success: boolean }>('DELETE', `/stickers/${stickerId}`),
+      myStickers: () =>
+        request<{ packs: StickerPack[] }>('GET', '/users/@me/stickers'),
     };
 
     this.admin = {

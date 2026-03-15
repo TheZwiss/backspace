@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { MessageWithUser } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Avatar } from '../ui/Avatar';
@@ -9,6 +10,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { Embed } from './Embed';
 import { Username } from '../ui/Username';
+import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
 
@@ -37,10 +39,21 @@ function formatHoverTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|media\.klipy\.com)\/.+$/;
+
+function isGifOnlyMessage(content: string | null): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  return GIF_URL_REGEX.test(trimmed);
+}
+
 export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
+  const reactionPickerRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
   const editMessage = useChatStore((s) => s.editMessage);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
@@ -83,8 +96,39 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     return acc;
   }, {} as Record<string, { count: number; me: boolean }>);
 
+  const isGifOnly = isGifOnlyMessage(message.content);
+  const isSticker = !!(message.stickerId || (message as any).sticker);
+  const stickerData = (message as any).sticker ?? null;
+
   const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const firstUrl = message.content?.match(urlRegex)?.[0];
+  const firstUrl = isGifOnly ? null : message.content?.match(urlRegex)?.[0];
+
+  // Close reaction picker on outside click
+  useEffect(() => {
+    if (!showReactionPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (reactionPickerRef.current?.contains(e.target as Node)) return;
+      if (reactionPickerBtnRef.current?.contains(e.target as Node)) return;
+      setShowReactionPicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showReactionPicker]);
+
+  // Close reaction picker on Escape
+  useEffect(() => {
+    if (!showReactionPicker) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowReactionPicker(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [showReactionPicker]);
+
+  const handleReactionEmojiSelect = useCallback((emoji: { native: string }) => {
+    addReaction(message.id, emoji.native);
+    setShowReactionPicker(false);
+  }, [addReaction, message.id]);
 
   const handleUsernameClick = (e: React.MouseEvent) => {
     if (!message.user) return;
@@ -245,17 +289,42 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-1">
-            {message.content && (
-              <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
-                <MarkdownRenderer content={message.content} />
-                {message.editedAt && (
-                  <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">(edited)</span>
-                )}
+            {/* Sticker rendering */}
+            {isSticker && stickerData ? (
+              <div className="mt-1" title={`${stickerData.name}`}>
+                <img
+                  src={stickerData.filename.startsWith('http') || stickerData.filename.startsWith('/') ? stickerData.filename : `/api/uploads/${stickerData.filename}`}
+                  alt={stickerData.name}
+                  className="max-w-[160px] max-h-[160px] object-contain"
+                  loading="lazy"
+                />
               </div>
-            )}
+            ) : isSticker ? (
+              <div className="mt-1 text-txt-tertiary text-sm italic">Sticker unavailable</div>
+            ) : isGifOnly ? (
+              <div className="mt-1 max-w-[350px] rounded-lg overflow-hidden">
+                <img
+                  src={message.content!.trim()}
+                  alt="GIF"
+                  className="max-w-full max-h-[350px] object-contain rounded-lg"
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <>
+                {message.content && (
+                  <div className="text-txt-message text-[15px] leading-[1.5] break-words whitespace-pre-wrap selection:bg-accent-primary/30">
+                    <MarkdownRenderer content={message.content} />
+                    {message.editedAt && (
+                      <span className="text-[10px] text-txt-tertiary ml-1 select-none font-medium">(edited)</span>
+                    )}
+                  </div>
+                )}
 
-            {/* Embeds */}
-            {!isEditing && firstUrl && <Embed url={firstUrl} />}
+                {/* Embeds */}
+                {!isEditing && firstUrl && <Embed url={firstUrl} />}
+              </>
+            )}
 
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
@@ -327,8 +396,28 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
         )}
       </div>
 
+      {/* Reaction emoji picker */}
+      {showReactionPicker && canAddReactions && reactionPickerBtnRef.current && createPortal(
+        <div
+          ref={reactionPickerRef}
+          className="fixed z-[300] animate-slide-up"
+          style={{
+            top: reactionPickerBtnRef.current.getBoundingClientRect().bottom + 8,
+            left: Math.min(
+              reactionPickerBtnRef.current.getBoundingClientRect().left,
+              window.innerWidth - 360,
+            ),
+          }}
+        >
+          <div className="glass rounded-xl overflow-hidden">
+            <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} />
+          </div>
+        </div>,
+        document.body,
+      )}
+
       {/* Action buttons on hover */}
-      {isHovered && !isEditing && (
+      {(isHovered || showReactionPicker) && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
@@ -341,6 +430,18 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                   {emoji}
                 </button>
               ))}
+              <button
+                ref={reactionPickerBtnRef}
+                onClick={() => setShowReactionPicker((v) => !v)}
+                className={`p-1 hover:bg-interactive-hover rounded transition-colors text-[14px] leading-none ${
+                  showReactionPicker ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+                }`}
+                title="Add reaction"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm1-13h-2v4H7v2h4v4h2v-4h4v-2h-4V7z" />
+                </svg>
+              </button>
             </div>
           )}
           <button

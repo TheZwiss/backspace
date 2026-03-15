@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@backspace/shared": "workspace:*",
+    "@emoji-mart/data": "^1.2.1",
+    "@emoji-mart/react": "^1.1.1",
     "@livekit/components-react": "^2.7.4",
     "@sapphi-red/web-noise-suppressor": "^0.3.5",
     "livekit-client": "^2.9.0",

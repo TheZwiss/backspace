@@ -6,10 +6,12 @@ interface SettingsState {
   streamingLimits: InstanceStreamingLimits | null;
   instanceSettings: InstanceAdminSettings | null;
   isAdmin: boolean;
+  gifEnabled: boolean;
   fetchStreamingLimits: () => Promise<void>;
   updateStreamingLimits: (limits: Partial<InstanceStreamingLimits>) => Promise<void>;
   fetchInstanceSettings: () => Promise<void>;
   updateInstanceSettings: (data: Partial<InstanceAdminSettings>) => Promise<void>;
+  fetchGifEnabled: () => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
 }
 
@@ -32,6 +34,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   streamingLimits: null,
   instanceSettings: null,
   isAdmin: false,
+  gifEnabled: false,
 
   fetchStreamingLimits: async () => {
     try {
@@ -67,6 +70,15 @@ export const useSettingsStore = create<SettingsState>((set) => ({
           ? { ...state.streamingLimits, discoveryEnabled: updated.discoveryEnabled }
           : state.streamingLimits,
       }));
+    }
+  },
+
+  fetchGifEnabled: async () => {
+    try {
+      const { enabled } = await api.gif.enabled();
+      set({ gifEnabled: enabled });
+    } catch {
+      set({ gifEnabled: false });
     }
   },
 

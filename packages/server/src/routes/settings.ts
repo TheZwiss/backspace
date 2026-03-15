@@ -131,10 +131,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Instance settings not initialized', statusCode: 500 });
     }
 
+    const gifKey = row.gifApiKey as string | null;
     const response: InstanceAdminSettings = {
       instanceName: row.instanceName ?? 'Backspace',
       registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
       discoveryEnabled: row.discoveryEnabled === 1,
+      gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
+      gifEnabled: !!gifKey,
     };
 
     return reply.code(200).send(response);
@@ -145,7 +148,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     const body = request.body;
-    const updateData: Record<string, number | string> = { updatedAt: Date.now() };
+    const updateData: Record<string, number | string | null> = { updatedAt: Date.now() };
 
     if (body.instanceName !== undefined) {
       if (typeof body.instanceName !== 'string' || body.instanceName.trim().length === 0 || body.instanceName.trim().length > 32) {
@@ -162,6 +165,17 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
     }
 
+    if (body.gifApiKey !== undefined) {
+      // Skip masked placeholder values — the GET endpoint returns '****xxxx' for security,
+      // so if the client sends that back unchanged, don't corrupt the real key
+      if (typeof body.gifApiKey === 'string' && body.gifApiKey.startsWith('****')) {
+        // Masked value — ignore, keep existing key
+      } else {
+        // Allow empty string to clear the key
+        updateData.gifApiKey = body.gifApiKey ? body.gifApiKey.trim() : null;
+      }
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
@@ -169,10 +183,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to read updated settings', statusCode: 500 });
     }
 
+    const updatedGifKey = updatedRow.gifApiKey as string | null;
     const response: InstanceAdminSettings = {
       instanceName: updatedRow.instanceName ?? 'Backspace',
       registrationOpen: updatedRow.registrationOpen !== null ? updatedRow.registrationOpen === 1 : config.registrationOpen,
       discoveryEnabled: updatedRow.discoveryEnabled === 1,
+      gifApiKey: updatedGifKey ? `****${updatedGifKey.slice(-4)}` : undefined,
+      gifEnabled: !!updatedGifKey,
     };
 
     return reply.code(200).send(response);

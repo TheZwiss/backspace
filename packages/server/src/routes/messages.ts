@@ -121,6 +121,28 @@ export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSel
   return map;
 }
 
+/** Hydrate a sticker by ID, returns null if not found */
+export function hydrateSticker(stickerId: string | null | undefined): any {
+  if (!stickerId) return null;
+  const db = getDb();
+  const row = db.select().from(schema.stickers).where(eq(schema.stickers.id, stickerId)).get();
+  if (!row) return null;
+  return {
+    id: row.id,
+    packId: row.packId,
+    spaceId: row.spaceId,
+    name: row.name,
+    tags: row.tags ?? '',
+    filename: row.filename,
+    mimetype: row.mimetype,
+    size: row.size,
+    width: row.width,
+    height: row.height,
+    uploadedBy: row.uploadedBy,
+    createdAt: row.createdAt,
+  };
+}
+
 export function buildMessageWithUser(
   message: typeof schema.messages.$inferSelect,
   user: typeof schema.users.$inferSelect,
@@ -128,6 +150,7 @@ export function buildMessageWithUser(
   reactions: Reaction[] = [],
   replyTo: MessageWithUser | null = null,
 ): MessageWithUser {
+  const stickerId = (message as any).stickerId ?? null;
   return {
     id: message.id,
     channelId: message.channelId,
@@ -149,6 +172,8 @@ export function buildMessageWithUser(
     })),
     reactions,
     replyTo,
+    stickerId,
+    sticker: hydrateSticker(stickerId),
   };
 }
 
@@ -252,7 +277,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     },
   }, async (request, reply) => {
     const { id } = request.params;
-    const { content, attachments: attachmentIds, replyToId } = request.body;
+    const { content, attachments: attachmentIds, replyToId, stickerId } = request.body;
 
     const spaceId = getChannelSpaceId(id);
     if (!spaceId) {
@@ -268,9 +293,20 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing ATTACH_FILES permission', statusCode: 403 });
     }
 
-    if ((!content || typeof content !== 'string' || content.trim().length === 0) &&
-        (!attachmentIds || attachmentIds.length === 0)) {
-      return reply.code(400).send({ error: 'Message must have content or attachments', statusCode: 400 });
+    const hasContent = content && typeof content === 'string' && content.trim().length > 0;
+    const hasAttachments = attachmentIds && attachmentIds.length > 0;
+    const hasSticker = stickerId && typeof stickerId === 'string';
+
+    if (!hasContent && !hasAttachments && !hasSticker) {
+      return reply.code(400).send({ error: 'Message must have content, attachments, or a sticker', statusCode: 400 });
+    }
+
+    // Validate sticker exists if provided
+    if (hasSticker) {
+      const sticker = getDb().select().from(schema.stickers).where(eq(schema.stickers.id, stickerId!)).get();
+      if (!sticker) {
+        return reply.code(400).send({ error: 'Sticker not found', statusCode: 400 });
+      }
     }
 
     if (content && content.length > MAX_MESSAGE_LENGTH) {
@@ -303,6 +339,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         userId: request.userId,
         replyToId: replyToId || null,
         content: content?.trim() || null,
+        stickerId: stickerId || null,
         createdAt: now,
       }).run();
 

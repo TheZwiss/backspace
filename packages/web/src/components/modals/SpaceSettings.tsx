@@ -10,6 +10,7 @@ import { OverviewPanel } from './spaceSettingsPanels/OverviewPanel';
 import { MembersPanel } from './spaceSettingsPanels/MembersPanel';
 import { RolesPanel } from './spaceSettingsPanels/RolesPanel';
 import { BansPanel } from './spaceSettingsPanels/BansPanel';
+import { StickersPanel } from './spaceSettingsPanels/StickersPanel';
 import type { SpaceVisibility, JoinRequest } from '@backspace/shared';
 
 function DiscoveryPanel({ spaceId }: { spaceId: string }) {
@@ -270,7 +271,7 @@ export function SpaceSettingsModal() {
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
-  const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles' | 'bans'>('overview');
+  const [tab, setTab] = useState<'overview' | 'discovery' | 'stickers' | 'members' | 'roles' | 'bans'>('overview');
 
   const isOpen = activeModal === 'spaceSettings';
   const space = spaces.find(s => s.id === currentSpaceId);
@@ -300,6 +301,11 @@ export function SpaceSettingsModal() {
                 Discovery
               </button>
             )}
+            {canManageSpace && (
+              <button onClick={() => setTab('stickers')} className={tabClass('stickers')}>
+                Stickers
+              </button>
+            )}
             <button onClick={() => setTab('members')} className={tabClass('members')}>
               Members
             </button>
@@ -320,6 +326,7 @@ export function SpaceSettingsModal() {
         <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
           {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
           {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
+          {tab === 'stickers' && canManageSpace && <StickersPanel spaceId={currentSpaceId} />}
           {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
           {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
           {tab === 'bans' && canBanMembers && <BansPanel spaceId={currentSpaceId} />}

@@ -150,6 +150,20 @@ export function runMigrations(db: Database.Database): void {
       columns: [
         { name: 'password_changed_at', type: 'INTEGER' },
       ]
+    },
+    // gif_api_key is handled by migrateRenameGifApiKey() — do NOT add it here
+    // or it will race with the tenor_api_key → gif_api_key rename migration
+    {
+      name: 'messages',
+      columns: [
+        { name: 'sticker_id', type: 'TEXT' },
+      ]
+    },
+    {
+      name: 'dm_messages',
+      columns: [
+        { name: 'sticker_id', type: 'TEXT' },
+      ]
     }
   ];
 
@@ -315,6 +329,38 @@ export function runMigrations(db: Database.Database): void {
   // ─── Add FK constraint to dm_messages.reply_to_id ────────────────────────
   migrateDmMessagesReplyToFk(db);
 
+  // ─── Ensure sticker tables exist ─────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sticker_packs (
+      id TEXT PRIMARY KEY,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_by TEXT NOT NULL REFERENCES users(id),
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS stickers (
+      id TEXT PRIMARY KEY,
+      pack_id TEXT NOT NULL REFERENCES sticker_packs(id) ON DELETE CASCADE,
+      space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      tags TEXT DEFAULT '',
+      filename TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      uploaded_by TEXT NOT NULL REFERENCES users(id),
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sticker_packs_space_id ON sticker_packs(space_id);
+    CREATE INDEX IF NOT EXISTS idx_stickers_pack_id ON stickers(pack_id);
+    CREATE INDEX IF NOT EXISTS idx_stickers_space_id ON stickers(space_id);
+  `);
+
+  // ─── Rename tenor_api_key → gif_api_key (Klipy pivot) ────────────────────
+  migrateRenameGifApiKey(db);
+
   // ─── Add indexes on FK columns for query performance ─────────────────────
   migrateAddIndexes(db);
 
@@ -333,22 +379,74 @@ function migrateDmMessagesReplyToFk(db: Database.Database): void {
   if (tableInfo.sql.includes('REFERENCES dm_messages')) return;
 
   console.log('Migrating: Adding FK constraint to dm_messages.reply_to_id...');
-  db.exec(`
-    CREATE TABLE dm_messages_new (
-      id TEXT PRIMARY KEY,
-      dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
-      user_id TEXT NOT NULL REFERENCES users(id),
-      reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
-      content TEXT,
-      edited_at INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
-    DROP TABLE dm_messages;
-    ALTER TABLE dm_messages_new RENAME TO dm_messages;
-    CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
-    CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
-  `);
+
+  // Check if sticker_id column exists (may have been added by column migration)
+  const dmCols = db.pragma('table_info(dm_messages)') as { name: string }[];
+  const hasStickerId = dmCols.some(c => c.name === 'sticker_id');
+
+  if (hasStickerId) {
+    db.exec(`
+      CREATE TABLE dm_messages_new (
+        id TEXT PRIMARY KEY,
+        dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
+        content TEXT,
+        sticker_id TEXT,
+        edited_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, sticker_id, edited_at, created_at FROM dm_messages;
+      DROP TABLE dm_messages;
+      ALTER TABLE dm_messages_new RENAME TO dm_messages;
+      CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
+      CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
+    `);
+  } else {
+    db.exec(`
+      CREATE TABLE dm_messages_new (
+        id TEXT PRIMARY KEY,
+        dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id),
+        reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
+        content TEXT,
+        edited_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
+      DROP TABLE dm_messages;
+      ALTER TABLE dm_messages_new RENAME TO dm_messages;
+      CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
+      CREATE INDEX IF NOT EXISTS idx_dm_messages_user_id ON dm_messages(user_id);
+    `);
+  }
+}
+
+/** Ensure gif_api_key column exists in instance_settings, migrating from tenor_api_key if present */
+function migrateRenameGifApiKey(db: Database.Database): void {
+  const cols = db.pragma('table_info(instance_settings)') as { name: string }[];
+  const hasTenor = cols.some(c => c.name === 'tenor_api_key');
+  const hasGif = cols.some(c => c.name === 'gif_api_key');
+
+  if (hasTenor && !hasGif) {
+    // Clean case: rename the old column
+    console.log('Migrating: Renaming tenor_api_key → gif_api_key in instance_settings');
+    db.exec('ALTER TABLE instance_settings RENAME COLUMN tenor_api_key TO gif_api_key');
+  } else if (hasTenor && hasGif) {
+    // Race condition: column-add loop created empty gif_api_key before rename could run.
+    // Copy the real key from tenor_api_key if gif_api_key is still NULL/empty.
+    const row = db.prepare('SELECT tenor_api_key, gif_api_key FROM instance_settings WHERE id = 1').get() as
+      { tenor_api_key: string | null; gif_api_key: string | null } | undefined;
+    if (row && row.tenor_api_key && !row.gif_api_key) {
+      db.prepare('UPDATE instance_settings SET gif_api_key = ? WHERE id = 1').run(row.tenor_api_key);
+      console.log('Migrating: Copied API key from tenor_api_key → gif_api_key (fixing race condition)');
+    }
+  } else if (!hasTenor && !hasGif) {
+    // Fresh install or never had Tenor — just add the column
+    console.log('Migrating: Adding gif_api_key column to instance_settings');
+    db.exec('ALTER TABLE instance_settings ADD COLUMN gif_api_key TEXT');
+  }
+  // !hasTenor && hasGif → already correct, no-op
 }
 
 /** Add database indexes on FK columns to prevent full table scans */

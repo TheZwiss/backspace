@@ -4,8 +4,10 @@ import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from '.
 import { wsSend } from '../../hooks/useWebSocket';
 import { MentionPopover } from './MentionPopover';
 import { TypingIndicator } from './TypingIndicator';
+import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { MAX_MESSAGE_LENGTH, type MemberWithUser } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MemberWithUser, type Sticker } from '@backspace/shared';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface MessageInputProps {
   channelId: string;
@@ -23,14 +25,22 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [mentionState, setMentionState] = useState<MentionState | null>(null);
+  const [activePopover, setActivePopover] = useState<InputPopoverTab | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+  const popoverAnchorRef = useRef<HTMLDivElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendStickerMessage = useChatStore((s) => s.sendStickerMessage);
   const replyTo = useChatStore((s) => s.replyTo);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const members = useSpaceStore((s) => s.members);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Feature flags
+  const gifEnabled = useSettingsStore((s) => s.gifEnabled);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const stickersEnabled = spaces.length > 0; // stickers available if user is in any space
 
   // Permission gating: DM channels always allow sending; space channels check SEND_MESSAGES
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
@@ -49,6 +59,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
       textareaRef.current?.focus();
     }
   }, [replyTo]);
+
+  // Close popover on channel change
+  useEffect(() => {
+    setActivePopover(null);
+  }, [channelId]);
 
   // Filter members for the mention popover
   const filteredMembers = useMemo(() => {
@@ -86,6 +101,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
     setIsUploading(true);
     setMentionState(null);
+    setActivePopover(null);
     try {
       // Upload files first — route to the correct instance for this channel
       const attachmentIds: string[] = [];
@@ -241,6 +257,44 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     textarea.style.height = Math.min(textarea.scrollHeight, 300) + 'px';
   };
 
+  const handleEmojiSelect = useCallback((emoji: { native: string }) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setContent((prev) => prev + emoji.native);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+    const newContent = before + emoji.native + after;
+    setContent(newContent);
+
+    // Restore cursor position after the emoji
+    const newCursorPos = start + emoji.native.length;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.selectionStart = newCursorPos;
+      textarea.selectionEnd = newCursorPos;
+    });
+  }, [content]);
+
+  const handleGifSelect = useCallback((url: string) => {
+    setActivePopover(null);
+    sendMessage(channelId, url);
+  }, [channelId, sendMessage]);
+
+  const handleStickerSelect = useCallback((sticker: Sticker) => {
+    setActivePopover(null);
+    sendStickerMessage(channelId, sticker.id);
+  }, [channelId, sendStickerMessage]);
+
+  const togglePopover = useCallback((tab: InputPopoverTab) => {
+    setActivePopover((prev) => prev === tab ? null : tab);
+  }, []);
+
+  const canSend = (content.trim() || files.length > 0) && !isOverLimit && !isUploading;
+
   if (!canSendMessages) {
     return (
       <div data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
@@ -252,8 +306,24 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   }
 
   return (
-    <div data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
+    <div ref={popoverAnchorRef} data-pip-obstacle="bottom" className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]">
       <TypingIndicator channelId={channelId} />
+
+      {/* Input popover (emoji / gif / stickers) */}
+      {activePopover && (
+        <InputPopover
+          activeTab={activePopover}
+          onClose={() => setActivePopover(null)}
+          onEmojiSelect={handleEmojiSelect}
+          onGifSelect={handleGifSelect}
+          onStickerSelect={handleStickerSelect}
+          anchorRef={popoverAnchorRef}
+          gifEnabled={gifEnabled}
+          stickersEnabled={stickersEnabled}
+          onTabChange={setActivePopover}
+        />
+      )}
+
       {replyTo && (
         <div className="bg-interactive-hover rounded-t-lg px-4 py-2 flex items-center justify-between border-b border-white/[0.06]">
           <div className="flex items-center gap-1 text-[14px] text-txt-message truncate">
@@ -376,25 +446,60 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           )}
 
           {/* GIF button */}
-          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="GIF">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
-            </svg>
-          </button>
+          {gifEnabled && (
+            <button
+              onClick={() => togglePopover('gif')}
+              className={`w-[34px] h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+                activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+              title="GIF"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2 5.5A2.5 2.5 0 0 1 4.5 3h15A2.5 2.5 0 0 1 22 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 2 18.5v-13ZM5.1 14V10h3.2v1.2H6.5v.6h1.6v1.1H6.5V14H5.1Zm4.5 0V10h1.4v4H9.6Zm2.5 0V10h3.2v1.2h-1.8v.5h1.6v1h-1.6V14h-1.4Z" />
+              </svg>
+            </button>
+          )}
 
           {/* Sticker button */}
-          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="Stickers">
+          <button
+            onClick={() => togglePopover('stickers')}
+            className={`w-[34px] h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              activePopover === 'stickers' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+            }`}
+            title="Stickers"
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12.5 2C6.81 2 2 6.81 2 12.5S6.81 23 12.5 23c1.31 0 2.56-.25 3.73-.7l5.07-5.07c.45-1.17.7-2.42.7-3.73C22 7.81 17.19 2 12.5 2Zm0 19c-4.69 0-8.5-3.81-8.5-8.5S7.81 4 12.5 4 21 7.81 21 12.5c0 .89-.14 1.74-.4 2.54l-3.56 3.56c-.8.26-1.65.4-2.54.4ZM8 11.5c.83 0 1.5-.67 1.5-1.5S8.83 8.5 8 8.5 6.5 9.17 6.5 10s.67 1.5 1.5 1.5Zm6 0c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5Zm-1 3.5c-2.33 0-4.31-1.46-5.11-3.5h10.22c-.8 2.04-2.78 3.5-5.11 3.5Z" />
             </svg>
           </button>
 
           {/* Emoji button */}
-          <button className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0" title="Emoji">
+          <button
+            onClick={() => togglePopover('emoji')}
+            className={`w-[34px] h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+            }`}
+            title="Emoji"
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5s.67 1.5 1.5 1.5zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
             </svg>
           </button>
+
+          {/* Send button — appears when there's content to send */}
+          {canSend && (
+            <button
+              onClick={handleSubmit}
+              disabled={isUploading}
+              className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
+              aria-label="Send message"
+              title="Send"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

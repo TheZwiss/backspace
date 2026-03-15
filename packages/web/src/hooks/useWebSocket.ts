@@ -96,6 +96,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         setUser(event.user);
         useSettingsStore.getState().setIsAdmin(event.user.isAdmin ?? false);
         useSettingsStore.getState().fetchStreamingLimits();
+        useSettingsStore.getState().fetchGifEnabled();
       }
 
       // Normalize asset URLs for remote origins before dispatching to stores
@@ -751,6 +752,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'join_request_declined': {
       if (!isHome) break;
       console.log('[WebSocket] Join request declined for space', event.request.spaceId);
+      break;
+    }
+
+    // ─── Sticker events (all origins) ────────────────────────────────────
+
+    case 'sticker_pack_created':
+    case 'sticker_pack_updated':
+    case 'sticker_pack_deleted':
+    case 'sticker_created':
+    case 'sticker_deleted': {
+      // Invalidate the sticker picker cache so next open fetches fresh data
+      import('../components/chat/StickerPicker').then(({ invalidateStickerCache }) => {
+        invalidateStickerCache();
+      });
       break;
     }
 

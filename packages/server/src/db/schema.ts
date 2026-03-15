@@ -70,6 +70,7 @@ export const messages = sqliteTable('messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  stickerId: text('sticker_id'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
@@ -112,6 +113,7 @@ export const dmMessages = sqliteTable('dm_messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  stickerId: text('sticker_id'),
   editedAt: integer('edited_at'),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
@@ -213,6 +215,30 @@ export const userSpaceLayout = sqliteTable('user_space_layout', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+export const stickerPacks = sqliteTable('sticker_packs', {
+  id: text('id').primaryKey(),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const stickers = sqliteTable('stickers', {
+  id: text('id').primaryKey(),
+  packId: text('pack_id').notNull().references(() => stickerPacks.id, { onDelete: 'cascade' }),
+  spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  tags: text('tags').default(''),
+  filename: text('filename').notNull(),
+  mimetype: text('mimetype').notNull(),
+  size: integer('size').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  uploadedBy: text('uploaded_by').notNull().references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+});
+
 export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),
   instanceName: text('instance_name').default('Backspace'),
@@ -226,6 +252,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   maxResolution: integer('max_resolution').notNull().default(1080),
   maxFramerate: integer('max_framerate').notNull().default(60),
   registrationOpen: integer('registration_open'),  // null = use env var default, 0/1 = explicit
+  gifApiKey: text('gif_api_key'),
   updatedAt: integer('updated_at').notNull(),
 });
 

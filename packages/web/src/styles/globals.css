@@ -292,6 +292,21 @@
   }
 }
 
+/* ── Emoji Mart Overrides ── */
+.emoji-picker-wrapper em-emoji-picker {
+  --em-rgb-background: 20, 20, 26;
+  --em-rgb-input: 17, 17, 24;
+  --em-rgb-color: 216, 216, 222;
+  --em-color-border: rgba(255, 255, 255, 0.07);
+  --em-color-border-over: rgba(255, 255, 255, 0.12);
+  --rgb-accent: 124, 108, 246;
+  --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  border: none !important;
+  background: transparent !important;
+  width: 100% !important;
+  max-height: 400px;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
