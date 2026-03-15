@@ -21,12 +21,15 @@ import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
 import { SoundController } from '../voice/SoundController';
 import { GlobalAudioRenderer } from '../voice/GlobalAudioRenderer';
+import { NotificationController } from '../NotificationController';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { ToastContainer } from '../ui/ToastContainer';
+import { UpdateToast } from '../ui/UpdateToast';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
+import { useDeepLinkHandler } from '../../platform/deepLink';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -114,6 +117,9 @@ export function AppLayout() {
 
   // Federation toast notifications for remote instance connection state changes
   useFederationToasts();
+
+  // Deep link handler for Electron (backspace:// protocol)
+  useDeepLinkHandler();
 
   // Track the last channel we attempted to connect to, to prevent effect loops
   const lastAttemptedRef = React.useRef<string | null>(null);
@@ -292,6 +298,8 @@ export function AppLayout() {
       <PictureInPicture />
       <SoundController />
       <GlobalAudioRenderer />
+      <NotificationController />
+      <UpdateToast />
 
       {/* User Profile Popout */}
       {userProfilePopout.user && userProfilePopout.position && (

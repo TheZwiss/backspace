@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { isElectron } from '../../platform/platform';
 
 export function InviteModal() {
   const [inviteCode, setInviteCode] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedDeepLink, setCopiedDeepLink] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const activeModal = useUIStore((s) => s.activeModal);
@@ -18,6 +20,13 @@ export function InviteModal() {
 
   const isOpen = activeModal === 'invite';
   const inviteUrl = inviteCode ? `${instanceOrigin || window.location.origin}/join/${inviteCode}` : '';
+
+  // Deep link for Electron desktop app
+  const deepLinkUrl = inviteCode
+    ? instanceOrigin
+      ? `backspace://join/${inviteCode}@${new URL(instanceOrigin).host}`
+      : `backspace://join/${inviteCode}`
+    : '';
 
   useEffect(() => {
     if (isOpen && currentSpaceId) {
@@ -52,6 +61,17 @@ export function InviteModal() {
     }
   };
 
+  const handleCopyDeepLink = async () => {
+    if (!deepLinkUrl) return;
+    try {
+      await navigator.clipboard.writeText(deepLinkUrl);
+      setCopiedDeepLink(true);
+      setTimeout(() => setCopiedDeepLink(false), 2000);
+    } catch {
+      // silently fail
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={closeModal} title="Invite Friends">
       <p className="text-txt-secondary text-sm mb-4">
@@ -81,6 +101,26 @@ export function InviteModal() {
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
+      {isElectron() && deepLinkUrl && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="text"
+            value={deepLinkUrl}
+            readOnly
+            className="input-standard flex-1 font-mono text-xs"
+          />
+          <button
+            onClick={handleCopyDeepLink}
+            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+              copiedDeepLink
+                ? 'bg-status-online text-white'
+                : 'bg-surface-elevated hover:bg-surface-elevated/80 text-txt-secondary'
+            }`}
+          >
+            {copiedDeepLink ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
     </Modal>
   );
 }

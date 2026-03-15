@@ -6,11 +6,12 @@
   "scripts": {
     "build:ts": "tsc",
     "dev": "tsc && electron .",
+    "prebuild": "mkdir -p build && cp ../web/public/icons/icon-512.png build/icon.png 2>/dev/null || true",
     "build": "tsc && electron-builder",
     "clean": "rm -rf dist dist-electron"
   },
   "dependencies": {
-    "electron-is-dev": "^3.0.1"
+    "electron-updater": "^6.3.0"
   },
   "devDependencies": {
     "electron": "^33.2.0",

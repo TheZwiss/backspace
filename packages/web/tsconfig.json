@@ -20,6 +20,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*", "node_modules/vite-plugin-pwa/client.d.ts"],
+  "include": ["src/**/*", "src/platform/electron.d.ts", "node_modules/vite-plugin-pwa/client.d.ts"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

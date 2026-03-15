@@ -10,10 +10,12 @@
     "build:shared": "pnpm --filter @backspace/shared build",
     "build:server": "pnpm --filter @backspace/server build",
     "build:web": "pnpm --filter @backspace/web build",
-    "build": "pnpm --filter @backspace/shared build && pnpm --filter @backspace/server build & pnpm --filter @backspace/web build"
+    "build": "pnpm --filter @backspace/shared build && pnpm --filter @backspace/server build & pnpm --filter @backspace/web build",
+    "dev:desktop": "pnpm --filter @backspace/desktop dev",
+    "build:desktop": "pnpm --filter @backspace/desktop build"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "sharp"]
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "electron", "sharp"]
   },
   "engines": {
     "node": ">=20.0.0",
