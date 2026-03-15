@@ -51,7 +51,9 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const confirmDeleteTimeout = useRef<ReturnType<typeof setTimeout>>();
   const reactionPickerBtnRef = useRef<HTMLButtonElement>(null);
   const reactionPickerRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
@@ -96,9 +98,23 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
     return acc;
   }, {} as Record<string, { count: number; me: boolean }>);
 
+  // Auto-cancel delete confirmation after timeout
+  const startDeleteConfirm = useCallback(() => {
+    setConfirmingDelete(true);
+    clearTimeout(confirmDeleteTimeout.current);
+    confirmDeleteTimeout.current = setTimeout(() => setConfirmingDelete(false), 3000);
+  }, []);
+
+  const cancelDeleteConfirm = useCallback(() => {
+    setConfirmingDelete(false);
+    clearTimeout(confirmDeleteTimeout.current);
+  }, []);
+
+  useEffect(() => {
+    return () => clearTimeout(confirmDeleteTimeout.current);
+  }, []);
+
   const isGifOnly = isGifOnlyMessage(message.content);
-  const isSticker = !!(message.stickerId || (message as any).sticker);
-  const stickerData = (message as any).sticker ?? null;
 
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const firstUrl = isGifOnly ? null : message.content?.match(urlRegex)?.[0];
@@ -206,7 +222,13 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           : 'hover:bg-[rgba(255,255,255,0.025)]'
       }`}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        if (confirmingDelete) {
+          clearTimeout(confirmDeleteTimeout.current);
+          confirmDeleteTimeout.current = setTimeout(() => setConfirmingDelete(false), 2000);
+        }
+      }}
     >
       {/* Reply Line */}
       {message.replyTo && (
@@ -289,19 +311,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-1">
-            {/* Sticker rendering */}
-            {isSticker && stickerData ? (
-              <div className="mt-1" title={`${stickerData.name}`}>
-                <img
-                  src={stickerData.filename.startsWith('http') || stickerData.filename.startsWith('/') ? stickerData.filename : `/api/uploads/${stickerData.filename}`}
-                  alt={stickerData.name}
-                  className="max-w-[160px] max-h-[160px] object-contain"
-                  loading="lazy"
-                />
-              </div>
-            ) : isSticker ? (
-              <div className="mt-1 text-txt-tertiary text-sm italic">Sticker unavailable</div>
-            ) : isGifOnly ? (
+            {isGifOnly ? (
               <div className="mt-1 max-w-[350px] rounded-lg overflow-hidden">
                 <img
                   src={message.content!.trim()}
@@ -417,7 +427,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
       )}
 
       {/* Action buttons on hover */}
-      {(isHovered || showReactionPicker) && !isEditing && (
+      {(isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
@@ -469,12 +479,38 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
           )}
           {canDelete && (
             <button
-              onClick={() => deleteMessage(message.id, channelKey)}
-              className="px-2 h-full text-txt-tertiary hover:text-txt-danger hover:bg-interactive-hover transition-all flex items-center justify-center"
-              title="Delete"
+              onClick={() => {
+                if (confirmingDelete) {
+                  cancelDeleteConfirm();
+                  deleteMessage(message.id, channelKey);
+                } else {
+                  startDeleteConfirm();
+                }
+              }}
+              className={`px-2 h-full transition-all duration-150 flex items-center justify-center relative w-9 ${
+                confirmingDelete
+                  ? 'bg-green-500/20 text-green-400'
+                  : 'text-txt-tertiary hover:text-txt-danger hover:bg-interactive-hover'
+              }`}
+              title={confirmingDelete ? 'Confirm delete' : 'Delete'}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              {/* Trash icon */}
+              <svg
+                width="20" height="20" viewBox="0 0 24 24" fill="currentColor"
+                className={`absolute transition-all duration-150 ${
+                  confirmingDelete ? 'scale-0 opacity-0' : 'scale-100 opacity-100'
+                }`}
+              >
                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+              </svg>
+              {/* Checkmark icon */}
+              <svg
+                width="20" height="20" viewBox="0 0 24 24" fill="currentColor"
+                className={`absolute transition-all duration-150 ${
+                  confirmingDelete ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                }`}
+              >
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
               </svg>
             </button>
           )}
