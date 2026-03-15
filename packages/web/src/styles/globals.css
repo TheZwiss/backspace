@@ -303,7 +303,6 @@
   --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   border: none !important;
   background: transparent !important;
-  width: 100% !important;
   max-height: 400px;
 }
 

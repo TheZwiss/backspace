@@ -79,7 +79,7 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
   };
 
   return (
-    <div className="flex flex-col h-[390px]" onKeyDown={handleKeyDown}>
+    <div className="flex flex-col h-[390px] w-[390px]" onKeyDown={handleKeyDown}>
       {/* Search */}
       <div className="px-3 pt-2 pb-1.5">
         <input

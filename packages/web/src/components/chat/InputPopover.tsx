@@ -2,20 +2,16 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { EmojiPicker } from './EmojiPicker';
 import { GifPicker } from './GifPicker';
-import { StickerPicker } from './StickerPicker';
-import type { Sticker } from '@backspace/shared';
 
-export type InputPopoverTab = 'emoji' | 'gif' | 'stickers';
+export type InputPopoverTab = 'emoji' | 'gif';
 
 interface InputPopoverProps {
   activeTab: InputPopoverTab;
   onClose: () => void;
   onEmojiSelect: (emoji: { native: string }) => void;
   onGifSelect: (url: string) => void;
-  onStickerSelect: (sticker: Sticker) => void;
   anchorRef: React.RefObject<HTMLElement | null>;
   gifEnabled: boolean;
-  stickersEnabled: boolean;
   onTabChange: (tab: InputPopoverTab) => void;
 }
 
@@ -24,10 +20,8 @@ export function InputPopover({
   onClose,
   onEmojiSelect,
   onGifSelect,
-  onStickerSelect,
   anchorRef,
   gifEnabled,
-  stickersEnabled,
   onTabChange,
 }: InputPopoverProps) {
   const floatingRef = useRef<HTMLDivElement>(null);
@@ -105,9 +99,6 @@ export function InputPopover({
   if (gifEnabled) {
     availableTabs.splice(0, 0, { key: 'gif', label: 'GIF' });
   }
-  if (stickersEnabled) {
-    availableTabs.push({ key: 'stickers', label: 'Stickers' });
-  }
 
   const showTabs = availableTabs.length > 1;
 
@@ -117,7 +108,7 @@ export function InputPopover({
       className="fixed z-[300] animate-slide-up"
       style={{ top: -9999, left: -9999 }}
     >
-      <div className="glass rounded-xl overflow-hidden flex flex-col" style={{ width: 352, maxHeight: 435 }}>
+      <div className="glass rounded-xl overflow-hidden flex flex-col w-fit max-h-[435px]">
         {/* Tab bar */}
         {showTabs && (
           <div className="flex items-center gap-0.5 px-2 pt-2 pb-1">
@@ -144,9 +135,6 @@ export function InputPopover({
           )}
           {activeTab === 'gif' && gifEnabled && (
             <GifPicker onGifSelect={onGifSelect} />
-          )}
-          {activeTab === 'stickers' && stickersEnabled && (
-            <StickerPicker onStickerSelect={onStickerSelect} />
           )}
         </div>
       </div>
