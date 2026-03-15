@@ -1,22 +1,22 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { useEffect } from 'react';
 
-export function SwUpdatePrompt() {
-  const {
-    needRefresh: [needRefresh],
-    updateServiceWorker,
-  } = useRegisterSW();
+export function SwAutoUpdate() {
+  useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      setInterval(() => {
+        registration.update();
+      }, 60_000);
+    },
+  });
 
-  if (!needRefresh) return null;
+  useEffect(() => {
+    if (!navigator.serviceWorker) return;
+    const onControllerChange = () => window.location.reload();
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+  }, []);
 
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] glass-pill px-4 py-2.5 flex items-center gap-3 text-sm text-txt-primary shadow-lg">
-      <span>A new version is available</span>
-      <button
-        onClick={() => updateServiceWorker(true)}
-        className="px-3 py-1 rounded-md bg-accent-primary text-white text-xs font-medium hover:opacity-90 transition-opacity"
-      >
-        Reload
-      </button>
-    </div>
-  );
+  return null;
 }

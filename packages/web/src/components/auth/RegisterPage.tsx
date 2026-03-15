@@ -473,6 +473,7 @@ export function RegisterPage() {
           title="Crop Avatar"
           aspectRatio={1}
           cropShape="round"
+          maxOutputDimension={256}
         />
       )}
     </div>

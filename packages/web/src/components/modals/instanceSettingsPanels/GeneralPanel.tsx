@@ -66,7 +66,7 @@ export function GeneralPanel() {
   };
 
   return (
-    <div className="space-y-5">
+    <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
       <div className="text-xs text-txt-tertiary">
         Configure your Backspace instance. These settings affect all users.
       </div>
@@ -178,6 +178,6 @@ export function GeneralPanel() {
           </div>
         </div>
       )}
-    </div>
+    </form>
   );
 }

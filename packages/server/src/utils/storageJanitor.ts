@@ -124,7 +124,10 @@ function getReferencedFilenames(): Set<string> {
 function getUnlinkedAttachments(): { id: string; filename: string; thumbnailFilename: string | null; size: number }[] {
   const db = getDb();
   const cutoff = Date.now() - UNLINKED_AGE_MS;
-  // Attachments with no message_id AND no dm_message_id, older than 1 hour
+  const profileReferenced = getProfileReferencedFilenames();
+
+  // Attachments with no message_id AND no dm_message_id, older than 1 hour,
+  // excluding files currently used as profile images (avatars, banners, icons)
   const rows = db.select({
     id: schema.attachments.id,
     filename: schema.attachments.filename,
@@ -137,6 +140,7 @@ function getUnlinkedAttachments(): { id: string; filename: string; thumbnailFile
 
   return rows.filter(r =>
     r.messageId === null && r.dmMessageId === null && r.createdAt < cutoff
+    && !profileReferenced.has(path.basename(r.filename))
   ).map(r => ({
     id: r.id,
     filename: r.filename,
@@ -242,12 +246,19 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
   // Phase 2: Clean up stale unlinked attachment records.
   // Files referenced by user/space profiles (avatars, banners, icons) are
   // preserved on disk — only the orphaned attachment DB record is removed.
+  // Thumbnails are always deleted since profile images don't need them.
   for (const att of unlinked) {
     const fileInUseByProfile = profileReferenced.has(path.basename(att.filename));
     if (!dryRun) {
       try {
         if (!fileInUseByProfile) {
           deleteUploadFile(att.filename);
+        } else if (att.thumbnailFilename) {
+          // Main file is a profile image — keep it. But delete the thumbnail
+          // since it's only useful for message attachments, and the attachment
+          // record is about to be deleted (which would orphan the thumbnail).
+          const thumbPath = path.join(config.uploadDir, path.basename(att.thumbnailFilename));
+          try { fs.unlinkSync(thumbPath); } catch { /* may not exist */ }
         }
         db.delete(schema.attachments)
           .where(eq(schema.attachments.id, att.id))

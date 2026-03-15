@@ -6,9 +6,12 @@ import { connectionManager } from '../ws/handler.js';
 import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { deleteUploadFile } from '../utils/fileCleanup.js';
+import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
 import { tombstoneUser } from '../utils/userDeletion.js';
 import { generateSnowflake } from '../utils/snowflake.js';
+import { resizeProfileImage } from '../utils/thumbnail.js';
+import { config } from '../config.js';
+import path from 'path';
 
 /** Validates that a URL is a safe asset URL (relative upload path, bare filename, or http/https) */
 function isValidAssetUrl(url: string | null | undefined): boolean {
@@ -332,9 +335,29 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     // Clean up old avatar/banner files that were replaced
     if (avatar !== undefined && oldAvatar && oldAvatar !== (avatar || null) && !oldAvatar.startsWith('http')) {
       deleteUploadFile(oldAvatar);
+      deleteAttachmentByFilename(oldAvatar);
     }
     if (banner !== undefined && oldBanner && oldBanner !== (updateData.banner ?? null) && !oldBanner.startsWith('http')) {
       deleteUploadFile(oldBanner);
+      deleteAttachmentByFilename(oldBanner);
+    }
+    // Clean up attachment records for newly-set profile images — the reference
+    // now lives in the users table, so the attachment record is unnecessary
+    if (avatar && typeof avatar === 'string' && avatar.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(avatar);
+    }
+    if (updateData.banner && typeof updateData.banner === 'string' && updateData.banner.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(updateData.banner);
+    }
+
+    // Resize profile images to optimal dimensions (safety net for federation, API clients, etc.)
+    if (avatar && typeof avatar === 'string' && !avatar.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(avatar));
+      await resizeProfileImage(filePath, 'avatar');
+    }
+    if (updateData.banner && typeof updateData.banner === 'string' && !updateData.banner.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(updateData.banner));
+      await resizeProfileImage(filePath, 'banner');
     }
 
     const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();

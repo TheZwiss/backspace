@@ -323,6 +323,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Add indexes on FK columns for query performance ─────────────────────
   migrateAddIndexes(db);
 
+  // ─── Clean up stale attachment records for profile images ───────────────
+  migrateCleanupProfileAttachmentRecords(db);
+
   console.log('Migrations complete.');
 }
 
@@ -882,6 +885,79 @@ function migrateReplicatedUsernames(db: Database.Database): void {
     update.run(newUsername, row.id);
     console.log(`Migrating: Renamed replicated user "${row.username}" → "${newUsername}"`);
   }
+}
+
+/**
+ * Clean up stale attachment records left behind by profile image uploads.
+ * Profile images (avatars, banners, space icons) go through POST /api/uploads
+ * but are referenced by users/spaces columns, not by attachments.message_id.
+ * This leaves orphaned attachment records that inflate the "Unlinked Uploads"
+ * count in the storage panel.
+ *
+ * Gated by a persistent flag so it runs exactly once.
+ */
+function migrateCleanupProfileAttachmentRecords(db: Database.Database): void {
+  const cols = db.pragma('table_info(instance_settings)') as { name: string }[];
+  if (!cols.some(c => c.name === 'profile_attachments_cleaned')) {
+    db.exec('ALTER TABLE instance_settings ADD COLUMN profile_attachments_cleaned INTEGER DEFAULT 0');
+  }
+
+  const row = db.prepare('SELECT profile_attachments_cleaned FROM instance_settings WHERE id = 1').get() as
+    { profile_attachments_cleaned: number } | undefined;
+  if (row && row.profile_attachments_cleaned === 1) return;
+
+  // Collect all filenames currently referenced by profiles
+  const profileFilenames = new Set<string>();
+
+  const avatarRows = db.prepare('SELECT avatar FROM users WHERE avatar IS NOT NULL').all() as { avatar: string }[];
+  for (const r of avatarRows) profileFilenames.add(path.basename(r.avatar));
+
+  const bannerRows = db.prepare('SELECT banner FROM users WHERE banner IS NOT NULL').all() as { banner: string }[];
+  for (const r of bannerRows) profileFilenames.add(path.basename(r.banner));
+
+  const iconRows = db.prepare('SELECT icon FROM spaces WHERE icon IS NOT NULL').all() as { icon: string }[];
+  for (const r of iconRows) profileFilenames.add(path.basename(r.icon));
+
+  const spaceBannerRows = db.prepare('SELECT banner FROM spaces WHERE banner IS NOT NULL').all() as { banner: string }[];
+  for (const r of spaceBannerRows) profileFilenames.add(path.basename(r.banner));
+
+  // Find unlinked attachment records (no message reference)
+  const unlinkedRows = db.prepare(
+    'SELECT id, filename FROM attachments WHERE message_id IS NULL AND dm_message_id IS NULL'
+  ).all() as { id: string; filename: string }[];
+
+  const deleteStmt = db.prepare('DELETE FROM attachments WHERE id = ?');
+  let cleaned = 0;
+
+  for (const att of unlinkedRows) {
+    const basename = path.basename(att.filename);
+    // Delete if the file is a current profile image (record is unnecessary)
+    // or if the file no longer exists on disk (stale record from a replaced profile image)
+    if (profileFilenames.has(basename)) {
+      deleteStmt.run(att.id);
+      cleaned++;
+    } else {
+      // Check if the file still exists on disk — if not, this is a stale
+      // record from a previously-replaced profile image whose file was
+      // already deleted by the PATCH handler
+      try {
+        const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), 'data', 'uploads');
+        const filePath = path.join(uploadDir, basename);
+        if (!fs.existsSync(filePath)) {
+          deleteStmt.run(att.id);
+          cleaned++;
+        }
+      } catch {
+        // Skip on error — the normal cleanup can handle it later
+      }
+    }
+  }
+
+  if (cleaned > 0) {
+    console.log(`Migrating: Cleaned up ${cleaned} stale profile image attachment record(s)`);
+  }
+
+  db.prepare('UPDATE instance_settings SET profile_attachments_cleaned = 1 WHERE id = 1').run();
 }
 
 /**

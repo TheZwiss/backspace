@@ -4,7 +4,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { RegisterPage } from './components/auth/RegisterPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { JoinPage } from './components/JoinPage';
-import { SwUpdatePrompt } from './components/ui/SwUpdatePrompt';
+import { SwAutoUpdate } from './components/ui/SwUpdatePrompt';
 import { useAuthStore } from './stores/authStore';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -29,7 +29,7 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <>
-    <SwUpdatePrompt />
+    <SwAutoUpdate />
     <Routes>
       <Route
         path="/login"

@@ -741,7 +741,7 @@ export function AccountPanel() {
         title="Crop Avatar"
         cropShape="round"
         aspectRatio={1}
-        maxOutputDimension={512}
+        maxOutputDimension={256}
       />
       <ImageCropModal
         isOpen={bannerCropSrc !== null}
@@ -751,7 +751,7 @@ export function AccountPanel() {
         title="Crop Banner"
         cropShape="rect"
         aspectRatio={3}
-        maxOutputDimension={1920}
+        maxOutputDimension={1280}
       />
 
       <DeleteAccountModal

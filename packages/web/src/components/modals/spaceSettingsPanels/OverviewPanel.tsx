@@ -601,7 +601,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         title="Crop Space Icon"
         cropShape="round"
         aspectRatio={1}
-        maxOutputDimension={512}
+        maxOutputDimension={256}
       />
 
       <ImageCropModal
@@ -612,7 +612,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         title="Crop Space Banner"
         cropShape="rect"
         aspectRatio={16 / 9}
-        maxOutputDimension={1920}
+        maxOutputDimension={1280}
       />
     </>
   );

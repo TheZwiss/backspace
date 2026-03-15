@@ -1,5 +1,36 @@
+import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+
+const PROFILE_LIMITS = { avatar: 256, icon: 256, banner: 1280 } as const;
+
+/**
+ * Resize a profile image (avatar, icon, or banner) to the target max dimension.
+ * Preserves animated GIF frames. No-op if the image is already small enough.
+ * Writes to a temp file then atomically renames to avoid corruption.
+ */
+export async function resizeProfileImage(
+  filepath: string,
+  type: 'avatar' | 'icon' | 'banner',
+): Promise<void> {
+  const maxDim = PROFILE_LIMITS[type];
+  try {
+    const image = sharp(filepath, { animated: true });
+    const metadata = await image.metadata();
+    if (!metadata.width || metadata.width <= maxDim) return;
+
+    const tmpPath = filepath + '.tmp';
+    await sharp(filepath, { animated: true })
+      .resize({ width: maxDim, withoutEnlargement: true })
+      .toFile(tmpPath);
+    fs.renameSync(tmpPath, filepath);
+  } catch (err) {
+    // Non-fatal — the original file is still intact
+    console.error(`Profile image resize failed (non-fatal) for ${path.basename(filepath)}:`, err);
+    // Clean up temp file if it was partially written
+    try { fs.unlinkSync(filepath + '.tmp'); } catch { /* ignore */ }
+  }
+}
 
 const RESIZABLE_MIMETYPES = new Set([
   'image/jpeg',

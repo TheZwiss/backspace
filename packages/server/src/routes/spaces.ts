@@ -1,3 +1,4 @@
+import path from 'path';
 import type { FastifyInstance } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
@@ -7,7 +8,9 @@ import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, Pe
 import { DEFAULT_EVERYONE_PERMISSIONS, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
 import crypto from 'crypto';
 import { connectionManager } from '../ws/handler.js';
-import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
+import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
+import { resizeProfileImage } from '../utils/thumbnail.js';
+import { config } from '../config.js';
 import type {
   CreateSpaceRequest,
   UpdateSpaceRequest,
@@ -172,6 +175,24 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     // Register the creator in connectionManager so they receive WS broadcasts for this space
     connectionManager.addUserSpace(request.userId, spaceId);
+
+    // Clean up attachment records for icon/banner — reference is now in spaces table
+    if (icon && typeof icon === 'string' && icon.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(icon);
+    }
+    if (banner && typeof banner === 'string' && banner.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(banner);
+    }
+
+    // Resize profile images to optimal dimensions
+    if (icon && typeof icon === 'string' && !icon.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(icon));
+      await resizeProfileImage(filePath, 'icon');
+    }
+    if (banner && typeof banner === 'string' && !banner.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(banner));
+      await resizeProfileImage(filePath, 'banner');
+    }
 
     return reply.code(201).send(rowToSpace(server));
   });
@@ -412,9 +433,29 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     // Clean up old icon/banner files that were replaced
     if (icon !== undefined && oldIcon && oldIcon !== (icon || null) && !oldIcon.startsWith('http')) {
       deleteUploadFile(oldIcon);
+      deleteAttachmentByFilename(oldIcon);
     }
     if (banner !== undefined && oldBanner && oldBanner !== (banner || null) && !oldBanner.startsWith('http')) {
       deleteUploadFile(oldBanner);
+      deleteAttachmentByFilename(oldBanner);
+    }
+    // Clean up attachment records for newly-set profile images — the reference
+    // now lives in the spaces table, so the attachment record is unnecessary
+    if (icon && typeof icon === 'string' && icon.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(icon);
+    }
+    if (banner && typeof banner === 'string' && banner.includes('/api/uploads/')) {
+      deleteAttachmentByFilename(banner);
+    }
+
+    // Resize profile images to optimal dimensions
+    if (icon && typeof icon === 'string' && !icon.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(icon));
+      await resizeProfileImage(filePath, 'icon');
+    }
+    if (banner && typeof banner === 'string' && !banner.startsWith('http')) {
+      const filePath = path.join(config.uploadDir, path.basename(banner));
+      await resizeProfileImage(filePath, 'banner');
     }
 
     const updated = db.select().from(schema.spaces).where(eq(schema.spaces.id, id)).get();

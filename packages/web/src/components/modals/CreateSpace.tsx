@@ -300,6 +300,7 @@ export function CreateSpaceModal() {
       title="Crop Space Icon"
       cropShape="round"
       aspectRatio={1}
+      maxOutputDimension={256}
     />
   </>
   );
