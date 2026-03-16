@@ -523,12 +523,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // 2. Rebuild unreadChannels ONLY for channels from this origin
-    //    Keep existing unread entries from other origins untouched
+    //    Keep existing unread entries from other origins untouched,
+    //    but prune orphans that don't map to any known channel
     const currentChannelId = get().currentChannelId;
+    const { channelToSpaceMap, dmChannels: knownDms } = useSpaceStore.getState();
+    const knownDmIds = new Set(knownDms.map(dm => dm.id));
     const unread = new Set<string>();
     for (const id of get().unreadChannels) {
       if (!originChannelIds || !originChannelIds.has(id)) {
-        unread.add(id); // preserve other-origin unreads
+        // Only preserve if the channel still maps to a known space or DM
+        if (channelToSpaceMap.has(id) || knownDmIds.has(id)) {
+          unread.add(id);
+        }
       }
     }
 

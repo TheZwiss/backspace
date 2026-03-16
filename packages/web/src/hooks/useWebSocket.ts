@@ -181,6 +181,21 @@ function handleEvent(origin: string, event: ServerEvent): void {
         useChatStore.getState().setReadStates(event.readStates, channelLastMessageIds, originChannelIds);
       }
 
+      // Prune orphaned unreads: channels in unreadChannels that don't map to
+      // any known space channel or DM (e.g. deleted channels, revoked permissions)
+      {
+        const { unreadChannels: uc } = useChatStore.getState();
+        const { channelToSpaceMap: ctsMap, dmChannels: dms } = useSpaceStore.getState();
+        const dmIds = new Set(dms.map(d => d.id));
+        const orphanIds = new Set<string>();
+        for (const id of uc) {
+          if (!ctsMap.has(id) && !dmIds.has(id)) orphanIds.add(id);
+        }
+        if (orphanIds.size > 0) {
+          useChatStore.getState().removeChannelStates(orphanIds);
+        }
+      }
+
       // Clear voice state only for the reconnecting origin before repopulating
       clearVoiceUsersForOrigin(origin);
       if (event.voiceStates) {
@@ -304,8 +319,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
       addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
+        const { voiceChannelIds } = useSpaceStore.getState();
         const myId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
-        if (event.message.channelId !== currentChannelId && event.message.userId !== myId) {
+        // Skip voice channels — they have no text reading/acking UI
+        if (event.message.channelId !== currentChannelId && event.message.userId !== myId && !voiceChannelIds.has(event.message.channelId)) {
           markChannelUnread(event.message.channelId);
         }
       }
@@ -612,7 +629,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── Channel/space events (all origins) ─────────────────────────────────
 
     case 'channel_created': {
-      const { currentSpaceId: curSpaceId, channels: curChannels, setChannels, channelToSpaceMap, channelPermissions, channelOriginMap } = useSpaceStore.getState();
+      const { currentSpaceId: curSpaceId, channels: curChannels, setChannels, channelToSpaceMap, channelPermissions, channelOriginMap, voiceChannelIds } = useSpaceStore.getState();
       if (event.spaceId === curSpaceId) {
         if (!curChannels.find(c => c.id === event.channel.id)) {
           setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
@@ -620,6 +637,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       channelToSpaceMap.set(event.channel.id, event.spaceId);
       channelOriginMap.set(event.channel.id, origin);
+      if (event.channel.type === 'voice') {
+        voiceChannelIds.add(event.channel.id);
+      }
       if (event.channel.myPermissions) {
         channelPermissions.set(event.channel.id, event.channel.myPermissions);
       }

@@ -38,6 +38,7 @@ interface SpaceState {
   spacePermissions: Map<string, string>; // spaceId → myPermissions decimal string
   channelPermissions: Map<string, string>; // channelId → myPermissions decimal string
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
+  voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
@@ -127,6 +128,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   spacePermissions: new Map(),
   channelPermissions: new Map(),
   channelOriginMap: new Map(),
+  voiceChannelIds: new Set(),
   categoryOriginMap: new Map(),
   _layoutUpdatedAt: 0,
 
@@ -147,6 +149,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       spacePermissions: new Map(),
       channelPermissions: new Map(),
       channelOriginMap: new Map(),
+      voiceChannelIds: new Set(),
       categoryOriginMap: new Map(),
       _layoutUpdatedAt: 0,
     });
@@ -576,6 +579,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const spacePermissions = new Map(get().spacePermissions);
     const channelPermissions = new Map(get().channelPermissions);
     const channelOriginMap = new Map(get().channelOriginMap);
+    const voiceChannelIds = new Set(get().voiceChannelIds);
     const categoryOriginMap = new Map(get().categoryOriginMap);
 
     // If home, clear home-origin entries first to avoid stale data
@@ -586,6 +590,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           channelLastMessageIds.delete(key);
           channelPermissions.delete(key);
           channelOriginMap.delete(key);
+          voiceChannelIds.delete(key);
         }
       }
       // Also clear server permissions for this origin
@@ -602,6 +607,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           channelLastMessageIds.delete(key);
           channelPermissions.delete(key);
           channelOriginMap.delete(key);
+          voiceChannelIds.delete(key);
         }
       }
       for (const s of get().spaces) {
@@ -619,7 +625,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       for (const ch of srv.channels) {
         channelToSpaceMap.set(ch.id, srv.id);
         channelOriginMap.set(ch.id, origin);
-        if (ch.lastMessageId) {
+        if (ch.type === 'voice') {
+          voiceChannelIds.add(ch.id);
+        } else if (ch.lastMessageId) {
           channelLastMessageIds.set(ch.id, ch.lastMessageId);
         }
         if (ch.myPermissions) {
@@ -663,6 +671,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       spacePermissions,
       channelPermissions,
       channelOriginMap,
+      voiceChannelIds,
       categoryOriginMap,
     };
 
