@@ -513,16 +513,6 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
-    // Set dock icon on macOS (overrides default Electron icon in dev mode)
-    if (process.platform === 'darwin' && app.dock) {
-      const dockIcon = path.join(__dirname, '..', 'build', 'icon-dock.png');
-      const fallbackIcon = path.join(__dirname, '..', 'build', 'icon.png');
-      const iconPath = fs.existsSync(dockIcon) ? dockIcon : fallbackIcon;
-      if (fs.existsSync(iconPath)) {
-        app.dock.setIcon(iconPath);
-      }
-    }
-
     // macOS application menu with "Change Instance"
     if (process.platform === 'darwin') {
       const appMenu = Menu.buildFromTemplate([

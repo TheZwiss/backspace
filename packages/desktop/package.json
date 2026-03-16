@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build:ts": "tsc",
-    "dev": "mkdir -p build && cp ../../icon.png build/icon.png && node -e \"try{require('child_process').execSync('swift scripts/gen-dock-icon.swift',{stdio:'inherit'})}catch(e){}\" && tsc && electron .",
+    "dev": "mkdir -p build && cp ../../icon.png build/icon.png && bash scripts/gen-icns.sh && cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
     "prebuild": "mkdir -p build && cp ../../icon.png build/icon.png",
     "build": "tsc && electron-builder",
     "clean": "rm -rf dist dist-electron"
