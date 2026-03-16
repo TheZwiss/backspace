@@ -143,11 +143,31 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }
       }
 
-      // Only force-reload the current channel on reconnect; other channels keep their cache
-      if (isHome) {
-        const { loadMessages: reloadMessages, currentChannelId } = useChatStore.getState();
-        if (currentChannelId) {
-          reloadMessages(currentChannelId, true);
+      // Clear stale message cache for all channels on this origin so the next
+      // visit does a fresh fetch (and scroll-to-bottom fires correctly).
+      // Force-reload the currently open channel immediately.
+      {
+        const chatState = useChatStore.getState();
+        const { channelOriginMap } = useSpaceStore.getState();
+        const newMessages = new Map(chatState.messages);
+        const newHasMore = new Map(chatState.hasMore);
+        for (const [channelId, chOrigin] of channelOriginMap) {
+          if (chOrigin === origin) {
+            newMessages.delete(channelId);
+            newHasMore.delete(channelId);
+          }
+        }
+        if (isHome) {
+          for (const key of [...newMessages.keys()]) {
+            if (key.startsWith('dm-')) {
+              newMessages.delete(key);
+              newHasMore.delete(key);
+            }
+          }
+        }
+        useChatStore.setState({ messages: newMessages, hasMore: newHasMore });
+        if (chatState.currentChannelId) {
+          chatState.loadMessages(chatState.currentChannelId, true);
         }
       }
 
