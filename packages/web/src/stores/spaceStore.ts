@@ -82,6 +82,7 @@ interface SpaceState {
   removeInstanceSpaces: (origin: string) => void;
   transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
   findExistingDmForUser: (targetUser: { id: string; homeUserId?: string | null }) => { dm: DmChannel; origin: string } | null;
+  reset: () => void;
 }
 
 /**
@@ -128,6 +129,28 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   channelOriginMap: new Map(),
   categoryOriginMap: new Map(),
   _layoutUpdatedAt: 0,
+
+  reset: () => {
+    _myUserIdByOrigin.clear();
+    set({
+      spaces: [],
+      currentSpaceId: null,
+      channels: [],
+      categories: [],
+      members: [],
+      roles: [],
+      folders: [],
+      spaceLayout: null,
+      dmChannels: [],
+      channelToSpaceMap: new Map(),
+      channelLastMessageIds: new Map(),
+      spacePermissions: new Map(),
+      channelPermissions: new Map(),
+      channelOriginMap: new Map(),
+      categoryOriginMap: new Map(),
+      _layoutUpdatedAt: 0,
+    });
+  },
 
   setSpaces: (spaces) => set({ spaces }),
   setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),

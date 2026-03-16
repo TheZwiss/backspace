@@ -31,7 +31,7 @@ interface AuthState {
 function resetUserStores() {
   clearSelfIds();
   useChatStore.getState().clearAllMessages();
-  useSpaceStore.getState().populateFromReady('', [], [], []);
+  useSpaceStore.getState().reset();
   useSocialStore.getState().reset();
   useVoiceStore.getState().resetSession();
   useInstanceStore.getState().reset();
