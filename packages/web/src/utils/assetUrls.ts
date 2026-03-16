@@ -1,5 +1,10 @@
 import { getApiForOrigin } from '../stores/spaceStore';
 
+/** Strip /api/uploads/ prefix to get bare filename. No-op for bare filenames and absolute URLs. */
+export function stripUploadPrefix(filename: string): string {
+  return filename.startsWith('/api/uploads/') ? filename.slice('/api/uploads/'.length) : filename;
+}
+
 /**
  * Resolve a relative asset filename to an absolute URL for remote origins.
  * Home-origin filenames are returned as-is (components handle the /api/uploads/ prefix).
@@ -7,7 +12,7 @@ import { getApiForOrigin } from '../stores/spaceStore';
  */
 export function resolveAssetUrl(filename: string | null | undefined, origin: string): typeof filename {
   if (!filename || !origin || filename.startsWith('http')) return filename;
-  return getApiForOrigin(origin).uploads.url(filename);
+  return getApiForOrigin(origin).uploads.url(stripUploadPrefix(filename));
 }
 
 /**

@@ -183,6 +183,10 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Avatar URL must be a relative upload path or http/https URL', statusCode: 400 });
       }
       updateData.avatar = avatar;
+      // Normalize to bare filename — profileSync historically stored /api/uploads/ prefix
+      if (typeof updateData.avatar === 'string' && updateData.avatar.startsWith('/api/uploads/')) {
+        updateData.avatar = updateData.avatar.slice('/api/uploads/'.length);
+      }
     }
 
     if (banner !== undefined) {
@@ -191,6 +195,10 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
       if (banner && typeof banner === 'string' && banner.trim().length > 0) {
         updateData.banner = banner.trim();
+        // Normalize to bare filename — profileSync historically stored /api/uploads/ prefix
+        if (updateData.banner.startsWith('/api/uploads/')) {
+          updateData.banner = updateData.banner.slice('/api/uploads/'.length);
+        }
       } else {
         updateData.banner = null;
       }
