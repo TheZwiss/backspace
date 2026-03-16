@@ -5,6 +5,7 @@ import { RegisterPage } from './components/auth/RegisterPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { JoinPage } from './components/JoinPage';
 import { SwAutoUpdate } from './components/ui/SwUpdatePrompt';
+import { ScreenSharePicker } from './components/voice/ScreenSharePicker';
 import { useAuthStore } from './stores/authStore';
 import { isElectron } from './platform/platform';
 
@@ -38,6 +39,7 @@ export function App() {
       </>}
       <div className={showTitleBar ? 'flex-1 min-h-0' : 'contents'}>
         <SwAutoUpdate />
+        <ScreenSharePicker />
         <Routes>
           <Route
             path="/login"
