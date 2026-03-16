@@ -125,6 +125,23 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     return () => observer.disconnect();
   }, [hasMessages, channelId]);
 
+  // Scroll to bottom when any image/media inside the message list finishes loading.
+  // The `load` event doesn't bubble, but capture-phase listeners on ancestors still fire.
+  // This handles the case ResizeObserver misses due to its own layout-loop suppression.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const handleMediaLoad = () => {
+      if (isNearBottomRef.current && containerRef.current) {
+        containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      }
+    };
+
+    content.addEventListener('load', handleMediaLoad, true);
+    return () => content.removeEventListener('load', handleMediaLoad, true);
+  }, [hasMessages, channelId]);
+
   // Jump-to-message: scroll to target and highlight
   useEffect(() => {
     if (!jumpToMessageId) return;
