@@ -13,7 +13,7 @@ import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 
 import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
-import { isElectronMac } from '../../platform/platform';
+import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
 // ─── Resolved layout types ─────────────────────────────────────────────────
@@ -79,7 +79,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
     }
 
     if (type === 'dm') {
-      return { background: HOME_GRADIENT.gradient };
+      return undefined;
     }
 
     // Space type — if it has a custom icon image, no gradient needed
@@ -110,7 +110,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   const buttonContent = (
     <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
       {type === 'dm' ? (
-        <span className="text-[17px] font-bold">B</span>
+        <img src="/icons/logo.png" alt="Backspace" className="w-full h-full object-cover" />
       ) : type === 'action' ? (
         actionType === 'add' ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -1248,7 +1248,7 @@ export function SpaceSidebar() {
   }, [openFolderId, resolvedLayout]);
 
   return (
-    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24, ...(isElectronMac() ? { top: '32px' } : {}) }} onDragOver={(e) => { if (dragState) e.preventDefault(); }} onDrop={handleDrop}>
+    <nav data-pip-obstacle="left" className="w-[72px] bg-surface-base flex flex-col items-center py-3 overflow-y-auto flex-shrink-0 no-scrollbar select-none md:fixed md:inset-y-0 md:left-0 md:z-[100] md:glass-strip" style={{ paddingBottom: floatingPanelHeight + 24, ...(isElectron() ? { top: '33px' } : {}) }} onDragOver={(e) => { if (dragState) e.preventDefault(); }} onDrop={handleDrop}>
       <SidebarItem
         id="@me"
         name="Direct Messages"

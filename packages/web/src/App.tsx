@@ -7,7 +7,7 @@ import { JoinPage } from './components/JoinPage';
 import { SwAutoUpdate } from './components/ui/SwUpdatePrompt';
 import { ScreenSharePicker } from './components/voice/ScreenSharePicker';
 import { useAuthStore } from './stores/authStore';
-import { isElectronMac } from './platform/platform';
+import { isElectron } from './platform/platform';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -29,13 +29,14 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
-  const showTitleBar = isElectronMac();
+  const showTitleBar = isElectron();
 
   return (
     <div className={`flex flex-col ${showTitleBar ? 'h-screen' : 'contents'}`}>
-      {showTitleBar && (
+      {showTitleBar && <>
         <div className="h-8 flex-shrink-0 bg-surface-base titlebar-drag" />
-      )}
+        <div className="h-px flex-shrink-0 bg-border-hard" />
+      </>}
       <div className={showTitleBar ? 'flex-1 min-h-0' : 'contents'}>
         <SwAutoUpdate />
         <ScreenSharePicker />

@@ -2,6 +2,12 @@
   "name": "@backspace/desktop",
   "version": "1.0.0",
   "private": true,
+  "description": "Backspace — a self-hosted, open-source chat platform",
+  "author": {
+    "name": "youruser",
+    "email": "backspace@backspace.chat"
+  },
+  "homepage": "https://github.com/youruser/backspace",
   "main": "dist/main.js",
   "scripts": {
     "build:ts": "tsc",

@@ -186,7 +186,14 @@ function createWindow(): void {
     minHeight: 500,
     title: 'Backspace',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform !== 'darwin' ? {
+      titleBarOverlay: {
+        color: '#0b0b10',
+        symbolColor: '#d8d8de',
+        height: 32,
+      },
+    } : {}),
     backgroundColor: '#313338',
     show: false,
     webPreferences: {
@@ -561,6 +568,23 @@ if (!gotTheLock) {
         },
       ]);
       Menu.setApplicationMenu(appMenu);
+    } else {
+      // Win/Linux: frameless window has no menu bar, but we still need an
+      // application menu so keyboard accelerators (Ctrl+C/V/X/Z/A) work.
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        {
+          label: 'Edit',
+          submenu: [
+            { role: 'undo' },
+            { role: 'redo' },
+            { type: 'separator' },
+            { role: 'cut' },
+            { role: 'copy' },
+            { role: 'paste' },
+            { role: 'selectAll' },
+          ],
+        },
+      ]));
     }
 
     // Purge ALL stale caches so Electron always loads fresh code on launch

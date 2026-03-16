@@ -1,5 +1,6 @@
 appId: com.backspace.desktop
 productName: Backspace
+artifactName: "${productName}-${version}-${arch}.${ext}"
 directories:
   output: dist-electron
 files:
