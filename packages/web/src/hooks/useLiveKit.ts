@@ -412,7 +412,17 @@ export function useLiveKit() {
           ).catch(() => { });
         }
       });
-      newRoom.on(RoomEvent.ParticipantDisconnected, guardedUpdate);
+      newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+        guardedUpdate();
+        // Sync voiceUsers so channel sidebar updates immediately
+        // (don't wait for server's 5s grace-period WS event)
+        const chId = connectedChannelRef.current;
+        if (chId && !chId.startsWith('dm-')) {
+          const { userId } = parseIdentity(participant.identity);
+          useVoiceStore.getState().removeVoiceUser(chId, userId);
+          useVoiceStore.getState().clearVoiceUserStatus(userId);
+        }
+      });
       newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         // LiveKit auto-attaches a hidden <audio> element for subscribed audio tracks.
         // GlobalAudioRenderer is the sole audio playback path with volume/attenuation/boost.
