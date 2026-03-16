@@ -1334,6 +1334,8 @@ function ChannelItem({
           channelName={channel.name}
           onClick={() => canConnect && handleVoiceJoin(channel.id)}
           locked={!canConnect}
+          canManage={canManage}
+          onSettingsClick={onSettingsClick}
           dragState={voiceDragState}
           onDragStart={onVoiceDragStart}
           onDragEnd={onVoiceDragEnd}

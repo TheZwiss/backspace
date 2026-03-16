@@ -4,6 +4,7 @@ import type { ParticipantInfo } from '../hooks/useLiveKit';
 import { AudioManager } from '../audio/AudioManager';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from './spaceStore';
 import { useAuthStore } from './authStore';
+import { isElectron } from '../platform/platform';
 
 export interface ScreenShareConfig {
   height: 1080 | 720 | 540;
@@ -135,7 +136,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: true },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -400,9 +401,6 @@ export const useVoiceStore = create<VoiceState>()(
         // Per-session media state
         isCameraOn: false,
         isScreenSharing: false,
-        // Per-session maps
-        participantVolumes: new Map(),
-        participantMutes: new Map(),
         deafenedUserIds: new Set(),
         streamVolumes: new Map(),
         streamMutes: new Map(),
@@ -528,7 +526,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 10,
+      version: 11,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -572,6 +570,11 @@ export const useVoiceStore = create<VoiceState>()(
             persistedState.screenShareConfig.shareAudio = true;
           }
         }
+        if (version < 11) {
+          if (persistedState.screenShareConfig) {
+            persistedState.screenShareConfig.shareAudio = !isElectron();
+          }
+        }
         return persistedState;
       },
       storage: createJSONStorage(() => localStorage),
@@ -592,6 +595,9 @@ export const useVoiceStore = create<VoiceState>()(
         soundEffectVolume: state.soundEffectVolume,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
+        // Per-user preferences (Map → plain object for JSON)
+        participantVolumes: Object.fromEntries(state.participantVolumes),
+        participantMutes: Object.fromEntries(state.participantMutes),
       }),
       merge: (persistedState: any, currentState: VoiceState) => {
         const merged = { ...currentState, ...persistedState };
@@ -605,8 +611,12 @@ export const useVoiceStore = create<VoiceState>()(
         merged.speakingUserIds = currentState.speakingUserIds;
         merged.deafenedUserIds = currentState.deafenedUserIds;
         merged.voiceUserStates = currentState.voiceUserStates;
-        merged.participantVolumes = currentState.participantVolumes;
-        merged.participantMutes = currentState.participantMutes;
+        merged.participantVolumes = persistedState?.participantVolumes
+          ? new Map(Object.entries(persistedState.participantVolumes))
+          : currentState.participantVolumes;
+        merged.participantMutes = persistedState?.participantMutes
+          ? new Map(Object.entries(persistedState.participantMutes))
+          : currentState.participantMutes;
         merged.streamVolumes = currentState.streamVolumes;
         merged.streamMutes = currentState.streamMutes;
         merged.watchingStreams = currentState.watchingStreams;
