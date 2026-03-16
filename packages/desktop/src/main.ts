@@ -598,9 +598,7 @@ if (!gotTheLock) {
     await session.defaultSession.clearCache();
 
     // Intercept getDisplayMedia() — show custom picker in renderer.
-    // useSystemPicker: on macOS 15+, the native system picker runs instead of
-    // our handler, allowing Chromium's restrictOwnAudio constraint to work
-    // natively (no audio feedback). On Windows/Linux the handler is called.
+    // Audio loopback controlled by user's shareAudio toggle.
     session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
       console.log('[Main:ScreenShare] Handler invoked');
       try {
@@ -658,7 +656,7 @@ if (!gotTheLock) {
         // @ts-ignore — deny the request without crashing
         callback();
       }
-    }, { useSystemPicker: true });
+    });
 
     registerIpcHandlers();
     createWindow();
