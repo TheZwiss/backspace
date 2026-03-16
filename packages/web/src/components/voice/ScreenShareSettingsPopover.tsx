@@ -229,7 +229,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
               </div>
               {isElectron() && config.shareAudio && (
                 <div className="text-[10px] text-accent-amber/80 mt-0.5">
-                  Headphones recommended
+                  Use Chrome for echo-free audio
                 </div>
               )}
             </div>

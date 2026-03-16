@@ -190,7 +190,7 @@ export function ScreenSharePicker() {
             </label>
             {shareAudio && (
               <div className="text-[11px] text-accent-amber/80">
-                Headphones recommended to prevent echo
+                May echo voices back to viewers — use Chrome browser for echo-free audio
               </div>
             )}
           </div>
