@@ -9,6 +9,7 @@ import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BAN
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 import type { FederationOpResult } from '../../../utils/federationOps';
+import { isElectron } from '../../../platform/platform';
 
 
 export function AccountPanel() {
@@ -686,6 +687,27 @@ export function AccountPanel() {
           </button>
         </form>
       </div>
+
+      {/* ── Connected Instance (Electron only) ── */}
+      {isElectron() && (
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Connected Instance</div>
+          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-txt-primary font-medium">{window.location.origin}</div>
+                <div className="text-xs text-txt-tertiary mt-0.5">Currently connected instance</div>
+              </div>
+              <button
+                onClick={() => window.backspace?.clearInstanceUrl()}
+                className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors"
+              >
+                Change Instance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Danger Zone ── */}
       <div>

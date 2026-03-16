@@ -59,6 +59,7 @@ export function VoiceControls() {
 
   const handleScreenShare = async () => {
     const room = getActiveRoom();
+    console.log('[SS] handleScreenShare clicked, room:', !!room, 'isScreenSharing:', isScreenSharing);
     if (!room) return;
     try {
       if (!isScreenSharing) {

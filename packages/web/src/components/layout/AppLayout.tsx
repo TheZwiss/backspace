@@ -255,7 +255,7 @@ export function AppLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-surface-chat">
+      <div className="h-full flex items-center justify-center bg-surface-chat">
         <div className="text-center">
           <svg className="animate-spin w-10 h-10 text-accent-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -268,7 +268,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="h-screen flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
+    <div className="h-full flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
       {/* Space sidebar - always visible on desktop, toggled on mobile */}
       <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
         <SpaceSidebar />

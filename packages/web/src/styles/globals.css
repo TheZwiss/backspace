@@ -455,3 +455,7 @@
   .animate-call-button-glow { animation: none !important; }
   .call-refraction::after { animation: none !important; opacity: 0; }
 }
+
+/* ── Electron window drag regions ── */
+.titlebar-drag { -webkit-app-region: drag; }
+.titlebar-no-drag { -webkit-app-region: no-drag; }

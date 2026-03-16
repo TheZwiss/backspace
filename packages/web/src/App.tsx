@@ -5,7 +5,9 @@ import { RegisterPage } from './components/auth/RegisterPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { JoinPage } from './components/JoinPage';
 import { SwAutoUpdate } from './components/ui/SwUpdatePrompt';
+import { ScreenSharePicker } from './components/voice/ScreenSharePicker';
 import { useAuthStore } from './stores/authStore';
+import { isElectronMac } from './platform/platform';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -27,50 +29,57 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
-  return (
-    <>
-    <SwAutoUpdate />
-    <Routes>
-      <Route
-        path="/login"
-        element={
-          <AuthRedirect>
-            <LoginPage />
-          </AuthRedirect>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <AuthRedirect>
-            <RegisterPage />
-          </AuthRedirect>
-        }
-      />
-      <Route
-        path="/channels/:spaceId/:channelId?"
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/join/:inviteCode"
-        element={<JoinPage />}
-      />
-      <Route
-        path="/explore"
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/channels/@me" replace />} />
-      <Route path="*" element={<Navigate to="/channels/@me" replace />} />
-    </Routes>
-    </>
+  const showTitleBar = isElectronMac();
 
+  return (
+    <div className={`flex flex-col ${showTitleBar ? 'h-screen' : 'contents'}`}>
+      {showTitleBar && (
+        <div className="h-8 flex-shrink-0 bg-surface-base titlebar-drag" />
+      )}
+      <div className={showTitleBar ? 'flex-1 min-h-0' : 'contents'}>
+        <SwAutoUpdate />
+        <ScreenSharePicker />
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <AuthRedirect>
+                <LoginPage />
+              </AuthRedirect>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <AuthRedirect>
+                <RegisterPage />
+              </AuthRedirect>
+            }
+          />
+          <Route
+            path="/channels/:spaceId/:channelId?"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/join/:inviteCode"
+            element={<JoinPage />}
+          />
+          <Route
+            path="/explore"
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/channels/@me" replace />} />
+          <Route path="*" element={<Navigate to="/channels/@me" replace />} />
+        </Routes>
+      </div>
+    </div>
   );
 }

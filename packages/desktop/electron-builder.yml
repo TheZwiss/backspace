@@ -4,6 +4,7 @@ directories:
   output: dist-electron
 files:
   - dist/**/*
+  - resources/**/*
   - "!node_modules"
 publish:
   - provider: generic

@@ -49,4 +49,17 @@ contextBridge.exposeInMainWorld('backspace', {
   onDeepLink: (callback: (url: string) => void) => {
     ipcRenderer.on('deep-link', (_event, url) => callback(url));
   },
+
+  // Screen share picker coordination
+  onScreenShareSources: (callback: (sources: unknown[]) => void) => {
+    ipcRenderer.on('screen-share-sources', (_event, sources) => callback(sources));
+  },
+  selectScreenSource: (sourceId: string | null) => {
+    ipcRenderer.send('screen-share-selected', sourceId);
+  },
+
+  // Instance URL management
+  getInstanceUrl: () => ipcRenderer.invoke('get-instance-url'),
+  setInstanceUrl: (url: string) => ipcRenderer.invoke('set-instance-url', url),
+  clearInstanceUrl: () => ipcRenderer.invoke('clear-instance-url'),
 });

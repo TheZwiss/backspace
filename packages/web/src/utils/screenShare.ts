@@ -124,10 +124,13 @@ export async function applyOverdrive(
 }
 
 // ---------------------------------------------------------------------------
-// Start screen sharing
+// Start screen sharing — single path via setScreenShareEnabled()
+// In Electron, getDisplayMedia() is intercepted by setDisplayMediaRequestHandler
+// in the main process, which shows the custom picker automatically.
 // ---------------------------------------------------------------------------
 
 export async function startScreenShare(room: Room): Promise<boolean> {
+  console.log('[SS] startScreenShare called, room state:', room.state);
   const opts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
 
   try {
@@ -147,6 +150,7 @@ export async function startScreenShare(room: Room): Promise<boolean> {
       simulcast: opts.publish.simulcast,
     } as any);
 
+    console.log('[SS] setScreenShareEnabled returned:', !!track);
     if (!track) {
       return false;
     }
@@ -159,39 +163,43 @@ export async function startScreenShare(room: Room): Promise<boolean> {
     }
 
     useVoiceStore.setState({ isScreenSharing: true });
-
-    // Overdrive at 2s — after WebRTC finishes negotiation
-    setTimeout(async () => {
-      if (!useVoiceStore.getState().isScreenSharing) return;
-      // Rebuild from fresh store state — no stale closures
-      const freshOpts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
-
-      const screenPub = room.localParticipant.getTrackPublications()
-        .find(p => p.source === Track.Source.ScreenShare);
-      if (screenPub?.track?.mediaStreamTrack) {
-        await screenPub.track.mediaStreamTrack.applyConstraints({
-          width: { ideal: freshOpts.capture.width },
-          height: { ideal: freshOpts.capture.height },
-          frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
-        });
-        // Re-assert contentHint (LiveKit may strip it during renegotiation)
-        screenPub.track.mediaStreamTrack.contentHint = freshOpts.contentHint;
-      }
-      await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
-    }, 2000);
-
-    // Second overdrive at 5s — safety net for slow BWE convergence
-    setTimeout(async () => {
-      if (!useVoiceStore.getState().isScreenSharing) return;
-      const freshOpts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
-      await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
-    }, 5000);
-
+    applyScreenShareOverdrive(room);
     return true;
   } catch (err) {
     console.error('[ScreenShare] Failed to start screen share:', err);
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shared overdrive scheduling
+// ---------------------------------------------------------------------------
+
+function applyScreenShareOverdrive(room: Room): void {
+  // Overdrive at 2s — after WebRTC finishes negotiation
+  setTimeout(async () => {
+    if (!useVoiceStore.getState().isScreenSharing) return;
+    const freshOpts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
+
+    const screenPub = room.localParticipant.getTrackPublications()
+      .find(p => p.source === Track.Source.ScreenShare);
+    if (screenPub?.track?.mediaStreamTrack) {
+      await screenPub.track.mediaStreamTrack.applyConstraints({
+        width: { ideal: freshOpts.capture.width },
+        height: { ideal: freshOpts.capture.height },
+        frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
+      });
+      screenPub.track.mediaStreamTrack.contentHint = freshOpts.contentHint;
+    }
+    await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
+  }, 2000);
+
+  // Second overdrive at 5s — safety net for slow BWE convergence
+  setTimeout(async () => {
+    if (!useVoiceStore.getState().isScreenSharing) return;
+    const freshOpts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
+    await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
+  }, 5000);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +220,7 @@ export async function stopScreenShare(room: Room): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function changeScreenShare(room: Room): Promise<void> {
-  await room.localParticipant.setScreenShareEnabled(false);
+  await stopScreenShare(room);
   setTimeout(async () => {
     await startScreenShare(room);
   }, 200);

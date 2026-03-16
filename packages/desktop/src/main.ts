@@ -8,6 +8,8 @@ import {
   ipcMain,
   shell,
   screen,
+  session,
+  desktopCapturer,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -17,9 +19,36 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let pendingDeepLink: string | null = null;
 
-const DEV_URL = 'http://localhost:5173';
-const PROD_URL = 'http://localhost:3000';
-const SERVER_URL = process.env.BACKSPACE_URL || (app.isPackaged ? PROD_URL : DEV_URL);
+// ─── Instance URL Persistence ────────────────────────────────────────────────
+
+function getInstanceUrlPath(): string {
+  return path.join(app.getPath('userData'), 'instance-url.json');
+}
+
+function loadInstanceUrl(): string | null {
+  try {
+    const data = JSON.parse(fs.readFileSync(getInstanceUrlPath(), 'utf-8'));
+    return typeof data.url === 'string' ? data.url : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveInstanceUrl(url: string): void {
+  fs.writeFileSync(getInstanceUrlPath(), JSON.stringify({ url }));
+}
+
+function clearInstanceUrl(): void {
+  try {
+    fs.unlinkSync(getInstanceUrlPath());
+  } catch {
+    // File may not exist — ignore
+  }
+}
+
+function getPickerPath(): string {
+  return path.join(__dirname, '..', 'resources', 'instance-picker.html');
+}
 
 // ─── Window State Persistence ───────────────────────────────────────────────
 
@@ -171,7 +200,21 @@ function createWindow(): void {
     mainWindow.maximize();
   }
 
-  mainWindow.loadURL(SERVER_URL);
+  // URL resolution priority:
+  // 1. BACKSPACE_URL env var (managed deployments)
+  // 2. Saved instance URL from picker
+  // 3. No URL → show instance picker
+  const envUrl = process.env.BACKSPACE_URL;
+  if (envUrl) {
+    mainWindow.loadURL(envUrl);
+  } else {
+    const savedUrl = loadInstanceUrl();
+    if (savedUrl) {
+      mainWindow.loadURL(savedUrl);
+    } else {
+      mainWindow.loadFile(getPickerPath());
+    }
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -248,6 +291,15 @@ function createTray(): void {
         mainWindow?.hide();
       },
     },
+    {
+      label: 'Change Instance',
+      click: () => {
+        clearInstanceUrl();
+        mainWindow?.loadFile(getPickerPath());
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+    },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -319,6 +371,39 @@ function registerIpcHandlers(): void {
     mainWindow?.close();
   });
 
+  // Instance URL management
+  ipcMain.handle('get-instance-url', () => loadInstanceUrl());
+
+  ipcMain.handle('set-instance-url', (_event, url: string) => {
+    saveInstanceUrl(url);
+    if (mainWindow) {
+      mainWindow.loadURL(url);
+      // Force Electron to re-evaluate drag regions after navigation
+      mainWindow.webContents.once('did-finish-load', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const bounds = mainWindow.getBounds();
+          mainWindow.setSize(bounds.width + 1, bounds.height);
+          mainWindow.setSize(bounds.width, bounds.height);
+        }
+      });
+    }
+  });
+
+  ipcMain.handle('clear-instance-url', () => {
+    clearInstanceUrl();
+    if (mainWindow) {
+      mainWindow.loadFile(getPickerPath());
+      // Force Electron to re-evaluate drag regions after navigation
+      mainWindow.webContents.once('did-finish-load', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const bounds = mainWindow.getBounds();
+          mainWindow.setSize(bounds.width + 1, bounds.height);
+          mainWindow.setSize(bounds.width, bounds.height);
+        }
+      });
+    }
+  });
+
   // Auto-update IPC
   ipcMain.on('install-update', () => {
     try {
@@ -336,6 +421,12 @@ function registerIpcHandlers(): void {
     } catch {
       // Auto-updater not available
     }
+  });
+
+  // Screen share picker coordination (used by setDisplayMediaRequestHandler)
+  ipcMain.on('screen-share-selected', (_event, sourceId: string | null) => {
+    // Handled via ipcMain.once in the display media handler — this is just
+    // a safety net to prevent unhandled-message warnings
   });
 }
 
@@ -420,7 +511,125 @@ if (!gotTheLock) {
 
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // macOS application menu with "Change Instance"
+    if (process.platform === 'darwin') {
+      const appMenu = Menu.buildFromTemplate([
+        {
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            {
+              label: 'Change Instance',
+              click: () => {
+                clearInstanceUrl();
+                mainWindow?.loadFile(getPickerPath());
+                mainWindow?.show();
+                mainWindow?.focus();
+              },
+            },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' },
+          ],
+        },
+        {
+          label: 'Edit',
+          submenu: [
+            { role: 'undo' },
+            { role: 'redo' },
+            { type: 'separator' },
+            { role: 'cut' },
+            { role: 'copy' },
+            { role: 'paste' },
+            { role: 'selectAll' },
+          ],
+        },
+        {
+          label: 'Window',
+          submenu: [
+            { role: 'minimize' },
+            { role: 'zoom' },
+            { type: 'separator' },
+            { role: 'front' },
+          ],
+        },
+      ]);
+      Menu.setApplicationMenu(appMenu);
+    }
+
+    // Purge ALL stale caches so Electron always loads fresh code on launch
+    await session.defaultSession.clearStorageData({ storages: ['serviceworkers'] });
+    await session.defaultSession.clearCache();
+
+    // Intercept getDisplayMedia() — show custom picker in renderer
+    session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+      console.log('[Main:ScreenShare] Handler invoked');
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 320, height: 180 },
+          fetchWindowIcons: true,
+        });
+        console.log('[Main:ScreenShare] Got', sources.length, 'sources');
+
+        if (sources.length === 0) {
+          console.warn('[Main:ScreenShare] No sources — macOS Screen Recording permission may not be granted');
+          // @ts-ignore — Electron throws if we pass {} when video was requested; pass nothing to deny
+          callback();
+          return;
+        }
+
+        const serialized = sources.map((source) => ({
+          id: source.id,
+          name: source.name,
+          thumbnailDataUrl: source.thumbnail.toDataURL(),
+          appIconDataUrl: source.appIcon && !source.appIcon.isEmpty()
+            ? source.appIcon.toDataURL() : null,
+          isScreen: source.id.startsWith('screen:'),
+        }));
+
+        // Send sources to renderer, wait for user selection
+        mainWindow?.webContents.send('screen-share-sources', serialized);
+
+        const sourceId = await new Promise<string | null>((resolve) => {
+          ipcMain.once('screen-share-selected', (_event, id: string | null) => {
+            resolve(id);
+          });
+        });
+        console.log('[Main:ScreenShare] User selected:', sourceId);
+
+        if (!sourceId) {
+          // @ts-ignore — deny the request without crashing
+          callback();
+          return;
+        }
+
+        const selected = sources.find((s) => s.id === sourceId);
+        if (!selected) {
+          // @ts-ignore — deny the request without crashing
+          callback();
+          return;
+        }
+
+        // Provide the selected source — Electron creates the MediaStream
+        // Enable system audio loopback on Windows/Linux (macOS blocks at OS level)
+        if (process.platform === 'darwin') {
+          callback({ video: selected });
+        } else {
+          callback({ video: selected, audio: 'loopback' });
+        }
+      } catch (err) {
+        console.error('[Main:ScreenShare] Handler error:', err);
+        // @ts-ignore — deny the request without crashing
+        callback();
+      }
+    });
+
     registerIpcHandlers();
     createWindow();
     createTray();

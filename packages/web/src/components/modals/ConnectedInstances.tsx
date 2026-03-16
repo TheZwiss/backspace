@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { InstanceInfoResponse } from '@backspace/shared';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
+import { isElectron } from '../../platform/platform';
 
 // ─── Status indicator ────────────────────────────────────────────────────────
 
@@ -411,8 +412,16 @@ export function ConnectedInstances() {
               </div>
             </div>
           </div>
-          <div className="text-xs text-txt-tertiary shrink-0 ml-2">
-            Local
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <span className="text-xs text-txt-tertiary">Local</span>
+            {isElectron() && (
+              <button
+                onClick={() => window.backspace?.clearInstanceUrl()}
+                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] rounded transition-colors"
+              >
+                Change
+              </button>
+            )}
           </div>
         </div>
 

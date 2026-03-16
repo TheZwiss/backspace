@@ -197,7 +197,7 @@ export function JoinPage() {
   // Loading state
   if (isLoadingPreview) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
+      <div className="min-h-full flex items-center justify-center bg-surface-base relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
         <div className="text-center relative z-10">
           <svg className="animate-spin w-10 h-10 text-accent-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none">
@@ -213,7 +213,7 @@ export function JoinPage() {
   // Error state — invalid/expired invite
   if (previewError || !preview) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
+      <div className="min-h-full flex items-center justify-center bg-surface-base relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
         <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent-rose/10 flex items-center justify-center">
@@ -247,7 +247,7 @@ export function JoinPage() {
 
   // Main invite page
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
+    <div className="min-h-full flex items-center justify-center bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
       <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         {/* Space preview */}

@@ -61,7 +61,7 @@ export function LoginPage() {
   const isDisabled = isLoading || retryAfter > 0;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-base relative">
+    <div className="min-h-full flex items-center justify-center bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
       <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10">
         <div className="text-center mb-6">
