@@ -185,6 +185,7 @@ function createWindow(): void {
     minWidth: 940,
     minHeight: 500,
     title: 'Backspace',
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: '#313338',
     show: false,
