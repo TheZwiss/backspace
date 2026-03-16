@@ -4,6 +4,7 @@ import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
 import { useAuthStore } from './authStore';
+import { useChatStore } from './chatStore';
 
 // ─── Instance-aware types ─────────────────────────────────────────────────────
 
@@ -147,9 +148,13 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     };
   }),
 
-  removeDmChannel: (id) => set((state) => ({
-    dmChannels: state.dmChannels.filter(c => c.id !== id)
-  })),
+  removeDmChannel: (id) => {
+    set((state) => ({
+      dmChannels: state.dmChannels.filter(c => c.id !== id)
+    }));
+    // Clean up unread/read state for the closed DM
+    useChatStore.getState().removeChannelStates(new Set([id]));
+  },
 
   addDmMember: (dmChannelId, user) => set((state) => ({
     dmChannels: state.dmChannels.map(dm =>
@@ -408,13 +413,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   removeSpace: (spaceId: string) => {
-    set((state) => {
-      // Collect channel IDs belonging to this space for map cleanup
-      const channelIdsToRemove = new Set<string>();
-      for (const [channelId, sid] of state.channelToSpaceMap) {
-        if (sid === spaceId) channelIdsToRemove.add(channelId);
-      }
+    // Collect channel IDs before set() so we can clean up chatStore after
+    const currentState = get();
+    const channelIdsToRemove = new Set<string>();
+    for (const [channelId, sid] of currentState.channelToSpaceMap) {
+      if (sid === spaceId) channelIdsToRemove.add(channelId);
+    }
 
+    set((state) => {
       const channelToSpaceMap = new Map(state.channelToSpaceMap);
       const channelPermissions = new Map(state.channelPermissions);
       const channelOriginMap = new Map(state.channelOriginMap);
@@ -439,6 +445,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         spacePermissions,
       };
     });
+
+    // Clean up orphaned unread/read states and cached messages in chatStore
+    if (channelIdsToRemove.size > 0) {
+      useChatStore.getState().removeChannelStates(channelIdsToRemove);
+    }
   },
 
   updateMemberPresence: (userId: string, status: string) => {
@@ -739,6 +750,13 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   removeInstanceSpaces: (origin: string) => {
+    // Collect channel IDs before set() for chatStore cleanup
+    const currentState = get();
+    const channelIdsToRemove = new Set<string>();
+    for (const [channelId, chOrigin] of currentState.channelOriginMap) {
+      if (chOrigin === origin) channelIdsToRemove.add(channelId);
+    }
+
     set((state) => {
       const remainingSpaces = state.spaces.filter(s => s._instanceOrigin !== origin);
 
@@ -749,13 +767,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       const channelOriginMap = new Map(state.channelOriginMap);
       const spacePermissions = new Map(state.spacePermissions);
 
-      for (const [channelId, chOrigin] of state.channelOriginMap) {
-        if (chOrigin === origin) {
-          channelToSpaceMap.delete(channelId);
-          channelLastMessageIds.delete(channelId);
-          channelPermissions.delete(channelId);
-          channelOriginMap.delete(channelId);
-        }
+      for (const channelId of channelIdsToRemove) {
+        channelToSpaceMap.delete(channelId);
+        channelLastMessageIds.delete(channelId);
+        channelPermissions.delete(channelId);
+        channelOriginMap.delete(channelId);
       }
       for (const s of state.spaces) {
         if (s._instanceOrigin === origin) {
@@ -775,6 +791,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           : null,
       };
     });
+
+    // Clean up orphaned unread/read states and cached messages in chatStore
+    if (channelIdsToRemove.size > 0) {
+      useChatStore.getState().removeChannelStates(channelIdsToRemove);
+    }
   },
 }));
 

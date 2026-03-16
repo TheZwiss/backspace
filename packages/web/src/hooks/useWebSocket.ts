@@ -284,7 +284,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
       addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
-        if (event.message.channelId !== currentChannelId) {
+        const myId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+        if (event.message.channelId !== currentChannelId && event.message.userId !== myId) {
           markChannelUnread(event.message.channelId);
         }
       }
@@ -440,7 +441,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
-        if (event.message.dmChannelId !== currentChannelId) {
+        const myId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+        if (event.message.dmChannelId !== currentChannelId && event.message.userId !== myId) {
           markChannelUnread(event.message.dmChannelId);
         }
       }

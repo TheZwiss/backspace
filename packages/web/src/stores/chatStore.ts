@@ -57,6 +57,7 @@ interface ChatState {
   markChannelUnread: (channelId: string) => void;
   ackChannel: (channelId: string) => void;
   onChannelAck: (channelId: string, messageId: string) => void;
+  removeChannelStates: (channelIds: Set<string>) => void;
   updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
 }
 
@@ -565,16 +566,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ackChannel: (channelId: string) => {
     const msgs = get().messages.get(channelId);
     if (!msgs || msgs.length === 0) return;
-    const lastMsg = msgs[msgs.length - 1];
-    if (!lastMsg) return;
-    const messageId = lastMsg.id;
-    // Don't ack optimistic/temp messages — wait for the real server ID
-    if (messageId.startsWith('temp_')) return;
+
+    // Walk backward to find the last server-confirmed (non-temp) message
+    let messageId: string | null = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i];
+      if (msg && !msg.id.startsWith('temp_')) {
+        messageId = msg.id;
+        break;
+      }
+    }
+    if (!messageId) return; // All messages are temp — nothing to ack yet
 
     // Update local state immediately
     set((state) => {
       const newReadStates = new Map(state.readStates);
-      newReadStates.set(channelId, messageId);
+      newReadStates.set(channelId, messageId!);
       const newUnread = new Set(state.unreadChannels);
       newUnread.delete(channelId);
       return { readStates: newReadStates, unreadChannels: newUnread };
@@ -592,6 +599,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newUnread = new Set(state.unreadChannels);
       newUnread.delete(channelId);
       return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+  },
+
+  removeChannelStates: (channelIds: Set<string>) => {
+    if (channelIds.size === 0) return;
+    set((state) => {
+      const newUnread = new Set(state.unreadChannels);
+      const newReadStates = new Map(state.readStates);
+      const newMessages = new Map(state.messages);
+      for (const channelId of channelIds) {
+        newUnread.delete(channelId);
+        newReadStates.delete(channelId);
+        newMessages.delete(channelId);
+      }
+      return { unreadChannels: newUnread, readStates: newReadStates, messages: newMessages };
     });
   },
 

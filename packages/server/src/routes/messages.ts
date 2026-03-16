@@ -343,7 +343,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     const messageWithUser = buildMessageWithUser(message, user, attachmentRows, [], replyTo);
 
     // Broadcast via WebSocket
-    connectionManager.sendToSpace(spaceId, {
+    connectionManager.sendToChannel(spaceId, id, {
       type: 'message_created',
       message: messageWithUser,
     });

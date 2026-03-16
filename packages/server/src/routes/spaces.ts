@@ -508,8 +508,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     const spaceIcon = server.icon;
     const spaceBanner = server.banner;
 
-    // Delete all channels (messages cascade), members, folder refs, then space atomically
+    // Delete all channels (messages cascade), members, folder refs, read states, then space atomically
     db.transaction((tx) => {
+      // Clean up read_states for all channels in this space (no FK cascade — channelId is plain text)
+      if (channelIds.length > 0) {
+        tx.delete(schema.readStates).where(inArray(schema.readStates.channelId, channelIds)).run();
+      }
       tx.delete(schema.channels).where(eq(schema.channels.spaceId, id)).run();
       tx.delete(schema.spaceMembers).where(eq(schema.spaceMembers.spaceId, id)).run();
       tx.delete(schema.spaceFolderMembers).where(eq(schema.spaceFolderMembers.spaceId, id)).run();
@@ -941,6 +945,16 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       )
     ).run();
 
+    // Clean up read_states for the departing user in this space's channels
+    const spaceChannelIds = db.select({ id: schema.channels.id })
+      .from(schema.channels).where(eq(schema.channels.spaceId, id)).all().map(c => c.id);
+    if (spaceChannelIds.length > 0) {
+      db.delete(schema.readStates).where(and(
+        eq(schema.readStates.userId, uid),
+        inArray(schema.readStates.channelId, spaceChannelIds),
+      )).run();
+    }
+
     // Broadcast member_left event
     connectionManager.sendToSpace(id, {
       type: 'member_left',
@@ -1269,6 +1283,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     const now = Date.now();
 
+    // Fetch channel IDs before the transaction for read_states cleanup
+    const banChannelIds = db.select({ id: schema.channels.id })
+      .from(schema.channels).where(eq(schema.channels.spaceId, id)).all().map(c => c.id);
+
     db.transaction((tx) => {
       // Insert ban record
       tx.insert(schema.bans).values({
@@ -1290,6 +1308,14 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
         eq(schema.memberRoles.spaceId, id),
         eq(schema.memberRoles.userId, targetId),
       )).run();
+
+      // Clean up read_states for the banned user in this space's channels
+      if (banChannelIds.length > 0) {
+        tx.delete(schema.readStates).where(and(
+          eq(schema.readStates.userId, targetId),
+          inArray(schema.readStates.channelId, banChannelIds),
+        )).run();
+      }
 
       // Clean up any voice restrictions for the banned member
       tx.delete(schema.voiceRestrictions).where(and(

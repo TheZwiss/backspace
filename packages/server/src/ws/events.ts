@@ -1040,6 +1040,14 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   // Validate messageId is a valid snowflake (numeric string) — reject temp/garbage IDs
   if (!/^\d+$/.test(messageId)) return;
 
+  // Validate channel membership — reject acks for channels the user doesn't belong to
+  const spaceId = getChannelSpaceId(channelId);
+  if (spaceId) {
+    if (!isMember(spaceId, userId)) return;
+  } else {
+    if (!isDmMember(channelId, userId)) return;
+  }
+
   const db = getDb();
 
   const existing = db.select()

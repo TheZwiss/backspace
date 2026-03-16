@@ -695,6 +695,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       ))
       .run();
 
+    // Clean up read_states for the departing user
+    db.delete(schema.readStates).where(and(
+      eq(schema.readStates.userId, request.userId),
+      eq(schema.readStates.channelId, id),
+    )).run();
+
     // Check remaining members
     const remainingMembers = db.select()
       .from(schema.dmMembers)
@@ -742,6 +748,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
         });
       }
+
+      // Clean up all read_states for this DM channel (all members' rows)
+      db.delete(schema.readStates).where(eq(schema.readStates.channelId, id)).run();
 
       // Delete the DM channel (cascades to dm_messages)
       db.delete(schema.dmChannels).where(eq(schema.dmChannels.id, id)).run();

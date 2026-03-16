@@ -69,6 +69,9 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     }
   }, [channelId, loadMessages, canReadHistory]);
 
+  // Track the last message ID so the ack re-fires when a temp message is replaced by its server-confirmed ID
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id ?? '' : '';
+
   // Ack channel when messages load or when new messages arrive while near bottom
   useEffect(() => {
     if (messages.length > 0 && isNearBottom) {
@@ -76,7 +79,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       ackTimerRef.current = setTimeout(() => ackChannel(channelId), 200);
     }
     return () => clearTimeout(ackTimerRef.current);
-  }, [channelId, messages.length, isNearBottom, ackChannel]);
+  }, [channelId, messages.length, lastMessageId, isNearBottom, ackChannel]);
 
   // Reset scroll tracking on channel switch so initial-load scroll fires
   useEffect(() => {
