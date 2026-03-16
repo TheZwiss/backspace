@@ -1,13 +1,5 @@
 /** Type augmentation for the Electron IPC bridge exposed by preload.ts */
 
-interface ElectronScreenSource {
-  id: string;                      // "screen:0:0" or "window:12345:0"
-  name: string;                    // "Entire Screen" or "Firefox"
-  thumbnailDataUrl: string;        // PNG data URL at 320×180
-  appIconDataUrl: string | null;   // App icon (windows only)
-  isScreen: boolean;               // true = display, false = window
-}
-
 interface BackspaceElectronAPI {
   // Platform info
   platform: NodeJS.Platform;
@@ -33,10 +25,6 @@ interface BackspaceElectronAPI {
 
   // Deep linking (Task 2.3)
   onDeepLink: (callback: (url: string) => void) => void;
-
-  // Screen share picker coordination
-  onScreenShareSources: (callback: (sources: ElectronScreenSource[]) => void) => void;
-  selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => void;
 
   // Instance URL management
   getInstanceUrl: () => Promise<string | null>;

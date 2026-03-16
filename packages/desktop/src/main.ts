@@ -9,7 +9,6 @@ import {
   shell,
   screen,
   session,
-  desktopCapturer,
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -431,11 +430,6 @@ function registerIpcHandlers(): void {
     }
   });
 
-  // Screen share picker coordination (used by setDisplayMediaRequestHandler)
-  ipcMain.on('screen-share-selected', (_event, _sourceId: string | null, _shareAudio?: boolean) => {
-    // Handled via ipcMain.once in the display media handler — this is just
-    // a safety net to prevent unhandled-message warnings
-  });
 }
 
 // ─── Auto-Update ────────────────────────────────────────────────────────────
@@ -597,66 +591,10 @@ if (!gotTheLock) {
     await session.defaultSession.clearStorageData({ storages: ['serviceworkers'] });
     await session.defaultSession.clearCache();
 
-    // Intercept getDisplayMedia() — show custom picker in renderer
-    session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
-      console.log('[Main:ScreenShare] Handler invoked');
-      try {
-        const sources = await desktopCapturer.getSources({
-          types: ['screen', 'window'],
-          thumbnailSize: { width: 320, height: 180 },
-          fetchWindowIcons: true,
-        });
-        console.log('[Main:ScreenShare] Got', sources.length, 'sources');
-
-        if (sources.length === 0) {
-          console.warn('[Main:ScreenShare] No sources — macOS Screen Recording permission may not be granted');
-          // @ts-ignore — Electron throws if we pass {} when video was requested; pass nothing to deny
-          callback();
-          return;
-        }
-
-        const serialized = sources.map((source) => ({
-          id: source.id,
-          name: source.name,
-          thumbnailDataUrl: source.thumbnail.toDataURL(),
-          appIconDataUrl: source.appIcon && !source.appIcon.isEmpty()
-            ? source.appIcon.toDataURL() : null,
-          isScreen: source.id.startsWith('screen:'),
-        }));
-
-        // Send sources to renderer, wait for user selection
-        mainWindow?.webContents.send('screen-share-sources', serialized);
-
-        const { sourceId, shareAudio } = await new Promise<{ sourceId: string | null; shareAudio: boolean }>((resolve) => {
-          ipcMain.once('screen-share-selected', (_event, id: string | null, wantAudio?: boolean) => {
-            resolve({ sourceId: id, shareAudio: wantAudio ?? true });
-          });
-        });
-        console.log('[Main:ScreenShare] User selected:', sourceId, 'audio:', shareAudio);
-
-        if (!sourceId) {
-          // @ts-ignore — deny the request without crashing
-          callback();
-          return;
-        }
-
-        const selected = sources.find((s) => s.id === sourceId);
-        if (!selected) {
-          // @ts-ignore — deny the request without crashing
-          callback();
-          return;
-        }
-
-        // Provide the selected source — Electron creates the MediaStream
-        // System audio loopback: Windows/Linux native, macOS 13+ via ScreenCaptureKit
-        // Controlled by user's shareAudio preference from the picker UI
-        callback({ video: selected, ...(shareAudio ? { audio: 'loopback' } : {}) });
-      } catch (err) {
-        console.error('[Main:ScreenShare] Handler error:', err);
-        // @ts-ignore — deny the request without crashing
-        callback();
-      }
-    });
+    // Screen sharing: let Chromium's native getDisplayMedia() pipeline handle
+    // source selection and audio capture. This ensures restrictOwnAudio is
+    // applied natively, preventing the app's own voice playback from being
+    // captured in the system audio loopback.
 
     registerIpcHandlers();
     createWindow();
