@@ -19,17 +19,14 @@ mac:
   target:
     - dmg
     - zip
-  # icon: build/icon.icns  # Uncomment when final icon is designed
 win:
   target:
     - nsis
-  # icon: build/icon.ico  # Uncomment when final icon is designed
 linux:
   target:
     - AppImage
     - deb
   category: Network
-  # icon: build/icons  # Uncomment when final icons are designed
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

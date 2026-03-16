@@ -6,7 +6,7 @@
   "scripts": {
     "build:ts": "tsc",
     "dev": "tsc && electron .",
-    "prebuild": "mkdir -p build && cp ../web/public/icons/icon-512.png build/icon.png 2>/dev/null || true",
+    "prebuild": "mkdir -p build && cp ../../icon.png build/icon.png",
     "build": "tsc && electron-builder",
     "clean": "rm -rf dist dist-electron"
   },
