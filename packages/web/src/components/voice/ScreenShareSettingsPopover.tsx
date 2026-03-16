@@ -5,6 +5,8 @@ import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { Toggle } from '../ui/Toggle';
+import { isElectron } from '../../platform/platform';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
@@ -215,6 +217,26 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 ? formatKbps(config.customBitrateKbps)
                 : `Auto`}
             </span>
+          </div>
+        </div>
+
+        {/* System Audio */}
+        <div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider">
+                System Audio
+              </div>
+              {isElectron() && config.shareAudio && (
+                <div className="text-[10px] text-accent-amber/80 mt-0.5">
+                  Headphones recommended
+                </div>
+              )}
+            </div>
+            <Toggle
+              enabled={config.shareAudio}
+              onChange={(enabled) => setConfig({ shareAudio: enabled })}
+            />
           </div>
         </div>
       </div>

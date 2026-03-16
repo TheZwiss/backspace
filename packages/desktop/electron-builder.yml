@@ -17,6 +17,9 @@ protocols:
       - backspace
 mac:
   category: public.app-category.social-networking
+  minimumSystemVersion: "12.0"
+  extendInfo:
+    NSAudioCaptureUsageDescription: "Backspace needs access to system audio to share sound during screen sharing."
   target:
     - dmg
     - zip

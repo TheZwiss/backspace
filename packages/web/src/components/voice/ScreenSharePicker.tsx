@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { create } from 'zustand';
 import { getElectronAPI } from '../../platform/platform';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 // ---------------------------------------------------------------------------
 // Zustand micro-store — bridges the event-driven API to React state
@@ -20,9 +21,9 @@ const useScreenPickerStore = create<ScreenPickerState>(() => ({
 // Close helper — sends selection back to main process
 // ---------------------------------------------------------------------------
 
-function closePicker(sourceId: string | null) {
+function closePicker(sourceId: string | null, shareAudio?: boolean) {
   const api = getElectronAPI();
-  if (api) api.selectScreenSource(sourceId);
+  if (api) api.selectScreenSource(sourceId, shareAudio);
   useScreenPickerStore.setState({ isOpen: false, sources: [] });
 }
 
@@ -37,6 +38,8 @@ export function ScreenSharePicker() {
   const [activeTab, setActiveTab] = useState<Tab>('screens');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const shareAudio = useVoiceStore((s) => s.screenShareConfig.shareAudio);
+  const setScreenShareConfig = useVoiceStore((s) => s.setScreenShareConfig);
 
   // Register listener for sources from main process (once on mount)
   useEffect(() => {
@@ -92,8 +95,6 @@ export function ScreenSharePicker() {
     const q = search.trim().toLowerCase();
     return wins.filter((w) => w.name.toLowerCase().includes(q));
   }, [sources, search]);
-
-  const isMac = getElectronAPI()?.platform === 'darwin';
 
   if (!isOpen) return null;
 
@@ -168,7 +169,7 @@ export function ScreenSharePicker() {
                   source={source}
                   selected={selectedId === source.id}
                   onClick={() => setSelectedId(source.id)}
-                  onDoubleClick={() => closePicker(source.id)}
+                  onDoubleClick={() => closePicker(source.id, shareAudio)}
                 />
               ))}
             </div>
@@ -177,11 +178,22 @@ export function ScreenSharePicker() {
 
         {/* Footer */}
         <div className="flex-shrink-0 flex flex-col items-center px-5 pt-2 pb-4">
-          {isMac ? (
-            <div className="text-[11px] text-txt-tertiary mb-2">System audio is not available on macOS</div>
-          ) : (
-            <div className="text-[11px] text-txt-tertiary mb-2">System audio will be shared</div>
-          )}
+          <div className="flex flex-col items-center gap-1 mb-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={shareAudio}
+                onChange={(e) => setScreenShareConfig({ shareAudio: e.target.checked })}
+                className="w-3.5 h-3.5 rounded accent-accent-primary cursor-pointer"
+              />
+              <span className="text-[12px] text-txt-secondary">Share system audio</span>
+            </label>
+            {shareAudio && (
+              <div className="text-[11px] text-accent-amber/80">
+                Headphones recommended to prevent echo
+              </div>
+            )}
+          </div>
           <div className="glass-bubble rounded-full px-3 py-2 flex items-center gap-3">
             <button
               onClick={() => closePicker(null)}
@@ -190,7 +202,7 @@ export function ScreenSharePicker() {
               Cancel
             </button>
             <button
-              onClick={() => closePicker(selectedId)}
+              onClick={() => closePicker(selectedId, shareAudio)}
               disabled={!selectedId}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >

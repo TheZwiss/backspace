@@ -10,6 +10,7 @@ export interface ScreenShareConfig {
   fps: 60 | 45 | 30;
   mode: 'gaming' | 'text';
   customBitrateKbps: number | null;
+  shareAudio: boolean;
 }
 
 interface VoiceState {
@@ -134,7 +135,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: true },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -527,7 +528,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 9,
+      version: 10,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -565,6 +566,11 @@ export const useVoiceStore = create<VoiceState>()(
         }
         if (version < 9) {
           delete persistedState.currentVoiceChannelId;
+        }
+        if (version < 10) {
+          if (persistedState.screenShareConfig) {
+            persistedState.screenShareConfig.shareAudio = true;
+          }
         }
         return persistedState;
       },

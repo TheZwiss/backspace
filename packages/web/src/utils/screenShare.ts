@@ -131,16 +131,22 @@ export async function applyOverdrive(
 
 export async function startScreenShare(room: Room): Promise<boolean> {
   console.log('[SS] startScreenShare called, room state:', room.state);
-  const opts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
+  const config = useVoiceStore.getState().screenShareConfig;
+  const opts = buildScreenShareOptions(config);
 
   try {
     const track = await room.localParticipant.setScreenShareEnabled(true, {
-      audio: {
+      audio: config.shareAudio ? {
+        // Chrome 141+: exclude this tab's own audio from system audio capture
+        // Prevents feedback loop where remote voices are captured and echoed back
+        // Silently ignored by older browsers / Electron's Chromium 130
+        // @ts-ignore — restrictOwnAudio is not yet in all TS type definitions
+        restrictOwnAudio: true,
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
         channelCount: 2,
-      },
+      } : false,
       resolution: { width: opts.capture.width, height: opts.capture.height },
       // @ts-ignore — LiveKit accepts frameRate at capture level
       frameRate: opts.capture.frameRate,

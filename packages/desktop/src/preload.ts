@@ -54,8 +54,8 @@ contextBridge.exposeInMainWorld('backspace', {
   onScreenShareSources: (callback: (sources: unknown[]) => void) => {
     ipcRenderer.on('screen-share-sources', (_event, sources) => callback(sources));
   },
-  selectScreenSource: (sourceId: string | null) => {
-    ipcRenderer.send('screen-share-selected', sourceId);
+  selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => {
+    ipcRenderer.send('screen-share-selected', sourceId, shareAudio ?? true);
   },
 
   // Instance URL management

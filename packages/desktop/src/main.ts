@@ -432,7 +432,7 @@ function registerIpcHandlers(): void {
   });
 
   // Screen share picker coordination (used by setDisplayMediaRequestHandler)
-  ipcMain.on('screen-share-selected', (_event, sourceId: string | null) => {
+  ipcMain.on('screen-share-selected', (_event, _sourceId: string | null, _shareAudio?: boolean) => {
     // Handled via ipcMain.once in the display media handler — this is just
     // a safety net to prevent unhandled-message warnings
   });
@@ -485,6 +485,12 @@ function handleDeepLink(url: string): void {
     // App not ready yet — store for later
     pendingDeepLink = url;
   }
+}
+
+// Electron 36+ defaults to GTK 4 on GNOME, which crashes if GTK 2/3
+// libraries are loaded in the same process. Force GTK 3 for compatibility.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('gtk-version', '3');
 }
 
 // Set as default protocol handler
@@ -621,12 +627,12 @@ if (!gotTheLock) {
         // Send sources to renderer, wait for user selection
         mainWindow?.webContents.send('screen-share-sources', serialized);
 
-        const sourceId = await new Promise<string | null>((resolve) => {
-          ipcMain.once('screen-share-selected', (_event, id: string | null) => {
-            resolve(id);
+        const { sourceId, shareAudio } = await new Promise<{ sourceId: string | null; shareAudio: boolean }>((resolve) => {
+          ipcMain.once('screen-share-selected', (_event, id: string | null, wantAudio?: boolean) => {
+            resolve({ sourceId: id, shareAudio: wantAudio ?? true });
           });
         });
-        console.log('[Main:ScreenShare] User selected:', sourceId);
+        console.log('[Main:ScreenShare] User selected:', sourceId, 'audio:', shareAudio);
 
         if (!sourceId) {
           // @ts-ignore — deny the request without crashing
@@ -642,12 +648,9 @@ if (!gotTheLock) {
         }
 
         // Provide the selected source — Electron creates the MediaStream
-        // Enable system audio loopback on Windows/Linux (macOS blocks at OS level)
-        if (process.platform === 'darwin') {
-          callback({ video: selected });
-        } else {
-          callback({ video: selected, audio: 'loopback' });
-        }
+        // System audio loopback: Windows/Linux native, macOS 13+ via ScreenCaptureKit
+        // Controlled by user's shareAudio preference from the picker UI
+        callback({ video: selected, ...(shareAudio ? { audio: 'loopback' } : {}) });
       } catch (err) {
         console.error('[Main:ScreenShare] Handler error:', err);
         // @ts-ignore — deny the request without crashing

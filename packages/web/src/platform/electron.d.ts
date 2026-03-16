@@ -36,7 +36,7 @@ interface BackspaceElectronAPI {
 
   // Screen share picker coordination
   onScreenShareSources: (callback: (sources: ElectronScreenSource[]) => void) => void;
-  selectScreenSource: (sourceId: string | null) => void;
+  selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => void;
 
   // Instance URL management
   getInstanceUrl: () => Promise<string | null>;
