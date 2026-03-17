@@ -73,6 +73,15 @@ export default {
       fontFamily: {
         sans: ['DM Sans', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
       },
+      animation: {
+        'slide-up-sheet': 'slide-up-sheet 200ms ease-out',
+      },
+      keyframes: {
+        'slide-up-sheet': {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+      },
     },
   },
   plugins: [],
