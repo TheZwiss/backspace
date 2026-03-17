@@ -112,9 +112,17 @@ export const useUIStore = create<UIState>()(
       openImagePreview: (url) => set({ activeModal: 'imagePreview', imagePreviewUrl: url }),
       closeImagePreview: () => set({ activeModal: null, imagePreviewUrl: null }),
 
-      openUserProfile: (user, position) => set({
-        userProfilePopout: { user, position }
-      }),
+      openUserProfile: (user, position) => {
+        if (get().isMobile) {
+          // On mobile, push a full-screen user profile instead of a positioned popout
+          set((state) => ({
+            mobileStack: [...state.mobileStack, { screen: 'user-profile', params: { userId: user.id } }],
+          }));
+          history.pushState({ mobileScreen: 'user-profile' }, '');
+        } else {
+          set({ userProfilePopout: { user, position } });
+        }
+      },
       closeUserProfile: () => set({
         userProfilePopout: { user: null, position: null }
       }),

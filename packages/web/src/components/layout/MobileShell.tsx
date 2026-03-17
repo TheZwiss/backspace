@@ -6,23 +6,17 @@ import { MobileScreenStack } from './MobileScreenStack';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 
-// Screen components — imported as they are created in subsequent tasks.
-// Inline placeholders are used until the real components exist.
-const PlaceholderScreen = ({ label }: { label: string }) => (
-  <div className="flex-1 flex items-center justify-center bg-surface-base text-txt-secondary">
-    {label}
-  </div>
-);
-
 import { MobileSpacesScreen } from './MobileSpacesScreen';
-import { FriendsPage } from '../chat/FriendsPage';
-// These will be replaced with real imports as each task is completed:
 import { MobileDmsScreen } from './MobileDmsScreen';
 import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
+import { MemberSidebar } from './MemberSidebar';
+import { FriendsPage } from '../chat/FriendsPage';
+import { ExplorePage } from '../chat/ExplorePage';
+import { UserProfileModal } from '../modals/UserProfileModal';
 
 const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
@@ -33,10 +27,17 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
   'settings-instance': () => <MobileSettingsScreen initialPanel="instance" />,
-  'members': () => <PlaceholderScreen label="Members" />,
+  'members': () => <MemberSidebar />,
   'voice-full': () => <MobileVoiceFullScreen />,
-  'explore': () => <PlaceholderScreen label="Explore" />,
-  'user-profile': () => <PlaceholderScreen label="Profile" />,
+  'explore': () => <ExplorePage />,
+  'user-profile': (params) => {
+    // Open the user profile modal with the userId from params
+    if (params?.userId) {
+      // Set modalData so UserProfileModal can read it
+      useUIStore.getState().openModal('userProfile', { userId: params.userId });
+    }
+    return <UserProfileModal />;
+  },
 };
 
 export function MobileShell() {
