@@ -50,6 +50,9 @@ packages/web/src/**/*.js
 .cache/
 tmp/
 
+# Worktrees
+.worktrees/
+
 # Local files
 Gemini Starter.rtf
 System Prompt.rtf
