@@ -16,7 +16,7 @@ const PlaceholderScreen = ({ label }: { label: string }) => (
 
 import { MobileSpacesScreen } from './MobileSpacesScreen';
 // These will be replaced with real imports as each task is completed:
-const MobileDmsScreen = () => <PlaceholderScreen label="DMs" />;
+import { MobileDmsScreen } from './MobileDmsScreen';
 const MobileYouScreen = () => <PlaceholderScreen label="You" />;
 import { MobileChatScreen } from './MobileChatScreen';
 const MobileSettingsScreen = ({ initialPanel: _p }: { initialPanel?: string }) => <PlaceholderScreen label="Settings" />;
