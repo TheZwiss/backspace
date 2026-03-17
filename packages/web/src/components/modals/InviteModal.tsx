@@ -73,7 +73,7 @@ export function InviteModal() {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Invite Friends">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Invite Friends" mobileStyle="sheet">
       <p className="text-txt-secondary text-sm mb-4">
         Share this invite link with friends to let them join your space.
       </p>

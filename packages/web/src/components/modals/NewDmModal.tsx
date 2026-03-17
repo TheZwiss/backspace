@@ -79,7 +79,7 @@ export function NewDmModal() {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="New Direct Message">
+    <Modal isOpen={isOpen} onClose={closeModal} title="New Direct Message" mobileStyle="sheet">
       <div className="space-y-3">
         <input
           ref={inputRef}

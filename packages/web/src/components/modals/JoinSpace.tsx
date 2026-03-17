@@ -124,7 +124,7 @@ export function JoinSpaceModal() {
   } catch { /* ignore */ }
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Join a Space">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Join a Space" mobileStyle="sheet">
       {/* Error display (shared across all phases) */}
       {error && (
         <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">

@@ -287,7 +287,7 @@ export function SpaceSettingsModal() {
     }`;
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-2xl">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-2xl" mobileStyle="fullscreen">
       <div className="flex gap-4 h-[min(520px,70vh)]">
         {/* Tabs */}
         <div className="w-32 flex-shrink-0 self-start z-10">

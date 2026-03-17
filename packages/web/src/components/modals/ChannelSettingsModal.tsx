@@ -931,7 +931,7 @@ export function ChannelSettingsModal() {
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={closeModal} title="Channel Settings" maxWidth={showTabs ? 'max-w-2xl' : 'max-w-md'}>
+      <Modal isOpen={isOpen} onClose={closeModal} title="Channel Settings" mobileStyle="fullscreen" maxWidth={showTabs ? 'max-w-2xl' : 'max-w-md'}>
         {showTabs ? (
           <div className="flex gap-4 h-[min(520px,70vh)]">
             {/* Tabs */}

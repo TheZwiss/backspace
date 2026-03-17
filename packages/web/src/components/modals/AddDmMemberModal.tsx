@@ -80,7 +80,7 @@ export function AddDmMemberModal() {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Add Friends to DM">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Add Friends to DM" mobileStyle="sheet">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-[13px] text-txt-tertiary">

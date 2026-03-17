@@ -56,7 +56,7 @@ export function CreateChannelModal() {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Create Channel">
+    <Modal isOpen={isOpen} onClose={closeModal} title="Create Channel" mobileStyle="sheet">
       <form onSubmit={handleSubmit}>
         {error && (
           <div className="mb-3 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
