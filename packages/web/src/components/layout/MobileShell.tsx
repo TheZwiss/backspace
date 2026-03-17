@@ -13,8 +13,8 @@ const PlaceholderScreen = ({ label }: { label: string }) => (
   </div>
 );
 
+import { MobileSpacesScreen } from './MobileSpacesScreen';
 // These will be replaced with real imports as each task is completed:
-const MobileSpacesScreen = () => <PlaceholderScreen label="Spaces" />;
 const MobileDmsScreen = () => <PlaceholderScreen label="DMs" />;
 const MobileYouScreen = () => <PlaceholderScreen label="You" />;
 const MobileChatScreen = ({ params: _params }: { params?: Record<string, string> }) => <PlaceholderScreen label="Chat" />;
