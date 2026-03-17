@@ -49,6 +49,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const isLoading = useChatStore((s) => s.isLoading);
   const hasMore = useChatStore((s) => s.hasMore.get(channelId) ?? true);
   const ackChannel = useChatStore((s) => s.ackChannel);
+  const saveScrollPosition = useChatStore((s) => s.saveScrollPosition);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -56,6 +57,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const isNearBottomRef = useRef(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const prevMessagesLength = useRef(0);
+  const prevChannelIdRef = useRef<string>(channelId);
+  const visibleMsgIdRef = useRef<string | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
@@ -81,14 +84,39 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     return () => clearTimeout(ackTimerRef.current);
   }, [channelId, messages.length, lastMessageId, isNearBottom, ackChannel]);
 
-  // Reset scroll tracking on channel switch so initial-load scroll fires
+  // Save scroll anchor (tracked by handleScroll) when leaving a channel, then reset tracking
   useEffect(() => {
-    prevMessagesLength.current = 0;
-    setIsNearBottom(true);
-    isNearBottomRef.current = true;
-  }, [channelId]);
+    const prevId = prevChannelIdRef.current;
+    prevChannelIdRef.current = channelId;
 
-  // Handle scrolling: initial load snaps to bottom, new messages smooth-scroll if near bottom
+    // Save or clear the old channel's scroll position
+    if (prevId && prevId !== channelId) {
+      if (visibleMsgIdRef.current) {
+        // User was scrolled up — save the anchor message
+        saveScrollPosition(prevId, visibleMsgIdRef.current);
+        visibleMsgIdRef.current = null;
+      } else {
+        // User was at bottom — clear any stale saved position so we snap to bottom next time
+        const pos = useChatStore.getState().scrollPositions;
+        if (pos.has(prevId)) {
+          const next = new Map(pos);
+          next.delete(prevId);
+          useChatStore.setState({ scrollPositions: next });
+        }
+      }
+    }
+
+    prevMessagesLength.current = 0;
+
+    // If we have a saved position for the incoming channel, don't mark as near-bottom
+    // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
+    const willRestore = useChatStore.getState().scrollPositions.has(channelId);
+    setIsNearBottom(!willRestore);
+    isNearBottomRef.current = !willRestore;
+  }, [channelId, saveScrollPosition]);
+
+  // Handle scrolling: initial load restores position or snaps to bottom,
+  // new messages smooth-scroll if near bottom
   useEffect(() => {
     const prev = prevMessagesLength.current;
     prevMessagesLength.current = messages.length;
@@ -96,18 +124,30 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     if (messages.length === 0) return;
 
     if (prev === 0) {
-      // Initial load / channel switch — snap to bottom
+      // Initial load / channel switch — restore to saved message anchor or snap to bottom
+      const savedMsgId = useChatStore.getState().scrollPositions.get(channelId);
       requestAnimationFrame(() => {
         const container = containerRef.current;
-        if (container) {
-          container.scrollTop = container.scrollHeight;
+        if (!container) return;
+        if (savedMsgId) {
+          const el = document.getElementById(`msg-${savedMsgId}`);
+          if (el) {
+            el.scrollIntoView({ block: 'start' });
+            const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+            const near = dist < 5000;
+            setIsNearBottom(near);
+            isNearBottomRef.current = near;
+            return;
+          }
         }
+        // No saved anchor or message not in cache — snap to bottom
+        container.scrollTop = container.scrollHeight;
       });
     } else if (messages.length > prev && isNearBottom) {
       // New messages arrived while near bottom — smooth scroll
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages.length, isNearBottom]);
+  }, [messages.length, isNearBottom, channelId]);
 
   // Auto-scroll when content height grows (embeds/images loading) while near bottom
   const hasMessages = messages.length > 0;
@@ -178,9 +218,23 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     // Check if near bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const nearBottom = distanceFromBottom < 100;
+    const nearBottom = distanceFromBottom < 5000;
     setIsNearBottom(nearBottom);
     isNearBottomRef.current = nearBottom;
+
+    // Track top-visible message for scroll position persistence
+    if (!nearBottom) {
+      const containerTop = container.getBoundingClientRect().top;
+      const msgEls = container.querySelectorAll('[id^="msg-"]');
+      for (const el of msgEls) {
+        if (el.getBoundingClientRect().bottom > containerTop) {
+          visibleMsgIdRef.current = el.id.replace('msg-', '');
+          break;
+        }
+      }
+    } else {
+      visibleMsgIdRef.current = null;
+    }
 
     // Load more when scrolled to top
     if (container.scrollTop < 50 && hasMore && !isLoadingMore) {
@@ -214,47 +268,61 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar"
-      onScroll={handleScroll}
-    >
-      {isLoadingMore && (
-        <div className="py-4">
-          <LoadingSpinner size={24} />
+    <div className="flex-1 relative min-h-0">
+      <div
+        ref={containerRef}
+        className="h-full overflow-y-auto overflow-x-hidden no-scrollbar"
+        onScroll={handleScroll}
+      >
+        {isLoadingMore && (
+          <div className="py-4">
+            <LoadingSpinner size={24} />
+          </div>
+        )}
+
+        {!hasMore && <WelcomeHeader channelId={channelId} />}
+
+        <div ref={contentRef} className="pt-4 pb-6 md:pb-20">
+          {messages.map((msg, i) => {
+            const prevMsg = messages[i - 1];
+            const showDate = shouldShowDateDivider(prevMsg, msg);
+            const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
+
+            return (
+              <React.Fragment key={msg.id}>
+                {showDate && (
+                  <div className="flex items-center px-5 my-2 select-none pointer-events-none">
+                    <div className="flex-1 h-[1px] bg-border-hard" />
+                    <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
+                      {formatDateDivider(msg.createdAt)}
+                    </span>
+                    <div className="flex-1 h-[1px] bg-border-hard" />
+                  </div>
+                )}
+                <Message
+                  message={msg}
+                  isCompact={!isFirstInGroup}
+                  isFirstInGroup={isFirstInGroup}
+                />
+              </React.Fragment>
+            );
+          })}
         </div>
-      )}
 
-      {!hasMore && <WelcomeHeader channelId={channelId} />}
-
-      <div ref={contentRef} className="pt-4 pb-6 md:pb-20">
-        {messages.map((msg, i) => {
-          const prevMsg = messages[i - 1];
-          const showDate = shouldShowDateDivider(prevMsg, msg);
-          const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
-
-          return (
-            <React.Fragment key={msg.id}>
-              {showDate && (
-                <div className="flex items-center px-5 my-2 select-none pointer-events-none">
-                  <div className="flex-1 h-[1px] bg-border-hard" />
-                  <span className="px-[14px] text-[11px] font-bold text-txt-tertiary leading-tight">
-                    {formatDateDivider(msg.createdAt)}
-                  </span>
-                  <div className="flex-1 h-[1px] bg-border-hard" />
-                </div>
-              )}
-              <Message
-                message={msg}
-                isCompact={!isFirstInGroup}
-                isFirstInGroup={isFirstInGroup}
-              />
-            </React.Fragment>
-          );
-        })}
+        <div ref={bottomRef} />
       </div>
 
-      <div ref={bottomRef} />
+      {!isNearBottom && messages.length > 0 && (
+        <button
+          onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-all animate-fade-in cursor-pointer"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+          </svg>
+          <span className="text-[13px] font-medium">Jump to Present</span>
+        </button>
+      )}
     </div>
   );
 }

@@ -32,7 +32,9 @@ interface ChatState {
   unreadChannels: Set<string>;
   realtimeMessageEvents: RealtimeMessageEvent[];
   channelAccessTimes: Map<string, number>;
+  scrollPositions: Map<string, string>;
   setCurrentChannel: (channelId: string | null) => void;
+  saveScrollPosition: (channelId: string, messageId: string) => void;
   setReplyTo: (message: MessageWithUser | null) => void;
   loadMessages: (channelId: string, force?: boolean) => Promise<void>;
   clearAllMessages: () => void;
@@ -83,6 +85,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   unreadChannels: new Set(),
   realtimeMessageEvents: [],
   channelAccessTimes: new Map(),
+  scrollPositions: new Map(),
+
+  saveScrollPosition: (channelId, messageId) => {
+    set((state) => {
+      const newPositions = new Map(state.scrollPositions);
+      newPositions.set(channelId, messageId);
+      return { scrollPositions: newPositions };
+    });
+  },
 
   setCurrentChannel: (channelId) => {
     set((state) => {
@@ -94,6 +105,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Evict stale channels if we have too many cached
       let newMessages = state.messages;
       let newHasMore = state.hasMore;
+      let newScrollPositions = state.scrollPositions;
       if (state.messages.size > MAX_CACHED_CHANNELS) {
         const entries = [...newAccessTimes.entries()]
           .filter(([id]) => id !== channelId)
@@ -103,10 +115,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (evictIds.size > 0) {
           newMessages = new Map(state.messages);
           newHasMore = new Map(state.hasMore);
+          newScrollPositions = new Map(state.scrollPositions);
           for (const id of evictIds) {
             newMessages.delete(id);
             newHasMore.delete(id);
             newAccessTimes.delete(id);
+            newScrollPositions.delete(id);
           }
         }
       }
@@ -116,6 +130,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         channelAccessTimes: newAccessTimes,
         messages: newMessages,
         hasMore: newHasMore,
+        scrollPositions: newScrollPositions,
       };
     });
   },
@@ -129,6 +144,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     unreadChannels: new Set(),
     realtimeMessageEvents: [],
     channelAccessTimes: new Map(),
+    scrollPositions: new Map(),
     currentChannelId: null,
     replyTo: null,
   }),
