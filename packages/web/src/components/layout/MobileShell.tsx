@@ -20,7 +20,7 @@ import { MobileDmsScreen } from './MobileDmsScreen';
 import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
-const MobileVoiceMiniBar = () => null;
+import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 const MobileVoiceFullScreen = () => <PlaceholderScreen label="Voice" />;
 
 const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
