@@ -22,7 +22,7 @@ import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
-const MobileVoiceFullScreen = () => <PlaceholderScreen label="Voice" />;
+import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
 
 const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
