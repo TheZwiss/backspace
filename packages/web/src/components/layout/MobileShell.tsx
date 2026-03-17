@@ -63,7 +63,8 @@ export function MobileShell() {
     const path = location.pathname;
     const match = path.match(/^\/channels\/([^/]+)\/([^/]+)$/);
     if (match && mobileStack.length === 0) {
-      const [, spaceId, channelId] = match;
+      const spaceId = match[1] ?? '';
+      const channelId = match[2] ?? '';
       if (spaceId === '@me') {
         pushMobileScreen('channel-chat', { channelId, spaceId: '@me' });
       } else {

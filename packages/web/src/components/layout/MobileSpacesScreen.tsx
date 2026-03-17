@@ -27,7 +27,7 @@ export function MobileSpacesScreen() {
 
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
-  const joinChannel = useVoiceStore((s) => s.joinChannel);
+  const setCurrentVoiceChannel = useVoiceStore((s) => s.setCurrentVoiceChannel);
 
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const setMobileTab = useUIStore((s) => s.setMobileTab);
@@ -52,7 +52,7 @@ export function MobileSpacesScreen() {
 
   // Auto-select first space if none selected
   useEffect(() => {
-    if (!selectedSpaceId && spaces.length > 0) {
+    if (!selectedSpaceId && spaces.length > 0 && spaces[0]) {
       setSelectedSpaceId(spaces[0].id);
     }
   }, [selectedSpaceId, spaces]);
@@ -107,7 +107,7 @@ export function MobileSpacesScreen() {
 
   const handleChannelTap = (channel: Channel) => {
     if (channel.type === 'voice') {
-      joinChannel(channel.id);
+      setCurrentVoiceChannel(channel.id);
       return;
     }
     if (selectedSpaceId) {

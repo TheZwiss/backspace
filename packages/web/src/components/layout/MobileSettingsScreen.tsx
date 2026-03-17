@@ -50,7 +50,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
-  const isAdmin = useAuthStore((s) => s.user?.is_admin);
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin);
 
   // If initialPanel is set, render that panel directly
   if (initialPanel) {

@@ -142,12 +142,13 @@ export function MobileYouScreen() {
 
       {showLogoutConfirm && (
         <ConfirmDialog
+          isOpen={true}
           title="Log Out"
-          message="Are you sure you want to log out?"
+          description="Are you sure you want to log out?"
           confirmLabel="Log Out"
           onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
-          onCancel={() => setShowLogoutConfirm(false)}
-          destructive
+          onClose={() => setShowLogoutConfirm(false)}
+          variant="danger"
         />
       )}
     </div>

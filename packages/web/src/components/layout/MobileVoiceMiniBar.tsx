@@ -10,10 +10,10 @@ export function MobileVoiceMiniBar() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
-  const toggleMute = useVoiceStore((s) => s.toggleMute);
+  const toggleMute = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
-  const leaveChannel = useVoiceStore((s) => s.leaveChannel);
+  const leaveVoice = useVoiceStore((s) => s.leaveVoice);
 
   const channels = useSpaceStore((s) => s.channels);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
@@ -21,7 +21,8 @@ export function MobileVoiceMiniBar() {
   if (!currentVoiceChannelId) return null;
 
   // Don't show mini-bar if voice full-screen is on top of the stack
-  const topScreen = mobileStack.length > 0 ? mobileStack[mobileStack.length - 1].screen : null;
+  const topEntry = mobileStack.length > 0 ? mobileStack[mobileStack.length - 1] : undefined;
+  const topScreen = topEntry?.screen ?? null;
   if (topScreen === 'voice-full') return null;
 
   // Resolve channel name
@@ -91,7 +92,7 @@ export function MobileVoiceMiniBar() {
         </button>
 
         <button
-          onClick={(e) => { e.stopPropagation(); leaveChannel(); }}
+          onClick={(e) => { e.stopPropagation(); leaveVoice(); }}
           className="w-8 h-8 rounded-full flex items-center justify-center bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

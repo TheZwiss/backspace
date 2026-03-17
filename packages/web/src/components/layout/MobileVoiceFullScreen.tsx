@@ -13,11 +13,11 @@ export function MobileVoiceFullScreen() {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-  const toggleMute = useVoiceStore((s) => s.toggleMute);
+  const toggleMute = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
   const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const leaveChannel = useVoiceStore((s) => s.leaveChannel);
+  const leaveVoice = useVoiceStore((s) => s.leaveVoice);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
 
@@ -62,9 +62,9 @@ export function MobileVoiceFullScreen() {
     const member = members.find(m => m.userId === userId);
     if (member) {
       return {
-        name: member.nickname ?? member.displayName ?? member.username,
-        avatar: member.avatar ? `/api/uploads/${member.avatar}` : null,
-        avatarColor: member.avatarColor,
+        name: member.nickname ?? member.user?.displayName ?? member.user?.username ?? 'User',
+        avatar: member.user?.avatar ? `/api/uploads/${member.user.avatar}` : null,
+        avatarColor: member.user?.avatarColor ?? null,
       };
     }
     // Check DM members
@@ -82,7 +82,7 @@ export function MobileVoiceFullScreen() {
   };
 
   const handleDisconnect = () => {
-    leaveChannel();
+    leaveVoice();
     popMobileScreen();
   };
 

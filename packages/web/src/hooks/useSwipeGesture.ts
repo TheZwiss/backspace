@@ -19,6 +19,7 @@ export function useSwipeGesture({
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (!enabled) return;
     const touch = e.touches[0];
+    if (!touch) return;
     if (touch.clientX <= edgeThreshold) {
       touchStartRef.current = { x: touch.clientX, y: touch.clientY };
       swipingRef.current = false;
@@ -28,6 +29,7 @@ export function useSwipeGesture({
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!touchStartRef.current) return;
     const touch = e.touches[0];
+    if (!touch) return;
     const dx = touch.clientX - touchStartRef.current.x;
     const dy = touch.clientY - touchStartRef.current.y;
 

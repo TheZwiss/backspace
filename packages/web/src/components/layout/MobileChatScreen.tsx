@@ -75,12 +75,12 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden">
-        <MessageList />
+        {channelId && <MessageList channelId={channelId} />}
       </div>
 
       {/* Typing indicator + Input */}
-      <TypingIndicator />
-      <MessageInput />
+      {channelId && <TypingIndicator channelId={channelId} />}
+      {channelId && <MessageInput channelId={channelId} channelName={channelName} />}
     </div>
   );
 }

@@ -35,7 +35,7 @@ export function MobileBottomNav() {
   const hasUnreadSpaces = Array.from(unreadChannels).some(chId => !voiceChannelIds.has(chId));
 
   // Pending friend requests — filter for incoming only
-  const pendingIncoming = requests.filter(r => r.status === 'pending' && r.from_id !== authUser?.id);
+  const pendingIncoming = requests.filter(r => r.status === 'pending' && r.fromId !== authUser?.id);
 
   const handleTab = (tab: 'spaces' | 'dms' | 'you') => {
     setMobileTab(tab);
