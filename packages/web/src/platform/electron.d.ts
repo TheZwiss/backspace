@@ -42,6 +42,11 @@ interface BackspaceElectronAPI {
   getInstanceUrl: () => Promise<string | null>;
   setInstanceUrl: (url: string) => Promise<void>;
   clearInstanceUrl: () => Promise<void>;
+
+  // Auto-launch settings
+  getAutoLaunchSettings: () => Promise<{ openAtLogin: boolean; startMinimized: boolean }>;
+  setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>
+    Promise<{ openAtLogin: boolean; startMinimized: boolean }>;
 }
 
 interface Window {

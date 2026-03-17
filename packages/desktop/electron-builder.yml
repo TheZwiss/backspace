@@ -9,7 +9,7 @@ files:
   - "!node_modules"
 publish:
   - provider: generic
-    url: "${BACKSPACE_UPDATE_URL}"
+    url: "${env.BACKSPACE_UPDATE_URL}"
     useMultipleRangeRequest: false
 protocols:
   - name: Backspace
@@ -24,6 +24,7 @@ mac:
     - dmg
     - zip
 win:
+  icon: ./build/icon.ico
   target:
     - nsis
 linux:

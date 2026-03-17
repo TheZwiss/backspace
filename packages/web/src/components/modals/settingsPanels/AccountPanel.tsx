@@ -10,7 +10,69 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 import type { FederationOpResult } from '../../../utils/federationOps';
 import { isElectron } from '../../../platform/platform';
+import { Toggle } from '../../ui/Toggle';
 
+
+function AutoLaunchSettings() {
+  const [openAtLogin, setOpenAtLogin] = useState(false);
+  const [startMinimized, setStartMinimized] = useState(true);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    window.backspace?.getAutoLaunchSettings().then((settings) => {
+      setOpenAtLogin(settings.openAtLogin);
+      setStartMinimized(settings.startMinimized);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const handleOpenAtLoginChange = async (enabled: boolean) => {
+    setOpenAtLogin(enabled);
+    try {
+      const result = await window.backspace!.setAutoLaunchSettings({ openAtLogin: enabled });
+      setOpenAtLogin(result.openAtLogin);
+      setStartMinimized(result.startMinimized);
+    } catch {
+      setOpenAtLogin(!enabled);
+    }
+  };
+
+  const handleStartMinimizedChange = async (enabled: boolean) => {
+    setStartMinimized(enabled);
+    try {
+      const result = await window.backspace!.setAutoLaunchSettings({ startMinimized: enabled });
+      setOpenAtLogin(result.openAtLogin);
+      setStartMinimized(result.startMinimized);
+    } catch {
+      setStartMinimized(!enabled);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <>
+      <div className="flex items-center justify-between py-1">
+        <div className="flex-1 mr-4">
+          <div className="text-sm text-txt-primary">Start at boot</div>
+          <div className="text-xs text-txt-tertiary mt-0.5">
+            Automatically launch Backspace when you log in
+          </div>
+        </div>
+        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} />
+      </div>
+      <div className="flex items-center justify-between py-1">
+        <div className="flex-1 mr-4">
+          <div className={`text-sm ${openAtLogin ? 'text-txt-primary' : 'text-txt-tertiary'}`}>Start minimized</div>
+          <div className="text-xs text-txt-tertiary mt-0.5">
+            Start hidden in the system tray instead of showing the window
+          </div>
+        </div>
+        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} />
+      </div>
+    </>
+  );
+}
 
 export function AccountPanel() {
   const user = useAuthStore((s) => s.user);
@@ -688,11 +750,15 @@ export function AccountPanel() {
         </form>
       </div>
 
-      {/* ── Connected Instance (Electron only) ── */}
+      {/* ── Desktop (Electron only) ── */}
       {isElectron() && (
         <div>
-          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Connected Instance</div>
-          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Desktop</div>
+          <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
+            <AutoLaunchSettings />
+
+            <div className="border-t border-white/[0.04]" />
+
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-txt-primary font-medium">{window.location.origin}</div>

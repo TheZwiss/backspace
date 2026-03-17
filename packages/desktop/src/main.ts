@@ -126,6 +126,67 @@ function saveWindowState(win: BrowserWindow): void {
   }
 }
 
+// ─── Auto-Launch Settings ────────────────────────────────────────────────────
+
+interface AutoLaunchSettings {
+  openAtLogin: boolean;
+  startMinimized: boolean;
+}
+
+const DEFAULT_AUTO_LAUNCH: AutoLaunchSettings = {
+  openAtLogin: false,
+  startMinimized: true,
+};
+
+function getAutoLaunchSettingsPath(): string {
+  return path.join(app.getPath('userData'), 'auto-launch.json');
+}
+
+function loadAutoLaunchSettings(): AutoLaunchSettings {
+  try {
+    const raw = fs.readFileSync(getAutoLaunchSettingsPath(), 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<AutoLaunchSettings>;
+    return {
+      openAtLogin: typeof parsed.openAtLogin === 'boolean' ? parsed.openAtLogin : DEFAULT_AUTO_LAUNCH.openAtLogin,
+      startMinimized: typeof parsed.startMinimized === 'boolean' ? parsed.startMinimized : DEFAULT_AUTO_LAUNCH.startMinimized,
+    };
+  } catch {
+    return { ...DEFAULT_AUTO_LAUNCH };
+  }
+}
+
+function saveAutoLaunchSettings(settings: AutoLaunchSettings): void {
+  fs.writeFileSync(getAutoLaunchSettingsPath(), JSON.stringify(settings));
+}
+
+function applyLoginItemSettings(openAtLogin: boolean, startMinimized: boolean): void {
+  if (process.platform === 'darwin') {
+    app.setLoginItemSettings({
+      openAtLogin,
+      openAsHidden: startMinimized,
+    });
+  } else if (process.platform === 'win32') {
+    app.setLoginItemSettings({
+      openAtLogin,
+      args: startMinimized ? ['--hidden'] : [],
+      name: 'Backspace',
+    });
+  } else {
+    // Linux: setLoginItemSettings creates a .desktop file in ~/.config/autostart/
+    // For AppImage, the path changes on update — we pass it explicitly.
+    // Electron's Linux impl doesn't support `path`/`args` in types,
+    // but the runtime does accept them in the options object.
+    const opts: Record<string, unknown> = { openAtLogin };
+    if (process.env.APPIMAGE) {
+      opts.path = process.env.APPIMAGE;
+    }
+    if (startMinimized) {
+      opts.args = ['--hidden'];
+    }
+    app.setLoginItemSettings(opts as Electron.Settings);
+  }
+}
+
 // ─── Tray Icon ──────────────────────────────────────────────────────────────
 
 function generateFallbackTrayIcon(): Electron.NativeImage {
@@ -139,9 +200,10 @@ function generateFallbackTrayIcon(): Electron.NativeImage {
       const idx = (y * size + x) * 4;
       const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
       if (dist <= r) {
-        canvas[idx] = 0x58;     // R (blurple)
+        // NativeImage raw buffer uses BGRA on most platforms
+        canvas[idx] = 0xf2;     // B (blurple #5865f2)
         canvas[idx + 1] = 0x65; // G
-        canvas[idx + 2] = 0xf2; // B
+        canvas[idx + 2] = 0x58; // R
         canvas[idx + 3] = 0xff; // A
       } else {
         canvas[idx] = 0;
@@ -155,15 +217,24 @@ function generateFallbackTrayIcon(): Electron.NativeImage {
 }
 
 function loadTrayIcon(): Electron.NativeImage {
-  const iconPath = path.join(__dirname, '..', 'build', 'tray-icon.png');
+  const resourcesDir = path.join(__dirname, '..', 'resources');
   try {
-    const icon = nativeImage.createFromPath(iconPath);
-    if (!icon.isEmpty()) {
-      const resized = icon.resize({ width: 16, height: 16 });
-      if (process.platform === 'darwin') {
-        resized.setTemplateImage(true);
+    if (process.platform === 'darwin') {
+      // macOS template image: Electron auto-resolves @2x from the base path.
+      // Template images adapt to light/dark menu bar automatically.
+      const templatePath = path.join(resourcesDir, 'tray-iconTemplate.png');
+      const icon = nativeImage.createFromPath(templatePath);
+      if (!icon.isEmpty()) {
+        icon.setTemplateImage(true);
+        return icon;
       }
-      return resized;
+    } else {
+      // Windows/Linux: colored icon
+      const iconPath = path.join(resourcesDir, 'tray-icon.png');
+      const icon = nativeImage.createFromPath(iconPath);
+      if (!icon.isEmpty()) {
+        return icon.resize({ width: 16, height: 16 });
+      }
     }
   } catch {
     // Fall through to generated icon
@@ -225,7 +296,14 @@ function createWindow(): void {
   }
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
+    // Check if launched minimized (auto-start to tray)
+    const launchedHidden =
+      process.argv.includes('--hidden') ||
+      (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
+
+    if (!launchedHidden) {
+      mainWindow?.show();
+    }
 
     // Send any pending deep link that launched the app
     if (pendingDeepLink && mainWindow) {
@@ -435,6 +513,34 @@ function registerIpcHandlers(): void {
   ipcMain.on('screen-share-selected', (_event, _sourceId: string | null, _shareAudio?: boolean) => {
     // Handled via ipcMain.once in the display media handler — this is just
     // a safety net to prevent unhandled-message warnings
+  });
+
+  // Auto-launch settings
+  ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
+    const saved = loadAutoLaunchSettings();
+    const osState = app.getLoginItemSettings();
+    return {
+      openAtLogin: osState.openAtLogin,
+      startMinimized: saved.startMinimized,
+    };
+  });
+
+  ipcMain.handle('set-auto-launch-settings', (_event, settings: { openAtLogin?: boolean; startMinimized?: boolean }) => {
+    const current = loadAutoLaunchSettings();
+    const osState = app.getLoginItemSettings();
+
+    const newOpenAtLogin = settings.openAtLogin ?? osState.openAtLogin;
+    const newStartMinimized = settings.startMinimized ?? current.startMinimized;
+
+    const updated: AutoLaunchSettings = {
+      openAtLogin: newOpenAtLogin,
+      startMinimized: newStartMinimized,
+    };
+
+    saveAutoLaunchSettings(updated);
+    applyLoginItemSettings(newOpenAtLogin, newStartMinimized);
+
+    return updated;
   });
 }
 
@@ -662,6 +768,10 @@ if (!gotTheLock) {
     createWindow();
     createTray();
     initAutoUpdater();
+
+    // Sync auto-launch settings with OS on startup (refreshes login item path for AppImage updates)
+    const autoLaunchSettings = loadAutoLaunchSettings();
+    applyLoginItemSettings(autoLaunchSettings.openAtLogin, autoLaunchSettings.startMinimized);
 
     // Check if the app was launched with a deep link (Windows/Linux)
     const launchArg = process.argv.find((arg) => arg.startsWith('backspace://'));

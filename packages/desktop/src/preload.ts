@@ -62,4 +62,9 @@ contextBridge.exposeInMainWorld('backspace', {
   getInstanceUrl: () => ipcRenderer.invoke('get-instance-url'),
   setInstanceUrl: (url: string) => ipcRenderer.invoke('set-instance-url', url),
   clearInstanceUrl: () => ipcRenderer.invoke('clear-instance-url'),
+
+  // Auto-launch settings
+  getAutoLaunchSettings: () => ipcRenderer.invoke('get-auto-launch-settings'),
+  setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>
+    ipcRenderer.invoke('set-auto-launch-settings', settings),
 });
