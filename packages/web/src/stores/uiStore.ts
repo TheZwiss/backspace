@@ -17,6 +17,11 @@ type ModalType =
   | 'userProfile'
   | null;
 
+interface MobileStackEntry {
+  screen: string;
+  params?: Record<string, string>;
+}
+
 interface Toast {
   id: string;
   message: string;
@@ -59,6 +64,13 @@ interface UIState {
   setPipCollapsed: (collapsed: boolean) => void;
   floatingPanelHeight: number;
   setFloatingPanelHeight: (height: number) => void;
+
+  // Mobile navigation
+  mobileScreen: 'spaces' | 'dms' | 'you';
+  mobileStack: MobileStackEntry[];
+  setMobileTab: (tab: 'spaces' | 'dms' | 'you') => void;
+  pushMobileScreen: (screen: string, params?: Record<string, string>) => void;
+  popMobileScreen: () => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -89,9 +101,9 @@ export const useUIStore = create<UIState>()(
         if (isMobile) {
           set({ isMobile, sidebarOpen: false, memberListOpen: false });
         } else {
-          // On desktop transition, restore sidebarOpen but leave memberListOpen
-          // at its persisted/toggled value — don't override user preference
-          set({ isMobile, sidebarOpen: true });
+          // On desktop transition: restore sidebar, clear mobile nav state
+          // memberListOpen is NOT reset here — it keeps its persisted/toggled value
+          set({ isMobile, sidebarOpen: true, mobileScreen: 'spaces' as const, mobileStack: [] });
         }
       },
 
@@ -130,6 +142,27 @@ export const useUIStore = create<UIState>()(
       setPipCollapsed: (collapsed) => set({ pipCollapsed: collapsed }),
       floatingPanelHeight: 140,
       setFloatingPanelHeight: (height) => set({ floatingPanelHeight: height }),
+
+      mobileScreen: 'spaces',
+      mobileStack: [],
+
+      setMobileTab: (tab) => set({ mobileScreen: tab, mobileStack: [] }),
+
+      pushMobileScreen: (screen, params) => {
+        set((state) => ({
+          mobileStack: [...state.mobileStack, { screen, params }],
+        }));
+        // Sync with browser history so hardware back button works
+        history.pushState({ mobileScreen: screen }, '');
+      },
+
+      popMobileScreen: () => {
+        const state = get();
+        if (state.mobileStack.length === 0) return;
+        set({ mobileStack: state.mobileStack.slice(0, -1) });
+        // Note: do NOT call history.back() here if triggered by popstate event.
+        // The MobileShell popstate handler manages this — see Task 5.
+      },
     }),
     {
       name: 'backspace-ui-settings',
