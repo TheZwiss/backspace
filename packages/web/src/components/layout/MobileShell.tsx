@@ -4,6 +4,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useLocation } from 'react-router-dom';
 import { MobileScreenStack } from './MobileScreenStack';
 import { MobileBottomNav } from './MobileBottomNav';
+import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 
 // Screen components — imported as they are created in subsequent tasks.
 // Inline placeholders are used until the real components exist.
@@ -44,6 +45,16 @@ export function MobileShell() {
   const mobileStack = useUIStore((s) => s.mobileStack);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const location = useLocation();
+
+  // Edge swipe back gesture
+  useSwipeGesture({
+    onSwipeRight: () => {
+      if (mobileStack.length > 0) {
+        popMobileScreen();
+      }
+    },
+    enabled: mobileStack.length > 0,
+  });
 
   // Reconstruct mobile stack from URL on mount (deep link / refresh support)
   useEffect(() => {
