@@ -6,7 +6,6 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
-import { resolveAssetUrl } from '../../utils/assetUrls';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { Channel } from '@backspace/shared';
 
@@ -195,7 +194,9 @@ export function MobileSpacesScreen() {
           const isSelected = space.id === selectedSpaceId;
           const hasUnread = spaceHasUnread(space.id);
           const iconUrl = space.icon
-            ? resolveAssetUrl(space.icon, space._instanceOrigin) ?? `/api/uploads/${space.icon}`
+            ? (space.icon.startsWith('http') || space.icon.startsWith('/')
+                ? space.icon
+                : `/api/uploads/${space.icon}`)
             : null;
           const grad = getSpaceGradient(space.id, space.name, space.avatarColor);
 
