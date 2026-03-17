@@ -19,7 +19,7 @@ import { MobileSpacesScreen } from './MobileSpacesScreen';
 import { MobileDmsScreen } from './MobileDmsScreen';
 import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
-const MobileSettingsScreen = ({ initialPanel: _p }: { initialPanel?: string }) => <PlaceholderScreen label="Settings" />;
+import { MobileSettingsScreen } from './MobileSettingsScreen';
 const MobileVoiceMiniBar = () => null;
 const MobileVoiceFullScreen = () => <PlaceholderScreen label="Voice" />;
 
