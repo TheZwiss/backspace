@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { useUIStore } from '../../stores/uiStore';
 
 interface TooltipProps {
   content: string;
@@ -10,6 +11,10 @@ interface TooltipProps {
 }
 
 export function Tooltip({ content, children, position = 'right', delay = 200 }: TooltipProps) {
+  const isMobile = useUIStore((s) => s.isMobile);
+
+  // No tooltips on touch devices — return children unwrapped
+  if (isMobile) return <>{children}</>;
   const [isVisible, setIsVisible] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const anchorRef = useRef<HTMLDivElement>(null);

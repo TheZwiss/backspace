@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useUIStore } from '../../stores/uiStore';
 
 interface ContextMenuItem {
   label: string;
@@ -16,6 +17,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
+  const isMobile = useUIStore((s) => s.isMobile);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -62,7 +64,38 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
   return (
     <>
       <div onContextMenu={handleContextMenu}>{children}</div>
-      {isOpen && (
+      {isOpen && isMobile && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-[300] bg-black/50" onClick={() => setIsOpen(false)} />
+          {/* Bottom sheet menu */}
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-bubble animate-slide-up-sheet"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
+            <div className="py-1">
+              {items.map((item, i) => (
+                <button
+                  key={i}
+                  className={`w-full text-left px-5 py-3 text-sm flex items-center gap-3 ${
+                    item.danger ? 'text-txt-danger' : 'text-txt-primary'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    item.onClick();
+                    setIsOpen(false);
+                  }}
+                >
+                  {item.icon && <span className="w-5 h-5">{item.icon}</span>}
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      {isOpen && !isMobile && (
         <div
           ref={menuRef}
           className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in max-h-[calc(100vh-16px)] overflow-y-auto scrollbar-thin"
