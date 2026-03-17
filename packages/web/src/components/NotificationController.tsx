@@ -61,7 +61,10 @@ export function NotificationController() {
             const body = message.content
               ? message.content.replace(/[*_~`>#\-\[\]]/g, '').slice(0, 100)
               : 'Sent an attachment';
-            sendNotification(displayName, body);
+            sendNotification(displayName, body, {
+              channelId: message.channelId ?? message.dmChannelId,
+              spaceId: message.dmChannelId ? '@me' : undefined,
+            });
             break; // one notification per batch
           }
         }
