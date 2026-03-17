@@ -4,7 +4,7 @@ import { SpaceSidebar } from './SpaceSidebar';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MainContent } from './MainContent';
 import { RightPanel } from './RightPanel';
-import { MobileNav } from './MobileNav';
+import { MobileShell } from './MobileShell';
 import { ImagePreview } from '../chat/ImagePreview';
 import { CreateSpaceModal } from '../modals/CreateSpace';
 import { JoinSpaceModal } from '../modals/JoinSpace';
@@ -267,9 +267,39 @@ export function AppLayout() {
     );
   }
 
+  // ── Mobile layout ──
+  if (isMobile) {
+    return (
+      <>
+        <MobileShell />
+        {/* Modals still render globally for both mobile and desktop */}
+        <CreateSpaceModal />
+        <JoinSpaceModal />
+        <CreateChannelModal />
+        <CreateCategoryModal />
+        <InviteModal />
+        {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
+        <SpaceSettingsModal />
+        <ChannelSettingsModal />
+        <NewDmModal />
+        <AddDmMemberModal />
+        <UserProfileModal />
+        <IncomingCallModal />
+        <ImagePreview />
+        <PictureInPicture />
+        <SoundController />
+        <GlobalAudioRenderer />
+        <NotificationController />
+        <UpdateToast />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  // ── Desktop layout ──
   return (
     <div className="h-full flex flex-col md:grid md:grid-cols-[312px_1fr] md:grid-rows-[minmax(0,1fr)] bg-surface-base overflow-hidden">
-      {/* Space sidebar - always visible on desktop, toggled on mobile */}
+      {/* Space sidebar - always visible on desktop */}
       <div className={`fixed inset-y-0 left-0 z-40 flex w-[312px] transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:static md:z-auto md:w-auto md:transform-none`}>
         <SpaceSidebar />
         <ChannelSidebar />
@@ -304,12 +334,12 @@ export function AppLayout() {
       {/* User Profile Popout */}
       {userProfilePopout.user && userProfilePopout.position && (
         <>
-          <div 
+          <div
             className="fixed inset-0 z-[145]"
             onClick={closeUserProfile}
           />
-          <UserProfilePopout 
-            user={userProfilePopout.user} 
+          <UserProfilePopout
+            user={userProfilePopout.user}
             onClose={closeUserProfile}
             position={userProfilePopout.position}
           />
