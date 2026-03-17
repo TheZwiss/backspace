@@ -13,7 +13,11 @@ import { api } from '../../api/client';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
-export function FriendsPage() {
+interface FriendsPageProps {
+  mobile?: boolean;
+}
+
+export function FriendsPage({ mobile }: FriendsPageProps) {
   const [activeTab, setActiveTab] = useState<Tab>('online');
   const [addUsername, setAddUsername] = useState('');
   const [addStatus, setAddStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -168,44 +172,78 @@ export function FriendsPage() {
     }
   };
 
+  const popMobileScreen = useUIStore((s) => s.popMobileScreen);
+
   return (
     <div className="flex-1 flex flex-col bg-surface-chat h-full">
       {/* Header */}
-      <div className="h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10 bg-surface-chat">
-        <div className="flex items-center gap-2 mr-4">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-          </svg>
-          <span className="font-bold text-txt-primary">Friends</span>
-        </div>
-
-        <div className="w-[1px] h-6 bg-surface-elevated mx-2" />
-
-        <div className="flex items-center gap-4 ml-2">
-          <TabButton active={activeTab === 'online'} onClick={() => setActiveTab('online')}>Online</TabButton>
-          <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')}>All</TabButton>
-          <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
-            Pending
-            {(pendingIncoming.length > 0) && (
-              <span className="ml-2 px-1.5 py-0.5 bg-accent-rose text-white text-[10px] rounded-full leading-none">
-                {pendingIncoming.length}
-              </span>
-            )}
-          </TabButton>
-          <button
-            onClick={() => setActiveTab('add')}
-            className={`px-2 py-0.5 rounded text-[14px] font-medium transition-all ${
-              activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
-            }`}
-          >
-            Add Friend
+      {mobile ? (
+        <div className="h-12 px-3 flex items-center gap-2 border-b border-border-soft flex-shrink-0 z-10 bg-surface-base">
+          <button onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
           </button>
+          <span className="font-semibold text-sm text-txt-primary">Friends</span>
         </div>
+      ) : (
+        <div className="h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10 bg-surface-chat">
+          <div className="flex items-center gap-2 mr-4">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+            <span className="font-bold text-txt-primary">Friends</span>
+          </div>
+          <div className="w-[1px] h-6 bg-surface-elevated mx-2" />
+          <div className="flex items-center gap-4 ml-2">
+            <TabButton active={activeTab === 'online'} onClick={() => setActiveTab('online')}>Online</TabButton>
+            <TabButton active={activeTab === 'all'} onClick={() => setActiveTab('all')}>All</TabButton>
+            <TabButton active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
+              Pending
+              {(pendingIncoming.length > 0) && (
+                <span className="ml-2 px-1.5 py-0.5 bg-accent-rose text-white text-[10px] rounded-full leading-none">
+                  {pendingIncoming.length}
+                </span>
+              )}
+            </TabButton>
+            <button
+              onClick={() => setActiveTab('add')}
+              className={`px-2 py-0.5 rounded text-[14px] font-medium transition-all ${
+                activeTab === 'add' ? 'text-status-online bg-transparent' : 'bg-status-online text-[#13131a] hover:bg-status-online/90'
+              }`}
+            >
+              Add Friend
+            </button>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <MemberListToggleButton />
+          </div>
+        </div>
+      )}
 
-        <div className="ml-auto flex items-center gap-1">
-          <MemberListToggleButton />
+      {/* Mobile tab bar */}
+      {mobile && (
+        <div className="flex border-b border-border-soft">
+          {(['online', 'all', 'pending', 'add'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2.5 text-sm font-medium text-center border-b-2 transition-colors ${
+                activeTab === tab
+                  ? 'border-accent-primary text-txt-primary'
+                  : 'border-transparent text-txt-secondary hover:text-txt-primary'
+              }`}
+            >
+              {tab === 'add' ? 'Add Friend' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'pending' && pendingIncoming.length > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-notification text-white rounded-full">
+                  {pendingIncoming.length}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
       {renderTabContent()}
     </div>
@@ -262,10 +300,10 @@ function AddFriendTab({
       <div className="p-6 pb-4">
         <h2 className="text-base font-bold text-txt-primary uppercase mb-2">Add Friend</h2>
         <p className="text-sm text-txt-tertiary mb-4">You can add friends with their Backspace username.</p>
-        <form onSubmit={onSubmit} className="relative mb-4">
+        <form onSubmit={onSubmit} className="flex flex-col gap-2 mb-4">
           <input
             type="text"
-            placeholder="You can add a friend with their username"
+            placeholder="Enter a username..."
             value={addUsername}
             onChange={(e) => setAddUsername(e.target.value)}
             className="input-search w-full px-4 py-3 rounded-lg"
@@ -273,7 +311,7 @@ function AddFriendTab({
           <button
             type="submit"
             disabled={!addUsername.trim() || isLoading}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:bg-accent-primary text-white text-sm font-medium rounded transition-colors"
+            className="w-full py-2.5 rounded-lg bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:bg-accent-primary text-white text-sm font-medium transition-colors"
           >
             Send Friend Request
           </button>

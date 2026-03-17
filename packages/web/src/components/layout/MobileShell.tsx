@@ -15,6 +15,7 @@ const PlaceholderScreen = ({ label }: { label: string }) => (
 );
 
 import { MobileSpacesScreen } from './MobileSpacesScreen';
+import { FriendsPage } from '../chat/FriendsPage';
 // These will be replaced with real imports as each task is completed:
 import { MobileDmsScreen } from './MobileDmsScreen';
 import { MobileYouScreen } from './MobileYouScreen';
@@ -25,7 +26,7 @@ const MobileVoiceFullScreen = () => <PlaceholderScreen label="Voice" />;
 
 const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
-  'friends': () => <PlaceholderScreen label="Friends" />,
+  'friends': () => <FriendsPage mobile />,
   'settings': () => <MobileSettingsScreen />,
   'settings-account': () => <MobileSettingsScreen initialPanel="account" />,
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
