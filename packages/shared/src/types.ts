@@ -276,6 +276,7 @@ export type ClientEvent =
   | { type: 'reaction_add'; messageId: string; emoji: string }
   | { type: 'reaction_remove'; messageId: string; emoji: string }
   | { type: 'channel_ack'; channelId: string; messageId: string }
+  | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'dm_call_start'; dmChannelId: string }
   | { type: 'dm_call_accept'; dmChannelId: string }
   | { type: 'dm_call_reject'; dmChannelId: string }
@@ -338,6 +339,7 @@ export type ServerEvent =
   | { type: 'category_deleted'; categoryId: string; spaceId: string }
   | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
   | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }
+  | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
