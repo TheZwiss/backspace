@@ -102,9 +102,9 @@ export async function resolveEmbeds(
               effectiveEmbedType = 'audio';
             }
           } else {
-            title = metadata.title;
-            description = metadata.description;
-            image = metadata.image;
+            title = metadata.title || title;
+            description = metadata.description || description;
+            image = metadata.image || image;
             siteName = metadata.siteName;
           }
         }
