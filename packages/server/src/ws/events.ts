@@ -1103,7 +1103,7 @@ function handleMarkUnread(event: Record<string, unknown>, userId: string): void 
   const channelId = event.channelId as string;
   const messageId = event.messageId as string;
   if (!channelId || !messageId) return;
-  if (!/^\d+$/.test(messageId) && messageId !== '0') return;
+  if (!/^\d+$/.test(messageId)) return;
 
   // Validate channel membership
   const spaceId = getChannelSpaceId(channelId);
