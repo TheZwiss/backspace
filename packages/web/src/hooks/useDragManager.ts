@@ -112,10 +112,74 @@ export function useDragManager(opts: UseDragManagerOpts) {
     onDragOver: handleContainerDragOver,
   };
 
+  // --- Voice user drag handlers ---
+
+  const handleVoiceUserDragStart = useCallback((e: React.DragEvent, userId: string, fromChannelId: string) => {
+    e.stopPropagation(); // Prevents bubbling to ChannelItem (fixes bug 1)
+    if (!canMoveMembers) return;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', userId); // Firefox requires setData for drag to work
+    setActiveDrag({ type: 'voiceUser', dragId: userId, sourceId: fromChannelId });
+  }, [canMoveMembers]);
+
+  const handleVoiceUserDragEnd = useCallback((e: React.DragEvent) => {
+    e.stopPropagation(); // Prevents bubbling to ChannelItem (fixes bug 6)
+    clearState();
+  }, [clearState]);
+
+  const voiceUserHandlers = useCallback((userId: string, channelId: string) => ({
+    draggable: canMoveMembers,
+    isBeingDragged: activeDrag?.type === 'voiceUser' && activeDrag.dragId === userId && activeDrag.sourceId === channelId,
+    onDragStart: (e: React.DragEvent) => handleVoiceUserDragStart(e, userId, channelId),
+    onDragEnd: handleVoiceUserDragEnd,
+  }), [canMoveMembers, activeDrag, handleVoiceUserDragStart, handleVoiceUserDragEnd]);
+
+  const handleVoiceDropZoneDragOver = useCallback((e: React.DragEvent, channelId: string) => {
+    if (activeDrag?.type !== 'voiceUser') return;
+    if (activeDrag.sourceId === channelId) return; // same channel — no preventDefault (fixes bug 2)
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setVoiceHoverChannelId(channelId);
+  }, [activeDrag]);
+
+  const handleVoiceDropZoneDragEnter = useCallback((e: React.DragEvent, channelId: string) => {
+    if (activeDrag?.type !== 'voiceUser') return;
+    if (activeDrag.sourceId === channelId) return;
+    e.preventDefault();
+    setVoiceHoverChannelId(channelId);
+  }, [activeDrag]);
+
+  const handleVoiceDropZoneDragLeave = useCallback((e: React.DragEvent) => {
+    if (activeDrag?.type !== 'voiceUser') return;
+    // Only clear when actually leaving the container, not entering a child element
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setVoiceHoverChannelId(null);
+  }, [activeDrag]);
+
+  const handleVoiceDropZoneDrop = useCallback((e: React.DragEvent, channelId: string) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent bubbling to container's onDrop
+    if (activeDrag?.type === 'voiceUser' && activeDrag.sourceId && activeDrag.sourceId !== channelId) {
+      onVoiceUserDrop(activeDrag.dragId, activeDrag.sourceId, channelId);
+    }
+    clearState();
+  }, [activeDrag, onVoiceUserDrop, clearState]);
+
+  const voiceChannelDropZone = useCallback((channelId: string) => ({
+    onDragOver: (e: React.DragEvent) => handleVoiceDropZoneDragOver(e, channelId),
+    onDragEnter: (e: React.DragEvent) => handleVoiceDropZoneDragEnter(e, channelId),
+    onDragLeave: handleVoiceDropZoneDragLeave,
+    onDrop: (e: React.DragEvent) => handleVoiceDropZoneDrop(e, channelId),
+    isDragOver: voiceHoverChannelId === channelId,
+    isValidTarget: activeDrag?.type === 'voiceUser' && activeDrag.sourceId !== channelId,
+  }), [
+    handleVoiceDropZoneDragOver, handleVoiceDropZoneDragEnter,
+    handleVoiceDropZoneDragLeave, handleVoiceDropZoneDrop,
+    voiceHoverChannelId, activeDrag,
+  ]);
+
   // Suppress unused variable warnings for incremental build
   void scrollContainerRef;
-  void canMoveMembers;
-  void onVoiceUserDrop;
 
   return {
     activeDrag,
@@ -123,5 +187,7 @@ export function useDragManager(opts: UseDragManagerOpts) {
     channelHandlers,
     categoryHandlers,
     containerHandlers,
+    voiceUserHandlers,
+    voiceChannelDropZone,
   };
 }
