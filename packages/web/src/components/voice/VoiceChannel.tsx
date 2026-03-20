@@ -1,19 +1,12 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
-import { wsSend } from '../../hooks/useWebSocket';
-import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 
 const EMPTY_VOICE_USERS: string[] = [];
-
-interface VoiceChannelDragState {
-  userId: string;
-  fromChannelId: string;
-}
 
 interface VoiceChannelProps {
   channelId: string;
@@ -22,13 +15,24 @@ interface VoiceChannelProps {
   locked?: boolean;
   canManage?: boolean;
   onSettingsClick?: () => void;
-  dragState?: VoiceChannelDragState | null;
-  onDragStart?: (userId: string) => void;
-  onDragEnd?: () => void;
+  voiceUserHandlers?: (userId: string, channelId: string) => {
+    draggable: boolean;
+    isBeingDragged: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: (e: React.DragEvent) => void;
+  };
+  dropZone?: {
+    onDragOver: (e: React.DragEvent) => void;
+    onDragEnter: (e: React.DragEvent) => void;
+    onDragLeave: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+    isDragOver: boolean;
+    isValidTarget: boolean;
+  };
 }
 
 /** Wrapper component for the volume slider so it can use hooks (useState). */
-export function VoiceChannel({ channelId, channelName, onClick, locked, canManage, onSettingsClick, dragState, onDragStart, onDragEnd }: VoiceChannelProps) {
+export function VoiceChannel({ channelId, channelName, onClick, locked, canManage, onSettingsClick, voiceUserHandlers, dropZone }: VoiceChannelProps) {
   const serverVoiceUsers = useVoiceStore((s) => s.voiceUsers.get(channelId)) ?? EMPTY_VOICE_USERS;
   const currentVoiceChannel = useVoiceStore((s) => s.currentVoiceChannelId);
   const participants = useVoiceStore((s) => s.participants);
@@ -59,16 +63,6 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
   const myUser = useAuthStore((s) => s.user);
   const isActive = currentVoiceChannel === channelId;
-
-  // Drag-and-drop permission check
-  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
-  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
-  const myPerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
-  const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
-
-  // Drop target highlight state
-  const [isDragOver, setIsDragOver] = useState(false);
-  const isValidDropTarget = dragState !== null && dragState !== undefined && dragState.fromChannelId !== channelId;
 
   const openContextMenu = useContextMenuStore((s) => s.open);
 
@@ -114,35 +108,11 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
 
   return (
     <div
-      onDragOver={(e) => {
-        if (isValidDropTarget) {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-          setIsDragOver(true);
-        }
-      }}
-      onDragEnter={(e) => {
-        if (isValidDropTarget) {
-          e.preventDefault();
-          setIsDragOver(true);
-        }
-      }}
-      onDragLeave={(e) => {
-        // Only clear when leaving the container (not entering a child)
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-          setIsDragOver(false);
-        }
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsDragOver(false);
-        if (dragState && dragState.fromChannelId !== channelId) {
-          const voiceOrigin = getChannelOrigin(dragState.fromChannelId);
-          wsSend({ type: 'voice_move', userId: dragState.userId, targetChannelId: channelId }, voiceOrigin);
-          onDragEnd?.();
-        }
-      }}
-      className={isDragOver && isValidDropTarget ? 'rounded-[8px] ring-1 ring-accent-mint/40' : ''}
+      onDragOver={dropZone?.onDragOver}
+      onDragEnter={dropZone?.onDragEnter}
+      onDragLeave={dropZone?.onDragLeave}
+      onDrop={dropZone?.onDrop}
+      className={dropZone?.isDragOver && dropZone?.isValidTarget ? 'rounded-[8px] ring-1 ring-accent-mint/40' : ''}
     >
       <button
         onClick={onClick}
@@ -211,8 +181,9 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
             const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
 
-            const isDraggable = canMoveMembers && userId !== myUser?.id;
-            const isBeingDragged = dragState?.userId === userId && dragState?.fromChannelId === channelId;
+            const userDrag = voiceUserHandlers?.(userId, channelId);
+            const isDraggable = !!(userDrag?.draggable && userId !== myUser?.id);
+            const isBeingDragged = userDrag?.isBeingDragged ?? false;
 
             return (
               <div
@@ -221,13 +192,8 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${isBeingDragged ? 'opacity-50' : ''}`}
                 draggable={isDraggable}
-                onDragStart={(e) => {
-                  if (!isDraggable) return;
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', userId);
-                  onDragStart?.(userId);
-                }}
-                onDragEnd={() => onDragEnd?.()}
+                onDragStart={isDraggable ? userDrag!.onDragStart : undefined}
+                onDragEnd={isDraggable ? userDrag!.onDragEnd : undefined}
                 onContextMenu={(e) => handleContextMenu(e, userId)}
               >
                 <Avatar
