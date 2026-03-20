@@ -16,7 +16,7 @@ import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
-import { ContextMenu } from '../ui/ContextMenu';
+import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
 
@@ -108,10 +108,8 @@ export function ChannelSidebar() {
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [deleteCategoryLoading, setDeleteCategoryLoading] = useState(false);
 
-  // Sidebar background context menu state
-  const [sidebarMenuOpen, setSidebarMenuOpen] = useState(false);
-  const [sidebarMenuPos, setSidebarMenuPos] = useState({ x: 0, y: 0 });
-  const sidebarMenuRef = useRef<HTMLDivElement>(null);
+  // Centralized context menu
+  const openContextMenu = useContextMenuStore((s) => s.open);
 
   // Collapse state — persisted in localStorage
   const collapseKey = `backspace:collapsed-categories:${currentSpaceId}`;
@@ -162,35 +160,86 @@ export function ChannelSidebar() {
     return chs.some(ch => unreadChannels.has(ch.id));
   }, [channelsByCategory, unreadChannels]);
 
-  // Sidebar background context menu: close on click/scroll, viewport clamp
-  useEffect(() => {
-    if (!sidebarMenuOpen) return;
-    const close = () => setSidebarMenuOpen(false);
-    document.addEventListener('click', close);
-    document.addEventListener('scroll', close, true);
-    return () => {
-      document.removeEventListener('click', close);
-      document.removeEventListener('scroll', close, true);
-    };
-  }, [sidebarMenuOpen]);
-
-  useEffect(() => {
-    if (sidebarMenuOpen && sidebarMenuRef.current) {
-      const rect = sidebarMenuRef.current.getBoundingClientRect();
-      const pos = { ...sidebarMenuPos };
-      if (rect.right > window.innerWidth) pos.x = window.innerWidth - rect.width - 8;
-      if (rect.bottom > window.innerHeight) pos.y = window.innerHeight - rect.height - 8;
-      if (pos.x < 8) pos.x = 8;
-      if (pos.y < 8) pos.y = 8;
-      if (pos.x !== sidebarMenuPos.x || pos.y !== sidebarMenuPos.y) setSidebarMenuPos(pos);
-    }
-  }, [sidebarMenuOpen, sidebarMenuPos]);
-
   const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setSidebarMenuPos({ x: e.clientX, y: e.clientY });
-    setSidebarMenuOpen(true);
-  }, []);
+    e.stopPropagation();
+    const items: ContextMenuItem[] = [];
+    if (canManageChannels) {
+      items.push({
+        key: 'create-channel',
+        type: 'action',
+        label: 'Create Channel',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.5 12.5v-9l5-2v9l-5 2zm6-9v9l5-2v-9l-5 2z" opacity="0.5" />
+            <path d="M5.72 12.885l.18-.085V3.2L2.1 4.9v8.5l3.62-1.515zM7.1 3.2v9.6l3.8-1.6V2.7L7.1 3.2z" />
+          </svg>
+        ),
+        onClick: () => openModal('createChannel'),
+      });
+      items.push({
+        key: 'create-category',
+        type: 'action',
+        label: 'Create Category',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+          </svg>
+        ),
+        onClick: () => openModal('createCategory'),
+      });
+    }
+    if (canCreateInvite) {
+      items.push({
+        key: 'invite',
+        type: 'action',
+        label: 'Invite People',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
+          </svg>
+        ),
+        onClick: () => openModal('invite'),
+      });
+    }
+    items.push({
+      key: 'settings',
+      type: 'action',
+      label: 'Space Settings',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" />
+        </svg>
+      ),
+      onClick: () => openModal('spaceSettings'),
+    });
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  }, [canManageChannels, canCreateInvite, openModal, openContextMenu]);
+
+  const handleDmContextMenu = useCallback((e: React.MouseEvent, dmId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu({ x: e.clientX, y: e.clientY }, [
+      {
+        key: 'leave-group',
+        type: 'action',
+        label: 'Leave Group',
+        danger: true,
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+          </svg>
+        ),
+        onClick: () => {
+          if (currentChannelId === dmId) {
+            navigate('/channels/@me');
+            setCurrentChannel(null);
+          }
+          useSpaceStore.getState().leaveDm(dmId);
+        },
+      },
+    ]);
+  }, [openContextMenu, currentChannelId, navigate, setCurrentChannel]);
 
   // DnD handlers
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
@@ -537,29 +586,9 @@ export function ChannelSidebar() {
 
               if (isGroup) {
                 return (
-                  <ContextMenu
-                    key={dm.id}
-                    items={[
-                      {
-                        label: 'Leave Group',
-                        danger: true,
-                        icon: (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-                          </svg>
-                        ),
-                        onClick: () => {
-                          if (currentChannelId === dm.id) {
-                            navigate('/channels/@me');
-                            setCurrentChannel(null);
-                          }
-                          useSpaceStore.getState().leaveDm(dm.id);
-                        },
-                      },
-                    ]}
-                  >
+                  <div key={dm.id} onContextMenu={(e) => handleDmContextMenu(e, dm.id)}>
                     {dmItem}
-                  </ContextMenu>
+                  </div>
                 );
               }
 
@@ -706,9 +735,13 @@ export function ChannelSidebar() {
             <div key={category.id} className="mb-[19px]">
               {/* Category header */}
               {canManageChannels ? (
-                <ContextMenu
-                  items={[
+                <div onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openContextMenu({ x: e.clientX, y: e.clientY }, [
                     {
+                      key: 'delete-category',
+                      type: 'action',
                       label: 'Delete Category',
                       danger: true,
                       icon: (
@@ -718,10 +751,10 @@ export function ChannelSidebar() {
                       ),
                       onClick: () => setDeleteCategoryId(category.id),
                     },
-                  ]}
-                >
+                  ]);
+                }}>
                   {categoryHeader}
-                </ContextMenu>
+                </div>
               ) : categoryHeader}
 
               {/* Category channels (hidden when collapsed, unless active) */}
@@ -791,70 +824,6 @@ export function ChannelSidebar() {
 
     </div>
     {floatingPanel}
-    {/* Sidebar background context menu */}
-    {sidebarMenuOpen && (
-      <div
-        ref={sidebarMenuRef}
-        className="fixed z-[200] min-w-[180px] py-1.5 glass rounded-md animate-fade-in"
-        style={{ left: sidebarMenuPos.x, top: sidebarMenuPos.y }}
-      >
-        {canManageChannels && (
-          <button
-            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
-            style={{ width: 'calc(100% - 12px)' }}
-            onClick={(e) => { e.stopPropagation(); openModal('createChannel'); setSidebarMenuOpen(false); }}
-          >
-            <span className="w-4 h-4">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M2.5 12.5v-9l5-2v9l-5 2zm6-9v9l5-2v-9l-5 2z" opacity="0.5" />
-                <path d="M5.72 12.885l.18-.085V3.2L2.1 4.9v8.5l3.62-1.515zM7.1 3.2v9.6l3.8-1.6V2.7L7.1 3.2z" />
-              </svg>
-            </span>
-            Create Channel
-          </button>
-        )}
-        {canManageChannels && (
-          <button
-            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
-            style={{ width: 'calc(100% - 12px)' }}
-            onClick={(e) => { e.stopPropagation(); openModal('createCategory'); setSidebarMenuOpen(false); }}
-          >
-            <span className="w-4 h-4">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-              </svg>
-            </span>
-            Create Category
-          </button>
-        )}
-        {canCreateInvite && (
-          <button
-            className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
-            style={{ width: 'calc(100% - 12px)' }}
-            onClick={(e) => { e.stopPropagation(); openModal('invite'); setSidebarMenuOpen(false); }}
-          >
-            <span className="w-4 h-4">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M21 3H24V5H21V8H19V5H16V3H19V0H21V3ZM10 12C12.21 12 14 10.21 14 8C14 5.79 12.21 4 10 4C7.79 4 6 5.79 6 8C6 10.21 7.79 12 10 12ZM10 13C6.69 13 1 14.66 1 18V20H19V18C19 14.66 13.31 13 10 13Z" />
-              </svg>
-            </span>
-            Invite People
-          </button>
-        )}
-        <button
-          className="w-full text-left px-2 py-1.5 mx-1.5 text-sm rounded-sm flex items-center gap-2 text-txt-secondary hover:bg-accent-primary hover:text-white"
-          style={{ width: 'calc(100% - 12px)' }}
-          onClick={(e) => { e.stopPropagation(); openModal('spaceSettings'); setSidebarMenuOpen(false); }}
-        >
-          <span className="w-4 h-4">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z" />
-            </svg>
-          </span>
-          Space Settings
-        </button>
-      </div>
-    )}
     <ConfirmDialog
       isOpen={deleteCategoryId !== null}
       onClose={() => setDeleteCategoryId(null)}
