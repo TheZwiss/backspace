@@ -232,6 +232,30 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Ensure embeds table exists (idempotent)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS embeds (
+      id TEXT PRIMARY KEY,
+      message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+      dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      embed_type TEXT NOT NULL CHECK (embed_type IN ('generic', 'video', 'image', 'audio', 'rich')),
+      provider TEXT,
+      title TEXT,
+      description TEXT,
+      image TEXT,
+      embed_url TEXT,
+      width INTEGER,
+      height INTEGER,
+      color TEXT,
+      created_at INTEGER NOT NULL,
+      CHECK (
+        (message_id IS NOT NULL AND dm_message_id IS NULL) OR
+        (message_id IS NULL AND dm_message_id IS NOT NULL)
+      )
+    );
+  `);
+
   // ─── Legacy permissions: convert JSON arrays to decimal strings ───────────
   migrateLegacyPermissions(db);
 
@@ -322,6 +346,10 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Add indexes on FK columns for query performance ─────────────────────
   migrateAddIndexes(db);
+
+  // ─── Embed indexes (outside fast-path guard so they run on existing DBs) ──
+  db.exec('CREATE INDEX IF NOT EXISTS idx_embeds_message_id ON embeds(message_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_embeds_dm_message_id ON embeds(dm_message_id)');
 
   // ─── Clean up stale attachment records for profile images ───────────────
   migrateCleanupProfileAttachmentRecords(db);
@@ -436,6 +464,10 @@ function migrateAddIndexes(db: Database.Database): void {
 
     // Categories
     'CREATE INDEX IF NOT EXISTS idx_channel_categories_space_id ON channel_categories(space_id)',
+
+    // Embeds
+    'CREATE INDEX IF NOT EXISTS idx_embeds_message_id ON embeds(message_id)',
+    'CREATE INDEX IF NOT EXISTS idx_embeds_dm_message_id ON embeds(dm_message_id)',
   ];
 
   db.exec(indexes.join(';\n'));

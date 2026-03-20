@@ -92,6 +92,23 @@ export const attachments = sqliteTable('attachments', {
   createdAt: integer('created_at').notNull(),
 });
 
+export const embeds = sqliteTable('embeds', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').references(() => messages.id, { onDelete: 'cascade' }),
+  dmMessageId: text('dm_message_id').references(() => dmMessages.id, { onDelete: 'cascade' }),
+  url: text('url').notNull(),
+  embedType: text('embed_type').notNull(),
+  provider: text('provider'),
+  title: text('title'),
+  description: text('description'),
+  image: text('image'),
+  embedUrl: text('embed_url'),
+  width: integer('width'),
+  height: integer('height'),
+  color: text('color'),
+  createdAt: integer('created_at').notNull(),
+});
+
 export const dmChannels = sqliteTable('dm_channels', {
   id: text('id').primaryKey(),
   ownerId: text('owner_id'),
