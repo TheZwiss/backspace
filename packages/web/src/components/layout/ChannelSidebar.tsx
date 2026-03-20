@@ -19,6 +19,7 @@ import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } fro
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
+import { useDragManager, type DropTarget } from '../../hooks/useDragManager';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -43,8 +44,6 @@ export function ChannelSidebar() {
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
 
-  // Drag-and-drop state for moving users between voice channels
-  const [voiceDragState, setVoiceDragState] = useState<{ userId: string; fromChannelId: string } | null>(null);
   const isSpaceMuted = !!(myOriginId && spaceId && spaceMutedUserIds.has(`${spaceId}:${myOriginId}`));
   const isSpaceDeafened = !!(myOriginId && spaceId && spaceDeafenedUserIds.has(`${spaceId}:${myOriginId}`));
   const isPermissionMuted = !!(myOriginId && spaceId && permissionMutedUserIds.has(`${spaceId}:${myOriginId}`));
@@ -52,6 +51,7 @@ export function ChannelSidebar() {
   const location = useLocation();
 
   const [floatingPanelEl, setFloatingPanelEl] = useState<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const floatingPanelHeight = useUIStore((s) => s.floatingPanelHeight);
   const setFloatingPanelHeight = useUIStore((s) => s.setFloatingPanelHeight);
 
@@ -99,10 +99,6 @@ export function ChannelSidebar() {
   const canManageChannels = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_CHANNELS);
   const canCreateInvite = hasPermissionBit(mySpacePerms, PermissionBits.CREATE_INVITE);
   const categories = useSpaceStore((s) => s.categories);
-
-  // Drag state for channel/category reordering
-  const [channelDragState, setChannelDragState] = useState<{ dragType: 'channel' | 'category'; dragId: string } | null>(null);
-  const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after'; type: 'channel' | 'category' } | null>(null);
 
   // Delete category confirmation state
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
@@ -159,6 +155,130 @@ export function ChannelSidebar() {
     const chs = channelsByCategory.get(categoryId) ?? [];
     return chs.some(ch => unreadChannels.has(ch.id));
   }, [channelsByCategory, unreadChannels]);
+
+  // --- Centralized drag-and-drop ---
+  const canMoveMembers = hasPermissionBit(mySpacePerms, PermissionBits.MOVE_MEMBERS);
+
+  const handleChannelDrop = useCallback((dragId: string, target: DropTarget) => {
+    if (!currentSpaceId) return;
+
+    const allChannelsCopy = channels.map(ch => ({
+      id: ch.id,
+      position: ch.position,
+      categoryId: ch.categoryId,
+    }));
+
+    if (target.targetType === 'channel') {
+      const targetCh = channels.find(c => c.id === target.targetId);
+      if (targetCh) {
+        const dragCh = allChannelsCopy.find(c => c.id === dragId);
+        if (dragCh) dragCh.categoryId = targetCh.categoryId;
+      }
+    } else if (target.targetType === 'category') {
+      const dragCh = allChannelsCopy.find(c => c.id === dragId);
+      if (dragCh) dragCh.categoryId = target.targetId;
+    }
+
+    const grouped = new Map<string | null, typeof allChannelsCopy>();
+    for (const ch of allChannelsCopy) {
+      let arr = grouped.get(ch.categoryId);
+      if (!arr) { arr = []; grouped.set(ch.categoryId, arr); }
+      arr.push(ch);
+    }
+
+    for (const [, arr] of grouped) {
+      arr.sort((a, b) => a.position - b.position);
+      const dragIdx = arr.findIndex(c => c.id === dragId);
+      if (dragIdx === -1) continue;
+      const dragItem = arr[dragIdx]!;
+      arr.splice(dragIdx, 1);
+
+      if (target.targetType === 'channel') {
+        const targetIdx = arr.findIndex(c => c.id === target.targetId);
+        if (targetIdx !== -1) {
+          const insertIdx = target.position === 'before' ? targetIdx : targetIdx + 1;
+          arr.splice(insertIdx, 0, dragItem);
+        } else {
+          arr.push(dragItem);
+        }
+      } else {
+        arr.unshift(dragItem);
+      }
+      arr.forEach((ch, i) => { ch.position = i; });
+    }
+
+    const channelUpdates = allChannelsCopy.map(ch => ({
+      id: ch.id,
+      position: ch.position,
+      categoryId: ch.categoryId,
+    }));
+    const categoryUpdates = sortedCategories.map(c => ({
+      id: c.id,
+      position: c.position,
+    }));
+
+    useSpaceStore.getState().setChannels(
+      channels.map(ch => {
+        const update = channelUpdates.find(u => u.id === ch.id);
+        if (update) return { ...ch, position: update.position, categoryId: update.categoryId };
+        return ch;
+      }).sort((a, b) => a.position - b.position)
+    );
+    useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: categoryUpdates });
+  }, [channels, sortedCategories, currentSpaceId]);
+
+  const handleCategoryDrop = useCallback((dragId: string, target: DropTarget) => {
+    if (!currentSpaceId) return;
+
+    const catsCopy = sortedCategories.map(c => ({ id: c.id, position: c.position }));
+    const dragIdx = catsCopy.findIndex(c => c.id === dragId);
+    if (dragIdx === -1) return;
+
+    const dragItem = catsCopy[dragIdx]!;
+    catsCopy.splice(dragIdx, 1);
+    const targetIdx = catsCopy.findIndex(c => c.id === target.targetId);
+    if (targetIdx !== -1) {
+      const insertIdx = target.position === 'before' ? targetIdx : targetIdx + 1;
+      catsCopy.splice(insertIdx, 0, dragItem);
+    } else {
+      catsCopy.push(dragItem);
+    }
+    catsCopy.forEach((c, i) => { c.position = i; });
+
+    const channelUpdates = channels.map(ch => ({
+      id: ch.id,
+      position: ch.position,
+      categoryId: ch.categoryId,
+    }));
+
+    useSpaceStore.getState().setCategories(
+      categories.map(cat => {
+        const update = catsCopy.find(u => u.id === cat.id);
+        if (update) return { ...cat, position: update.position };
+        return cat;
+      }).sort((a, b) => a.position - b.position)
+    );
+    useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: catsCopy });
+  }, [sortedCategories, categories, channels, currentSpaceId]);
+
+  const handleVoiceUserDrop = useCallback((userId: string, fromChannelId: string, toChannelId: string) => {
+    const voiceOrigin = getChannelOrigin(fromChannelId);
+    wsSend({ type: 'voice_move', userId, targetChannelId: toChannelId }, voiceOrigin);
+  }, []);
+
+  const {
+    activeDrag, dropTarget,
+    channelHandlers, categoryHandlers,
+    voiceUserHandlers, voiceChannelDropZone,
+    containerHandlers,
+  } = useDragManager({
+    scrollContainerRef,
+    canManage: canManageChannels,
+    canMoveMembers,
+    onChannelDrop: handleChannelDrop,
+    onCategoryDrop: handleCategoryDrop,
+    onVoiceUserDrop: handleVoiceUserDrop,
+  });
 
   const handleSidebarContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -240,165 +360,6 @@ export function ChannelSidebar() {
       },
     ]);
   }, [openContextMenu, currentChannelId, navigate, setCurrentChannel]);
-
-  // DnD handlers
-  const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
-    if (!canManageChannels) return;
-    e.dataTransfer.setData('application/x-channel-id', channelId);
-    e.dataTransfer.effectAllowed = 'move';
-    setChannelDragState({ dragType: 'channel', dragId: channelId });
-  }, [canManageChannels]);
-
-  const handleCategoryDragStart = useCallback((e: React.DragEvent, categoryId: string) => {
-    if (!canManageChannels) return;
-    e.dataTransfer.setData('application/x-category-id', categoryId);
-    e.dataTransfer.effectAllowed = 'move';
-    setChannelDragState({ dragType: 'category', dragId: categoryId });
-  }, [canManageChannels]);
-
-  const handleDragEnd = useCallback(() => {
-    setChannelDragState(null);
-    setDropIndicator(null);
-  }, []);
-
-  const handleChannelDragOver = useCallback((e: React.DragEvent, targetId: string, type: 'channel' | 'category') => {
-    if (!channelDragState) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const rect = e.currentTarget.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    const position = e.clientY < midY ? 'before' : 'after';
-    setDropIndicator({ targetId, position, type });
-  }, [channelDragState]);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (!channelDragState || !currentSpaceId || !dropIndicator) {
-      setChannelDragState(null);
-      setDropIndicator(null);
-      return;
-    }
-
-    const dragChannelId = e.dataTransfer.getData('application/x-channel-id');
-    const dragCategoryId = e.dataTransfer.getData('application/x-category-id');
-
-    if (dragChannelId && dropIndicator) {
-      // Channel drag — compute new layout
-      const allChannelsCopy = channels.map(ch => ({
-        id: ch.id,
-        position: ch.position,
-        categoryId: ch.categoryId,
-      }));
-
-      if (dropIndicator.type === 'channel') {
-        // Dropping on a channel — take its categoryId and insert near it
-        const targetCh = channels.find(c => c.id === dropIndicator.targetId);
-        if (targetCh) {
-          const dragCh = allChannelsCopy.find(c => c.id === dragChannelId);
-          if (dragCh) {
-            dragCh.categoryId = targetCh.categoryId;
-          }
-        }
-      } else if (dropIndicator.type === 'category') {
-        // Dropping on a category header — move channel into that category
-        const dragCh = allChannelsCopy.find(c => c.id === dragChannelId);
-        if (dragCh) {
-          dragCh.categoryId = dropIndicator.targetId;
-        }
-      }
-
-      // Recalculate positions: group by category and assign sequential positions
-      const grouped = new Map<string | null, typeof allChannelsCopy>();
-      for (const ch of allChannelsCopy) {
-        const key = ch.categoryId;
-        let arr = grouped.get(key);
-        if (!arr) { arr = []; grouped.set(key, arr); }
-        arr.push(ch);
-      }
-
-      // Within each group, move dragged channel to correct position
-      for (const [, arr] of grouped) {
-        arr.sort((a, b) => a.position - b.position);
-        const dragIdx = arr.findIndex(c => c.id === dragChannelId);
-        if (dragIdx === -1) continue;
-        const dragItem = arr[dragIdx]!;
-        arr.splice(dragIdx, 1);
-
-        // Find target position
-        if (dropIndicator.type === 'channel') {
-          const targetIdx = arr.findIndex(c => c.id === dropIndicator.targetId);
-          if (targetIdx !== -1) {
-            const insertIdx = dropIndicator.position === 'before' ? targetIdx : targetIdx + 1;
-            arr.splice(insertIdx, 0, dragItem);
-          } else {
-            arr.push(dragItem);
-          }
-        } else {
-          // Dropped on category header — add at start
-          arr.unshift(dragItem);
-        }
-        // Reassign positions
-        arr.forEach((ch, i) => { ch.position = i; });
-      }
-
-      const channelUpdates = allChannelsCopy.map(ch => ({
-        id: ch.id,
-        position: ch.position,
-        categoryId: ch.categoryId,
-      }));
-      const categoryUpdates = sortedCategories.map(c => ({
-        id: c.id,
-        position: c.position,
-      }));
-
-      // Optimistic update
-      useSpaceStore.getState().setChannels(
-        channels.map(ch => {
-          const update = channelUpdates.find(u => u.id === ch.id);
-          if (update) return { ...ch, position: update.position, categoryId: update.categoryId };
-          return ch;
-        }).sort((a, b) => a.position - b.position)
-      );
-
-      useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: categoryUpdates });
-    } else if (dragCategoryId && dropIndicator?.type === 'category') {
-      // Category drag — reorder categories
-      const catsCopy = sortedCategories.map(c => ({ id: c.id, position: c.position }));
-      const dragIdx = catsCopy.findIndex(c => c.id === dragCategoryId);
-      if (dragIdx !== -1) {
-        const dragItem = catsCopy[dragIdx]!;
-        catsCopy.splice(dragIdx, 1);
-        const targetIdx = catsCopy.findIndex(c => c.id === dropIndicator.targetId);
-        if (targetIdx !== -1) {
-          const insertIdx = dropIndicator.position === 'before' ? targetIdx : targetIdx + 1;
-          catsCopy.splice(insertIdx, 0, dragItem);
-        } else {
-          catsCopy.push(dragItem);
-        }
-        catsCopy.forEach((c, i) => { c.position = i; });
-
-        const channelUpdates = channels.map(ch => ({
-          id: ch.id,
-          position: ch.position,
-          categoryId: ch.categoryId,
-        }));
-
-        // Optimistic update
-        useSpaceStore.getState().setCategories(
-          categories.map(cat => {
-            const update = catsCopy.find(u => u.id === cat.id);
-            if (update) return { ...cat, position: update.position };
-            return cat;
-          }).sort((a, b) => a.position - b.position)
-        );
-
-        useSpaceStore.getState().updateChannelLayout(currentSpaceId, { channels: channelUpdates, categories: catsCopy });
-      }
-    }
-
-    setChannelDragState(null);
-    setDropIndicator(null);
-  }, [channelDragState, dropIndicator, channels, sortedCategories, categories, currentSpaceId]);
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);
