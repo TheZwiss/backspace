@@ -208,6 +208,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      e.stopPropagation();
 
       const items: ContextMenuItem[] = [];
 

@@ -97,3 +97,38 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
 
   return items;
 }
+
+// ── Shared custom menu item components ────────────────────────────────────
+
+/**
+ * Volume slider for a voice participant, used as a `custom` context menu item.
+ * Must be a component (not a plain function) because it subscribes to store state.
+ */
+export function VolumeSliderItem({ userId }: { userId: string }) {
+  const volume = useVoiceStore((s) => s.participantVolumes.get(userId) ?? 100);
+  const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
+
+  return (
+    <div className="p-3">
+      <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
+        User Volume
+      </div>
+      <div className="flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
+          <path d="M3 9v6h4l5 5V4L7 9H3z" />
+        </svg>
+        <input
+          type="range"
+          min="0"
+          max="200"
+          value={volume}
+          onChange={(e) => setParticipantVolume(userId, parseInt(e.target.value))}
+          className="flex-1 accent-accent-primary h-1"
+        />
+        <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+          {volume}%
+        </span>
+      </div>
+    </div>
+  );
+}
