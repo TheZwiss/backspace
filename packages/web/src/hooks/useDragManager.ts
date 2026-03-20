@@ -180,9 +180,11 @@ export function useDragManager(opts: UseDragManagerOpts) {
   }, [activeDrag]);
 
   const handleVoiceDropZoneDrop = useCallback((e: React.DragEvent, channelId: string) => {
+    // Only handle voice user drops — let channel/category drops bubble to container
+    if (activeDrag?.type !== 'voiceUser') return;
     e.preventDefault();
     e.stopPropagation(); // Prevent bubbling to container's onDrop
-    if (activeDrag?.type === 'voiceUser' && activeDrag.sourceId && activeDrag.sourceId !== channelId) {
+    if (activeDrag.sourceId && activeDrag.sourceId !== channelId) {
       onVoiceUserDrop(activeDrag.dragId, activeDrag.sourceId, channelId);
     }
     clearState();
