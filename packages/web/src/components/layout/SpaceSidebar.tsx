@@ -6,13 +6,13 @@ import type { TaggedSpace } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useInstanceStore } from '../../stores/instanceStore';
-import { useAuthStore } from '../../stores/authStore';
+import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { Tooltip } from '../ui/Tooltip';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 import type { SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
 
-import { getSpaceGradient, HOME_GRADIENT } from '../../utils/gradients';
+import { getSpaceGradient } from '../../utils/gradients';
 import { isElectron } from '../../platform/platform';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 
@@ -247,88 +247,6 @@ function FolderIcon({ spaces, color, isActive, isHovered }: { spaces: TaggedSpac
         </div>
       )}
     </div>
-  );
-}
-
-// ─── Folder context menu ──────────────────────────────────────────────────
-
-function FolderContextMenu({ folder, x, y, onClose, onRename, onColorChange, onUngroup }: {
-  folder: SpaceFolder;
-  x: number;
-  y: number;
-  onClose: () => void;
-  onRename: () => void;
-  onColorChange: (color: string | null) => void;
-  onUngroup: () => void;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  const menuWidth = 200;
-  const menuHeight = 140;
-  const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
-  const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
-
-  return ReactDOM.createPortal(
-    <div
-      ref={menuRef}
-      className="fixed z-[9999] min-w-[160px] glass rounded-lg py-1 animate-in fade-in zoom-in-95 duration-100"
-      style={{ left: clampedX, top: clampedY }}
-    >
-      <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-txt-primary hover:bg-white/[0.06] transition-colors"
-        onClick={() => { onRename(); onClose(); }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-        </svg>
-        Rename Folder
-      </button>
-      <div className="px-3 py-1.5">
-        <p className="text-[11px] text-txt-tertiary mb-1.5">Folder Color</p>
-        <div className="flex gap-1.5">
-          <button
-            className={`w-5 h-5 rounded-full border-2 ${!folder.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
-            onClick={() => { onColorChange(null); onClose(); }}
-            title="Default"
-          />
-          {FOLDER_COLORS.map((c) => (
-            <button
-              key={c.name}
-              className={`w-5 h-5 rounded-full border-2 ${folder.color === c.value ? 'border-white/40' : 'border-transparent'}`}
-              style={{ background: c.value }}
-              onClick={() => { onColorChange(c.value); onClose(); }}
-              title={c.name}
-            />
-          ))}
-        </div>
-      </div>
-      <div className="h-[1px] bg-white/[0.06] mx-2 my-1" />
-      <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
-        onClick={() => { onUngroup(); onClose(); }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V8h-2v4H10v2h4v4h2v-4h4v-2h-4z" />
-        </svg>
-        Ungroup
-      </button>
-    </div>,
-    document.body,
   );
 }
 
@@ -575,136 +493,6 @@ function FolderFlyout({
   );
 }
 
-// ─── SpaceContextMenu ─────────────────────────────────────────────────────
-
-function SpaceContextMenu({ spaceId, x, y, onClose }: { spaceId: string; x: number; y: number; onClose: () => void }) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
-  const leaveSpace = useSpaceStore((s) => s.leaveSpace);
-  const generateInvite = useSpaceStore((s) => s.generateInvite);
-  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
-  const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
-  const setShowDms = useUIStore((s) => s.setShowDms);
-  const addToast = useUIStore((s) => s.addToast);
-  const navigate = useNavigate();
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-
-  const isOwner = space?.ownerId === getMyUserIdForOrigin((space as any)?._instanceOrigin ?? '');
-
-  // Close on click-outside and scroll
-  useEffect(() => {
-    if (showTransferModal || showLeaveConfirm) return; // Don't close when sub-dialog is open
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleScroll = () => onClose();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('scroll', handleScroll, true);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('scroll', handleScroll, true);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose, showTransferModal, showLeaveConfirm]);
-
-  if (!space) return null;
-
-  const handleInvite = async () => {
-    try {
-      const code = await generateInvite(spaceId);
-      const origin = (space as any)._instanceOrigin || window.location.origin;
-      const url = `${origin}/invite/${code}`;
-      await navigator.clipboard.writeText(url);
-      addToast('Invite link copied to clipboard', 'success', 3000);
-    } catch {
-      addToast('Failed to generate invite', 'warning', 3000);
-    }
-    onClose();
-  };
-
-  if (showTransferModal) {
-    return (
-      <TransferOwnershipModal
-        spaceId={spaceId}
-        onClose={onClose}
-      />
-    );
-  }
-
-  // Viewport-aware clamping — always 2 items (Invite + Transfer or Invite + Leave)
-  const menuWidth = 200;
-  const menuHeight = 2 * 32 + 8;
-  const clampedX = Math.min(x, window.innerWidth - menuWidth - 8);
-  const clampedY = Math.min(y, window.innerHeight - menuHeight - 8);
-
-  return ReactDOM.createPortal(
-    <div
-      ref={menuRef}
-      data-flyout-safe
-      className="fixed z-[9999] min-w-[160px] glass rounded-lg py-1 animate-in fade-in zoom-in-95 duration-100"
-      style={{ left: clampedX, top: clampedY }}
-    >
-      <button
-        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-txt-primary hover:bg-white/[0.06] transition-colors"
-        onClick={handleInvite}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-        </svg>
-        Invite People
-      </button>
-      {isOwner ? (
-        <button
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-amber hover:bg-accent-amber/10 transition-colors"
-          onClick={() => setShowTransferModal(true)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 13h-3V3h-2v10H8l4 4 4-4zM4 19v2h16v-2H4z" />
-          </svg>
-          Transfer Ownership
-        </button>
-      ) : (
-        <button
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-accent-rose hover:bg-accent-rose/10 transition-colors"
-          onClick={() => setShowLeaveConfirm(true)}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-          </svg>
-          Leave Space
-        </button>
-      )}
-      <ConfirmDialog
-        isOpen={showLeaveConfirm}
-        onClose={() => setShowLeaveConfirm(false)}
-        onConfirm={() => {
-          if (currentSpaceId === spaceId) {
-            navigate('/channels/@me');
-            setCurrentSpace(null);
-            setShowDms(true);
-          }
-          leaveSpace(spaceId);
-          setShowLeaveConfirm(false);
-          onClose();
-        }}
-        title={`Leave ${space.name}`}
-        description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
-        variant="danger"
-        confirmLabel="Leave"
-      />
-    </div>,
-    document.body,
-  );
-}
-
 // ─── FolderSlot (single icon slot for a folder) ──────────────────────────
 
 function FolderSlot({
@@ -806,6 +594,8 @@ export function SpaceSidebar() {
   const folders = useSpaceStore((s) => s.folders);
   const spaceLayout = useSpaceStore((s) => s.spaceLayout);
   const updateSpaceLayout = useSpaceStore((s) => s.updateSpaceLayout);
+  const generateInvite = useSpaceStore((s) => s.generateInvite);
+  const leaveSpace = useSpaceStore((s) => s.leaveSpace);
   const showDms = useUIStore((s) => s.showDms);
   const setShowDms = useUIStore((s) => s.setShowDms);
   const openModal = useUIStore((s) => s.openModal);
@@ -821,9 +611,9 @@ export function SpaceSidebar() {
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const folderAnchorRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  // Context menus
-  const [contextMenu, setContextMenu] = useState<{ spaceId: string; x: number; y: number } | null>(null);
-  const [folderContextMenu, setFolderContextMenu] = useState<{ folder: SpaceFolder; x: number; y: number } | null>(null);
+  // Modal state for context menu actions that spawn modals
+  const [transferModalSpaceId, setTransferModalSpaceId] = useState<string | null>(null);
+  const [leaveConfirmSpaceId, setLeaveConfirmSpaceId] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
 
   // DnD state
@@ -831,12 +621,65 @@ export function SpaceSidebar() {
   const [dropIndicator, setDropIndicator] = useState<{ targetId: string; position: 'before' | 'after' | 'merge' } | null>(null);
   const dropIndicatorRef = useRef(dropIndicator);
 
+  const openContextMenu = useContextMenuStore((s) => s.open);
+
   const handleSpaceContextMenu = useCallback((spaceId: string, e: React.MouseEvent) => {
     e.preventDefault();
-    setContextMenu({ spaceId, x: e.clientX, y: e.clientY });
-  }, []);
+    const space = useSpaceStore.getState().spaces.find(sp => sp.id === spaceId);
+    if (!space) return;
+    const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
 
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+    const items: ContextMenuItem[] = [
+      {
+        key: 'invite',
+        type: 'action',
+        label: 'Invite People',
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          </svg>
+        ),
+        onClick: async () => {
+          try {
+            const code = await useSpaceStore.getState().generateInvite(spaceId);
+            const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
+            const url = `${origin}/invite/${code}`;
+            await navigator.clipboard.writeText(url);
+            useUIStore.getState().addToast('Invite link copied to clipboard', 'success', 3000);
+          } catch {
+            useUIStore.getState().addToast('Failed to generate invite', 'warning', 3000);
+          }
+        },
+      },
+      {
+        key: 'transfer',
+        type: 'action',
+        label: 'Transfer Ownership',
+        hidden: !isOwner,
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16 13h-3V3h-2v10H8l4 4 4-4zM4 19v2h16v-2H4z" />
+          </svg>
+        ),
+        onClick: () => setTransferModalSpaceId(spaceId),
+      },
+      {
+        key: 'leave',
+        type: 'action',
+        label: 'Leave Space',
+        hidden: isOwner,
+        danger: true,
+        icon: (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 00-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+          </svg>
+        ),
+        onClick: () => setLeaveConfirmSpaceId(spaceId),
+      },
+    ];
+
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  }, [openContextMenu]);
 
   // Set of disconnected origins
   const disconnectedOrigins = useMemo(() => {
@@ -1309,7 +1152,65 @@ export function SpaceSidebar() {
             onToggleFlyout={() => setOpenFolderId(isFlyoutOpen ? null : folder.id)}
             onContextMenu={(e) => {
               e.preventDefault();
-              setFolderContextMenu({ folder, x: e.clientX, y: e.clientY });
+              const folderRef = folder;
+              const items: ContextMenuItem[] = [
+                {
+                  key: 'rename',
+                  type: 'action',
+                  label: 'Rename Folder',
+                  icon: (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                    </svg>
+                  ),
+                  onClick: () => {
+                    setRenamingFolderId(folderRef.id);
+                    setOpenFolderId(folderRef.id);
+                  },
+                },
+                {
+                  key: 'color',
+                  type: 'custom',
+                  render: () => (
+                    <div className="px-3 py-1.5">
+                      <p className="text-[11px] text-txt-tertiary mb-1.5">Folder Color</p>
+                      <div className="flex gap-1.5">
+                        <button
+                          className={`w-5 h-5 rounded-full border-2 ${!folderRef.color ? 'border-white/40' : 'border-transparent'} bg-white/10`}
+                          onClick={() => { handleFolderColorChange(folderRef.id, null); useContextMenuStore.getState().close(); }}
+                          title="Default"
+                        />
+                        {FOLDER_COLORS.map((c) => (
+                          <button
+                            key={c.name}
+                            className={`w-5 h-5 rounded-full border-2 ${folderRef.color === c.value ? 'border-white/40' : 'border-transparent'}`}
+                            style={{ background: c.value }}
+                            onClick={() => { handleFolderColorChange(folderRef.id, c.value); useContextMenuStore.getState().close(); }}
+                            title={c.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'sep',
+                  type: 'separator',
+                },
+                {
+                  key: 'ungroup',
+                  type: 'action',
+                  label: 'Ungroup',
+                  danger: true,
+                  icon: (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm12 6V8h-2v4H10v2h4v4h2v-4h4v-2h-4z" />
+                    </svg>
+                  ),
+                  onClick: () => handleUngroup(folderRef.id),
+                },
+              ];
+              openContextMenu({ x: e.clientX, y: e.clientY }, items);
             }}
             onDragStart={(e) => handleDragStart(e, folder.id, 'folder')}
             onDragOver={(e) => handleDragOver(e, folder.id, 'folder')}
@@ -1352,29 +1253,34 @@ export function SpaceSidebar() {
         actionType="explore"
       />
 
-      {contextMenu && (
-        <SpaceContextMenu
-          spaceId={contextMenu.spaceId}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={closeContextMenu}
+      {transferModalSpaceId && (
+        <TransferOwnershipModal
+          spaceId={transferModalSpaceId}
+          onClose={() => setTransferModalSpaceId(null)}
         />
       )}
-
-      {folderContextMenu && (
-        <FolderContextMenu
-          folder={folderContextMenu.folder}
-          x={folderContextMenu.x}
-          y={folderContextMenu.y}
-          onClose={() => setFolderContextMenu(null)}
-          onRename={() => {
-            setRenamingFolderId(folderContextMenu.folder.id);
-            setOpenFolderId(folderContextMenu.folder.id);
-          }}
-          onColorChange={(color) => handleFolderColorChange(folderContextMenu.folder.id, color)}
-          onUngroup={() => handleUngroup(folderContextMenu.folder.id)}
-        />
-      )}
+      {leaveConfirmSpaceId && (() => {
+        const space = spaces.find(s => s.id === leaveConfirmSpaceId);
+        return (
+          <ConfirmDialog
+            isOpen={true}
+            onClose={() => setLeaveConfirmSpaceId(null)}
+            onConfirm={() => {
+              if (currentSpaceId === leaveConfirmSpaceId) {
+                navigate('/channels/@me');
+                setCurrentSpace(null);
+                setShowDms(true);
+              }
+              leaveSpace(leaveConfirmSpaceId);
+              setLeaveConfirmSpaceId(null);
+            }}
+            title={`Leave ${space?.name ?? 'Space'}`}
+            description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
+            variant="danger"
+            confirmLabel="Leave"
+          />
+        );
+      })()}
 
       {openFolderId && (() => {
         const folderItem = resolvedLayout.find(
