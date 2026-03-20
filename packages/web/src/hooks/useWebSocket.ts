@@ -9,6 +9,8 @@ import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { registerSelfId } from '../utils/identity';
+import { getActiveRoom } from './useLiveKit';
+import { useUIStore } from '../stores/uiStore';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -428,7 +430,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'voice_disconnected': {
       const myDisconnectId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
       if (event.userId === myDisconnectId) {
-        useVoiceStore.getState().handleForceDisconnect();
+        const { currentVoiceChannelId } = useVoiceStore.getState();
+        if (event.channelId === currentVoiceChannelId) {
+          useVoiceStore.getState().handleForceDisconnect();
+          getActiveRoom()?.disconnect();
+          if (event.reason === 'displaced') {
+            useUIStore.getState().addToast('Voice disconnected — joined from another session', 'info');
+          }
+        }
       }
       break;
     }

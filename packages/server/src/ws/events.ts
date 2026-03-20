@@ -537,6 +537,14 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
   const left = connectionManager.leaveCurrentRoom(userId);
   if (left) {
     broadcastRoomLeave(left.roomId, left.room, userId);
+
+    // Notify all of the user's tabs so the displaced tab tears down LiveKit
+    connectionManager.sendToUser(userId, {
+      type: 'voice_disconnected',
+      userId,
+      channelId: left.roomId,
+      reason: 'displaced',
+    });
   }
 
   // Cancel any ringing DM rooms where this user is the caller

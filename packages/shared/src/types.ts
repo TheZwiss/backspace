@@ -330,7 +330,7 @@ export type ServerEvent =
   | { type: 'voice_space_deafened'; userId: string; channelId: string; spaceId: string; deafened: boolean }
   | { type: 'voice_permission_muted'; userId: string; spaceId: string; muted: boolean }
   | { type: 'voice_moved'; userId: string; oldChannelId: string; newChannelId: string }
-  | { type: 'voice_disconnected'; userId: string; channelId: string }
+  | { type: 'voice_disconnected'; userId: string; channelId: string; reason?: 'displaced' }
   | { type: 'user_updated'; user: User }
   | { type: 'member_banned'; spaceId: string; reason: string | null }
   | { type: 'category_created'; category: ChannelCategory; spaceId: string }
