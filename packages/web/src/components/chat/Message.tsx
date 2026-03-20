@@ -20,6 +20,7 @@ interface MessageProps {
   message: MessageWithUser;
   isCompact: boolean;
   isFirstInGroup: boolean;
+  previousMessageId: string | null;
 }
 
 function formatTime(timestamp: number): string {
@@ -59,7 +60,7 @@ function isGifOnlyMessage(content: string | null): boolean {
   return GIF_URL_REGEX.test(trimmed);
 }
 
-export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
+export function Message({ message, isCompact, isFirstInGroup, previousMessageId }: MessageProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content ?? '');
   const [isHovered, setIsHovered] = useState(false);

@@ -303,6 +303,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
                   message={msg}
                   isCompact={!isFirstInGroup}
                   isFirstInGroup={isFirstInGroup}
+                  previousMessageId={messages[i - 1]?.id ?? null}
                 />
               </React.Fragment>
             );
