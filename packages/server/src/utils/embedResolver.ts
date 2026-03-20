@@ -78,6 +78,12 @@ export async function resolveEmbeds(
       // Track the effective embed type (may be overridden by Content-Type detection)
       let effectiveEmbedType = classification.embedType;
 
+      // For YouTube/Vimeo, use predictable thumbnail URLs as fallback
+      if (classification.provider === 'youtube' && classification.embedUrl) {
+        const ytId = classification.embedUrl.split('/').pop()?.split('?')[0];
+        if (ytId) image = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+      }
+
       if (classification.embedType === 'image') {
         // Direct image URL — no fetch needed, use the URL as the image source
         image = url;
