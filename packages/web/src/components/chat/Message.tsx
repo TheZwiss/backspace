@@ -4,8 +4,8 @@ import type { MessageWithUser } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MentionBadge } from './MentionBadge';
 import { Avatar } from '../ui/Avatar';
-import { useContextMenu } from '../../hooks/useContextMenu';
-import type { ContextMenuItem } from '../../stores/contextMenuStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { buildMessageMenuItems } from './messageMenuItems';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -80,14 +80,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const isAuthor = isSelf(message.user, currentUser);
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const myChPerms = channelPermissions.get(message.channelId);
-  const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
-  const canDelete = isAuthor || canManageMessages;
   const isDmMessage = !!(message as any).dmChannelId || !message.channelId;
+  const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
+  const canSendMessages = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.SEND_MESSAGES);
+  const canDelete = isAuthor || canManageMessages;
   const canAddReactions = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.ADD_REACTIONS);
 
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
+  const markUnread = useChatStore((s) => s.markUnread);
 
   const isOwnReaction = (r: { userId: string; user?: { id: string; username: string; homeInstance?: string | null } | null }) =>
     r.user ? isSelf(r.user, currentUser) : r.userId === currentUser?.id;
@@ -169,39 +171,38 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     });
   };
 
-  const contextMenuItems: ContextMenuItem[] = [];
-  if (isAuthor) {
-    contextMenuItems.push({
-      key: 'edit',
-      type: 'action',
-      label: 'Edit Message',
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-        </svg>
-      ),
-      onClick: () => {
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const selectedText = window.getSelection()?.toString() ?? '';
+
+    const items = buildMessageMenuItems({
+      message,
+      selectedText,
+      previousMessageId,
+      isAuthor,
+      isDm: isDmMessage,
+      canAddReactions,
+      canSendMessages,
+      canManageMessages,
+      onReply: () => setReplyTo(message),
+      onEdit: () => {
         setEditContent(message.content ?? '');
         setIsEditing(true);
       },
+      onDelete: () => deleteMessage(message.id, channelKey),
+      onReaction: (emoji: string) => toggleReaction(emoji),
+      onOpenEmojiPicker: () => {
+        // Close the context menu, then show the reaction picker
+        useContextMenuStore.getState().close();
+        setShowReactionPicker(true);
+      },
+      onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
     });
-  }
-  if (canDelete) {
-    contextMenuItems.push({
-      key: 'delete',
-      type: 'action',
-      label: 'Delete Message',
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-        </svg>
-      ),
-      onClick: () => deleteMessage(message.id, channelKey),
-      danger: true,
-    });
-  }
 
-  const { onContextMenu } = useContextMenu(contextMenuItems);
+    if (items.length === 0) return;
+    useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, items);
+  };
 
   const handleEditSubmit = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -549,7 +550,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   );
 
   return (
-    <div onContextMenu={contextMenuItems.length > 0 ? onContextMenu : undefined}>
+    <div onContextMenu={handleContextMenu}>
       {content}
     </div>
   );
