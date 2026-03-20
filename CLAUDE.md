@@ -409,6 +409,28 @@ CREATE TABLE attachments (
     created_at INTEGER NOT NULL
 );
 
+-- Embeds (resolved URL previews)
+CREATE TABLE embeds (
+    id TEXT PRIMARY KEY,
+    message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+    dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    embed_type TEXT NOT NULL CHECK (embed_type IN ('generic', 'video', 'image', 'audio', 'rich')),
+    provider TEXT,                  -- 'youtube' | 'vimeo' | 'spotify' | null
+    title TEXT,
+    description TEXT,
+    image TEXT,                     -- thumbnail/og:image URL
+    embed_url TEXT,                 -- iframe-safe embed URL
+    width INTEGER,
+    height INTEGER,
+    color TEXT,
+    created_at INTEGER NOT NULL,
+    CHECK (
+        (message_id IS NOT NULL AND dm_message_id IS NULL) OR
+        (message_id IS NULL AND dm_message_id IS NOT NULL)
+    )
+);
+
 -- Reactions
 CREATE TABLE reactions (
     id TEXT PRIMARY KEY,
@@ -788,6 +810,10 @@ All WebSocket messages are JSON over `/ws`. Client authenticates by sending `{ t
 { type: 'join_request_accepted', request, space? }
 { type: 'join_request_declined', request }
 
+# Embeds
+{ type: 'embeds_resolved', messageId, channelId, embeds: Embed[] }
+{ type: 'dm_embeds_resolved', messageId, dmChannelId, embeds: Embed[] }
+
 # Space Layout
 { type: 'space_layout_updated', layout: SpaceLayoutItem[], folders: SpaceFolder[] }
 ```
@@ -895,7 +921,8 @@ All core features are implemented and live:
 - **Friends:** Send/accept/decline requests, friend list, user search
 - **Audio Processing:** RNNoise noise suppression, echo cancellation, auto gain control, per-user volume
 - **File Uploads:** Multipart upload, immutable cache headers, directory traversal protection
-- **URL Previews:** Server-side metadata extraction with Cheerio
+- **Inline Media:** Video/audio attachment playback, YouTube/Vimeo click-to-load embeds, Spotify rich embeds, external image URL display, database-backed embed resolution
+- **URL Previews:** Server-side metadata extraction with Cheerio (now shared utility for embed resolver)
 - **Desktop:** Electron wrapper with tray, notifications, badge count
 - **Docker:** Multi-stage build, health checks, Caddy auto-HTTPS
 - **Federation:** Multi-instance user replication, home instance tracking, connected instances UI, profile sync
