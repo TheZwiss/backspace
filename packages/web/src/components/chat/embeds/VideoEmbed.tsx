@@ -34,11 +34,10 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
         {isPlaying && embed.embedUrl ? (
           <iframe
             className="absolute inset-0 w-full h-full"
-            src={`${embed.embedUrl}?autoplay=1`}
+            src={`${embed.embedUrl}?autoplay=1&origin=${encodeURIComponent(window.location.origin)}`}
             title={embed.title ?? 'Video'}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
-            referrerPolicy="no-referrer"
           />
         ) : (
           <button
