@@ -178,8 +178,44 @@ export function useDragManager(opts: UseDragManagerOpts) {
     voiceHoverChannelId, activeDrag,
   ]);
 
-  // Suppress unused variable warnings for incremental build
-  void scrollContainerRef;
+  // --- Auto-scroll during drag (fixes bug 7) ---
+
+  useEffect(() => {
+    if (!activeDrag || !scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    const EDGE_PX = 40;
+    let scrollSpeed = 0;
+    let rafId = 0;
+
+    const onDragOver = (e: DragEvent) => {
+      const rect = container.getBoundingClientRect();
+      const distFromTop = e.clientY - rect.top;
+      const distFromBottom = rect.bottom - e.clientY;
+
+      if (distFromTop < EDGE_PX) {
+        scrollSpeed = -(1 + 7 * (1 - distFromTop / EDGE_PX));
+      } else if (distFromBottom < EDGE_PX) {
+        scrollSpeed = 1 + 7 * (1 - distFromBottom / EDGE_PX);
+      } else {
+        scrollSpeed = 0;
+      }
+    };
+
+    const tick = () => {
+      if (scrollSpeed !== 0) {
+        container.scrollTop += scrollSpeed;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    container.addEventListener('dragover', onDragOver);
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      container.removeEventListener('dragover', onDragOver);
+      cancelAnimationFrame(rafId);
+    };
+  }, [activeDrag, scrollContainerRef]);
 
   return {
     activeDrag,
