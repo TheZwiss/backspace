@@ -14,17 +14,25 @@ export interface DropTarget {
   targetType: 'channel' | 'category';
 }
 
+export interface LayoutItem {
+  id: string;
+  type: 'channel' | 'category';
+}
+
 interface UseDragManagerOpts {
   scrollContainerRef: RefObject<HTMLElement | null>;
   canManage: boolean;
   canMoveMembers: boolean;
+  /** Flat ordered list of all visible items in sidebar order — used to normalize
+   *  'before B' into 'after A' so only a single drop indicator line renders. */
+  orderedItems: LayoutItem[];
   onChannelDrop: (dragId: string, target: DropTarget) => void;
   onCategoryDrop: (dragId: string, target: DropTarget) => void;
   onVoiceUserDrop: (userId: string, fromChannelId: string, toChannelId: string) => void;
 }
 
 export function useDragManager(opts: UseDragManagerOpts) {
-  const { scrollContainerRef, canManage, canMoveMembers, onChannelDrop, onCategoryDrop, onVoiceUserDrop } = opts;
+  const { scrollContainerRef, canManage, canMoveMembers, orderedItems, onChannelDrop, onCategoryDrop, onVoiceUserDrop } = opts;
 
   const [activeDrag, setActiveDrag] = useState<DragState | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -58,9 +66,24 @@ export function useDragManager(opts: UseDragManagerOpts) {
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
-    const position: 'before' | 'after' = e.clientY < midY ? 'before' : 'after';
-    setDropTarget({ targetId, position, targetType });
-  }, [activeDrag]);
+    let position: 'before' | 'after' = e.clientY < midY ? 'before' : 'after';
+
+    // Normalize 'before' to previous item's 'after' so a single drop indicator
+    // line renders between items, eliminating the double-line visual glitch
+    let resolvedId = targetId;
+    let resolvedType = targetType;
+    if (position === 'before') {
+      const idx = orderedItems.findIndex(item => item.id === targetId);
+      if (idx > 0) {
+        const prev = orderedItems[idx - 1]!;
+        resolvedId = prev.id;
+        resolvedType = prev.type;
+        position = 'after';
+      }
+    }
+
+    setDropTarget({ targetId: resolvedId, position, targetType: resolvedType });
+  }, [activeDrag, orderedItems]);
 
   const handleDragEnd = useCallback(() => {
     clearState();

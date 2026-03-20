@@ -19,7 +19,7 @@ import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } fro
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
-import { useDragManager, type DropTarget } from '../../hooks/useDragManager';
+import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -157,6 +157,26 @@ export function ChannelSidebar() {
   }, [channelsByCategory, unreadChannels]);
 
   // --- Centralized drag-and-drop ---
+
+  // Flat ordered list matching visual sidebar order — used by useDragManager
+  // to normalize 'before B' into 'after A' for a single drop indicator line
+  const orderedItems = useMemo<LayoutItem[]>(() => {
+    const items: LayoutItem[] = [];
+    for (const ch of uncategorizedChannels) {
+      items.push({ id: ch.id, type: 'channel' });
+    }
+    for (const cat of sortedCategories) {
+      items.push({ id: cat.id, type: 'category' });
+      const catChs = channelsByCategory.get(cat.id) ?? [];
+      if (!collapsedCategories.has(cat.id)) {
+        for (const ch of catChs) {
+          items.push({ id: ch.id, type: 'channel' });
+        }
+      }
+    }
+    return items;
+  }, [uncategorizedChannels, sortedCategories, channelsByCategory, collapsedCategories]);
+
   const canMoveMembers = hasPermissionBit(mySpacePerms, PermissionBits.MOVE_MEMBERS);
 
   const handleChannelDrop = useCallback((dragId: string, target: DropTarget) => {
@@ -275,6 +295,7 @@ export function ChannelSidebar() {
     scrollContainerRef,
     canManage: canManageChannels,
     canMoveMembers,
+    orderedItems,
     onChannelDrop: handleChannelDrop,
     onCategoryDrop: handleCategoryDrop,
     onVoiceUserDrop: handleVoiceUserDrop,
@@ -1257,7 +1278,7 @@ function ChannelItem({
         className={`relative ${isDragging ? 'opacity-50' : ''}`}
         {...channelDragHandlers}
       >
-        {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+        {dropIndicator === 'before' && <div className="absolute -top-[1px] left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
         <VoiceChannel
           channelId={channel.id}
           channelName={channel.name}
@@ -1268,7 +1289,7 @@ function ChannelItem({
           voiceUserHandlers={voiceUserHandlers}
           dropZone={voiceChannelDropZone}
         />
-        {dropIndicator === 'after' && <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+        {dropIndicator === 'after' && <div className="absolute -bottom-[1px] left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
       </div>
     );
   }
@@ -1278,7 +1299,7 @@ function ChannelItem({
       className={`relative ${isDragging ? 'opacity-50' : ''}`}
       {...channelDragHandlers}
     >
-      {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+      {dropIndicator === 'before' && <div className="absolute -top-[1px] left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
       <button
         onClick={onChannelClick}
         className={`relative w-full flex items-center gap-1.5 px-[10px] h-8 rounded-[6px] group transition-colors ${
@@ -1318,7 +1339,7 @@ function ChannelItem({
           </svg>
         )}
       </button>
-      {dropIndicator === 'after' && <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
+      {dropIndicator === 'after' && <div className="absolute -bottom-[1px] left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
     </div>
   );
 }
