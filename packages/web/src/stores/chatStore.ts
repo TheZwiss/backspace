@@ -360,20 +360,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addMessage: (channelId: string, message: MessageWithUser) => {
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
     set((state) => {
       const newMessages = new Map(state.messages);
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
-      if (current.find(m => m.id === message.id)) return state;
+      if (current.find(m => m.id === normalizedMessage.id)) return state;
       // Remove any optimistic temp message with same content.
       // Don't require userId match — for federated messages the home user ID
       // differs from the replicated user ID, but content match is sufficient
       // since temp messages are unique within the short optimistic window.
       const filtered = current.filter(m => {
         if (!m.id.startsWith('temp_')) return true;
-        return m.content !== message.content;
+        return m.content !== normalizedMessage.content;
       });
-      let updated = [...filtered, message];
+      let updated = [...filtered, normalizedMessage];
       // Cap per-channel messages to prevent memory growth
       if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
         updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
@@ -384,25 +385,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   addRealtimeMessage: (channelId: string, message: MessageWithUser) => {
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
     set((state) => {
       const newMessages = new Map(state.messages);
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
-      if (current.find(m => m.id === message.id)) return state;
+      if (current.find(m => m.id === normalizedMessage.id)) return state;
       // Remove any optimistic temp message with same content (no userId check —
       // federated messages arrive with a different replicated user ID)
       const filtered = current.filter(m => {
         if (!m.id.startsWith('temp_')) return true;
-        return m.content !== message.content;
+        return m.content !== normalizedMessage.content;
       });
-      let updated = [...filtered, message];
+      let updated = [...filtered, normalizedMessage];
       // Cap per-channel messages to prevent memory growth
       if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
         updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
       }
       newMessages.set(channelId, updated);
       // Append to realtimeMessageEvents (capped at 50)
-      const newEvents = [...state.realtimeMessageEvents, { channelId, message }];
+      const newEvents = [...state.realtimeMessageEvents, { channelId, message: normalizedMessage }];
       if (newEvents.length > 50) newEvents.splice(0, newEvents.length - 50);
       return { messages: newMessages, realtimeMessageEvents: newEvents };
     });
@@ -412,13 +414,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // DM messages have dmChannelId instead of channelId — check both
     const channelKey = message.channelId || (message as any).dmChannelId;
     if (!channelKey) return;
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
     set((state) => {
       const newMessages = new Map(state.messages);
       const current = newMessages.get(channelKey);
       if (!current) return state;
       newMessages.set(
         channelKey,
-        current.map(m => m.id === message.id ? message : m),
+        current.map(m => m.id === normalizedMessage.id ? normalizedMessage : m),
       );
       return { messages: newMessages };
     });

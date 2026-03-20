@@ -317,7 +317,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
 
     case 'message_created':
-      if (!isHome) normalizeMessageAssets(event.message, origin);
+      if (!isHome) {
+        normalizeMessageAssets(event.message, origin);
+        if (event.message.embeds) {
+          for (const embed of event.message.embeds) {
+            if (embed.image && !embed.image.startsWith('http')) {
+              embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+            }
+          }
+        }
+      }
       addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
@@ -331,7 +340,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
 
     case 'message_updated':
-      if (!isHome) normalizeMessageAssets(event.message, origin);
+      if (!isHome) {
+        normalizeMessageAssets(event.message, origin);
+        if (event.message.embeds) {
+          for (const embed of event.message.embeds) {
+            if (embed.image && !embed.image.startsWith('http')) {
+              embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+            }
+          }
+        }
+      }
       updateMessage(event.message);
       break;
 
@@ -461,7 +479,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM events (home-only) ──────────────────────────────────────────────
 
     case 'dm_message_created': {
-      if (!isHome) normalizeMessageAssets(event.message as any, origin);
+      if (!isHome) {
+        normalizeMessageAssets(event.message as any, origin);
+        if ((event.message as any).embeds) {
+          for (const embed of (event.message as any).embeds) {
+            if (embed.image && !embed.image.startsWith('http')) {
+              embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+            }
+          }
+        }
+      }
       addRealtimeMessage(event.message.dmChannelId, event.message as any);
       const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useSpaceStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
@@ -496,13 +523,62 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_message_updated':
-      if (!isHome) normalizeMessageAssets(event.message as any, origin);
+      if (!isHome) {
+        normalizeMessageAssets(event.message as any, origin);
+        if ((event.message as any).embeds) {
+          for (const embed of (event.message as any).embeds) {
+            if (embed.image && !embed.image.startsWith('http')) {
+              embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+            }
+          }
+        }
+      }
       updateMessage(event.message as any);
       break;
 
     case 'dm_message_deleted':
       removeMessage(event.messageId, event.dmChannelId);
       break;
+
+    case 'embeds_resolved': {
+      if (!isHome) {
+        for (const embed of event.embeds) {
+          if (embed.image && !embed.image.startsWith('http')) {
+            embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+          }
+        }
+      }
+      const resolvedMsgs = useChatStore.getState().messages.get(event.channelId);
+      if (resolvedMsgs) {
+        const newResolvedMsgs = resolvedMsgs.map(m =>
+          m.id === event.messageId ? { ...m, embeds: event.embeds } : m
+        );
+        const newResolvedMessages = new Map(useChatStore.getState().messages);
+        newResolvedMessages.set(event.channelId, newResolvedMsgs);
+        useChatStore.setState({ messages: newResolvedMessages });
+      }
+      break;
+    }
+
+    case 'dm_embeds_resolved': {
+      if (!isHome) {
+        for (const embed of event.embeds) {
+          if (embed.image && !embed.image.startsWith('http')) {
+            embed.image = resolveAssetUrl(embed.image, origin) ?? embed.image;
+          }
+        }
+      }
+      const dmResolvedMsgs = useChatStore.getState().messages.get(event.dmChannelId);
+      if (dmResolvedMsgs) {
+        const newDmResolvedMsgs = dmResolvedMsgs.map(m =>
+          m.id === event.messageId ? { ...m, embeds: event.embeds } : m
+        );
+        const newDmResolvedMessages = new Map(useChatStore.getState().messages);
+        newDmResolvedMessages.set(event.dmChannelId, newDmResolvedMsgs);
+        useChatStore.setState({ messages: newDmResolvedMessages });
+      }
+      break;
+    }
 
     case 'dm_typing': {
       let dmTypingUsername = event.username as string;
