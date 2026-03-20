@@ -410,20 +410,21 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.attachments.messageId, id))
       .all();
 
-    // Hydrate reactions, embeds, and reply-to
+    // Delete old embeds synchronously so the broadcast reflects the edit
+    db.delete(schema.embeds).where(eq(schema.embeds.messageId, id)).run();
+
+    // Hydrate reactions and reply-to (embeds are empty after deletion)
     const reactionsMap = fetchReactionsForMessages([id]);
     const reactions = reactionsMap.get(id) ?? [];
-    const embedMap = fetchEmbedsForMessages([id]);
-    const embedRows = embedMap.get(id) ?? [];
     let replyTo: MessageWithUser | null = null;
     if (updatedMessage.replyToId) {
       const replyToMap = fetchReplyToMessages([updatedMessage]);
       replyTo = replyToMap.get(updatedMessage.replyToId) ?? null;
     }
 
-    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo, embedRows);
+    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo, []);
 
-    // Broadcast edit
+    // Broadcast edit (with empty embeds — new ones arrive via embeds_resolved)
     const spaceId = getChannelSpaceId(message.channelId);
     if (spaceId) {
       connectionManager.sendToSpace(spaceId, {
@@ -431,9 +432,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         message: messageWithUser,
       });
 
-      // Re-resolve embeds asynchronously after responding
+      // Resolve new embeds asynchronously (old ones already deleted above)
       setImmediate(() => {
-        reResolveEmbeds(id, content.trim(), message.channelId, false, spaceId).catch(() => {});
+        resolveEmbeds(id, content.trim(), message.channelId, false, spaceId).catch(() => {});
       });
     }
 

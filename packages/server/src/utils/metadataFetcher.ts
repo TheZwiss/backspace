@@ -93,13 +93,13 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
     const $ = cheerio.load(html);
 
     const metadata: UrlMetadata = {
-      title: $('meta[property="og:title"]').attr('content') ?? $('title').text() ?? null,
+      title: $('meta[property="og:title"]').attr('content') || $('title').text() || null,
       description:
-        $('meta[property="og:description"]').attr('content') ??
-        $('meta[name="description"]').attr('content') ??
+        $('meta[property="og:description"]').attr('content') ||
+        $('meta[name="description"]').attr('content') ||
         null,
-      image: $('meta[property="og:image"]').attr('content') ?? null,
-      siteName: $('meta[property="og:site_name"]').attr('content') ?? null,
+      image: $('meta[property="og:image"]').attr('content') || null,
+      siteName: $('meta[property="og:site_name"]').attr('content') || null,
       url,
     };
 

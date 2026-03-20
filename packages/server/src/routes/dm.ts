@@ -1007,6 +1007,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.dmMessages.id, id))
       .run();
 
+    // Delete old embeds synchronously so the broadcast reflects the edit
+    db.delete(schema.embeds).where(eq(schema.embeds.dmMessageId, id)).run();
+
     const updated = getDmMessageWithUser(id);
     if (!updated) {
       return reply.code(500).send({ error: 'Failed to update message', statusCode: 500 });
@@ -1025,9 +1028,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    // Re-resolve embeds asynchronously after responding
+    // Resolve new embeds asynchronously (old ones already deleted above)
     setImmediate(() => {
-      reResolveEmbeds(id, content.trim(), msg.dmChannelId, true, null).catch(() => {});
+      resolveEmbeds(id, content.trim(), msg.dmChannelId, true, null).catch(() => {});
     });
 
     return reply.code(200).send(updated);

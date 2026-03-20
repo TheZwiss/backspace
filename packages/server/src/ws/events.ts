@@ -313,6 +313,9 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
   const spaceId = getChannelSpaceId(message.channelId);
   if (!spaceId) return;
 
+  // Delete old embeds synchronously so the broadcast reflects the edit
+  db.delete(schema.embeds).where(eq(schema.embeds.messageId, messageId)).run();
+
   const updatedMessage = getMessageWithUser(messageId);
   if (updatedMessage) {
     connectionManager.sendToChannel(spaceId, message.channelId, {
@@ -320,9 +323,9 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
       message: updatedMessage,
     });
 
-    // Re-resolve embeds asynchronously
+    // Resolve new embeds asynchronously (old ones already deleted above)
     setImmediate(() => {
-      reResolveEmbeds(messageId, content.trim(), message.channelId, false, spaceId).catch(() => {});
+      resolveEmbeds(messageId, content.trim(), message.channelId, false, spaceId).catch(() => {});
     });
   }
 }
@@ -862,6 +865,9 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     .where(eq(schema.dmMessages.id, messageId))
     .run();
 
+  // Delete old embeds synchronously so the broadcast reflects the edit
+  db.delete(schema.embeds).where(eq(schema.embeds.dmMessageId, messageId)).run();
+
   const updated = getDmMessageWithUser(messageId);
   if (!updated) return;
 
@@ -877,9 +883,9 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     });
   }
 
-  // Re-resolve embeds asynchronously
+  // Resolve new embeds asynchronously (old ones already deleted above)
   setImmediate(() => {
-    reResolveEmbeds(messageId, content.trim(), msg.dmChannelId, true, null).catch(() => {});
+    resolveEmbeds(messageId, content.trim(), msg.dmChannelId, true, null).catch(() => {});
   });
 }
 

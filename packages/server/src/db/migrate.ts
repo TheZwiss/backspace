@@ -465,9 +465,6 @@ function migrateAddIndexes(db: Database.Database): void {
     // Categories
     'CREATE INDEX IF NOT EXISTS idx_channel_categories_space_id ON channel_categories(space_id)',
 
-    // Embeds
-    'CREATE INDEX IF NOT EXISTS idx_embeds_message_id ON embeds(message_id)',
-    'CREATE INDEX IF NOT EXISTS idx_embeds_dm_message_id ON embeds(dm_message_id)',
   ];
 
   db.exec(indexes.join(';\n'));
