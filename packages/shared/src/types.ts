@@ -190,6 +190,7 @@ export interface Message {
 export interface MessageWithUser extends Message {
   user: User;
   attachments: Attachment[];
+  embeds: Embed[];
   reactions: Reaction[];
   replyTo?: MessageWithUser | null;
 }
@@ -215,6 +216,28 @@ export interface Attachment {
   mimetype: string;
   size: number;
   thumbnailFilename?: string | null;
+  createdAt: number;
+}
+
+// ─── Embed Types ──────────────────────────────────────────────────────────
+
+export type EmbedType = 'generic' | 'video' | 'image' | 'audio' | 'rich';
+export type EmbedProvider = 'youtube' | 'vimeo' | 'spotify';
+
+export interface Embed {
+  id: string;
+  messageId: string | null;
+  dmMessageId: string | null;
+  url: string;
+  embedType: EmbedType;
+  provider: EmbedProvider | null;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  embedUrl: string | null;
+  width: number | null;
+  height: number | null;
+  color: string | null;
   createdAt: number;
 }
 
@@ -253,6 +276,7 @@ export interface DmMessage {
 export interface DmMessageWithUser extends DmMessage {
   user: User;
   attachments: Attachment[];
+  embeds: Embed[];
   reactions: Reaction[];
   replyTo?: DmMessageWithUser | null;
 }
@@ -340,6 +364,8 @@ export type ServerEvent =
   | { type: 'channel_layout_updated'; spaceId: string; channels: Channel[]; categories: ChannelCategory[] }
   | { type: 'space_layout_updated'; layout: SpaceLayoutItem[]; folders: SpaceFolder[]; updatedAt?: number }
   | { type: 'mark_unread'; channelId: string; messageId: string }
+  | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
+  | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
