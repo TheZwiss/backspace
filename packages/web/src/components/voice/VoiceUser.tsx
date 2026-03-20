@@ -1,14 +1,46 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { VoiceUserContextMenu } from './VoiceUserContextMenu';
+import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
+import { buildVoiceModMenuItems } from './voiceMenuItems';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
+import { getActiveRoom, setCameraSubscription } from '../../hooks/useLiveKit';
 import type { UserTile } from '../../hooks/useLiveKit';
 
 interface VoiceUserProps {
   tile: UserTile;
   large?: boolean;
+}
+
+/** Wrapper component for the volume slider so it can use hooks (useState). */
+function VolumeSliderItem({ userId }: { userId: string }) {
+  const volume = useVoiceStore((s) => s.participantVolumes.get(userId) ?? 100);
+  const setParticipantVolume = useVoiceStore((s) => s.setParticipantVolume);
+
+  return (
+    <div className="p-3">
+      <div className="text-xs text-txt-tertiary mb-2 font-medium uppercase tracking-wider">
+        User Volume
+      </div>
+      <div className="flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
+          <path d="M3 9v6h4l5 5V4L7 9H3z" />
+        </svg>
+        <input
+          type="range"
+          min="0"
+          max="200"
+          value={volume}
+          onChange={(e) => setParticipantVolume(userId, parseInt(e.target.value))}
+          className="flex-1 accent-accent-primary h-1"
+        />
+        <span className="text-xs text-txt-secondary min-w-[32px] text-right">
+          {volume}%
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function VoiceUser({ tile, large }: VoiceUserProps) {
@@ -24,6 +56,8 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   const unwatchedCameras = useVoiceStore((s) => s.unwatchedCameras);
   const participantMutes = useVoiceStore((s) => s.participantMutes);
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
+
+  const openContextMenu = useContextMenuStore((s) => s.open);
 
   const [, forceUpdate] = useState(0);
 
@@ -59,18 +93,79 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
   }, [tile.lkVideoTrack]);
 
   // Context Menu
-  const [volumeMenu, setVolumeMenu] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if (isLocal) return;
+      if (isLocal || !currentVoiceChannelId) return;
       e.preventDefault();
-      setVolumeMenu({ x: e.clientX, y: e.clientY });
+
+      const targetUserId = participant.userId;
+      const channelId = currentVoiceChannelId;
+
+      // Build moderation items
+      const modItems = buildVoiceModMenuItems(targetUserId, channelId);
+
+      const items: ContextMenuItem[] = [...modItems];
+
+      // Separator after mod items
+      if (modItems.length > 0) {
+        items.push({ key: 'mod-end-sep', type: 'separator' });
+      }
+
+      // Camera watch/unwatch
+      const targetParticipant = useVoiceStore.getState().participants.find((p) => p.userId === targetUserId);
+      const targetHasCamera = targetParticipant?.isCameraOn ?? false;
+      const isCameraUnwatched = useVoiceStore.getState().unwatchedCameras.has(targetUserId);
+
+      if (targetHasCamera) {
+        items.push({
+          key: 'camera-toggle',
+          type: 'action',
+          label: isCameraUnwatched ? 'Watch Camera' : 'Stop Watching Camera',
+          icon: React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'currentColor', className: 'flex-shrink-0' },
+            ...(isCameraUnwatched
+              ? [React.createElement('path', { key: 'cam', d: 'M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z' })]
+              : [
+                  React.createElement('path', { key: 'cam', d: 'M17 10.5V7c0-.55-.45-1-1-1H2c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h14c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z' }),
+                  React.createElement('line', { key: 'slash', x1: 1, y1: 1, x2: 23, y2: 23, stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round' }),
+                ]),
+          ),
+          onClick: () => {
+            const room = getActiveRoom();
+            const identity = targetParticipant?.identity;
+            if (isCameraUnwatched) {
+              useVoiceStore.getState().rewatchCamera(targetUserId);
+              if (identity) setCameraSubscription(room, identity, true);
+            } else {
+              useVoiceStore.getState().unwatchCamera(targetUserId);
+              if (identity) setCameraSubscription(room, identity, false);
+            }
+          },
+        });
+        items.push({ key: 'camera-sep', type: 'separator' });
+      }
+
+      // Mute User checkbox
+      const isUserMuted = useVoiceStore.getState().participantMutes.get(targetUserId) ?? false;
+      items.push({
+        key: 'mute-user',
+        type: 'checkbox',
+        label: 'Mute User',
+        checked: isUserMuted,
+        onChange: (checked) => useVoiceStore.getState().setParticipantMute(targetUserId, checked),
+      });
+
+      items.push({ key: 'vol-sep', type: 'separator' });
+
+      // Volume slider (custom, needs store subscription via wrapper component)
+      items.push({
+        key: 'volume',
+        type: 'custom',
+        render: () => React.createElement(VolumeSliderItem, { userId: targetUserId }),
+      });
+
+      openContextMenu({ x: e.clientX, y: e.clientY }, items);
     },
-    [isLocal],
+    [isLocal, currentVoiceChannelId, participant.userId, openContextMenu],
   );
 
   return (
@@ -185,16 +280,6 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
           </div>
         </div>
       </div>
-
-      {volumeMenu && currentVoiceChannelId && (
-        <VoiceUserContextMenu
-          targetUserId={participant.userId}
-          channelId={currentVoiceChannelId}
-          position={volumeMenu}
-          onClose={() => setVolumeMenu(null)}
-          isLocal={isLocal}
-        />
-      )}
     </div>
   );
 }
