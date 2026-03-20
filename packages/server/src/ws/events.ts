@@ -168,6 +168,9 @@ export function handleClientEvent(
     case 'channel_ack':
       handleChannelAck(event, userId);
       break;
+    case 'mark_unread':
+      handleMarkUnread(event, userId);
+      break;
     case 'dm_call_start':
       handleDmCallStart(event, userId, username);
       break;
@@ -1091,6 +1094,67 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   // Echo ack back to all of this user's connections (multi-tab sync)
   connectionManager.sendToUser(userId, {
     type: 'channel_ack',
+    channelId,
+    messageId,
+  });
+}
+
+function handleMarkUnread(event: Record<string, unknown>, userId: string): void {
+  const channelId = event.channelId as string;
+  const messageId = event.messageId as string;
+  if (!channelId || !messageId) return;
+  if (!/^\d+$/.test(messageId) && messageId !== '0') return;
+
+  // Validate channel membership
+  const spaceId = getChannelSpaceId(channelId);
+  if (spaceId) {
+    if (!isMember(spaceId, userId)) return;
+  } else {
+    if (!isDmMember(channelId, userId)) return;
+  }
+
+  const db = getDb();
+  const now = Date.now();
+
+  if (messageId === '0') {
+    // '0' sentinel: delete the read state entirely → channel appears fully unread
+    db.delete(schema.readStates)
+      .where(and(
+        eq(schema.readStates.userId, userId),
+        eq(schema.readStates.channelId, channelId),
+      ))
+      .run();
+  } else {
+    // Set read state to the specified message (allows backward writes)
+    const existing = db.select()
+      .from(schema.readStates)
+      .where(and(
+        eq(schema.readStates.userId, userId),
+        eq(schema.readStates.channelId, channelId),
+      ))
+      .get();
+
+    if (existing) {
+      db.update(schema.readStates)
+        .set({ lastReadMessageId: messageId, updatedAt: now })
+        .where(and(
+          eq(schema.readStates.userId, userId),
+          eq(schema.readStates.channelId, channelId),
+        ))
+        .run();
+    } else {
+      db.insert(schema.readStates).values({
+        userId,
+        channelId,
+        lastReadMessageId: messageId,
+        updatedAt: now,
+      }).run();
+    }
+  }
+
+  // Broadcast to all of this user's connections (multi-tab sync)
+  connectionManager.sendToUser(userId, {
+    type: 'mark_unread',
     channelId,
     messageId,
   });
