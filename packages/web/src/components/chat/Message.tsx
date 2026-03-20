@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { MessageWithUser } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { MentionBadge } from './MentionBadge';
 import { Avatar } from '../ui/Avatar';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
@@ -38,6 +39,16 @@ function formatTime(timestamp: number): string {
 
 function formatHoverTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Lightweight inline renderer that resolves <@userId> mentions to MentionBadge components. */
+function renderInlineWithMentions(content: string): React.ReactNode {
+  const parts = content.split(/(<@[a-zA-Z0-9_-]+>)/g);
+  return parts.map((part, i) => {
+    const match = part.match(/^<@([a-zA-Z0-9_-]+)>$/);
+    if (match) return <MentionBadge key={i} userId={match[1]!} />;
+    return part;
+  });
 }
 
 const GIF_URL_REGEX = /^https:\/\/(?:media\.tenor\.com|static\.klipy\.com)\/.+$/;
@@ -285,7 +296,7 @@ export function Message({ message, isCompact, isFirstInGroup }: MessageProps) {
                 style={replyRoleColor(message.replyTo)}
               />
               <span className="text-[14px] text-txt-message truncate max-w-[400px] hover:text-txt-primary">
-                {message.replyTo.content}
+                {message.replyTo.content ? renderInlineWithMentions(message.replyTo.content) : ''}
               </span>
             </div>
           );
