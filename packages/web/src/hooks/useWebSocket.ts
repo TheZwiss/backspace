@@ -571,6 +571,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    case 'mark_unread': {
+      const { onMarkUnread } = useChatStore.getState();
+      onMarkUnread(event.channelId, event.messageId);
+      break;
+    }
+
     // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {

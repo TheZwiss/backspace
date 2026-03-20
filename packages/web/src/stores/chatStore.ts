@@ -57,8 +57,10 @@ interface ChatState {
   getTypingUsers: (channelId: string) => TypingUser[];
   setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => void;
   markChannelUnread: (channelId: string) => void;
+  markUnread: (channelId: string, messageId: string) => void;
   ackChannel: (channelId: string) => void;
   onChannelAck: (channelId: string, messageId: string) => void;
+  onMarkUnread: (channelId: string, messageId: string) => void;
   removeChannelStates: (channelIds: Set<string>) => void;
   updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
 }
@@ -585,6 +587,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
+  markUnread: (channelId: string, messageId: string) => {
+    // Optimistically update local state
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      const newUnread = new Set(state.unreadChannels);
+      if (messageId === '0') {
+        newReadStates.delete(channelId);
+      } else {
+        newReadStates.set(channelId, messageId);
+      }
+      newUnread.add(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+
+    // Send to the correct federated instance
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'mark_unread', channelId, messageId }, origin);
+  },
+
   ackChannel: (channelId: string) => {
     const msgs = get().messages.get(channelId);
     if (!msgs || msgs.length === 0) return;
@@ -620,6 +641,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       newReadStates.set(channelId, messageId);
       const newUnread = new Set(state.unreadChannels);
       newUnread.delete(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+  },
+
+  onMarkUnread: (channelId: string, messageId: string) => {
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      const newUnread = new Set(state.unreadChannels);
+      if (messageId === '0') {
+        newReadStates.delete(channelId);
+      } else {
+        newReadStates.set(channelId, messageId);
+      }
+      newUnread.add(channelId);
       return { readStates: newReadStates, unreadChannels: newUnread };
     });
   },
