@@ -22,6 +22,8 @@ export interface UrlMetadata {
   image: string | null;
   siteName: string | null;
   url: string;
+  /** Set when the URL itself is a direct media resource (image/video/audio) */
+  contentType?: string;
 }
 
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
@@ -64,6 +66,13 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
 
     if (!response.ok) {
       return null;
+    }
+
+    // If the response is a direct media file (image/video/audio), return early
+    // with the content type — don't try to parse it as HTML
+    const responseContentType = response.headers.get('content-type') ?? '';
+    if (responseContentType.startsWith('image/') || responseContentType.startsWith('video/') || responseContentType.startsWith('audio/')) {
+      return { title: null, description: null, image: null, siteName: null, url, contentType: responseContentType };
     }
 
     // Early exit if Content-Length > 512KB

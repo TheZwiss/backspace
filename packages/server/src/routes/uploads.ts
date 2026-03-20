@@ -134,6 +134,28 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(originalName)}"`);
     }
 
+    // Support Range requests for audio/video seeking
+    const stat = fs.statSync(filepath);
+    const fileSize = stat.size;
+    const rangeHeader = request.headers.range;
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0] ?? '0', 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunkSize = end - start + 1;
+
+      reply.header('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      reply.header('Accept-Ranges', 'bytes');
+      reply.header('Content-Length', chunkSize);
+      reply.code(206);
+
+      const stream = fs.createReadStream(filepath, { start, end });
+      return reply.send(stream);
+    }
+
+    reply.header('Accept-Ranges', 'bytes');
+    reply.header('Content-Length', fileSize);
     const stream = fs.createReadStream(filepath);
     return reply.send(stream);
   });

@@ -75,20 +75,36 @@ export async function resolveEmbeds(
       let image: string | null = null;
       let siteName: string | null = null;
 
+      // Track the effective embed type (may be overridden by Content-Type detection)
+      let effectiveEmbedType = classification.embedType;
+
       if (classification.embedType === 'image') {
         // Direct image URL — no fetch needed, use the URL as the image source
         image = url;
       } else if (classification.needsMetadataFetch) {
         const metadata = await fetchUrlMetadata(url);
         if (metadata) {
-          title = metadata.title;
-          description = metadata.description;
-          image = metadata.image;
-          siteName = metadata.siteName;
+          // If the URL itself is a direct media resource (detected via Content-Type),
+          // override the classification instead of trying to use og: metadata
+          if (metadata.contentType) {
+            if (metadata.contentType.startsWith('image/')) {
+              effectiveEmbedType = 'image';
+              image = url;
+            } else if (metadata.contentType.startsWith('video/')) {
+              effectiveEmbedType = 'video';
+            } else if (metadata.contentType.startsWith('audio/')) {
+              effectiveEmbedType = 'audio';
+            }
+          } else {
+            title = metadata.title;
+            description = metadata.description;
+            image = metadata.image;
+            siteName = metadata.siteName;
+          }
         }
 
-        // For generic embeds, skip if we couldn't extract a title
-        if (classification.embedType === 'generic' && !title) {
+        // For generic embeds, skip if we couldn't extract a title and it's not a media URL
+        if (effectiveEmbedType === 'generic' && !title) {
           continue;
         }
       }
@@ -99,7 +115,7 @@ export async function resolveEmbeds(
         messageId: isDm ? null : messageId,
         dmMessageId: isDm ? messageId : null,
         url,
-        embedType: classification.embedType,
+        embedType: effectiveEmbedType,
         provider: classification.provider,
         title,
         description,

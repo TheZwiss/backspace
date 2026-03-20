@@ -44,10 +44,10 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
 
   if (mimetype.startsWith('video/')) {
     return (
-      <div className="mt-1 max-w-[520px] rounded-lg overflow-hidden border border-white/[0.06]">
+      <div className="mt-1 max-w-[520px]">
         <video
           controls
-          preload="none"
+          preload="metadata"
           poster={thumbUrl ?? undefined}
           className="max-w-full max-h-[400px] rounded-lg"
         >
