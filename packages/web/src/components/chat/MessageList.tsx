@@ -134,7 +134,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
           if (el) {
             el.scrollIntoView({ block: 'start' });
             const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
-            const near = dist < 5000;
+            const near = dist < 150;
             setIsNearBottom(near);
             isNearBottomRef.current = near;
             return;
@@ -218,7 +218,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     // Check if near bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    const nearBottom = distanceFromBottom < 5000;
+    const nearBottom = distanceFromBottom < 150;
     setIsNearBottom(nearBottom);
     isNearBottomRef.current = nearBottom;
 

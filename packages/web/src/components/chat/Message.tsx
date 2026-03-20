@@ -10,7 +10,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { Embed } from './Embed';
+import { AttachmentRenderer } from './AttachmentRenderer';
+import { EmbedRenderer } from './EmbedRenderer';
 import { Username } from '../ui/Username';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
@@ -73,7 +74,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const editMessage = useChatStore((s) => s.editMessage);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const members = useSpaceStore((s) => s.members);
-  const openImagePreview = useUIStore((s) => s.openImagePreview);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
   const channelKey = message.channelId || (message as any).dmChannelId;
@@ -130,9 +130,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   }, []);
 
   const isGifOnly = isGifOnlyMessage(message.content);
-
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const firstUrl = isGifOnly ? null : message.content?.match(urlRegex)?.[0];
 
   // Close reaction picker on outside click
   useEffect(() => {
@@ -362,55 +359,22 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 )}
 
                 {/* Embeds */}
-                {!isEditing && firstUrl && <Embed url={firstUrl} />}
+                {!isEditing && message.embeds && message.embeds.length > 0 && (
+                  <div className="flex flex-col gap-2 mt-1">
+                    {message.embeds.map((embed) => (
+                      <EmbedRenderer key={embed.id} embed={embed} />
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="mt-1 grid gap-2">
-                {message.attachments.map((att) => {
-                  const isImage = att.mimetype.startsWith('image/');
-                  const attUrl = att.filename.startsWith('http') || att.filename.startsWith('/') ? att.filename : `/api/uploads/${att.filename}`;
-                  const thumbUrl = att.thumbnailFilename
-                    ? (att.thumbnailFilename.startsWith('http') || att.thumbnailFilename.startsWith('/') ? att.thumbnailFilename : `/api/uploads/${att.thumbnailFilename}`)
-                    : null;
-                  if (isImage) {
-                    return (
-                      <div key={att.id} className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]">
-                        <img
-                          src={thumbUrl ?? attUrl}
-                          alt={att.originalName}
-                          className="max-w-full max-h-[350px] object-contain cursor-pointer hover:brightness-95 transition-all"
-                          onClick={() => openImagePreview(attUrl)}
-                          loading="lazy"
-                        />
-                      </div>
-                    );
-                  }
-                  return (
-                    <a
-                      key={att.id}
-                      href={attUrl}
-                      download={att.originalName}
-                      className="flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all max-w-[400px] mt-1 group/att"
-                    >
-                      <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors">
-                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-txt-link text-[15px] font-medium truncate hover:underline">{att.originalName}</p>
-                        <p className="text-[12px] text-txt-tertiary font-medium">
-                          {att.size < 1024 ? `${att.size} B` :
-                           att.size < 1048576 ? `${(att.size / 1024).toFixed(1)} KB` :
-                           `${(att.size / 1048576).toFixed(1)} MB`}
-                        </p>
-                      </div>
-                    </a>
-                  );
-                })}
+                {message.attachments.map((att) => (
+                  <AttachmentRenderer key={att.id} attachment={att} />
+                ))}
               </div>
             )}
 
