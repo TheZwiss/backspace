@@ -602,7 +602,7 @@ export function ChannelSidebar() {
       </div>
 
       {/* Channels — dynamic category layout */}
-      <div className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={handleDrop} onDragOver={(e) => e.preventDefault()} onContextMenu={handleSidebarContextMenu}>
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
         {/* Uncategorized channels */}
         {uncategorizedChannels.length > 0 && (
           <div className="mb-[19px]">
@@ -627,20 +627,17 @@ export function ChannelSidebar() {
                   isActive={currentChannelId === channel.id}
                   isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
                   canManage={canManageChannels}
-                  isDragging={channelDragState?.dragType === 'channel' && channelDragState.dragId === channel.id}
-                  dropIndicator={dropIndicator?.targetId === channel.id ? dropIndicator.position : null}
+                  isDragging={activeDrag?.type === 'channel' && activeDrag.dragId === channel.id}
+                  dropIndicator={dropTarget?.targetId === channel.id ? dropTarget.position : null}
                   onChannelClick={channel.type === 'voice' ? (() => {
                     const chPerms = channelPermissions.get(channel.id);
                     const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
                     if (canConnect) handleVoiceJoin(channel.id);
                   }) : (() => handleChannelClick(channel.id))}
                   onSettingsClick={() => openModal('channelSettings', { channelId: channel.id })}
-                  onDragStart={(e) => handleChannelDragStart(e, channel.id)}
-                  onDragOver={(e) => handleChannelDragOver(e, channel.id, 'channel')}
-                  onDragEnd={handleDragEnd}
-                  voiceDragState={voiceDragState}
-                  onVoiceDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
-                  onVoiceDragEnd={() => setVoiceDragState(null)}
+                  channelDragHandlers={channelHandlers(channel.id)}
+                  voiceUserHandlers={voiceUserHandlers}
+                  voiceChannelDropZone={voiceChannelDropZone(channel.id)}
                   channelPermissions={channelPermissions}
                   handleVoiceJoin={handleVoiceJoin}
                 />
@@ -658,12 +655,9 @@ export function ChannelSidebar() {
           const categoryHeader = (
                 <div
                   className={`flex items-center justify-between px-1 mb-1 group cursor-pointer ${
-                    channelDragState?.dragType === 'category' && channelDragState.dragId === category.id ? 'opacity-50' : ''
-                  } ${dropIndicator?.targetId === category.id && dropIndicator.type === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
-                  draggable={canManageChannels}
-                  onDragStart={(e) => handleCategoryDragStart(e, category.id)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleChannelDragOver(e, category.id, 'category')}
+                    activeDrag?.type === 'category' && activeDrag.dragId === category.id ? 'opacity-50' : ''
+                  } ${dropTarget?.targetId === category.id && dropTarget.targetType === 'category' ? 'ring-1 ring-accent-mint/40 rounded' : ''}`}
+                  {...categoryHandlers(category.id)}
                   onClick={() => toggleCollapse(category.id)}
                 >
                   <div className="flex items-center gap-0.5 text-txt-tertiary hover:text-txt-secondary transition-colors min-w-0">
@@ -728,20 +722,17 @@ export function ChannelSidebar() {
                       isActive={currentChannelId === channel.id}
                       isUnread={unreadChannels.has(channel.id) && currentChannelId !== channel.id}
                       canManage={canManageChannels}
-                      isDragging={channelDragState?.dragType === 'channel' && channelDragState.dragId === channel.id}
-                      dropIndicator={dropIndicator?.targetId === channel.id ? dropIndicator.position : null}
+                      isDragging={activeDrag?.type === 'channel' && activeDrag.dragId === channel.id}
+                      dropIndicator={dropTarget?.targetId === channel.id ? dropTarget.position : null}
                       onChannelClick={channel.type === 'voice' ? (() => {
                         const chPerms = channelPermissions.get(channel.id);
                         const canConnect = hasPermissionBit(chPerms, PermissionBits.CONNECT);
                         if (canConnect) handleVoiceJoin(channel.id);
                       }) : (() => handleChannelClick(channel.id))}
                       onSettingsClick={() => openModal('channelSettings', { channelId: channel.id })}
-                      onDragStart={(e) => handleChannelDragStart(e, channel.id)}
-                      onDragOver={(e) => handleChannelDragOver(e, channel.id, 'channel')}
-                      onDragEnd={handleDragEnd}
-                      voiceDragState={voiceDragState}
-                      onVoiceDragStart={(userId: string) => setVoiceDragState({ userId, fromChannelId: channel.id })}
-                      onVoiceDragEnd={() => setVoiceDragState(null)}
+                      channelDragHandlers={channelHandlers(channel.id)}
+                      voiceUserHandlers={voiceUserHandlers}
+                      voiceChannelDropZone={voiceChannelDropZone(channel.id)}
                       channelPermissions={channelPermissions}
                       handleVoiceJoin={handleVoiceJoin}
                     />
@@ -1221,12 +1212,9 @@ function ChannelItem({
   dropIndicator,
   onChannelClick,
   onSettingsClick,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  voiceDragState,
-  onVoiceDragStart,
-  onVoiceDragEnd,
+  channelDragHandlers,
+  voiceUserHandlers,
+  voiceChannelDropZone,
   channelPermissions,
   handleVoiceJoin,
 }: {
@@ -1238,12 +1226,26 @@ function ChannelItem({
   dropIndicator: 'before' | 'after' | null;
   onChannelClick: () => void;
   onSettingsClick: () => void;
-  onDragStart: (e: React.DragEvent) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
-  voiceDragState: { userId: string; fromChannelId: string } | null;
-  onVoiceDragStart: (userId: string) => void;
-  onVoiceDragEnd: () => void;
+  channelDragHandlers: {
+    draggable: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDragEnd: () => void;
+  };
+  voiceUserHandlers: (userId: string, channelId: string) => {
+    draggable: boolean;
+    isBeingDragged: boolean;
+    onDragStart: (e: React.DragEvent) => void;
+    onDragEnd: (e: React.DragEvent) => void;
+  };
+  voiceChannelDropZone: {
+    onDragOver: (e: React.DragEvent) => void;
+    onDragEnter: (e: React.DragEvent) => void;
+    onDragLeave: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
+    isDragOver: boolean;
+    isValidTarget: boolean;
+  };
   channelPermissions: Map<string, string>;
   handleVoiceJoin: (channelId: string) => void;
 }) {
@@ -1253,10 +1255,7 @@ function ChannelItem({
     return (
       <div
         className={`relative ${isDragging ? 'opacity-50' : ''}`}
-        draggable={canManage}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
+        {...channelDragHandlers}
       >
         {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
         <VoiceChannel
@@ -1266,9 +1265,8 @@ function ChannelItem({
           locked={!canConnect}
           canManage={canManage}
           onSettingsClick={onSettingsClick}
-          dragState={voiceDragState}
-          onDragStart={onVoiceDragStart}
-          onDragEnd={onVoiceDragEnd}
+          voiceUserHandlers={voiceUserHandlers}
+          dropZone={voiceChannelDropZone}
         />
         {dropIndicator === 'after' && <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
       </div>
@@ -1278,10 +1276,7 @@ function ChannelItem({
   return (
     <div
       className={`relative ${isDragging ? 'opacity-50' : ''}`}
-      draggable={canManage}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
+      {...channelDragHandlers}
     >
       {dropIndicator === 'before' && <div className="absolute top-0 left-2 right-2 h-[2px] bg-accent-mint rounded-full z-10" />}
       <button
