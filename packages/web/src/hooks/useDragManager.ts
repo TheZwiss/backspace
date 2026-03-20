@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, type RefObject } from 'react';
+import { useState, useCallback, useEffect, useMemo, type RefObject } from 'react';
 
 export type DragType = 'channel' | 'category' | 'voiceUser';
 
@@ -39,18 +39,18 @@ export function useDragManager(opts: UseDragManagerOpts) {
   // --- Channel/Category drag handlers ---
 
   const handleChannelDragStart = useCallback((e: React.DragEvent, channelId: string) => {
-    if (!canManage || activeDrag !== null) return;
+    if (!canManage) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', channelId); // Firefox requires setData for drag to work
     setActiveDrag({ type: 'channel', dragId: channelId });
-  }, [canManage, activeDrag]);
+  }, [canManage]);
 
   const handleCategoryDragStart = useCallback((e: React.DragEvent, categoryId: string) => {
-    if (!canManage || activeDrag !== null) return;
+    if (!canManage) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', categoryId); // Firefox requires setData for drag to work
     setActiveDrag({ type: 'category', dragId: categoryId });
-  }, [canManage, activeDrag]);
+  }, [canManage]);
 
   const handleLayoutDragOver = useCallback((e: React.DragEvent, targetId: string, targetType: 'channel' | 'category') => {
     if (!activeDrag || activeDrag.type === 'voiceUser') return;
@@ -107,10 +107,10 @@ export function useDragManager(opts: UseDragManagerOpts) {
     clearState();
   }, [activeDrag, dropTarget, onChannelDrop, onCategoryDrop, clearState]);
 
-  const containerHandlers = {
+  const containerHandlers = useMemo(() => ({
     onDrop: handleContainerDrop,
     onDragOver: handleContainerDragOver,
-  };
+  }), [handleContainerDrop, handleContainerDragOver]);
 
   // --- Voice user drag handlers ---
 
