@@ -16,9 +16,11 @@ import {
   type PaginatedQuery,
   type Attachment,
   type Reaction,
+  type Embed,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -67,6 +69,7 @@ export function buildDmMessageWithUser(
   attachmentRows: (typeof schema.attachments.$inferSelect)[],
   reactions: Reaction[] = [],
   replyTo: DmMessageWithUser | null = null,
+  embedRows: (typeof schema.embeds.$inferSelect)[] = [],
 ): DmMessageWithUser {
   return {
     id: message.id,
@@ -87,6 +90,7 @@ export function buildDmMessageWithUser(
       thumbnailFilename: a.thumbnailFilename ?? null,
       createdAt: a.createdAt,
     })),
+    embeds: embedRows.map(e => embedRowToEmbed(e)),
     reactions,
     replyTo,
   };
@@ -108,6 +112,11 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
     .where(eq(schema.attachments.dmMessageId, dmMessageId))
     .all();
 
+  const embedRows = db.select()
+    .from(schema.embeds)
+    .where(eq(schema.embeds.dmMessageId, dmMessageId))
+    .all();
+
   const reactionsMap = fetchDmReactionsForMessages([dmMessageId]);
   const reactions = reactionsMap.get(dmMessageId) ?? [];
 
@@ -127,13 +136,14 @@ export function getDmMessageWithUser(dmMessageId: string): DmMessageWithUser | n
           createdAt: replyMsg.createdAt,
           user: sanitizeUser(replyUser),
           attachments: [],
+          embeds: [],
           reactions: [],
         };
       }
     }
   }
 
-  return buildDmMessageWithUser(message, user, attachmentRows, reactions, replyTo);
+  return buildDmMessageWithUser(message, user, attachmentRows, reactions, replyTo, embedRows);
 }
 
 /**
@@ -830,6 +840,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Batch fetch reactions
     const reactionsMap = fetchDmReactionsForMessages(messageIds);
 
+    // Batch fetch embeds
+    const embedMap = fetchDmEmbedsForMessages(messageIds);
+
     // Batch fetch reply-to messages
     const replyToIds = messageRows
       .map(m => m.replyToId)
@@ -860,6 +873,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           createdAt: rm.createdAt,
           user: sanitizeUser(rUser),
           attachments: [],
+          embeds: [],
           reactions: [],
         });
       }
@@ -871,7 +885,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is DmMessageWithUser => m !== null);
 
@@ -953,6 +967,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Broadcast to all DM members (including those who closed the channel)
     broadcastDmMessage(id, message);
 
+    // Resolve embeds asynchronously after responding
+    setImmediate(() => {
+      resolveEmbeds(messageId, content?.trim() || null, id, true, null).catch(() => {});
+    });
+
     return reply.code(201).send(message);
   });
 
@@ -1005,6 +1024,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         message: updated,
       });
     }
+
+    // Re-resolve embeds asynchronously after responding
+    setImmediate(() => {
+      reResolveEmbeds(id, content.trim(), msg.dmChannelId, true, null).catch(() => {});
+    });
 
     return reply.code(200).send(updated);
   });

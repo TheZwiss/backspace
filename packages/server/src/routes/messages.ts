@@ -12,9 +12,11 @@ import {
   type PaginatedQuery,
   type MessageWithUser,
   type Reaction,
+  type Embed,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { fetchEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 
 /**
  * Fetch reactions for a set of message IDs.
@@ -114,6 +116,7 @@ export function fetchReplyToMessages(messages: (typeof schema.messages.$inferSel
         size: a.size,
         createdAt: a.createdAt,
       })),
+      embeds: [],
       reactions: [],
       replyTo: null,
     });
@@ -127,6 +130,7 @@ export function buildMessageWithUser(
   attachmentRows: (typeof schema.attachments.$inferSelect)[],
   reactions: Reaction[] = [],
   replyTo: MessageWithUser | null = null,
+  embedRows: (typeof schema.embeds.$inferSelect)[] = [],
 ): MessageWithUser {
   return {
     id: message.id,
@@ -147,6 +151,7 @@ export function buildMessageWithUser(
       thumbnailFilename: a.thumbnailFilename ?? null,
       createdAt: a.createdAt,
     })),
+    embeds: embedRows.map(e => embedRowToEmbed(e)),
     reactions,
     replyTo,
   };
@@ -224,6 +229,9 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
     // Batch fetch reactions for all messages
     const reactionsMap = fetchReactionsForMessages(messageIds);
 
+    // Batch fetch embeds for all messages
+    const embedMap = fetchEmbedsForMessages(messageIds);
+
     // Batch fetch reply-to messages
     const replyToMap = fetchReplyToMessages(messageRows);
 
@@ -233,7 +241,7 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is MessageWithUser => m !== null);
 
@@ -348,6 +356,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       message: messageWithUser,
     });
 
+    // Resolve embeds asynchronously after responding
+    setImmediate(() => {
+      resolveEmbeds(messageId, content?.trim() || null, id, false, spaceId).catch(() => {});
+    });
+
     return reply.code(201).send(messageWithUser);
   });
 
@@ -397,16 +410,18 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       .where(eq(schema.attachments.messageId, id))
       .all();
 
-    // Hydrate reactions and reply-to
+    // Hydrate reactions, embeds, and reply-to
     const reactionsMap = fetchReactionsForMessages([id]);
     const reactions = reactionsMap.get(id) ?? [];
+    const embedMap = fetchEmbedsForMessages([id]);
+    const embedRows = embedMap.get(id) ?? [];
     let replyTo: MessageWithUser | null = null;
     if (updatedMessage.replyToId) {
       const replyToMap = fetchReplyToMessages([updatedMessage]);
       replyTo = replyToMap.get(updatedMessage.replyToId) ?? null;
     }
 
-    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo);
+    const messageWithUser = buildMessageWithUser(updatedMessage, user, attachmentRows, reactions, replyTo, embedRows);
 
     // Broadcast edit
     const spaceId = getChannelSpaceId(message.channelId);
@@ -414,6 +429,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.sendToSpace(spaceId, {
         type: 'message_updated',
         message: messageWithUser,
+      });
+
+      // Re-resolve embeds asynchronously after responding
+      setImmediate(() => {
+        reResolveEmbeds(id, content.trim(), message.channelId, false, spaceId).catch(() => {});
       });
     }
 

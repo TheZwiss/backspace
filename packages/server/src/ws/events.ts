@@ -5,9 +5,10 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -76,6 +77,11 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     createdAt: r.createdAt,
   }));
 
+  const embedRows = db.select()
+    .from(schema.embeds)
+    .where(eq(schema.embeds.messageId, messageId))
+    .all();
+
   let replyTo: MessageWithUser | null = null;
   if (message.replyToId) {
     // Simple fetch for replyTo (one level deep to avoid recursion loops)
@@ -93,6 +99,7 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
           createdAt: replyMsg.createdAt,
           user: sanitizeUser(replyUser),
           attachments: [], // Don't fetch attachments for replies to save bandwidth
+          embeds: [],
           reactions: [], // Don't fetch reactions for replies
         };
       }
@@ -109,6 +116,7 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     createdAt: message.createdAt,
     user: sanitizeUser(user),
     attachments,
+    embeds: embedRows.map(e => embedRowToEmbed(e)),
     reactions,
     replyTo,
   };
@@ -257,6 +265,11 @@ function handleMessageCreate(event: Record<string, unknown>, userId: string): vo
       type: 'message_created',
       message: messageWithUser,
     });
+
+    // Resolve embeds asynchronously
+    setImmediate(() => {
+      resolveEmbeds(messageId, content.trim(), channelId, false, spaceId).catch(() => {});
+    });
   }
 }
 
@@ -305,6 +318,11 @@ function handleMessageEdit(event: Record<string, unknown>, userId: string): void
     connectionManager.sendToChannel(spaceId, message.channelId, {
       type: 'message_updated',
       message: updatedMessage,
+    });
+
+    // Re-resolve embeds asynchronously
+    setImmediate(() => {
+      reResolveEmbeds(messageId, content.trim(), message.channelId, false, spaceId).catch(() => {});
     });
   }
 }
@@ -763,6 +781,11 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
 
   // Broadcast to all DM members (including those who closed the channel)
   broadcastDmMessage(dmChannelId, dmMessage);
+
+  // Resolve embeds asynchronously
+  setImmediate(() => {
+    resolveEmbeds(messageId, hasContent ? content!.trim() : null, dmChannelId, true, null).catch(() => {});
+  });
 }
 
 function handleDmTypingStart(event: Record<string, unknown>, userId: string, username: string): void {
@@ -853,6 +876,11 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
       message: updated,
     });
   }
+
+  // Re-resolve embeds asynchronously
+  setImmediate(() => {
+    reResolveEmbeds(messageId, content.trim(), msg.dmChannelId, true, null).catch(() => {});
+  });
 }
 
 function handleDmMessageDelete(event: Record<string, unknown>, userId: string): void {

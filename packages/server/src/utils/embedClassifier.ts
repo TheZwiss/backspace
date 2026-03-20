@@ -25,15 +25,15 @@ function extractYouTubeId(url: URL): string | null {
 
     // /shorts/ID
     const shortsMatch = path.match(/^\/shorts\/([A-Za-z0-9_-]+)/);
-    if (shortsMatch) return shortsMatch[1];
+    if (shortsMatch) return shortsMatch[1] ?? null;
 
     // /embed/ID
     const embedMatch = path.match(/^\/embed\/([A-Za-z0-9_-]+)/);
-    if (embedMatch) return embedMatch[1];
+    if (embedMatch) return embedMatch[1] ?? null;
 
     // /v/ID (legacy)
     const vMatch = path.match(/^\/v\/([A-Za-z0-9_-]+)/);
-    if (vMatch) return vMatch[1];
+    if (vMatch) return vMatch[1] ?? null;
   }
 
   return null;

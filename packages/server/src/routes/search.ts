@@ -7,6 +7,7 @@ import { fetchReactionsForMessages, fetchReplyToMessages, buildMessageWithUser }
 import { fetchDmReactionsForMessages, buildDmMessageWithUser } from './dm.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import type { MessageWithUser, DmMessageWithUser } from '@backspace/shared';
+import { fetchEmbedsForMessages, fetchDmEmbedsForMessages } from '../utils/embedResolver.js';
 
 interface SearchQuery {
   q?: string;
@@ -143,6 +144,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const reactionsMap = fetchReactionsForMessages(messageIds);
+    const embedMap = fetchEmbedsForMessages(messageIds);
     const replyToMap = fetchReplyToMessages(messageRows);
 
     const results: MessageWithUser[] = messageRows
@@ -151,7 +153,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is MessageWithUser => m !== null);
 
@@ -269,6 +271,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const reactionsMap = fetchDmReactionsForMessages(messageIds);
+    const embedMap = fetchDmEmbedsForMessages(messageIds);
 
     // Fetch reply-to messages for DMs
     const replyToIds = messageRows
@@ -299,6 +302,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
           createdAt: rm.createdAt,
           user: sanitizeUser(rUser),
           attachments: [],
+          embeds: [],
           reactions: [],
         });
       }
@@ -310,7 +314,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is DmMessageWithUser => m !== null);
 
@@ -405,6 +409,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const reactionsMap = fetchReactionsForMessages(msgIds);
+    const embedMap = fetchEmbedsForMessages(msgIds);
     const replyToMap = fetchReplyToMessages(uniqueRows);
 
     const messages: MessageWithUser[] = uniqueRows
@@ -413,7 +418,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is MessageWithUser => m !== null);
 
@@ -498,6 +503,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const reactionsMap = fetchDmReactionsForMessages(msgIds);
+    const embedMap = fetchDmEmbedsForMessages(msgIds);
 
     const replyToIds = uniqueRows
       .map(m => m.replyToId)
@@ -527,6 +533,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
           createdAt: rm.createdAt,
           user: sanitizeUser(rUser),
           attachments: [],
+          embeds: [],
           reactions: [],
         });
       }
@@ -538,7 +545,7 @@ export async function searchRoutes(app: FastifyInstance): Promise<void> {
         if (!user) return null;
         const reactions = reactionsMap.get(m.id) ?? [];
         const replyTo = m.replyToId ? (replyToMap.get(m.replyToId) ?? null) : null;
-        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo);
+        return buildDmMessageWithUser(m, user, attachmentMap.get(m.id) ?? [], reactions, replyTo, embedMap.get(m.id) ?? []);
       })
       .filter((m): m is DmMessageWithUser => m !== null);
 

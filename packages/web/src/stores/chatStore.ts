@@ -267,6 +267,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         createdAt: Date.now(),
         user: currentUser,
         attachments: [],
+        embeds: [],
         reactions: [],
         replyTo: get().replyTo ?? undefined,
       };
