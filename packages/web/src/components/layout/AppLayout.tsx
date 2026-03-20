@@ -25,6 +25,7 @@ import { NotificationController } from '../NotificationController';
 import { UserProfilePopout } from '../ui/UserProfilePopout';
 import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
+import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
@@ -292,6 +293,7 @@ export function AppLayout() {
         <NotificationController />
         <UpdateToast />
         <ToastContainer />
+        <ContextMenuRenderer />
       </>
     );
   }
@@ -348,6 +350,7 @@ export function AppLayout() {
 
       {/* Federation toasts */}
       <ToastContainer />
+      <ContextMenuRenderer />
     </div>
   );
 }
