@@ -77,6 +77,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
 
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [isNewRole, setIsNewRole] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -96,6 +97,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
       const uniqueName = getUniqueRoleName('new role', roles);
       const newRole = await api.roles.create(spaceId, { name: uniqueName });
       await loadSpaceDetail(spaceId);
+      setIsNewRole(true);
       setEditingRoleId(newRole.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create role');
@@ -115,9 +117,10 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
         key={editingRoleId}
         role={role}
         spaceId={spaceId}
-        onBack={() => setEditingRoleId(null)}
-        onDeleted={() => setEditingRoleId(null)}
-        onCopied={(newRoleId) => setEditingRoleId(newRoleId)}
+        isNew={isNewRole}
+        onBack={() => { setIsNewRole(false); setEditingRoleId(null); }}
+        onDeleted={() => { setIsNewRole(false); setEditingRoleId(null); }}
+        onCopied={(newRoleId) => { setIsNewRole(true); setEditingRoleId(newRoleId); }}
       />
     );
   }
@@ -152,7 +155,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
               return (
                 <button
                   key={role.id}
-                  onClick={() => setEditingRoleId(role.id)}
+                  onClick={() => { setIsNewRole(false); setEditingRoleId(role.id); }}
                   className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-interactive-hover transition-colors text-left group"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -188,12 +191,13 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
 interface RoleEditViewProps {
   role: Role;
   spaceId: string;
+  isNew?: boolean;
   onBack: () => void;
   onDeleted: () => void;
   onCopied: (newRoleId: string) => void;
 }
 
-function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditViewProps) {
+function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: RoleEditViewProps) {
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const roles = useSpaceStore((s) => s.roles);
   const isEveryone = role.id === spaceId;
@@ -201,7 +205,6 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
   const [draftName, setDraftName] = useState(role.name);
   const [nameError, setNameError] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const isNewlyCreated = /^new role( \d+)?$/i.test(role.name) || /^Copy of /i.test(role.name);
 
   useEffect(() => {
     if (!isEveryone && nameInputRef.current) {
@@ -328,7 +331,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
         </button>
       </div>
 
-      {isNewlyCreated && !hasChanges && (
+      {isNew && !hasChanges && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">
           Role created — customize it below
         </div>
