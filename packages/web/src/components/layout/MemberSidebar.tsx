@@ -5,7 +5,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActivityStore } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
-import { ActivityCard } from '../ui/ActivityCard';
+import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
+import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
 
 /**
@@ -102,11 +103,20 @@ export function MemberSidebar() {
     const { baseName, domain } = parseFederatedUsername(member.user.username);
     const displayName = member.user.displayName ?? baseName;
     const colorStyle = isOffline ? undefined : getMemberColor(member);
+    const activities = userActivities.get(member.userId) ?? [];
+    const isRichActivity = !isOffline && hasRichActivity(activities);
+    const primary = getPrimaryActivity(activities);
+    const accentClass = primary ? getActivityAccentClass(primary.type) : '';
+
+    const rowClass = isRichActivity
+      ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
+      : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors';
+
     return (
       <div
         key={member.userId}
         onClick={(e) => handleMemberClick(e, member.user)}
-        className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
+        className={rowClass}
       >
         <Avatar
           src={member.user.avatar}
@@ -127,8 +137,7 @@ export function MemberSidebar() {
           )}
           {!isOffline && (
             <ActivityCard
-              activities={userActivities.get(member.userId) ?? []}
-              compact={true}
+              activities={activities}
               fallbackCustomStatus={member.user.customStatus}
             />
           )}

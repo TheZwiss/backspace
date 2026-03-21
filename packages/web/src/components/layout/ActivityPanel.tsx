@@ -4,7 +4,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActivityStore } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
-import { ActivityCard } from '../ui/ActivityCard';
+import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import type { Friend } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -73,15 +73,23 @@ export function ActivityPanel() {
     );
   };
 
-  const renderFriend = (friend: Friend, isOffline = false, isCompact = true) => {
+  const renderFriend = (friend: Friend, isOffline = false) => {
     const { baseName, domain } = parseFederatedUsername(friend.username);
     const friendDisplayName = friend.displayName ?? baseName;
     const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
+    const isRichActivity = !isOffline && hasRichActivity(activities);
+    const primary = getPrimaryActivity(activities);
+    const accentClass = primary ? getActivityAccentClass(primary.type) : '';
+
+    const rowClass = isRichActivity
+      ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
+      : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors';
+
     return (
       <div
         key={friend.id}
         onClick={(e) => handleFriendClick(e, friend)}
-        className="flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors"
+        className={rowClass}
       >
         <Avatar
           src={friend.avatar}
@@ -103,7 +111,6 @@ export function ActivityPanel() {
           {!isOffline && (
             <ActivityCard
               activities={activities}
-              compact={isCompact}
               fallbackCustomStatus={friend.customStatus}
             />
           )}
@@ -128,7 +135,7 @@ export function ActivityPanel() {
           <>
             {activeFriends.length > 0 && (
               <div className="mb-4">
-                {activeFriends.map(f => renderFriend(f, false, false))}
+                {activeFriends.map(f => renderFriend(f))}
               </div>
             )}
             {onlineFriends.length > 0 && (
