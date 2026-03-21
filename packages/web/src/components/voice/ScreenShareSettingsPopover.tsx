@@ -109,7 +109,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
 
   const result = buildScreenShareOptions(config);
 
-  const pillBase = 'px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors cursor-pointer select-none';
+  const pillBase = 'px-2.5 py-1.5 rounded-full text-[13px] font-medium transition-colors cursor-pointer select-none text-center';
   const pillSelected = 'bg-accent-primary text-white';
   const pillUnselected = 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover';
 
@@ -129,10 +129,10 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Resolution
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             {RESOLUTIONS.map((r) => (
               <button
-                key={r.value}
+                key={String(r.value)}
                 onClick={() => setConfig({ height: r.value })}
                 className={`${pillBase} ${config.height === r.value ? pillSelected : pillUnselected}`}
               >
@@ -147,7 +147,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Frame Rate
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             {FRAME_RATES.map((f) => (
               <button
                 key={f.value}
