@@ -79,7 +79,8 @@ export function runMigrations(db: Database.Database): void {
         { name: 'instance_name', type: "TEXT DEFAULT 'Backspace'" },
         { name: 'worker_id', type: 'INTEGER' },
         { name: 'discovery_enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
-        { name: 'registration_open', type: 'INTEGER' }
+        { name: 'registration_open', type: 'INTEGER' },
+        { name: 'bitrate_matrix_overrides', type: 'TEXT DEFAULT NULL' }
       ]
     },
     {

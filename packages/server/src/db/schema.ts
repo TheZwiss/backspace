@@ -258,6 +258,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   maxFramerate: integer('max_framerate').notNull().default(60),
   registrationOpen: integer('registration_open'),  // null = use env var default, 0/1 = explicit
   gifApiKey: text('gif_api_key'),
+  bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   updatedAt: integer('updated_at').notNull(),
 });
 

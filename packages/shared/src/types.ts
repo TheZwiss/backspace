@@ -616,6 +616,7 @@ export interface InstanceStreamingLimits {
   maxResolution: number;
   maxFramerate: number;
   discoveryEnabled: boolean;
+  bitrateMatrixOverrides: Record<string, number> | null;
 }
 
 // ─── Federation Types ──────────────────────────────────────────────────────

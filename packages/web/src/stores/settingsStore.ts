@@ -24,6 +24,7 @@ const DEFAULT_LIMITS: InstanceStreamingLimits = {
   maxResolution: 1080,
   maxFramerate: 60,
   discoveryEnabled: true,
+  bitrateMatrixOverrides: null,
 };
 
 export function getStreamingLimits(): InstanceStreamingLimits {
