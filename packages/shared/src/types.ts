@@ -611,7 +611,7 @@ export interface InstanceStreamingLimits {
   maxBitrateKbps: number;
   minBitrateKbps: number;
   bitrateStepKbps: number;
-  allowedResolutions: number[];
+  allowedResolutions: (number | 'native')[];
   allowedFramerates: number[];
   maxResolution: number;
   maxFramerate: number;

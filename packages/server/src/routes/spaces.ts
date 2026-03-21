@@ -1016,10 +1016,10 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     // Check for case-insensitive duplicate name within the space
     const rawDb = getRawDb();
     const duplicate = rawDb.prepare(
-      'SELECT id FROM roles WHERE space_id = ? AND name = ? COLLATE NOCASE'
+      'SELECT id FROM roles WHERE space_id = ? AND name COLLATE NOCASE = ?'
     ).get(id, roleName);
     if (duplicate) {
-      return reply.code(409).send({ error: 'A role with this name already exists' });
+      return reply.code(409).send({ error: 'A role with this name already exists', statusCode: 409 });
     }
 
     const roleId = generateSnowflake();
@@ -1061,15 +1061,15 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     if (name !== undefined) {
       const trimmed = name.trim();
       if (!trimmed) {
-        return reply.code(400).send({ error: 'Role name cannot be empty' });
+        return reply.code(400).send({ error: 'Role name cannot be empty', statusCode: 400 });
       }
       // Check for case-insensitive duplicate name within the space
       const rawDb = getRawDb();
       const duplicate = rawDb.prepare(
-        'SELECT id FROM roles WHERE space_id = ? AND name = ? COLLATE NOCASE AND id != ?'
+        'SELECT id FROM roles WHERE space_id = ? AND name COLLATE NOCASE = ? AND id != ?'
       ).get(id, trimmed, roleId);
       if (duplicate) {
-        return reply.code(409).send({ error: 'A role with this name already exists' });
+        return reply.code(409).send({ error: 'A role with this name already exists', statusCode: 409 });
       }
       updates.name = trimmed;
     }
