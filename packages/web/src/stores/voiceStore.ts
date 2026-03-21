@@ -7,8 +7,8 @@ import { useAuthStore } from './authStore';
 import { isElectron } from '../platform/platform';
 
 export interface ScreenShareConfig {
-  height: 1080 | 720 | 540;
-  fps: 60 | 45 | 30;
+  height: number | 'native';
+  fps: number;
   mode: 'gaming' | 'text';
   customBitrateKbps: number | null;
   shareAudio: boolean;
@@ -526,7 +526,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 11,
+      version: 12,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -573,6 +573,13 @@ export const useVoiceStore = create<VoiceState>()(
         if (version < 11) {
           if (persistedState.screenShareConfig) {
             persistedState.screenShareConfig.shareAudio = !isElectron();
+          }
+        }
+        if (version < 12) {
+          // Validate screenShareConfig.height after type widening
+          const cfg = persistedState.screenShareConfig;
+          if (cfg && typeof cfg.height !== 'number' && cfg.height !== 'native') {
+            cfg.height = 1080;
           }
         }
         return persistedState;
