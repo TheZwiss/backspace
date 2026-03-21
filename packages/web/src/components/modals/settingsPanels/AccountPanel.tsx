@@ -11,7 +11,6 @@ import type { User, UserStatus, AvatarColor } from '@backspace/shared';
 import type { FederationOpResult } from '../../../utils/federationOps';
 import { isElectron } from '../../../platform/platform';
 import { Toggle } from '../../ui/Toggle';
-import { useActivityStore } from '../../../stores/activityStore';
 
 
 function AutoLaunchSettings() {
@@ -140,7 +139,6 @@ export function AccountPanel() {
 
   const instances = useInstanceStore((s) => s.instances);
   const changePassword = useAuthStore((s) => s.changePassword);
-  const showActivity = useActivityStore((s) => s.showActivity);
 
   if (!user) return null;
 
@@ -776,30 +774,6 @@ export function AccountPanel() {
           </div>
         </div>
       )}
-
-      {/* ── Activity Status ── */}
-      <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Activity Status</div>
-        <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <div className="text-[14px] text-txt-primary">Share Activity Status</div>
-              <div className="text-[12px] text-txt-tertiary mt-0.5">Allow others to see what you're up to</div>
-            </div>
-            <Toggle
-              enabled={showActivity}
-              onChange={async (enabled) => {
-                try {
-                  await api.users.update({ showActivity: enabled });
-                  useActivityStore.getState().setShowActivity(enabled);
-                } catch (err) {
-                  console.error('Failed to update activity visibility:', err);
-                }
-              }}
-            />
-          </div>
-        </div>
-      </div>
 
       {/* ── Danger Zone ── */}
       <div>
