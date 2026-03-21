@@ -6,6 +6,7 @@ import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
+  BITRATE_MATRIX_KBPS,
   type StandardResolution,
 } from '@backspace/shared/src/constants';
 
@@ -48,19 +49,26 @@ export const CAMERA_OVERDRIVE: OverdriveOptions = {
 // Screen share builder — three independent axes → computed result
 // ---------------------------------------------------------------------------
 
-const BITRATE_MATRIX: Record<number, Record<number, number>> = {
-  540:  { 30: 1_500_000, 45: 2_000_000, 60: 2_500_000, 75: 2_800_000, 90: 3_200_000, 120: 4_000_000 },
-  720:  { 30: 3_000_000, 45: 3_500_000, 60: 4_000_000, 75: 4_500_000, 90: 5_000_000, 120: 6_000_000 },
-  1080: { 30: 6_000_000, 45: 7_000_000, 60: 8_000_000, 75: 9_000_000, 90: 10_000_000, 120: 12_000_000 },
-  1440: { 30: 10_000_000, 45: 12_000_000, 60: 14_000_000, 75: 16_000_000, 90: 18_000_000, 120: 22_000_000 },
-  2160: { 30: 20_000_000, 45: 24_000_000, 60: 28_000_000, 75: 32_000_000, 90: 38_000_000, 120: 45_000_000 },
-};
+// ---------------------------------------------------------------------------
+// Resolve a matrix cell: admin override first, then default (all in kbps)
+// ---------------------------------------------------------------------------
+
+function resolveMatrixKbps(height: number, fps: number, overrides: Record<string, number> | null | undefined): number {
+  const key = `${height}_${fps}`;
+  if (overrides?.[key] != null) return overrides[key]!;
+  return BITRATE_MATRIX_KBPS[height]?.[fps] ?? BITRATE_MATRIX_KBPS[1080]![60]!;
+}
 
 // ---------------------------------------------------------------------------
 // Native mode — pixel-count-proportional bitrate computation
 // ---------------------------------------------------------------------------
 
-function computeNativeBitrate(capturedWidth: number, capturedHeight: number, fps: number): number {
+function computeNativeBitrate(
+  capturedWidth: number,
+  capturedHeight: number,
+  fps: number,
+  overrides: Record<string, number> | null | undefined,
+): number {
   const capturedPixels = capturedWidth * capturedHeight;
 
   // Find nearest known resolution tier by pixel count (handles ultrawides correctly)
@@ -80,61 +88,54 @@ function computeNativeBitrate(capturedWidth: number, capturedHeight: number, fps
     if (dist < nearestFpsDist) { nearestFpsDist = dist; nearestFps = f; }
   }
 
-  const baseBitrate = BITRATE_MATRIX[nearestHeight]![nearestFps]!;
+  const baseKbps = resolveMatrixKbps(nearestHeight, nearestFps, overrides);
   const nearestPixels = WIDTH_MAP[nearestHeight] * nearestHeight;
 
-  // Scale proportionally by pixel count and framerate
-  return Math.round(baseBitrate * (capturedPixels / nearestPixels) * (fps / nearestFps));
+  // Scale proportionally by pixel count and framerate — result in kbps
+  return Math.round(baseKbps * (capturedPixels / nearestPixels) * (fps / nearestFps));
 }
 
 export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
   const { height, fps, mode, customBitrateKbps } = config;
   const isNative = height === 'native';
   const limits = getStreamingLimits();
+  const overrides = limits.bitrateMatrixOverrides;
 
   // Capture dimensions: sentinel 0 for native (caller skips resolution constraint)
   const captureWidth = isNative ? 0 : WIDTH_MAP[height as StandardResolution] ?? 1920;
   const captureHeight = isNative ? 0 : (height as number);
 
-  // Bitrate: custom override > matrix lookup > native initial estimate
-  let rawBitrate: number;
+  // Resolve bitrate in kbps: custom > override > default > native estimate
+  let rawKbps: number;
   if (customBitrateKbps != null) {
-    rawBitrate = customBitrateKbps * 1000;
+    rawKbps = customBitrateKbps;
   } else if (isNative) {
-    // Use 2160p at nearest known framerate as generous initial — overdrive corrects at 2s
     const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
       Math.abs(b - fps) < Math.abs(a - fps) ? b : a
     );
-    rawBitrate = BITRATE_MATRIX[2160]![nearestFps]!;
+    rawKbps = resolveMatrixKbps(2160, nearestFps, overrides);
   } else {
-    // Find nearest framerate in matrix for this resolution
-    const resFps = BITRATE_MATRIX[height as number];
-    if (resFps && resFps[fps]) {
-      rawBitrate = resFps[fps]!;
-    } else {
-      // Snap to nearest known framerate for this resolution
-      const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
-        Math.abs(b - fps) < Math.abs(a - fps) ? b : a
-      );
-      rawBitrate = (resFps ?? BITRATE_MATRIX[1080]!)[nearestFps]!;
-    }
+    rawKbps = resolveMatrixKbps(height as number, fps, overrides);
   }
 
-  // Hard cap to instance limits
-  const maxBitrate = Math.min(Math.max(rawBitrate, limits.minBitrateKbps * 1000), limits.maxBitrateKbps * 1000);
-  const minBitrate = Math.round(maxBitrate * 0.25);
+  // Clamp to instance limits (all in kbps)
+  const clampedKbps = Math.min(Math.max(rawKbps, limits.minBitrateKbps), limits.maxBitrateKbps);
+
+  // Convert to bps ONLY at the WebRTC boundary
+  const bps = clampedKbps * 1000;
+  const minBps = Math.round(bps * 0.25);
 
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
       videoCodec: 'vp9',
-      videoEncoding: { maxBitrate, maxFramerate: fps },
+      videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
     },
     overdrive: {
-      maxBitrate,
+      maxBitrate: bps,
       maxFramerate: fps,
-      minBitrate,
+      minBitrate: minBps,
       degradationPreference: mode === 'text' ? 'maintain-resolution' : 'balanced',
     },
     contentHint: mode === 'text' ? 'detail' : 'motion',
@@ -155,12 +156,15 @@ export function resolveNativeOverdrive(
   const settings = mediaTrack.getSettings();
   if (!settings.width || !settings.height) return;
 
-  const nativeBitrate = computeNativeBitrate(settings.width, settings.height, config.fps);
   const limits = getStreamingLimits();
-  const clamped = Math.min(Math.max(nativeBitrate, limits.minBitrateKbps * 1000), limits.maxBitrateKbps * 1000);
-  opts.overdrive.maxBitrate = clamped;
-  opts.overdrive.minBitrate = Math.round(clamped * 0.25);
-  opts.publish.videoEncoding.maxBitrate = clamped;
+  const nativeKbps = computeNativeBitrate(settings.width, settings.height, config.fps, limits.bitrateMatrixOverrides);
+  const clampedKbps = Math.min(Math.max(nativeKbps, limits.minBitrateKbps), limits.maxBitrateKbps);
+
+  // Convert to bps at the mutation point
+  const bps = clampedKbps * 1000;
+  opts.overdrive.maxBitrate = bps;
+  opts.overdrive.minBitrate = Math.round(bps * 0.25);
+  opts.publish.videoEncoding.maxBitrate = bps;
 }
 
 // ---------------------------------------------------------------------------
