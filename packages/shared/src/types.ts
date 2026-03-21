@@ -217,6 +217,9 @@ export interface Attachment {
   mimetype: string;
   size: number;
   thumbnailFilename?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
   createdAt: number;
 }
 

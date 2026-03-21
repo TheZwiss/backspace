@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, foreignKey, real } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -90,6 +90,9 @@ export const attachments = sqliteTable('attachments', {
   mimetype: text('mimetype').notNull(),
   size: integer('size').notNull(),
   thumbnailFilename: text('thumbnail_filename'),
+  width: integer('width'),
+  height: integer('height'),
+  duration: real('duration'),
   createdAt: integer('created_at').notNull(),
 });
 
