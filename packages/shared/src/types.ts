@@ -154,7 +154,16 @@ export interface ChannelCategory {
   spaceId: string;
   name: string;
   position: number;
+  isPrivate?: boolean;
   createdAt: number;
+}
+
+export interface CategoryOverride {
+  categoryId: string;
+  targetType: 'role' | 'member';
+  targetId: string;
+  allow: string;
+  deny: string;
 }
 
 export interface Channel {
