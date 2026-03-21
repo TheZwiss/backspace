@@ -28,3 +28,13 @@ export const RESOLUTION_LABELS: Record<Resolution, string> = {
 
 export const HIGH_END_RESOLUTION_THRESHOLD = 1440;
 export const HIGH_END_FRAMERATE_THRESHOLD = 75;
+
+// Hand-tuned VP9 screen share bitrates in kbps per resolution/framerate combo.
+// All bitrate math operates in kbps; conversion to bps happens only at the WebRTC encoding boundary.
+export const BITRATE_MATRIX_KBPS: Record<number, Record<number, number>> = {
+  540:  { 30: 1500, 45: 2000, 60: 2500, 75: 2800, 90: 3200, 120: 4000 },
+  720:  { 30: 3000, 45: 3500, 60: 4000, 75: 4500, 90: 5000, 120: 6000 },
+  1080: { 30: 6000, 45: 7000, 60: 8000, 75: 9000, 90: 10000, 120: 12000 },
+  1440: { 30: 10000, 45: 12000, 60: 14000, 75: 16000, 90: 18000, 120: 22000 },
+  2160: { 30: 20000, 45: 24000, 60: 28000, 75: 32000, 90: 38000, 120: 45000 },
+};
