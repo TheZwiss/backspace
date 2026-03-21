@@ -385,6 +385,16 @@ CREATE TABLE channel_overrides (
     PRIMARY KEY (channel_id, target_type, target_id)
 );
 
+-- Category Permission Overrides
+CREATE TABLE category_overrides (
+    category_id TEXT NOT NULL REFERENCES channel_categories(id) ON DELETE CASCADE,
+    target_type TEXT NOT NULL,     -- 'role' | 'member'
+    target_id TEXT NOT NULL,       -- role ID or user ID
+    allow TEXT NOT NULL DEFAULT '0',  -- bigint decimal string
+    deny TEXT NOT NULL DEFAULT '0',   -- bigint decimal string
+    PRIMARY KEY (category_id, target_type, target_id)
+);
+
 -- Messages
 CREATE TABLE messages (
     id TEXT PRIMARY KEY,
@@ -634,6 +644,11 @@ GET    /api/channels/:id/overrides (auth, MANAGE_CHANNELS)                 → {
 PUT    /api/channels/:id/overrides (auth, MANAGE_CHANNELS) { targetType, targetId, allow, deny } → { override }
 DELETE /api/channels/:id/overrides/:targetType/:targetId (auth, MANAGE_CHANNELS) → { success }
 
+# Category Overrides
+GET    /api/categories/:id/overrides           (auth, MANAGE_ROLES)                     → { overrides[] }
+PUT    /api/categories/:id/overrides           (auth, MANAGE_ROLES) { targetType, targetId, allow, deny } → { success }
+DELETE /api/categories/:id/overrides/:tt/:tid  (auth, MANAGE_ROLES)                     → { success }
+
 # Messages
 GET    /api/channels/:id/messages  (auth, member) ?before=&limit=50       → { messages[] }
 POST   /api/channels/:id/messages  (auth, SEND_MESSAGES) { content, attachments?, replyToId? } → { message }
@@ -845,7 +860,7 @@ Bitwise permission engine defined in `packages/shared/src/permissions.ts`. Store
 | 25 | STREAM | Share screen in voice channels |
 | 26 | DISCONNECT_MEMBERS | Disconnect members from voice channels |
 
-**Resolution order:** Owner → @everyone role → Assigned roles (OR'd) → ADMINISTRATOR shortcut → Channel overrides (@everyone → role overrides → member override).
+**Resolution order:** Owner → @everyone role → Assigned roles (OR'd) → ADMINISTRATOR shortcut → Interleaved category+channel overrides: for each tier (@everyone → role → member), category override is applied first, then channel override. Channel bits win for any bit they explicitly set; bits not touched by the channel cascade from the category.
 
 ## ENVIRONMENT VARIABLES
 
@@ -933,3 +948,4 @@ All core features are implemented and live:
 - **Space Profiles:** Banner, avatar color, description, visibility settings
 - **Account Management:** Password change, account deletion with owned-space safeguards, username availability check
 - **Instance Settings:** Instance name, registration toggle, discovery toggle, persistent admin config
+- **Category Settings:** Settings modal (rename, private toggle, delete), permission overrides with cascade to child channels
