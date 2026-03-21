@@ -329,7 +329,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
       </div>
 
       {isNewlyCreated && !hasChanges && (
-        <div className="p-2 bg-accent-primary/10 border border-accent-primary/20 rounded text-txt-secondary text-sm">
+        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">
           Role created — customize it below
         </div>
       )}
