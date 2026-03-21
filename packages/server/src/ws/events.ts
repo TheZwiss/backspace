@@ -62,6 +62,9 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     mimetype: a.mimetype,
     size: a.size,
     thumbnailFilename: a.thumbnailFilename ?? null,
+    width: a.width ?? null,
+    height: a.height ?? null,
+    duration: a.duration ?? null,
     createdAt: a.createdAt,
   }));
 
