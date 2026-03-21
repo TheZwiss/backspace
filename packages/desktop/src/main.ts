@@ -509,6 +509,8 @@ function registerIpcHandlers(): void {
     }
   });
 
+  ipcMain.handle('get-app-version', () => app.getVersion());
+
   // Screen share picker coordination (used by setDisplayMediaRequestHandler)
   ipcMain.on('screen-share-selected', (_event, _sourceId: string | null, _shareAudio?: boolean) => {
     // Handled via ipcMain.once in the display media handler — this is just
@@ -561,7 +563,10 @@ function initAutoUpdater(): void {
     });
 
     autoUpdater.on('error', (err: Error) => {
-      mainWindow?.webContents.send('update-error', err.message);
+      mainWindow?.webContents.send('update-error', {
+        message: err.message,
+        releaseUrl: 'https://github.com/TheZwiss/backspace/releases/latest',
+      });
     });
 
     // Initial check with 10s delay
