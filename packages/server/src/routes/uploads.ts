@@ -8,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import type { Attachment } from '@backspace/shared';
-import { generateThumbnail, isResizableImage } from '../utils/thumbnail.js';
+import { generateThumbnail, isResizableImage, probeImageDimensions, probeMediaMeta, generateVideoThumbnail } from '../utils/thumbnail.js';
 
 const EXT_MIMETYPES: Record<string, string> = {
   '.webp': 'image/webp', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -69,10 +69,39 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     const now = Date.now();
     const db = getDb();
 
-    // Generate thumbnail for resizable images (non-blocking — upload succeeds regardless)
+    // ─── Media processing ────────────────────────────────────────────────────
     let thumbnailFilename: string | null = null;
+    let width: number | null = null;
+    let height: number | null = null;
+    let duration: number | null = null;
+
     if (isResizableImage(mimetype)) {
+      // Image: generate thumbnail (unchanged) + probe dimensions
       thumbnailFilename = await generateThumbnail(filepath, mimetype, config.uploadDir);
+      const dims = await probeImageDimensions(filepath);
+      if (dims) {
+        width = dims.width;
+        height = dims.height;
+      }
+    } else if (mimetype.startsWith('video/')) {
+      // Video: generate thumbnail frame + probe duration
+      const videoThumb = await generateVideoThumbnail(filepath, config.uploadDir);
+      if (videoThumb) {
+        thumbnailFilename = videoThumb.thumbnailFilename;
+        width = videoThumb.width;
+        height = videoThumb.height;
+      }
+      // Duration (and fallback dimensions if thumbnail failed)
+      const meta = await probeMediaMeta(filepath, mimetype);
+      if (meta) {
+        duration = meta.duration ?? null;
+        if (width === null && meta.width) width = meta.width;
+        if (height === null && meta.height) height = meta.height;
+      }
+    } else if (mimetype.startsWith('audio/')) {
+      // Audio: duration only
+      const meta = await probeMediaMeta(filepath, mimetype);
+      if (meta?.duration) duration = meta.duration;
     }
 
     // Save attachment record
@@ -84,6 +113,9 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       mimetype,
       size,
       thumbnailFilename,
+      width,
+      height,
+      duration,
       createdAt: now,
     }).run();
 
@@ -95,6 +127,9 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       mimetype,
       size,
       thumbnailFilename: thumbnailFilename ?? undefined,
+      width: width ?? undefined,
+      height: height ?? undefined,
+      duration: duration ?? undefined,
       createdAt: now,
     };
 
