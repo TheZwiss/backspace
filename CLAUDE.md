@@ -930,7 +930,7 @@ All core features are implemented and live:
 - **Messaging:** Send, edit, delete, replies, attachments, reactions, typing indicators, read states
 - **Permissions:** Full RBAC with roles, per-channel overrides, computed permissions
 - **Voice/Video:** LiveKit integration, mute/deafen, camera, screen share with VP9
-- **Screen Share:** Configurable resolution/FPS/bitrate, gaming vs text mode, instance-level limits
+- **Screen Share:** Configurable resolution/FPS/bitrate, gaming vs text mode, instance-level limits, 1440p/4K/native resolution and 75/90/120fps (opt-in via admin settings)
 - **DMs:** 1-on-1 and group DMs (up to 10), soft-close, message edit/delete
 - **DM Calls:** Ringing state machine (ring → active → ended), auto-reject timeout
 - **Friends:** Send/accept/decline requests, friend list, user search
