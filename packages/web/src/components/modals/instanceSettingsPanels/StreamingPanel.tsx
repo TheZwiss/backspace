@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import type { InstanceStreamingLimits } from '@backspace/shared';
-
-const VALID_RESOLUTIONS = [540, 720, 1080] as const;
-const VALID_FRAMERATES = [30, 45, 60] as const;
+import {
+  STANDARD_FRAMERATES,
+  ALL_RESOLUTIONS, RESOLUTION_LABELS,
+  HIGH_END_RESOLUTION_THRESHOLD, HIGH_END_FRAMERATE_THRESHOLD,
+  type Resolution,
+} from '@backspace/shared/src/constants';
 
 function formatKbps(kbps: number): string {
   return kbps >= 1000
@@ -48,7 +51,7 @@ export function StreamingPanel() {
     setSaveError('');
   };
 
-  const toggleResolution = (res: number) => {
+  const toggleResolution = (res: number | 'native') => {
     const current = new Set(draft.allowedResolutions);
     if (current.has(res)) {
       if (current.size <= 1) return;
@@ -56,7 +59,10 @@ export function StreamingPanel() {
     } else {
       current.add(res);
     }
-    setDraft({ ...draft, allowedResolutions: Array.from(current).sort((a, b) => a - b) });
+    // Sort: numbers ascending, 'native' always last
+    const nums: (number | 'native')[] = Array.from(current).filter((r): r is number => r !== 'native').sort((a, b) => a - b);
+    if (current.has('native')) nums.push('native');
+    setDraft({ ...draft, allowedResolutions: nums });
   };
 
   const toggleFramerate = (fps: number) => {
@@ -160,14 +166,14 @@ export function StreamingPanel() {
             <div className="text-xs text-txt-secondary mb-1.5">
               Allowed Resolutions
             </div>
-            <div className="flex gap-1.5">
-              {VALID_RESOLUTIONS.map((res) => (
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_RESOLUTIONS.map((res) => (
                 <button
-                  key={res}
+                  key={String(res)}
                   onClick={() => toggleResolution(res)}
                   className={`${pillBase} ${draft.allowedResolutions.includes(res) ? pillOn : pillOff}`}
                 >
-                  {res}p
+                  {RESOLUTION_LABELS[res]}
                 </button>
               ))}
             </div>
@@ -178,8 +184,8 @@ export function StreamingPanel() {
             <div className="text-xs text-txt-secondary mb-1.5">
               Allowed Frame Rates
             </div>
-            <div className="flex gap-1.5">
-              {VALID_FRAMERATES.map((fps) => (
+            <div className="flex flex-wrap gap-1.5">
+              {STANDARD_FRAMERATES.map((fps) => (
                 <button
                   key={fps}
                   onClick={() => toggleFramerate(fps)}
@@ -192,6 +198,29 @@ export function StreamingPanel() {
           </div>
         </div>
       </div>
+
+      {/* High-end resource warning */}
+      {(draft.allowedResolutions.some(
+          (r) => r === 'native' || (typeof r === 'number' && r >= HIGH_END_RESOLUTION_THRESHOLD)
+        ) || draft.allowedFramerates.some(
+          (f) => f >= HIGH_END_FRAMERATE_THRESHOLD
+        )) && (
+        <div className="p-3 bg-accent-amber/10 border border-accent-amber/30 rounded-lg">
+          <div className="flex items-start gap-2">
+            <svg className="w-4 h-4 text-accent-amber mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.168 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+            </svg>
+            <div className="text-xs text-accent-amber/90 leading-relaxed">
+              <span className="font-semibold">High-performance settings enabled.</span>{' '}
+              Streaming above 1080p or 60 fps requires significant client-side CPU/GPU encoding
+              power and can saturate server bandwidth, especially when streams are routed through
+              TURN. High-end configurations (e.g., 4K at 120 fps) can require up to 45 Mbps per
+              active stream. Ensure your infrastructure can handle this load before enabling these
+              options for all users.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save / Reset */}
       {saveError && (
