@@ -997,14 +997,17 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Validate permissions string is a valid bigint if provided
-    let permStr: string | undefined;
-    if (permissions !== undefined) {
+    let permStr: string;
+    if (permissions !== undefined && permissions !== null) {
       try {
         BigInt(permissions);
         permStr = permissions;
       } catch {
         return reply.code(400).send({ error: 'Invalid permissions value', statusCode: 400 });
       }
+    } else {
+      // Default to @everyone baseline so new roles start functional
+      permStr = permissionsToString(DEFAULT_EVERYONE_PERMISSIONS);
     }
 
     const roleId = generateSnowflake();
@@ -1014,7 +1017,7 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       name: name || 'new role',
       color: color || '#b9bbbe',
       position: 0,
-      permissions: permStr ?? null,
+      permissions: permStr,
       createdAt: Date.now(),
     }).run();
 
