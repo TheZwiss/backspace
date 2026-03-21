@@ -5,7 +5,8 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets } from '@backspace/shared';
+import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
@@ -205,6 +206,9 @@ export function handleClientEvent(
       break;
     case 'voice_disconnect':
       handleVoiceDisconnect(event, userId);
+      break;
+    case 'activity_update':
+      handleActivityUpdate(event, userId);
       break;
     default:
       connectionManager.sendToUser(userId, {
@@ -412,6 +416,54 @@ function handleTypingStart(event: Record<string, unknown>, userId: string, usern
   typingTimeouts.set(key, timeout);
 }
 
+// ─── Activity Validation ──────────────────────────────────────────────────
+
+const VALID_ACTIVITY_TYPES = new Set<string>(['custom', 'playing', 'listening', 'watching', 'streaming']);
+const MAX_TIMESTAMP = 4102444800000;
+
+function validateActivities(raw: unknown): Activity[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length > ACTIVITY_LIMITS.MAX_ACTIVITIES_PER_USER) return null;
+
+  const validated: Activity[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') return null;
+    const obj = item as Record<string, unknown>;
+    if (!VALID_ACTIVITY_TYPES.has(obj.type as string)) return null;
+    if (typeof obj.name !== 'string') return null;
+    if (obj.name.length === 0 || obj.name.length > ACTIVITY_LIMITS.MAX_NAME_LENGTH) return null;
+
+    const activity: Activity = { type: obj.type as ActivityType, name: (obj.name as string).trim() };
+
+    if (typeof obj.details === 'string' && obj.details.length <= ACTIVITY_LIMITS.MAX_DETAILS_LENGTH) activity.details = obj.details.trim();
+    if (typeof obj.state === 'string' && obj.state.length <= ACTIVITY_LIMITS.MAX_STATE_LENGTH) activity.state = obj.state.trim();
+    if (typeof obj.url === 'string' && obj.url.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) {
+      if (obj.url.startsWith('https://') || obj.url.startsWith('http://')) activity.url = obj.url;
+    }
+
+    if (obj.timestamps && typeof obj.timestamps === 'object') {
+      const tsObj = obj.timestamps as Record<string, unknown>;
+      const ts: ActivityTimestamps = {};
+      if (typeof tsObj.start === 'number' && tsObj.start >= 0 && tsObj.start <= MAX_TIMESTAMP) ts.start = tsObj.start;
+      if (typeof tsObj.end === 'number' && tsObj.end >= 0 && tsObj.end <= MAX_TIMESTAMP) ts.end = tsObj.end;
+      if (ts.start !== undefined || ts.end !== undefined) activity.timestamps = ts;
+    }
+
+    if (obj.assets && typeof obj.assets === 'object') {
+      const aObj = obj.assets as Record<string, unknown>;
+      const assets: ActivityAssets = {};
+      if (typeof aObj.largeImage === 'string' && aObj.largeImage.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) assets.largeImage = aObj.largeImage;
+      if (typeof aObj.largeText === 'string' && aObj.largeText.length <= ACTIVITY_LIMITS.MAX_ASSET_TEXT_LENGTH) assets.largeText = aObj.largeText;
+      if (typeof aObj.smallImage === 'string' && aObj.smallImage.length <= ACTIVITY_LIMITS.MAX_URL_LENGTH) assets.smallImage = aObj.smallImage;
+      if (typeof aObj.smallText === 'string' && aObj.smallText.length <= ACTIVITY_LIMITS.MAX_ASSET_TEXT_LENGTH) assets.smallText = aObj.smallText;
+      if (Object.keys(assets).length > 0) activity.assets = assets;
+    }
+
+    validated.push(activity);
+  }
+  return validated;
+}
+
 function handlePresenceUpdate(event: Record<string, unknown>, userId: string): void {
   const status = event.status as string;
 
@@ -423,22 +475,47 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
   const db = getDb();
   db.update(schema.users).set({ status }).where(eq(schema.users.id, userId)).run();
 
+  connectionManager.setUserStatus(userId, status);
+  const activities = connectionManager.getUserActivities(userId);
+
   // Broadcast to all spaces user is in
   const userSpaces = connectionManager.getUserSpaces(userId);
+  const payload = {
+    type: 'presence_update' as const,
+    userId,
+    status,
+    ...(activities.length > 0 ? { activities } : {}),
+  };
   for (const spaceId of userSpaces) {
-    connectionManager.sendToSpace(spaceId, {
-      type: 'presence_update',
-      userId,
-      status,
-    }, userId);
+    connectionManager.sendToSpace(spaceId, payload, userId);
   }
 
   // Also send to self (other tabs)
-  connectionManager.sendToUser(userId, {
-    type: 'presence_update',
-    userId,
-    status,
-  });
+  connectionManager.sendToUser(userId, payload);
+}
+
+function handleActivityUpdate(event: Record<string, unknown>, userId: string): void {
+  if (!connectionManager.getUserShowActivity(userId)) return;
+  if (!connectionManager.checkActivityRateLimit(userId)) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Activity update rate limited' });
+    return;
+  }
+
+  const activities = validateActivities(event.activities);
+  if (!activities) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'Invalid activity payload' });
+    return;
+  }
+
+  connectionManager.setUserActivities(userId, activities);
+  const status = connectionManager.getUserStatus(userId);
+
+  const userSpaces = connectionManager.getUserSpaces(userId);
+  const payload = { type: 'presence_update' as const, userId, status, activities };
+  for (const spaceId of userSpaces) {
+    connectionManager.sendToSpace(spaceId, payload, userId);
+  }
+  connectionManager.sendToUser(userId, payload);
 }
 
 // ─── Voice Handlers (Unified Room API) ─────────────────────────────────────
