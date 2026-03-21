@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { config } from '../config.js';
 import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
-import { STANDARD_RESOLUTIONS, STANDARD_FRAMERATES } from '@backspace/shared/src/constants.js';
+import { STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, BITRATE_MATRIX_KBPS } from '@backspace/shared/src/constants.js';
 
 function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): InstanceStreamingLimits {
   return {
@@ -23,6 +23,15 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
     maxResolution: row.maxResolution,
     maxFramerate: row.maxFramerate,
     discoveryEnabled: row.discoveryEnabled === 1,
+    bitrateMatrixOverrides: (() => {
+      const raw = row.bitrateMatrixOverrides as string | null;
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+        return Object.keys(parsed).length > 0 ? parsed as Record<string, number> : null;
+      } catch { return null; }
+    })(),
   };
 }
 
@@ -42,18 +51,18 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     const body = request.body;
-    const updateData: Record<string, number | string> = { updatedAt: Date.now() };
+    const updateData: Record<string, number | string | null> = { updatedAt: Date.now() };
 
     if (body.maxBitrateKbps !== undefined) {
-      if (typeof body.maxBitrateKbps !== 'number' || body.maxBitrateKbps < 500 || body.maxBitrateKbps > 50000) {
-        return reply.code(400).send({ error: 'maxBitrateKbps must be between 500 and 50000', statusCode: 400 });
+      if (typeof body.maxBitrateKbps !== 'number' || body.maxBitrateKbps < 500 || body.maxBitrateKbps > 1000000) {
+        return reply.code(400).send({ error: 'maxBitrateKbps must be between 500 and 1000000', statusCode: 400 });
       }
       updateData.maxBitrateKbps = body.maxBitrateKbps;
     }
 
     if (body.minBitrateKbps !== undefined) {
-      if (typeof body.minBitrateKbps !== 'number' || body.minBitrateKbps < 100 || body.minBitrateKbps > 50000) {
-        return reply.code(400).send({ error: 'minBitrateKbps must be between 100 and 50000', statusCode: 400 });
+      if (typeof body.minBitrateKbps !== 'number' || body.minBitrateKbps < 100 || body.minBitrateKbps > 1000000) {
+        return reply.code(400).send({ error: 'minBitrateKbps must be between 100 and 1000000', statusCode: 400 });
       }
       updateData.minBitrateKbps = body.minBitrateKbps;
     }
@@ -108,6 +117,31 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.discoveryEnabled !== undefined) {
       updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
+    }
+
+    if (body.bitrateMatrixOverrides !== undefined) {
+      if (body.bitrateMatrixOverrides === null) {
+        updateData.bitrateMatrixOverrides = null;
+      } else if (typeof body.bitrateMatrixOverrides !== 'object' || Array.isArray(body.bitrateMatrixOverrides)) {
+        return reply.code(400).send({ error: 'bitrateMatrixOverrides must be an object or null', statusCode: 400 });
+      } else {
+        // Validate each key and value
+        const validKeys = new Set<string>();
+        for (const res of STANDARD_RESOLUTIONS) {
+          for (const fps of STANDARD_FRAMERATES) {
+            validKeys.add(`${res}_${fps}`);
+          }
+        }
+        for (const [key, value] of Object.entries(body.bitrateMatrixOverrides)) {
+          if (!validKeys.has(key)) {
+            return reply.code(400).send({ error: `Invalid matrix key: "${key}". Keys must be {resolution}_{framerate}, e.g. "1080_60"`, statusCode: 400 });
+          }
+          if (typeof value !== 'number' || value <= 0 || value > 1000000) {
+            return reply.code(400).send({ error: `Invalid value for "${key}": must be a positive number up to 1000000 kbps`, statusCode: 400 });
+          }
+        }
+        updateData.bitrateMatrixOverrides = JSON.stringify(body.bitrateMatrixOverrides);
+      }
     }
 
     // Cross-field validation: min < max
