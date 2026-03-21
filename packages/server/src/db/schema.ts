@@ -20,6 +20,7 @@ export const users = sqliteTable('users', {
   discoverable: integer('discoverable').default(1),
   profileUpdatedAt: integer('profile_updated_at'),
   passwordChangedAt: integer('password_changed_at'),
+  showActivity: integer('show_activity').notNull().default(1),
   createdAt: integer('created_at').notNull(),
 });
 

@@ -26,6 +26,7 @@ export interface User {
   homeInstance: string | null;
   homeUserId: string | null;
   replicatedInstances: ReplicatedInstance[];
+  showActivity?: boolean;
 }
 
 export interface ReplicatedInstance {
@@ -281,6 +282,32 @@ export interface DmMessageWithUser extends DmMessage {
   replyTo?: DmMessageWithUser | null;
 }
 
+// ─── Activity Types ────────────────────────────────────────────────────────
+
+export type ActivityType = 'custom' | 'playing' | 'listening' | 'watching' | 'streaming';
+
+export interface ActivityTimestamps {
+  start?: number;
+  end?: number;
+}
+
+export interface ActivityAssets {
+  largeImage?: string;
+  largeText?: string;
+  smallImage?: string;
+  smallText?: string;
+}
+
+export interface Activity {
+  type: ActivityType;
+  name: string;
+  details?: string;
+  state?: string;
+  timestamps?: ActivityTimestamps;
+  assets?: ActivityAssets;
+  url?: string;
+}
+
 // ─── WebSocket Event Types ──────────────────────────────────────────────────
 
 // Client → Server Events
@@ -310,16 +337,17 @@ export type ClientEvent =
   | { type: 'voice_space_deafen'; userId: string; deafened: boolean }
   | { type: 'voice_move'; userId: string; targetChannelId: string }
   | { type: 'voice_disconnect'; userId: string }
+  | { type: 'activity_update'; activities: Activity[] }
   | { type: 'ping' };
 
 // Server → Client Events
 export type ServerEvent =
-  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }> }
+  | { type: 'ready'; user: User; spaces: SpaceWithChannelsAndMembers[]; dmChannels: DmChannel[]; folders?: SpaceFolder[]; spaceLayout?: SpaceLayoutItem[] | null; layoutUpdatedAt?: number; voiceStates?: Record<string, string[]>; voiceUserStates?: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>; readStates?: ReadState[]; activeCalls?: ActiveCallInfo[]; spaceVoiceStates?: Record<string, { spaceMuted: boolean; spaceDeafened: boolean }>; userActivities?: Record<string, Activity[]> }
   | { type: 'message_created'; message: MessageWithUser }
   | { type: 'message_updated'; message: MessageWithUser }
   | { type: 'message_deleted'; messageId: string; channelId: string }
   | { type: 'typing'; channelId: string; userId: string; username: string }
-  | { type: 'presence_update'; userId: string; status: string }
+  | { type: 'presence_update'; userId: string; status: string; activities?: Activity[] }
   | { type: 'voice_state_update'; channelId: string; userId: string; action: 'join' | 'leave' }
   | { type: 'member_joined'; spaceId: string; member: MemberWithUser }
   | { type: 'member_left'; spaceId: string; userId: string }
@@ -435,6 +463,7 @@ export interface UpdateUserRequest {
   homeUserId?: string;
   profileUpdatedAt?: number;
   discoverable?: boolean;
+  showActivity?: boolean;
 }
 
 export interface UpdateMemberRequest {

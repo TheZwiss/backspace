@@ -33,7 +33,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
     }
 
-    return reply.code(200).send(sanitizeUser(user));
+    return reply.code(200).send(sanitizeUser(user, true));
   });
 
   // POST /api/users/@me/verify-password — verify password matches current account
@@ -328,7 +328,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           const storedTs = currentUser.profileUpdatedAt ?? currentUser.createdAt;
           if (profileUpdatedAt < storedTs) {
             // Incoming data is older — return current state without updating
-            return reply.code(200).send(sanitizeUser(currentUser));
+            return reply.code(200).send(sanitizeUser(currentUser, true));
           }
         }
         (updateData as Record<string, unknown>).profileUpdatedAt = profileUpdatedAt;
@@ -373,7 +373,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    const sanitized = sanitizeUser(updatedUser);
+    const sanitized = sanitizeUser(updatedUser, true);
 
     // Broadcast presence update if status changed
     if (status !== undefined) {
@@ -681,7 +681,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const mutualFriendIds = [...myFriendIds].filter((id) => targetFriendIds.has(id));
 
     const mutualFriends = mutualFriendIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, mutualFriendIds)).all().map(sanitizeUser)
+      ? db.select().from(schema.users).where(inArray(schema.users.id, mutualFriendIds)).all().map(u => sanitizeUser(u))
       : [];
 
     // Mutual spaces: spaces both me and the target are members of

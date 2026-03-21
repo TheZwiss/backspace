@@ -192,7 +192,7 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
             id: dmChannel.id,
             ownerId: dmChannel.ownerId ?? null,
             createdAt: dmChannel.createdAt,
-            members: users.map(sanitizeUser),
+            members: users.map(u => sanitizeUser(u)),
             lastMessage: message,
           },
         });
@@ -290,7 +290,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const members = memberIds
         .map(id => userMap.get(id))
         .filter((u): u is NonNullable<typeof u> => u !== undefined)
-        .map(sanitizeUser);
+        .map(u => sanitizeUser(u));
 
       const lastMsg = lastMessageMap.get(channelId) ?? null;
 
@@ -407,7 +407,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           id: dmChannel.id,
           ownerId: dmChannel.ownerId ?? null,
           createdAt: dmChannel.createdAt,
-          members: users.map(sanitizeUser),
+          members: users.map(u => sanitizeUser(u)),
           lastMessage: lastMsg ? {
             id: lastMsg.id,
             dmChannelId: lastMsg.dmChannelId,
@@ -446,7 +446,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
     const members = [currentUserRow, targetUser]
       .filter((u): u is NonNullable<typeof u> => u !== undefined)
-      .map(sanitizeUser);
+      .map(u => sanitizeUser(u));
 
     const result: DmChannel = {
       id: dmChannelId,
@@ -600,7 +600,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       id: dmChannel.id,
       ownerId: dmChannel.ownerId ?? null,
       createdAt: dmChannel.createdAt,
-      members: users.map(sanitizeUser),
+      members: users.map(u => sanitizeUser(u)),
       lastMessage: lastMsg ? {
         id: lastMsg.id,
         dmChannelId: lastMsg.dmChannelId,

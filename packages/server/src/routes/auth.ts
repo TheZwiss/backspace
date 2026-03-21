@@ -122,7 +122,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const response: AuthResponse = {
       token,
-      user: sanitizeUser(user),
+      user: sanitizeUser(user, true),
     };
 
     return reply.code(201).send(response);
@@ -207,7 +207,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const response: AuthResponse = {
       token,
-      user: sanitizeUser({ ...user, status: 'online' }),
+      user: sanitizeUser({ ...user, status: 'online' }, true),
     };
 
     return reply.code(200).send(response);

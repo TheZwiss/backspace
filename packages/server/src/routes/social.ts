@@ -502,6 +502,6 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       .limit(10)
       .all();
 
-    return reply.code(200).send(users.map(sanitizeUser));
+    return reply.code(200).send(users.map(u => sanitizeUser(u)));
   });
 }

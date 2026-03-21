@@ -1,7 +1,7 @@
 import type { User, ReplicatedInstance } from '@backspace/shared';
 import { schema } from '../db/index.js';
 
-export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
+export function sanitizeUser(row: typeof schema.users.$inferSelect, isSelf = false): User {
   // Tombstoned (deleted) users — return anonymized profile
   if (row.isDeleted === 1) {
     return {
@@ -23,6 +23,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
       homeInstance: null,
       homeUserId: null,
       replicatedInstances: [],
+      ...(isSelf ? { showActivity: false } : {}),
     };
   }
 
@@ -53,5 +54,6 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect): User {
     homeInstance: row.homeInstance ?? null,
     homeUserId: row.homeUserId ?? null,
     replicatedInstances,
+    ...(isSelf ? { showActivity: row.showActivity !== 0 } : {}),
   };
 }

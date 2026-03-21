@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/types.ts",
     "./src/permissions": "./src/permissions.ts",
-    "./src/permissions.js": "./src/permissions.ts"
+    "./src/permissions.js": "./src/permissions.ts",
+    "./src/activities": "./src/activities.ts",
+    "./src/activities.js": "./src/activities.ts"
   },
   "scripts": {
     "build": "tsc",

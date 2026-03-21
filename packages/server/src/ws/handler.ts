@@ -682,7 +682,7 @@ function buildReadyPayload(userId: string): {
   if (!userRow) {
     throw new Error('User not found');
   }
-  const user = sanitizeUser(userRow);
+  const user = sanitizeUser(userRow, true);
 
   // Get user's space memberships
   const memberships = db.select()
@@ -931,7 +931,7 @@ function buildReadyPayload(userId: string): {
       const members = memberRows
         .map(m => dmUserMap.get(m.userId))
         .filter((u): u is NonNullable<typeof u> => u != null)
-        .map(sanitizeUser);
+        .map(u => sanitizeUser(u));
 
       const last = dmLastMsgMap.get(dm.dmChannelId) ?? null;
 

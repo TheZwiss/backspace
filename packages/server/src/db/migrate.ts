@@ -151,6 +151,12 @@ export function runMigrations(db: Database.Database): void {
         { name: 'password_changed_at', type: 'INTEGER' },
       ]
     },
+    {
+      name: 'users',
+      columns: [
+        { name: 'show_activity', type: 'INTEGER NOT NULL DEFAULT 1' },
+      ]
+    },
     // gif_api_key is handled by migrateRenameGifApiKey() — do NOT add it here
     // or it will race with the tenor_api_key → gif_api_key rename migration
   ];
