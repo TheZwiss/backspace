@@ -8,9 +8,9 @@ files:
   - resources/**/*
   - "!node_modules"
 publish:
-  - provider: generic
-    url: "${env.BACKSPACE_UPDATE_URL}"
-    useMultipleRangeRequest: false
+  - provider: github
+    owner: TheZwiss
+    repo: backspace
 protocols:
   - name: Backspace
     schemes:

@@ -7,7 +7,7 @@
     "name": "youruser",
     "email": "backspace@backspace.chat"
   },
-  "homepage": "https://github.com/youruser/backspace",
+  "homepage": "https://github.com/TheZwiss/backspace",
   "main": "dist/main.js",
   "scripts": {
     "build:ts": "tsc",
