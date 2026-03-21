@@ -3,7 +3,7 @@ import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -151,7 +151,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.patch<{ Body: UpdateUserRequest }>('/api/users/@me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt, discoverable } = request.body;
+    const { displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status, replicatedInstances, homeUserId, profileUpdatedAt, discoverable, showActivity } = request.body;
     const db = getDb();
 
     const updateData: Record<string, string | null | undefined> = {};
@@ -312,6 +312,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       (updateData as Record<string, unknown>).discoverable = discoverable ? 1 : 0;
     }
 
+    if (showActivity !== undefined) {
+      if (typeof showActivity !== 'boolean') {
+        return reply.code(400).send({ error: 'showActivity must be a boolean', statusCode: 400 });
+      }
+      (updateData as Record<string, unknown>).showActivity = showActivity ? 1 : 0;
+    }
+
     if (Object.keys(updateData).length === 0) {
       return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
     }
@@ -339,6 +346,25 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     }
 
     db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
+
+    // Update activity visibility cache and broadcast clear when toggled off
+    if (showActivity !== undefined) {
+      connectionManager.setUserShowActivity(request.userId, showActivity);
+      if (!showActivity) {
+        connectionManager.clearUserActivities(request.userId);
+        const userSpaces = connectionManager.getUserSpaces(request.userId);
+        const clearPayload = {
+          type: 'presence_update' as const,
+          userId: request.userId,
+          status: connectionManager.getUserStatus(request.userId),
+          activities: [] as Activity[],
+        };
+        for (const spaceId of userSpaces) {
+          connectionManager.sendToSpace(spaceId, clearPayload, request.userId);
+        }
+        connectionManager.sendToUser(request.userId, clearPayload);
+      }
+    }
 
     // Clean up old avatar/banner files that were replaced
     if (avatar !== undefined && oldAvatar && oldAvatar !== (avatar || null) && !oldAvatar.startsWith('http')) {
