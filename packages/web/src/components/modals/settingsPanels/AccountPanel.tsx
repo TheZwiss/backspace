@@ -74,6 +74,42 @@ function AutoLaunchSettings() {
   );
 }
 
+function UpdateSettings() {
+  const [version, setVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    window.backspace?.getVersion().then(setVersion).catch(() => {});
+  }, []);
+
+  const handleCheck = () => {
+    setChecking(true);
+    window.backspace?.checkForUpdates();
+    // Reset after a few seconds — electron-updater doesn't have a "no update" callback
+    setTimeout(() => setChecking(false), 5000);
+  };
+
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex-1 mr-4">
+        <div className="text-sm text-txt-primary">
+          {version ? `Version ${version}` : 'Backspace Desktop'}
+        </div>
+        <div className="text-xs text-txt-tertiary mt-0.5">
+          Check for new versions of the desktop app
+        </div>
+      </div>
+      <button
+        onClick={handleCheck}
+        disabled={checking}
+        className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+      >
+        {checking ? 'Checking...' : 'Check for Updates'}
+      </button>
+    </div>
+  );
+}
+
 export function AccountPanel() {
   const user = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
@@ -756,6 +792,7 @@ export function AccountPanel() {
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Desktop</div>
           <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
             <AutoLaunchSettings />
+            <UpdateSettings />
 
             <div className="border-t border-white/[0.04]" />
 
