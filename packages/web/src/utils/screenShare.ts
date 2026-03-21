@@ -4,6 +4,10 @@ import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
+import {
+  STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
+  type StandardResolution,
+} from '@backspace/shared/src/constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,26 +49,83 @@ export const CAMERA_OVERDRIVE: OverdriveOptions = {
 // ---------------------------------------------------------------------------
 
 const BITRATE_MATRIX: Record<number, Record<number, number>> = {
-  1080: { 60: 8_000_000, 45: 7_000_000, 30: 6_000_000 },
-  720:  { 60: 4_000_000, 45: 3_500_000, 30: 3_000_000 },
-  540:  { 60: 2_500_000, 45: 2_000_000, 30: 1_500_000 },
+  540:  { 30: 1_500_000, 45: 2_000_000, 60: 2_500_000, 75: 2_800_000, 90: 3_200_000, 120: 4_000_000 },
+  720:  { 30: 3_000_000, 45: 3_500_000, 60: 4_000_000, 75: 4_500_000, 90: 5_000_000, 120: 6_000_000 },
+  1080: { 30: 6_000_000, 45: 7_000_000, 60: 8_000_000, 75: 9_000_000, 90: 10_000_000, 120: 12_000_000 },
+  1440: { 30: 10_000_000, 45: 12_000_000, 60: 14_000_000, 75: 16_000_000, 90: 18_000_000, 120: 22_000_000 },
+  2160: { 30: 20_000_000, 45: 24_000_000, 60: 28_000_000, 75: 32_000_000, 90: 38_000_000, 120: 45_000_000 },
 };
 
-const WIDTH_MAP: Record<number, number> = { 1080: 1920, 720: 1280, 540: 960 };
+// ---------------------------------------------------------------------------
+// Native mode — pixel-count-proportional bitrate computation
+// ---------------------------------------------------------------------------
+
+function computeNativeBitrate(capturedWidth: number, capturedHeight: number, fps: number): number {
+  const capturedPixels = capturedWidth * capturedHeight;
+
+  // Find nearest known resolution tier by pixel count (handles ultrawides correctly)
+  let nearestHeight: StandardResolution = 1080;
+  let nearestDist = Infinity;
+  for (const h of STANDARD_RESOLUTIONS) {
+    const knownPixels = WIDTH_MAP[h] * h;
+    const dist = Math.abs(capturedPixels - knownPixels);
+    if (dist < nearestDist) { nearestDist = dist; nearestHeight = h; }
+  }
+
+  // Snap to nearest known framerate
+  let nearestFps = 30;
+  let nearestFpsDist = Infinity;
+  for (const f of STANDARD_FRAMERATES) {
+    const dist = Math.abs(fps - f);
+    if (dist < nearestFpsDist) { nearestFpsDist = dist; nearestFps = f; }
+  }
+
+  const baseBitrate = BITRATE_MATRIX[nearestHeight]![nearestFps]!;
+  const nearestPixels = WIDTH_MAP[nearestHeight] * nearestHeight;
+
+  // Scale proportionally by pixel count and framerate
+  return Math.round(baseBitrate * (capturedPixels / nearestPixels) * (fps / nearestFps));
+}
 
 export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareBuildResult {
   const { height, fps, mode, customBitrateKbps } = config;
-  const width = WIDTH_MAP[height]!;
+  const isNative = height === 'native';
   const limits = getStreamingLimits();
-  const rawBitrate = customBitrateKbps != null
-    ? customBitrateKbps * 1000
-    : BITRATE_MATRIX[height]![fps]!;
-  // Clamp to instance-level admin limits
+
+  // Capture dimensions: sentinel 0 for native (caller skips resolution constraint)
+  const captureWidth = isNative ? 0 : WIDTH_MAP[height as StandardResolution] ?? 1920;
+  const captureHeight = isNative ? 0 : (height as number);
+
+  // Bitrate: custom override > matrix lookup > native initial estimate
+  let rawBitrate: number;
+  if (customBitrateKbps != null) {
+    rawBitrate = customBitrateKbps * 1000;
+  } else if (isNative) {
+    // Use 2160p at nearest known framerate as generous initial — overdrive corrects at 2s
+    const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
+      Math.abs(b - fps) < Math.abs(a - fps) ? b : a
+    );
+    rawBitrate = BITRATE_MATRIX[2160]![nearestFps]!;
+  } else {
+    // Find nearest framerate in matrix for this resolution
+    const resFps = BITRATE_MATRIX[height as number];
+    if (resFps && resFps[fps]) {
+      rawBitrate = resFps[fps]!;
+    } else {
+      // Snap to nearest known framerate for this resolution
+      const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
+        Math.abs(b - fps) < Math.abs(a - fps) ? b : a
+      );
+      rawBitrate = (resFps ?? BITRATE_MATRIX[1080]!)[nearestFps]!;
+    }
+  }
+
+  // Hard cap to instance limits
   const maxBitrate = Math.min(Math.max(rawBitrate, limits.minBitrateKbps * 1000), limits.maxBitrateKbps * 1000);
   const minBitrate = Math.round(maxBitrate * 0.25);
 
   return {
-    capture: { width, height, frameRate: fps },
+    capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
       videoCodec: 'vp9',
       videoEncoding: { maxBitrate, maxFramerate: fps },
@@ -78,6 +139,28 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
     },
     contentHint: mode === 'text' ? 'detail' : 'motion',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Shared helper: resolve native-mode overdrive from actual track dimensions
+// Used by both applyScreenShareOverdrive (screenShare.ts) and updateActiveTracks (useLiveKit.ts)
+// ---------------------------------------------------------------------------
+
+export function resolveNativeOverdrive(
+  mediaTrack: MediaStreamTrack | null | undefined,
+  config: ScreenShareConfig,
+  opts: ScreenShareBuildResult,
+): void {
+  if (config.height !== 'native' || config.customBitrateKbps != null || !mediaTrack) return;
+  const settings = mediaTrack.getSettings();
+  if (!settings.width || !settings.height) return;
+
+  const nativeBitrate = computeNativeBitrate(settings.width, settings.height, config.fps);
+  const limits = getStreamingLimits();
+  const clamped = Math.min(Math.max(nativeBitrate, limits.minBitrateKbps * 1000), limits.maxBitrateKbps * 1000);
+  opts.overdrive.maxBitrate = clamped;
+  opts.overdrive.minBitrate = Math.round(clamped * 0.25);
+  opts.publish.videoEncoding.maxBitrate = clamped;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,11 +218,10 @@ export async function startScreenShare(room: Room): Promise<boolean> {
   const opts = buildScreenShareOptions(config);
 
   try {
-    const track = await room.localParticipant.setScreenShareEnabled(true, {
+    // For native mode: omit resolution constraint to capture at display's full native resolution
+    const captureOptions: any = {
       audio: config.shareAudio ? {
         // Chrome 141+: exclude this tab's own audio from system audio capture
-        // Prevents feedback loop where remote voices are captured and echoed back
-        // Silently ignored by older browsers / Electron's Chromium 130
         // @ts-ignore — restrictOwnAudio is not yet in all TS type definitions
         restrictOwnAudio: true,
         echoCancellation: false,
@@ -147,10 +229,13 @@ export async function startScreenShare(room: Room): Promise<boolean> {
         autoGainControl: false,
         channelCount: 2,
       } : false,
-      resolution: { width: opts.capture.width, height: opts.capture.height },
-      // @ts-ignore — LiveKit accepts frameRate at capture level
       frameRate: opts.capture.frameRate,
-    }, {
+    };
+    if (opts.capture.width > 0 && opts.capture.height > 0) {
+      captureOptions.resolution = { width: opts.capture.width, height: opts.capture.height };
+    }
+
+    const track = await room.localParticipant.setScreenShareEnabled(true, captureOptions, {
       videoCodec: opts.publish.videoCodec,
       videoEncoding: opts.publish.videoEncoding,
       simulcast: opts.publish.simulcast,
@@ -190,12 +275,18 @@ function applyScreenShareOverdrive(room: Room): void {
     const screenPub = room.localParticipant.getTrackPublications()
       .find(p => p.source === Track.Source.ScreenShare);
     if (screenPub?.track?.mediaStreamTrack) {
-      await screenPub.track.mediaStreamTrack.applyConstraints({
-        width: { ideal: freshOpts.capture.width },
-        height: { ideal: freshOpts.capture.height },
-        frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
-      });
+      // Skip resolution constraints for native mode — capture is already at native dims
+      if (freshOpts.capture.width > 0 && freshOpts.capture.height > 0) {
+        await screenPub.track.mediaStreamTrack.applyConstraints({
+          width: { ideal: freshOpts.capture.width },
+          height: { ideal: freshOpts.capture.height },
+          frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
+        });
+      }
       screenPub.track.mediaStreamTrack.contentHint = freshOpts.contentHint;
+
+      // For native mode, compute correct bitrate from actual track dimensions
+      resolveNativeOverdrive(screenPub.track.mediaStreamTrack, useVoiceStore.getState().screenShareConfig, freshOpts);
     }
     await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
   }, 2000);
@@ -204,6 +295,11 @@ function applyScreenShareOverdrive(room: Room): void {
   setTimeout(async () => {
     if (!useVoiceStore.getState().isScreenSharing) return;
     const freshOpts = buildScreenShareOptions(useVoiceStore.getState().screenShareConfig);
+    const screenPub5 = room.localParticipant.getTrackPublications()
+      .find(p => p.source === Track.Source.ScreenShare);
+    if (screenPub5?.track?.mediaStreamTrack) {
+      resolveNativeOverdrive(screenPub5.track.mediaStreamTrack, useVoiceStore.getState().screenShareConfig, freshOpts);
+    }
     await applyOverdrive(room, Track.Source.ScreenShare, freshOpts.overdrive);
   }, 5000);
 }
