@@ -670,6 +670,10 @@ export function ChannelSidebar() {
         {/* Categories with their channels */}
         {sortedCategories.map((category) => {
           const catChannels = channelsByCategory.get(category.id) ?? [];
+
+          // Hide empty categories for users without MANAGE_CHANNELS permission
+          if (!canManageChannels && catChannels.length === 0) return null;
+
           const isCollapsed = collapsedCategories.has(category.id);
           const hasUnread = isCollapsed && categoryHasUnread(category.id);
 
@@ -686,6 +690,11 @@ export function ChannelSidebar() {
                       <path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z" />
                     </svg>
                     <span className="text-[11px] font-medium uppercase tracking-[0.06em] truncate" style={{ color: '#484854' }}>{category.name}</span>
+                    {category.isPrivate && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-muted flex-shrink-0">
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
+                      </svg>
+                    )}
                     {hasUnread && (
                       <div className="ml-1 w-1.5 h-1.5 rounded-full bg-accent-rose flex-shrink-0" />
                     )}
@@ -715,6 +724,17 @@ export function ChannelSidebar() {
                   e.preventDefault();
                   e.stopPropagation();
                   openContextMenu({ x: e.clientX, y: e.clientY }, [
+                    {
+                      key: 'category-settings',
+                      type: 'action',
+                      label: 'Category Settings',
+                      icon: (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z" />
+                        </svg>
+                      ),
+                      onClick: () => openModal('categorySettings', { categoryId: category.id }),
+                    },
                     {
                       key: 'delete-category',
                       type: 'action',
