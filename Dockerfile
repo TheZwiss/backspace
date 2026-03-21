@@ -37,7 +37,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Install build dependencies for better-sqlite3 native module
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
+    apt-get install -y --no-install-recommends python3 make g++ ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
