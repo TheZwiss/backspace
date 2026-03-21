@@ -401,24 +401,34 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       </div>
 
       {/* Reaction emoji picker */}
-      {showReactionPicker && canAddReactions && reactionPickerBtnRef.current && createPortal(
-        <div
-          ref={reactionPickerRef}
-          className="fixed z-[300] animate-slide-up"
-          style={{
-            top: reactionPickerBtnRef.current.getBoundingClientRect().bottom + 8,
-            left: Math.min(
-              reactionPickerBtnRef.current.getBoundingClientRect().left,
-              window.innerWidth - 360,
-            ),
-          }}
-        >
-          <div className="glass rounded-xl overflow-hidden">
-            <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} />
-          </div>
-        </div>,
-        document.body,
-      )}
+      {showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
+        const PICKER_HEIGHT = 400;
+        const PICKER_WIDTH = 360;
+        const MARGIN = 8;
+        const btnRect = reactionPickerBtnRef.current!.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - btnRect.bottom;
+        const spaceAbove = btnRect.top;
+        const flipAbove = spaceBelow < (PICKER_HEIGHT + MARGIN) && spaceAbove > spaceBelow;
+        const top = flipAbove
+          ? Math.max(MARGIN, btnRect.top - PICKER_HEIGHT - MARGIN)
+          : btnRect.bottom + MARGIN;
+        const left = Math.min(
+          Math.max(MARGIN, btnRect.left),
+          window.innerWidth - PICKER_WIDTH - MARGIN,
+        );
+        return createPortal(
+          <div
+            ref={reactionPickerRef}
+            className={`fixed z-[300] ${flipAbove ? 'animate-slide-down' : 'animate-slide-up'}`}
+            style={{ top, left }}
+          >
+            <div className="glass rounded-xl overflow-hidden">
+              <EmojiPicker onEmojiSelect={handleReactionEmojiSelect} />
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
 
       {/* Action buttons on hover */}
       {(isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
