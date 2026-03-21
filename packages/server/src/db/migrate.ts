@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { DEFAULT_EVERYONE_PERMISSIONS, PermissionBits, ALL_PERMISSIONS, permissionsToString } from '@backspace/shared/src/permissions.js';
-import { generateThumbnail, isResizableImage } from '../utils/thumbnail.js';
+import { generateThumbnail, isResizableImage, probeImageDimensions, probeMediaMeta, generateVideoThumbnail } from '../utils/thumbnail.js';
 
 export function runMigrations(db: Database.Database): void {
   console.log('Checking for database migrations...');
@@ -1057,4 +1057,78 @@ export async function backfillThumbnails(db: Database.Database, uploadDir: strin
 
   console.log(`Backfill: Generated ${generated} thumbnail(s), skipped ${skipped} (small or missing)`);
   db.prepare('UPDATE instance_settings SET thumbnails_backfilled = 1 WHERE id = 1').run();
+}
+
+/**
+ * Async backfill: extract dimensions and generate thumbnails for existing
+ * video and image attachments that don't have width/height yet.
+ * Runs once after server startup, gated by a persistent flag.
+ */
+export async function backfillMediaDimensions(db: Database.Database, uploadDir: string): Promise<void> {
+  // Ensure the flag column exists
+  const cols = db.pragma('table_info(instance_settings)') as { name: string }[];
+  if (!cols.some(c => c.name === 'media_dimensions_backfilled')) {
+    db.exec('ALTER TABLE instance_settings ADD COLUMN media_dimensions_backfilled INTEGER DEFAULT 0');
+  }
+
+  const row = db.prepare('SELECT media_dimensions_backfilled FROM instance_settings WHERE id = 1').get() as
+    { media_dimensions_backfilled: number } | undefined;
+  if (row && row.media_dimensions_backfilled === 1) return;
+
+  // Find all image/video attachments without dimensions
+  const rows = db.prepare(
+    "SELECT id, filename, mimetype FROM attachments WHERE width IS NULL AND (mimetype LIKE 'video/%' OR mimetype LIKE 'image/%')"
+  ).all() as { id: string; filename: string; mimetype: string }[];
+
+  if (rows.length === 0) {
+    db.prepare('UPDATE instance_settings SET media_dimensions_backfilled = 1 WHERE id = 1').run();
+    return;
+  }
+
+  console.log(`Backfill: Extracting dimensions for ${rows.length} existing media attachment(s)...`);
+
+  const update = db.prepare(
+    'UPDATE attachments SET width = ?, height = ?, duration = ?, thumbnail_filename = COALESCE(?, thumbnail_filename) WHERE id = ?'
+  );
+  let processed = 0;
+  let skipped = 0;
+
+  for (const att of rows) {
+    const originalPath = path.join(uploadDir, path.basename(att.filename));
+    if (!fs.existsSync(originalPath)) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      if (att.mimetype.startsWith('video/')) {
+        // Video: thumbnail + dimensions + duration
+        const videoThumb = await generateVideoThumbnail(originalPath, uploadDir);
+        const meta = await probeMediaMeta(originalPath, att.mimetype);
+
+        const width = videoThumb?.width ?? meta?.width ?? null;
+        const height = videoThumb?.height ?? meta?.height ?? null;
+        const duration = meta?.duration ?? null;
+        const thumbName = videoThumb?.thumbnailFilename ?? null;
+
+        update.run(width, height, duration, thumbName, att.id);
+        processed++;
+      } else {
+        // Image: dimensions only
+        const dims = await probeImageDimensions(originalPath);
+        if (dims) {
+          update.run(dims.width, dims.height, null, null, att.id);
+          processed++;
+        } else {
+          skipped++;
+        }
+      }
+    } catch (err) {
+      console.error(`Backfill: Failed to process ${att.filename} (non-fatal):`, err);
+      skipped++;
+    }
+  }
+
+  console.log(`Backfill: Processed ${processed} media attachment(s), skipped ${skipped}`);
+  db.prepare('UPDATE instance_settings SET media_dimensions_backfilled = 1 WHERE id = 1').run();
 }
