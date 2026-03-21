@@ -18,6 +18,7 @@ import type {
   SpaceLayoutItem,
   ReadState,
   ActiveCallInfo,
+  Activity,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
@@ -91,6 +92,16 @@ class ConnectionManager {
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // Per-user WebSocket rate limiters (shared across all tabs/connections)
   private userRateLimiters: Map<string, WsRateLimiter> = new Map();
+
+  // ─── Rich Presence ──────────────────────────────────────────────────────
+  // userId → Activity[] (ephemeral, same lifecycle as voiceUserStates)
+  private userActivities: Map<string, Activity[]> = new Map();
+  // userId → boolean (cached from DB at auth time, updated via REST)
+  private userShowActivity: Map<string, boolean> = new Map();
+  // userId → status string (cached at auth, updated on presence_update)
+  private userStatuses: Map<string, string> = new Map();
+  // userId → timestamp of last activity_update (rate limiting)
+  private lastActivityUpdate: Map<string, number> = new Map();
 
   addConnection(userId: string, ws: WebSocket): void {
     if (!this.connections.has(userId)) {
@@ -193,6 +204,12 @@ class ConnectionManager {
       }
     }
 
+    // Clear activity state
+    this.clearUserActivities(userId);
+    this.userShowActivity.delete(userId);
+    this.userStatuses.delete(userId);
+    this.lastActivityUpdate.delete(userId);
+
     // Broadcast offline to all spaces
     const userSpaces = this.getUserSpaces(userId);
     for (const spaceId of userSpaces) {
@@ -200,6 +217,7 @@ class ConnectionManager {
         type: 'presence_update',
         userId: userId,
         status: 'offline',
+        activities: [] as Activity[],
       });
     }
 
@@ -226,6 +244,48 @@ class ConnectionManager {
       this.userRateLimiters.set(userId, limiter);
     }
     return limiter;
+  }
+
+  // ─── Activity accessors ─────────────────────────────────────────────────
+
+  setUserActivities(userId: string, activities: Activity[]): void {
+    if (activities.length === 0) {
+      this.userActivities.delete(userId);
+    } else {
+      this.userActivities.set(userId, activities);
+    }
+  }
+
+  getUserActivities(userId: string): Activity[] {
+    return this.userActivities.get(userId) ?? [];
+  }
+
+  clearUserActivities(userId: string): void {
+    this.userActivities.delete(userId);
+  }
+
+  setUserShowActivity(userId: string, show: boolean): void {
+    this.userShowActivity.set(userId, show);
+  }
+
+  getUserShowActivity(userId: string): boolean {
+    return this.userShowActivity.get(userId) ?? true;
+  }
+
+  setUserStatus(userId: string, status: string): void {
+    this.userStatuses.set(userId, status);
+  }
+
+  getUserStatus(userId: string): string {
+    return this.userStatuses.get(userId) ?? 'offline';
+  }
+
+  checkActivityRateLimit(userId: string): boolean {
+    const now = Date.now();
+    const last = this.lastActivityUpdate.get(userId) ?? 0;
+    if (now - last < 3000) return false;
+    this.lastActivityUpdate.set(userId, now);
+    return true;
   }
 
   setUserSpaces(userId: string, spaceIds: string[]): void {
@@ -594,6 +654,12 @@ class ConnectionManager {
       }
     }
 
+    // Clear activity state
+    this.clearUserActivities(userId);
+    this.userShowActivity.delete(userId);
+    this.userStatuses.delete(userId);
+    this.lastActivityUpdate.delete(userId);
+
     // Close all WebSocket connections
     const connections = this.connections.get(userId);
     if (connections) {
@@ -674,6 +740,7 @@ function buildReadyPayload(userId: string): {
   spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
+  userActivities: Record<string, Activity[]>;
 } {
   const db = getDb();
 
@@ -683,6 +750,10 @@ function buildReadyPayload(userId: string): {
     throw new Error('User not found');
   }
   const user = sanitizeUser(userRow, true);
+
+  // Cache showActivity and status for Rich Presence
+  connectionManager.setUserShowActivity(userId, userRow.showActivity !== 0);
+  connectionManager.setUserStatus(userId, (userRow.status ?? 'offline') as string);
 
   // Get user's space memberships
   const memberships = db.select()
@@ -1073,7 +1144,35 @@ function buildReadyPayload(userId: string): {
     lastReadMessageId: rs.lastReadMessageId,
   }));
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls };
+  // Build user activities snapshot for all visible users
+  // Auto-inject customStatus as a 'custom' activity for users with no ephemeral activities
+  const userActivities: Record<string, Activity[]> = {};
+  const seenUserIds = new Set<string>();
+
+  function collectUserActivities(uid: string, customStatus: string | null) {
+    if (seenUserIds.has(uid)) return;
+    seenUserIds.add(uid);
+    let acts = connectionManager.getUserActivities(uid);
+    if (acts.length === 0 && customStatus) {
+      acts = [{ type: 'custom', name: customStatus }];
+    }
+    if (acts.length > 0) {
+      userActivities[uid] = acts;
+    }
+  }
+
+  for (const space of spaces) {
+    for (const member of space.members) {
+      collectUserActivities(member.userId, member.user?.customStatus ?? null);
+    }
+  }
+  for (const dm of dmChannels) {
+    for (const member of dm.members) {
+      collectUserActivities(member.id, member.customStatus ?? null);
+    }
+  }
+
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {
