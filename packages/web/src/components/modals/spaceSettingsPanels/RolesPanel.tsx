@@ -103,6 +103,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
         spaceId={spaceId}
         onBack={() => setEditingRoleId(null)}
         onDeleted={() => setEditingRoleId(null)}
+        onCopied={(newRoleId) => setEditingRoleId(newRoleId)}
       />
     );
   }
@@ -175,9 +176,10 @@ interface RoleEditViewProps {
   spaceId: string;
   onBack: () => void;
   onDeleted: () => void;
+  onCopied: (newRoleId: string) => void;
 }
 
-function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
+function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditViewProps) {
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const roles = useSpaceStore((s) => s.roles);
   const isEveryone = role.id === spaceId;
@@ -208,7 +210,6 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
   const hasColorChange = !isEveryone && draftColor !== role.color;
   const hasPermChange = permissionsToString(draftPermissions) !== (role.permissions ?? '0');
   const hasChanges = hasNameChange || hasColorChange || hasPermChange;
-  const showPill = hasChanges || !isEveryone;
 
   const togglePermission = (bit: bigint) => {
     setDraftPermissions((prev) => (prev & bit) !== 0n ? prev & ~bit : prev | bit);
@@ -265,6 +266,26 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const [copying, setCopying] = useState(false);
+
+  const handleCopy = async () => {
+    setCopying(true);
+    setSaveError('');
+    try {
+      const newRole = await api.roles.create(spaceId, {
+        name: `Copy of ${role.name}`,
+        color: role.color,
+        permissions: role.permissions ?? undefined,
+      });
+      await loadSpaceDetail(spaceId);
+      onCopied(newRole.id);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to copy role');
+    } finally {
+      setCopying(false);
     }
   };
 
@@ -398,8 +419,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
       {saveSuccess && (
         <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Role saved</div>
       )}
-      {showPill && (
-        <div className="sticky bottom-0 z-10 pointer-events-none">
+      <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">
             <div className={`glass-bubble rounded-full px-4 py-2 flex items-center gap-2 pointer-events-auto${
               isEveryone ? ' animate-slide-up' : ''
@@ -421,26 +441,35 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
                   </button>
                 </>
               )}
-              {!isEveryone && hasChanges && (
+              {hasChanges && (
                 <div className="w-px h-5 bg-white/10" />
               )}
+              <button
+                onClick={handleCopy}
+                disabled={copying}
+                className="px-3 py-1.5 text-sm font-medium rounded-full text-txt-secondary hover:bg-interactive-hover transition-colors disabled:opacity-50"
+              >
+                {copying ? 'Copying...' : 'Copy Role'}
+              </button>
               {!isEveryone && (
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50 ${
-                    confirmDelete
-                      ? 'bg-accent-rose/15 text-accent-rose'
-                      : 'text-accent-rose hover:bg-accent-rose/10'
-                  }`}
-                >
-                  {deleting ? 'Deleting...' : confirmDelete ? 'Confirm?' : 'Delete Role'}
-                </button>
+                <>
+                  <div className="w-px h-5 bg-white/10" />
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors disabled:opacity-50 ${
+                      confirmDelete
+                        ? 'bg-accent-rose/15 text-accent-rose'
+                        : 'text-accent-rose hover:bg-accent-rose/10'
+                    }`}
+                  >
+                    {deleting ? 'Deleting...' : confirmDelete ? 'Confirm?' : 'Delete Role'}
+                  </button>
+                </>
               )}
             </div>
           </div>
         </div>
-      )}
     </div>
   );
 }
