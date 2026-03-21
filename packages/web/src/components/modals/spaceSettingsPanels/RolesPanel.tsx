@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSpaceStore } from '../../../stores/spaceStore';
 import { api } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
@@ -200,6 +200,15 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
 
   const [draftName, setDraftName] = useState(role.name);
   const [nameError, setNameError] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const isNewlyCreated = /^new role( \d+)?$/i.test(role.name) || /^Copy of /i.test(role.name);
+
+  useEffect(() => {
+    if (!isEveryone && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, []);
 
   const validateName = (name: string): string => {
     const trimmed = name.trim();
@@ -319,6 +328,12 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
         </button>
       </div>
 
+      {isNewlyCreated && !hasChanges && (
+        <div className="p-2 bg-accent-primary/10 border border-accent-primary/20 rounded text-txt-secondary text-sm">
+          Role created — customize it below
+        </div>
+      )}
+
       {/* Identity card (Name + Color — not shown for @everyone) */}
       {!isEveryone && (
         <div>
@@ -329,6 +344,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
                 Role Name
               </label>
               <input
+                ref={nameInputRef}
                 type="text"
                 value={draftName}
                 onChange={(e) => {
