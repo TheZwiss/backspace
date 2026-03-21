@@ -116,6 +116,9 @@ export class BackspaceApiClient {
     create: (spaceId: string, name: string) => Promise<ChannelCategory>;
     update: (id: string, data: { name?: string; position?: number }) => Promise<ChannelCategory>;
     delete: (id: string) => Promise<{ success: boolean }>;
+    getOverrides: (categoryId: string) => Promise<{ categoryId: string; targetType: string; targetId: string; allow: string; deny: string }[]>;
+    putOverride: (categoryId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) => Promise<{ success: boolean }>;
+    deleteOverride: (categoryId: string, targetType: string, targetId: string) => Promise<{ success: boolean }>;
   };
 
   readonly messages: {
@@ -406,6 +409,14 @@ export class BackspaceApiClient {
         request<ChannelCategory>('PATCH', `/categories/${id}`, data),
       delete: (id: string) =>
         request<{ success: boolean }>('DELETE', `/categories/${id}`),
+      getOverrides: (categoryId: string) =>
+        request<{ categoryId: string; targetType: string; targetId: string; allow: string; deny: string }[]>(
+          'GET', `/categories/${categoryId}/overrides`
+        ),
+      putOverride: (categoryId: string, data: { targetType: string; targetId: string; allow: string; deny: string }) =>
+        request<{ success: boolean }>('PUT', `/categories/${categoryId}/overrides`, data),
+      deleteOverride: (categoryId: string, targetType: string, targetId: string) =>
+        request<{ success: boolean }>('DELETE', `/categories/${categoryId}/overrides/${targetType}/${targetId}`),
     };
 
     this.messages = {
