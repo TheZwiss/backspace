@@ -7,24 +7,13 @@ import { buildScreenShareOptions } from '../../utils/screenShare';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { Toggle } from '../ui/Toggle';
 import { isElectron } from '../../platform/platform';
+import { RESOLUTION_LABELS } from '@backspace/shared/src/constants';
 
 interface ScreenShareSettingsPopoverProps {
   open: boolean;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLElement | null>;
 }
-
-const ALL_RESOLUTIONS: { value: ScreenShareConfig['height']; label: string }[] = [
-  { value: 540, label: '540p' },
-  { value: 720, label: '720p' },
-  { value: 1080, label: '1080p' },
-];
-
-const ALL_FRAME_RATES: { value: ScreenShareConfig['fps']; label: string }[] = [
-  { value: 30, label: '30' },
-  { value: 45, label: '45' },
-  { value: 60, label: '60' },
-];
 
 const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
   { value: 'gaming', label: 'Gaming' },
@@ -66,12 +55,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
   const BITRATE_MAX = limits?.maxBitrateKbps ?? 20000;
   const BITRATE_STEP = limits?.bitrateStepKbps ?? 500;
 
-  const RESOLUTIONS = ALL_RESOLUTIONS.filter((r) =>
-    (limits?.allowedResolutions ?? [540, 720, 1080]).includes(r.value)
-  );
-  const FRAME_RATES = ALL_FRAME_RATES.filter((f) =>
-    (limits?.allowedFramerates ?? [30, 45, 60]).includes(f.value)
-  );
+  const RESOLUTIONS = (limits?.allowedResolutions ?? [540, 720, 1080]).map((r) => ({
+    value: r as ScreenShareConfig['height'],
+    label: RESOLUTION_LABELS[r as keyof typeof RESOLUTION_LABELS] ?? `${r}p`,
+  }));
+  const FRAME_RATES = (limits?.allowedFramerates ?? [30, 45, 60]).map((f) => ({
+    value: f as ScreenShareConfig['fps'],
+    label: `${f}`,
+  }));
 
   useEffect(() => {
     if (!open) return;
@@ -89,15 +80,22 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
     if (!limits) return;
     const patch: Partial<ScreenShareConfig> = {};
     if (!limits.allowedResolutions.includes(config.height)) {
-      const closest = limits.allowedResolutions.reduce((a, b) =>
-        Math.abs(b - config.height) < Math.abs(a - config.height) ? b : a
-      ) as ScreenShareConfig['height'];
-      patch.height = closest;
+      const numericRes = limits.allowedResolutions.filter((r): r is number => r !== 'native');
+      if (typeof config.height === 'number' && numericRes.length > 0) {
+        const h = config.height;
+        patch.height = numericRes.reduce((a, b) =>
+          Math.abs(b - h) < Math.abs(a - h) ? b : a
+        );
+      } else {
+        // 'native' was disabled or no numeric options — fall back to highest numeric
+        patch.height = numericRes.length > 0 ? Math.max(...numericRes) : 1080;
+      }
     }
     if (!limits.allowedFramerates.includes(config.fps)) {
+      const f = config.fps;
       const closest = limits.allowedFramerates.reduce((a, b) =>
-        Math.abs(b - config.fps) < Math.abs(a - config.fps) ? b : a
-      ) as ScreenShareConfig['fps'];
+        Math.abs(b - f) < Math.abs(a - f) ? b : a
+      );
       patch.fps = closest;
     }
     if (config.customBitrateKbps != null) {
@@ -131,7 +129,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Resolution
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {RESOLUTIONS.map((r) => (
               <button
                 key={r.value}
@@ -149,7 +147,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
             Frame Rate
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {FRAME_RATES.map((f) => (
               <button
                 key={f.value}
