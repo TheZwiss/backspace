@@ -29,12 +29,16 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   const { mimetype, originalName, size } = attachment;
 
   if (mimetype.startsWith('image/')) {
+    const { width, height } = attachment;
     return (
-      <div className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]">
+      <div
+        className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]"
+        style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 550), maxHeight: 350 } : undefined}
+      >
         <img
           src={thumbUrl ?? attUrl}
           alt={originalName}
-          className="max-w-full max-h-[350px] object-contain cursor-pointer hover:brightness-95 transition-all"
+          className="w-full h-full object-contain cursor-pointer hover:brightness-95 transition-all"
           onClick={() => openImagePreview(attUrl)}
           loading="lazy"
         />
@@ -43,13 +47,18 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   }
 
   if (mimetype.startsWith('video/')) {
+    const { width, height } = attachment;
+    const hasDimensions = width && height;
     return (
-      <div className="mt-1 max-w-[520px]">
+      <div
+        className="mt-1 max-w-[520px] rounded-lg overflow-hidden"
+        style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 400 } : undefined}
+      >
         <video
           controls
-          preload="metadata"
+          preload={hasDimensions ? 'none' : 'metadata'}
           poster={thumbUrl ?? undefined}
-          className="max-w-full max-h-[400px] rounded-lg"
+          className="w-full h-full rounded-lg"
         >
           <source src={attUrl} type={mimetype} />
           Your browser does not support video playback.
