@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
 import { useSocialStore } from '../../stores/socialStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useActivityStore } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { ActivityCard } from '../ui/ActivityCard';
 import type { Friend } from '@backspace/shared';
+import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
 
 export function ActivityPanel() {
@@ -11,16 +14,34 @@ export function ActivityPanel() {
   const loadFriends = useSocialStore((s) => s.loadFriends);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const userActivities = useActivityStore((s) => s.userActivities);
 
   useEffect(() => {
     loadFriends();
   }, [loadFriends]);
 
-  const { onlineFriends, offlineFriends } = useMemo(() => {
-    const online = friends.filter(f => f.status !== 'offline');
-    const offline = friends.filter(f => f.status === 'offline');
-    return { onlineFriends: online, offlineFriends: offline };
-  }, [friends]);
+  const { activeFriends, onlineFriends, offlineFriends } = useMemo(() => {
+    const active: Friend[] = [];
+    const online: Friend[] = [];
+    const offline: Friend[] = [];
+
+    for (const f of friends) {
+      if (f.status === 'offline') {
+        offline.push(f);
+        continue;
+      }
+      const activities = userActivities.get(f.homeUserId ?? f.id) ?? [];
+      const primary = getPrimaryActivity(activities);
+      // Active = has a non-custom activity (playing, listening, watching, streaming)
+      if (primary && primary.type !== 'custom') {
+        active.push(f);
+      } else {
+        online.push(f);
+      }
+    }
+
+    return { activeFriends: active, onlineFriends: online, offlineFriends: offline };
+  }, [friends, userActivities]);
 
   if (!memberListOpen) return null;
 
@@ -52,9 +73,10 @@ export function ActivityPanel() {
     );
   };
 
-  const renderFriend = (friend: Friend, isOffline = false) => {
+  const renderFriend = (friend: Friend, isOffline = false, isCompact = true) => {
     const { baseName, domain } = parseFederatedUsername(friend.username);
     const friendDisplayName = friend.displayName ?? baseName;
+    const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
     return (
       <div
         key={friend.id}
@@ -78,8 +100,12 @@ export function ActivityPanel() {
           {domain && !isOffline && (
             <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
           )}
-          {!isOffline && friend.customStatus && (
-            <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{friend.customStatus}</div>
+          {!isOffline && (
+            <ActivityCard
+              activities={activities}
+              compact={isCompact}
+              fallbackCustomStatus={friend.customStatus}
+            />
           )}
         </div>
       </div>
@@ -91,7 +117,7 @@ export function ActivityPanel() {
       <div className="p-3">
         <h3 className="text-[20px] font-bold text-txt-primary mb-4 px-2">Active Now</h3>
 
-        {onlineFriends.length === 0 && offlineFriends.length === 0 ? (
+        {activeFriends.length === 0 && onlineFriends.length === 0 && offlineFriends.length === 0 ? (
           <div className="text-center py-8">
             <div className="text-[16px] font-bold text-txt-primary mb-1">It's quiet for now...</div>
             <div className="text-[14px] text-txt-tertiary max-w-[200px] mx-auto">
@@ -100,6 +126,11 @@ export function ActivityPanel() {
           </div>
         ) : (
           <>
+            {activeFriends.length > 0 && (
+              <div className="mb-4">
+                {activeFriends.map(f => renderFriend(f, false, false))}
+              </div>
+            )}
             {onlineFriends.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">

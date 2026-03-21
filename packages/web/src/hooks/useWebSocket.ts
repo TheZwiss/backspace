@@ -11,6 +11,7 @@ import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice'
 import { registerSelfId } from '../utils/identity';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
+import { useActivityStore } from '../stores/activityStore';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -205,6 +206,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
           setVoiceUsers(channelId, userIds);
         }
       }
+      // Initialize activity data from ready payload
+      if (event.userActivities) {
+        useActivityStore.getState().initActivities(event.userActivities);
+      }
+      if (event.user.showActivity !== undefined) {
+        useActivityStore.setState({ showActivity: event.user.showActivity });
+      }
+
       // Populate voice user statuses (mute/deafen/camera/screenshare) from server
       if (event.voiceUserStates) {
         for (const [uid, status] of Object.entries(event.voiceUserStates)) {
@@ -369,6 +378,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'presence_update':
       updateMemberPresence(event.userId, event.status);
       useSocialStore.getState().updateFriendPresence(event.userId, event.status);
+      if (event.activities) {
+        useActivityStore.getState().setUserActivities(event.userId, event.activities);
+      }
       break;
 
     case 'user_updated': {

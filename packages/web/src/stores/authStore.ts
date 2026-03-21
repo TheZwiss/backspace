@@ -6,6 +6,7 @@ import { useSpaceStore } from './spaceStore';
 import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
+import { useActivityStore } from './activityStore';
 import { syncProfileUpdateToRemotes } from '../utils/profileSync';
 import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
 import { clearSelfIds } from '../utils/identity';
@@ -35,6 +36,7 @@ function resetUserStores() {
   useSocialStore.getState().reset();
   useVoiceStore.getState().resetSession();
   useInstanceStore.getState().reset();
+  useActivityStore.getState().reset();
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({

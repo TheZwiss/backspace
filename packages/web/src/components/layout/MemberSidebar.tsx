@@ -2,8 +2,10 @@ import React, { useMemo } from 'react';
 import type { MemberWithUser } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useActivityStore } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
+import { ActivityCard } from '../ui/ActivityCard';
 import { parseFederatedUsername } from '../../utils/identity';
 
 /**
@@ -47,6 +49,7 @@ export function MemberSidebar() {
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const userActivities = useActivityStore((s) => s.userActivities);
 
   const space = spaces.find(s => s.id === currentSpaceId);
   const ownerId = space?.ownerId;
@@ -122,8 +125,12 @@ export function MemberSidebar() {
           {domain && !isOffline && (
             <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
           )}
-          {!isOffline && member.user.customStatus && (
-            <div className="text-[11px] leading-[1.3] text-txt-tertiary truncate">{member.user.customStatus}</div>
+          {!isOffline && (
+            <ActivityCard
+              activities={userActivities.get(member.userId) ?? []}
+              compact={true}
+              fallbackCustomStatus={member.user.customStatus}
+            />
           )}
         </div>
       </div>
