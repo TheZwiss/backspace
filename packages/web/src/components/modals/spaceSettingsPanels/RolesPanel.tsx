@@ -54,6 +54,18 @@ const PRESET_COLORS = [
   '#fbbf24', '#fda4af', '#f87171', '#60a5fa', '#34d399',
 ];
 
+/** Auto-increment a base name ("Foo" → "Foo 2" → "Foo 3") to avoid uniqueness conflicts. */
+function getUniqueRoleName(baseName: string, existingRoles: Role[]): string {
+  const existingNames = new Set(existingRoles.map((r) => r.name.toLowerCase()));
+  let candidateName = baseName;
+  let counter = 2;
+  while (existingNames.has(candidateName.toLowerCase())) {
+    candidateName = `${baseName} ${counter}`;
+    counter++;
+  }
+  return candidateName;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 interface RolesPanelProps {
@@ -81,7 +93,8 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
     setCreating(true);
     setError('');
     try {
-      const newRole = await api.roles.create(spaceId, { name: 'new role' });
+      const uniqueName = getUniqueRoleName('new role', roles);
+      const newRole = await api.roles.create(spaceId, { name: uniqueName });
       await loadSpaceDetail(spaceId);
       setEditingRoleId(newRole.id);
     } catch (err) {
@@ -275,8 +288,9 @@ function RoleEditView({ role, spaceId, onBack, onDeleted, onCopied }: RoleEditVi
     setCopying(true);
     setSaveError('');
     try {
+      const uniqueName = getUniqueRoleName(`Copy of ${role.name}`, roles);
       const newRole = await api.roles.create(spaceId, {
-        name: `Copy of ${role.name}`,
+        name: uniqueName,
         color: role.color,
         permissions: role.permissions ?? undefined,
       });
