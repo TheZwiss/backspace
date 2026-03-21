@@ -68,4 +68,12 @@ contextBridge.exposeInMainWorld('backspace', {
   getAutoLaunchSettings: () => ipcRenderer.invoke('get-auto-launch-settings'),
   setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>
     ipcRenderer.invoke('set-auto-launch-settings', settings),
+
+  // Activity detection (game/app process scanning)
+  onActivityDetected: (callback: (activity: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, activity: unknown) => callback(activity);
+    ipcRenderer.on('activity-detected', handler);
+    return () => { ipcRenderer.removeListener('activity-detected', handler); };
+  },
+  getCurrentActivity: () => ipcRenderer.invoke('get-current-activity'),
 });

@@ -31,6 +31,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
 import { useDeepLinkHandler } from '../../platform/deepLink';
+import { initActivityBridge, teardownActivityBridge } from '../../platform/activityBridge';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -121,6 +122,12 @@ export function AppLayout() {
 
   // Deep link handler for Electron (backspace:// protocol)
   useDeepLinkHandler();
+
+  // Electron activity detection bridge (game/app process scanning → activityStore)
+  useEffect(() => {
+    initActivityBridge();
+    return () => teardownActivityBridge();
+  }, []);
 
   // Track the last channel we attempted to connect to, to prevent effect loops
   const lastAttemptedRef = React.useRef<string | null>(null);

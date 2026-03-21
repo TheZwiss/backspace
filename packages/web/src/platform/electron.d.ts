@@ -48,6 +48,10 @@ interface BackspaceElectronAPI {
   getAutoLaunchSettings: () => Promise<{ openAtLogin: boolean; startMinimized: boolean }>;
   setAutoLaunchSettings: (settings: { openAtLogin?: boolean; startMinimized?: boolean }) =>
     Promise<{ openAtLogin: boolean; startMinimized: boolean }>;
+
+  // Activity detection (game/app process scanning)
+  onActivityDetected: (callback: (activity: unknown) => void) => (() => void);
+  getCurrentActivity: () => Promise<unknown>;
 }
 
 interface Window {

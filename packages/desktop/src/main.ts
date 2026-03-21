@@ -13,6 +13,7 @@ import {
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -774,6 +775,13 @@ if (!gotTheLock) {
     createTray();
     initAutoUpdater();
 
+    // ─── Activity Detection ────────────────────────────────────────────────
+    startActivityDetection((activity) => {
+      mainWindow?.webContents.send('activity-detected', activity);
+    });
+
+    ipcMain.handle('get-current-activity', () => getCurrentActivity());
+
     // Sync auto-launch settings with OS on startup (refreshes login item path for AppImage updates)
     const autoLaunchSettings = loadAutoLaunchSettings();
     applyLoginItemSettings(autoLaunchSettings.openAtLogin, autoLaunchSettings.startMinimized);
@@ -801,5 +809,6 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    stopActivityDetection();
   });
 }
