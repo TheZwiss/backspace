@@ -70,13 +70,18 @@ function loadDictionary(): boolean {
   processMap = new Map();
 
   for (const entry of parsed) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== 'object') {
+      console.warn('[ActivityDetector] Skipping invalid entry (not an object)');
+      continue;
+    }
     const e = entry as Record<string, unknown>;
 
-    if (typeof e.id !== 'string' || !e.id) continue;
-    if (typeof e.name !== 'string' || !e.name) continue;
-    if (!Array.isArray(e.processes) || e.processes.length === 0) continue;
-    if (!e.processes.every((p: unknown) => typeof p === 'string')) continue;
+    if (typeof e.id !== 'string' || !e.id || typeof e.name !== 'string' || !e.name ||
+        !Array.isArray(e.processes) || e.processes.length === 0 ||
+        !e.processes.every((p: unknown) => typeof p === 'string')) {
+      console.warn('[ActivityDetector] Skipping invalid entry:', e.id ?? JSON.stringify(e));
+      continue;
+    }
 
     const type = typeof e.type === 'string' && VALID_TYPES.has(e.type) ? e.type : 'playing';
 
