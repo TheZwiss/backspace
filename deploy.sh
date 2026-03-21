@@ -35,11 +35,17 @@ EXCLUDES=(
   --exclude='.env.local'
   --exclude='packages/*/node_modules'
   --exclude='packages/web/dist'
+  --exclude='packages/desktop'
+  --exclude='installers'
   --exclude='data'
   --exclude='livekit.yaml'
   --exclude='.DS_Store'
+  --exclude='.superpowers'
   --exclude='Gemini Starter.rtf'
   --exclude='System Prompt.rtf'
+  --exclude='Old Designs'
+  --exclude='outdated trash'
+  --exclude='*.rtf'
 )
 
 # ── Deploy function ─────────────────────────────────────────
