@@ -27,6 +27,7 @@ import {
   startScreenShare,
   stopScreenShare,
   handleScreenShareUnpublished,
+  resolveNativeOverdrive,
 } from '../utils/screenShare';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 
@@ -611,9 +612,14 @@ export function useLiveKit() {
         if (screenPub?.videoTrack) {
           const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
-            await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate } });
+            // Skip resolution constraints for native mode — capture is already at native dims
+            if (opts.capture.width > 0 && opts.capture.height > 0) {
+              await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate } });
+            }
             mediaTrack.contentHint = opts.contentHint;
           }
+          // For native mode, recompute overdrive bitrate from actual track dimensions
+          resolveNativeOverdrive(mediaTrack ?? null, screenShareConfig, opts);
           await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
       }
