@@ -89,6 +89,51 @@ function broadcastOverrideChange(spaceId: string, channelId: string): void {
   }
 }
 
+/**
+ * Check if a category is private by looking for VIEW_CHANNEL deny on @everyone.
+ */
+function isCategoryPrivate(categoryId: string, spaceId: string): boolean {
+  const db = getDb();
+  const override = db.select().from(schema.categoryOverrides).where(
+    and(
+      eq(schema.categoryOverrides.categoryId, categoryId),
+      eq(schema.categoryOverrides.targetType, 'role'),
+      eq(schema.categoryOverrides.targetId, spaceId),
+    )
+  ).get();
+  if (!override) return false;
+  const denyBits = BigInt(override.deny || '0');
+  return (denyBits & PermissionBits.VIEW_CHANNEL) !== 0n;
+}
+
+/**
+ * When a category's overrides change, re-evaluate visibility for all channels
+ * in that category and send channel_updated/channel_deleted per user.
+ * Also broadcasts category_updated with isPrivate for the lock icon.
+ */
+function broadcastCategoryOverrideChange(spaceId: string, categoryId: string): void {
+  const db = getDb();
+
+  const channelsInCategory = db.select().from(schema.channels)
+    .where(and(eq(schema.channels.spaceId, spaceId), eq(schema.channels.categoryId, categoryId)))
+    .all();
+
+  for (const ch of channelsInCategory) {
+    broadcastOverrideChange(spaceId, ch.id);
+  }
+
+  const category = db.select().from(schema.channelCategories)
+    .where(eq(schema.channelCategories.id, categoryId)).get();
+  if (category) {
+    const isPrivate = isCategoryPrivate(categoryId, spaceId);
+    connectionManager.sendToSpace(spaceId, {
+      type: 'category_updated',
+      category: { ...rowToCategory(category), isPrivate },
+      spaceId,
+    });
+  }
+}
+
 export async function channelRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/spaces/:id/channels - List channels in a space
   app.get<{ Params: { id: string } }>('/api/spaces/:id/channels', {
@@ -278,12 +323,20 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
 
     const channelData = rowToChannel(updated);
 
-    // Broadcast channel_updated to members with VIEW_CHANNEL
-    connectionManager.sendToChannel(spaceId, id, {
-      type: 'channel_updated',
-      channel: channelData,
-      spaceId,
-    });
+    // If categoryId changed, permissions may have changed due to different category overrides
+    if (categoryId !== undefined) {
+      broadcastOverrideChange(spaceId, id);
+      if (channel.type === 'voice') {
+        checkVoicePermissions(spaceId);
+      }
+    } else {
+      // Simple broadcast for non-permission-affecting changes
+      connectionManager.sendToChannel(spaceId, id, {
+        type: 'channel_updated',
+        channel: channelData,
+        spaceId,
+      });
+    }
 
     return reply.code(200).send(channelData);
   });
@@ -500,6 +553,149 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── Category Override Endpoints ─────────────────────────────────────────
+
+  // GET /api/categories/:id/overrides
+  app.get<{ Params: { id: string } }>('/api/categories/:id/overrides', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const db = getDb();
+
+    const category = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, id)).get();
+    if (!category) {
+      return reply.code(404).send({ error: 'Category not found', statusCode: 404 });
+    }
+
+    if (!isMember(category.spaceId, request.userId)) {
+      return reply.code(403).send({ error: 'Not a member of this space', statusCode: 403 });
+    }
+
+    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+    }
+
+    const overrides = db.select().from(schema.categoryOverrides)
+      .where(eq(schema.categoryOverrides.categoryId, id))
+      .all();
+
+    return reply.code(200).send(overrides.map(o => ({
+      categoryId: o.categoryId,
+      targetType: o.targetType,
+      targetId: o.targetId,
+      allow: o.allow,
+      deny: o.deny,
+    })));
+  });
+
+  // PUT /api/categories/:id/overrides
+  app.put<{
+    Params: { id: string };
+    Body: { targetType: string; targetId: string; allow: string; deny: string };
+  }>('/api/categories/:id/overrides', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { targetType, targetId, allow, deny } = request.body;
+    const db = getDb();
+
+    if (!targetType || !['role', 'member'].includes(targetType)) {
+      return reply.code(400).send({ error: 'targetType must be "role" or "member"', statusCode: 400 });
+    }
+    if (!targetId || typeof targetId !== 'string') {
+      return reply.code(400).send({ error: 'targetId is required', statusCode: 400 });
+    }
+
+    const category = db.select().from(schema.channelCategories)
+      .where(eq(schema.channelCategories.id, id)).get();
+    if (!category) {
+      return reply.code(404).send({ error: 'Category not found', statusCode: 404 });
+    }
+
+    if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+      return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+    }
+
+    let allowBits: bigint;
+    let denyBits: bigint;
+    try {
+      allowBits = BigInt(allow || '0');
+      denyBits = BigInt(deny || '0');
+    } catch {
+      return reply.code(400).send({ error: 'allow and deny must be valid decimal integer strings', statusCode: 400 });
+    }
+
+    // Privilege escalation guard (matches channel override pattern)
+    const callerPerms = computePermissions(request.userId, category.spaceId);
+    if ((callerPerms & PermissionBits.ADMINISTRATOR) === 0n) {
+      const escalatedAllow = allowBits & ~callerPerms;
+      if (escalatedAllow !== 0n) {
+        return reply.code(403).send({ error: 'Cannot grant permissions you do not possess', statusCode: 403 });
+      }
+      const escalatedDeny = denyBits & ~callerPerms;
+      if (escalatedDeny !== 0n) {
+        return reply.code(403).send({ error: 'Cannot deny permissions you do not possess', statusCode: 403 });
+      }
+    }
+
+    db.transaction((tx) => {
+      tx.delete(schema.categoryOverrides).where(
+        and(
+          eq(schema.categoryOverrides.categoryId, id),
+          eq(schema.categoryOverrides.targetType, targetType),
+          eq(schema.categoryOverrides.targetId, targetId),
+        )
+      ).run();
+
+      tx.insert(schema.categoryOverrides).values({
+        categoryId: id,
+        targetType,
+        targetId,
+        allow: allow || '0',
+        deny: deny || '0',
+      }).run();
+    });
+
+    broadcastCategoryOverrideChange(category.spaceId, id);
+    checkVoicePermissions(category.spaceId);
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // DELETE /api/categories/:id/overrides/:targetType/:targetId
+  app.delete<{ Params: { id: string; targetType: string; targetId: string } }>(
+    '/api/categories/:id/overrides/:targetType/:targetId',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id, targetType, targetId } = request.params;
+      const db = getDb();
+
+      const category = db.select().from(schema.channelCategories)
+        .where(eq(schema.channelCategories.id, id)).get();
+      if (!category) {
+        return reply.code(404).send({ error: 'Category not found', statusCode: 404 });
+      }
+
+      if (!hasPermission(request.userId, category.spaceId, PermissionBits.MANAGE_ROLES)) {
+        return reply.code(403).send({ error: 'Missing MANAGE_ROLES permission', statusCode: 403 });
+      }
+
+      db.delete(schema.categoryOverrides).where(
+        and(
+          eq(schema.categoryOverrides.categoryId, id),
+          eq(schema.categoryOverrides.targetType, targetType),
+          eq(schema.categoryOverrides.targetId, targetId),
+        )
+      ).run();
+
+      broadcastCategoryOverrideChange(category.spaceId, id);
+      checkVoicePermissions(category.spaceId);
+
+      return reply.code(200).send({ success: true });
+    },
+  );
+
   // ─── Channel Category Endpoints ─────────────────────────────────────────────
 
   // POST /api/spaces/:id/categories - Create a category
@@ -608,14 +804,14 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(500).send({ error: 'Failed to update category', statusCode: 500 });
     }
 
-    const categoryData = rowToCategory(updated);
+    const updatedData = { ...rowToCategory(updated), isPrivate: isCategoryPrivate(id, category.spaceId) };
     connectionManager.sendToSpace(category.spaceId, {
       type: 'category_updated',
-      category: categoryData,
+      category: updatedData,
       spaceId: category.spaceId,
     });
 
-    return reply.code(200).send(categoryData);
+    return reply.code(200).send(updatedData);
   });
 
   // DELETE /api/categories/:id - Delete a category
@@ -753,7 +949,10 @@ function broadcastChannelLayout(spaceId: string): void {
   const allCategories = db.select().from(schema.channelCategories)
     .where(eq(schema.channelCategories.spaceId, spaceId)).all();
 
-  const categoryData = allCategories.map(rowToCategory);
+  const categoryData = allCategories.map(c => ({
+    ...rowToCategory(c),
+    isPrivate: isCategoryPrivate(c.id, spaceId),
+  }));
 
   for (const [userId, spaceIds] of connectionManager.getUserSpaceEntries()) {
     if (!spaceIds.has(spaceId)) continue;

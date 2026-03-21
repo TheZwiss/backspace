@@ -301,11 +301,28 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       .from(schema.channelCategories)
       .where(eq(schema.channelCategories.spaceId, id))
       .all();
+
+    // Batch-fetch category overrides for @everyone to determine isPrivate
+    const catEveryoneOverrides = db.select().from(schema.categoryOverrides)
+      .where(and(
+        eq(schema.categoryOverrides.targetType, 'role'),
+        eq(schema.categoryOverrides.targetId, id),
+      ))
+      .all();
+    const privateCategoryIds = new Set<string>();
+    for (const o of catEveryoneOverrides) {
+      const denyBits = BigInt(o.deny || '0');
+      if ((denyBits & PermissionBits.VIEW_CHANNEL) !== 0n) {
+        privateCategoryIds.add(o.categoryId);
+      }
+    }
+
     const categories: ChannelCategory[] = categoryRows.map(c => ({
       id: c.id,
       spaceId: c.spaceId,
       name: c.name,
       position: c.position ?? 0,
+      isPrivate: privateCategoryIds.has(c.id),
       createdAt: c.createdAt,
     }));
 
