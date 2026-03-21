@@ -179,9 +179,21 @@ interface RoleEditViewProps {
 
 function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const roles = useSpaceStore((s) => s.roles);
   const isEveryone = role.id === spaceId;
 
   const [draftName, setDraftName] = useState(role.name);
+  const [nameError, setNameError] = useState('');
+
+  const validateName = (name: string): string => {
+    const trimmed = name.trim();
+    if (!trimmed) return 'Role name cannot be empty';
+    const isDuplicate = roles.some(
+      (r) => r.id !== role.id && r.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    return isDuplicate ? 'A role with this name already exists' : '';
+  };
+
   const [draftColor, setDraftColor] = useState(role.color);
   const [draftPermissions, setDraftPermissions] = useState<bigint>(
     stringToPermissions(role.permissions)
@@ -217,7 +229,12 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save role');
+      const msg = err instanceof Error ? err.message : 'Failed to save role';
+      if (msg.includes('already exists')) {
+        setNameError(msg);
+      } else {
+        setSaveError(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -229,6 +246,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
     setDraftPermissions(stringToPermissions(role.permissions));
     setConfirmDelete(false);
     setSaveError('');
+    setNameError('');
   };
 
   const handleDelete = async () => {
@@ -277,9 +295,16 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
               <input
                 type="text"
                 value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                className="input-standard w-full"
+                onChange={(e) => {
+                  setDraftName(e.target.value);
+                  setNameError(validateName(e.target.value));
+                }}
+                onBlur={() => setNameError(validateName(draftName))}
+                className={`input-standard w-full${nameError ? ' ring-2 ring-accent-rose' : ''}`}
               />
+              {nameError && (
+                <p className="text-xs text-txt-danger mt-1">{nameError}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs text-txt-secondary mb-1.5">
@@ -389,7 +414,7 @@ function RoleEditView({ role, spaceId, onBack, onDeleted }: RoleEditViewProps) {
                   </button>
                   <button
                     onClick={handleSave}
-                    disabled={saving || (!isEveryone && !draftName.trim())}
+                    disabled={saving || (!isEveryone && !draftName.trim()) || !!nameError}
                     className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Save'}
