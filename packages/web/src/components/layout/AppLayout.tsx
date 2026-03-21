@@ -14,6 +14,7 @@ import { InviteModal } from '../modals/InviteModal';
 import { UserSettingsModal } from '../modals/UserSettings';
 import { SpaceSettingsModal } from '../modals/SpaceSettings';
 import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
+import { CategorySettingsModal } from '../modals/CategorySettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
 import { UserProfileModal } from '../modals/UserProfileModal';
@@ -289,6 +290,7 @@ export function AppLayout() {
         {/* UserSettings is a pushed screen on mobile (MobileSettingsScreen), not a modal */}
         <SpaceSettingsModal />
         <ChannelSettingsModal />
+        <CategorySettingsModal />
         <NewDmModal />
         <AddDmMemberModal />
         <UserProfileModal />
@@ -329,6 +331,7 @@ export function AppLayout() {
       <UserSettingsModal />
       <SpaceSettingsModal />
       <ChannelSettingsModal />
+      <CategorySettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
       <UserProfileModal />
