@@ -1,7 +1,7 @@
 import path from 'path';
 import type { FastifyInstance } from 'fastify';
 import { eq, and, inArray } from 'drizzle-orm';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isMember, isSpaceOwner, isBanned, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
@@ -1010,11 +1010,23 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       permStr = permissionsToString(DEFAULT_EVERYONE_PERMISSIONS);
     }
 
+    // Trim and validate name
+    const roleName = (name || 'new role').trim() || 'new role';
+
+    // Check for case-insensitive duplicate name within the space
+    const rawDb = getRawDb();
+    const duplicate = rawDb.prepare(
+      'SELECT id FROM roles WHERE space_id = ? AND name = ? COLLATE NOCASE'
+    ).get(id, roleName);
+    if (duplicate) {
+      return reply.code(409).send({ error: 'A role with this name already exists' });
+    }
+
     const roleId = generateSnowflake();
     db.insert(schema.roles).values({
       id: roleId,
       spaceId: id,
-      name: name || 'new role',
+      name: roleName,
       color: color || '#b9bbbe',
       position: 0,
       permissions: permStr,
@@ -1046,7 +1058,21 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const updates: Partial<typeof schema.roles.$inferInsert> = {};
-    if (name !== undefined) updates.name = name;
+    if (name !== undefined) {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return reply.code(400).send({ error: 'Role name cannot be empty' });
+      }
+      // Check for case-insensitive duplicate name within the space
+      const rawDb = getRawDb();
+      const duplicate = rawDb.prepare(
+        'SELECT id FROM roles WHERE space_id = ? AND name = ? COLLATE NOCASE AND id != ?'
+      ).get(id, trimmed, roleId);
+      if (duplicate) {
+        return reply.code(409).send({ error: 'A role with this name already exists' });
+      }
+      updates.name = trimmed;
+    }
     if (color !== undefined) updates.color = color;
     if (position !== undefined) updates.position = position;
 
