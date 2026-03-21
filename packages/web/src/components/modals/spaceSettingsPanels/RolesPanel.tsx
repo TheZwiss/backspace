@@ -112,6 +112,7 @@ export function RolesPanel({ spaceId }: RolesPanelProps) {
     }
     return (
       <RoleEditView
+        key={editingRoleId}
         role={role}
         spaceId={spaceId}
         onBack={() => setEditingRoleId(null)}
