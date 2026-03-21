@@ -202,6 +202,16 @@ export const channelOverrides = sqliteTable('channel_overrides', {
   pk: primaryKey({ columns: [table.channelId, table.targetType, table.targetId] }),
 }));
 
+export const categoryOverrides = sqliteTable('category_overrides', {
+  categoryId: text('category_id').notNull().references(() => channelCategories.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(),
+  targetId: text('target_id').notNull(),
+  allow: text('allow').notNull().default('0'),
+  deny: text('deny').notNull().default('0'),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.categoryId, table.targetType, table.targetId] }),
+}));
+
 export const readStates = sqliteTable('read_states', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   channelId: text('channel_id').notNull(),

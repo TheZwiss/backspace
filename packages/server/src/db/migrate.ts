@@ -368,6 +368,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Clean up stale attachment records for profile images ───────────────
   migrateCleanupProfileAttachmentRecords(db);
 
+  // ─── Add category_overrides table ────────────────────────────────────────
+  migrateCategoryOverrides(db);
+
   console.log('Migrations complete.');
 }
 
@@ -1001,6 +1004,26 @@ function migrateCleanupProfileAttachmentRecords(db: Database.Database): void {
   }
 
   db.prepare('UPDATE instance_settings SET profile_attachments_cleaned = 1 WHERE id = 1').run();
+}
+
+function migrateCategoryOverrides(db: Database.Database): void {
+  const exists = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='category_overrides'"
+  ).get();
+  if (exists) return;
+
+  console.log('Migrating: Adding category_overrides table...');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS category_overrides (
+        category_id TEXT NOT NULL REFERENCES channel_categories(id) ON DELETE CASCADE,
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        allow TEXT NOT NULL DEFAULT '0',
+        deny TEXT NOT NULL DEFAULT '0',
+        PRIMARY KEY (category_id, target_type, target_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_category_overrides_category_id ON category_overrides(category_id);
+  `);
 }
 
 /**
