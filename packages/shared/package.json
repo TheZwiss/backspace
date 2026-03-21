@@ -10,7 +10,9 @@
     "./src/permissions": "./src/permissions.ts",
     "./src/permissions.js": "./src/permissions.ts",
     "./src/activities": "./src/activities.ts",
-    "./src/activities.js": "./src/activities.ts"
+    "./src/activities.js": "./src/activities.ts",
+    "./src/constants": "./src/constants.ts",
+    "./src/constants.js": "./src/constants.ts"
   },
   "scripts": {
     "build": "tsc",
