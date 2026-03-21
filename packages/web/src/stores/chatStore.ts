@@ -261,7 +261,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         id: tempId,
         channelId: isDm ? '' : channelId,
         userId: currentUser.id,
-        content,
+        content: content || null,
         replyToId: replyToId ?? null,
         editedAt: null,
         createdAt: Date.now(),
@@ -370,9 +370,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Don't require userId match — for federated messages the home user ID
       // differs from the replicated user ID, but content match is sufficient
       // since temp messages are unique within the short optimistic window.
+      // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
       const filtered = current.filter(m => {
         if (!m.id.startsWith('temp_')) return true;
-        return m.content !== normalizedMessage.content;
+        return (m.content || null) !== (normalizedMessage.content || null);
       });
       let updated = [...filtered, normalizedMessage];
       // Cap per-channel messages to prevent memory growth
@@ -392,10 +393,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Avoid duplicates
       if (current.find(m => m.id === normalizedMessage.id)) return state;
       // Remove any optimistic temp message with same content (no userId check —
-      // federated messages arrive with a different replicated user ID)
+      // federated messages arrive with a different replicated user ID).
+      // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
       const filtered = current.filter(m => {
         if (!m.id.startsWith('temp_')) return true;
-        return m.content !== normalizedMessage.content;
+        return (m.content || null) !== (normalizedMessage.content || null);
       });
       let updated = [...filtered, normalizedMessage];
       // Cap per-channel messages to prevent memory growth
