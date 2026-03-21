@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('backspace', {
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
     ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
   },
-  onUpdateError: (callback: (error: string) => void) => {
+  onUpdateError: (callback: (error: { message: string; releaseUrl: string }) => void) => {
     ipcRenderer.on('update-error', (_event, error) => callback(error));
   },
   installUpdate: () => {
@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('backspace', {
   checkForUpdates: () => {
     ipcRenderer.send('check-for-updates');
   },
+  getVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // Window focus
   onWindowFocusChange: (callback: (focused: boolean) => void) => {

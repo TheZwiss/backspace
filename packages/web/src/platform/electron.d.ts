@@ -24,9 +24,10 @@ interface BackspaceElectronAPI {
   // Auto-update (Task 2.1)
   onUpdateAvailable: (callback: (info: { version: string }) => void) => void;
   onUpdateDownloaded: (callback: (info: { version: string }) => void) => void;
-  onUpdateError: (callback: (error: string) => void) => void;
+  onUpdateError: (callback: (error: { message: string; releaseUrl: string }) => void) => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
+  getVersion: () => Promise<string>;
 
   // Window focus (Task 2.2)
   onWindowFocusChange: (callback: (focused: boolean) => void) => void;
