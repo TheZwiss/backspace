@@ -68,26 +68,130 @@ export function computePermissions(userId: string, spaceId: string, channelId?: 
   // If no channel, return space-level perms
   if (!channelId) return base;
 
-  // 4. Channel overrides
-  const overrides = db.select().from(schema.channelOverrides)
+  // Look up the channel to get its categoryId
+  const channel = db.select().from(schema.channels).where(eq(schema.channels.id, channelId)).get();
+  if (!channel) return base;
+
+  // Fetch category overrides (if channel is in a category)
+  let catOverrides: typeof schema.categoryOverrides.$inferSelect[] = [];
+  if (channel.categoryId) {
+    catOverrides = db.select().from(schema.categoryOverrides)
+      .where(eq(schema.categoryOverrides.categoryId, channel.categoryId))
+      .all();
+  }
+
+  // Fetch channel overrides
+  const chanOverrides = db.select().from(schema.channelOverrides)
     .where(eq(schema.channelOverrides.channelId, channelId))
     .all();
 
-  if (overrides.length === 0) return base;
+  // If neither has overrides, return base
+  if (catOverrides.length === 0 && chanOverrides.length === 0) return base;
 
-  // 4a. @everyone role override (target_type='role', target_id=spaceId)
-  const everyoneOverride = overrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
-  if (everyoneOverride) {
-    const deny = stringToPermissions(everyoneOverride.deny);
-    const allow = stringToPermissions(everyoneOverride.allow);
+  // ─── Interleaved Resolution ──────────────────────────────────────────
+  // Within each tier (@everyone, roles, member), apply category first,
+  // then channel. Channel bits win for any bit they explicitly set.
+
+  // Tier 1: @everyone override (targetType='role', targetId=spaceId)
+  const catEveryoneOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
+  if (catEveryoneOverride) {
+    const deny = stringToPermissions(catEveryoneOverride.deny);
+    const allow = stringToPermissions(catEveryoneOverride.allow);
+    base = (base & ~deny) | allow;
+  }
+  const chanEveryoneOverride = chanOverrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
+  if (chanEveryoneOverride) {
+    const deny = stringToPermissions(chanEveryoneOverride.deny);
+    const allow = stringToPermissions(chanEveryoneOverride.allow);
     base = (base & ~deny) | allow;
   }
 
-  // 4b. Role overrides (combined for all assigned roles)
+  // Tier 2: Role overrides (combined for all assigned roles)
+  let catCombinedAllow = 0n;
+  let catCombinedDeny = 0n;
+  for (const roleId of assignedRoleIds) {
+    const roleOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === roleId);
+    if (roleOverride) {
+      catCombinedAllow |= stringToPermissions(roleOverride.allow);
+      catCombinedDeny |= stringToPermissions(roleOverride.deny);
+    }
+  }
+  base = (base & ~catCombinedDeny) | catCombinedAllow;
+
+  let chanCombinedAllow = 0n;
+  let chanCombinedDeny = 0n;
+  for (const roleId of assignedRoleIds) {
+    const roleOverride = chanOverrides.find(o => o.targetType === 'role' && o.targetId === roleId);
+    if (roleOverride) {
+      chanCombinedAllow |= stringToPermissions(roleOverride.allow);
+      chanCombinedDeny |= stringToPermissions(roleOverride.deny);
+    }
+  }
+  base = (base & ~chanCombinedDeny) | chanCombinedAllow;
+
+  // Tier 3: Member-specific override
+  const catMemberOverride = catOverrides.find(o => o.targetType === 'member' && o.targetId === userId);
+  if (catMemberOverride) {
+    const deny = stringToPermissions(catMemberOverride.deny);
+    const allow = stringToPermissions(catMemberOverride.allow);
+    base = (base & ~deny) | allow;
+  }
+  const chanMemberOverride = chanOverrides.find(o => o.targetType === 'member' && o.targetId === userId);
+  if (chanMemberOverride) {
+    const deny = stringToPermissions(chanMemberOverride.deny);
+    const allow = stringToPermissions(chanMemberOverride.allow);
+    base = (base & ~deny) | allow;
+  }
+
+  return base;
+}
+
+/**
+ * Compute permissions at the category level (no channel step).
+ * Used for determining if a category is "private" for a user.
+ */
+export function computeCategoryPermissions(userId: string, spaceId: string, categoryId: string): bigint {
+  const db = getDb();
+
+  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
+  if (!space) return 0n;
+  if (space.ownerId === userId) return ALL_PERMISSIONS;
+
+  const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (userRow?.isAdmin === 1) return ALL_PERMISSIONS;
+
+  const everyoneRole = db.select().from(schema.roles)
+    .where(and(eq(schema.roles.id, spaceId), eq(schema.roles.spaceId, spaceId)))
+    .get();
+  let base = everyoneRole ? stringToPermissions(everyoneRole.permissions) : 0n;
+
+  const memberRoleRows = db.select().from(schema.memberRoles)
+    .where(and(eq(schema.memberRoles.spaceId, spaceId), eq(schema.memberRoles.userId, userId)))
+    .all();
+  const assignedRoleIds = memberRoleRows.map(mr => mr.roleId);
+
+  for (const roleId of assignedRoleIds) {
+    const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
+    if (role) base |= stringToPermissions(role.permissions);
+  }
+
+  if ((base & PermissionBits.ADMINISTRATOR) !== 0n) return ALL_PERMISSIONS;
+
+  const catOverrides = db.select().from(schema.categoryOverrides)
+    .where(eq(schema.categoryOverrides.categoryId, categoryId))
+    .all();
+
+  if (catOverrides.length === 0) return base;
+
+  const everyoneOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
+  if (everyoneOverride) {
+    base = (base & ~stringToPermissions(everyoneOverride.deny)) | stringToPermissions(everyoneOverride.allow);
+  }
+
   let combinedAllow = 0n;
   let combinedDeny = 0n;
   for (const roleId of assignedRoleIds) {
-    const roleOverride = overrides.find(o => o.targetType === 'role' && o.targetId === roleId);
+    const roleOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === roleId);
     if (roleOverride) {
       combinedAllow |= stringToPermissions(roleOverride.allow);
       combinedDeny |= stringToPermissions(roleOverride.deny);
@@ -95,12 +199,9 @@ export function computePermissions(userId: string, spaceId: string, channelId?: 
   }
   base = (base & ~combinedDeny) | combinedAllow;
 
-  // 4c. Member-specific override
-  const memberOverride = overrides.find(o => o.targetType === 'member' && o.targetId === userId);
+  const memberOverride = catOverrides.find(o => o.targetType === 'member' && o.targetId === userId);
   if (memberOverride) {
-    const deny = stringToPermissions(memberOverride.deny);
-    const allow = stringToPermissions(memberOverride.allow);
-    base = (base & ~deny) | allow;
+    base = (base & ~stringToPermissions(memberOverride.deny)) | stringToPermissions(memberOverride.allow);
   }
 
   return base;
