@@ -4,17 +4,22 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { config } from '../config.js';
 import type { InstanceStreamingLimits, InstanceAdminSettings } from '@backspace/shared';
-
-const VALID_RESOLUTIONS = [540, 720, 1080];
-const VALID_FRAMERATES = [30, 45, 60];
+import { STANDARD_RESOLUTIONS, STANDARD_FRAMERATES } from '@backspace/shared/src/constants.js';
 
 function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): InstanceStreamingLimits {
   return {
     maxBitrateKbps: row.maxBitrateKbps,
     minBitrateKbps: row.minBitrateKbps,
     bitrateStepKbps: row.bitrateStepKbps,
-    allowedResolutions: row.allowedResolutions.split(',').map(Number).filter((n) => VALID_RESOLUTIONS.includes(n)),
-    allowedFramerates: row.allowedFramerates.split(',').map(Number).filter((n) => VALID_FRAMERATES.includes(n)),
+    allowedResolutions: row.allowedResolutions.split(',')
+      .map((s) => s.trim())
+      .map((s) => s === 'native' ? 'native' as const : Number(s))
+      .filter((v): v is number | 'native' =>
+        v === 'native' || (typeof v === 'number' && !isNaN(v) && (STANDARD_RESOLUTIONS as readonly number[]).includes(v))
+      ),
+    allowedFramerates: row.allowedFramerates.split(',')
+      .map(Number)
+      .filter((n) => (STANDARD_FRAMERATES as readonly number[]).includes(n)),
     maxResolution: row.maxResolution,
     maxFramerate: row.maxFramerate,
     discoveryEnabled: row.discoveryEnabled === 1,
@@ -64,34 +69,39 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       if (!Array.isArray(body.allowedResolutions) || body.allowedResolutions.length === 0) {
         return reply.code(400).send({ error: 'allowedResolutions must be a non-empty array', statusCode: 400 });
       }
-      const invalid = body.allowedResolutions.filter((r) => !VALID_RESOLUTIONS.includes(r));
+      const invalid = body.allowedResolutions.filter((r) =>
+        r !== 'native' && !(STANDARD_RESOLUTIONS as readonly number[]).includes(r as number)
+      );
       if (invalid.length > 0) {
-        return reply.code(400).send({ error: `Invalid resolutions: ${invalid.join(', ')}. Allowed: ${VALID_RESOLUTIONS.join(', ')}`, statusCode: 400 });
+        return reply.code(400).send({ error: `Invalid resolutions: ${invalid.join(', ')}. Allowed: ${[...STANDARD_RESOLUTIONS, 'native'].join(', ')}`, statusCode: 400 });
       }
-      updateData.allowedResolutions = body.allowedResolutions.sort((a, b) => a - b).join(',');
+      // Serialize: numbers sorted ascending, 'native' always last
+      const nums = body.allowedResolutions.filter((r): r is number => r !== 'native').sort((a, b) => a - b);
+      const hasNative = body.allowedResolutions.includes('native');
+      updateData.allowedResolutions = [...nums, ...(hasNative ? ['native'] : [])].join(',');
     }
 
     if (body.allowedFramerates !== undefined) {
       if (!Array.isArray(body.allowedFramerates) || body.allowedFramerates.length === 0) {
         return reply.code(400).send({ error: 'allowedFramerates must be a non-empty array', statusCode: 400 });
       }
-      const invalid = body.allowedFramerates.filter((f) => !VALID_FRAMERATES.includes(f));
+      const invalid = body.allowedFramerates.filter((f) => !(STANDARD_FRAMERATES as readonly number[]).includes(f));
       if (invalid.length > 0) {
-        return reply.code(400).send({ error: `Invalid framerates: ${invalid.join(', ')}. Allowed: ${VALID_FRAMERATES.join(', ')}`, statusCode: 400 });
+        return reply.code(400).send({ error: `Invalid framerates: ${invalid.join(', ')}. Allowed: ${STANDARD_FRAMERATES.join(', ')}`, statusCode: 400 });
       }
       updateData.allowedFramerates = body.allowedFramerates.sort((a, b) => a - b).join(',');
     }
 
     if (body.maxResolution !== undefined) {
-      if (!VALID_RESOLUTIONS.includes(body.maxResolution)) {
-        return reply.code(400).send({ error: `maxResolution must be one of: ${VALID_RESOLUTIONS.join(', ')}`, statusCode: 400 });
+      if (!(STANDARD_RESOLUTIONS as readonly number[]).includes(body.maxResolution)) {
+        return reply.code(400).send({ error: `maxResolution must be one of: ${STANDARD_RESOLUTIONS.join(', ')}`, statusCode: 400 });
       }
       updateData.maxResolution = body.maxResolution;
     }
 
     if (body.maxFramerate !== undefined) {
-      if (!VALID_FRAMERATES.includes(body.maxFramerate)) {
-        return reply.code(400).send({ error: `maxFramerate must be one of: ${VALID_FRAMERATES.join(', ')}`, statusCode: 400 });
+      if (!(STANDARD_FRAMERATES as readonly number[]).includes(body.maxFramerate)) {
+        return reply.code(400).send({ error: `maxFramerate must be one of: ${STANDARD_FRAMERATES.join(', ')}`, statusCode: 400 });
       }
       updateData.maxFramerate = body.maxFramerate;
     }
