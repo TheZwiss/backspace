@@ -1,14 +1,26 @@
 import { useRef, useCallback, useLayoutEffect } from 'react';
 import { useSettingsSectionsContext, type SettingsSection } from '../components/modals/SettingsSectionsContext';
 
-export function useSettingsSections(sections: SettingsSection[]) {
+interface UseSettingsSectionsOptions {
+  /**
+   * Tab mode: sidebar sub-links switch tabs instead of scrolling.
+   * When provided, clicking a sub-link calls onNavigate(id) instead of scrollIntoView.
+   * No IntersectionObserver is set up — the caller manages activeSection.
+   */
+  onNavigate?: (id: string) => void;
+  /** In tab mode, the currently active tab id (drives sidebar highlight) */
+  activeTab?: string;
+}
+
+export function useSettingsSections(sections: SettingsSection[], options?: UseSettingsSectionsOptions) {
   const ctx = useSettingsSectionsContext();
-  // Store ctx setters in refs to avoid depending on the ctx object in effects.
-  // The ctx object reference changes when any context value changes, which would
-  // cause infinite loops if used as an effect dependency (effect sets state →
-  // provider re-renders → new ctx object → effect re-runs).
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
+
+  const onNavigateRef = useRef(options?.onNavigate);
+  onNavigateRef.current = options?.onNavigate;
+
+  const isTabMode = !!options?.onNavigate;
 
   const scrollContainerRef = ctx?.scrollContainerRef ?? null;
   const sectionElementsRef = useRef(new Map<string, HTMLElement>());
@@ -25,8 +37,22 @@ export function useSettingsSections(sections: SettingsSection[]) {
     };
   }, [sections]);
 
-  // scrollToSection implementation
-  const scrollToSection = useCallback((id: string) => {
+  // In tab mode, sync activeTab to context
+  useLayoutEffect(() => {
+    if (isTabMode && options?.activeTab) {
+      ctxRef.current?.setActiveSection(options.activeTab);
+    }
+  }, [isTabMode, options?.activeTab]);
+
+  // navigateToSection: either calls onNavigate callback (tab mode) or scrollIntoView (scroll mode)
+  const navigateToSection = useCallback((id: string) => {
+    if (onNavigateRef.current) {
+      // Tab mode: delegate to caller
+      onNavigateRef.current(id);
+      return;
+    }
+
+    // Scroll mode: smooth scroll to element
     const el = sectionElementsRef.current.get(id);
     if (!el) return;
 
@@ -52,13 +78,15 @@ export function useSettingsSections(sections: SettingsSection[]) {
     }
   }, [scrollContainerRef]);
 
-  // Register scrollToSection into context
+  // Register navigateToSection into context
   useLayoutEffect(() => {
-    ctxRef.current?.setScrollToSection(scrollToSection);
-  }, [scrollToSection]);
+    ctxRef.current?.setScrollToSection(navigateToSection);
+  }, [navigateToSection]);
 
-  // Set up IntersectionObserver
+  // Set up IntersectionObserver (scroll mode only)
   useLayoutEffect(() => {
+    if (isTabMode) return; // No scroll-spy in tab mode
+
     const container = scrollContainerRef?.current;
     if (!container || sections.length === 0) return;
 
@@ -80,7 +108,6 @@ export function useSettingsSections(sections: SettingsSection[]) {
       }
     );
 
-    // Observe all registered section elements
     sectionElementsRef.current.forEach((el) => {
       observerRef.current?.observe(el);
     });
@@ -89,7 +116,7 @@ export function useSettingsSections(sections: SettingsSection[]) {
       observerRef.current?.disconnect();
       observerRef.current = null;
     };
-  }, [sections, scrollContainerRef]);
+  }, [sections, scrollContainerRef, isTabMode]);
 
   // Stable callback ref factory (cached per id to avoid re-attach)
   const sectionRef = useCallback((id: string) => {
@@ -113,6 +140,6 @@ export function useSettingsSections(sections: SettingsSection[]) {
 
   return {
     sectionRef,
-    scrollToSection,
+    scrollToSection: navigateToSection,
   };
 }

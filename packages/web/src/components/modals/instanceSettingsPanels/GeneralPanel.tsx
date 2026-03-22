@@ -1,76 +1,73 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { Toggle } from '../../ui/Toggle';
+import type { InstanceAdminSettings } from '@backspace/shared';
 
 export function GeneralPanel() {
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
-  const [instanceName, setInstanceName] = useState('');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [draft, setDraft] = useState<InstanceAdminSettings | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [gifKeyDraft, setGifKeyDraft] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [gifKeyDirty, setGifKeyDirty] = useState(false);
+  const [gifKeyDraft, setGifKeyDraft] = useState('');
 
   useEffect(() => {
     if (instanceSettings) {
-      setInstanceName(instanceSettings.instanceName);
+      setDraft({ ...instanceSettings });
       setGifKeyDraft('');
       setGifKeyDirty(false);
     }
   }, [instanceSettings]);
 
-  const autoSave = useCallback(async (payload: Record<string, unknown>) => {
-    setSaveStatus('saving');
+  if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
+
+  const baseChanges = instanceSettings && draft
+    ? draft.instanceName !== instanceSettings.instanceName ||
+      draft.registrationOpen !== instanceSettings.registrationOpen ||
+      draft.discoveryEnabled !== instanceSettings.discoveryEnabled
+    : false;
+  const hasChanges = baseChanges || gifKeyDirty;
+
+  const handleSave = async () => {
+    setSaving(true);
     setSaveError('');
+    setSaveSuccess(false);
     try {
+      const payload: Partial<InstanceAdminSettings> = {
+        instanceName: draft!.instanceName,
+        registrationOpen: draft!.registrationOpen,
+        discoveryEnabled: draft!.discoveryEnabled,
+      };
+      if (gifKeyDirty) {
+        payload.gifApiKey = gifKeyDraft;
+      }
       await updateInstanceSettings(payload);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save');
-      setSaveStatus('error');
-      setTimeout(() => { setSaveStatus('idle'); setSaveError(''); }, 3000);
-    }
-  }, [updateInstanceSettings]);
-
-  if (!instanceSettings) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
-
-  const handleToggle = (key: string, value: boolean) => {
-    autoSave({ [key]: value });
-  };
-
-  const handleInstanceNameBlur = () => {
-    const trimmed = instanceName.trim();
-    if (trimmed && trimmed !== instanceSettings.instanceName) {
-      autoSave({ instanceName: trimmed });
-    }
-  };
-
-  const handleGifKeyBlur = () => {
-    if (gifKeyDirty) {
-      autoSave({ gifApiKey: gifKeyDraft });
       setGifKeyDirty(false);
       setGifKeyDraft('');
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleClearGifKey = () => {
-    autoSave({ gifApiKey: '' });
+  const handleReset = () => {
+    if (instanceSettings) setDraft({ ...instanceSettings });
+    setGifKeyDirty(false);
+    setGifKeyDraft('');
+    setSaveError('');
   };
 
   return (
-    <div className="space-y-5">
-      {/* Save status indicator */}
-      {saveStatus === 'saving' && (
-        <div className="text-xs text-txt-tertiary animate-pulse">Saving...</div>
-      )}
-      {saveStatus === 'saved' && (
-        <div className="text-xs text-status-online">Saved</div>
-      )}
-      {saveStatus === 'error' && (
-        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
-      )}
+    <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+      <div className="text-xs text-txt-tertiary">
+        Configure your Backspace instance. These settings affect all users.
+      </div>
 
       {/* Instance Name */}
       <div>
@@ -79,13 +76,12 @@ export function GeneralPanel() {
         <div className="rounded-lg bg-white/[0.02] p-3.5">
           <input
             type="text"
-            value={instanceName}
-            onChange={(e) => setInstanceName(e.target.value.slice(0, 32))}
-            onBlur={handleInstanceNameBlur}
+            value={draft.instanceName}
+            onChange={(e) => setDraft({ ...draft, instanceName: e.target.value.slice(0, 32) })}
             placeholder="Backspace"
             className="input-standard w-full"
           />
-          <div className="text-[11px] text-txt-tertiary text-right mt-1">{instanceName.length}/32</div>
+          <div className="text-[11px] text-txt-tertiary text-right mt-1">{draft.instanceName.length}/32</div>
         </div>
       </div>
 
@@ -98,7 +94,7 @@ export function GeneralPanel() {
               <div className="text-sm font-medium text-txt-primary">Open Registration</div>
               <div className="text-xs text-txt-tertiary mt-0.5">Allow new users to create accounts on this instance</div>
             </div>
-            <Toggle enabled={instanceSettings.registrationOpen} onChange={(v) => handleToggle('registrationOpen', v)} />
+            <Toggle enabled={draft.registrationOpen} onChange={(v) => setDraft({ ...draft, registrationOpen: v })} />
           </label>
         </div>
       </div>
@@ -112,7 +108,7 @@ export function GeneralPanel() {
               <div className="text-sm font-medium text-txt-primary">Space Discovery</div>
               <div className="text-xs text-txt-tertiary mt-0.5">Allow spaces to appear in the public Explore page</div>
             </div>
-            <Toggle enabled={instanceSettings.discoveryEnabled} onChange={(v) => handleToggle('discoveryEnabled', v)} />
+            <Toggle enabled={draft.discoveryEnabled} onChange={(v) => setDraft({ ...draft, discoveryEnabled: v })} />
           </label>
         </div>
       </div>
@@ -128,20 +124,19 @@ export function GeneralPanel() {
             type="password"
             value={gifKeyDirty ? gifKeyDraft : ''}
             onChange={(e) => { setGifKeyDraft(e.target.value); setGifKeyDirty(true); }}
-            onBlur={handleGifKeyBlur}
-            placeholder={instanceSettings.gifEnabled ? 'Key saved — enter new key to replace' : 'Klipy API key'}
+            placeholder={draft.gifEnabled ? 'Key saved — enter new key to replace' : 'Klipy API key'}
             className="input-standard w-full"
             autoComplete="off"
           />
           <div className="flex items-center gap-2">
             <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded ${
-              instanceSettings.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
+              draft.gifEnabled ? 'bg-status-online/15 text-status-online' : 'bg-white/5 text-txt-tertiary'
             }`}>
-              {instanceSettings.gifEnabled ? 'Enabled' : 'Not configured'}
+              {draft.gifEnabled ? 'Enabled' : 'Not configured'}
             </span>
-            {instanceSettings.gifEnabled && !gifKeyDirty && (
+            {draft.gifEnabled && !gifKeyDirty && (
               <button
-                onClick={handleClearGifKey}
+                onClick={() => { setGifKeyDraft(''); setGifKeyDirty(true); }}
                 className="text-[11px] text-txt-tertiary hover:text-txt-danger transition-colors"
               >
                 Clear key
@@ -150,6 +145,37 @@ export function GeneralPanel() {
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Status messages */}
+      {saveError && (
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
+      )}
+      {saveSuccess && (
+        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
+      )}
+
+      {/* Save / Reset bar */}
+      {hasChanges && (
+        <div className="sticky bottom-0 z-10 pointer-events-none">
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
+              <button
+                onClick={handleReset}
+                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </form>
   );
 }
