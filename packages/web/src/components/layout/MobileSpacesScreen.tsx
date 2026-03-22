@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { Channel } from '@backspace/shared';
+import { Mascot } from '../ui/Mascot';
 
 export function MobileSpacesScreen() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -308,8 +309,9 @@ export function MobileSpacesScreen() {
 
           {/* Empty state */}
           {spaceChannels.length === 0 && selectedSpaceId && (
-            <div className="flex items-center justify-center h-32 text-txt-tertiary text-sm">
-              No channels yet
+            <div className="flex flex-col items-center justify-center h-32 opacity-80">
+              <Mascot state="idle" className="w-20 h-20 mb-2" />
+              <p className="text-txt-tertiary text-sm">No channels yet.</p>
             </div>
           )}
         </div>

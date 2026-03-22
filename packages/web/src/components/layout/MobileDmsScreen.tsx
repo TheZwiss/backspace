@@ -5,6 +5,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
+import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
 
@@ -180,8 +181,9 @@ export function MobileDmsScreen() {
         })}
 
         {sortedDms.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-40 text-txt-tertiary text-sm">
-            No conversations yet
+          <div className="flex flex-col items-center justify-center h-40 opacity-80">
+            <Mascot state="sleeping" className="w-20 h-20 mb-2" />
+            <p className="text-txt-tertiary text-sm">No conversations yet.</p>
           </div>
         )}
       </div>
