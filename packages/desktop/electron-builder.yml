@@ -6,7 +6,8 @@ directories:
 files:
   - dist/**/*
   - resources/**/*
-  - "!node_modules"
+asarUnpack:
+  - "**/*.node"
 publish:
   - provider: github
     owner: TheZwiss
