@@ -8,8 +8,42 @@ import { VoicePanel } from './settingsPanels/VoicePanel';
 import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
 import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
+import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 
 type SettingsTab = 'account' | 'voice' | 'privacy' | 'connections' | 'instance';
+
+function SidebarSubLinks() {
+  const ctx = useSettingsSectionsContext();
+  if (!ctx || ctx.sections.length === 0) return null;
+
+  return (
+    <div className="overflow-hidden">
+      {ctx.sections.map((section) => (
+        <button
+          key={section.id}
+          onClick={() => ctx.scrollToSection(section.id)}
+          className={`w-full text-left pl-6 py-1 text-xs rounded-md transition-colors ${
+            ctx.activeSection === section.id
+              ? 'text-txt-primary'
+              : 'text-txt-tertiary hover:text-txt-secondary'
+          }`}
+          aria-current={ctx.activeSection === section.id ? 'true' : undefined}
+        >
+          {section.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SettingsScrollContainer({ children }: { children: React.ReactNode }) {
+  const ctx = useSettingsSectionsContext();
+  return (
+    <div ref={ctx?.scrollContainerRef} className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
+      {children}
+    </div>
+  );
+}
 
 export function UserSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
@@ -61,6 +95,7 @@ export function UserSettingsModal() {
 
   return (
     <Modal isOpen={isOpen} onClose={closeModal} size="settings" mobileStyle="fullscreen">
+      <SettingsSectionsProvider>
       <div className="flex h-full">
         {/* Desktop Sidebar */}
         <div className="hidden md:flex w-52 flex-shrink-0 flex-col p-4 gap-3">
@@ -94,6 +129,7 @@ export function UserSettingsModal() {
                 <div className="border-t border-white/[0.04] my-2 mx-2" />
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Administration</div>
                 <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>Instance</button>
+                {tab === 'instance' && <SidebarSubLinks />}
               </>
             )}
 
@@ -157,7 +193,7 @@ export function UserSettingsModal() {
 
         {/* Content area (desktop always, mobile only when viewing content) */}
         {(!isMobile || mobileView === 'content') && (
-          <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
+          <SettingsScrollContainer>
             <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
@@ -178,9 +214,10 @@ export function UserSettingsModal() {
               {tab === 'connections' && <ConnectionsPanel />}
               {tab === 'instance' && isAdmin && <InstancePanel />}
             </div>
-          </div>
+          </SettingsScrollContainer>
         )}
       </div>
+      </SettingsSectionsProvider>
     </Modal>
   );
 }
