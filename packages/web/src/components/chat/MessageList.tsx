@@ -261,8 +261,19 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
   if (isLoading && messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <LoadingSpinner />
+      <div className="flex-1 flex flex-col justify-end px-4 pb-6">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
+            <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
+            <div className="flex-1 space-y-2 pt-1">
+              <div className="skeleton skeleton-bar" style={{ width: `${20 + (i * 7) % 20}%`, animationDelay: `${i * 0.15}s` }} />
+              <div className="skeleton skeleton-bar h-2.5" style={{ width: `${50 + (i * 13) % 40}%`, animationDelay: `${i * 0.15}s` }} />
+              {i % 2 === 0 && (
+                <div className="skeleton skeleton-bar h-2.5" style={{ width: `${30 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
