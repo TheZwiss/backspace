@@ -626,9 +626,8 @@ export function ChannelSidebar() {
 
       {/* Channels — dynamic category layout */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
-        {/* Skeleton loading state */}
-        {isLoadingSpace && (
-          <div className="px-2 pt-3">
+        {isLoadingSpace ? (
+          <div className="px-2 pt-3" role="status" aria-label="Loading channels">
             {/* Category group 1 */}
             <div className="skeleton skeleton-bar h-2 w-[45%] ml-2 mb-3" />
             {Array.from({ length: 3 }, (_, i) => (
@@ -646,9 +645,8 @@ export function ChannelSidebar() {
               </div>
             ))}
           </div>
-        )}
+        ) : (<>
         {/* Uncategorized channels */}
-        {!isLoadingSpace && (<>
         {uncategorizedChannels.length > 0 && (
           <div className="mb-[19px]">
             {canManageChannels && sortedCategories.length === 0 && (

@@ -260,7 +260,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
   if (isLoading && messages.length === 0) {
     return (
-      <div className="flex-1 flex flex-col justify-end px-4 pb-6">
+      <div className="flex-1 flex flex-col justify-end px-4 pb-6" role="status" aria-label="Loading messages">
         {Array.from({ length: 7 }, (_, i) => (
           <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
             <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
@@ -285,7 +285,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         onScroll={handleScroll}
       >
         {isLoadingMore && (
-          <div className="px-4 pt-4">
+          <div className="px-4 pt-4" role="status" aria-label="Loading older messages">
             {Array.from({ length: 3 }, (_, i) => (
               <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
                 <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />

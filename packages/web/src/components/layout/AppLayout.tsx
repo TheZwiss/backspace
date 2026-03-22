@@ -264,7 +264,7 @@ export function AppLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="h-full flex bg-surface-base">
+      <div className="h-full flex bg-surface-base" role="status" aria-label="Loading Backspace">
         {/* Space strip */}
         <div className="w-[72px] hidden md:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
           {Array.from({ length: 5 }, (_, i) => (
