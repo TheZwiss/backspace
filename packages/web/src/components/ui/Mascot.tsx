@@ -15,9 +15,15 @@ interface MascotProps {
   className?: string;
 }
 
-function IdleSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.idle; gradientId: string }) {
+interface SvgProps {
+  palette: (typeof MASCOT_PALETTES)[MascotState];
+  gradientId: string;
+  svgRef: React.RefObject<SVGSVGElement | null>;
+}
+
+function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
   return (
-    <svg viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
+    <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
         <radialGradient id={gradientId} cx="38%" cy="30%" r="65%">
           <stop offset="0%" stopColor={palette.from} />
@@ -67,9 +73,9 @@ function IdleSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.idle
   );
 }
 
-function SleepingSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.sleeping; gradientId: string }) {
+function SleepingSvg({ palette, gradientId, svgRef }: SvgProps) {
   return (
-    <svg viewBox="0 0 220 130" aria-hidden="true" width="100%" height="100%">
+    <svg ref={svgRef} viewBox="0 0 220 130" aria-hidden="true" width="100%" height="100%">
       <defs>
         <radialGradient id={gradientId} cx="40%" cy="30%" r="65%">
           <stop offset="0%" stopColor={palette.from} />
@@ -122,9 +128,9 @@ function SleepingSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.
   );
 }
 
-function ExcitedSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.excited; gradientId: string }) {
+function ExcitedSvg({ palette, gradientId, svgRef }: SvgProps) {
   return (
-    <svg viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
+    <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
         <radialGradient id={gradientId} cx="36%" cy="30%" r="65%">
           <stop offset="0%" stopColor={palette.from} />
@@ -174,9 +180,9 @@ function ExcitedSvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.e
   );
 }
 
-function LonelySvg({ palette, gradientId }: { palette: typeof MASCOT_PALETTES.lonely; gradientId: string }) {
+function LonelySvg({ palette, gradientId, svgRef }: SvgProps) {
   return (
-    <svg viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
+    <svg ref={svgRef} viewBox="0 0 200 200" aria-hidden="true" width="100%" height="100%">
       <defs>
         <radialGradient id={gradientId} cx="40%" cy="30%" r="65%">
           <stop offset="0%" stopColor={palette.from} />
@@ -238,10 +244,10 @@ export function Mascot({ state, className }: MascotProps) {
 
   return (
     <div ref={containerRef} role="presentation" className={classes} style={{ position: 'relative' }}>
-      {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} />}
-      {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} />}
-      {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} />}
-      {state === 'lonely' && <LonelySvg palette={palette} gradientId={gradientId} />}
+      {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
+      {state === 'lonely' && <LonelySvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
       {state === 'sleeping' && (
         <div
           data-mascot="z-container"
