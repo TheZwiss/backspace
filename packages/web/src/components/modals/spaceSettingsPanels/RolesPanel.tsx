@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSpaceStore } from '../../../stores/spaceStore';
+import { useUIStore } from '../../../stores/uiStore';
 import { api } from '../../../api/client';
 import { PermissionBits, stringToPermissions, permissionsToString } from '../../../utils/permissions';
 import type { Role } from '@backspace/shared';
@@ -227,10 +228,10 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
   const [draftPermissions, setDraftPermissions] = useState<bigint>(
     stringToPermissions(role.permissions)
   );
+  const addToast = useUIStore((s) => s.addToast);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const hasNameChange = !isEveryone && draftName.trim() !== role.name;
@@ -246,7 +247,6 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
     setConfirmDelete(false);
     setSaving(true);
     setSaveError('');
-    setSaveSuccess(false);
     try {
       const data: { name?: string; color?: string; permissions?: string } = {};
       if (hasNameChange) data.name = draftName.trim();
@@ -254,8 +254,7 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
       if (hasPermChange) data.permissions = permissionsToString(draftPermissions);
       await api.roles.update(spaceId, role.id, data);
       await loadSpaceDetail(spaceId);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      addToast('Role saved', 'success', 2000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to save role';
       if (msg.includes('already exists')) {
@@ -450,9 +449,6 @@ function RoleEditView({ role, spaceId, isNew, onBack, onDeleted, onCopied }: Rol
 
       {saveError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
-      )}
-      {saveSuccess && (
-        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Role saved</div>
       )}
       <div className="sticky bottom-0 z-10 pointer-events-none">
           <div className="flex justify-center pt-3 pb-1">

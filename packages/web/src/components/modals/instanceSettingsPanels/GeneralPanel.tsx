@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import type { InstanceAdminSettings } from '@backspace/shared';
 
@@ -7,10 +8,11 @@ export function GeneralPanel() {
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
 
+  const addToast = useUIStore((s) => s.addToast);
+
   const [draft, setDraft] = useState<InstanceAdminSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [gifKeyDirty, setGifKeyDirty] = useState(false);
   const [gifKeyDraft, setGifKeyDraft] = useState('');
 
@@ -34,7 +36,6 @@ export function GeneralPanel() {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
-    setSaveSuccess(false);
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft!.instanceName,
@@ -47,8 +48,7 @@ export function GeneralPanel() {
       await updateInstanceSettings(payload);
       setGifKeyDirty(false);
       setGifKeyDraft('');
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      addToast('Settings saved', 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -151,10 +151,6 @@ export function GeneralPanel() {
       {saveError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
       )}
-      {saveSuccess && (
-        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
-      )}
-
       {/* Save / Reset bar */}
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">

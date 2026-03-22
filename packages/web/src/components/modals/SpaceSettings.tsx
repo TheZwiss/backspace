@@ -23,9 +23,9 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
     (space?.visibility as SpaceVisibility) ?? 'private'
   );
   const [description, setDescription] = useState(space?.description ?? '');
+  const addToast = useUIStore((s) => s.addToast);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     if (space) {
@@ -43,11 +43,9 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
-    setSaveSuccess(false);
     try {
       await api.spaces.update(spaceId, { visibility, description: description.trim() });
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      addToast('Settings saved', 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -126,10 +124,6 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
       {saveError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
       )}
-      {saveSuccess && (
-        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
-      )}
-
       {/* Pending Join Requests — only shown when visibility is 'request' */}
       {(visibility === 'request' || (space.visibility as SpaceVisibility) === 'request') && (
         <JoinRequestsSection spaceId={spaceId} />

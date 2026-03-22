@@ -47,7 +47,6 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -174,7 +173,6 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
-    setSaveSuccess(false);
     try {
       const updates: { name?: string; icon?: string; banner?: string; avatarColor?: string } = {};
       if (hasNameChange) updates.name = spaceName.trim();
@@ -198,8 +196,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         URL.revokeObjectURL(bannerPreview);
         setBannerPreview(null);
       }
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      addToast('Settings saved', 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -448,9 +445,6 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
         {/* Save / Discard */}
         {saveError && (
           <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
-        )}
-        {saveSuccess && (
-          <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
         )}
         {/* Danger Zone */}
         {isOwner && (

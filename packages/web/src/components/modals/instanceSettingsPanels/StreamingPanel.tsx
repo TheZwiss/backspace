@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useUIStore } from '../../../stores/uiStore';
 import type { InstanceStreamingLimits } from '@backspace/shared';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES,
@@ -19,10 +20,12 @@ export function StreamingPanel() {
   const limits = useSettingsStore((s) => s.streamingLimits);
   const updateStreamingLimits = useSettingsStore((s) => s.updateStreamingLimits);
 
+  const addToast = useUIStore((s) => s.addToast);
+
   const [draft, setDraft] = useState<InstanceStreamingLimits | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+
 
   // Matrix editor state: full grid of kbps values (integers only)
   const [matrixDraft, setMatrixDraft] = useState<Record<string, number>>({});
@@ -93,7 +96,6 @@ export function StreamingPanel() {
   const handleSave = async () => {
     setSaving(true);
     setSaveError('');
-    setSaveSuccess(false);
     try {
       // Compute sparse overrides: only cells that differ from defaults
       const overrides: Record<string, number> = {};
@@ -107,8 +109,7 @@ export function StreamingPanel() {
         bitrateMatrixOverrides: Object.keys(overrides).length > 0 ? overrides : null,
       };
       await updateStreamingLimits(payload);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      addToast('Settings saved', 'success', 2000);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -485,9 +486,6 @@ export function StreamingPanel() {
       {/* Save / Reset */}
       {saveError && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{saveError}</div>
-      )}
-      {saveSuccess && (
-        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">Settings saved</div>
       )}
       {hasChanges && (
         <div className="sticky bottom-0 z-10 pointer-events-none">
