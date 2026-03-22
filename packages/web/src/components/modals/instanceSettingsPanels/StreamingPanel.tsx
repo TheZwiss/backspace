@@ -176,22 +176,22 @@ export function StreamingPanel() {
             <div className="text-xs text-txt-secondary mb-1.5">
               Bitrate Range
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <label className="text-[11px] text-txt-tertiary mb-1 block">Min</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={100}
-                    max={Math.min(draft.maxBitrateKbps - 500, 100000)}
-                    step={100}
-                    value={Math.min(draft.minBitrateKbps, 100000)}
-                    onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
-                    className="flex-1 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
-                  />
+            <div className="flex items-start gap-3">
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[11px] text-txt-tertiary block">Min</label>
+                <input
+                  type="range"
+                  min={100}
+                  max={Math.min(draft.maxBitrateKbps - 500, 100000)}
+                  step={100}
+                  value={Math.min(draft.minBitrateKbps, 100000)}
+                  onChange={(e) => setDraft({ ...draft, minBitrateKbps: Number(e.target.value) })}
+                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                />
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min={100}
@@ -202,26 +202,26 @@ export function StreamingPanel() {
                       const v = Number(e.target.value);
                       if (v >= 100 && v <= 1000000) setDraft({ ...draft, minBitrateKbps: v });
                     }}
-                    className="input-standard w-24 px-2 py-1 text-xs"
+                    className="input-standard w-20 px-2 py-0.5 text-xs"
                   />
+                  <span className="text-[11px] text-txt-tertiary">{formatKbps(draft.minBitrateKbps)}</span>
                 </div>
-                <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.minBitrateKbps)}</div>
               </div>
-              <div className="flex-1">
-                <label className="text-[11px] text-txt-tertiary mb-1 block">Max</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={draft.minBitrateKbps + 500}
-                    max={100000}
-                    step={500}
-                    value={Math.min(draft.maxBitrateKbps, 100000)}
-                    onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
-                    className="flex-1 h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
-                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
-                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
-                      [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
-                  />
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[11px] text-txt-tertiary block">Max</label>
+                <input
+                  type="range"
+                  min={draft.minBitrateKbps + 500}
+                  max={100000}
+                  step={500}
+                  value={Math.min(draft.maxBitrateKbps, 100000)}
+                  onChange={(e) => setDraft({ ...draft, maxBitrateKbps: Number(e.target.value) })}
+                  className="w-full h-1.5 accent-accent-primary cursor-pointer appearance-none bg-interactive-muted rounded-full
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-0"
+                />
+                <div className="flex items-center gap-1.5">
                   <input
                     type="number"
                     min={draft.minBitrateKbps + 500}
@@ -232,10 +232,10 @@ export function StreamingPanel() {
                       const v = Number(e.target.value);
                       if (v >= 500 && v <= 1000000) setDraft({ ...draft, maxBitrateKbps: v });
                     }}
-                    className="input-standard w-24 px-2 py-1 text-xs"
+                    className="input-standard w-20 px-2 py-0.5 text-xs"
                   />
+                  <span className="text-[11px] text-txt-tertiary">{formatKbps(draft.maxBitrateKbps)}</span>
                 </div>
-                <div className="text-[11px] text-txt-secondary mt-0.5">{formatKbps(draft.maxBitrateKbps)}</div>
               </div>
             </div>
           </div>
