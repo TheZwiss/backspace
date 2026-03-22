@@ -121,6 +121,7 @@ interface InstanceState {
   isLoading: boolean;
   error: string | null;
   _autoConnectDone: boolean;
+  pendingSyncOrigins: string[];
 
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
   connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
@@ -142,6 +143,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   isLoading: false,
   error: null,
   _autoConnectDone: false,
+  pendingSyncOrigins: [],
 
   probeInstance: async (url: string) => {
     const origin = normalizeOrigin(url);
@@ -457,15 +459,23 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   setPendingPasswordSync: (origin: string, pending: boolean) => {
     const userId = useAuthStore.getState().user?.id;
     if (!userId) return;
+
+    // Update Zustand state (triggers React re-renders)
+    set((state) => ({
+      pendingSyncOrigins: pending
+        ? state.pendingSyncOrigins.includes(origin)
+          ? state.pendingSyncOrigins
+          : [...state.pendingSyncOrigins, origin]
+        : state.pendingSyncOrigins.filter(o => o !== origin),
+    }));
+
+    // Also persist to localStorage
     const flags: Record<string, boolean> = { [origin]: pending };
     saveCachedTokens(get().instances, userId, flags);
   },
 
   hasPendingPasswordSync: (origin: string) => {
-    const userId = useAuthStore.getState().user?.id;
-    if (!userId) return false;
-    const cached = loadCachedTokens(userId);
-    return cached[origin]?.pendingPasswordSync === true;
+    return get().pendingSyncOrigins.includes(origin);
   },
 
   syncInstanceList: async () => {
@@ -668,8 +678,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // so disconnected instances survive page reload and can auto-reconnect later
     saveCachedTokens(get().instances, currentUser.id);
 
-    // Mark auto-connect complete so syncInstanceList is now safe to run
-    set({ _autoConnectDone: true });
+    // Hydrate pendingSyncOrigins from localStorage cache and mark auto-connect done
+    const freshCached = loadCachedTokens(currentUser.id);
+    const pendingOrigins = Object.entries(freshCached)
+      .filter(([, v]) => v.pendingPasswordSync)
+      .map(([origin]) => origin);
+    set({ _autoConnectDone: true, pendingSyncOrigins: pendingOrigins });
   },
 
   reset: () => {
@@ -682,7 +696,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Tear down all remote WebSocket connections
     disconnectAllRemote();
 
-    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false });
+    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [] });
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));
