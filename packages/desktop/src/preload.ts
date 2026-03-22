@@ -76,4 +76,25 @@ contextBridge.exposeInMainWorld('backspace', {
     return () => { ipcRenderer.removeListener('activity-detected', handler); };
   },
   getCurrentActivity: () => ipcRenderer.invoke('get-current-activity'),
+
+  // Keybind support
+  syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => {
+    ipcRenderer.send('keybinds-sync', keybinds);
+  },
+  onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, action: { actionId: string; pressed: boolean }) => callback(action);
+    ipcRenderer.on('keybind-action', handler);
+    return () => { ipcRenderer.removeListener('keybind-action', handler); };
+  },
+  onAccessibilityStatus: (callback: (status: { trusted: boolean }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: { trusted: boolean }) => callback(status);
+    ipcRenderer.on('accessibility-status', handler);
+    return () => { ipcRenderer.removeListener('accessibility-status', handler); };
+  },
+  onKeybindHookError: (callback: (error: { message: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, error: { message: string }) => callback(error);
+    ipcRenderer.on('keybind-hook-error', handler);
+    return () => { ipcRenderer.removeListener('keybind-hook-error', handler); };
+  },
+  checkAccessibility: () => ipcRenderer.invoke('check-accessibility'),
 });

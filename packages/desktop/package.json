@@ -14,12 +14,15 @@
     "dev": "mkdir -p build && cp ../../icon.png build/icon.png && bash scripts/gen-icns.sh && cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
     "prebuild": "mkdir -p build && cp ../../icon.png build/icon.png",
     "build": "tsc && electron-builder",
-    "clean": "rm -rf dist dist-electron"
+    "clean": "rm -rf dist dist-electron",
+    "postinstall": "electron-rebuild -f -w uiohook-napi"
   },
   "dependencies": {
-    "electron-updater": "^6.3.0"
+    "electron-updater": "^6.3.0",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
     "typescript": "^5.7.2"
