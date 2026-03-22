@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useSettingsSections } from '../../../hooks/useSettingsSections';
 import type { SettingsSection } from '../SettingsSectionsContext';
+import { SettingsTabBar } from '../SettingsTabBar';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
@@ -34,23 +35,9 @@ export function InstancePanel() {
     fetchStreamingLimits();
   }, [fetchInstanceSettings, fetchStreamingLimits]);
 
-  const tabPillClass = (t: SubTab) =>
-    `px-3 py-1.5 text-sm rounded-md transition-colors ${
-      subTab === t
-        ? 'text-txt-primary font-medium border-b-2 border-accent-primary'
-        : 'text-txt-tertiary hover:text-txt-secondary'
-    }`;
-
   return (
     <div className="space-y-4">
-      {/* Top tab bar */}
-      <div className="flex gap-1 border-b border-white/[0.04] pb-0">
-        {SECTIONS.map((s) => (
-          <button key={s.id} onClick={() => setSubTab(s.id as SubTab)} className={tabPillClass(s.id as SubTab)}>
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <SettingsTabBar />
 
       {subTab === 'general' && <GeneralPanel />}
       {subTab === 'streaming' && <StreamingPanel />}
