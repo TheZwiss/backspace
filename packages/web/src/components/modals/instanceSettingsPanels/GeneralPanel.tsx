@@ -158,23 +158,21 @@ export function GeneralPanel() {
 
       {/* Save / Reset bar */}
       {hasChanges && (
-        <div className="sticky bottom-0 z-10 pointer-events-none">
-          <div className="flex justify-center pt-3 pb-1">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up pointer-events-auto">
-              <button
-                onClick={handleReset}
-                className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
-              >
-                Reset
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-2 animate-slide-up">
+            <button
+              onClick={handleReset}
+              className="px-3 py-1 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
+            >
+              Reset
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
           </div>
         </div>
       )}
