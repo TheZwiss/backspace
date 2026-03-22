@@ -94,11 +94,20 @@ describe('Mascot', () => {
     expect(shadow).toBeTruthy();
   });
 
-  it('applies custom className', () => {
+  it('applies custom className replacing default size', () => {
     const { container } = render(<Mascot state="idle" className="w-48 h-48" />);
     const wrapper = container.firstElementChild as HTMLElement;
     expect(wrapper.className).toContain('w-48');
     expect(wrapper.className).toContain('h-48');
+    // Custom className replaces default w-32 h-32 to avoid Tailwind conflicts
+    expect(wrapper.className).not.toContain('w-32');
+  });
+
+  it('uses default w-32 h-32 when no className provided', () => {
+    const { container } = render(<Mascot state="idle" />);
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper.className).toContain('w-32');
+    expect(wrapper.className).toContain('h-32');
   });
 
   it('renders the sleeping mouth ellipse', () => {

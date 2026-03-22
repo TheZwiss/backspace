@@ -18,7 +18,7 @@ interface MascotProps {
 interface SvgProps {
   palette: (typeof MASCOT_PALETTES)[MascotState];
   gradientId: string;
-  svgRef: React.RefObject<SVGSVGElement | null>;
+  svgRef: React.Ref<SVGSVGElement>;
 }
 
 function IdleSvg({ palette, gradientId, svgRef }: SvgProps) {
@@ -240,10 +240,8 @@ export function Mascot({ state, className }: MascotProps) {
 
   useMascotAnimation(svgRef, containerRef, state);
 
-  const classes = className ? `w-32 h-32 ${className}` : 'w-32 h-32';
-
   return (
-    <div ref={containerRef} role="presentation" className={classes} style={{ position: 'relative' }}>
+    <div ref={containerRef} role="presentation" className={`relative ${className ?? 'w-32 h-32'}`}>
       {state === 'idle' && <IdleSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
       {state === 'sleeping' && <SleepingSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
       {state === 'excited' && <ExcitedSvg palette={palette} gradientId={gradientId} svgRef={svgRef} />}
