@@ -7,6 +7,7 @@ import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf } from '../../utils/identity';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import type { MessageWithUser } from '@backspace/shared';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
@@ -55,6 +56,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
+  const showPaginationSkeleton = useDelayedLoading(isLoadingMore);
   const prevMessagesLength = useRef(0);
   const prevChannelIdRef = useRef<string>(channelId);
   const visibleMsgIdRef = useRef<string | null>(null);
@@ -258,7 +261,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     );
   }
 
-  if (isLoading && messages.length === 0) {
+  if (showInitialSkeleton) {
     return (
       <div className="flex-1 flex flex-col justify-end px-4 pb-6" role="status" aria-label="Loading messages">
         {Array.from({ length: 7 }, (_, i) => (
@@ -284,7 +287,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         className="h-full overflow-y-auto overflow-x-hidden no-scrollbar"
         onScroll={handleScroll}
       >
-        {isLoadingMore && (
+        {showPaginationSkeleton && (
           <div className="px-4 pt-4" role="status" aria-label="Loading older messages">
             {Array.from({ length: 3 }, (_, i) => (
               <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
