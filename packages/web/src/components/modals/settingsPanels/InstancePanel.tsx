@@ -1,22 +1,23 @@
 import { useEffect } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useSettingsSections } from '../../../hooks/useSettingsSections';
+import type { SettingsSection } from '../SettingsSectionsContext';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 
-const SECTIONS = [
+const SECTIONS: SettingsSection[] = [
   { id: 'general', label: 'General' },
   { id: 'streaming', label: 'Streaming' },
   { id: 'storage', label: 'Storage' },
   { id: 'users', label: 'Users' },
-] as const;
+];
 
 export function InstancePanel() {
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
   const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
-  const { sectionRef } = useSettingsSections([...SECTIONS]);
+  const { sectionRef } = useSettingsSections(SECTIONS);
 
   useEffect(() => {
     fetchInstanceSettings();
