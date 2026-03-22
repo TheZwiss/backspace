@@ -198,31 +198,36 @@ export function useKeybinds(): void {
     }
   }, [keybinds, currentVoiceChannelId]);
 
-  // --- Keybind listeners (Electron IPC or web capture-phase fallback) ---
+  // --- Electron IPC bridge (global shortcuts via uiohook in main process) ---
   useEffect(() => {
     if (keybinds.length === 0) return;
+    if (!isElectron()) return;
+    const api = window.backspace;
+    if (!api?.syncKeybinds || !api?.onKeybindAction) return;
 
-    // Try Electron IPC bridge first (requires rebuilt desktop app with keybind support)
-    if (isElectron()) {
-      const api = window.backspace;
-      if (api?.syncKeybinds && api?.onKeybindAction) {
-        // Desktop app has keybind support — use OS-level global shortcuts
-        api.syncKeybinds(keybinds.map((kb) => ({
-          actionId: kb.actionId,
-          keys: kb.keys,
-          mouseButton: kb.mouseButton,
-        })));
+    // Sync keybind config to main process — it registers OS-level hooks
+    api.syncKeybinds(keybinds.map((kb) => ({
+      actionId: kb.actionId,
+      keys: kb.keys,
+      mouseButton: kb.mouseButton,
+    })));
 
-        const cleanup = api.onKeybindAction((action) => {
-          dispatchKeybindAction(action.actionId, action.pressed);
-        });
+    // Listen for matched actions from main process
+    const cleanup = api.onKeybindAction((action) => {
+      dispatchKeybindAction(action.actionId, action.pressed);
+    });
 
-        return cleanup;
-      }
-      // Desktop app lacks keybind APIs (old build) — fall through to web fallback
-    }
+    return cleanup;
+  }, [keybinds]);
 
-    // Web fallback: capture-phase listeners (works when tab/window is focused)
+  // --- Web fallback: always active as safety net ---
+  // On web: this is the only keybind path (works when tab is focused).
+  // On Electron: this provides in-app keybinds even if the OS-level hook
+  // fails to start (e.g. macOS Accessibility permission denied). When the
+  // global hook IS working, both fire but dispatchKeybindAction is
+  // idempotent for toggles (no-op if not in voice / already handled).
+  useEffect(() => {
+    if (keybinds.length === 0) return;
     const cleanup = setupWebFallback(keybindsRef);
     return cleanup ?? undefined;
   }, [keybinds]);
