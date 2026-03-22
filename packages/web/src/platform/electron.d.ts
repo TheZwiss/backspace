@@ -52,6 +52,13 @@ interface BackspaceElectronAPI {
   // Activity detection (game/app process scanning)
   onActivityDetected: (callback: (activity: unknown) => void) => (() => void);
   getCurrentActivity: () => Promise<unknown>;
+
+  // Keybind support
+  syncKeybinds: (keybinds: Array<{ actionId: string; keys: number[]; mouseButton?: number }>) => void;
+  onKeybindAction: (callback: (action: { actionId: string; pressed: boolean }) => void) => (() => void);
+  onAccessibilityStatus: (callback: (status: { trusted: boolean }) => void) => (() => void);
+  onKeybindHookError: (callback: (error: { message: string }) => void) => (() => void);
+  checkAccessibility: () => Promise<boolean>;
 }
 
 interface Window {
