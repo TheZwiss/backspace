@@ -1,0 +1,119 @@
+import { useRef, useCallback, useLayoutEffect } from 'react';
+import { useSettingsSectionsContext, type SettingsSection } from '../components/modals/SettingsSectionsContext';
+
+export function useSettingsSections(sections: SettingsSection[]) {
+  const ctx = useSettingsSectionsContext();
+  // scrollContainerRef is owned by the context provider, not by this hook.
+  // UserSettings attaches it to the scroll container div, and this hook reads it.
+  const scrollContainerRef = ctx?.scrollContainerRef ?? null;
+  const sectionElementsRef = useRef(new Map<string, HTMLElement>());
+  const sectionRefCallbacksRef = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const suppressObserverRef = useRef(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Register sections into context synchronously (useLayoutEffect prevents flicker)
+  useLayoutEffect(() => {
+    if (ctx) {
+      ctx.setSections(sections);
+    }
+    return () => {
+      if (ctx) {
+        ctx.setSections([]);
+        ctx.setActiveSection('');
+      }
+    };
+  }, [sections, ctx]);
+
+  // scrollToSection implementation
+  const scrollToSection = useCallback((id: string) => {
+    const el = sectionElementsRef.current.get(id);
+    if (!el) return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    suppressObserverRef.current = true;
+    ctx?.setActiveSection(id);
+
+    el.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+
+    const container = scrollContainerRef?.current;
+    if (container && 'onscrollend' in container) {
+      container.addEventListener('scrollend', () => {
+        suppressObserverRef.current = false;
+      }, { once: true });
+    } else {
+      setTimeout(() => {
+        suppressObserverRef.current = false;
+      }, prefersReducedMotion ? 50 : 500);
+    }
+  }, [ctx, scrollContainerRef]);
+
+  // Register scrollToSection into context
+  useLayoutEffect(() => {
+    if (ctx) {
+      ctx.setScrollToSection(scrollToSection);
+    }
+  }, [scrollToSection, ctx]);
+
+  // Set up IntersectionObserver
+  useLayoutEffect(() => {
+    const container = scrollContainerRef?.current;
+    if (!container || sections.length === 0) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (suppressObserverRef.current) return;
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const id = entry.target.getAttribute('data-section-id');
+            if (id && ctx) {
+              ctx.setActiveSection(id);
+            }
+          }
+        }
+      },
+      {
+        root: container,
+        rootMargin: '-20% 0px -70% 0px',
+      }
+    );
+
+    // Observe all registered section elements
+    sectionElementsRef.current.forEach((el) => {
+      observerRef.current?.observe(el);
+    });
+
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    };
+  }, [sections, ctx, scrollContainerRef]);
+
+  // Stable callback ref factory (cached per id to avoid re-attach)
+  const sectionRef = useCallback((id: string) => {
+    let cb = sectionRefCallbacksRef.current.get(id);
+    if (!cb) {
+      cb = (el: HTMLElement | null) => {
+        if (el) {
+          el.setAttribute('data-section-id', id);
+          sectionElementsRef.current.set(id, el);
+          observerRef.current?.observe(el);
+        } else {
+          const prev = sectionElementsRef.current.get(id);
+          if (prev) observerRef.current?.unobserve(prev);
+          sectionElementsRef.current.delete(id);
+        }
+      };
+      sectionRefCallbacksRef.current.set(id, cb);
+    }
+    return cb;
+  }, []);
+
+  return {
+    sectionRef,
+    scrollToSection,
+  };
+}
