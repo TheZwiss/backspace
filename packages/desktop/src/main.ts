@@ -14,8 +14,10 @@ import {
 import path from 'path';
 import fs from 'fs';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
+import { KeybindManager } from './keybindManager';
 
 let mainWindow: BrowserWindow | null = null;
+const keybindManager = new KeybindManager();
 let tray: Tray | null = null;
 let isQuitting = false;
 let pendingDeepLink: string | null = null;
@@ -275,6 +277,8 @@ function createWindow(): void {
       sandbox: true,
     },
   });
+
+  keybindManager.setWindow(mainWindow);
 
   if (savedState.isMaximized) {
     mainWindow.maximize();
@@ -545,6 +549,15 @@ function registerIpcHandlers(): void {
 
     return updated;
   });
+
+  // Keybinds
+  ipcMain.on('keybinds-sync', (_event, keybinds) => {
+    keybindManager.updateKeybinds(keybinds);
+  });
+
+  ipcMain.handle('check-accessibility', () => {
+    return keybindManager.checkAccessibility();
+  });
 }
 
 // ─── Auto-Update ────────────────────────────────────────────────────────────
@@ -810,5 +823,6 @@ if (!gotTheLock) {
   app.on('before-quit', () => {
     isQuitting = true;
     stopActivityDetection();
+    keybindManager.stop();
   });
 }

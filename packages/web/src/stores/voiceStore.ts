@@ -79,6 +79,9 @@ interface VoiceState {
   setOutputVolume: (volume: number) => void;
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
+  pttActive: boolean;
+  setMuted: (muted: boolean) => void;
+  setPttActive: (active: boolean) => void;
   toggleMic: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
@@ -122,6 +125,7 @@ export const useVoiceStore = create<VoiceState>()(
       voiceUsers: new Map(),
       currentVoiceChannelId: null,
       isMuted: false,
+      pttActive: false,
       isDeafened: false,
       isCameraOn: false,
       isScreenSharing: false,
@@ -289,6 +293,9 @@ export const useVoiceStore = create<VoiceState>()(
       setInputDevice: (deviceId) => set({ inputDeviceId: deviceId }),
       
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
+
+      setMuted: (muted: boolean) => set({ isMuted: muted }),
+      setPttActive: (active: boolean) => set({ pttActive: active }),
 
       toggleMic: () => set((state) => {
         // User intent toggle — effective state (intent || serverEnforcement) is

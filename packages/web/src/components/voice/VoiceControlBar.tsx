@@ -2,13 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
-import { getActiveRoom } from '../../hooks/useLiveKit';
-import { wsSend } from '../../hooks/useWebSocket';
 import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
-import { CAMERA_PRESET, startScreenShare, stopScreenShare } from '../../utils/screenShare';
-import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { handleMuteAction, handleDeafenAction, handleCameraAction, handleScreenShareAction, handleDisconnectAction } from '../../utils/voiceActions';
 
 const btnBase = 'w-10 h-10 flex items-center justify-center rounded-full transition-colors';
 const btnDefault = `${btnBase} bg-surface-channel text-txt-secondary hover:bg-surface-elevated hover:text-txt-primary`;
@@ -20,9 +17,6 @@ export function VoiceControlBar() {
   const isDeafened = useVoiceStore((s) => s.isDeafened);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-  const toggleMic = useVoiceStore((s) => s.toggleMic);
-  const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-  const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const voiceChatOpen = useUIStore((s) => s.voiceChatOpen);
   const toggleVoiceChat = useUIStore((s) => s.toggleVoiceChat);
   const voiceFullscreen = useUIStore((s) => s.voiceFullscreen);
@@ -30,7 +24,6 @@ export function VoiceControlBar() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const myUser = useAuthStore((s) => s.user);
   const spaceId = useSpaceStore((s) => currentVoiceChannelId ? s.channelToSpaceMap.get(currentVoiceChannelId) : null);
-  const voiceOrigin = currentVoiceChannelId ? getChannelOrigin(currentVoiceChannelId) : '';
   const myOriginId = useSpaceStore((s) => currentVoiceChannelId ? getMyUserIdForOrigin(getChannelOrigin(currentVoiceChannelId)) : s.members.find(m => m.userId === myUser?.id)?.userId ?? myUser?.id);
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -44,102 +37,33 @@ export function VoiceControlBar() {
   const [qualityOpen, setQualityOpen] = useState(false);
   const qualityBtnRef = useRef<HTMLButtonElement>(null);
 
-  const handleMute = React.useCallback(async () => {
-    if (isSpaceMuted || isSpaceDeafened) return;
-    const wasDeafened = useVoiceStore.getState().isDeafened;
-    toggleMic();
-    broadcastVoiceStatus();
-    // If unmuting while deafened cleared deafen, broadcast via LiveKit data channel
-    if (wasDeafened && !useVoiceStore.getState().isDeafened) {
-      broadcastDeafenViaLiveKit();
-    }
-  }, [isSpaceMuted, isSpaceDeafened, toggleMic]);
+  const handleMute = React.useCallback(() => {
+    handleMuteAction(isSpaceMuted, isSpaceDeafened);
+  }, [isSpaceMuted, isSpaceDeafened]);
 
-  const handleDeafen = React.useCallback(async () => {
-    if (isSpaceDeafened) return;
-    toggleDeafen();
-    broadcastVoiceStatus();
-    broadcastDeafenViaLiveKit();
-  }, [isSpaceDeafened, toggleDeafen]);
+  const handleDeafen = React.useCallback(() => {
+    handleDeafenAction(isSpaceDeafened);
+  }, [isSpaceDeafened]);
 
-  const handleCamera = async () => {
-    const room = getActiveRoom();
-    if (!room) return;
-    try {
-      const willEnable = !isCameraOn;
-      if (willEnable) {
-        await room.localParticipant.setCameraEnabled(true,
-          { resolution: CAMERA_PRESET.resolution },
-          {
-            videoCodec: CAMERA_PRESET.codec,
-            videoEncoding: CAMERA_PRESET.encoding,
-            simulcast: true,
-          }
-        );
-      } else {
-        await room.localParticipant.setCameraEnabled(false);
-      }
-      toggleCamera();
-      broadcastVoiceStatus();
-    } catch (err) {
-      console.error('[VoiceControlBar] Failed to toggle camera:', err);
-    }
-  };
+  const handleCamera = () => handleCameraAction();
 
-  const handleScreenShare = async () => {
-    const room = getActiveRoom();
-    if (!room) return;
-    try {
-      if (!isScreenSharing) {
-        const started = await startScreenShare(room);
-        if (started) broadcastVoiceStatus();
-      } else {
-        await stopScreenShare(room);
-        broadcastVoiceStatus();
-      }
-    } catch (err) {
-      console.error('[VoiceControlBar] Failed to toggle screen share:', err);
-    }
-  };
+  const handleScreenShare = () => handleScreenShareAction();
 
-  const handleDisconnect = () => {
-    const { activeDmCall } = useVoiceStore.getState();
-    if (activeDmCall) {
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
-      useVoiceStore.getState().setActiveDmCall(null);
-    } else {
-      wsSend({ type: 'voice_leave' }, voiceOrigin);
-      useVoiceStore.getState().leaveVoice();
-    }
-    if (voiceFullscreen) {
-      useUIStore.getState().setVoiceFullscreen(false);
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-  };
+  const handleDisconnect = () => handleDisconnectAction();
 
   const handleFullscreen = () => {
     toggleVoiceFullscreen();
   };
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'm' || e.key === 'M') {
-        e.preventDefault();
-        handleMute();
-      } else if (e.key === 'd' || e.key === 'D') {
-        e.preventDefault();
-        handleDeafen();
-      } else if (e.key === 'Escape' && voiceFullscreen) {
+      if (e.key === 'Escape' && voiceFullscreen) {
         useUIStore.getState().setVoiceFullscreen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMute, handleDeafen, voiceFullscreen]);
+  }, [voiceFullscreen]);
 
   return (
     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 opacity-0 translate-y-4 group-hover/voice:opacity-100 group-hover/voice:translate-y-0 transition-all duration-300 ease-out">

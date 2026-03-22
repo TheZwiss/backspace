@@ -32,6 +32,7 @@ import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
+import { useKeybinds } from '../../hooks/useKeybinds';
 import { useDeepLinkHandler } from '../../platform/deepLink';
 import { initActivityBridge, teardownActivityBridge } from '../../platform/activityBridge';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -122,6 +123,9 @@ export function AppLayout() {
 
   // Federation toast notifications for remote instance connection state changes
   useFederationToasts();
+
+  // Keybinds handler
+  useKeybinds();
 
   // Deep link handler for Electron (backspace:// protocol)
   useDeepLinkHandler();
