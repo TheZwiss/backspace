@@ -7,10 +7,12 @@ import { AccountPanel } from './settingsPanels/AccountPanel';
 import { VoicePanel } from './settingsPanels/VoicePanel';
 import { PrivacyPanel } from './settingsPanels/PrivacyPanel';
 import { ConnectionsPanel } from './settingsPanels/ConnectionsPanel';
+import { DesktopPanel } from './settingsPanels/DesktopPanel';
 import { InstancePanel } from './settingsPanels/InstancePanel';
+import { isElectron } from '../../platform/platform';
 import { SettingsSectionsProvider, useSettingsSectionsContext } from './SettingsSectionsContext';
 
-type SettingsTab = 'account' | 'voice' | 'privacy' | 'connections' | 'instance';
+type SettingsTab = 'account' | 'voice' | 'privacy' | 'connections' | 'desktop' | 'instance';
 
 function SidebarSubLinks() {
   const ctx = useSettingsSectionsContext();
@@ -123,6 +125,7 @@ export function UserSettingsModal() {
             <div className="border-t border-white/[0.04] my-2 mx-2" />
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
             <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
+            {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>Desktop</button>}
 
             {isAdmin && (
               <>
@@ -171,6 +174,7 @@ export function UserSettingsModal() {
               <div className="border-t border-white/[0.04] my-2 mx-2" />
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
               <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
+              {isElectron() && <button onClick={() => handleTabClick('desktop')} className={tabClass('desktop')}>Desktop</button>}
 
               {isAdmin && (
                 <>
@@ -212,6 +216,7 @@ export function UserSettingsModal() {
               {tab === 'voice' && <VoicePanel />}
               {tab === 'privacy' && <PrivacyPanel />}
               {tab === 'connections' && <ConnectionsPanel />}
+              {tab === 'desktop' && <DesktopPanel />}
               {tab === 'instance' && isAdmin && <InstancePanel />}
             </div>
           </SettingsScrollContainer>

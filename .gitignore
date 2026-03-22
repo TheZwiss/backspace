@@ -53,5 +53,8 @@ tmp/
 # Worktrees
 .worktrees/
 
+# Superpowers brainstorm artifacts
+.superpowers/
+
 # Local files
 Gemini Starter.rtf
