@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
-import { eq, like, or, and, ne, sql } from 'drizzle-orm';
+import { eq, like, or, and, ne, sql, isNull, isNotNull, gte, lte, asc, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
 import { getStorageStats, getOrphanedFiles, cleanupStorage } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
@@ -62,7 +62,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   // ─── User Management ────────────────────────────────────────────────────
 
   // GET /api/admin/users — paginated user list with search
-  app.get<{ Querystring: { q?: string; page?: string; pageSize?: string; showDeleted?: string } }>(
+  app.get<{ Querystring: { q?: string; page?: string; pageSize?: string; showDeleted?: string; homeInstance?: string; role?: string; joinedAfter?: string; joinedBefore?: string; sort?: string } }>(
     '/api/admin/users',
     { preHandler: [authenticate, requireAdmin] },
     async (request, reply) => {
@@ -84,7 +84,45 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         )!);
       }
 
+      // Instance filter
+      const homeInstanceFilter = request.query.homeInstance;
+      if (homeInstanceFilter === 'local') {
+        conditions.push(isNull(schema.users.homeInstance));
+      } else if (homeInstanceFilter) {
+        conditions.push(eq(schema.users.homeInstance, homeInstanceFilter));
+      }
+
+      // Role filter
+      const roleFilter = request.query.role;
+      if (roleFilter === 'admin') {
+        conditions.push(eq(schema.users.isAdmin, 1));
+      } else if (roleFilter === 'non-admin') {
+        conditions.push(eq(schema.users.isAdmin, 0));
+      }
+
+      // Date range filter
+      const joinedAfter = request.query.joinedAfter;
+      if (joinedAfter) {
+        const ts = new Date(joinedAfter).getTime();
+        if (!isNaN(ts)) conditions.push(gte(schema.users.createdAt, ts));
+      }
+      const joinedBefore = request.query.joinedBefore;
+      if (joinedBefore) {
+        const ts = new Date(joinedBefore + 'T23:59:59.999Z').getTime();
+        if (!isNaN(ts)) conditions.push(lte(schema.users.createdAt, ts));
+      }
+
       const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // Dynamic sort
+      const sortParam = request.query.sort || 'newest';
+      let orderByClause;
+      switch (sortParam) {
+        case 'oldest': orderByClause = asc(schema.users.createdAt); break;
+        case 'az': orderByClause = asc(schema.users.username); break;
+        case 'za': orderByClause = desc(schema.users.username); break;
+        default: orderByClause = desc(schema.users.createdAt); break;
+      }
 
       const countResult = db.select({ count: sql<number>`count(*)` })
         .from(schema.users)
@@ -95,7 +133,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const rows = db.select()
         .from(schema.users)
         .where(where)
-        .orderBy(sql`${schema.users.createdAt} DESC`)
+        .orderBy(orderByClause)
         .limit(pageSize)
         .offset((page - 1) * pageSize)
         .all();
@@ -110,6 +148,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(response);
     },
   );
+
+  // GET /api/admin/users/instances — distinct home instance domains
+  app.get('/api/admin/users/instances', { preHandler: [authenticate, requireAdmin] }, async (_request, reply) => {
+    const db = getDb();
+    const rows = db.selectDistinct({ homeInstance: schema.users.homeInstance })
+      .from(schema.users)
+      .where(isNotNull(schema.users.homeInstance))
+      .all();
+    const instances = rows.map(r => r.homeInstance).filter(Boolean) as string[];
+    return reply.code(200).send({ instances });
+  });
 
   // PATCH /api/admin/users/:id/role — promote/demote admin
   app.patch<{ Params: { id: string }; Body: { isAdmin: boolean } }>(
