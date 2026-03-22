@@ -5,6 +5,10 @@ import { useAuthStore } from './authStore';
 import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
 import { syncProfileToRemote } from '../utils/profileSync';
+// Circular dependency: federationOps imports useInstanceStore, instanceStore imports this.
+// Safe because both modules access each other lazily (at call time, not import time).
+// clearPasswordSyncTimers itself does not reference useInstanceStore.
+import { clearPasswordSyncTimers } from '../utils/federationOps';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -695,6 +699,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     // Tear down all remote WebSocket connections
     disconnectAllRemote();
+
+    clearPasswordSyncTimers();
 
     set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [] });
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
