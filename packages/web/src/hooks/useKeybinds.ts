@@ -198,30 +198,31 @@ export function useKeybinds(): void {
     }
   }, [keybinds, currentVoiceChannelId]);
 
-  // --- Electron: IPC bridge ---
+  // --- Keybind listeners (Electron IPC or web capture-phase fallback) ---
   useEffect(() => {
-    if (!isElectron()) return;
-    const api = window.backspace;
-    if (!api?.syncKeybinds || !api?.onKeybindAction) return;
-
-    api.syncKeybinds(keybinds.map((kb) => ({
-      actionId: kb.actionId,
-      keys: kb.keys,
-      mouseButton: kb.mouseButton,
-    })));
-
-    const cleanup = api.onKeybindAction((action) => {
-      dispatchKeybindAction(action.actionId, action.pressed);
-    });
-
-    return cleanup;
-  }, [keybinds]);
-
-  // --- Web fallback: capture-phase listeners ---
-  useEffect(() => {
-    if (isElectron()) return;
     if (keybinds.length === 0) return;
 
+    // Try Electron IPC bridge first (requires rebuilt desktop app with keybind support)
+    if (isElectron()) {
+      const api = window.backspace;
+      if (api?.syncKeybinds && api?.onKeybindAction) {
+        // Desktop app has keybind support — use OS-level global shortcuts
+        api.syncKeybinds(keybinds.map((kb) => ({
+          actionId: kb.actionId,
+          keys: kb.keys,
+          mouseButton: kb.mouseButton,
+        })));
+
+        const cleanup = api.onKeybindAction((action) => {
+          dispatchKeybindAction(action.actionId, action.pressed);
+        });
+
+        return cleanup;
+      }
+      // Desktop app lacks keybind APIs (old build) — fall through to web fallback
+    }
+
+    // Web fallback: capture-phase listeners (works when tab/window is focused)
     const cleanup = setupWebFallback(keybindsRef);
     return cleanup ?? undefined;
   }, [keybinds]);
