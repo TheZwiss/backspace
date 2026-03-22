@@ -27,8 +27,16 @@ function getSpaceEnforcementState(): { isSpaceMuted: boolean; isSpaceDeafened: b
   };
 }
 
+/** Dedup rapid duplicate dispatches (native hook + web fallback both fire when focused) */
+const lastDispatch: Record<string, number> = {};
+
 /** Dispatch a keybind action to the appropriate voice handler */
 function dispatchKeybindAction(actionId: string, pressed: boolean): void {
+  const now = Date.now();
+  const key = `${actionId}:${pressed}`;
+  if (now - (lastDispatch[key] || 0) < 100) return;
+  lastDispatch[key] = now;
+
   const voice = useVoiceStore.getState();
   if (!voice.currentVoiceChannelId) return;
 
