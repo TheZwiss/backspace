@@ -240,26 +240,22 @@ export function StreamingPanel() {
             </div>
           </div>
 
-          {/* Bitrate Step */}
-          <div>
-            <div className="text-xs text-txt-secondary mb-1.5">
-              Slider Step
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={50}
-                max={5000}
-                step={50}
-                value={draft.bitrateStepKbps}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
-                }}
-                className="input-standard w-24 px-2 py-1"
-              />
-              <span className="text-[12px] text-txt-tertiary">kbps</span>
-            </div>
+          {/* Bitrate Step — compact inline row */}
+          <div className="flex items-center gap-2 pt-1 border-t border-white/[0.04]">
+            <span className="text-[11px] text-txt-tertiary">Slider step</span>
+            <input
+              type="number"
+              min={50}
+              max={5000}
+              step={50}
+              value={draft.bitrateStepKbps}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
+              }}
+              className="input-standard w-16 px-1.5 py-0.5 text-xs text-center"
+            />
+            <span className="text-[11px] text-txt-tertiary">kbps</span>
           </div>
         </div>
       </div>
