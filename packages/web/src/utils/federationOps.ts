@@ -1,4 +1,4 @@
-import { useInstanceStore, type ConnectedInstance } from '../stores/instanceStore';
+import { useInstanceStore } from '../stores/instanceStore';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
