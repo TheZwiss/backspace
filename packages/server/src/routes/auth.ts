@@ -198,7 +198,48 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const validPassword = await verifyPassword(password, user.passwordHash);
     if (!validPassword) {
-      return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+      // For federated users, try verifying against the home instance.
+      // If the password is valid there but stale here, self-heal the local hash.
+      if (user.homeInstance) {
+        try {
+          const homeUsername = user.username.includes('@')
+            ? user.username.split('@')[0]!
+            : user.username;
+
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10_000);
+
+          const homeResponse = await fetch(`https://${user.homeInstance}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: homeUsername, password }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+
+          if (homeResponse.ok) {
+            // Home instance accepted the password — update our stale hash.
+            // Do NOT set passwordChangedAt: this is a state correction, not a
+            // password change. Setting it would invalidate existing valid JWTs.
+            const newHash = await hashPassword(password);
+            db.update(schema.users)
+              .set({ passwordHash: newHash })
+              .where(eq(schema.users.id, user.id))
+              .run();
+
+            app.log.info(`Self-healed password hash for federated user ${user.username} via ${user.homeInstance}`);
+          } else {
+            // Home instance also rejected — password is genuinely wrong
+            return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+          }
+        } catch {
+          // Home instance unreachable — fall back to local-only rejection
+          return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+        }
+      } else {
+        return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+      }
     }
 
     db.update(schema.users).set({ status: 'online' }).where(eq(schema.users.id, user.id)).run();
