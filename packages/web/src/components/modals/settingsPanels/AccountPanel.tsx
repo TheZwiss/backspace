@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
+import { useUIStore } from '../../../stores/uiStore';
 import { useInstanceStore } from '../../../stores/instanceStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
@@ -35,8 +36,8 @@ export function AccountPanel() {
   const [bannerCropSrc, setBannerCropSrc] = useState<string | null>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
+  const addToast = useUIStore((s) => s.addToast);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -63,7 +64,6 @@ export function AccountPanel() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordResults, setPasswordResults] = useState<FederationOpResult[] | null>(null);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -184,7 +184,6 @@ export function AccountPanel() {
 
   const handleSave = async () => {
     setError('');
-    setSuccess('');
     setIsLoading(true);
     try {
       const updates: Record<string, string | undefined> = {};
@@ -198,8 +197,7 @@ export function AccountPanel() {
       if (bannerFilename !== null) updates.banner = bannerFilename;
 
       await updateProfile(updates as Parameters<typeof updateProfile>[0]);
-      setSuccess('Profile updated!');
-      setTimeout(() => setSuccess(''), 2000);
+      addToast('Profile updated', 'success', 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile');
     } finally {
@@ -209,7 +207,6 @@ export function AccountPanel() {
 
   const handleChangePassword = async () => {
     setPasswordError('');
-    setPasswordSuccess('');
     setPasswordResults(null);
 
     if (newPassword.length < 8) {
@@ -224,7 +221,7 @@ export function AccountPanel() {
     setPasswordLoading(true);
     try {
       const results = await changePassword(currentPassword, newPassword);
-      setPasswordSuccess('Password changed successfully!');
+      addToast('Password changed', 'success', 2000);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
@@ -234,7 +231,6 @@ export function AccountPanel() {
       }
 
       setTimeout(() => {
-        setPasswordSuccess('');
         setPasswordResults(null);
       }, 5000);
     } catch (err) {
@@ -658,9 +654,6 @@ export function AccountPanel() {
           {passwordError && (
             <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">{passwordError}</div>
           )}
-          {passwordSuccess && (
-            <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-xs">{passwordSuccess}</div>
-          )}
           {passwordResults && passwordResults.length > 0 && (
             <div className="space-y-1">
               {passwordResults.map(r => (
@@ -704,9 +697,6 @@ export function AccountPanel() {
 
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
-      )}
-      {success && (
-        <div className="p-2 bg-status-online/10 border border-status-online/30 rounded text-status-online text-sm">{success}</div>
       )}
 
       {hasChanges && (
