@@ -5,7 +5,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo } from '@backspace/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { registerSelfId } from '../utils/identity';
@@ -212,6 +212,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
       }
       if (event.user.showActivity !== undefined) {
         useActivityStore.setState({ showActivity: event.user.showActivity });
+      }
+
+      // Re-push local Electron activities after reconnect (sleep/wake, network blip, etc.)
+      // The process scanner keeps running but onActivityDetected only fires on change,
+      // so if the same app was active before and after sleep, nothing would re-push.
+      if (isHome && window.backspace?.getCurrentActivity) {
+        window.backspace.getCurrentActivity().then((activity: unknown) => {
+          if (activity) {
+            useActivityStore.getState().pushActivities([activity as Activity]);
+          }
+        }).catch(() => {});
       }
 
       // Populate voice user statuses (mute/deafen/camera/screenshare) from server

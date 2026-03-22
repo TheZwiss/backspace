@@ -41,13 +41,17 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   },
 
   initActivities: (activityMap) => {
-    const next = new Map<string, Activity[]>();
-    for (const [userId, activities] of Object.entries(activityMap)) {
-      if (activities.length > 0) {
-        next.set(userId, activities);
+    set((state) => {
+      const next = new Map(state.userActivities);
+      for (const [userId, activities] of Object.entries(activityMap)) {
+        if (activities.length > 0) {
+          next.set(userId, activities);
+        } else {
+          next.delete(userId);
+        }
       }
-    }
-    set({ userActivities: next });
+      return { userActivities: next };
+    });
   },
 
   setShowActivity: (show) => {
