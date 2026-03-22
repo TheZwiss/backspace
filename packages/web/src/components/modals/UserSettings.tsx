@@ -21,7 +21,7 @@ export function UserSettingsModal() {
   const logout = useAuthStore((s) => s.logout);
 
   const [tab, setTab] = useState<SettingsTab>('account');
-  const [mobileView, setMobileView] = useState<'tabs' | 'content'>('content');
+  const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
 
   const isOpen = activeModal === 'userSettings';
 

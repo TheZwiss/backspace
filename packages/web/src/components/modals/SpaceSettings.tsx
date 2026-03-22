@@ -282,6 +282,14 @@ export function SpaceSettingsModal() {
   const canManageRoles = hasPermissionBit(mySpacePerms, PermissionBits.MANAGE_ROLES);
   const canBanMembers = hasPermissionBit(mySpacePerms, PermissionBits.BAN_MEMBERS);
 
+  // Reset tab and mobile view when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTab('overview');
+      setMobileView('tabs');
+    }
+  }, [isOpen]);
+
   if (!space || !currentSpaceId) return null;
 
   const tabClass = (t: typeof tab) =>
