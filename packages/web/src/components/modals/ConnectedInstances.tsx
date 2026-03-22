@@ -269,7 +269,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
   const removeInstance = useInstanceStore((s) => s.removeInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
-  const hasPendingSync = useInstanceStore((s) => s.hasPendingPasswordSync)(inst.origin);
+  const hasPendingSync = useInstanceStore((s) => s.pendingSyncOrigins.includes(inst.origin));
 
   const [showReauth, setShowReauth] = useState(false);
   const [reauthPassword, setReauthPassword] = useState('');
@@ -319,6 +319,14 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {hasPendingSync && inst.status === 'connected' && (
+            <button
+              onClick={() => setShowReauth(!showReauth)}
+              className="px-2 py-1 text-xs text-accent-primary hover:bg-accent-primary/10 rounded transition-colors"
+            >
+              Sync now
+            </button>
+          )}
           {(inst.status === 'disconnected' || inst.status === 'error') && (
             isTokenless ? (
               <button
@@ -355,7 +363,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
               type="password"
               value={reauthPassword}
               onChange={(e) => setReauthPassword(e.target.value)}
-              placeholder="Your account password"
+              placeholder={hasPendingSync && inst.status === 'connected' ? 'Enter your current password' : 'Your account password'}
               className="input-standard flex-1 py-1.5"
               disabled={reauthLoading}
               autoFocus
@@ -366,7 +374,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
               disabled={reauthLoading || !reauthPassword}
               className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
             >
-              {reauthLoading ? 'Connecting...' : 'Connect'}
+              {reauthLoading ? 'Connecting...' : (hasPendingSync && inst.status === 'connected' ? 'Sync' : 'Connect')}
             </button>
             <button
               type="button"
