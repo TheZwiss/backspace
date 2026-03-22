@@ -364,6 +364,7 @@ export function AccountPanel() {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">My Account</h2>
       {/* ── Profile Customization ── */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">

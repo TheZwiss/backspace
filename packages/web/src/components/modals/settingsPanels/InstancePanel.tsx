@@ -27,6 +27,7 @@ export function InstancePanel() {
 
   return (
     <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Instance</h2>
       {/* Sub-tab switcher */}
       <div className="flex gap-1 p-1 bg-white/[0.02] rounded-full w-fit">
         <button onClick={() => setSubTab('general')} className={pillClass('general')}>

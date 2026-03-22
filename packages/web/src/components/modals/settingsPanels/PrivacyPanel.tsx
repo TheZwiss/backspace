@@ -31,6 +31,7 @@ export function PrivacyPanel() {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Privacy</h2>
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           Discovery
