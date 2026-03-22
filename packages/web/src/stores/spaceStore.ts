@@ -40,6 +40,7 @@ interface SpaceState {
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
   voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
+  loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
@@ -130,6 +131,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   channelOriginMap: new Map(),
   voiceChannelIds: new Set(),
   categoryOriginMap: new Map(),
+  loadingSpaceId: null,
   _layoutUpdatedAt: 0,
 
   reset: () => {
@@ -151,6 +153,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       channelOriginMap: new Map(),
       voiceChannelIds: new Set(),
       categoryOriginMap: new Map(),
+      loadingSpaceId: null,
       _layoutUpdatedAt: 0,
     });
   },
@@ -232,6 +235,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       // Resolve the correct API client based on the server's instance origin
       const space =get().spaces.find(s => s.id === spaceId);
       if (!space) return; // Not populated yet — remote WS ready will trigger reload
+      set({ loadingSpaceId: spaceId });
       const origin = space._instanceOrigin ?? '';
       const client = getApiForOrigin(origin);
 
@@ -257,6 +261,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
 
       set({
+        loadingSpaceId: null,
         currentSpaceId: spaceId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         categories: (detail.categories || []).sort((a, b) => a.position - b.position),
@@ -266,7 +271,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelPermissions,
       });
     } catch {
-      // Handle error silently
+      set({ loadingSpaceId: null });
     }
   },
 
