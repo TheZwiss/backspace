@@ -18,6 +18,9 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
+# Copy patches (referenced by pnpm-lock.yaml)
+COPY patches/ patches/
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile || pnpm install
 
@@ -50,6 +53,9 @@ COPY tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
+
+# Copy patches (referenced by pnpm-lock.yaml)
+COPY patches/ patches/
 
 # Install production dependencies only (plus tsx for running TS)
 RUN pnpm install --frozen-lockfile || pnpm install
