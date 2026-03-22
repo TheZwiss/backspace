@@ -26,7 +26,12 @@ function keyDisplayName(code: string, key: string): string {
 }
 
 function codeToNumeric(code: string): number {
-  return code.charCodeAt(0) * 256 + (code.charCodeAt(1) || 0);
+  // djb2 hash — produces unique numeric IDs for all KeyboardEvent.code values
+  let hash = 5381;
+  for (let i = 0; i < code.length; i++) {
+    hash = ((hash << 5) + hash + code.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0; // ensure unsigned
 }
 
 // ---------------------------------------------------------------------------

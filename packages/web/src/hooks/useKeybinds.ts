@@ -83,9 +83,12 @@ function setupWebFallback(keybindsRef: React.MutableRefObject<Keybind[]>): WebCl
   const activeActions = new Set<string>();
 
   function browserCodeToUiohook(code: string): number {
-    // Stable numeric ID from KeyboardEvent.code — consistent within web context
-    // because the recorder captures using the same mapping
-    return code.charCodeAt(0) * 256 + (code.charCodeAt(1) || 0);
+    // djb2 hash — must match codeToNumeric() in KeybindsPanel.tsx
+    let hash = 5381;
+    for (let i = 0; i < code.length; i++) {
+      hash = ((hash << 5) + hash + code.charCodeAt(i)) | 0;
+    }
+    return hash >>> 0;
   }
 
   function checkKeybinds(isDown: boolean): void {
