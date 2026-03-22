@@ -267,20 +267,24 @@ function handleEvent(origin: string, event: ServerEvent): void {
         // at broadcast and hardware time.
       }
 
-      // Re-register in voice channel after WS reconnect — the server lost
-      // voice state on restart, so we must tell it we're still connected.
-      // GUARD: Only re-register if LiveKit is actually connected. Background
-      // tabs can reconnect WS but not LiveKit — sending voice_join without
-      // an active media plane would create ghost users in the sidebar.
+      // Server-authoritative voice session check: if we had a voice connection
+      // but the server's voiceStates doesn't include us (server restarted and
+      // lost in-memory voiceRooms), tear down the stale LiveKit session cleanly.
+      // If the server still knows about us (WS blip, not a restart), do nothing —
+      // useLiveKit's ConnectionStateChanged handler will re-register if needed.
       {
-        const { currentVoiceChannelId, isLiveKitConnected } = useVoiceStore.getState();
-        if (currentVoiceChannelId && isLiveKitConnected) {
+        const { currentVoiceChannelId } = useVoiceStore.getState();
+        if (currentVoiceChannelId) {
           const voiceOrigin = getChannelOrigin(currentVoiceChannelId);
           if (voiceOrigin === origin) {
-            const myId = event.user.id;
-            if (myId) addVoiceUser(currentVoiceChannelId, myId);
-            wsSend({ type: 'voice_join', channelId: currentVoiceChannelId }, origin);
-            broadcastVoiceStatus(origin);
+            const serverKnowsUs = event.voiceStates?.[currentVoiceChannelId]?.includes(event.user.id);
+            if (!serverKnowsUs) {
+              // leaveVoice() clears currentVoiceChannelId first to prevent
+              // AppLayout from auto-reconnecting (disconnect() fires with
+              // CLIENT_INITIATED which skips handleForceDisconnect).
+              useVoiceStore.getState().leaveVoice();
+              getActiveRoom()?.disconnect();
+            }
           }
         }
       }
