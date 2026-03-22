@@ -48,6 +48,7 @@ export function MemberSidebar() {
   const members = useSpaceStore((s) => s.members);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
   const memberListOpen = useUIStore((s) => s.memberListOpen);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
   const userActivities = useActivityStore((s) => s.userActivities);
@@ -78,6 +79,8 @@ export function MemberSidebar() {
   }, [members, ownerId]);
 
   if (!memberListOpen) return null;
+
+  const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === currentSpaceId;
 
   const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
     if (member.roles && member.roles.length > 0) {
@@ -148,6 +151,26 @@ export function MemberSidebar() {
 
   return (
     <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">
+      {isLoadingSpace ? (
+        <div className="px-3 pt-4">
+          {/* Role group 1 */}
+          <div className="skeleton skeleton-bar h-2 w-[40%] mb-3" style={{ animationDelay: '0s' }} />
+          {Array.from({ length: 2 }, (_, i) => (
+            <div key={i} className="flex items-center gap-3 py-1.5 mb-1" style={{ animationDelay: `${i * 0.12}s` }}>
+              <div className="skeleton skeleton-circle w-8 h-8 flex-shrink-0" style={{ animationDelay: `${i * 0.12}s` }} />
+              <div className="skeleton skeleton-bar" style={{ width: `${45 + (i * 19) % 30}%`, animationDelay: `${i * 0.12}s` }} />
+            </div>
+          ))}
+          {/* Role group 2 */}
+          <div className="skeleton skeleton-bar h-2 w-[50%] mb-3 mt-5" style={{ animationDelay: '0.25s' }} />
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="flex items-center gap-3 py-1.5 mb-1" style={{ animationDelay: `${(i + 2) * 0.12}s` }}>
+              <div className="skeleton skeleton-circle w-8 h-8 flex-shrink-0" style={{ animationDelay: `${(i + 2) * 0.12}s` }} />
+              <div className="skeleton skeleton-bar" style={{ width: `${40 + (i * 15) % 35}%`, animationDelay: `${(i + 2) * 0.12}s` }} />
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="p-3">
         {/* Role-based groups */}
         {roleGroups.map(([key, group]) => (
@@ -169,6 +192,7 @@ export function MemberSidebar() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
