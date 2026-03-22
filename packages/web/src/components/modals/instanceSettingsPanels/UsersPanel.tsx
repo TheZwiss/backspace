@@ -16,6 +16,13 @@ export function UsersPanel() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
+  const [instanceFilter, setInstanceFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [joinedAfter, setJoinedAfter] = useState('');
+  const [joinedBefore, setJoinedBefore] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [instances, setInstances] = useState<string[]>([]);
+
   // Confirm dialogs
   const [confirmAction, setConfirmAction] = useState<{ type: 'demote' | 'delete'; user: AdminUser } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -25,11 +32,28 @@ export function UsersPanel() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const fetchUsers = useCallback(async (q: string, p: number, deleted: boolean) => {
+  useEffect(() => {
+    api.admin.listInstances().then(({ instances: inst }) => setInstances(inst)).catch(() => {});
+  }, []);
+
+  const filtersRef = useRef({ homeInstance: '', role: '', joinedAfter: '', joinedBefore: '', sort: 'newest' });
+  filtersRef.current = { homeInstance: instanceFilter, role: roleFilter, joinedAfter, joinedBefore, sort: sortBy };
+
+  const fetchUsers = useCallback(async (
+    q: string, p: number, deleted: boolean,
+    opts?: { homeInstance?: string; role?: string; joinedAfter?: string; joinedBefore?: string; sort?: string }
+  ) => {
     setLoading(true);
     setError('');
     try {
-      const result = await api.admin.listUsers({ q: q || undefined, page: p, pageSize, showDeleted: deleted });
+      const result = await api.admin.listUsers({
+        q: q || undefined, page: p, pageSize, showDeleted: deleted,
+        homeInstance: opts?.homeInstance || undefined,
+        role: opts?.role || undefined,
+        joinedAfter: opts?.joinedAfter || undefined,
+        joinedBefore: opts?.joinedBefore || undefined,
+        sort: opts?.sort || undefined,
+      });
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users');
@@ -39,15 +63,15 @@ export function UsersPanel() {
   }, []);
 
   useEffect(() => {
-    fetchUsers(query, page, showDeleted);
-  }, [fetchUsers, page, showDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchUsers(query, page, showDeleted, filtersRef.current);
+  }, [fetchUsers, page, showDeleted, instanceFilter, roleFilter, joinedAfter, joinedBefore, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearchChange = (value: string) => {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
-      fetchUsers(value, 1, showDeleted);
+      fetchUsers(value, 1, showDeleted, filtersRef.current);
     }, 300);
   };
 
@@ -61,7 +85,7 @@ export function UsersPanel() {
     setError('');
     try {
       await api.admin.setUserRole(user.id, true);
-      fetchUsers(query, page, showDeleted);
+      fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update role');
     }
@@ -106,7 +130,7 @@ export function UsersPanel() {
         await api.admin.deleteUser(confirmAction.user.id);
       }
       setConfirmAction(null);
-      fetchUsers(query, page, showDeleted);
+      fetchUsers(query, page, showDeleted, filtersRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Action failed');
       setConfirmAction(null);
@@ -129,7 +153,7 @@ export function UsersPanel() {
         View and manage user accounts on this instance.
       </div>
 
-      {/* Search + Show Deleted */}
+      {/* Search */}
       <div className="flex items-center gap-3">
         <input
           type="text"
@@ -138,15 +162,81 @@ export function UsersPanel() {
           placeholder="Search users..."
           className="input-search flex-1"
         />
-        <label className="flex items-center gap-2 text-sm text-txt-secondary cursor-pointer whitespace-nowrap">
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select
+          value={instanceFilter}
+          onChange={(e) => { setInstanceFilter(e.target.value); setPage(1); }}
+          className="input-search text-xs py-1"
+        >
+          <option value="">All instances</option>
+          <option value="local">Local only</option>
+          {instances.map((inst) => (
+            <option key={inst} value={inst}>{inst}</option>
+          ))}
+        </select>
+
+        <select
+          value={roleFilter}
+          onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+          className="input-search text-xs py-1"
+        >
+          <option value="">All roles</option>
+          <option value="admin">Admin</option>
+          <option value="non-admin">Non-admin</option>
+        </select>
+
+        <input
+          type="date"
+          value={joinedAfter}
+          onChange={(e) => { setJoinedAfter(e.target.value); setPage(1); }}
+          className="input-search text-xs py-1"
+          title="Joined after"
+        />
+        <input
+          type="date"
+          value={joinedBefore}
+          onChange={(e) => { setJoinedBefore(e.target.value); setPage(1); }}
+          className="input-search text-xs py-1"
+          title="Joined before"
+        />
+
+        <select
+          value={sortBy}
+          onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+          className="input-search text-xs py-1"
+        >
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="az">Name A-Z</option>
+          <option value="za">Name Z-A</option>
+        </select>
+
+        <label className="flex items-center gap-1.5 text-xs text-txt-secondary cursor-pointer whitespace-nowrap">
           <input
             type="checkbox"
             checked={showDeleted}
             onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); }}
-            className="w-3.5 h-3.5 rounded border-border-soft accent-accent-primary"
+            className="w-3 h-3 rounded border-border-soft accent-accent-primary"
           />
-          Show deleted
+          Deleted
         </label>
+
+        {(instanceFilter || roleFilter || joinedAfter || joinedBefore || sortBy !== 'newest' || showDeleted || query) && (
+          <button
+            onClick={() => {
+              setQuery(''); setInstanceFilter(''); setRoleFilter('');
+              setJoinedAfter(''); setJoinedBefore('');
+              setSortBy('newest'); setShowDeleted(false); setPage(1);
+              fetchUsers('', 1, false, { sort: 'newest' });
+            }}
+            className="text-xs text-accent-primary hover:text-accent-primary/80 whitespace-nowrap"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Error */}
