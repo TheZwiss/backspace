@@ -69,6 +69,7 @@ function DiscoveryPanel({ spaceId }: { spaceId: string }) {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Discovery</h2>
       {!discoveryEnabled && (
         <div className="p-2.5 bg-accent-amber/10 border border-accent-amber/30 rounded text-[13px] text-accent-amber">
           Space discovery is disabled by the instance administrator. Changing visibility will have no effect until discovery is re-enabled.

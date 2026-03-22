@@ -100,6 +100,7 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
 
   return (
     <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Members</h2>
       {error && (
         <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
       )}

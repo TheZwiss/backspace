@@ -273,6 +273,7 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
   return (
     <>
       <div className="space-y-5">
+        <h2 className="text-lg font-semibold text-txt-primary mb-6">Overview</h2>
         {/* Space Identity */}
         <div>
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Space Identity</div>
