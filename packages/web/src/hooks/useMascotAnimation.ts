@@ -13,8 +13,9 @@ export function useMascotAnimation(
   containerRef: React.RefObject<HTMLDivElement | null>,
   state: MascotState,
 ): void {
+  interface Cancellable { cancel(): void }
   const timeoutRef = useRef<number | null>(null);
-  const activeAnimations = useRef<Animation[]>([]);
+  const activeAnimations = useRef<Cancellable[]>([]);
   const abortedRef = useRef(false);
 
   useEffect(() => {
@@ -90,6 +91,11 @@ export function useMascotAnimation(
       timeoutRef.current = window.setTimeout(() => {
         if (abortedRef.current) return;
         fn().then(() => {
+          if (!abortedRef.current) {
+            scheduleNext(fn, minMs, maxMs);
+          }
+        }).catch(() => {
+          // Action failed — reschedule unless aborted
           if (!abortedRef.current) {
             scheduleNext(fn, minMs, maxMs);
           }
@@ -469,9 +475,7 @@ export function useMascotAnimation(
       // Store initial timeout so cleanup can cancel it
       activeAnimations.current.push({
         cancel: () => clearTimeout(initialTimeout),
-        finished: Promise.resolve(),
-        playState: 'running',
-      } as unknown as Animation);
+      });
     }
 
     // ═══ LONELY STATE ═══
