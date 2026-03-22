@@ -240,22 +240,24 @@ export function StreamingPanel() {
             </div>
           </div>
 
-          {/* Bitrate Step — compact inline row */}
-          <div className="flex items-center gap-2 pt-1 border-t border-white/[0.04]">
-            <span className="text-[11px] text-txt-tertiary">Slider step</span>
-            <input
-              type="number"
-              min={50}
-              max={5000}
-              step={50}
-              value={draft.bitrateStepKbps}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (v >= 50 && v <= 5000) setDraft({ ...draft, bitrateStepKbps: v });
-              }}
-              className="input-standard w-16 px-1.5 py-0.5 text-xs text-center"
-            />
-            <span className="text-[11px] text-txt-tertiary">kbps</span>
+          {/* Bitrate Step — pill presets */}
+          <div className="pt-2 border-t border-white/[0.04]">
+            <div className="text-[11px] text-txt-tertiary mb-1.5">Slider Step</div>
+            <div className="flex flex-wrap gap-1">
+              {[100, 250, 500, 1000, 2500, 5000].map((step) => (
+                <button
+                  key={step}
+                  onClick={() => setDraft({ ...draft, bitrateStepKbps: step })}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer select-none ${
+                    draft.bitrateStepKbps === step
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-elevated text-txt-secondary hover:bg-interactive-hover'
+                  }`}
+                >
+                  {step >= 1000 ? `${step / 1000} Mbps` : `${step} kbps`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
