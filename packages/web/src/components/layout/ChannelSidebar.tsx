@@ -24,6 +24,7 @@ import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/us
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
   const channels = useSpaceStore((s) => s.channels);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
@@ -86,6 +87,7 @@ export function ChannelSidebar() {
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const space = spaces.find(s => s.id === currentSpaceId);
   const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
+  const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === currentSpaceId;
 
   const federationInstances = useInstanceStore((s) => s.instances);
   const instanceLabel = useMemo(() => {
@@ -624,7 +626,29 @@ export function ChannelSidebar() {
 
       {/* Channels — dynamic category layout */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
+        {/* Skeleton loading state */}
+        {isLoadingSpace && (
+          <div className="px-2 pt-3">
+            {/* Category group 1 */}
+            <div className="skeleton skeleton-bar h-2 w-[45%] ml-2 mb-3" />
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 mb-0.5" style={{ animationDelay: `${i * 0.1}s` }}>
+                <div className="skeleton w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ animationDelay: `${i * 0.1}s` }} />
+                <div className="skeleton skeleton-bar flex-1" style={{ width: `${55 + (i * 17) % 25}%`, animationDelay: `${i * 0.1}s` }} />
+              </div>
+            ))}
+            {/* Category group 2 */}
+            <div className="skeleton skeleton-bar h-2 w-[55%] ml-2 mb-3 mt-5" style={{ animationDelay: '0.3s' }} />
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 mb-0.5" style={{ animationDelay: `${(i + 3) * 0.1}s` }}>
+                <div className="skeleton w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ animationDelay: `${(i + 3) * 0.1}s` }} />
+                <div className="skeleton skeleton-bar flex-1" style={{ width: `${50 + (i * 13) % 30}%`, animationDelay: `${(i + 3) * 0.1}s` }} />
+              </div>
+            ))}
+          </div>
+        )}
         {/* Uncategorized channels */}
+        {!isLoadingSpace && (<>
         {uncategorizedChannels.length > 0 && (
           <div className="mb-[19px]">
             {canManageChannels && sortedCategories.length === 0 && (
@@ -812,6 +836,7 @@ export function ChannelSidebar() {
             </button>
           </div>
         )}
+        </>)}
 
       </div>
 
