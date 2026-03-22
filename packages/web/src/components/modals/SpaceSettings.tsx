@@ -379,7 +379,7 @@ export function SpaceSettingsModal() {
         {/* Content area (desktop always, mobile only when viewing content) */}
         {(!isMobile || mobileView === 'content') && (
           <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
-            <div className="px-6 max-w-[640px]">
+            <div className="px-6 max-w-[640px] mx-auto">
               {/* Mobile back button */}
               {isMobile && (
                 <button
