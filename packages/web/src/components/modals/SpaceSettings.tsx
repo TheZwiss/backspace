@@ -266,11 +266,13 @@ function JoinRequestsSection({ spaceId }: { spaceId: string }) {
 export function SpaceSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const closeModal = useUIStore((s) => s.closeModal);
+  const isMobile = useUIStore((s) => s.isMobile);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
   const spaces = useSpaceStore((s) => s.spaces);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
 
   const [tab, setTab] = useState<'overview' | 'discovery' | 'members' | 'roles' | 'bans'>('overview');
+  const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
 
   const isOpen = activeModal === 'spaceSettings';
   const space = spaces.find(s => s.id === currentSpaceId);
@@ -282,48 +284,114 @@ export function SpaceSettingsModal() {
   if (!space || !currentSpaceId) return null;
 
   const tabClass = (t: typeof tab) =>
-    `w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
-      tab === t ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+    `w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+      tab === t ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
+  const handleTabClick = (t: typeof tab) => {
+    setTab(t);
+    if (isMobile) setMobileView('content');
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Space Settings" maxWidth="max-w-2xl" mobileStyle="fullscreen">
-      <div className="flex gap-4 h-[min(520px,70vh)]">
-        {/* Tabs */}
-        <div className="w-32 flex-shrink-0 self-start z-10">
-          <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
-            <button onClick={() => setTab('overview')} className={tabClass('overview')}>
-              Overview
-            </button>
+    <Modal isOpen={isOpen} onClose={closeModal} size="settings" mobileStyle="fullscreen">
+      <div className="flex h-full">
+        {/* Desktop Sidebar */}
+        <div className="hidden md:flex w-52 flex-shrink-0 flex-col p-4 gap-3">
+          {/* Space card */}
+          <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
+            <Avatar
+              src={space.icon}
+              name={space.name}
+              size={36}
+              userId={space.id}
+            />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-txt-primary truncate">{space.name}</div>
+            </div>
+          </div>
+
+          {/* Nav list */}
+          <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">General</div>
+            <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>Overview</button>
             {canManageSpace && (
-              <button onClick={() => setTab('discovery')} className={tabClass('discovery')}>
-                Discovery
-              </button>
+              <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>Discovery</button>
             )}
-            <button onClick={() => setTab('members')} className={tabClass('members')}>
-              Members
-            </button>
+
+            <div className="border-t border-white/[0.04] my-2 mx-2" />
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Management</div>
+            <button onClick={() => handleTabClick('members')} className={tabClass('members')}>Members</button>
             {canManageRoles && (
-              <button onClick={() => setTab('roles')} className={tabClass('roles')}>
-                Roles
-              </button>
+              <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>Roles</button>
             )}
             {canBanMembers && (
-              <button onClick={() => setTab('bans')} className={tabClass('bans')}>
-                Bans
-              </button>
+              <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>Bans</button>
             )}
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin">
-          {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
-          {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
-          {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
-          {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
-          {tab === 'bans' && canBanMembers && <BansPanel spaceId={currentSpaceId} />}
-        </div>
+        {/* Mobile: Tab list */}
+        {isMobile && mobileView === 'tabs' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Mobile space card */}
+            <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
+              <Avatar
+                src={space.icon}
+                name={space.name}
+                size={36}
+                userId={space.id}
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-txt-primary truncate">{space.name}</div>
+              </div>
+            </div>
+
+            <div className="glass-bubble rounded-lg p-2 space-y-0.5">
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">General</div>
+              <button onClick={() => handleTabClick('overview')} className={tabClass('overview')}>Overview</button>
+              {canManageSpace && (
+                <button onClick={() => handleTabClick('discovery')} className={tabClass('discovery')}>Discovery</button>
+              )}
+
+              <div className="border-t border-white/[0.04] my-2 mx-2" />
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Management</div>
+              <button onClick={() => handleTabClick('members')} className={tabClass('members')}>Members</button>
+              {canManageRoles && (
+                <button onClick={() => handleTabClick('roles')} className={tabClass('roles')}>Roles</button>
+              )}
+              {canBanMembers && (
+                <button onClick={() => handleTabClick('bans')} className={tabClass('bans')}>Bans</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Content area (desktop always, mobile only when viewing content) */}
+        {(!isMobile || mobileView === 'content') && (
+          <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
+            <div className="px-6 max-w-[640px]">
+              {/* Mobile back button */}
+              {isMobile && (
+                <button
+                  onClick={() => setMobileView('tabs')}
+                  className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
+                  aria-label="Back to space settings menu"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                  </svg>
+                  Space Settings
+                </button>
+              )}
+              {tab === 'overview' && <OverviewPanel spaceId={currentSpaceId} />}
+              {tab === 'discovery' && canManageSpace && <DiscoveryPanel spaceId={currentSpaceId} />}
+              {tab === 'members' && <MembersPanel spaceId={currentSpaceId} />}
+              {tab === 'roles' && canManageRoles && <RolesPanel spaceId={currentSpaceId} />}
+              {tab === 'bans' && canBanMembers && <BansPanel spaceId={currentSpaceId} />}
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );
