@@ -352,6 +352,27 @@
   animation: gradientPulse 4s ease-in-out infinite;
 }
 
+/* ── Skeleton Loading ── */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.08) 40%,
+    rgba(255,255,255,0.04) 80%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-circle { border-radius: 50%; }
+.skeleton-bar    { height: 12px; border-radius: 6px; }
+.skeleton-block  { border-radius: 8px; }
+
 @keyframes search-flash {
   0% { background-color: rgba(124, 108, 246, 0.2); }
   100% { background-color: transparent; }
@@ -464,6 +485,7 @@
   .animate-call-glow,
   .animate-call-button-glow { animation: none !important; }
   .call-refraction::after { animation: none !important; opacity: 0; }
+  .skeleton { animation: none; }
 }
 
 /* ── MOBILE SCREEN TRANSITIONS ── */
