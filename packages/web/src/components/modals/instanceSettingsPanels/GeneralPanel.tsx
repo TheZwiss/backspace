@@ -65,6 +65,7 @@ export function GeneralPanel() {
 
   return (
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+      <h2 className="text-lg font-semibold text-txt-primary">General</h2>
       <div className="text-xs text-txt-tertiary">
         Configure your Backspace instance. These settings affect all users.
       </div>

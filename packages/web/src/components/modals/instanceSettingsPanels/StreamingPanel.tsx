@@ -162,6 +162,7 @@ export function StreamingPanel() {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary">Streaming</h2>
       <div className="text-xs text-txt-tertiary">
         These limits apply to all users on this instance. Users can pick values within these bounds.
       </div>

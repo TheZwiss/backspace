@@ -74,6 +74,7 @@ export function StoragePanel() {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary">Storage</h2>
       <div className="text-xs text-txt-tertiary">
         Monitor disk usage and clean up orphaned files left behind by deleted content or replaced avatars/banners.
       </div>
