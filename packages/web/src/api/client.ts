@@ -201,7 +201,8 @@ export class BackspaceApiClient {
     storageStats: () => Promise<StorageStats>;
     storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
     storageCleanup: (dryRun?: boolean) => Promise<CleanupResult>;
-    listUsers: (params?: { q?: string; page?: number; pageSize?: number; showDeleted?: boolean }) => Promise<AdminUserListResponse>;
+    listUsers: (params?: { q?: string; page?: number; pageSize?: number; showDeleted?: boolean; homeInstance?: string; role?: string; joinedAfter?: string; joinedBefore?: string; sort?: string }) => Promise<AdminUserListResponse>;
+    listInstances: () => Promise<{ instances: string[] }>;
     setUserRole: (userId: string, isAdmin: boolean) => Promise<AdminUser>;
     resetUserPassword: (userId: string) => Promise<AdminResetPasswordResponse>;
     deleteUser: (userId: string) => Promise<{ success: boolean }>;
@@ -583,8 +584,14 @@ export class BackspaceApiClient {
         if (params?.page !== undefined) qs.set('page', String(params.page));
         if (params?.pageSize !== undefined) qs.set('pageSize', String(params.pageSize));
         if (params?.showDeleted) qs.set('showDeleted', 'true');
+        if (params?.homeInstance) qs.set('homeInstance', params.homeInstance);
+        if (params?.role) qs.set('role', params.role);
+        if (params?.joinedAfter) qs.set('joinedAfter', params.joinedAfter);
+        if (params?.joinedBefore) qs.set('joinedBefore', params.joinedBefore);
+        if (params?.sort) qs.set('sort', params.sort);
         return request<AdminUserListResponse>('GET', `/admin/users?${qs}`);
       },
+      listInstances: () => request<{ instances: string[] }>('GET', '/admin/users/instances'),
       setUserRole: (userId, isAdmin) =>
         request<AdminUser>('PATCH', `/admin/users/${userId}/role`, { isAdmin }),
       resetUserPassword: (userId) =>
