@@ -20,6 +20,7 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
 import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -88,6 +89,7 @@ export function ChannelSidebar() {
   const space = spaces.find(s => s.id === currentSpaceId);
   const mySpacePerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
   const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === currentSpaceId;
+  const showChannelSkeleton = useDelayedLoading(isLoadingSpace);
 
   const federationInstances = useInstanceStore((s) => s.instances);
   const instanceLabel = useMemo(() => {
@@ -626,7 +628,7 @@ export function ChannelSidebar() {
 
       {/* Channels — dynamic category layout */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
-        {isLoadingSpace ? (
+        {showChannelSkeleton ? (
           <div className="px-2 pt-3" role="status" aria-label="Loading channels">
             {/* Category group 1 */}
             <div className="skeleton skeleton-bar h-2 w-[45%] ml-2 mb-3" />
