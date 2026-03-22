@@ -72,13 +72,18 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    // All users must provide current password (federated users have a local password hash)
-    if (!currentPassword || typeof currentPassword !== 'string') {
-      return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
-    }
-    const valid = await verifyPassword(currentPassword, user.passwordHash);
-    if (!valid) {
-      return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+    // Federated users (replicas on this instance) don't need currentPassword —
+    // their home instance already verified the password change, and JWT auth
+    // proves identity. The homeInstance field comes from the DB, not the request.
+    if (!user.homeInstance) {
+      // Local users must provide current password
+      if (!currentPassword || typeof currentPassword !== 'string') {
+        return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
+      }
+      const valid = await verifyPassword(currentPassword, user.passwordHash);
+      if (!valid) {
+        return reply.code(403).send({ error: 'Incorrect password', statusCode: 403 });
+      }
     }
 
     const newHash = await hashPassword(newPassword);
