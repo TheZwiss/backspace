@@ -15,7 +15,15 @@
     "build:desktop": "pnpm --filter @backspace/desktop build"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "electron", "sharp"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild",
+      "electron",
+      "sharp"
+    ],
+    "patchedDependencies": {
+      "uiohook-napi@1.5.5": "patches/uiohook-napi@1.5.5.patch"
+    }
   },
   "engines": {
     "node": ">=20.0.0",
