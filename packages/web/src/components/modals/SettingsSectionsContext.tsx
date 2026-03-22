@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 
 export interface SettingsSection {
   id: string;
@@ -33,18 +33,18 @@ export function SettingsSectionsProvider({ children }: { children: React.ReactNo
     setScrollFn(() => fn);
   }, []);
 
+  const value = useMemo(() => ({
+    sections,
+    activeSection,
+    scrollToSection,
+    scrollContainerRef,
+    setSections,
+    setActiveSection,
+    setScrollToSection: setScrollToSectionStable,
+  }), [sections, activeSection, scrollToSection, scrollContainerRef, setScrollToSectionStable]);
+
   return (
-    <SettingsSectionsContext.Provider
-      value={{
-        sections,
-        activeSection,
-        scrollToSection,
-        scrollContainerRef,
-        setSections,
-        setActiveSection,
-        setScrollToSection: setScrollToSectionStable,
-      }}
-    >
+    <SettingsSectionsContext.Provider value={value}>
       {children}
     </SettingsSectionsContext.Provider>
   );

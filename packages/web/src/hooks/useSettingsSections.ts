@@ -3,8 +3,13 @@ import { useSettingsSectionsContext, type SettingsSection } from '../components/
 
 export function useSettingsSections(sections: SettingsSection[]) {
   const ctx = useSettingsSectionsContext();
-  // scrollContainerRef is owned by the context provider, not by this hook.
-  // UserSettings attaches it to the scroll container div, and this hook reads it.
+  // Store ctx setters in refs to avoid depending on the ctx object in effects.
+  // The ctx object reference changes when any context value changes, which would
+  // cause infinite loops if used as an effect dependency (effect sets state →
+  // provider re-renders → new ctx object → effect re-runs).
+  const ctxRef = useRef(ctx);
+  ctxRef.current = ctx;
+
   const scrollContainerRef = ctx?.scrollContainerRef ?? null;
   const sectionElementsRef = useRef(new Map<string, HTMLElement>());
   const sectionRefCallbacksRef = useRef(new Map<string, (el: HTMLElement | null) => void>());
@@ -13,16 +18,12 @@ export function useSettingsSections(sections: SettingsSection[]) {
 
   // Register sections into context synchronously (useLayoutEffect prevents flicker)
   useLayoutEffect(() => {
-    if (ctx) {
-      ctx.setSections(sections);
-    }
+    ctxRef.current?.setSections(sections);
     return () => {
-      if (ctx) {
-        ctx.setSections([]);
-        ctx.setActiveSection('');
-      }
+      ctxRef.current?.setSections([]);
+      ctxRef.current?.setActiveSection('');
     };
-  }, [sections, ctx]);
+  }, [sections]);
 
   // scrollToSection implementation
   const scrollToSection = useCallback((id: string) => {
@@ -32,7 +33,7 @@ export function useSettingsSections(sections: SettingsSection[]) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     suppressObserverRef.current = true;
-    ctx?.setActiveSection(id);
+    ctxRef.current?.setActiveSection(id);
 
     el.scrollIntoView({
       behavior: prefersReducedMotion ? 'auto' : 'smooth',
@@ -49,14 +50,12 @@ export function useSettingsSections(sections: SettingsSection[]) {
         suppressObserverRef.current = false;
       }, prefersReducedMotion ? 50 : 500);
     }
-  }, [ctx, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   // Register scrollToSection into context
   useLayoutEffect(() => {
-    if (ctx) {
-      ctx.setScrollToSection(scrollToSection);
-    }
-  }, [scrollToSection, ctx]);
+    ctxRef.current?.setScrollToSection(scrollToSection);
+  }, [scrollToSection]);
 
   // Set up IntersectionObserver
   useLayoutEffect(() => {
@@ -69,8 +68,8 @@ export function useSettingsSections(sections: SettingsSection[]) {
         for (const entry of entries) {
           if (entry.isIntersecting) {
             const id = entry.target.getAttribute('data-section-id');
-            if (id && ctx) {
-              ctx.setActiveSection(id);
+            if (id) {
+              ctxRef.current?.setActiveSection(id);
             }
           }
         }
@@ -90,7 +89,7 @@ export function useSettingsSections(sections: SettingsSection[]) {
       observerRef.current?.disconnect();
       observerRef.current = null;
     };
-  }, [sections, ctx, scrollContainerRef]);
+  }, [sections, scrollContainerRef]);
 
   // Stable callback ref factory (cached per id to avoid re-attach)
   const sectionRef = useCallback((id: string) => {
