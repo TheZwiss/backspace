@@ -5,7 +5,6 @@ import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf } from '../../utils/identity';
 import type { MessageWithUser } from '@backspace/shared';
@@ -286,8 +285,16 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         onScroll={handleScroll}
       >
         {isLoadingMore && (
-          <div className="py-4">
-            <LoadingSpinner size={24} />
+          <div className="px-4 pt-4">
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
+                <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="skeleton skeleton-bar" style={{ width: `${22 + (i * 9) % 18}%`, animationDelay: `${i * 0.15}s` }} />
+                  <div className="skeleton skeleton-bar h-2.5" style={{ width: `${55 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
