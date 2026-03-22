@@ -264,13 +264,49 @@ export function AppLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="h-full flex items-center justify-center bg-surface-chat">
-        <div className="text-center">
-          <svg className="animate-spin w-10 h-10 text-accent-primary mx-auto mb-4" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <p className="text-txt-tertiary">Loading Backspace...</p>
+      <div className="h-full flex bg-surface-base">
+        {/* Space strip */}
+        <div className="w-[72px] hidden md:flex flex-col items-center gap-3 pt-4 bg-surface-base flex-shrink-0">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className="skeleton skeleton-circle w-12 h-12" style={{ animationDelay: `${i * 0.1}s` }} />
+          ))}
+        </div>
+
+        {/* Sidebar */}
+        <div className="w-60 hidden md:flex bg-surface-channel flex-shrink-0 flex-col pt-4 px-2">
+          {/* Header bar */}
+          <div className="skeleton skeleton-bar w-[60%] h-4 mb-6 ml-2" />
+          {/* Channel items */}
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="flex items-center gap-2 px-2 py-1.5 mb-0.5" style={{ animationDelay: `${i * 0.08}s` }}>
+              <div className="skeleton w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ animationDelay: `${i * 0.08}s` }} />
+              <div className="skeleton skeleton-bar flex-1" style={{ width: `${45 + (i * 11) % 35}%`, animationDelay: `${i * 0.08}s` }} />
+            </div>
+          ))}
+        </div>
+
+        {/* Main chat area */}
+        <div className="flex-1 bg-surface-chat flex flex-col">
+          {/* Channel header */}
+          <div className="h-12 flex items-center px-4 border-b border-white/[0.04]">
+            <div className="skeleton skeleton-bar w-32 h-3.5" />
+          </div>
+
+          {/* Messages area — bottom-aligned */}
+          <div className="flex-1 flex flex-col justify-end px-4 pb-6">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.12}s` }}>
+                <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.12}s` }} />
+                <div className="flex-1 space-y-2 pt-1">
+                  <div className="skeleton skeleton-bar" style={{ width: `${20 + (i * 7) % 20}%`, animationDelay: `${i * 0.12}s` }} />
+                  <div className="skeleton skeleton-bar h-2.5" style={{ width: `${50 + (i * 13) % 40}%`, animationDelay: `${i * 0.12}s` }} />
+                  {i % 3 === 0 && (
+                    <div className="skeleton skeleton-bar h-2.5" style={{ width: `${30 + (i * 11) % 35}%`, animationDelay: `${i * 0.12}s` }} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
