@@ -1,12 +1,7 @@
 // packages/web/src/components/ui/__tests__/Mascot.test.tsx
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { Mascot } from '../Mascot';
-
-// Mock the animation hook — Task 2 implements it
-vi.mock('../../../hooks/useMascotAnimation', () => ({
-  useMascotAnimation: vi.fn(),
-}));
 
 describe('Mascot', () => {
   it('renders an SVG with aria-hidden and presentation role', () => {
@@ -122,5 +117,18 @@ describe('Mascot', () => {
     const mouth = container.querySelector('[data-mascot="mouth"]');
     expect(mouth).toBeTruthy();
     expect(mouth!.tagName.toLowerCase()).toBe('path');
+  });
+
+  describe('Mascot animation lifecycle', () => {
+    it('renders without crashing when element.animate is unavailable (jsdom)', () => {
+      expect(() => render(<Mascot state="idle" />)).not.toThrow();
+    });
+
+    it('renders without crashing for each state', () => {
+      for (const state of ['idle', 'sleeping', 'excited', 'lonely'] as const) {
+        const { unmount } = render(<Mascot state={state} />);
+        unmount();
+      }
+    });
   });
 });
