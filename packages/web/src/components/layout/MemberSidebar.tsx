@@ -8,6 +8,7 @@ import { Username } from '../ui/Username';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -78,9 +79,10 @@ export function MemberSidebar() {
     return { roleGroups: sorted, offlineMembers: offline };
   }, [members, ownerId]);
 
-  if (!memberListOpen) return null;
-
   const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === currentSpaceId;
+  const showMemberSkeleton = useDelayedLoading(isLoadingSpace);
+
+  if (!memberListOpen) return null;
 
   const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
     if (member.roles && member.roles.length > 0) {
@@ -151,7 +153,7 @@ export function MemberSidebar() {
 
   return (
     <div className="w-60 bg-surface-members flex-shrink-0 overflow-y-auto select-none no-scrollbar hidden md:block border-l border-border-hard">
-      {isLoadingSpace ? (
+      {showMemberSkeleton ? (
         <div className="px-3 pt-4" role="status" aria-label="Loading members">
           {/* Role group 1 */}
           <div className="skeleton skeleton-bar h-2 w-[40%] mb-3" style={{ animationDelay: '0s' }} />
