@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
+import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from './settingsPanels/AccountPanel';
@@ -14,10 +15,13 @@ export function UserSettingsModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
+  const isMobile = useUIStore((s) => s.isMobile);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
+  const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
   const [tab, setTab] = useState<SettingsTab>('account');
+  const [mobileView, setMobileView] = useState<'tabs' | 'content'>('content');
 
   const isOpen = activeModal === 'userSettings';
 
@@ -35,6 +39,8 @@ export function UserSettingsModal() {
       } else {
         setTab('account');
       }
+      // On mobile, if deep-linking to a tab, show content directly
+      setMobileView(requested ? 'content' : 'tabs');
     }
   }, [isOpen, modalData.tab, isAdmin]);
 
@@ -44,52 +50,136 @@ export function UserSettingsModal() {
   };
 
   const tabClass = (t: SettingsTab) =>
-    `w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${
-      tab === t ? 'bg-interactive-selected text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
+    `w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+      tab === t ? 'bg-interactive-selected text-txt-primary font-medium' : 'text-txt-tertiary hover:text-txt-secondary hover:bg-interactive-hover'
     }`;
 
+  const handleTabClick = (t: SettingsTab) => {
+    setTab(t);
+    if (isMobile) setMobileView('content');
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={closeModal} title="Settings" maxWidth="max-w-2xl">
-      <div className="flex gap-4 h-[min(520px,70vh)]">
-        {/* Sidebar */}
-        <div className="w-32 flex-shrink-0 flex flex-col gap-2">
-          <div className="glass-bubble rounded-lg p-1.5 space-y-0.5">
-            <button onClick={() => setTab('account')} className={tabClass('account')}>
-              Account
-            </button>
-            <button onClick={() => setTab('voice')} className={tabClass('voice')}>
-              Voice
-            </button>
-            <button onClick={() => setTab('privacy')} className={tabClass('privacy')}>
-              Privacy
-            </button>
-            <button onClick={() => setTab('connections')} className={tabClass('connections')}>
-              Connections
-            </button>
-            {isAdmin && (
-              <button onClick={() => setTab('instance')} className={tabClass('instance')}>
-                Instance
-              </button>
-            )}
+    <Modal isOpen={isOpen} onClose={closeModal} size="settings" mobileStyle="fullscreen">
+      <div className="flex h-full">
+        {/* Desktop Sidebar */}
+        <div className="hidden md:flex w-52 flex-shrink-0 flex-col p-4 gap-3">
+          {/* User card */}
+          <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
+            <Avatar
+              src={user?.avatar}
+              name={user?.displayName || user?.username || ''}
+              size={36}
+              userId={user?.id}
+            />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-txt-primary truncate">{user?.displayName || user?.username}</div>
+              <div className="text-xs text-txt-tertiary truncate">@{user?.username}</div>
+            </div>
           </div>
-          <div className="glass-bubble rounded-lg p-1.5">
+
+          {/* Nav list */}
+          <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
+            <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
+            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice</button>
+            <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
+
+            <div className="border-t border-white/[0.04] my-2 mx-2" />
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
+            <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
+
+            {isAdmin && (
+              <>
+                <div className="border-t border-white/[0.04] my-2 mx-2" />
+                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Administration</div>
+                <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>Instance</button>
+              </>
+            )}
+
+            <div className="flex-1" />
+
+            <div className="border-t border-white/[0.04] my-2 mx-2" />
             <button
               onClick={handleLogout}
-              className="w-full px-2.5 py-1.5 rounded text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors text-left"
+              className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
             >
               Log Out
             </button>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin px-1">
-          {tab === 'account' && <AccountPanel />}
-          {tab === 'voice' && <VoicePanel />}
-          {tab === 'privacy' && <PrivacyPanel />}
-          {tab === 'connections' && <ConnectionsPanel />}
-          {tab === 'instance' && isAdmin && <InstancePanel />}
-        </div>
+        {/* Mobile: Tab list */}
+        {isMobile && mobileView === 'tabs' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Mobile user card */}
+            <div className="glass-bubble rounded-lg p-3 flex items-center gap-3">
+              <Avatar
+                src={user?.avatar}
+                name={user?.displayName || user?.username || ''}
+                size={36}
+                userId={user?.id}
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-txt-primary truncate">{user?.displayName || user?.username}</div>
+                <div className="text-xs text-txt-tertiary truncate">@{user?.username}</div>
+              </div>
+            </div>
+
+            <div className="glass-bubble rounded-lg p-2 space-y-0.5">
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
+              <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
+              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice</button>
+              <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
+
+              <div className="border-t border-white/[0.04] my-2 mx-2" />
+              <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">App Settings</div>
+              <button onClick={() => handleTabClick('connections')} className={tabClass('connections')}>Connections</button>
+
+              {isAdmin && (
+                <>
+                  <div className="border-t border-white/[0.04] my-2 mx-2" />
+                  <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">Administration</div>
+                  <button onClick={() => handleTabClick('instance')} className={tabClass('instance')}>Instance</button>
+                </>
+              )}
+
+              <div className="border-t border-white/[0.04] my-2 mx-2" />
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-3 py-2 rounded-md text-sm text-txt-danger hover:bg-accent-rose/10 transition-colors"
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Content area (desktop always, mobile only when viewing content) */}
+        {(!isMobile || mobileView === 'content') && (
+          <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin py-6">
+            <div className="px-6 max-w-[640px]">
+              {/* Mobile back button */}
+              {isMobile && (
+                <button
+                  onClick={() => setMobileView('tabs')}
+                  className="flex items-center gap-1.5 text-txt-tertiary hover:text-txt-secondary mb-4 text-sm"
+                  aria-label="Back to settings menu"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                  </svg>
+                  Settings
+                </button>
+              )}
+              {tab === 'account' && <AccountPanel />}
+              {tab === 'voice' && <VoicePanel />}
+              {tab === 'privacy' && <PrivacyPanel />}
+              {tab === 'connections' && <ConnectionsPanel />}
+              {tab === 'instance' && isAdmin && <InstancePanel />}
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );
