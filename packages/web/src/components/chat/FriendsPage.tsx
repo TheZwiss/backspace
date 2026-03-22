@@ -10,6 +10,7 @@ import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
+import { Mascot } from '../ui/Mascot';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
@@ -97,9 +98,9 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               Online — {onlineFriends.length}
             </h2>
             {onlineFriends.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-60">
-                <img src="/friends-empty.svg" alt="" className="w-64 h-64 mb-4" onError={(e) => (e.target as any).style.display='none'} />
-                <p className="text-txt-tertiary">No one's around to play with Wumpus.</p>
+              <div className="flex flex-col items-center justify-center h-full opacity-80">
+                <Mascot state="idle" className="w-32 h-32 mb-4" />
+                <p className="text-txt-tertiary text-sm">No one's online right now.</p>
               </div>
             ) : (
               onlineFriends.map(friend => (
@@ -115,8 +116,9 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               All Friends — {friends.length}
             </h2>
             {friends.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-60">
-                <p className="text-txt-tertiary">Wumpus is waiting on friends. You can add them!</p>
+              <div className="flex flex-col items-center justify-center h-full opacity-80">
+                <Mascot state="lonely" className="w-32 h-32 mb-4" />
+                <p className="text-txt-tertiary text-sm">No friends yet — add someone!</p>
               </div>
             ) : (
               friends.map(friend => (
@@ -132,8 +134,9 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               Pending — {pendingIncoming.length + pendingOutgoing.length}
             </h2>
             {[...pendingIncoming, ...pendingOutgoing].length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full opacity-60">
-                <p className="text-txt-tertiary">There are no pending friend requests. Here's Wumpus for now!</p>
+              <div className="flex flex-col items-center justify-center h-full opacity-80">
+                <Mascot state="sleeping" className="w-32 h-32 mb-4" />
+                <p className="text-txt-tertiary text-sm">No pending requests — Nori is napping.</p>
               </div>
             ) : (
               <>

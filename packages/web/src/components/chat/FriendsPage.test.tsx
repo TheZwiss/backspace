@@ -7,6 +7,21 @@ import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../
 import { useSpaceStore } from '../../stores/spaceStore';
 import type { Friend, FriendRequest } from '@backspace/shared';
 
+// Mock the mascot animation hook
+vi.mock('../../hooks/useMascotAnimation', () => ({
+  useMascotAnimation: vi.fn(),
+}));
+
+// Stub AudioManager to avoid AudioWorkletNode reference error in jsdom
+vi.mock('../../audio/AudioManager', () => ({
+  AudioManager: {
+    getInstance: vi.fn().mockReturnValue({
+      setOutputDevice: vi.fn(),
+      setVolume: vi.fn(),
+    }),
+  },
+}));
+
 // Mock the api module
 vi.mock('../../api/client', () => ({
   api: {
@@ -363,6 +378,38 @@ describe('FriendsPage', () => {
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith('req-in-2', 'declined');
       });
+    });
+  });
+
+  describe('Empty state mascot messages', () => {
+    it('shows "No one\'s online right now." in online tab when no friends online', () => {
+      useSocialStore.setState({ friends: [], requests: [] });
+      renderFriendsPage();
+
+      expect(screen.getByText("No one's online right now.")).toBeInTheDocument();
+      expect(screen.queryByText(/Wumpus/)).not.toBeInTheDocument();
+    });
+
+    it('shows "No friends yet — add someone!" in all tab when no friends', async () => {
+      const user = userEvent.setup();
+      useSocialStore.setState({ friends: [], requests: [] });
+      renderFriendsPage();
+
+      await user.click(screen.getByText('All'));
+
+      expect(screen.getByText('No friends yet — add someone!')).toBeInTheDocument();
+      expect(screen.queryByText(/Wumpus/)).not.toBeInTheDocument();
+    });
+
+    it('shows "No pending requests — Nori is napping." in pending tab when empty', async () => {
+      const user = userEvent.setup();
+      useSocialStore.setState({ friends: [], requests: [] });
+      renderFriendsPage();
+
+      await user.click(screen.getByText('Pending'));
+
+      expect(screen.getByText('No pending requests — Nori is napping.')).toBeInTheDocument();
+      expect(screen.queryByText(/Wumpus/)).not.toBeInTheDocument();
     });
   });
 });
