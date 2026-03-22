@@ -28,6 +28,7 @@ import { ToastContainer } from '../ui/ToastContainer';
 import { UpdateToast } from '../ui/UpdateToast';
 import { ContextMenuRenderer } from '../ui/ContextMenuRenderer';
 import { useAuth } from '../../hooks/useAuth';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useFederationToasts } from '../../hooks/useFederationToasts';
 import { useLiveKit } from '../../hooks/useLiveKit';
@@ -91,6 +92,7 @@ export function AppLayout() {
   }, [outputDeviceId]);
 
   const { user, isLoading } = useAuth();
+  const showBootSkeleton = useDelayedLoading(isLoading);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
@@ -262,7 +264,7 @@ export function AppLayout() {
     }
   }, [spaceId, channelId, channels, navigate]);
 
-  if (isLoading || !user) {
+  if (!user || showBootSkeleton) {
     return (
       <div className="h-full flex bg-surface-base" role="status" aria-label="Loading Backspace">
         {/* Space strip */}
