@@ -1,6 +1,68 @@
 import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent } from 'uiohook-napi';
 import { BrowserWindow, systemPreferences } from 'electron';
 
+// ---------------------------------------------------------------------------
+// Uiohook keycode → DOM event.code mapping
+// ---------------------------------------------------------------------------
+// The web UI records keybinds as djb2 hashes of DOM KeyboardEvent.code strings.
+// Uiohook fires native keycodes (hardware scan codes). This table bridges the
+// two so the main process can match keybinds against native events.
+
+const UIOHOOK_TO_DOM_CODE: Record<number, string> = {
+  // Letters
+  30: 'KeyA', 48: 'KeyB', 46: 'KeyC', 32: 'KeyD', 18: 'KeyE',
+  33: 'KeyF', 34: 'KeyG', 35: 'KeyH', 23: 'KeyI', 36: 'KeyJ',
+  37: 'KeyK', 38: 'KeyL', 50: 'KeyM', 49: 'KeyN', 24: 'KeyO',
+  25: 'KeyP', 16: 'KeyQ', 19: 'KeyR', 31: 'KeyS', 20: 'KeyT',
+  22: 'KeyU', 47: 'KeyV', 17: 'KeyW', 45: 'KeyX', 21: 'KeyY',
+  44: 'KeyZ',
+  // Digits
+  11: 'Digit0', 2: 'Digit1', 3: 'Digit2', 4: 'Digit3', 5: 'Digit4',
+  6: 'Digit5', 7: 'Digit6', 8: 'Digit7', 9: 'Digit8', 10: 'Digit9',
+  // Function keys
+  59: 'F1', 60: 'F2', 61: 'F3', 62: 'F4', 63: 'F5', 64: 'F6',
+  65: 'F7', 66: 'F8', 67: 'F9', 68: 'F10', 87: 'F11', 88: 'F12',
+  91: 'F13', 92: 'F14', 93: 'F15', 99: 'F16', 100: 'F17', 101: 'F18',
+  102: 'F19', 103: 'F20', 104: 'F21', 105: 'F22', 106: 'F23', 107: 'F24',
+  // Modifiers
+  29: 'ControlLeft', 3613: 'ControlRight',
+  56: 'AltLeft', 3640: 'AltRight',
+  42: 'ShiftLeft', 54: 'ShiftRight',
+  3675: 'MetaLeft', 3676: 'MetaRight',
+  // Special keys
+  14: 'Backspace', 15: 'Tab', 28: 'Enter', 58: 'CapsLock', 1: 'Escape', 57: 'Space',
+  // Navigation
+  3657: 'PageUp', 3665: 'PageDown', 3663: 'End', 3655: 'Home',
+  57419: 'ArrowLeft', 57416: 'ArrowUp', 57421: 'ArrowRight', 57424: 'ArrowDown',
+  3666: 'Insert', 3667: 'Delete',
+  // Punctuation
+  39: 'Semicolon', 13: 'Equal', 51: 'Comma', 12: 'Minus', 52: 'Period',
+  53: 'Slash', 41: 'Backquote', 26: 'BracketLeft', 43: 'Backslash',
+  27: 'BracketRight', 40: 'Quote',
+  // Numpad
+  82: 'Numpad0', 79: 'Numpad1', 80: 'Numpad2', 81: 'Numpad3',
+  75: 'Numpad4', 76: 'Numpad5', 77: 'Numpad6', 71: 'Numpad7',
+  72: 'Numpad8', 73: 'Numpad9', 55: 'NumpadMultiply', 78: 'NumpadAdd',
+  74: 'NumpadSubtract', 83: 'NumpadDecimal', 3637: 'NumpadDivide',
+  // Locks
+  69: 'NumLock', 70: 'ScrollLock', 3639: 'PrintScreen',
+};
+
+/** djb2 hash — must match codeToNumeric() in KeybindsPanel.tsx */
+function djb2(code: string): number {
+  let hash = 5381;
+  for (let i = 0; i < code.length; i++) {
+    hash = ((hash << 5) + hash + code.charCodeAt(i)) | 0;
+  }
+  return hash >>> 0;
+}
+
+// Pre-compute: uiohook keycode → djb2 hash (same values the web UI stores)
+const UIOHOOK_TO_HASH = new Map<number, number>();
+for (const [keycode, domCode] of Object.entries(UIOHOOK_TO_DOM_CODE)) {
+  UIOHOOK_TO_HASH.set(Number(keycode), djb2(domCode));
+}
+
 interface KeybindConfig {
   actionId: string;
   keys: number[];
@@ -79,12 +141,16 @@ export class KeybindManager {
   }
 
   private onKeyDown(e: UiohookKeyboardEvent): void {
-    this.pressedKeys.add(e.keycode);
+    const hash = UIOHOOK_TO_HASH.get(e.keycode);
+    if (hash === undefined) return; // unmapped key — ignore
+    this.pressedKeys.add(hash);
     this.evaluateKeybinds();
   }
 
   private onKeyUp(e: UiohookKeyboardEvent): void {
-    this.pressedKeys.delete(e.keycode);
+    const hash = UIOHOOK_TO_HASH.get(e.keycode);
+    if (hash === undefined) return;
+    this.pressedKeys.delete(hash);
     this.checkReleases();
   }
 
