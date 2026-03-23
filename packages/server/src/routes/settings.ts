@@ -176,12 +176,14 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const gifKey = row.gifApiKey as string | null;
+    const maxUploadBytes = row.maxUploadSizeBytes ?? config.maxUploadSize;
     const response: InstanceAdminSettings = {
       instanceName: row.instanceName ?? 'Backspace',
       registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
       discoveryEnabled: row.discoveryEnabled === 1,
       gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
       gifEnabled: !!gifKey,
+      maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
     };
 
     return reply.code(200).send(response);
@@ -220,6 +222,14 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    if (body.maxUploadSizeMb !== undefined) {
+      const mb = Number(body.maxUploadSizeMb);
+      if (isNaN(mb) || mb < 1 || mb > 500) {
+        return reply.code(400).send({ error: 'maxUploadSizeMb must be between 1 and 500', statusCode: 400 });
+      }
+      updateData.maxUploadSizeBytes = Math.round(mb * 1024 * 1024);
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
@@ -228,12 +238,14 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const updatedGifKey = updatedRow.gifApiKey as string | null;
+    const updatedMaxUploadBytes = updatedRow.maxUploadSizeBytes ?? config.maxUploadSize;
     const response: InstanceAdminSettings = {
       instanceName: updatedRow.instanceName ?? 'Backspace',
       registrationOpen: updatedRow.registrationOpen !== null ? updatedRow.registrationOpen === 1 : config.registrationOpen,
       discoveryEnabled: updatedRow.discoveryEnabled === 1,
       gifApiKey: updatedGifKey ? `****${updatedGifKey.slice(-4)}` : undefined,
       gifEnabled: !!updatedGifKey,
+      maxUploadSizeMb: Math.round(updatedMaxUploadBytes / (1024 * 1024)),
     };
 
     return reply.code(200).send(response);
