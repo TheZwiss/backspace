@@ -8,6 +8,7 @@ import { InputPopover, type InputPopoverTab } from './InputPopover';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { MAX_MESSAGE_LENGTH, type MemberWithUser } from '@backspace/shared';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface MessageInputProps {
   channelId: string;
@@ -24,6 +25,8 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Map<number, number>>(new Map());
+  const addToast = useUIStore((s) => s.addToast);
   const [mentionState, setMentionState] = useState<MentionState | null>(null);
   const [activePopover, setActivePopover] = useState<InputPopoverTab | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,13 +102,31 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     setIsUploading(true);
     setMentionState(null);
     setActivePopover(null);
+    setUploadProgress(new Map());
     try {
       // Upload files first — route to the correct instance for this channel
       const attachmentIds: string[] = [];
       const uploadClient = getApiForOrigin(getChannelOrigin(channelId));
-      for (const file of files) {
-        const attachment = await uploadClient.uploads.upload(file);
-        attachmentIds.push(attachment.id);
+      const failedFiles: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]!;
+        try {
+          const attachment = await uploadClient.uploads.uploadWithProgress(file, (loaded, total) => {
+            setUploadProgress(prev => new Map(prev).set(i, Math.round((loaded / total) * 100)));
+          });
+          attachmentIds.push(attachment.id);
+          setUploadProgress(prev => new Map(prev).set(i, 100));
+        } catch (err) {
+          failedFiles.push(file.name);
+          const msg = err instanceof Error ? err.message : 'Upload failed';
+          addToast(`Failed to upload ${file.name}: ${msg}`, 'warning');
+        }
+      }
+
+      if (failedFiles.length > 0 && attachmentIds.length === 0 && !trimmed) {
+        // All uploads failed, no text — nothing to send
+        return;
       }
 
       await sendMessage(channelId, trimmed || '', attachmentIds.length > 0 ? attachmentIds : undefined);
@@ -124,9 +145,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         typingTimeoutRef.current = undefined;
       }
     } catch (err) {
-      console.error('Failed to send message:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to send message';
+      addToast(msg, 'warning');
     } finally {
       setIsUploading(false);
+      setUploadProgress(new Map());
     }
   };
 
@@ -349,32 +372,51 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         {/* File previews */}
         {files.length > 0 && (
           <div className="p-4 flex flex-wrap gap-4 bg-surface-channel/30">
-            {files.map((file, i) => (
-              <div key={i} className="relative group bg-surface-channel rounded-lg p-2 max-w-[200px] shadow-elevation-low border border-border-hard">
-                {file.type.startsWith('image/') ? (
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="max-h-[150px] rounded object-cover"
-                  />
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-txt-secondary py-4 px-2">
-                    <svg className="w-8 h-8 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span className="truncate max-w-[120px] font-medium">{file.name}</span>
-                  </div>
-                )}
-                <button
-                  onClick={() => removeFile(i)}
-                  className="absolute -top-2 -right-2 w-7 h-7 bg-accent-rose hover:bg-accent-rose/80 shadow-elevation-high rounded-lg flex items-center justify-center text-white transition-colors z-10"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+            {files.map((file, i) => {
+              const progress = uploadProgress.get(i);
+              return (
+                <div key={i} className="relative group bg-surface-channel rounded-lg p-2 max-w-[200px] shadow-elevation-low border border-border-hard overflow-hidden">
+                  {file.type.startsWith('image/') ? (
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="max-h-[150px] rounded object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-txt-secondary py-4 px-2">
+                      <svg className="w-8 h-8 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="truncate max-w-[120px] font-medium">{file.name}</span>
+                    </div>
+                  )}
+                  {/* Upload progress bar */}
+                  {progress !== undefined && progress < 100 && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10">
+                      <div
+                        className="h-full bg-accent-primary transition-all duration-200"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  )}
+                  {progress !== undefined && progress < 100 && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
+                      <span className="text-xs font-medium text-white">{progress}%</span>
+                    </div>
+                  )}
+                  {!isUploading && (
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="absolute -top-2 -right-2 w-7 h-7 bg-accent-rose hover:bg-accent-rose/80 shadow-elevation-high rounded-lg flex items-center justify-center text-white transition-colors z-10"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M5 2a1 1 0 011-1h4a1 1 0 011 1v1h3a1 1 0 110 2h-.08L13 14a2 2 0 01-2 2H5a2 2 0 01-2-2L2.08 5H2a1 1 0 110-2h3V2zm2 0v1h2V2H7z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
