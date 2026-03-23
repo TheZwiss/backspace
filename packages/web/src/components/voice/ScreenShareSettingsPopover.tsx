@@ -20,9 +20,9 @@ const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
   { value: 'text', label: 'Text' },
 ];
 
-const CODECS: { value: ScreenShareConfig['codec']; label: string; desc: string }[] = [
-  { value: 'vp9', label: 'VP9', desc: 'Less bandwidth, more CPU' },
-  { value: 'h264', label: 'H.264', desc: 'Less CPU, more bandwidth' },
+const CODECS: { value: ScreenShareConfig['codec']; label: string }[] = [
+  { value: 'vp9', label: 'VP9' },
+  { value: 'h264', label: 'H.264' },
 ];
 
 function formatBitrate(bps: number): string {
@@ -193,12 +193,9 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
               <button
                 key={c.value}
                 onClick={() => setConfig({ codec: c.value })}
-                className={`${pillBase} flex-1 flex flex-col items-center gap-0.5 !py-1.5 ${config.codec === c.value ? pillSelected : pillUnselected}`}
+                className={`${pillBase} ${config.codec === c.value ? pillSelected : pillUnselected}`}
               >
-                <span>{c.label}</span>
-                <span className={`text-[9px] font-normal ${config.codec === c.value ? 'text-white/70' : 'text-txt-tertiary'}`}>
-                  {c.desc}
-                </span>
+                {c.label}
               </button>
             ))}
           </div>
