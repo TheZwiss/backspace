@@ -166,6 +166,12 @@ export function runMigrations(db: Database.Database): void {
         { name: 'duration', type: 'REAL' },
       ]
     },
+    {
+      name: 'instance_settings',
+      columns: [
+        { name: 'max_upload_size_bytes', type: 'INTEGER' }
+      ]
+    },
     // gif_api_key is handled by migrateRenameGifApiKey() — do NOT add it here
     // or it will race with the tenor_api_key → gif_api_key rename migration
   ];

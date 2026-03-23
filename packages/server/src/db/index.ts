@@ -230,6 +230,7 @@ function createTables(db: Database.Database): void {
       max_resolution INTEGER NOT NULL DEFAULT 1080,
       max_framerate INTEGER NOT NULL DEFAULT 60,
       registration_open INTEGER,
+      max_upload_size_bytes INTEGER,
       updated_at INTEGER NOT NULL DEFAULT 0
     );
 

@@ -605,6 +605,7 @@ export interface InstanceAdminSettings {
   discoveryEnabled: boolean;
   gifApiKey?: string;
   gifEnabled?: boolean;
+  maxUploadSizeMb: number;
 }
 
 export interface InstanceStreamingLimits {

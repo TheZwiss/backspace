@@ -259,6 +259,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   registrationOpen: integer('registration_open'),  // null = use env var default, 0/1 = explicit
   gifApiKey: text('gif_api_key'),
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
+  maxUploadSizeBytes: integer('max_upload_size_bytes'),
   updatedAt: integer('updated_at').notNull(),
 });
 
