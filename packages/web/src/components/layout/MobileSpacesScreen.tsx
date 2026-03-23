@@ -1,14 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
+import type { TaggedSpace } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import type { Channel } from '@backspace/shared';
 import { Mascot } from '../ui/Mascot';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 
 export function MobileSpacesScreen() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -21,6 +25,9 @@ export function MobileSpacesScreen() {
   const voiceChannelIds = useSpaceStore((s) => s.voiceChannelIds);
   const spacePermissions = useSpaceStore((s) => s.spacePermissions);
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
+  const folders = useSpaceStore((s) => s.folders);
+  const spaceLayout = useSpaceStore((s) => s.spaceLayout);
+  const updateSpaceLayout = useSpaceStore((s) => s.updateSpaceLayout);
 
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
@@ -33,6 +40,9 @@ export function MobileSpacesScreen() {
   const setMobileTab = useUIStore((s) => s.setMobileTab);
   const openModal = useUIStore((s) => s.openModal);
   const setLastChannel = useUIStore((s) => s.setLastChannel);
+  const addToast = useUIStore((s) => s.addToast);
+
+  const openContextMenu = useContextMenuStore((s) => s.open);
 
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
@@ -41,6 +51,10 @@ export function MobileSpacesScreen() {
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(currentSpaceId);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [leaveConfirmSpaceId, setLeaveConfirmSpaceId] = useState<string | null>(null);
+  const [deleteChannelId, setDeleteChannelId] = useState<string | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [transferModalSpaceId, setTransferModalSpaceId] = useState<string | null>(null);
 
   // Sync selected space with store's current space
   useEffect(() => {
@@ -129,6 +143,230 @@ export function MobileSpacesScreen() {
     });
   };
 
+  // ─── Folder handlers ──────────────────────────────────────────────────
+
+  const handleCreateFolder = async (spaceId: string) => {
+    const currentLayout = spaceLayout || spaces.map(s => ({ t: 's' as const, id: s.id }));
+    // Remove the space from its current position
+    const newLayout = currentLayout.filter(item => !(item.t === 's' && item.id === spaceId));
+    // Create a new folder ID
+    const folderId = `folder-${Date.now()}`;
+    // Insert the folder where the space was
+    const insertIdx = currentLayout.findIndex(item => item.t === 's' && item.id === spaceId);
+    newLayout.splice(insertIdx >= 0 ? insertIdx : newLayout.length, 0, { t: 'f', id: folderId });
+
+    const folderData: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    // Preserve existing folders
+    for (const f of folders) {
+      folderData[f.id] = { name: f.name, color: f.color, spaceIds: f.spaceIds };
+    }
+    // Add new folder
+    folderData[folderId] = { name: null, color: null, spaceIds: [spaceId] };
+
+    await updateSpaceLayout(newLayout, folderData);
+    addToast('Folder created', 'success', 3000);
+  };
+
+  const handleMoveToFolder = async (spaceId: string, folderId: string) => {
+    const currentLayout = spaceLayout || spaces.map(s => ({ t: 's' as const, id: s.id }));
+    const newLayout = currentLayout.filter(item => !(item.t === 's' && item.id === spaceId));
+
+    const folderData: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    for (const f of folders) {
+      folderData[f.id] = {
+        name: f.name,
+        color: f.color,
+        spaceIds: f.id === folderId ? [...f.spaceIds, spaceId] : f.spaceIds,
+      };
+    }
+
+    await updateSpaceLayout(newLayout, folderData);
+    addToast('Moved to folder', 'success', 3000);
+  };
+
+  const handleRemoveFromFolder = async (spaceId: string) => {
+    const currentLayout = spaceLayout || spaces.map(s => ({ t: 's' as const, id: s.id }));
+
+    // Find which folder contains this space
+    const containingFolder = folders.find(f => f.spaceIds.includes(spaceId));
+    if (!containingFolder) return;
+
+    // Find the folder's position in layout and insert the space after it
+    const folderIdx = currentLayout.findIndex(item => item.t === 'f' && item.id === containingFolder.id);
+    const newLayout = [...currentLayout];
+    newLayout.splice(folderIdx + 1, 0, { t: 's', id: spaceId });
+
+    const folderData: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    for (const f of folders) {
+      folderData[f.id] = {
+        name: f.name,
+        color: f.color,
+        spaceIds: f.id === containingFolder.id
+          ? f.spaceIds.filter(sid => sid !== spaceId)
+          : f.spaceIds,
+      };
+    }
+
+    // If folder is now empty, remove it from layout
+    if (folderData[containingFolder.id]!.spaceIds.length === 0) {
+      const idx = newLayout.findIndex(item => item.t === 'f' && item.id === containingFolder.id);
+      if (idx >= 0) newLayout.splice(idx, 1);
+      delete folderData[containingFolder.id];
+    }
+
+    await updateSpaceLayout(newLayout, folderData);
+    addToast('Removed from folder', 'success', 3000);
+  };
+
+  // ─── Context menu handlers ────────────────────────────────────────────
+
+  const handleSpaceContextMenu = (e: React.MouseEvent, spaceId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const space = spaces.find(s => s.id === spaceId);
+    if (!space) return;
+    const isOwner = space.ownerId === getMyUserIdForOrigin((space as TaggedSpace)._instanceOrigin ?? '');
+
+    // Check if space is in a folder
+    const inFolder = folders.some(f => f.spaceIds.includes(spaceId));
+    const availableFolders = folders.filter(f => !f.spaceIds.includes(spaceId));
+
+    const items: ContextMenuItem[] = [
+      {
+        key: 'invite',
+        type: 'action',
+        label: 'Invite People',
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>,
+        onClick: async () => {
+          try {
+            const code = await useSpaceStore.getState().generateInvite(spaceId);
+            const origin = (space as TaggedSpace)._instanceOrigin || window.location.origin;
+            const url = `${origin}/invite/${code}`;
+            await navigator.clipboard.writeText(url);
+            addToast('Invite link copied to clipboard', 'success', 3000);
+          } catch {
+            addToast('Failed to generate invite', 'warning', 3000);
+          }
+        },
+      },
+      {
+        key: 'create-folder',
+        type: 'action',
+        label: 'Create Folder',
+        hidden: inFolder,
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>,
+        onClick: () => handleCreateFolder(spaceId),
+      },
+    ];
+
+    // Move to Folder submenu (only for standalone spaces when folders exist)
+    if (!inFolder && availableFolders.length > 0) {
+      items.push({
+        key: 'move-to-folder',
+        type: 'submenu',
+        label: 'Move to Folder',
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>,
+        children: availableFolders.map(f => ({
+          key: f.id,
+          type: 'action' as const,
+          label: f.name || 'Unnamed Folder',
+          onClick: () => handleMoveToFolder(spaceId, f.id),
+        })),
+      });
+    }
+
+    // Remove from Folder (only for spaces in a folder)
+    if (inFolder) {
+      items.push({
+        key: 'remove-from-folder',
+        type: 'action',
+        label: 'Remove from Folder',
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>,
+        onClick: () => handleRemoveFromFolder(spaceId),
+      });
+    }
+
+    items.push({ key: 'sep', type: 'separator' });
+
+    items.push({
+      key: 'transfer',
+      type: 'action',
+      label: 'Transfer Ownership',
+      hidden: !isOwner,
+      icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>,
+      onClick: () => setTransferModalSpaceId(spaceId),
+    });
+
+    items.push({
+      key: 'leave',
+      type: 'action',
+      label: 'Leave Space',
+      hidden: isOwner,
+      danger: true,
+      icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>,
+      onClick: () => setLeaveConfirmSpaceId(spaceId),
+    });
+
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  };
+
+  const handleChannelContextMenu = (e: React.MouseEvent, channelId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const canManageChannels = hasPermissionBit(
+      channelPermissions.get(channelId),
+      PermissionBits.MANAGE_CHANNELS
+    );
+    if (!canManageChannels) return;
+
+    const items: ContextMenuItem[] = [
+      {
+        key: 'channel-settings',
+        type: 'action',
+        label: 'Channel Settings',
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+        onClick: () => openModal('channelSettings', { channelId }),
+      },
+      { key: 'ch-sep', type: 'separator' },
+      {
+        key: 'delete-channel',
+        type: 'action',
+        label: 'Delete Channel',
+        danger: true,
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>,
+        onClick: () => setDeleteChannelId(channelId),
+      },
+    ];
+
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  };
+
+  const handleCategoryContextMenu = (e: React.MouseEvent, categoryId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const canManageChannels = hasPermissionBit(myPerms, PermissionBits.MANAGE_CHANNELS);
+    if (!canManageChannels) return;
+
+    openContextMenu({ x: e.clientX, y: e.clientY }, [
+      {
+        key: 'category-settings',
+        type: 'action',
+        label: 'Category Settings',
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+        onClick: () => openModal('categorySettings', { categoryId }),
+      },
+      { key: 'cat-sep', type: 'separator' },
+      {
+        key: 'delete-category',
+        type: 'action',
+        label: 'Delete Category',
+        danger: true,
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>,
+        onClick: () => setDeleteCategoryId(categoryId),
+      },
+    ]);
+  };
+
   const selectedSpace = spaces.find(s => s.id === selectedSpaceId);
   const myPerms = selectedSpaceId ? spacePermissions.get(selectedSpaceId) : undefined;
   const canInvite = hasPermissionBit(myPerms, PermissionBits.CREATE_INVITE);
@@ -147,6 +385,7 @@ export function MobileSpacesScreen() {
       <button
         key={channel.id}
         onClick={() => handleChannelTap(channel)}
+        onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
         className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
           isActive ? 'bg-interactive-selected text-txt-primary' :
           isInVoice ? 'bg-accent-mint/10 text-accent-mint' :
@@ -213,6 +452,7 @@ export function MobileSpacesScreen() {
               </div>
               <button
                 onClick={() => handleSpaceSelect(space.id)}
+                onContextMenu={(e) => handleSpaceContextMenu(e, space.id)}
                 className={`w-10 h-10 rounded-2xl overflow-hidden flex items-center justify-center transition-all ${
                   isSelected ? 'rounded-xl ring-2 ring-accent-primary/50' : 'hover:rounded-xl'
                 }`}
@@ -290,6 +530,7 @@ export function MobileSpacesScreen() {
               <div key={category.id} className="mt-3">
                 <button
                   onClick={() => toggleCategory(category.id)}
+                  onContextMenu={(e) => handleCategoryContextMenu(e, category.id)}
                   className="flex items-center gap-1 px-1 py-1 w-full text-left"
                 >
                   <svg
@@ -357,6 +598,75 @@ export function MobileSpacesScreen() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Confirmation dialogs */}
+      {leaveConfirmSpaceId && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Leave Space"
+          description="Are you sure you want to leave this space? You'll need a new invite to rejoin."
+          confirmLabel="Leave"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await useSpaceStore.getState().leaveSpace(leaveConfirmSpaceId);
+              if (selectedSpaceId === leaveConfirmSpaceId) setSelectedSpaceId(null);
+              addToast('Left space', 'success', 3000);
+            } catch {
+              addToast('Failed to leave space', 'warning', 3000);
+            }
+            setLeaveConfirmSpaceId(null);
+          }}
+          onClose={() => setLeaveConfirmSpaceId(null)}
+        />
+      )}
+
+      {deleteChannelId && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Delete Channel"
+          description="Are you sure? This will permanently delete the channel and all its messages."
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await useSpaceStore.getState().deleteChannel(deleteChannelId);
+              addToast('Channel deleted', 'success', 3000);
+            } catch {
+              addToast('Failed to delete channel', 'warning', 3000);
+            }
+            setDeleteChannelId(null);
+          }}
+          onClose={() => setDeleteChannelId(null)}
+        />
+      )}
+
+      {deleteCategoryId && (
+        <ConfirmDialog
+          isOpen={true}
+          title="Delete Category"
+          description="Are you sure? Channels in this category will be moved to uncategorized."
+          confirmLabel="Delete"
+          variant="danger"
+          onConfirm={async () => {
+            try {
+              await useSpaceStore.getState().deleteCategory(deleteCategoryId);
+              addToast('Category deleted', 'success', 3000);
+            } catch {
+              addToast('Failed to delete category', 'warning', 3000);
+            }
+            setDeleteCategoryId(null);
+          }}
+          onClose={() => setDeleteCategoryId(null)}
+        />
+      )}
+
+      {transferModalSpaceId && (
+        <TransferOwnershipModal
+          spaceId={transferModalSpaceId}
+          onClose={() => setTransferModalSpaceId(null)}
+        />
       )}
     </div>
   );
