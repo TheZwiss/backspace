@@ -189,6 +189,7 @@ export function getStorageStats(): StorageStats {
   let referencedSize = 0;
   let orphanedFiles = 0;
   let orphanedSize = 0;
+  let danglingFilesOnDisk = 0;
   const breakdownMap = new Map<string, { count: number; size: number }>();
 
   for (const file of diskFiles) {
@@ -201,7 +202,7 @@ export function getStorageStats(): StorageStats {
 
     if (danglingFilenames.has(file.filename)) {
       // File is on disk but its attachment record points to a deleted message
-      // — counted as dangling, not referenced
+      danglingFilesOnDisk++;
     } else if (referenced.has(file.filename)) {
       referencedSize += file.size;
     } else {
@@ -224,7 +225,7 @@ export function getStorageStats(): StorageStats {
   return {
     totalFiles: diskFiles.length,
     totalSize,
-    referencedFiles: diskFiles.length - orphanedFiles - danglingFilenames.size,
+    referencedFiles: diskFiles.length - orphanedFiles - danglingFilesOnDisk,
     referencedSize,
     orphanedFiles,
     orphanedSize,
