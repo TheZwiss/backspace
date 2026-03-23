@@ -524,6 +524,95 @@ function MobileMenu({ items, close }: MobileMenuProps) {
   );
 }
 
+// ── Global long-press → contextmenu for mobile ──────────────────────────────
+
+/**
+ * Adds document-level touch listeners that detect long-press (500ms hold,
+ * < 10px movement) and dispatch a synthetic `contextmenu` event on the
+ * touched element. This allows ALL existing onContextMenu handlers to work
+ * on touch devices without per-component changes.
+ */
+function useGlobalLongPress(isMobile: boolean) {
+  useEffect(() => {
+    if (!isMobile) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let originX = 0;
+    let originY = 0;
+    let fired = false;
+    let activeTarget: EventTarget | null = null;
+
+    const cancel = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) { cancel(); return; }
+      const touch = e.touches[0]!;
+      originX = touch.clientX;
+      originY = touch.clientY;
+      fired = false;
+      activeTarget = e.target;
+
+      timer = setTimeout(() => {
+        timer = null;
+        fired = true;
+        // Dispatch synthetic contextmenu on the original target.
+        // React's event delegation picks it up and fires onContextMenu handlers.
+        const syntheticEvent = new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: originX,
+          clientY: originY,
+          screenX: originX,
+          screenY: originY,
+        });
+        if (activeTarget) {
+          activeTarget.dispatchEvent(syntheticEvent);
+        }
+      }, 500);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (timer === null) return;
+      const touch = e.touches[0];
+      if (!touch) return;
+      if (Math.hypot(touch.clientX - originX, touch.clientY - originY) > 10) cancel();
+    };
+
+    const onTouchEnd = () => {
+      cancel();
+      if (fired) {
+        const suppressClick = (ev: MouseEvent) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+        };
+        document.addEventListener('click', suppressClick, { capture: true, once: true });
+        setTimeout(() => {
+          document.removeEventListener('click', suppressClick, { capture: true });
+        }, 500);
+        fired = false;
+      }
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      cancel();
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [isMobile]);
+}
+
 // ── Main renderer ────────────────────────────────────────────────────────────
 
 export function ContextMenuRenderer() {
@@ -531,6 +620,9 @@ export function ContextMenuRenderer() {
   const close = useContextMenuStore((s) => s.close);
   const closeGuard = useContextMenuStore((s) => s.closeGuard);
   const isMobile = useUIStore((s) => s.isMobile);
+
+  // Global long-press detection — enables context menus on all touch targets
+  useGlobalLongPress(isMobile);
 
   if (!menu) return null;
 

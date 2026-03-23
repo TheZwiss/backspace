@@ -16,7 +16,6 @@ import { Username } from '../ui/Username';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
-import { useLongPress } from '../../hooks/useLongPress';
 
 interface MessageProps {
   message: MessageWithUser;
@@ -201,36 +200,6 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     if (items.length === 0) return;
     useContextMenuStore.getState().open({ x: e.clientX, y: e.clientY }, items);
   };
-
-  const isMobile = useUIStore((s) => s.isMobile);
-
-  const longPressHandlers = useLongPress((position) => {
-    const selectedText = window.getSelection()?.toString() ?? '';
-    const items = buildMessageMenuItems({
-      message,
-      selectedText,
-      previousMessageId,
-      isAuthor,
-      isDm: isDmMessage,
-      canAddReactions,
-      canSendMessages,
-      canManageMessages,
-      onReply: () => setReplyTo(message),
-      onEdit: () => {
-        setEditContent(message.content ?? '');
-        setIsEditing(true);
-      },
-      onDelete: () => deleteMessage(message.id, channelKey),
-      onReaction: (emoji: string) => toggleReaction(emoji),
-      onOpenEmojiPicker: () => {
-        useContextMenuStore.getState().close();
-        setShowReactionPicker(true);
-      },
-      onMarkUnread: (msgId: string) => markUnread(channelKey, msgId),
-    });
-    if (items.length === 0) return;
-    useContextMenuStore.getState().open({ x: position.clientX, y: position.clientY }, items);
-  });
 
   const handleEditSubmit = async (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -555,7 +524,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   );
 
   return (
-    <div onContextMenu={handleContextMenu} {...(isMobile ? longPressHandlers : {})}>
+    <div onContextMenu={handleContextMenu}>
       {content}
     </div>
   );
