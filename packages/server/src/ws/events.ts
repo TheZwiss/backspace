@@ -993,20 +993,18 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
   const dmAttachmentRows = db.select({ filename: schema.attachments.filename })
     .from(schema.attachments).where(eq(schema.attachments.dmMessageId, messageId)).all();
 
-  // Delete attachments linked to this DM message
-  db.delete(schema.attachments)
-    .where(eq(schema.attachments.dmMessageId, messageId))
-    .run();
-
-  // Delete reactions
-  db.delete(schema.dmReactions)
-    .where(eq(schema.dmReactions.dmMessageId, messageId))
-    .run();
-
-  // Delete message
-  db.delete(schema.dmMessages)
-    .where(eq(schema.dmMessages.id, messageId))
-    .run();
+  // Delete attachments, reactions, and message atomically
+  db.transaction((tx) => {
+    tx.delete(schema.attachments)
+      .where(eq(schema.attachments.dmMessageId, messageId))
+      .run();
+    tx.delete(schema.dmReactions)
+      .where(eq(schema.dmReactions.dmMessageId, messageId))
+      .run();
+    tx.delete(schema.dmMessages)
+      .where(eq(schema.dmMessages.id, messageId))
+      .run();
+  });
 
   // Clean up files from disk
   deleteAttachmentFiles(dmAttachmentRows);
