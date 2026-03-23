@@ -11,12 +11,18 @@ import { MobileDmsScreen } from './MobileDmsScreen';
 import { MobileYouScreen } from './MobileYouScreen';
 import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
+import { MobileInstancePanel } from './MobileInstancePanel';
+import { MobileScreenHeader } from './MobileScreenHeader';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
 import { MemberSidebar } from './MemberSidebar';
 import { FriendsPage } from '../chat/FriendsPage';
 import { ExplorePage } from '../chat/ExplorePage';
 import { UserProfileModal } from '../modals/UserProfileModal';
+import { GeneralPanel } from '../modals/instanceSettingsPanels/GeneralPanel';
+import { StreamingPanel } from '../modals/instanceSettingsPanels/StreamingPanel';
+import { StoragePanel } from '../modals/instanceSettingsPanels/StoragePanel';
+import { UsersPanel } from '../modals/instanceSettingsPanels/UsersPanel';
 
 const screenMap: Record<string, (params?: Record<string, string>) => React.ReactNode> = {
   'channel-chat': (params) => <MobileChatScreen params={params} />,
@@ -26,7 +32,31 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
-  'settings-instance': () => <MobileSettingsScreen initialPanel="instance" />,
+  'settings-instance': () => <MobileInstancePanel />,
+  'settings-instance-general': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title="General" />
+      <div className="flex-1 overflow-y-auto p-4"><GeneralPanel /></div>
+    </div>
+  ),
+  'settings-instance-streaming': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title="Streaming" />
+      <div className="flex-1 overflow-y-auto p-4"><StreamingPanel /></div>
+    </div>
+  ),
+  'settings-instance-storage': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title="Storage" />
+      <div className="flex-1 overflow-y-auto p-4"><StoragePanel /></div>
+    </div>
+  ),
+  'settings-instance-users': () => (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title="Users" />
+      <div className="flex-1 overflow-y-auto p-4"><UsersPanel /></div>
+    </div>
+  ),
   'members': () => <MemberSidebar />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,

@@ -5,7 +5,6 @@ import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
 import { VoicePanel } from '../modals/settingsPanels/VoicePanel';
 import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
 import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
-import { InstancePanel } from '../modals/settingsPanels/InstancePanel';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
@@ -16,7 +15,6 @@ const panelConfig: Record<string, { title: string; component: React.ReactNode }>
   voice: { title: 'Voice & Audio', component: <VoicePanel /> },
   privacy: { title: 'Privacy', component: <PrivacyPanel /> },
   connections: { title: 'Connections', component: <ConnectionsPanel /> },
-  instance: { title: 'Instance', component: <InstancePanel /> },
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
