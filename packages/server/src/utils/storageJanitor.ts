@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { eq, isNotNull } from 'drizzle-orm';
 import { config } from '../config.js';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile } from './fileCleanup.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
@@ -149,10 +149,41 @@ function getUnlinkedAttachments(): { id: string; filename: string; thumbnailFile
   }));
 }
 
+/** Attachment records whose message_id or dm_message_id references a deleted message. */
+function getDanglingAttachments(): { id: string; filename: string; size: number }[] {
+  const rawDb = getRawDb();
+
+  // Space message attachments with dangling references
+  const danglingSpace = rawDb.prepare(`
+    SELECT a.id, a.filename, a.size
+    FROM attachments a
+    LEFT JOIN messages m ON a.message_id = m.id
+    WHERE a.message_id IS NOT NULL AND m.id IS NULL
+  `).all() as { id: string; filename: string; size: number }[];
+
+  // DM message attachments with dangling references
+  const danglingDm = rawDb.prepare(`
+    SELECT a.id, a.filename, a.size
+    FROM attachments a
+    LEFT JOIN dm_messages dm ON a.dm_message_id = dm.id
+    WHERE a.dm_message_id IS NOT NULL AND dm.id IS NULL
+  `).all() as { id: string; filename: string; size: number }[];
+
+  return [...danglingSpace, ...danglingDm];
+}
+
 export function getStorageStats(): StorageStats {
   const diskFiles = getDiskFiles();
   const referenced = getReferencedFilenames();
   const unlinked = getUnlinkedAttachments();
+  const dangling = getDanglingAttachments();
+
+  const danglingFilenames = new Set<string>();
+  let danglingSize = 0;
+  for (const att of dangling) {
+    danglingFilenames.add(path.basename(att.filename));
+    danglingSize += att.size;
+  }
 
   let totalSize = 0;
   let referencedSize = 0;
@@ -168,7 +199,10 @@ export function getStorageStats(): StorageStats {
     entry.size += file.size;
     breakdownMap.set(type, entry);
 
-    if (referenced.has(file.filename)) {
+    if (danglingFilenames.has(file.filename)) {
+      // File is on disk but its attachment record points to a deleted message
+      // — counted as dangling, not referenced
+    } else if (referenced.has(file.filename)) {
       referencedSize += file.size;
     } else {
       orphanedFiles++;
@@ -190,12 +224,14 @@ export function getStorageStats(): StorageStats {
   return {
     totalFiles: diskFiles.length,
     totalSize,
-    referencedFiles: diskFiles.length - orphanedFiles,
+    referencedFiles: diskFiles.length - orphanedFiles - danglingFilenames.size,
     referencedSize,
     orphanedFiles,
     orphanedSize,
     unlinkedAttachments: unlinked.length,
     unlinkedSize,
+    danglingAttachments: dangling.length,
+    danglingSize,
     breakdown,
   };
 }
@@ -272,6 +308,26 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
     if (!fileInUseByProfile) {
       freedBytes += att.size;
     }
+  }
+
+  // Phase 3: Delete dangling attachment records (message_id / dm_message_id
+  // points to a message that no longer exists) and their files from disk.
+  const dangling = getDanglingAttachments();
+  for (const att of dangling) {
+    if (!dryRun) {
+      try {
+        deleteUploadFile(att.filename);
+        db.delete(schema.attachments)
+          .where(eq(schema.attachments.id, att.id))
+          .run();
+      } catch (err: any) {
+        errors.push(`Failed to clean up dangling attachment ${att.id}: ${err.message}`);
+        continue;
+      }
+    }
+    deletedFiles++;
+    freedBytes += att.size;
+    deletedAttachmentRecords++;
   }
 
   return {
