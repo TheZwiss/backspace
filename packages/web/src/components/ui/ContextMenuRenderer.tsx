@@ -550,6 +550,10 @@ function useGlobalLongPress(isMobile: boolean) {
     };
 
     const onTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-context-menu]')) {
+        e.preventDefault();
+      }
       if (e.touches.length !== 1) { cancel(); return; }
       const touch = e.touches[0]!;
       originX = touch.clientX;
@@ -600,7 +604,7 @@ function useGlobalLongPress(isMobile: boolean) {
       }
     };
 
-    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchstart', onTouchStart, { passive: false });
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd, { passive: true });
     document.addEventListener('touchcancel', onTouchEnd, { passive: true });

@@ -669,6 +669,7 @@ export function MobileSpacesScreen() {
                 />
               </div>
               <button
+                data-context-menu
                 onClick={() => handleSpaceSelect(space.id)}
                 onContextMenu={(e) => handleSpaceContextMenu(e, space.id)}
                 className={`w-10 h-10 rounded-2xl overflow-hidden flex items-center justify-center transition-all ${
@@ -765,6 +766,7 @@ export function MobileSpacesScreen() {
             return (
               <div key={category.id} className="mt-3">
                 <button
+                  data-context-menu
                   onClick={() => toggleCategory(category.id)}
                   onContextMenu={(e) => handleCategoryContextMenu(e, category.id)}
                   className="flex items-center gap-1 px-1 py-1 w-full text-left"

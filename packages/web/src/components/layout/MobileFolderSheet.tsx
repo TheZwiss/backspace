@@ -94,7 +94,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
         <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1 shrink-0" />
 
         {/* Folder header */}
-        <div className="px-4 py-2 flex items-center gap-2 shrink-0" onContextMenu={handleFolderContextMenu}>
+        <div className="px-4 py-2 flex items-center gap-2 shrink-0" data-context-menu onContextMenu={handleFolderContextMenu}>
           <div
             className="w-5 h-5 rounded"
             style={{ background: folder.color || 'rgb(var(--text-tertiary))' }}

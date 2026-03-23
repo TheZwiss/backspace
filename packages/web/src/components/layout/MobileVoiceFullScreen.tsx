@@ -198,6 +198,7 @@ export function MobileVoiceFullScreen() {
             return (
               <div
                 key={userId}
+                data-context-menu
                 className={`rounded-xl bg-surface-channel p-4 flex flex-col items-center gap-3 ${
                   participantIds.length <= 2 ? 'py-8' : 'py-4'
                 }`}

@@ -224,6 +224,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const ownerId = spaces.find(s => s.id === currentSpaceId)?.ownerId;
 
   const getMemberDisplayColor = (userId: string) => {
+    if (isDmMessage) return { color: '#d8d8de' };
     const member = members.find(m => m.userId === userId);
     if (member?.roles && member.roles.length > 0) {
       const sorted = [...member.roles].sort((a, b) => b.position - a.position);
@@ -524,7 +525,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   );
 
   return (
-    <div onContextMenu={handleContextMenu}>
+    <div data-context-menu onContextMenu={handleContextMenu}>
       {content}
     </div>
   );

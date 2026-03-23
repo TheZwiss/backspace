@@ -165,6 +165,7 @@ export function MobileDmsScreen() {
           return (
             <button
               key={dm.id}
+              data-context-menu
               onClick={() => handleDmTap(dm.id)}
               onContextMenu={(e) => handleDmContextMenu(e, dm.id, isGroup)}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-interactive-hover text-left transition-colors"
