@@ -4,6 +4,8 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
+import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
+import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
 
 export function MobileVoiceFullScreen() {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
@@ -29,6 +31,8 @@ export function MobileVoiceFullScreen() {
   const members = useSpaceStore((s) => s.members);
 
   const authUser = useAuthStore((s) => s.user);
+
+  const openContextMenu = useContextMenuStore((s) => s.open);
 
   if (!currentVoiceChannelId) {
     popMobileScreen();
@@ -87,6 +91,41 @@ export function MobileVoiceFullScreen() {
     popMobileScreen();
   };
 
+  const handleParticipantContextMenu = (e: React.MouseEvent, userId: string) => {
+    if (userId === authUser?.id || !currentVoiceChannelId || isDmCall) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const modItems = buildVoiceModMenuItems(userId, currentVoiceChannelId);
+    const items: ContextMenuItem[] = [...modItems];
+
+    if (modItems.length > 0) {
+      items.push({ key: 'mod-end-sep', type: 'separator' });
+    }
+
+    // Local mute checkbox
+    const isUserMuted = useVoiceStore.getState().participantMutes.get(userId) ?? false;
+    items.push({
+      key: 'mute-user',
+      type: 'checkbox',
+      label: 'Mute User',
+      checked: isUserMuted,
+      onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
+    });
+
+    items.push({ key: 'vol-sep', type: 'separator' });
+
+    // Volume slider
+    items.push({
+      key: 'volume',
+      type: 'custom',
+      render: () => <VolumeSliderItem userId={userId} />,
+    });
+
+    if (items.length === 0) return;
+    openContextMenu({ x: e.clientX, y: e.clientY }, items);
+  };
+
   return (
     <div className="flex flex-col h-full bg-surface-base">
       {/* Header */}
@@ -129,6 +168,7 @@ export function MobileVoiceFullScreen() {
                 className={`rounded-xl bg-surface-channel p-4 flex flex-col items-center gap-3 ${
                   participantIds.length <= 2 ? 'py-8' : 'py-4'
                 }`}
+                onContextMenu={(e) => handleParticipantContextMenu(e, userId)}
               >
                 <div className="relative">
                   <Avatar
