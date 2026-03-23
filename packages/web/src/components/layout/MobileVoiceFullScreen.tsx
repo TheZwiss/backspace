@@ -6,6 +6,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
+import { wsSend } from '../../hooks/useWebSocket';
+import { getChannelOrigin } from '../../stores/spaceStore';
 
 export function MobileVoiceFullScreen() {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
@@ -96,8 +98,14 @@ export function MobileVoiceFullScreen() {
   };
 
   const handleDisconnect = () => {
-    leaveVoice();
-    const disconnectFn = useVoiceStore.getState().disconnectFn;
+    const { activeDmCall, disconnectFn } = useVoiceStore.getState();
+    if (activeDmCall) {
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
+      useVoiceStore.getState().setActiveDmCall(null);
+    } else if (currentVoiceChannelId) {
+      wsSend({ type: 'voice_leave' }, getChannelOrigin(currentVoiceChannelId));
+      leaveVoice();
+    }
     if (disconnectFn) disconnectFn();
     popMobileScreen();
   };

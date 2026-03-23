@@ -1,7 +1,8 @@
 import React from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { useSpaceStore } from '../../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
+import { wsSend } from '../../hooks/useWebSocket';
 
 export function MobileVoiceMiniBar() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -92,7 +93,18 @@ export function MobileVoiceMiniBar() {
         </button>
 
         <button
-          onClick={(e) => { e.stopPropagation(); leaveVoice(); const df = useVoiceStore.getState().disconnectFn; if (df) df(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            const { activeDmCall, disconnectFn } = useVoiceStore.getState();
+            if (activeDmCall) {
+              wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
+              useVoiceStore.getState().setActiveDmCall(null);
+            } else if (currentVoiceChannelId) {
+              wsSend({ type: 'voice_leave' }, getChannelOrigin(currentVoiceChannelId));
+              leaveVoice();
+            }
+            if (disconnectFn) disconnectFn();
+          }}
           className="w-8 h-8 rounded-full flex items-center justify-center bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
