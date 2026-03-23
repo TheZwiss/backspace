@@ -560,6 +560,8 @@ function useGlobalLongPress(isMobile: boolean) {
       timer = setTimeout(() => {
         timer = null;
         fired = true;
+        // Clear any native text selection that started during the hold
+        window.getSelection()?.removeAllRanges();
         // Dispatch synthetic contextmenu on the original target.
         // React's event delegation picks it up and fires onContextMenu handlers.
         const syntheticEvent = new MouseEvent('contextmenu', {

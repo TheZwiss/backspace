@@ -99,6 +99,15 @@
     text-rendering: optimizeLegibility;
   }
 
+  /* Suppress native long-press callout on mobile (iOS "Copy/Lookup" popup).
+     Our global useLongPress handler provides context menus instead.
+     Text can still be copied via context menu "Copy Text" option. */
+  @media (max-width: 767px) {
+    * {
+      -webkit-touch-callout: none;
+    }
+  }
+
   /* Thin scrollbar */
   ::-webkit-scrollbar {
     width: 8px;
