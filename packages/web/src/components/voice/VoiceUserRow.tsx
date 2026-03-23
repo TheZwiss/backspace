@@ -1,4 +1,3 @@
-import React from 'react';
 import { Avatar } from '../ui/Avatar';
 
 export interface VoiceUserRowProps {
@@ -9,6 +8,7 @@ export interface VoiceUserRowProps {
   isMuted?: boolean;
   isDeafened?: boolean;
   isCameraOn?: boolean;
+  isUnwatchedCamera?: boolean;
   isScreenSharing?: boolean;
   isServerMuted?: boolean;
   isServerDeafened?: boolean;
@@ -27,6 +27,7 @@ export function VoiceUserRow({
   isMuted,
   isDeafened,
   isCameraOn,
+  isUnwatchedCamera,
   isScreenSharing,
   isServerMuted,
   isServerDeafened,
@@ -107,6 +108,9 @@ export function VoiceUserRow({
         {isCameraOn && (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
             <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+            {isUnwatchedCamera && (
+              <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            )}
           </svg>
         )}
         {/* Screen sharing LIVE badge */}
