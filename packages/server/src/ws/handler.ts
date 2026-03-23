@@ -1311,7 +1311,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
       // Handle authenticated events
       if (userId && username) {
         try {
-          handleClientEvent(parsed, userId, username);
+          handleClientEvent(parsed, userId, username, ws);
         } catch (err) {
           app.log.error({ err, eventType: parsed.type, userId }, 'Unhandled error in WS event handler');
           try {

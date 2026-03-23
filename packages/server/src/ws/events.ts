@@ -1,3 +1,4 @@
+import type { WebSocket } from 'ws';
 import { eq, inArray, and } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -134,6 +135,7 @@ export function handleClientEvent(
   event: Record<string, unknown>,
   userId: string,
   username: string,
+  ws: WebSocket,
 ): void {
   const type = event.type as string;
 
@@ -154,7 +156,7 @@ export function handleClientEvent(
       handlePresenceUpdate(event, userId);
       break;
     case 'voice_join':
-      handleVoiceJoin(event, userId);
+      handleVoiceJoin(event, userId, ws);
       break;
     case 'voice_leave':
       handleVoiceLeave(userId);
@@ -184,10 +186,10 @@ export function handleClientEvent(
       handleMarkUnread(event, userId);
       break;
     case 'dm_call_start':
-      handleDmCallStart(event, userId, username);
+      handleDmCallStart(event, userId, username, ws);
       break;
     case 'dm_call_accept':
-      handleDmCallAccept(event, userId);
+      handleDmCallAccept(event, userId, ws);
       break;
     case 'dm_call_reject':
       handleDmCallReject(event, userId);
@@ -552,7 +554,7 @@ function broadcastRoomLeave(roomId: string, room: VoiceRoom, userId: string): vo
   }
 }
 
-function handleVoiceJoin(event: Record<string, unknown>, userId: string): void {
+function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const channelId = event.channelId as string;
 
   if (!channelId || typeof channelId !== 'string') {
@@ -1274,7 +1276,7 @@ function handleMarkUnread(event: Record<string, unknown>, userId: string): void 
 
 // ─── DM Call Handlers (Unified Room API) ───────────────────────────────────
 
-function handleDmCallStart(event: Record<string, unknown>, userId: string, username: string): void {
+function handleDmCallStart(event: Record<string, unknown>, userId: string, username: string, ws: WebSocket): void {
   const dmChannelId = event.dmChannelId as string;
   if (!dmChannelId || typeof dmChannelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
@@ -1323,7 +1325,7 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
   }, userId);
 }
 
-function handleDmCallAccept(event: Record<string, unknown>, userId: string): void {
+function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   const dmChannelId = event.dmChannelId as string;
   if (!dmChannelId || typeof dmChannelId !== 'string') {
     connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
