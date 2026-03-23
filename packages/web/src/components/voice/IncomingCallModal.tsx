@@ -39,7 +39,12 @@ export function IncomingCallModal() {
 
   const handleAccept = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    wsSend({ type: 'dm_call_accept', dmChannelId: incomingCall.dmChannelId }, getChannelOrigin(incomingCall.dmChannelId));
+    const dmChannelId = incomingCall.dmChannelId;
+    const origin = getChannelOrigin(dmChannelId);
+    wsSend({ type: 'dm_call_accept', dmChannelId }, origin);
+    // Connect directly within gesture context (required for iOS audio permission)
+    const connectFn = useVoiceStore.getState().connectFn;
+    if (connectFn) connectFn(dmChannelId, true);
   };
 
   const handleDecline = () => {
