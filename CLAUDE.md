@@ -548,6 +548,7 @@ CREATE TABLE instance_settings (
     max_resolution INTEGER NOT NULL DEFAULT 1080,
     max_framerate INTEGER NOT NULL DEFAULT 60,
     registration_open INTEGER,               -- explicit registration override (null = use env)
+    max_upload_size_bytes INTEGER,           -- admin-configurable upload limit (null = use env var)
     updated_at INTEGER NOT NULL
 );
 
@@ -709,6 +710,7 @@ PATCH  /api/settings/instance      (auth, admin) { instanceName?, registrationOp
 GET    /api/admin/storage/stats    (auth, admin)                           → StorageStats
 GET    /api/admin/storage/orphans  (auth, admin)                           → { orphans: OrphanedFile[] }
 POST   /api/admin/storage/cleanup  (auth, admin) { dryRun?: boolean }      → CleanupResult
+POST   /api/admin/storage/cleanup-media (auth, admin) { maxAgeDays, dryRun? } → CleanupResult
 GET    /api/admin/users            (auth, admin) ?q=&page=&pageSize=&showDeleted= → AdminUserListResponse
 PATCH  /api/admin/users/:id/role   (auth, admin) { isAdmin: boolean }      → AdminUser
 POST   /api/admin/users/:id/reset-password (auth, admin)                   → { temporaryPassword }
