@@ -63,7 +63,7 @@ export function MobileScreenStack({ rootScreen, screenMap }: MobileScreenStackPr
         if (!renderer) return null;
 
         let style: React.CSSProperties = {};
-        let className = 'absolute inset-0 bg-surface-base z-10 flex flex-col';
+        let className = 'absolute inset-0 bg-surface-base z-10 flex flex-col overflow-hidden';
 
         if (isTop && transitioning === 'push') {
           // Initial position: off-screen right

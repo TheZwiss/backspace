@@ -74,7 +74,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {channelId && <MessageList channelId={channelId} />}
       </div>
 
