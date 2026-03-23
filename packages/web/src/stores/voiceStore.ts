@@ -10,6 +10,7 @@ export interface ScreenShareConfig {
   height: number | 'native';
   fps: number;
   mode: 'gaming' | 'text';
+  codec: 'vp9' | 'h264';
   customBitrateKbps: number | null;
   shareAudio: boolean;
 }
@@ -145,7 +146,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', codec: 'vp9', customBitrateKbps: null, shareAudio: !isElectron() },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {

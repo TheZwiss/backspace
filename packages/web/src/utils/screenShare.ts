@@ -131,33 +131,33 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   const bps = clampedKbps * 1000;
   const minBps = Math.round(bps * 0.25);
 
-  // Gaming mode: H.264 primary (hardware NVENC/QSV encoding, zero CPU impact on games)
-  // Text mode: VP9 primary (better compression for sharp text) with H.264 backup for Safari
-  const isGaming = mode === 'gaming';
+  // VP9: better quality per bit, software-encoded (CPU). Best for text/static content.
+  // H.264: hardware-encoded via NVENC/QSV/VCE (zero CPU). Universal browser support.
+  // When VP9 is primary, H.264 SIMULCAST backup handles Safari/incompatible viewers.
+  // When H.264 is primary, no backup needed — universally supported.
+  const useVp9 = config.codec !== 'h264';
 
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
-      videoCodec: isGaming ? 'h264' : 'vp9',
+      videoCodec: useVp9 ? 'vp9' : 'h264',
       videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
-      // H.264 is universally supported — no backup needed for gaming mode.
-      // VP9 needs H.264 backup for Safari/incompatible viewers.
-      ...(isGaming ? {} : {
+      ...(useVp9 ? {
         backupCodec: {
           codec: 'h264' as const,
           encoding: { maxBitrate: bps, maxFramerate: fps },
         },
         backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
-      }),
+      } : {}),
     },
     overdrive: {
       maxBitrate: bps,
       maxFramerate: fps,
       minBitrate: minBps,
-      degradationPreference: isGaming ? 'balanced' : 'maintain-resolution',
+      degradationPreference: mode === 'text' ? 'maintain-resolution' : 'balanced',
     },
-    contentHint: isGaming ? 'motion' : 'detail',
+    contentHint: mode === 'text' ? 'detail' : 'motion',
   };
 }
 

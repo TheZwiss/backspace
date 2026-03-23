@@ -20,6 +20,11 @@ const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
   { value: 'text', label: 'Text' },
 ];
 
+const CODECS: { value: ScreenShareConfig['codec']; label: string; desc: string }[] = [
+  { value: 'vp9', label: 'VP9', desc: 'Less bandwidth, more CPU' },
+  { value: 'h264', label: 'H.264', desc: 'Less CPU, more bandwidth' },
+];
+
 function formatBitrate(bps: number): string {
   return `${(bps / 1_000_000).toFixed(bps % 1_000_000 === 0 ? 0 : 1)} Mbps`;
 }
@@ -173,6 +178,27 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 className={`${pillBase} ${config.mode === m.value ? pillSelected : pillUnselected}`}
               >
                 {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Codec */}
+        <div>
+          <div className="text-[11px] text-txt-tertiary font-semibold uppercase tracking-wider mb-1.5">
+            Codec
+          </div>
+          <div className="flex gap-1.5">
+            {CODECS.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => setConfig({ codec: c.value })}
+                className={`${pillBase} flex-1 flex flex-col items-center gap-0.5 !py-1.5 ${config.codec === c.value ? pillSelected : pillUnselected}`}
+              >
+                <span>{c.label}</span>
+                <span className={`text-[9px] font-normal ${config.codec === c.value ? 'text-white/70' : 'text-txt-tertiary'}`}>
+                  {c.desc}
+                </span>
               </button>
             ))}
           </div>
