@@ -11,8 +11,13 @@ import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { getAvatarGradient } from '../../utils/gradients';
 import { api } from '../../api/client';
 import { Mascot } from '../ui/Mascot';
+import { useActivityStore } from '../../stores/activityStore';
+import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
+import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
+import { parseFederatedUsername } from '../../utils/identity';
+import { Username } from '../ui/Username';
 
-type Tab = 'online' | 'all' | 'pending' | 'add';
+type Tab = 'online' | 'all' | 'pending' | 'add' | 'activity';
 
 interface FriendsPageProps {
   mobile?: boolean;
@@ -41,6 +46,9 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
     loadFriends();
     loadRequests();
   }, [loadFriends, loadRequests]);
+
+  const userActivities = useActivityStore((s) => s.userActivities);
+  const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
   const onlineFriends = friends.filter(f => f.status !== 'offline');
   const pendingIncoming = requests.filter(r => r.status === 'pending' && r.user?.id === r.fromId);
@@ -172,6 +180,116 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             onOpenDm={handleOpenDm}
           />
         );
+      case 'activity': {
+        const activeFriends: TaggedFriend[] = [];
+        const idleFriends: TaggedFriend[] = [];
+        const offlineActivityFriends: TaggedFriend[] = [];
+        for (const f of friends) {
+          if (f.status === 'offline') {
+            offlineActivityFriends.push(f);
+            continue;
+          }
+          const acts = userActivities.get(f.homeUserId ?? f.id) ?? [];
+          const primary = getPrimaryActivity(acts);
+          if (primary && primary.type !== 'custom') {
+            activeFriends.push(f);
+          } else {
+            idleFriends.push(f);
+          }
+        }
+
+        const renderActivityFriend = (friend: TaggedFriend, isOffline = false) => {
+          const { baseName, domain } = parseFederatedUsername(friend.username);
+          const friendDisplayName = friend.displayName ?? baseName;
+          const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
+          const isRichActivity = !isOffline && hasRichActivity(activities);
+          const primary = getPrimaryActivity(activities);
+          const accentClass = primary ? getActivityAccentClass(primary.type) : '';
+
+          const rowClass = isRichActivity
+            ? `flex items-center gap-3 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
+            : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer transition-colors active:bg-interactive-hover';
+
+          return (
+            <div
+              key={friend.id}
+              onClick={() => {
+                if (mobile) {
+                  pushMobileScreen('user-profile', { userId: friend.id });
+                } else {
+                  handleOpenDm(friend.id, friend._instanceOrigin ?? '', friend.homeUserId ?? undefined);
+                }
+              }}
+              className={rowClass}
+            >
+              <Avatar
+                src={friend.avatar}
+                name={friendDisplayName}
+                size={36}
+                status={isOffline ? 'offline' : friend.status}
+                className={isOffline ? 'opacity-60' : undefined}
+                userId={friend.homeUserId ?? friend.id}
+                avatarColor={friend.avatarColor}
+              />
+              <div className="flex-1 min-w-0">
+                <Username
+                  username={friendDisplayName}
+                  className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
+                />
+                {domain && !isOffline && (
+                  <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
+                )}
+                {!isOffline && (
+                  <ActivityCard
+                    activities={activities}
+                    fallbackCustomStatus={friend.customStatus}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        return (
+          <div className="flex-1 overflow-y-auto p-4">
+            {activeFriends.length === 0 && idleFriends.length === 0 && offlineActivityFriends.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Mascot state="sleeping" className="w-[100px] h-[100px]" />
+                <div className="text-sm text-txt-tertiary mt-4 max-w-[240px]">
+                  It's quiet for now... When friends start an activity, we'll show it here!
+                </div>
+              </div>
+            ) : (
+              <>
+                {activeFriends.length > 0 && (
+                  <div className="mb-4">
+                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                      Active — {activeFriends.length}
+                    </h2>
+                    {activeFriends.map(f => renderActivityFriend(f))}
+                  </div>
+                )}
+                {idleFriends.length > 0 && (
+                  <div className="mb-4">
+                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                      Online — {idleFriends.length}
+                    </h2>
+                    {idleFriends.map(f => renderActivityFriend(f))}
+                  </div>
+                )}
+                {offlineActivityFriends.length > 0 && (
+                  <div>
+                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                      Offline — {offlineActivityFriends.length}
+                    </h2>
+                    {offlineActivityFriends.map(f => renderActivityFriend(f, true))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      }
     }
   };
 
@@ -227,7 +345,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       {/* Mobile tab bar */}
       {mobile && (
         <div className="flex border-b border-border-soft">
-          {(['online', 'all', 'pending', 'add'] as Tab[]).map((tab) => (
+          {(['online', 'all', 'pending', 'add', 'activity'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -237,7 +355,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                   : 'border-transparent text-txt-secondary hover:text-txt-primary'
               }`}
             >
-              {tab === 'add' ? 'Add Friend' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'add' ? 'Add Friend' : tab === 'activity' ? 'Activity' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === 'pending' && pendingIncoming.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 text-xs bg-notification text-white rounded-full">
                   {pendingIncoming.length}

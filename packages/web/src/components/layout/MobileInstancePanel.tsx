@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useUIStore } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { MobileScreenHeader } from './MobileScreenHeader';
 
 const sections = [
@@ -44,6 +45,15 @@ const sections = [
 
 export function MobileInstancePanel() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
+  const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
+  const fetchStreamingLimits = useSettingsStore((s) => s.fetchStreamingLimits);
+
+  // Pre-fetch instance data so sub-panels have it when they mount
+  // (mirrors InstancePanel.tsx useEffect on desktop)
+  useEffect(() => {
+    fetchInstanceSettings();
+    fetchStreamingLimits();
+  }, [fetchInstanceSettings, fetchStreamingLimits]);
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
