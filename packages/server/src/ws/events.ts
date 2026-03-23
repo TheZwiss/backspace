@@ -573,6 +573,23 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: Web
     return;
   }
 
+  // ── Device switch guardrail ──
+  // If this user already has a voice session on a different socket,
+  // notify that socket to tear down its LiveKit connection.
+  {
+    const oldVoiceWs = connectionManager.getVoiceWs(userId);
+    if (oldVoiceWs && oldVoiceWs !== ws) {
+      const oldRoom = connectionManager.getUserRoom(userId);
+      connectionManager.sendToWs(oldVoiceWs, {
+        type: 'voice_disconnected',
+        userId,
+        channelId: oldRoom?.roomId ?? channelId,
+        reason: 'displaced',
+      });
+    }
+    connectionManager.setVoiceWs(userId, ws);
+  }
+
   // If the user is already in this exact room (e.g. WS reconnect re-registration),
   // skip the leave+join broadcast to avoid visual flicker for other users.
   const currentRoom = connectionManager.getUserRoom(userId);
@@ -1316,6 +1333,10 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
     return;
   }
 
+  // Bind voice session to this socket so removeConnection can clean up
+  // if the caller closes the tab while the call is ringing
+  connectionManager.setVoiceWs(userId, ws);
+
   // Ring other members
   connectionManager.sendToDmMembers(dmChannelId, {
     type: 'dm_call_incoming',
@@ -1377,6 +1398,9 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
 
   // Join acceptor into the DM room
   connectionManager.joinRoom(dmChannelId, userId);
+
+  // Bind voice session to this socket for the acceptor
+  connectionManager.setVoiceWs(userId, ws);
 
   // Notify all DM members that the call was accepted
   connectionManager.sendToDmMembers(dmChannelId, {
