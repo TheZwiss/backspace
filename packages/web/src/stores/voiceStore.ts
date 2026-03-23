@@ -146,7 +146,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', codec: 'vp9', customBitrateKbps: null, shareAudio: !isElectron() },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', codec: 'h264', customBitrateKbps: null, shareAudio: !isElectron() },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -326,9 +326,14 @@ export const useVoiceStore = create<VoiceState>()(
       toggleScreenShare: () => set((state) => ({ isScreenSharing: !state.isScreenSharing })),
 
       setFocusedParticipant: (id) => set({ focusedParticipantId: id }),
-      setScreenShareConfig: (config) => set((state) => ({
-        screenShareConfig: { ...state.screenShareConfig, ...config },
-      })),
+      setScreenShareConfig: (config) => set((state) => {
+        const merged = { ...state.screenShareConfig, ...config };
+        // When mode changes (without an explicit codec override), auto-set the smart default
+        if (config.mode && !config.codec) {
+          merged.codec = config.mode === 'gaming' ? 'h264' : 'vp9';
+        }
+        return { screenShareConfig: merged };
+      }),
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,

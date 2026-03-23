@@ -32,6 +32,7 @@ import {
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 
 let _activeRoom: Room | null = null;
+let _publishedScreenShareCodec: 'vp9' | 'h264' | null = null;
 
 export function getActiveRoom(): Room | null {
   return _activeRoom;
@@ -608,8 +609,21 @@ export function useLiveKit() {
     const updateActiveTracks = async () => {
       if (isScreenSharing) {
         const opts = buildScreenShareOptions(screenShareConfig);
+
+        // Codec changed mid-stream — must restart (codec is baked into SDP negotiation)
+        if (_publishedScreenShareCodec && _publishedScreenShareCodec !== opts.publish.videoCodec) {
+          _publishedScreenShareCodec = null;
+          await stopScreenShare(room);
+          setTimeout(() => startScreenShare(room).catch(() => {}), 200);
+          return;
+        }
+
         const screenPub = room.localParticipant.getTrackPublications().find(p => p.source === Track.Source.ScreenShare);
         if (screenPub?.videoTrack) {
+          // Track the published codec for mid-stream change detection
+          if (!_publishedScreenShareCodec) {
+            _publishedScreenShareCodec = opts.publish.videoCodec;
+          }
           const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
             if (opts.capture.width > 0 && opts.capture.height > 0) {
@@ -625,6 +639,9 @@ export function useLiveKit() {
           resolveNativeOverdrive(mediaTrack ?? null, screenShareConfig, opts);
           await applyOverdrive(room, Track.Source.ScreenShare, opts.overdrive);
         }
+      } else {
+        // Screen share stopped — clear published codec tracker
+        _publishedScreenShareCodec = null;
       }
       if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
     };
