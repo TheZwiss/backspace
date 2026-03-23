@@ -511,14 +511,30 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
         network.packetLoss = (totalPacketsLost / totalPackets) * 100;
       }
 
-      // ── Step F: Cleanup stale prevSample entries ──
+      // ── Step F: Filter paused backup codec tracks ──
+      // With backupCodec enabled, the publisher may have two concurrent outbound
+      // video tracks for the same source (e.g. VP9 + H.264). When one is paused
+      // by dynacast (0 bitrate), hide it if an active sibling exists.
+      const filteredVideoTracks = videoTracks.filter((track) => {
+        if (track.direction !== 'send' || track.bitrate > 0) return true;
+        const hasActiveSibling = videoTracks.some(
+          (other) =>
+            other !== track &&
+            other.direction === 'send' &&
+            other.source === track.source &&
+            other.bitrate > 0,
+        );
+        return !hasActiveSibling;
+      });
+
+      // ── Step G: Cleanup stale prevSample entries ──
       for (const key of prev.keys()) {
         if (!seenKeys.has(key)) {
           prev.delete(key);
         }
       }
 
-      setSnapshot({ network, audioTracks, videoTracks });
+      setSnapshot({ network, audioTracks, videoTracks: filteredVideoTracks });
     };
 
     poll();

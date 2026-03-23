@@ -612,9 +612,12 @@ export function useLiveKit() {
         if (screenPub?.videoTrack) {
           const mediaTrack = getMediaStreamTrack(screenPub.videoTrack);
           if (mediaTrack) {
-            // Skip resolution constraints for native mode — capture is already at native dims
             if (opts.capture.width > 0 && opts.capture.height > 0) {
-              await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate } });
+              // Standard mode: apply resolution + frameRate together
+              await mediaTrack.applyConstraints({ width: { ideal: opts.capture.width }, height: { ideal: opts.capture.height }, frameRate: { ideal: opts.capture.frameRate, min: 15 } });
+            } else {
+              // Native mode: apply frameRate only — never pass 0 to width/height
+              await mediaTrack.applyConstraints({ frameRate: { ideal: opts.capture.frameRate, min: 15 } });
             }
             mediaTrack.contentHint = opts.contentHint;
           }

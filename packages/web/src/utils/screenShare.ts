@@ -1,4 +1,4 @@
-import { Room, Track } from 'livekit-client';
+import { Room, Track, BackupCodecPolicy } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
@@ -23,7 +23,13 @@ export interface OverdriveOptions {
 
 export interface ScreenShareBuildResult {
   capture: { width: number; height: number; frameRate: number };
-  publish: { videoCodec: 'vp9'; videoEncoding: { maxBitrate: number; maxFramerate: number }; simulcast: false };
+  publish: {
+    videoCodec: 'vp9' | 'h264';
+    videoEncoding: { maxBitrate: number; maxFramerate: number };
+    simulcast: false;
+    backupCodec?: { codec: 'h264'; encoding: { maxBitrate: number; maxFramerate: number } };
+    backupCodecPolicy?: BackupCodecPolicy;
+  };
   overdrive: OverdriveOptions;
   contentHint: 'motion' | 'detail';
 }
@@ -125,20 +131,33 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   const bps = clampedKbps * 1000;
   const minBps = Math.round(bps * 0.25);
 
+  // Gaming mode: H.264 primary (hardware NVENC/QSV encoding, zero CPU impact on games)
+  // Text mode: VP9 primary (better compression for sharp text) with H.264 backup for Safari
+  const isGaming = mode === 'gaming';
+
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
-      videoCodec: 'vp9',
+      videoCodec: isGaming ? 'h264' : 'vp9',
       videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
+      // H.264 is universally supported — no backup needed for gaming mode.
+      // VP9 needs H.264 backup for Safari/incompatible viewers.
+      ...(isGaming ? {} : {
+        backupCodec: {
+          codec: 'h264' as const,
+          encoding: { maxBitrate: bps, maxFramerate: fps },
+        },
+        backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
+      }),
     },
     overdrive: {
       maxBitrate: bps,
       maxFramerate: fps,
       minBitrate: minBps,
-      degradationPreference: mode === 'text' ? 'maintain-resolution' : 'balanced',
+      degradationPreference: isGaming ? 'balanced' : 'maintain-resolution',
     },
-    contentHint: mode === 'text' ? 'detail' : 'motion',
+    contentHint: isGaming ? 'motion' : 'detail',
   };
 }
 
@@ -243,7 +262,11 @@ export async function startScreenShare(room: Room): Promise<boolean> {
       videoCodec: opts.publish.videoCodec,
       videoEncoding: opts.publish.videoEncoding,
       simulcast: opts.publish.simulcast,
-    } as any);
+      ...(opts.publish.backupCodec ? {
+        backupCodec: opts.publish.backupCodec,
+        backupCodecPolicy: opts.publish.backupCodecPolicy,
+      } : {}),
+    });
 
     console.log('[SS] setScreenShareEnabled returned:', !!track);
     if (!track) {
@@ -279,11 +302,16 @@ function applyScreenShareOverdrive(room: Room): void {
     const screenPub = room.localParticipant.getTrackPublications()
       .find(p => p.source === Track.Source.ScreenShare);
     if (screenPub?.track?.mediaStreamTrack) {
-      // Skip resolution constraints for native mode — capture is already at native dims
       if (freshOpts.capture.width > 0 && freshOpts.capture.height > 0) {
+        // Standard mode: apply resolution + frameRate together
         await screenPub.track.mediaStreamTrack.applyConstraints({
           width: { ideal: freshOpts.capture.width },
           height: { ideal: freshOpts.capture.height },
+          frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
+        });
+      } else {
+        // Native mode: apply frameRate only — never pass 0 to width/height
+        await screenPub.track.mediaStreamTrack.applyConstraints({
           frameRate: { ideal: freshOpts.capture.frameRate, min: 15 },
         });
       }
