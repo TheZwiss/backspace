@@ -201,6 +201,7 @@ export class BackspaceApiClient {
     storageStats: () => Promise<StorageStats>;
     storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
     storageCleanup: (dryRun?: boolean) => Promise<CleanupResult>;
+    cleanupOldMedia: (maxAgeDays: number, dryRun?: boolean) => Promise<CleanupResult>;
     listUsers: (params?: { q?: string; page?: number; pageSize?: number; showDeleted?: boolean; homeInstance?: string; role?: string; joinedAfter?: string; joinedBefore?: string; sort?: string }) => Promise<AdminUserListResponse>;
     listInstances: () => Promise<{ instances: string[] }>;
     setUserRole: (userId: string, isAdmin: boolean) => Promise<AdminUser>;
@@ -578,6 +579,8 @@ export class BackspaceApiClient {
       storageStats: () => request<StorageStats>('GET', '/admin/storage/stats'),
       storageOrphans: () => request<{ orphans: OrphanedFile[] }>('GET', '/admin/storage/orphans'),
       storageCleanup: (dryRun = false) => request<CleanupResult>('POST', '/admin/storage/cleanup', { dryRun }),
+      cleanupOldMedia: (maxAgeDays: number, dryRun = false) =>
+        request<CleanupResult>('POST', '/admin/storage/cleanup-media', { maxAgeDays, dryRun }),
       listUsers: (params) => {
         const qs = new URLSearchParams();
         if (params?.q) qs.set('q', params.q);

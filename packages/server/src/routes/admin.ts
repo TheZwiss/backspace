@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { eq, like, or, and, ne, sql, isNull, isNotNull, gte, lte, asc, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
-import { getStorageStats, getOrphanedFiles, cleanupStorage } from '../utils/storageJanitor.js';
+import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from '../ws/handler.js';
 import { tombstoneUser } from '../utils/userDeletion.js';
@@ -56,6 +56,21 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(result);
     } catch (err: any) {
       return reply.code(500).send({ error: `Cleanup failed: ${err.message}`, statusCode: 500 });
+    }
+  });
+
+  // POST /api/admin/storage/cleanup-media — delete chat media older than N days
+  app.post<{ Body: { maxAgeDays: number; dryRun?: boolean } }>('/api/admin/storage/cleanup-media', { preHandler: [authenticate, requireAdmin] }, async (request, reply) => {
+    try {
+      const maxAgeDays = Number(request.body?.maxAgeDays);
+      if (isNaN(maxAgeDays) || maxAgeDays < 1) {
+        return reply.code(400).send({ error: 'maxAgeDays must be a positive number', statusCode: 400 });
+      }
+      const dryRun = request.body?.dryRun ?? false;
+      const result = cleanupOldMedia(maxAgeDays, dryRun);
+      return reply.code(200).send(result);
+    } catch (err: any) {
+      return reply.code(500).send({ error: `Media cleanup failed: ${err.message}`, statusCode: 500 });
     }
   });
 

@@ -339,3 +339,43 @@ export function cleanupStorage(dryRun: boolean): CleanupResult {
     errors,
   };
 }
+
+export function cleanupOldMedia(maxAgeDays: number, dryRun: boolean): CleanupResult {
+  const db = getDb();
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const profileReferenced = getProfileReferencedFilenames();
+  const errors: string[] = [];
+  let deletedFiles = 0;
+  let freedBytes = 0;
+  let deletedAttachmentRecords = 0;
+
+  // Find message attachments older than the cutoff
+  const rawDb = getRawDb();
+  const oldMedia = rawDb.prepare(`
+    SELECT id, filename, size FROM attachments
+    WHERE (message_id IS NOT NULL OR dm_message_id IS NOT NULL)
+      AND created_at < ?
+  `).all(cutoff) as { id: string; filename: string; size: number }[];
+
+  for (const att of oldMedia) {
+    // Never delete files currently used as profile images
+    if (profileReferenced.has(path.basename(att.filename))) continue;
+
+    if (!dryRun) {
+      try {
+        deleteUploadFile(att.filename);
+        db.delete(schema.attachments)
+          .where(eq(schema.attachments.id, att.id))
+          .run();
+      } catch (err: any) {
+        errors.push(`Failed to delete old media ${att.id}: ${err.message}`);
+        continue;
+      }
+    }
+    deletedFiles++;
+    freedBytes += att.size;
+    deletedAttachmentRecords++;
+  }
+
+  return { dryRun, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+}
