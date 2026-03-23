@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../api/client';
 import type { StorageStats, CleanupResult } from '@backspace/shared';
+import { useSettingsStore } from '../../../stores/settingsStore';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -18,6 +19,19 @@ export function StoragePanel() {
   const [cleaning, setCleaning] = useState(false);
   const [previewDone, setPreviewDone] = useState(false);
 
+  // Upload limit state
+  const instanceSettings = useSettingsStore((s) => s.instanceSettings);
+  const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
+  const [uploadLimitMb, setUploadLimitMb] = useState<number>(100);
+  const [uploadLimitSaving, setUploadLimitSaving] = useState(false);
+  const [uploadLimitDirty, setUploadLimitDirty] = useState(false);
+
+  // Media retention state
+  const [mediaAgeDays, setMediaAgeDays] = useState(90);
+  const [mediaCleanupResult, setMediaCleanupResult] = useState<CleanupResult | null>(null);
+  const [mediaCleaning, setMediaCleaning] = useState(false);
+  const [mediaPreviewDone, setMediaPreviewDone] = useState(false);
+
   const fetchStats = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -34,6 +48,44 @@ export function StoragePanel() {
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
+
+  useEffect(() => {
+    if (instanceSettings?.maxUploadSizeMb) {
+      setUploadLimitMb(instanceSettings.maxUploadSizeMb);
+    }
+  }, [instanceSettings]);
+
+  const handleUploadLimitSave = async () => {
+    setUploadLimitSaving(true);
+    try {
+      await updateInstanceSettings({ maxUploadSizeMb: uploadLimitMb });
+      setUploadLimitDirty(false);
+    } catch {
+      setError('Failed to update upload limit');
+    } finally {
+      setUploadLimitSaving(false);
+    }
+  };
+
+  const handleMediaCleanup = async (dryRun: boolean) => {
+    setMediaCleaning(true);
+    setMediaCleanupResult(null);
+    setError('');
+    try {
+      const result = await api.admin.cleanupOldMedia(mediaAgeDays, dryRun);
+      setMediaCleanupResult(result);
+      if (dryRun) {
+        setMediaPreviewDone(true);
+      } else {
+        setMediaPreviewDone(false);
+        await fetchStats();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Media cleanup failed');
+    } finally {
+      setMediaCleaning(false);
+    }
+  };
 
   const handleCleanup = async (dryRun: boolean) => {
     setCleaning(true);
@@ -136,6 +188,32 @@ export function StoragePanel() {
         </div>
       )}
 
+      {/* Upload Limit */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Upload Limit</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-txt-secondary whitespace-nowrap">Max file size</label>
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={uploadLimitMb}
+              onChange={(e) => { setUploadLimitMb(Number(e.target.value)); setUploadLimitDirty(true); }}
+              className="input-standard w-20 px-2 py-1 text-sm text-center"
+            />
+            <span className="text-sm text-txt-tertiary">MB</span>
+            <button
+              onClick={handleUploadLimitSave}
+              disabled={!uploadLimitDirty || uploadLimitSaving || uploadLimitMb < 1 || uploadLimitMb > 500}
+              className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
+            >
+              {uploadLimitSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Cleanup Actions */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Cleanup</div>
@@ -181,6 +259,61 @@ export function StoragePanel() {
               {cleanupResult.errors.length > 0 && (
                 <div className="mt-1 text-txt-danger">
                   {cleanupResult.errors.length} error{cleanupResult.errors.length !== 1 ? 's' : ''}: {cleanupResult.errors[0]}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Media Retention */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Media Retention</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-txt-secondary whitespace-nowrap">Delete chat media older than</label>
+            <input
+              type="number"
+              min={1}
+              value={mediaAgeDays}
+              onChange={(e) => { setMediaAgeDays(Number(e.target.value)); setMediaPreviewDone(false); setMediaCleanupResult(null); }}
+              className="input-standard w-20 px-2 py-1 text-sm text-center"
+            />
+            <span className="text-sm text-txt-tertiary">days</span>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleMediaCleanup(true)}
+              disabled={mediaCleaning || mediaAgeDays < 1}
+              className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {mediaCleaning ? 'Scanning...' : 'Preview'}
+            </button>
+            <button
+              onClick={() => handleMediaCleanup(false)}
+              disabled={mediaCleaning || !mediaPreviewDone}
+              className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {mediaCleaning ? 'Deleting...' : 'Delete Now'}
+            </button>
+          </div>
+
+          {mediaCleanupResult && (
+            <div className={`p-2 rounded text-sm ${
+              mediaCleanupResult.dryRun
+                ? 'bg-accent-amber/10 border border-accent-amber/30 text-accent-amber'
+                : 'bg-status-online/10 border border-status-online/30 text-status-online'
+            }`}>
+              <div className="font-medium mb-1">
+                {mediaCleanupResult.dryRun ? 'Preview — no files deleted' : 'Cleanup complete'}
+              </div>
+              <div>
+                {mediaCleanupResult.deletedFiles} file{mediaCleanupResult.deletedFiles !== 1 ? 's' : ''} ({formatBytes(mediaCleanupResult.freedBytes)})
+              </div>
+              {mediaCleanupResult.errors.length > 0 && (
+                <div className="mt-1 text-txt-danger">
+                  {mediaCleanupResult.errors.length} error{mediaCleanupResult.errors.length !== 1 ? 's' : ''}: {mediaCleanupResult.errors[0]}
                 </div>
               )}
             </div>
