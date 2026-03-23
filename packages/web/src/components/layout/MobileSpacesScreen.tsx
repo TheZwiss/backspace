@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import type { TaggedSpace } from '../../stores/spaceStore';
@@ -15,6 +15,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 import { MobileFolderSheet } from './MobileFolderSheet';
 import { useInstanceStore } from '../../stores/instanceStore';
+import { VoiceUserRow } from '../voice/VoiceUserRow';
+import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
 
 type ResolvedItem =
   | { type: 'space'; space: TaggedSpace }
@@ -40,7 +42,14 @@ export function MobileSpacesScreen() {
 
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
-  const setCurrentVoiceChannel = useVoiceStore((s) => s.setCurrentVoiceChannel);
+  const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
+  const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
+  const participantMutes = useVoiceStore((s) => s.participantMutes);
+  const speakingUserIds = useVoiceStore((s) => s.speakingUserIds);
+
+  const members = useSpaceStore((s) => s.members);
 
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const setMobileTab = useUIStore((s) => s.setMobileTab);
@@ -62,6 +71,7 @@ export function MobileSpacesScreen() {
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [transferModalSpaceId, setTransferModalSpaceId] = useState<string | null>(null);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [voiceJoinChannelId, setVoiceJoinChannelId] = useState<string | null>(null);
 
   // Sync selected space with store's current space
   useEffect(() => {
@@ -169,7 +179,7 @@ export function MobileSpacesScreen() {
 
   const handleChannelTap = (channel: Channel) => {
     if (channel.type === 'voice') {
-      setCurrentVoiceChannel(channel.id);
+      setVoiceJoinChannelId(channel.id);
       return;
     }
     if (selectedSpaceId) {
@@ -457,6 +467,41 @@ export function MobileSpacesScreen() {
   const canInvite = hasPermissionBit(myPerms, PermissionBits.CREATE_INVITE);
   const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 
+  const handleVoiceUserContextMenu = useCallback(
+    (e: React.MouseEvent, userId: string, channelId: string) => {
+      if (userId === user?.id) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const modItems = buildVoiceModMenuItems(userId, channelId);
+      const items: ContextMenuItem[] = [...modItems];
+
+      if (modItems.length > 0) {
+        items.push({ key: 'mod-end-sep', type: 'separator' });
+      }
+
+      const isUserMuted = useVoiceStore.getState().participantMutes.get(userId) ?? false;
+      items.push({
+        key: 'mute-user',
+        type: 'checkbox',
+        label: 'Mute User',
+        checked: isUserMuted,
+        onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
+      });
+
+      items.push({ key: 'vol-sep', type: 'separator' });
+
+      items.push({
+        key: 'volume',
+        type: 'custom',
+        render: () => React.createElement(VolumeSliderItem, { userId }),
+      });
+
+      openContextMenu({ x: e.clientX, y: e.clientY }, items);
+    },
+    [user?.id, openContextMenu],
+  );
+
   const renderChannelItem = (channel: Channel) => {
     const isVoice = channel.type === 'voice';
     const isActive = !isVoice && currentChannelId === channel.id;
@@ -466,32 +511,80 @@ export function MobileSpacesScreen() {
     const canView = hasPermissionBit(channelPermissions.get(channel.id), PermissionBits.VIEW_CHANNEL);
     if (canView === false) return null;
 
+    const spaceId = channelToSpaceMap.get(channel.id);
+
     return (
-      <button
-        key={channel.id}
-        onClick={() => handleChannelTap(channel)}
-        onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
-        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
-          isActive ? 'bg-interactive-selected text-txt-primary' :
-          isInVoice ? 'bg-accent-mint/10 text-accent-mint' :
-          'text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary'
-        }`}
-      >
-        {isVoice ? (
-          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-          </svg>
-        ) : (
-          <span className="text-sm shrink-0 opacity-60">#</span>
-        )}
-        <span className={`flex-1 text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : ''}`}>
-          {channel.name}
-        </span>
-        {isUnread && <span className="w-2 h-2 rounded-full bg-txt-primary shrink-0" />}
+      <div key={channel.id}>
+        <button
+          onClick={() => handleChannelTap(channel)}
+          onContextMenu={(e) => handleChannelContextMenu(e, channel.id)}
+          data-context-menu={`channel-${channel.id}`}
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+            isActive ? 'bg-interactive-selected text-txt-primary' :
+            isInVoice ? 'bg-accent-mint/10 text-accent-mint' :
+            'text-txt-secondary hover:bg-interactive-hover hover:text-txt-primary'
+          }`}
+        >
+          {isVoice ? (
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+            </svg>
+          ) : (
+            <span className="text-sm shrink-0 opacity-60">#</span>
+          )}
+          <span className={`flex-1 text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : ''}`}>
+            {channel.name}
+          </span>
+          {isUnread && <span className="w-2 h-2 rounded-full bg-txt-primary shrink-0" />}
+        </button>
+
+        {/* Inline voice users */}
         {isVoice && vUsers.length > 0 && (
-          <span className="text-xs text-txt-tertiary">{vUsers.length}</span>
+          <div className="ml-7 mt-0.5 space-y-0.5">
+            {vUsers.map((userId) => {
+              const member = members.find(m => m.userId === userId);
+              const displayName = member?.user.displayName ?? member?.user.username ?? userId;
+              const avatar = member?.user.avatar ?? null;
+              const avatarColor = member?.user.avatarColor;
+              const wsStatus = voiceUserStates.get(userId);
+              const isMuted = wsStatus?.isMuted ?? false;
+              const isDeafened = wsStatus?.isDeafened ?? false;
+              const hasCamera = wsStatus?.isCameraOn ?? false;
+              const isScreenSharing = wsStatus?.isScreenSharing ?? false;
+              const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${userId}`);
+              const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${userId}`);
+              const isPermissionMuted = permissionMutedUserIds.has(`${spaceId}:${userId}`);
+
+              return (
+                <div
+                  key={userId}
+                  data-context-menu={`voice-user-${userId}`}
+                  className="px-3 py-1 rounded-lg hover:bg-interactive-hover transition-colors"
+                  onClick={() => openModal('userProfile', { userId: member?.user.homeUserId ?? userId })}
+                  onContextMenu={(e) => handleVoiceUserContextMenu(e, userId, channel.id)}
+                >
+                  <VoiceUserRow
+                    userId={member?.user.homeUserId ?? userId}
+                    displayName={displayName}
+                    avatar={avatar}
+                    avatarColor={avatarColor ?? undefined}
+                    isMuted={isMuted}
+                    isDeafened={isDeafened}
+                    isCameraOn={hasCamera}
+                    isScreenSharing={isScreenSharing}
+                    isServerMuted={isSpaceMuted}
+                    isServerDeafened={isSpaceDeafened}
+                    isPermissionMuted={isPermissionMuted}
+                    isLocallyMuted={userId !== user?.id && (participantMutes.get(userId) ?? false)}
+                    isSpeaking={speakingUserIds.has(userId)}
+                    size="compact"
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
-      </button>
+      </div>
     );
   };
 
