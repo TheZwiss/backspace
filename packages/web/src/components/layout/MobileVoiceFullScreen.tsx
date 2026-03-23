@@ -23,6 +23,10 @@ export function MobileVoiceFullScreen() {
   const leaveVoice = useVoiceStore((s) => s.leaveVoice);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
+  const participants = useVoiceStore((s) => s.participants);
+  const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
+  const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
+  const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
 
   const channels = useSpaceStore((s) => s.channels);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
@@ -67,7 +71,7 @@ export function MobileVoiceFullScreen() {
     const member = members.find(m => m.userId === userId);
     if (member) {
       return {
-        name: member.nickname ?? member.user?.displayName ?? member.user?.username ?? 'User',
+        name: member.nickname ?? member.user?.displayName ?? member.user?.username ?? userId,
         avatar: member.user?.avatar ? `/api/uploads/${member.user.avatar}` : null,
         avatarColor: member.user?.avatarColor ?? null,
       };
@@ -83,7 +87,12 @@ export function MobileVoiceFullScreen() {
         };
       }
     }
-    return { name: 'User', avatar: null, avatarColor: null };
+    // Fall back to LiveKit participant metadata
+    const participant = participants.find(p => p.userId === userId);
+    if (participant?.username) {
+      return { name: participant.username, avatar: null, avatarColor: null };
+    }
+    return { name: userId, avatar: null, avatarColor: null };
   };
 
   const handleDisconnect = () => {
@@ -159,8 +168,30 @@ export function MobileVoiceFullScreen() {
         }`}>
           {participantIds.map(userId => {
             const info = getParticipantInfo(userId);
-            const state = voiceUserStates.get(userId);
+            const wsStatus = voiceUserStates.get(userId);
+            const participant = participants.find(p => p.userId === userId);
             const isMe = userId === authUser?.id;
+
+            // Resolve mute/deafen: local state for self, LiveKit participant then WS fallback for others
+            const isUserMuted = isMe
+              ? isMuted
+              : (participant?.isMuted ?? wsStatus?.isMuted ?? false);
+            const isUserDeafened = isMe
+              ? isDeafened
+              : (participant?.isDeafened ?? wsStatus?.isDeafened ?? false);
+
+            // Server-enforced states
+            const spaceId = !isDmCall && currentVoiceChannelId
+              ? channelToSpaceMap.get(currentVoiceChannelId)
+              : undefined;
+            const isSpaceMuted = spaceId ? spaceMutedUserIds.has(`${spaceId}:${userId}`) : false;
+            const isSpaceDeafened = spaceId ? spaceDeafenedUserIds.has(`${spaceId}:${userId}`) : false;
+            const isPermissionMuted = spaceId ? permissionMutedUserIds.has(`${spaceId}:${userId}`) : false;
+
+            // Any muted indicator: self-mute, server mute, or permission mute
+            const showMuted = isUserMuted || isSpaceMuted || isPermissionMuted;
+            // Any deafened indicator: self-deafen or server deafen
+            const showDeafened = isUserDeafened || isSpaceDeafened;
 
             return (
               <div
@@ -177,12 +208,19 @@ export function MobileVoiceFullScreen() {
                     avatarColor={info.avatarColor}
                     size={participantIds.length <= 2 ? 80 : 56}
                   />
-                  {state?.isMuted && (
+                  {(showMuted || showDeafened) && (
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-accent-rose/90 flex items-center justify-center">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
-                      </svg>
+                      {showDeafened ? (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18" />
+                        </svg>
+                      )}
                     </div>
                   )}
                 </div>
