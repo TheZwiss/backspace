@@ -32,7 +32,7 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
     config: {
       rateLimit: {
-        max: 10,
+        max: 30,
         timeWindow: '1 minute',
         keyGenerator: (request: any) => (request as any).userId || request.ip,
       },
