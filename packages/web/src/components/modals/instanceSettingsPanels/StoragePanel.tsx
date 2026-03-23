@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../../api/client';
 import type { StorageStats, CleanupResult } from '@backspace/shared';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { useUIStore } from '../../../stores/uiStore';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -14,7 +15,8 @@ function formatBytes(bytes: number): string {
 export function StoragePanel() {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const addToast = useUIStore((s) => s.addToast);
   const [cleanupResult, setCleanupResult] = useState<CleanupResult | null>(null);
   const [cleaning, setCleaning] = useState(false);
   const [previewDone, setPreviewDone] = useState(false);
@@ -34,12 +36,12 @@ export function StoragePanel() {
 
   const fetchStats = useCallback(async () => {
     setLoading(true);
-    setError('');
+    setLoadError('');
     try {
       const data = await api.admin.storageStats();
       setStats(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load storage stats');
+      setLoadError(err instanceof Error ? err.message : 'Failed to load storage stats');
     } finally {
       setLoading(false);
     }
@@ -60,8 +62,9 @@ export function StoragePanel() {
     try {
       await updateInstanceSettings({ maxUploadSizeMb: uploadLimitMb });
       setUploadLimitDirty(false);
+      addToast(`Upload limit set to ${uploadLimitMb} MB`, 'success');
     } catch {
-      setError('Failed to update upload limit');
+      addToast('Failed to update upload limit', 'warning');
     } finally {
       setUploadLimitSaving(false);
     }
@@ -70,7 +73,6 @@ export function StoragePanel() {
   const handleMediaCleanup = async (dryRun: boolean) => {
     setMediaCleaning(true);
     setMediaCleanupResult(null);
-    setError('');
     try {
       const result = await api.admin.cleanupOldMedia(mediaAgeDays, dryRun);
       setMediaCleanupResult(result);
@@ -78,10 +80,11 @@ export function StoragePanel() {
         setMediaPreviewDone(true);
       } else {
         setMediaPreviewDone(false);
+        addToast(`Deleted ${result.deletedFiles} file${result.deletedFiles !== 1 ? 's' : ''} (${formatBytes(result.freedBytes)})`, 'success');
         await fetchStats();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Media cleanup failed');
+      addToast(err instanceof Error ? err.message : 'Media cleanup failed', 'warning');
     } finally {
       setMediaCleaning(false);
     }
@@ -90,7 +93,6 @@ export function StoragePanel() {
   const handleCleanup = async (dryRun: boolean) => {
     setCleaning(true);
     setCleanupResult(null);
-    setError('');
     try {
       const result = await api.admin.storageCleanup(dryRun);
       setCleanupResult(result);
@@ -98,10 +100,11 @@ export function StoragePanel() {
         setPreviewDone(true);
       } else {
         setPreviewDone(false);
+        addToast(`Cleaned up ${result.deletedFiles} file${result.deletedFiles !== 1 ? 's' : ''} (${formatBytes(result.freedBytes)})`, 'success');
         await fetchStats();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cleanup failed');
+      addToast(err instanceof Error ? err.message : 'Cleanup failed', 'warning');
     } finally {
       setCleaning(false);
     }
@@ -111,10 +114,10 @@ export function StoragePanel() {
     return <div className="text-sm text-txt-tertiary">Loading storage stats...</div>;
   }
 
-  if (error && !stats) {
+  if (loadError && !stats) {
     return (
       <div className="space-y-3">
-        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{loadError}</div>
         <button onClick={fetchStats} className="text-sm text-accent-primary hover:underline">Retry</button>
       </div>
     );
@@ -320,11 +323,6 @@ export function StoragePanel() {
           )}
         </div>
       </div>
-
-      {/* Error / Refresh */}
-      {error && (
-        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
-      )}
 
       <button
         onClick={() => { setCleanupResult(null); setPreviewDone(false); fetchStats(); }}
