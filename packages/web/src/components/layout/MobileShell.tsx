@@ -15,7 +15,7 @@ import { MobileInstancePanel } from './MobileInstancePanel';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
-import { MemberSidebar } from './MemberSidebar';
+import { MobileMembersScreen } from './MobileMembersScreen';
 import { FriendsPage } from '../chat/FriendsPage';
 import { ExplorePage } from '../chat/ExplorePage';
 import { UserProfileModal } from '../modals/UserProfileModal';
@@ -57,7 +57,7 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
       <div className="flex-1 overflow-y-auto p-4"><UsersPanel /></div>
     </div>
   ),
-  'members': () => <MemberSidebar />,
+  'members': (params) => <MobileMembersScreen params={params} />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,
   'user-profile': (params) => {
