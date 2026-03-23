@@ -13,6 +13,7 @@ import type { Channel } from '@backspace/shared';
 import { Mascot } from '../ui/Mascot';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
+import { useInstanceStore } from '../../stores/instanceStore';
 
 export function MobileSpacesScreen() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -466,6 +467,24 @@ export function MobileSpacesScreen() {
                   </span>
                 )}
               </button>
+              {(() => {
+                const origin = (space as TaggedSpace)._instanceOrigin;
+                if (!origin) return null;
+                const instances = useInstanceStore.getState().instances;
+                const inst = instances.find(i => i.origin === origin);
+                const isDisconnected = inst ? !inst.connected : false;
+                return (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-base flex items-center justify-center">
+                    {isDisconnected ? (
+                      <div className="w-[8px] h-[8px] rounded-full bg-accent-amber" />
+                    ) : (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                      </svg>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

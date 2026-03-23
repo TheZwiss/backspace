@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { parseFederatedUsername } from '../../utils/identity';
 
 export function MobileYouScreen() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -99,6 +100,11 @@ export function MobileYouScreen() {
             {user.displayName ?? user.username}
           </h2>
           <p className="text-sm text-txt-secondary">@{user.username}</p>
+          {(() => {
+            const { domain } = parseFederatedUsername(user.username);
+            if (!domain) return null;
+            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">Home instance: {domain}</div>;
+          })()}
           {user.customStatus && (
             <p className="text-sm text-txt-secondary mt-1">{user.customStatus}</p>
           )}

@@ -9,6 +9,7 @@ import { Avatar } from '../ui/Avatar';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
+import { parseFederatedUsername } from '../../utils/identity';
 
 export function MobileDmsScreen() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -195,6 +196,13 @@ export function MobileDmsScreen() {
                     </span>
                   )}
                 </div>
+                {(() => {
+                  const mainUser = otherMembers[0];
+                  if (!mainUser) return null;
+                  const { domain } = parseFederatedUsername(mainUser.username);
+                  if (!domain) return null;
+                  return <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>;
+                })()}
                 {preview && (
                   <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-txt-secondary font-medium' : 'text-txt-tertiary'}`}>
                     {previewSender && previewSender.id !== authUser?.id
