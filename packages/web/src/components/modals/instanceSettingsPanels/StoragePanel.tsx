@@ -70,7 +70,7 @@ export function StoragePanel() {
 
   if (!stats) return null;
 
-  const hasOrphans = stats.orphanedFiles > 0 || stats.unlinkedAttachments > 0;
+  const hasOrphans = stats.orphanedFiles > 0 || stats.unlinkedAttachments > 0 || stats.danglingAttachments > 0;
 
   return (
     <div className="space-y-5">
@@ -107,6 +107,13 @@ export function StoragePanel() {
             </div>
             <div className="text-xs text-txt-tertiary">{formatBytes(stats.unlinkedSize)}</div>
           </div>
+          <div className="rounded-lg bg-white/[0.02] p-3.5">
+            <div className="text-xs text-txt-tertiary mb-0.5">Dangling Records</div>
+            <div className={`text-lg font-semibold ${stats.danglingAttachments > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
+              {stats.danglingAttachments}
+            </div>
+            <div className="text-xs text-txt-tertiary">{formatBytes(stats.danglingSize)}</div>
+          </div>
         </div>
       </div>
 
@@ -134,7 +141,7 @@ export function StoragePanel() {
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Cleanup</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
           {!hasOrphans && (
-            <div className="text-sm text-txt-tertiary">No orphaned files or stale uploads found.</div>
+            <div className="text-sm text-txt-tertiary">No orphaned files, stale uploads, or dangling records found.</div>
           )}
 
           {hasOrphans && (
@@ -166,7 +173,7 @@ export function StoragePanel() {
                 {cleanupResult.dryRun ? 'Preview — no files deleted' : 'Cleanup complete'}
               </div>
               <div>
-                {cleanupResult.deletedFiles} orphaned file{cleanupResult.deletedFiles !== 1 ? 's' : ''} ({formatBytes(cleanupResult.freedBytes)})
+                {cleanupResult.deletedFiles} orphaned/dangling file{cleanupResult.deletedFiles !== 1 ? 's' : ''} ({formatBytes(cleanupResult.freedBytes)})
                 {cleanupResult.deletedAttachmentRecords > 0 && (
                   <>, {cleanupResult.deletedAttachmentRecords} stale upload record{cleanupResult.deletedAttachmentRecords !== 1 ? 's' : ''}</>
                 )}
