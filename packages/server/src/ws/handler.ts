@@ -90,6 +90,9 @@ class ConnectionManager {
   private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
   // Permission-muted users (SPEAK permission revoked while in voice)
   private permissionMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
+  // The specific WebSocket that initiated voice_join / DM call for this user.
+  // When THIS socket closes, voice state is cleaned up immediately.
+  private voiceWs: Map<string, WebSocket> = new Map();
   // Per-user WebSocket rate limiters (shared across all tabs/connections)
   private userRateLimiters: Map<string, WsRateLimiter> = new Map();
 
@@ -476,6 +479,23 @@ class ConnectionManager {
     this.voiceUserStates.delete(userId);
   }
 
+  // ─── Voice WebSocket Binding ───────────────────────────────────────────────
+
+  /** Store which ws owns the voice session for this user. */
+  setVoiceWs(userId: string, ws: WebSocket): void {
+    this.voiceWs.set(userId, ws);
+  }
+
+  /** Get the voice-owning ws for this user. */
+  getVoiceWs(userId: string): WebSocket | undefined {
+    return this.voiceWs.get(userId);
+  }
+
+  /** Clear the voice ws binding for this user. */
+  clearVoiceWs(userId: string): void {
+    this.voiceWs.delete(userId);
+  }
+
   setSpaceMuted(spaceId: string, userId: string, muted: boolean): void {
     const key = `${spaceId}:${userId}`;
     if (muted) this.spaceMutedUsers.add(key);
@@ -606,6 +626,13 @@ class ConnectionManager {
           }
         }
       }
+    }
+  }
+
+  /** Send to a specific WebSocket instance (not all of a user's connections). */
+  sendToWs(ws: WebSocket, event: ServerEvent): void {
+    if (ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(JSON.stringify(event));
     }
   }
 
