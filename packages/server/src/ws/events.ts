@@ -762,6 +762,7 @@ function handleVoiceJoin(event: Record<string, unknown>, userId: string, ws: Web
 }
 
 function handleVoiceLeave(userId: string): void {
+  connectionManager.clearVoiceWs(userId);
   const left = connectionManager.leaveCurrentRoom(userId);
   if (left) {
     broadcastRoomLeave(left.roomId, left.room, userId);
@@ -1432,6 +1433,12 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
   const room = connectionManager.getRoom(dmChannelId);
   if (!room) return; // No active call, silently ignore
 
+  // Extract caller ID before destroying the room
+  const meta = room.metadata as DmRoomMeta;
+
+  // Clear caller's voice ws binding (set during handleDmCallStart)
+  connectionManager.clearVoiceWs(meta.callerId);
+
   // Destroy room
   connectionManager.destroyRoom(dmChannelId);
 
@@ -1457,9 +1464,14 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
   const room = connectionManager.getRoom(dmChannelId);
   if (!room) return; // No active call, silently ignore
 
-  // Clear voice user states for all participants
+  // Clear voice ws binding for the caller (may not be in participants if still ringing)
+  const meta = room.metadata as DmRoomMeta;
+  connectionManager.clearVoiceWs(meta.callerId);
+
+  // Clear voice user states and voice ws for all participants
   for (const participantId of room.participants) {
     connectionManager.clearVoiceUserStatus(participantId);
+    connectionManager.clearVoiceWs(participantId);
   }
 
   // Destroy room (removes all participants from userToRoom)
@@ -1711,6 +1723,7 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
 
   // Remove from voice room
   connectionManager.leaveRoom(channelId, targetUserId);
+  connectionManager.clearVoiceWs(targetUserId);
 
   // Clear ephemeral voice status (mute/camera/etc)
   connectionManager.clearVoiceUserStatus(targetUserId);

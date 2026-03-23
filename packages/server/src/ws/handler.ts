@@ -165,6 +165,7 @@ class ConnectionManager {
     // Leave voice room if in one (handles both space and DM rooms)
     const left = this.leaveCurrentRoom(userId);
     this.clearVoiceUserStatus(userId);
+    this.voiceWs.delete(userId);
     if (left) {
       if (left.room.roomType === 'space') {
         const meta = left.room.metadata as SpaceRoomMeta;
@@ -648,6 +649,7 @@ class ConnectionManager {
     // Leave voice room if in one
     const left = this.leaveCurrentRoom(userId);
     this.clearVoiceUserStatus(userId);
+    this.voiceWs.delete(userId);
     if (left) {
       if (left.room.roomType === 'space') {
         const meta = left.room.metadata as SpaceRoomMeta;
