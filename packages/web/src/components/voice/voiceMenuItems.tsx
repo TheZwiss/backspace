@@ -10,10 +10,13 @@ import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
  * Called imperatively at right-click time (not during render).
  */
 export function buildVoiceModMenuItems(targetUserId: string, channelId: string): ContextMenuItem[] {
-  const { spacePermissions, currentSpaceId, channels, channelToSpaceMap } = useSpaceStore.getState();
+  const { spacePermissions, channels, channelToSpaceMap } = useSpaceStore.getState();
   const { spaceMutedUserIds, spaceDeafenedUserIds } = useVoiceStore.getState();
 
-  const myPerms = currentSpaceId ? spacePermissions.get(currentSpaceId) : undefined;
+  // Derive spaceId from the voice channel, NOT from UI navigation state.
+  // On mobile, the user can navigate away from the space while still in voice.
+  const derivedSpaceId = channelToSpaceMap.get(channelId);
+  const myPerms = derivedSpaceId ? spacePermissions.get(derivedSpaceId) : undefined;
   const canMuteMembers = hasPermissionBit(myPerms, PermissionBits.MUTE_MEMBERS);
   const canDeafenMembers = hasPermissionBit(myPerms, PermissionBits.DEAFEN_MEMBERS);
   const canMoveMembers = hasPermissionBit(myPerms, PermissionBits.MOVE_MEMBERS);
@@ -22,7 +25,7 @@ export function buildVoiceModMenuItems(targetUserId: string, channelId: string):
   if (!canMuteMembers && !canDeafenMembers && !canMoveMembers && !canDisconnectMembers) return [];
 
   const voiceOrigin = getChannelOrigin(channelId);
-  const spaceId = channelToSpaceMap.get(channelId);
+  const spaceId = derivedSpaceId;
   const isSpaceMuted = spaceMutedUserIds.has(`${spaceId}:${targetUserId}`);
   const isSpaceDeafened = spaceDeafenedUserIds.has(`${spaceId}:${targetUserId}`);
   const otherVoiceChannels = channels.filter(c => c.type === 'voice' && c.id !== channelId);
