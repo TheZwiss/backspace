@@ -38,7 +38,13 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
       },
     },
   }, async (request, reply) => {
-    const data = await request.file();
+    // Read dynamic upload limit from instance settings
+    const db = getDb();
+    const settings = db.select({ maxUploadSizeBytes: schema.instanceSettings.maxUploadSizeBytes })
+      .from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    const maxSize = settings?.maxUploadSizeBytes ?? config.maxUploadSize;
+
+    const data = await request.file({ limits: { fileSize: maxSize } });
     if (!data) {
       return reply.code(400).send({ error: 'No file provided', statusCode: 400 });
     }
@@ -56,18 +62,17 @@ export async function uploadRoutes(app: FastifyInstance): Promise<void> {
     const writeStream = fs.createWriteStream(filepath);
     await pipeline(data.file, writeStream);
 
-    // Get file size
-    const stats = fs.statSync(filepath);
-    const size = stats.size;
-
-    // Check size limit
-    if (size > config.maxUploadSize) {
+    // Check if file was truncated by multipart limit
+    if ((data.file as any).truncated) {
       fs.unlinkSync(filepath);
       return reply.code(413).send({ error: 'File too large', statusCode: 413 });
     }
 
+    // Get file size
+    const stats = fs.statSync(filepath);
+    const size = stats.size;
+
     const now = Date.now();
-    const db = getDb();
 
     // ─── Media processing ────────────────────────────────────────────────────
     let thumbnailFilename: string | null = null;
