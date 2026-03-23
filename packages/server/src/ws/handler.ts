@@ -125,9 +125,71 @@ class ConnectionManager {
     const userConnections = this.connections.get(userId);
     if (userConnections) {
       userConnections.delete(ws);
+
+      // ── Immediate voice cleanup if this was the voice-active socket ──
+      if (this.voiceWs.get(userId) === ws) {
+        this.voiceWs.delete(userId);
+
+        // Leave voice room (space or DM)
+        const left = this.leaveCurrentRoom(userId);
+        this.clearVoiceUserStatus(userId);
+        if (left) {
+          if (left.room.roomType === 'space') {
+            const meta = left.room.metadata as SpaceRoomMeta;
+            this.sendToSpace(meta.spaceId, {
+              type: 'voice_state_update',
+              channelId: left.roomId,
+              userId,
+              action: 'leave',
+            });
+          } else {
+            this.sendToDmMembers(left.roomId, {
+              type: 'voice_state_update',
+              channelId: left.roomId,
+              userId,
+              action: 'leave',
+            });
+            // Auto-end empty active DM calls
+            const updatedRoom = this.voiceRooms.get(left.roomId);
+            if (updatedRoom && updatedRoom.participants.size === 0
+                && (updatedRoom.metadata as DmRoomMeta).state === 'active') {
+              this.destroyRoom(left.roomId);
+              this.sendToDmMembers(left.roomId, {
+                type: 'dm_call_ended',
+                dmChannelId: left.roomId,
+              });
+            }
+          }
+        }
+
+        // Clean up ringing DM rooms where this user is the caller
+        for (const [roomId, room] of this.voiceRooms) {
+          if (room.roomType === 'dm') {
+            const meta = room.metadata as DmRoomMeta;
+            if (meta.state === 'ringing' && meta.callerId === userId) {
+              this.destroyRoom(roomId);
+              this.sendToDmMembers(roomId, {
+                type: 'dm_call_ended',
+                dmChannelId: roomId,
+              });
+            }
+          }
+        }
+
+        // Notify the user's remaining tabs so their UI updates
+        if (userConnections.size > 0 && left) {
+          this.sendToUser(userId, {
+            type: 'voice_disconnected',
+            userId,
+            channelId: left.roomId,
+            reason: 'session_closed',
+          });
+        }
+      }
+
       if (userConnections.size === 0) {
         this.connections.delete(userId);
-        // Schedule disconnect cleanup
+        // Schedule disconnect cleanup (presence/offline, NOT voice — already handled above)
         this.scheduleDisconnect(userId);
       }
     }
