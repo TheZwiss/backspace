@@ -666,6 +666,8 @@ export interface StorageStats {
   orphanedSize: number;
   unlinkedAttachments: number;
   unlinkedSize: number;
+  danglingAttachments: number;
+  danglingSize: number;
   breakdown: StorageBreakdown[];
 }
 
