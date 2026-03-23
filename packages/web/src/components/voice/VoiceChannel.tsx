@@ -2,9 +2,9 @@ import React, { useCallback, useMemo } from 'react';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Avatar } from '../ui/Avatar';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
+import { VoiceUserRow } from './VoiceUserRow';
 
 const EMPTY_VOICE_USERS: string[] = [];
 
@@ -166,7 +166,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             const participant = participants.find(p => p.userId === userId);
             const displayName = member?.user.displayName ?? member?.user.username ?? participant?.username ?? userId;
             const avatar = member?.user.avatar ?? null;
-            const status = member?.user.status;
+            const avatarColor = member?.user.avatarColor;
             const wsStatus = voiceUserStates.get(userId);
             const isParticipantDeafened = userId === currentUserId
               ? localIsDeafened
@@ -188,7 +188,7 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
             return (
               <div
                 key={userId}
-                className={`flex items-center gap-2 px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors ${
+                className={`px-[10px] py-1 rounded-[6px] hover:bg-interactive-hover transition-colors ${
                   isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
                 } ${isBeingDragged ? 'opacity-50' : ''}`}
                 draggable={isDraggable}
@@ -196,69 +196,22 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
                 onDragEnd={isDraggable ? userDrag!.onDragEnd : undefined}
                 onContextMenu={(e) => handleContextMenu(e, userId)}
               >
-                <Avatar
-                  src={avatar}
-                  name={displayName}
-                  size={24}
-
+                <VoiceUserRow
                   userId={member?.user.homeUserId ?? userId}
-                  user={member?.user}
-                  className={speakingUserIds.has(userId) ? 'rounded-full ring-2 ring-status-online' : ''}
+                  displayName={displayName}
+                  avatar={avatar}
+                  avatarColor={avatarColor ?? undefined}
+                  isMuted={isMuted}
+                  isDeafened={isParticipantDeafened}
+                  isCameraOn={hasCamera}
+                  isUnwatchedCamera={userId !== myUser?.id && unwatchedCameras.has(userId)}
+                  isScreenSharing={isScreenSharing}
+                  isServerMuted={isSpaceMuted}
+                  isServerDeafened={isSpaceDeafened}
+                  isPermissionMuted={isPermissionMuted}
+                  isLocallyMuted={userId !== myUser?.id && (participantMutes.get(userId) ?? false)}
+                  isSpeaking={speakingUserIds.has(userId)}
                 />
-                <span className="text-[13px] text-txt-secondary truncate flex-1 min-w-0">{displayName}</span>
-                {/* Status badges */}
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {(isSpaceMuted || isSpaceDeafened || isPermissionMuted) && (
-                    <span title={isPermissionMuted ? "Muted (No Speak Permission)" : isSpaceMuted ? "Space Muted" : "Muted (Space Deafened)"}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                        <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  )}
-                  {isSpaceDeafened && (
-                    <span title="Space Deafened">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber">
-                        <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-                        <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  )}
-                  {!isSpaceMuted && !isSpaceDeafened && !isPermissionMuted && isMuted && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
-                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                      <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                    </svg>
-                  )}
-                  {!isSpaceDeafened && isParticipantDeafened && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-danger">
-                      <path d="M12 3c-4.97 0-9 4.03-9 9v7c0 1.1.9 2 2 2h2v-7H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v7h2c1.1 0 2-.9 2-2v-7c0-4.97-4.03-9-9-9z" />
-                      <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                    </svg>
-                  )}
-                  {hasCamera && (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-                      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-                      {userId !== myUser?.id && unwatchedCameras.has(userId) && (
-                        <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                      )}
-                    </svg>
-                  )}
-                  {isScreenSharing && (
-                    <span className="bg-accent-rose text-white text-[9px] font-bold px-1 rounded leading-[14px]">LIVE</span>
-                  )}
-                  {userId !== myUser?.id && participantMutes.get(userId) && (
-                    <span title="Locally Muted">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-                        <path d="M3 9v6h4l5 5V4L7 9H3z" />
-                        <line x1="17" y1="7" x2="23" y2="13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                        <line x1="23" y1="7" x2="17" y2="13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  )}
-                </div>
               </div>
             );
           })}
