@@ -108,18 +108,24 @@ export function AppLayout() {
   
   const channels = useSpaceStore((s) => s.channels);
 
-  const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
-  const activeDmCall = useVoiceStore((s) => s.activeDmCall);
   const {
     connect: connectVoice,
     disconnect: disconnectVoice,
-    isConnected: isVoiceConnected,
-    isConnecting: isVoiceConnecting,
-    connectedChannelId,
   } = useLiveKit();
 
+  // Register connect/disconnect refs in voiceStore so click handlers can access them
+  // without calling useLiveKit() (which would create duplicate Room instances).
+  useEffect(() => {
+    useVoiceStore.getState().setConnectFn(connectVoice);
+    useVoiceStore.getState().setDisconnectFn(disconnectVoice);
+    return () => {
+      useVoiceStore.getState().setConnectFn(null);
+      useVoiceStore.getState().setDisconnectFn(null);
+    };
+  }, [connectVoice, disconnectVoice]);
+
   // Initialize WebSocket
-  const { isConnected: isWsConnected } = useWebSocket();
+  useWebSocket();
 
   // Federation toast notifications for remote instance connection state changes
   useFederationToasts();
@@ -135,67 +141,6 @@ export function AppLayout() {
     initActivityBridge();
     return () => teardownActivityBridge();
   }, []);
-
-  // Track the last channel we attempted to connect to, to prevent effect loops
-  const lastAttemptedRef = React.useRef<string | null>(null);
-
-  // Manage voice connection
-  useEffect(() => {
-    if (isLoading || !user || !isWsConnected) return;
-
-    const manageConnection = async () => {
-      // Determine what we SHOULD be connected to
-      const targetChannelId = activeDmCall 
-        ? `dm-${activeDmCall.dmChannelId}` 
-        : currentVoiceChannelId;
-
-      // 1. If we have a target
-      if (targetChannelId) {
-        // If we're not connected to the RIGHT place, trigger connect.
-        // We IGNORE isVoiceConnecting here to allow "interrupting" a connection
-        // or switching rooms immediately.
-        if (connectedChannelId !== targetChannelId) {
-          // Prevent spamming the same connection attempt if React re-renders
-          if (lastAttemptedRef.current === targetChannelId && isVoiceConnecting) {
-            return;
-          }
-          
-          console.log(`[AppLayout] Switching/Connecting to: ${targetChannelId}`);
-          lastAttemptedRef.current = targetChannelId;
-          
-          if (activeDmCall) {
-            await connectVoice(activeDmCall.dmChannelId, true);
-          } else {
-            await connectVoice(targetChannelId);
-          }
-        } else {
-          // We are connected to the right place. Reset ref.
-          lastAttemptedRef.current = null;
-        }
-        return;
-      }
-
-      // 2. No target — ensure disconnected
-      if (connectedChannelId !== null || isVoiceConnected || isVoiceConnecting) {
-        console.log('[AppLayout] Leaving voice (no target)');
-        lastAttemptedRef.current = null;
-        await disconnectVoice();
-      }
-    };
-
-    manageConnection();
-  }, [
-    currentVoiceChannelId, 
-    activeDmCall, 
-    connectedChannelId,
-    isVoiceConnected, 
-    isVoiceConnecting, 
-    isWsConnected, 
-    isLoading, 
-    user, 
-    connectVoice,
-    disconnectVoice
-  ]);
 
   // Responsive detection
   useEffect(() => {

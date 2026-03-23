@@ -75,7 +75,7 @@ export function VoiceControls() {
   };
 
   const handleDisconnect = () => {
-    const { activeDmCall } = useVoiceStore.getState();
+    const { activeDmCall, disconnectFn } = useVoiceStore.getState();
     if (activeDmCall) {
       wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
       useVoiceStore.getState().setActiveDmCall(null);
@@ -83,6 +83,7 @@ export function VoiceControls() {
       wsSend({ type: 'voice_leave' }, voiceOrigin);
       useVoiceStore.getState().leaveVoice();
     }
+    if (disconnectFn) disconnectFn();
   };
 
   const statusColor = connectionError

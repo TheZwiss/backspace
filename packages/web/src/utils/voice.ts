@@ -65,8 +65,17 @@ export function broadcastDeafenViaLiveKit(): void {
  * When switching from a channel on Instance A to one on Instance B,
  * this sends an explicit voice_leave to Instance A first so it
  * broadcasts a leave event and the client cleans up stale voice state.
+ *
+ * @param channelId   The channel to join.
+ * @param connectFn   The LiveKit connect function, obtained from
+ *                    `useVoiceStore.getState().connectFn`. When provided the
+ *                    LiveKit connection is initiated directly within the
+ *                    caller's gesture context (required on iOS).
  */
-export function joinVoiceChannel(channelId: string): void {
+export function joinVoiceChannel(
+  channelId: string,
+  connectFn?: (channelId: string, isDm?: boolean) => Promise<void>,
+): void {
   const { currentVoiceChannelId, setCurrentVoiceChannel, addVoiceUser, removeVoiceUser } = useVoiceStore.getState();
   if (currentVoiceChannelId === channelId) return;
 
@@ -83,8 +92,16 @@ export function joinVoiceChannel(channelId: string): void {
   }
 
   setCurrentVoiceChannel(channelId);
-  // voice_join is now sent by useLiveKit after successful LiveKit connection
   // Optimistic: immediately show self in new channel (using origin-aware ID)
   const myNewId = getMyUserIdForOrigin(getChannelOrigin(channelId));
   if (myNewId) addVoiceUser(channelId, myNewId);
+
+  // Direct connection within gesture context
+  if (connectFn) {
+    connectFn(channelId).catch((err) => {
+      console.error('[voice] Connection failed:', err);
+      setCurrentVoiceChannel(null);
+      if (myNewId) removeVoiceUser(channelId, myNewId);
+    });
+  }
 }

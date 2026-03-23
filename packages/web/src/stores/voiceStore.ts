@@ -116,6 +116,11 @@ interface VoiceState {
   clearVoiceUsersForOrigin: (origin: string) => void;
   leaveVoice: () => void;
   handleForceDisconnect: () => void;
+  // Gesture-aware connect/disconnect refs — registered by AppLayout from useLiveKit()
+  connectFn: ((channelId: string, isDm?: boolean) => Promise<void>) | null;
+  disconnectFn: (() => Promise<void>) | null;
+  setConnectFn: (fn: ((channelId: string, isDm?: boolean) => Promise<void>) | null) => void;
+  setDisconnectFn: (fn: (() => Promise<void>) | null) => void;
   reset: () => void;
 }
 
@@ -470,6 +475,12 @@ export const useVoiceStore = create<VoiceState>()(
           };
         });
       },
+
+      // Gesture-aware connect/disconnect refs — set by AppLayout, read by click handlers
+      connectFn: null,
+      disconnectFn: null,
+      setConnectFn: (fn) => set({ connectFn: fn }),
+      setDisconnectFn: (fn) => set({ disconnectFn: fn }),
 
       // Force disconnect: clear local connection state but do NOT touch voiceUsers.
       // Used for involuntary disconnects (identity collision, server shutdown, etc.)

@@ -85,7 +85,7 @@ export async function handleScreenShareAction(): Promise<void> {
  */
 export function handleDisconnectAction(): void {
   const voice = useVoiceStore.getState();
-  const { activeDmCall, currentVoiceChannelId } = voice;
+  const { activeDmCall, currentVoiceChannelId, disconnectFn } = voice;
 
   if (activeDmCall) {
     wsSend(
@@ -98,6 +98,9 @@ export function handleDisconnectAction(): void {
     wsSend({ type: 'voice_leave' }, origin);
     voice.leaveVoice();
   }
+
+  // Tear down the LiveKit connection
+  if (disconnectFn) disconnectFn();
 
   // Exit fullscreen if active
   const voiceFullscreen = useUIStore.getState().voiceFullscreen;

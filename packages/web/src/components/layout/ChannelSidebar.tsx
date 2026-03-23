@@ -403,7 +403,8 @@ export function ChannelSidebar() {
       navigate(`/channels/${currentSpaceId}/${channelId}`);
       return;
     }
-    joinVoiceChannel(channelId);
+    const connectFn = useVoiceStore.getState().connectFn;
+    joinVoiceChannel(channelId, connectFn ?? undefined);
     navigate(`/channels/${currentSpaceId}/${channelId}`);
   };
 

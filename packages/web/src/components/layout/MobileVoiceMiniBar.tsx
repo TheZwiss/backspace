@@ -92,7 +92,7 @@ export function MobileVoiceMiniBar() {
         </button>
 
         <button
-          onClick={(e) => { e.stopPropagation(); leaveVoice(); }}
+          onClick={(e) => { e.stopPropagation(); leaveVoice(); const df = useVoiceStore.getState().disconnectFn; if (df) df(); }}
           className="w-8 h-8 rounded-full flex items-center justify-center bg-accent-rose/20 text-accent-rose hover:bg-accent-rose/30 transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

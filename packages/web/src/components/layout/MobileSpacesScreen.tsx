@@ -194,8 +194,12 @@ export function MobileSpacesScreen() {
     });
   };
 
-  const handleVoiceJoin = useCallback((chId: string, _preMuted: boolean) => {
-    joinVoiceChannel(chId);
+  const handleVoiceJoin = useCallback((chId: string, preMuted: boolean) => {
+    if (preMuted) {
+      useVoiceStore.getState().setMuted(true);
+    }
+    const connectFn = useVoiceStore.getState().connectFn;
+    joinVoiceChannel(chId, connectFn ?? undefined);
     setVoiceJoinChannelId(null);
     pushMobileScreen('voice');
   }, [pushMobileScreen]);

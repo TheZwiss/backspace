@@ -302,13 +302,19 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Restore DM call state from server (all origins — federated DMs live on remote instances)
       {
-        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall } = useVoiceStore.getState();
+        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, connectFn, disconnectFn } = useVoiceStore.getState();
         const myId = event.user.id;
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
             const isParticipant = call.participants.includes(myId);
             if (call.state === 'active' && isParticipant) {
               setActiveDmCall({ dmChannelId: call.dmChannelId });
+              // Re-establish LiveKit connection for DM call if needed (WS reconnect)
+              if (connectFn) {
+                connectFn(call.dmChannelId, true).catch((err) => {
+                  console.error('[WS] DM call reconnect failed:', err);
+                });
+              }
               break;
             } else if (call.state === 'ringing' && call.callerId !== myId) {
               const dmCh = event.dmChannels?.find((d: any) => d.id === call.dmChannelId);
@@ -323,6 +329,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         } else {
           if (activeDmCall) {
             setActiveDmCall(null);
+            if (disconnectFn) disconnectFn();
           }
           if (incomingCall) {
             setIncomingCall(null);
@@ -466,7 +473,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
           const vs = useVoiceStore.getState();
           // Clear current channel first so joinVoiceChannel doesn't bail
           vs.setCurrentVoiceChannel(null);
-          joinVoiceChannel(event.newChannelId);
+          joinVoiceChannel(event.newChannelId, vs.connectFn ?? undefined);
         });
       }
       break;
@@ -693,26 +700,34 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_accepted': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, connectFn } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall({ dmChannelId: event.dmChannelId });
+      // Initiate LiveKit connection for the DM call
+      if (connectFn) {
+        connectFn(event.dmChannelId, true).catch((err) => {
+          console.error('[WS] DM call connect failed:', err);
+        });
+      }
       break;
     }
 
     case 'dm_call_rejected': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall(null);
+      if (disconnectFn) disconnectFn();
       break;
     }
 
     case 'dm_call_ended': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall(null);
+      if (disconnectFn) disconnectFn();
       break;
     }
 

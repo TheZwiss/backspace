@@ -97,6 +97,8 @@ export function MobileVoiceFullScreen() {
 
   const handleDisconnect = () => {
     leaveVoice();
+    const disconnectFn = useVoiceStore.getState().disconnectFn;
+    if (disconnectFn) disconnectFn();
     popMobileScreen();
   };
 
