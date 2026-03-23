@@ -372,6 +372,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Add category_overrides table ────────────────────────────────────────
   migrateCategoryOverrides(db);
 
+  // ─── Add FK constraint to attachments.dm_message_id ─────────────────────
+  migrateAttachmentsDmMessageFk(db);
+
   console.log('Migrations complete.');
 }
 
@@ -1024,6 +1027,48 @@ function migrateCategoryOverrides(db: Database.Database): void {
         PRIMARY KEY (category_id, target_type, target_id)
     );
     CREATE INDEX IF NOT EXISTS idx_category_overrides_category_id ON category_overrides(category_id);
+  `);
+}
+
+/** Add FK constraint to attachments.dm_message_id (SQLite requires table recreation) */
+function migrateAttachmentsDmMessageFk(db: Database.Database): void {
+  const tableInfo = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
+  ).get() as { sql: string } | undefined;
+
+  // Only migrate if dm_message_id exists but has no FK reference
+  if (!tableInfo) return;
+  if (!tableInfo.sql.includes('dm_message_id')) return;
+  if (tableInfo.sql.includes('REFERENCES dm_messages')) return;
+
+  console.log('Migrating: Adding FK constraint to attachments.dm_message_id...');
+
+  db.exec(`
+    CREATE TABLE attachments_new (
+      id TEXT PRIMARY KEY,
+      message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+      dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE,
+      uploader_id TEXT,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      thumbnail_filename TEXT,
+      width INTEGER,
+      height INTEGER,
+      duration REAL,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO attachments_new
+      SELECT id, message_id, dm_message_id, uploader_id, filename, original_name,
+             mimetype, size, thumbnail_filename, width, height, duration, created_at
+      FROM attachments
+      WHERE dm_message_id IS NULL
+         OR dm_message_id IN (SELECT id FROM dm_messages);
+    DROP TABLE attachments;
+    ALTER TABLE attachments_new RENAME TO attachments;
+    CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON attachments(message_id);
+    CREATE INDEX IF NOT EXISTS idx_attachments_dm_message_id ON attachments(dm_message_id);
   `);
 }
 

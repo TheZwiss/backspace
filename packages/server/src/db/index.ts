@@ -89,19 +89,6 @@ function createTables(db: Database.Database): void {
       created_at INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS attachments (
-      id TEXT PRIMARY KEY,
-      message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
-      dm_message_id TEXT,
-      uploader_id TEXT,
-      filename TEXT NOT NULL,
-      original_name TEXT NOT NULL,
-      mimetype TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      thumbnail_filename TEXT,
-      created_at INTEGER NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS dm_channels (
       id TEXT PRIMARY KEY,
       owner_id TEXT,
@@ -122,6 +109,22 @@ function createTables(db: Database.Database): void {
       reply_to_id TEXT REFERENCES dm_messages(id) ON DELETE SET NULL,
       content TEXT,
       edited_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
+      dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE,
+      uploader_id TEXT,
+      filename TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      thumbnail_filename TEXT,
+      width INTEGER,
+      height INTEGER,
+      duration REAL,
       created_at INTEGER NOT NULL
     );
 
