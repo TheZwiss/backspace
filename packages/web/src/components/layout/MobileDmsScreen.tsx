@@ -4,6 +4,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
+import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { Avatar } from '../ui/Avatar';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
@@ -18,6 +19,8 @@ export function MobileDmsScreen() {
   const authUser = useAuthStore((s) => s.user);
   const friends = useSocialStore((s) => s.friends);
   const navigate = useNavigate();
+  const openContextMenu = useContextMenuStore((s) => s.open);
+  const setCurrentChannel = useChatStore((s) => s.setCurrentChannel);
 
   // Online friends for the activity row
   const onlineFriends = useMemo(() =>
@@ -38,6 +41,30 @@ export function MobileDmsScreen() {
   const handleDmTap = (dmId: string) => {
     navigate(`/channels/@me/${dmId}`);
     pushMobileScreen('channel-chat', { channelId: dmId, spaceId: '@me' });
+  };
+
+  const handleDmContextMenu = (e: React.MouseEvent, dmId: string, isGroup: boolean) => {
+    if (!isGroup) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    openContextMenu({ x: e.clientX, y: e.clientY }, [
+      {
+        key: 'leave-group',
+        type: 'action',
+        label: 'Leave Group',
+        danger: true,
+        icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>,
+        onClick: () => {
+          const currentChId = useChatStore.getState().currentChannelId;
+          if (currentChId === dmId) {
+            navigate('/channels/@me');
+            setCurrentChannel(null);
+          }
+          useSpaceStore.getState().leaveDm(dmId);
+        },
+      },
+    ]);
   };
 
   const formatTimestamp = (ts: number): string => {
@@ -138,6 +165,7 @@ export function MobileDmsScreen() {
             <button
               key={dm.id}
               onClick={() => handleDmTap(dm.id)}
+              onContextMenu={(e) => handleDmContextMenu(e, dm.id, isGroup)}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-interactive-hover text-left transition-colors"
             >
               <div className="relative shrink-0">
