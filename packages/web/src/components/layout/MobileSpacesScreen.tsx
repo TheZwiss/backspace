@@ -16,7 +16,9 @@ import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
 import { MobileFolderSheet } from './MobileFolderSheet';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { VoiceUserRow } from '../voice/VoiceUserRow';
+import { MobileVoiceJoinSheet } from '../voice/MobileVoiceJoinSheet';
 import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
+import { joinVoiceChannel } from '../../utils/voice';
 
 type ResolvedItem =
   | { type: 'space'; space: TaggedSpace }
@@ -191,6 +193,12 @@ export function MobileSpacesScreen() {
       spaceId: selectedSpaceId || '',
     });
   };
+
+  const handleVoiceJoin = useCallback((chId: string, _preMuted: boolean) => {
+    joinVoiceChannel(chId);
+    setVoiceJoinChannelId(null);
+    pushMobileScreen('voice');
+  }, [pushMobileScreen]);
 
   const toggleCategory = (categoryId: string) => {
     setCollapsedCategories(prev => {
@@ -908,6 +916,16 @@ export function MobileSpacesScreen() {
           />
         );
       })()}
+
+      {voiceJoinChannelId && selectedSpaceId && (
+        <MobileVoiceJoinSheet
+          channelId={voiceJoinChannelId}
+          channelName={channels.find(c => c.id === voiceJoinChannelId)?.name || ''}
+          spaceId={selectedSpaceId}
+          onClose={() => setVoiceJoinChannelId(null)}
+          onJoin={handleVoiceJoin}
+        />
+      )}
     </div>
   );
 }
