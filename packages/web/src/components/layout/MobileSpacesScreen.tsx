@@ -9,11 +9,16 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { useNavigate } from 'react-router-dom';
 import { getSpaceGradient } from '../../utils/gradients';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import type { Channel } from '@backspace/shared';
+import type { Channel, SpaceFolder } from '@backspace/shared';
 import { Mascot } from '../ui/Mascot';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TransferOwnershipModal } from '../modals/TransferOwnershipModal';
+import { MobileFolderSheet } from './MobileFolderSheet';
 import { useInstanceStore } from '../../stores/instanceStore';
+
+type ResolvedItem =
+  | { type: 'space'; space: TaggedSpace }
+  | { type: 'folder'; folder: SpaceFolder; spaces: TaggedSpace[] };
 
 export function MobileSpacesScreen() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -56,6 +61,7 @@ export function MobileSpacesScreen() {
   const [deleteChannelId, setDeleteChannelId] = useState<string | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [transferModalSpaceId, setTransferModalSpaceId] = useState<string | null>(null);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
   // Sync selected space with store's current space
   useEffect(() => {
@@ -114,6 +120,47 @@ export function MobileSpacesScreen() {
     }
     return false;
   };
+
+  // ─── Folder-aware layout resolution ─────────────────────────────────
+
+  const spaceMap = useMemo(() => new Map(spaces.map(s => [s.id, s])), [spaces]);
+  const folderMap = useMemo(() => new Map(folders.map(f => [f.id, f])), [folders]);
+
+  const resolvedLayout = useMemo((): ResolvedItem[] => {
+    const result: ResolvedItem[] = [];
+    const accountedSpaceIds = new Set<string>();
+
+    if (spaceLayout && spaceLayout.length > 0) {
+      for (const item of spaceLayout) {
+        if (item.t === 's') {
+          const space = spaceMap.get(item.id);
+          if (space) {
+            result.push({ type: 'space', space });
+            accountedSpaceIds.add(item.id);
+          }
+        } else if (item.t === 'f') {
+          const folder = folderMap.get(item.id);
+          if (folder) {
+            const folderSpaces = folder.spaceIds
+              .map(sid => spaceMap.get(sid))
+              .filter((s): s is TaggedSpace => !!s);
+            if (folderSpaces.length > 0) {
+              result.push({ type: 'folder', folder, spaces: folderSpaces });
+              for (const s of folderSpaces) accountedSpaceIds.add(s.id);
+            }
+          }
+        }
+      }
+    }
+
+    for (const space of spaces) {
+      if (!accountedSpaceIds.has(space.id)) {
+        result.push({ type: 'space', space });
+      }
+    }
+
+    return result;
+  }, [spaceLayout, spaces, spaceMap, folderMap]);
 
   const handleSpaceSelect = (spaceId: string) => {
     setSelectedSpaceId(spaceId);
@@ -217,6 +264,43 @@ export function MobileSpacesScreen() {
 
     await updateSpaceLayout(newLayout, folderData);
     addToast('Removed from folder', 'success', 3000);
+  };
+
+  const handleUngroup = async (folderId: string) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return;
+
+    const currentLayout = spaceLayout || spaces.map(s => ({ t: 's' as const, id: s.id }));
+    const folderIdx = currentLayout.findIndex(item => item.t === 'f' && item.id === folderId);
+
+    // Replace folder with its spaces
+    const newLayout = [...currentLayout];
+    const spaceItems = folder.spaceIds.map(sid => ({ t: 's' as const, id: sid }));
+    newLayout.splice(folderIdx, 1, ...spaceItems);
+
+    const folderData: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    for (const f of folders) {
+      if (f.id !== folderId) {
+        folderData[f.id] = { name: f.name, color: f.color, spaceIds: f.spaceIds };
+      }
+    }
+
+    await updateSpaceLayout(newLayout, folderData);
+    setOpenFolderId(null);
+    addToast('Folder ungrouped', 'success', 3000);
+  };
+
+  const handleUpdateFolder = async (folderId: string, updates: { name?: string | null; color?: string | null }) => {
+    const folderData: Record<string, { name: string | null; color: string | null; spaceIds: string[] }> = {};
+    for (const f of folders) {
+      folderData[f.id] = {
+        name: f.id === folderId && updates.name !== undefined ? updates.name : f.name,
+        color: f.id === folderId && updates.color !== undefined ? updates.color : f.color,
+        spaceIds: f.spaceIds,
+      };
+    }
+    const currentLayout = spaceLayout || spaces.map(s => ({ t: 's' as const, id: s.id }));
+    await updateSpaceLayout(currentLayout, folderData);
   };
 
   // ─── Context menu handlers ────────────────────────────────────────────
@@ -430,8 +514,36 @@ export function MobileSpacesScreen() {
 
         <div className="w-8 h-px bg-border-soft my-0.5" />
 
-        {/* Space icons */}
-        {spaces.map(space => {
+        {/* Space icons (folder-aware) */}
+        {resolvedLayout.map((item) => {
+          if (item.type === 'folder') {
+            const folder = item.folder;
+            const hasUnread = item.spaces.some(s => spaceHasUnread(s.id));
+            const isSelected = item.spaces.some(s => s.id === selectedSpaceId);
+            return (
+              <div key={`folder-${folder.id}`} className="relative">
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1 flex items-center">
+                  <div className={`bg-white rounded-r-full transition-all duration-200 w-full ${
+                    isSelected ? 'h-8' : hasUnread ? 'h-2' : 'h-0'
+                  }`} />
+                </div>
+                <button
+                  onClick={() => setOpenFolderId(folder.id)}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${
+                    isSelected ? 'rounded-xl ring-2 ring-accent-primary/50' : 'hover:rounded-xl'
+                  } bg-surface-elevated`}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke={folder.color || 'currentColor'} strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                  </svg>
+                </button>
+              </div>
+            );
+          }
+
+          // Standalone space — full space icon rendering with federation badge and context menu
+          const space = item.space;
           const isSelected = space.id === selectedSpaceId;
           const hasUnread = spaceHasUnread(space.id);
           const iconUrl = space.icon
@@ -472,7 +584,7 @@ export function MobileSpacesScreen() {
                 if (!origin) return null;
                 const instances = useInstanceStore.getState().instances;
                 const inst = instances.find(i => i.origin === origin);
-                const isDisconnected = inst ? !inst.connected : false;
+                const isDisconnected = inst ? inst.status !== 'connected' : false;
                 return (
                   <div className="absolute -bottom-0.5 -right-0.5 w-[14px] h-[14px] rounded-full bg-surface-base flex items-center justify-center">
                     {isDisconnected ? (
@@ -687,6 +799,22 @@ export function MobileSpacesScreen() {
           onClose={() => setTransferModalSpaceId(null)}
         />
       )}
+
+      {openFolderId && (() => {
+        const folder = folders.find(f => f.id === openFolderId);
+        if (!folder) return null;
+        return (
+          <MobileFolderSheet
+            folder={folder}
+            onClose={() => setOpenFolderId(null)}
+            onSelectSpace={(spaceId) => {
+              handleSpaceSelect(spaceId);
+            }}
+            onUpdateFolder={handleUpdateFolder}
+            onUngroup={handleUngroup}
+          />
+        );
+      })()}
     </div>
   );
 }
