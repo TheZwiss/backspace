@@ -224,8 +224,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.maxUploadSizeMb !== undefined) {
       const mb = Number(body.maxUploadSizeMb);
-      if (isNaN(mb) || mb < 1 || mb > 500) {
-        return reply.code(400).send({ error: 'maxUploadSizeMb must be between 1 and 500', statusCode: 400 });
+      if (isNaN(mb) || mb < 1 || mb > 5120) {
+        return reply.code(400).send({ error: 'maxUploadSizeMb must be between 1 and 5120', statusCode: 400 });
       }
       updateData.maxUploadSizeBytes = Math.round(mb * 1024 * 1024);
     }

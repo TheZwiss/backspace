@@ -200,7 +200,7 @@ export function StoragePanel() {
             <input
               type="number"
               min={1}
-              max={500}
+              max={5120}
               value={uploadLimitMb}
               onChange={(e) => { setUploadLimitMb(Number(e.target.value)); setUploadLimitDirty(true); }}
               className="input-standard w-20 px-2 py-1 text-sm text-center"
@@ -208,7 +208,7 @@ export function StoragePanel() {
             <span className="text-sm text-txt-tertiary">MB</span>
             <button
               onClick={handleUploadLimitSave}
-              disabled={!uploadLimitDirty || uploadLimitSaving || uploadLimitMb < 1 || uploadLimitMb > 500}
+              disabled={!uploadLimitDirty || uploadLimitSaving || uploadLimitMb < 1 || uploadLimitMb > 5120}
               className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
             >
               {uploadLimitSaving ? 'Saving...' : 'Save'}
