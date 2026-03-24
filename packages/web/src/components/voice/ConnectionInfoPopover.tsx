@@ -93,16 +93,19 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
           {track.codec && <span className="text-txt-tertiary ml-2">{track.codec}</span>}
         </span>
       </div>
-      {(resolution || track.fps !== null || track.qualityLimitation || track.simulcastLayer) && (
+      {(resolution || track.fps !== null || track.qualityLimitation || track.simulcastLayer || track.encoderImpl) && (
         <div className="flex items-center justify-between pl-3">
           <span className="text-[11px] text-txt-tertiary">
             {resolution && `${resolution}`}
             {track.fps !== null && ` @${track.fps}`}
           </span>
           <span className="text-[11px] text-txt-tertiary">
-            {track.direction === 'send' && track.qualityLimitation && track.qualityLimitation !== 'none'
-              ? track.qualityLimitation
-              : ''}
+            {track.direction === 'send' && (() => {
+              const parts: string[] = [];
+              if (track.encoderImpl) parts.push(track.encoderImpl);
+              if (track.qualityLimitation && track.qualityLimitation !== 'none') parts.push(track.qualityLimitation);
+              return parts.join(' · ') || null;
+            })()}
             {track.direction === 'recv' && track.simulcastLayer
               ? track.simulcastLayer
               : ''}

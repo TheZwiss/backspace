@@ -199,6 +199,11 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
               </button>
             ))}
           </div>
+          {config.codec !== 'vp9' && (
+            <div className="text-[10px] text-accent-amber/80 mt-1">
+              VP9 is recommended for most setups
+            </div>
+          )}
         </div>
 
         {/* Bitrate Override */}

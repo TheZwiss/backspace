@@ -26,6 +26,7 @@ export interface VideoTrackStat {
   participantName: string | null;
   bitrate: number;
   codec: string | null;
+  encoderImpl: string | null;
   width: number | null;
   height: number | null;
   fps: number | null;
@@ -362,6 +363,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   participantName: null,
                   bitrate,
                   codec,
+                  encoderImpl: report.encoderImplementation ?? null,
                   width,
                   height,
                   fps,
@@ -493,6 +495,7 @@ export function useTrackStats(enabled: boolean): TrackStatsSnapshot | null {
                   participantName: identity.participantName,
                   bitrate,
                   codec,
+                  encoderImpl: null,
                   width,
                   height,
                   fps,
