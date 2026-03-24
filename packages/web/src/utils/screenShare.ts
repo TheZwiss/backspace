@@ -4,6 +4,8 @@ import type { ScreenShareConfig } from '../stores/voiceStore';
 import { getStreamingLimits } from '../stores/settingsStore';
 import { getPublisherPC, getMediaStreamTrack } from './livekitInternals';
 import { broadcastVoiceStatus } from './voice';
+import { activate as activateHwOverdrive, deactivate as deactivateHwOverdrive } from './hwOverdrive';
+import { useUIStore } from '../stores/uiStore';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES, WIDTH_MAP,
   BITRATE_MATRIX_KBPS,
@@ -131,11 +133,10 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   const bps = clampedKbps * 1000;
   const minBps = Math.round(bps * 0.25);
 
-  // VP9: better quality per bit via libvpx (software, CPU).
-  // H.264: OpenH264 software encoder in Electron/Chrome (NOT hardware NVENC).
-  // When VP9 is primary, VP8 SIMULCAST backup (also libvpx, lightweight) handles
-  // incompatible viewers (Safari). Backup capped at 30fps to minimize dual-encode overhead.
-  const useVp9 = config.codec !== 'h264';
+  // hwOverdrive forces H.264 with SDP profile override for hardware encoding.
+  // Default is always VP9. Both paths get VP8 SIMULCAST backup (dynacast pauses
+  // the backup when no subscriber needs it — near-zero cost).
+  const hwOverdrive = useVoiceStore.getState().hwOverdrive;
 
   // Backup encoding: cap at 30fps and proportional bitrate to keep CPU overhead low
   const backupFps = Math.min(fps, 30);
@@ -144,16 +145,14 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
     publish: {
-      videoCodec: useVp9 ? 'vp9' : 'h264',
+      videoCodec: hwOverdrive ? 'h264' : 'vp9',
       videoEncoding: { maxBitrate: bps, maxFramerate: fps },
       simulcast: false,
-      ...(useVp9 ? {
-        backupCodec: {
-          codec: 'vp8' as const,
-          encoding: { maxBitrate: backupBps, maxFramerate: backupFps },
-        },
-        backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
-      } : {}),
+      backupCodec: {
+        codec: 'vp8' as const,
+        encoding: { maxBitrate: backupBps, maxFramerate: backupFps },
+      },
+      backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
     },
     overdrive: {
       maxBitrate: bps,
@@ -242,7 +241,13 @@ export async function applyOverdrive(
 export async function startScreenShare(room: Room): Promise<boolean> {
   console.log('[SS] startScreenShare called, room state:', room.state);
   const config = useVoiceStore.getState().screenShareConfig;
+  const hwOverdrive = useVoiceStore.getState().hwOverdrive;
   const opts = buildScreenShareOptions(config);
+
+  // Activate SDP profile override before WebRTC negotiation
+  if (hwOverdrive) {
+    activateHwOverdrive();
+  }
 
   try {
     // For native mode: omit resolution constraint to capture at display's full native resolution
@@ -277,6 +282,7 @@ export async function startScreenShare(room: Room): Promise<boolean> {
 
     console.log('[SS] setScreenShareEnabled returned:', !!track);
     if (!track) {
+      if (hwOverdrive) deactivateHwOverdrive();
       return false;
     }
 
@@ -289,9 +295,16 @@ export async function startScreenShare(room: Room): Promise<boolean> {
 
     useVoiceStore.setState({ isScreenSharing: true });
     applyScreenShareOverdrive(room);
+
+    // Schedule hardware encoder detection
+    if (hwOverdrive) {
+      scheduleEncoderDetection(room);
+    }
+
     return true;
   } catch (err) {
     console.error('[ScreenShare] Failed to start screen share:', err);
+    if (hwOverdrive) deactivateHwOverdrive();
     return false;
   }
 }
@@ -344,6 +357,50 @@ function applyScreenShareOverdrive(room: Room): void {
 }
 
 // ---------------------------------------------------------------------------
+// Hardware encoder detection — checks WebRTC stats after stream starts
+// ---------------------------------------------------------------------------
+
+function scheduleEncoderDetection(room: Room): void {
+  setTimeout(async () => {
+    if (!useVoiceStore.getState().isScreenSharing) return;
+    if (!useVoiceStore.getState().hwOverdrive) return;
+
+    try {
+      const pc = getPublisherPC(room);
+      if (!pc) return;
+
+      const screenPub = room.localParticipant.getTrackPublications()
+        .find(p => p.source === Track.Source.ScreenShare);
+      if (!screenPub?.track) return;
+
+      const mediaTrack = getMediaStreamTrack(screenPub.track);
+      if (!mediaTrack) return;
+
+      const sender = pc.getSenders().find(s => s.track?.id === mediaTrack.id);
+      if (!sender) return;
+
+      const stats = await sender.getStats();
+      let encoderImpl: string | null = null;
+      stats.forEach((report: any) => {
+        if (report.type === 'outbound-rtp' && (report.kind === 'video' || report.mediaType === 'video')) {
+          encoderImpl = report.encoderImplementation ?? null;
+        }
+      });
+
+      if (encoderImpl && /openh264/i.test(encoderImpl)) {
+        useUIStore.getState().addToast(
+          'Hardware encoder not available — using software fallback. Switch to VP9 for better performance.',
+          'warning',
+          8000,
+        );
+      }
+    } catch {
+      // Non-critical — silently ignore detection failures
+    }
+  }, 4000);
+}
+
+// ---------------------------------------------------------------------------
 // Stop screen sharing
 // ---------------------------------------------------------------------------
 
@@ -353,7 +410,8 @@ export async function stopScreenShare(room: Room): Promise<void> {
   } catch (err) {
     console.error('[ScreenShare] Failed to stop screen share:', err);
   }
-  useVoiceStore.setState({ isScreenSharing: false });
+  deactivateHwOverdrive();
+  useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +430,7 @@ export async function changeScreenShare(room: Room): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export function handleScreenShareUnpublished(): void {
-  useVoiceStore.setState({ isScreenSharing: false });
+  deactivateHwOverdrive();
+  useVoiceStore.setState({ isScreenSharing: false, hwOverdrive: false });
   broadcastVoiceStatus();
 }
