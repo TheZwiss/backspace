@@ -68,9 +68,9 @@ export function UpdateToast() {
     <div className="fixed bottom-6 left-6 z-[300] animate-slide-up">
       <div className="glass-pill rounded-xl px-4 py-3 flex items-center gap-3 max-w-[380px]">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-txt-primary">Update available</p>
+          <p className="text-sm font-medium text-txt-primary">Update failed</p>
           <p className="text-xs text-txt-secondary truncate">
-            Auto-install failed — download manually
+            Auto-update failed — download manually
           </p>
         </div>
         <a

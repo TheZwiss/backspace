@@ -55,6 +55,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const contentRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const isAtBottomRef = useRef(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
   const showPaginationSkeleton = useDelayedLoading(isLoadingMore);
@@ -110,11 +112,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     prevMessagesLength.current = 0;
 
-    // If we have a saved position for the incoming channel, don't mark as near-bottom
+    // If we have a saved position for the incoming channel, don't mark as near/at-bottom
     // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
     const willRestore = useChatStore.getState().scrollPositions.has(channelId);
     setIsNearBottom(!willRestore);
     isNearBottomRef.current = !willRestore;
+    setIsAtBottom(!willRestore);
+    isAtBottomRef.current = !willRestore;
   }, [channelId, saveScrollPosition]);
 
   // Handle scrolling: initial load restores position or snaps to bottom,
@@ -139,17 +143,20 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
             const near = dist < 5000;
             setIsNearBottom(near);
             isNearBottomRef.current = near;
+            const atBot = dist < 150;
+            setIsAtBottom(atBot);
+            isAtBottomRef.current = atBot;
             return;
           }
         }
         // No saved anchor or message not in cache — snap to bottom
         container.scrollTop = container.scrollHeight;
       });
-    } else if (messages.length > prev && isNearBottom) {
-      // New messages arrived while near bottom — smooth scroll
+    } else if (messages.length > prev && isAtBottom) {
+      // New messages arrived while at bottom — smooth scroll
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages.length, isNearBottom, channelId]);
+  }, [messages.length, isAtBottom, channelId]);
 
   // Auto-scroll when content height grows (embeds/images loading) while near bottom
   const hasMessages = messages.length > 0;
@@ -227,8 +234,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     const container = containerRef.current;
     if (!container) return;
 
-    // Check if near bottom
+    // Check scroll position relative to bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    // "at bottom" = within 150px — used for auto-scrolling on new messages
+    const atBottom = distanceFromBottom < 150;
+    setIsAtBottom(atBottom);
+    isAtBottomRef.current = atBottom;
+    // "near bottom" = within 5000px — used for "Jump to Present" button visibility
     const nearBottom = distanceFromBottom < 5000;
     setIsNearBottom(nearBottom);
     isNearBottomRef.current = nearBottom;

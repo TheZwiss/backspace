@@ -6,8 +6,18 @@ directories:
 files:
   - dist/**/*
   - resources/**/*
+  # Exclude host-compiled native module artifacts from the asar.
+  # electron-rebuild (postinstall) compiles uiohook-napi for the build machine,
+  # creating build/Release/*.node. node-gyp-build checks build/ BEFORE prebuilds/,
+  # so if these directories enter the asar, the app crashes on every platform
+  # (including the build platform after afterPack removes the unpacked file).
+  - "!**/node_modules/uiohook-napi/build/**"
+  - "!**/node_modules/uiohook-napi/build.bak/**"
+  - "!**/node_modules/uiohook-napi/bin/**"
 asarUnpack:
   - "**/*.node"
+npmRebuild: false
+afterPack: ./scripts/afterPack.js
 publish:
   - provider: github
     owner: TheZwiss
@@ -25,7 +35,7 @@ mac:
     - dmg
     - zip
 win:
-  icon: ./build/icon.ico
+  icon: ./build/icon.png
   target:
     - nsis
 linux:
