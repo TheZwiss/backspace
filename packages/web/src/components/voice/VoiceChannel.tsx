@@ -83,12 +83,12 @@ export function VoiceChannel({ channelId, channelName, onClick, locked, canManag
       }
 
       // Mute User checkbox
-      const isUserMuted = useVoiceStore.getState().participantMutes.get(userId) ?? false;
       items.push({
         key: 'mute-user',
         type: 'checkbox',
         label: 'Mute User',
-        checked: isUserMuted,
+        subscribe: useVoiceStore.subscribe,
+        getChecked: () => useVoiceStore.getState().participantMutes.get(userId) ?? false,
         onChange: (checked) => useVoiceStore.getState().setParticipantMute(userId, checked),
       });
 

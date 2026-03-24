@@ -116,12 +116,12 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       }
 
       // Mute User checkbox
-      const isUserMuted = useVoiceStore.getState().participantMutes.get(targetUserId) ?? false;
       items.push({
         key: 'mute-user',
         type: 'checkbox',
         label: 'Mute User',
-        checked: isUserMuted,
+        subscribe: useVoiceStore.subscribe,
+        getChecked: () => useVoiceStore.getState().participantMutes.get(targetUserId) ?? false,
         onChange: (checked) => useVoiceStore.getState().setParticipantMute(targetUserId, checked),
       });
 

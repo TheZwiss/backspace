@@ -286,12 +286,12 @@ export function StreamTile({ tile, large }: StreamTileProps) {
         items.push({ key: 'watch-sep', type: 'separator' });
 
         // Mute Stream checkbox
-        const isStreamMuted = useVoiceStore.getState().streamMutes.get(userId) ?? false;
         items.push({
           key: 'mute-stream',
           type: 'checkbox',
           label: 'Mute Stream',
-          checked: isStreamMuted,
+          subscribe: useVoiceStore.subscribe,
+          getChecked: () => useVoiceStore.getState().streamMutes.get(userId) ?? false,
           onChange: (checked) => useVoiceStore.getState().setStreamMute(userId, checked),
         });
 
