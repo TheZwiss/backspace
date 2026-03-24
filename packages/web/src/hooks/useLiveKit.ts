@@ -196,7 +196,7 @@ export function useLiveKit() {
       } else if (isLocal) {
         // Local user safety net — authStore is always available
         cachedUser = useAuthStore.getState().user;
-        homeUserId = cachedUser?.homeUserId ?? cachedUser?.id ?? null;
+        homeUserId = cachedUser?.homeUserId ?? null;
       } else {
         // Space switched — carry forward from previous cycle
         cachedUser = prevCacheMap.get(p.identity) ?? null;
