@@ -39,8 +39,18 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
       }
     }
 
-    // 3. Final fallback — parse username from LiveKit identity
+    // 3. Fallback to cached user from ParticipantInfo (federation carry-forward)
+    if (participant.cachedUser) {
+      const { baseName } = parseFederatedUsername(participant.cachedUser.username);
+      return {
+        displayName: participant.cachedUser.displayName ?? baseName,
+        avatar: participant.cachedUser.avatar ?? null,
+        user: participant.cachedUser,
+      };
+    }
+
+    // 4. Final fallback — parse username from LiveKit identity
     const { baseName } = parseFederatedUsername(participant.username);
     return { displayName: baseName, avatar: null, user: null as User | null };
-  }, [members, dmChannels, participant.userId, participant.username]);
+  }, [members, dmChannels, participant.userId, participant.username, participant.cachedUser]);
 }
