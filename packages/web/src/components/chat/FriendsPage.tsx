@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
+import { ConnectInstanceModal } from '../modals/ConnectInstanceModal';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useInstanceStore } from '../../stores/instanceStore';
@@ -27,6 +28,12 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const [activeTab, setActiveTab] = useState<Tab>('online');
   const [addUsername, setAddUsername] = useState('');
   const [addStatus, setAddStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const addToast = useUIStore((s) => s.addToast);
+  const [connectModal, setConnectModal] = useState<{
+    domain: string;
+    isReconnect: boolean;
+    username: string;
+  } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
 
@@ -63,7 +70,28 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       setAddStatus({ type: 'success', message: `Success! Your friend request to ${addUsername} has been sent.` });
       setAddUsername('');
     } catch (err) {
-      setAddStatus({ type: 'error', message: (err as Error).message });
+      if (err instanceof InstanceNotConnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: false, username: addUsername.trim() });
+      } else if (err instanceof InstanceDisconnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: true, username: addUsername.trim() });
+      } else {
+        setAddStatus({ type: 'error', message: (err as Error).message });
+      }
+    }
+  };
+
+  const handleAddFriendConnected = async (result: 'new' | 'reconnect') => {
+    const username = connectModal?.username;
+    const domain = connectModal?.domain;
+    setConnectModal(null);
+    if (!username) return;
+
+    try {
+      await sendFriendRequest(username);
+      setAddStatus({ type: 'success', message: `Connected to ${domain} — friend request sent!` });
+      setAddUsername('');
+    } catch (err) {
+      addToast((err as Error).message, 'warning');
     }
   };
 
@@ -367,6 +395,16 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       )}
 
       {renderTabContent()}
+
+      {connectModal && (
+        <ConnectInstanceModal
+          domain={connectModal.domain}
+          targetDisplayName={connectModal.username}
+          isReconnect={connectModal.isReconnect}
+          onConnected={handleAddFriendConnected}
+          onCancel={() => setConnectModal(null)}
+        />
+      )}
     </div>
   );
 }
