@@ -10,7 +10,6 @@ export interface ScreenShareConfig {
   height: number | 'native';
   fps: number;
   mode: 'gaming' | 'text';
-  codec: 'vp9' | 'h264';
   customBitrateKbps: number | null;
   shareAudio: boolean;
 }
@@ -89,6 +88,8 @@ interface VoiceState {
   toggleDeafen: () => void;
   setFocusedParticipant: (id: string | null) => void;
   setScreenShareConfig: (config: Partial<ScreenShareConfig>) => void;
+  hwOverdrive: boolean;
+  setHwOverdrive: (enabled: boolean) => void;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
@@ -146,7 +147,7 @@ export const useVoiceStore = create<VoiceState>()(
       inputDeviceId: 'default',
       outputDeviceId: 'default',
       focusedParticipantId: null,
-      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', codec: 'vp9', customBitrateKbps: null, shareAudio: !isElectron() },
+      screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
       participantVolumes: new Map(),
       setParticipantVolume: (userId, volume) => {
         set((state) => {
@@ -329,6 +330,9 @@ export const useVoiceStore = create<VoiceState>()(
       setScreenShareConfig: (config) => set((state) => ({
         screenShareConfig: { ...state.screenShareConfig, ...config },
       })),
+      // Hardware H.264 override — transient (intentionally excluded from partialize for non-persisted behavior)
+      hwOverdrive: false,
+      setHwOverdrive: (enabled) => set({ hwOverdrive: enabled }),
       noiseSuppression: true,
       echoCancellation: true,
       autoGainControl: true,
@@ -545,7 +549,7 @@ export const useVoiceStore = create<VoiceState>()(
     }),
     {
       name: 'backspace-voice-settings',
-      version: 12,
+      version: 13,
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {
           persistedState.streamAttenuationEnabled = false;
@@ -599,6 +603,11 @@ export const useVoiceStore = create<VoiceState>()(
           const cfg = persistedState.screenShareConfig;
           if (cfg && typeof cfg.height !== 'number' && cfg.height !== 'native') {
             cfg.height = 1080;
+          }
+        }
+        if (version < 13) {
+          if (persistedState.screenShareConfig) {
+            delete persistedState.screenShareConfig.codec;
           }
         }
         return persistedState;
