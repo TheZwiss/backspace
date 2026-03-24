@@ -16,6 +16,8 @@ import {
 import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore } from '../stores/spaceStore';
 import { wsSend } from './useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
+import { useAuthStore } from '../stores/authStore';
+import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus } from '../utils/voice';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
@@ -55,6 +57,7 @@ export interface ParticipantInfo {
   screenAudioTrack: MediaStreamTrack | null;
   lkVideoTrack: Track | null;   // LiveKit Track for attach/detach (adaptive stream)
   lkScreenTrack: Track | null;  // LiveKit Track for attach/detach (adaptive stream)
+  cachedUser: User | null;   // Hydrated User from member lookup, carried forward across space switches
 }
 
 export interface UserTile {
@@ -170,12 +173,35 @@ export function useLiveKit() {
   const updateParticipants = useCallback(() => {
     const r = roomRef.current;
     if (!r) return;
+
+    // Carry-forward: snapshot previous participants for cachedUser preservation
+    const prevParticipants = useVoiceStore.getState().participants;
+    const prevCacheMap = new Map<string, User | null>();
+    for (const prev of prevParticipants) {
+      prevCacheMap.set(prev.identity, prev.cachedUser);
+    }
+
     const allParticipants: ParticipantInfo[] = [];
     const processParticipant = (p: Participant, isLocal: boolean) => {
       if (!p.identity) return;
       const { userId, username } = parseIdentity(p.identity);
       const memberMatch = useSpaceStore.getState().members.find(m => m.userId === userId);
-      const homeUserId = memberMatch?.user.homeUserId ?? null;
+      let cachedUser: User | null;
+      let homeUserId: string | null;
+
+      if (memberMatch) {
+        // Fresh data available — use and update cache
+        cachedUser = memberMatch.user as User;
+        homeUserId = memberMatch.user.homeUserId ?? null;
+      } else if (isLocal) {
+        // Local user safety net — authStore is always available
+        cachedUser = useAuthStore.getState().user;
+        homeUserId = cachedUser?.homeUserId ?? cachedUser?.id ?? null;
+      } else {
+        // Space switched — carry forward from previous cycle
+        cachedUser = prevCacheMap.get(p.identity) ?? null;
+        homeUserId = cachedUser?.homeUserId ?? null;
+      }
       let audioTrack: MediaStreamTrack | null = null;
       let videoTrack: MediaStreamTrack | null = null;
       let screenTrack: MediaStreamTrack | null = null;
@@ -229,6 +255,7 @@ export function useLiveKit() {
         userId,
         username,
         homeUserId,
+        cachedUser,
         isMuted: isPartMuted,
         isDeafened: isPartDeafened,
         isCameraOn: hasCameraPublication && p.isCameraEnabled, // True even when unsubscribed

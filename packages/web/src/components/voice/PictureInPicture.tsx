@@ -14,6 +14,7 @@ const EMPTY_PARTICIPANT: ParticipantInfo = {
   isMuted: false, isDeafened: false, isCameraOn: false, isScreenSharing: false,
   isLocal: false, audioTrack: null, videoTrack: null, screenTrack: null,
   screenAudioTrack: null, lkVideoTrack: null, lkScreenTrack: null,
+  cachedUser: null,
 };
 
 const PIP_WIDTH = 320;
