@@ -15,7 +15,7 @@ export function ImageEmbed({ embed }: ImageEmbedProps) {
       <img
         src={imageUrl}
         alt={embed.title ?? ''}
-        className="max-w-[520px] max-h-[350px] object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+        className="max-w-[400px] max-h-[300px] object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
         loading="lazy"
         referrerPolicy="no-referrer"
         onClick={() => openImagePreview(imageUrl)}

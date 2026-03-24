@@ -19,7 +19,7 @@ export function EmbedRenderer({ embed }: EmbedRendererProps) {
 
     case 'audio':
       return (
-        <div className="mt-2 max-w-[520px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard p-3">
+        <div className="mt-2 max-w-[400px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard p-3">
           {embed.title && (
             <a
               href={embed.url}

@@ -11,7 +11,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
   // Direct video URL — no provider, no embedUrl
   if (!embed.provider && !embed.embedUrl) {
     return (
-      <div className="mt-2 max-w-[520px]">
+      <div className="mt-2 max-w-[400px]">
         <video
           src={embed.url}
           controls
@@ -28,7 +28,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
     : null;
 
   return (
-    <div className="mt-2 max-w-[520px] rounded-lg overflow-hidden bg-surface-channel border border-white/[0.06]">
+    <div className="mt-2 max-w-[400px] rounded-lg overflow-hidden bg-surface-channel border border-white/[0.06]">
       {/* 16:9 video area */}
       <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
         {isPlaying && embed.embedUrl ? (

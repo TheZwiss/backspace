@@ -29,7 +29,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
   if (!embed.embedUrl) return null;
 
   return (
-    <div className="mt-2 max-w-[520px] rounded-lg overflow-hidden bg-surface-channel border border-white/[0.06]">
+    <div className="mt-2 max-w-[400px] rounded-lg overflow-hidden bg-surface-channel border border-white/[0.06]">
       {isLoaded ? (
         <iframe
           src={embed.embedUrl}

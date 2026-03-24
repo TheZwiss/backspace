@@ -19,7 +19,7 @@ export function GenericEmbed({ embed }: GenericEmbedProps) {
   const providerName = embed.provider ?? hostnameFromUrl(embed.url);
 
   return (
-    <div className="mt-2 max-w-[520px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard flex overflow-hidden">
+    <div className="mt-2 max-w-[400px] bg-surface-channel rounded-[4px] border-l-4 border-border-hard flex overflow-hidden">
       <div className="flex-1 p-3 min-w-0">
         {providerName && (
           <div className="text-[12px] text-txt-muted font-medium mb-1 truncate">
