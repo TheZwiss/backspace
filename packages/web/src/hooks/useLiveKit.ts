@@ -152,6 +152,7 @@ export function useLiveKit() {
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const screenShareConfig = useVoiceStore((s) => s.screenShareConfig);
+  const hwOverdrive = useVoiceStore((s) => s.hwOverdrive);
   const voiceUserStates = useVoiceStore((s) => s.voiceUserStates);
   const spaceMutedUserIds = useVoiceStore((s) => s.spaceMutedUserIds);
   const spaceDeafenedUserIds = useVoiceStore((s) => s.spaceDeafenedUserIds);
@@ -646,7 +647,7 @@ export function useLiveKit() {
       if (isCameraOn) { await applyOverdrive(room, Track.Source.Camera, CAMERA_OVERDRIVE); }
     };
     updateActiveTracks().catch(() => {});
-  }, [room, screenShareConfig, isScreenSharing, isCameraOn]);
+  }, [room, screenShareConfig, isScreenSharing, isCameraOn, hwOverdrive]);
 
   useEffect(() => {
     return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };
