@@ -559,6 +559,12 @@ function UserDiscoverCard({
   const openModal = useUIStore((s) => s.openModal);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
+  const addToast = useUIStore((s) => s.addToast);
+  const [connectModal, setConnectModal] = useState<{
+    domain: string;
+    isReconnect: boolean;
+    username: string;
+  } | null>(null);
 
   const displayName = user.displayName ?? user.username;
   const baseName = user.username.includes('@') ? user.username.split('@')[0]! : user.username;
@@ -582,6 +588,33 @@ function UserDiscoverCard({
       const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
       const requestId = await sendFriendRequest(username);
       updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
+    } catch (err) {
+      if (err instanceof InstanceNotConnectedError) {
+        const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
+        setConnectModal({ domain: err.domain, isReconnect: false, username });
+      } else if (err instanceof InstanceDisconnectedError) {
+        const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
+        setConnectModal({ domain: err.domain, isReconnect: true, username });
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to send request');
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDiscoverConnected = async (result: 'new' | 'reconnect') => {
+    const username = connectModal?.username;
+    const domain = connectModal?.domain;
+    setConnectModal(null);
+    if (!username) return;
+
+    setActionLoading(true);
+    try {
+      const requestId = await sendFriendRequest(username);
+      updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
+      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
+      addToast(`${verb} ${domain} — friend request sent!`, 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send request');
     } finally {
@@ -767,6 +800,15 @@ function UserDiscoverCard({
           </button>
         )}
       </div>
+      {connectModal && (
+        <ConnectInstanceModal
+          domain={connectModal.domain}
+          targetDisplayName={user.displayName ?? baseName}
+          isReconnect={connectModal.isReconnect}
+          onConnected={handleDiscoverConnected}
+          onCancel={() => setConnectModal(null)}
+        />
+      )}
     </div>
   );
 }
