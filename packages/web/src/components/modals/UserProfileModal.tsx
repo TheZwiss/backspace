@@ -6,7 +6,8 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
+import { ConnectInstanceModal } from './ConnectInstanceModal';
 import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
@@ -51,6 +52,7 @@ export function UserProfileModal() {
   const activeModal = useUIStore((s) => s.activeModal);
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
+  const addToast = useUIStore((s) => s.addToast);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const friends = useSocialStore((s) => s.friends);
@@ -68,6 +70,10 @@ export function UserProfileModal() {
   const [mutualSpaces, setMutualSpaces] = useState<MutualSpace[]>([]);
   const [loadingMutuals, setLoadingMutuals] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
+  const [connectModal, setConnectModal] = useState<{
+    domain: string;
+    isReconnect: boolean;
+  } | null>(null);
 
   const isOpen = activeModal === 'userProfile';
   const userId = modalData?.userId as string | undefined;
@@ -177,35 +183,66 @@ export function UserProfileModal() {
 
   const handleAddFriend = async () => {
     setFriendActionLoading(true);
-    try { await sendFriendRequest(user.username); } catch { /* silent */ }
-    finally { setFriendActionLoading(false); }
+    try {
+      await sendFriendRequest(user.username);
+    } catch (err) {
+      if (err instanceof InstanceNotConnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: false });
+      } else if (err instanceof InstanceDisconnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: true });
+      }
+      // Other errors: socialStore already sets its own error state
+    } finally {
+      setFriendActionLoading(false);
+    }
+  };
+
+  const handleConnected = async (result: 'new' | 'reconnect') => {
+    const domain = connectModal?.domain; // capture before clearing
+    setConnectModal(null);
+    // Retry the friend request now that we're connected
+    setFriendActionLoading(true);
+    try {
+      await sendFriendRequest(user.username);
+      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
+      addToast(`${verb} ${domain} — friend request sent to ${user.displayName ?? parseFederatedUsername(user.username).baseName}`, 'success');
+    } catch (err) {
+      // Connection succeeded but friend request failed — still valuable
+      addToast((err as Error).message, 'warning');
+    } finally {
+      setFriendActionLoading(false);
+    }
   };
 
   const handleRemoveFriend = async () => {
     if (friendship.state !== 'friends') return;
     setFriendActionLoading(true);
-    try { await removeFriend(friendship.friend.id); } catch { /* silent */ }
+    try { await removeFriend(friendship.friend.id); }
+    catch (err) { addToast((err as Error).message, 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
   const handleCancelRequest = async () => {
     if (friendship.state !== 'outbound_pending') return;
     setFriendActionLoading(true);
-    try { await cancelFriendRequest(friendship.request.id); } catch { /* silent */ }
+    try { await cancelFriendRequest(friendship.request.id); }
+    catch (err) { addToast((err as Error).message, 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
   const handleAcceptRequest = async () => {
     if (friendship.state !== 'inbound_pending') return;
     setFriendActionLoading(true);
-    try { await updateFriendRequest(friendship.request.id, 'accepted'); } catch { /* silent */ }
+    try { await updateFriendRequest(friendship.request.id, 'accepted'); }
+    catch (err) { addToast((err as Error).message, 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
   const handleDeclineRequest = async () => {
     if (friendship.state !== 'inbound_pending') return;
     setFriendActionLoading(true);
-    try { await updateFriendRequest(friendship.request.id, 'declined'); } catch { /* silent */ }
+    try { await updateFriendRequest(friendship.request.id, 'declined'); }
+    catch (err) { addToast((err as Error).message, 'warning'); }
     finally { setFriendActionLoading(false); }
   };
 
@@ -517,6 +554,16 @@ export function UserProfileModal() {
           )}
         </div>
       </div>
+
+      {connectModal && user && (
+        <ConnectInstanceModal
+          domain={connectModal.domain}
+          targetDisplayName={user.displayName ?? parseFederatedUsername(user.username).baseName}
+          isReconnect={connectModal.isReconnect}
+          onConnected={handleConnected}
+          onCancel={() => setConnectModal(null)}
+        />
+      )}
     </div>
   );
 }
