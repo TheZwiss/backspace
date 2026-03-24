@@ -33,12 +33,12 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     return (
       <div
         className="max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]"
-        style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 550), maxHeight: 350 } : undefined}
+        style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 400), maxHeight: 300 } : undefined}
       >
         <img
           src={thumbUrl ?? attUrl}
           alt={originalName}
-          className="w-full h-full object-contain cursor-pointer hover:brightness-95 transition-all"
+          className="w-full h-full max-w-[400px] max-h-[300px] object-contain cursor-pointer hover:brightness-95 transition-all"
           onClick={() => openImagePreview(attUrl)}
           loading="lazy"
         />
@@ -51,8 +51,8 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     const hasDimensions = width && height;
     return (
       <div
-        className="mt-1 max-w-[520px] rounded-lg overflow-hidden"
-        style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 400 } : undefined}
+        className="mt-1 max-w-[400px] max-h-[300px] rounded-lg overflow-hidden"
+        style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 300 } : undefined}
       >
         <video
           controls
