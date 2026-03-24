@@ -4,6 +4,24 @@ import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
 
+// ─── Federation errors ────────────────────────────────────────────────────
+
+/** Thrown when the target domain has never been connected. */
+export class InstanceNotConnectedError extends Error {
+  constructor(public domain: string) {
+    super(`Not connected to ${domain}`);
+    this.name = 'InstanceNotConnectedError';
+  }
+}
+
+/** Thrown when the instance entry exists but the session is disconnected/errored. */
+export class InstanceDisconnectedError extends Error {
+  constructor(public domain: string) {
+    super(`Instance ${domain} is not currently connected`);
+    this.name = 'InstanceDisconnectedError';
+  }
+}
+
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
 export type TaggedFriend = Friend & { _instanceOrigin: string };
@@ -143,11 +161,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           });
 
           if (!match) {
-            throw new Error(`Not connected to ${domain}. Add it as an instance in Settings first.`);
+            throw new InstanceNotConnectedError(domain);
           }
 
           if (match.status !== 'connected') {
-            throw new Error(`Instance ${domain} is not currently connected. Check your connection in Settings.`);
+            throw new InstanceDisconnectedError(domain);
           }
 
           // On the remote instance, the user is just "alice", not "alice@orbit"
