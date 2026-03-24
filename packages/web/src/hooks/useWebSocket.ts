@@ -225,6 +225,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
         }).catch(() => {});
       }
 
+      // Re-push current activities to newly connected instances so their
+      // in-memory activity store is populated immediately (covers the case
+      // where a user starts a game, then a remote instance connects later).
+      {
+        const { myActivities, showActivity } = useActivityStore.getState();
+        if (showActivity && myActivities && myActivities.length > 0) {
+          wsSend({ type: 'activity_update', activities: myActivities }, origin);
+        }
+      }
+
       // Populate voice user statuses (mute/deafen/camera/screenshare) from server
       if (event.voiceUserStates) {
         for (const [uid, status] of Object.entries(event.voiceUserStates)) {
