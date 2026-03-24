@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useInstanceStore } from '../stores/instanceStore';
-import { DifferentPasswordError } from '../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError } from '../stores/instanceStore';
 
 /**
  * Reusable hook for connecting to a federated instance.

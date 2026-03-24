@@ -88,7 +88,8 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
 
     try {
       await sendFriendRequest(username);
-      setAddStatus({ type: 'success', message: `Connected to ${domain} — friend request sent!` });
+      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
+      setAddStatus({ type: 'success', message: `${verb} ${domain} — friend request sent!` });
       setAddUsername('');
     } catch (err) {
       addToast((err as Error).message, 'warning');
@@ -583,17 +584,14 @@ function UserDiscoverCard({
   const handleSendRequest = async () => {
     setActionLoading(true);
     setError('');
+    const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
     try {
-      // For federated users, use user@host format
-      const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
       const requestId = await sendFriendRequest(username);
       updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
     } catch (err) {
       if (err instanceof InstanceNotConnectedError) {
-        const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
         setConnectModal({ domain: err.domain, isReconnect: false, username });
       } else if (err instanceof InstanceDisconnectedError) {
-        const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
         setConnectModal({ domain: err.domain, isReconnect: true, username });
       } else {
         setError(err instanceof Error ? err.message : 'Failed to send request');
