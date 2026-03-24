@@ -265,6 +265,9 @@ export async function startScreenShare(room: Room): Promise<boolean> {
     const track = await room.localParticipant.setScreenShareEnabled(true, captureOptions, {
       videoCodec: opts.publish.videoCodec,
       videoEncoding: opts.publish.videoEncoding,
+      // LiveKit uses screenShareEncoding (not videoEncoding) for screen share tracks.
+      // Without this, the default ScreenSharePresets.h1080fps15 caps at 15fps.
+      screenShareEncoding: opts.publish.videoEncoding,
       simulcast: opts.publish.simulcast,
       ...(opts.publish.backupCodec ? {
         backupCodec: opts.publish.backupCodec,
