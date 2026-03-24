@@ -190,7 +190,7 @@ function buildComponents(): Components {
       <img
         src={src}
         alt={alt ?? ''}
-        className="max-w-full max-h-[350px] rounded-md mt-1"
+        className="max-w-[400px] max-h-[300px] rounded-md mt-1"
         loading="lazy"
         referrerPolicy="no-referrer"
         crossOrigin="anonymous"
