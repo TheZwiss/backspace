@@ -1067,6 +1067,15 @@ export function wsSend(event: ClientEvent, origin: string = HOME_ORIGIN): void {
   }
 }
 
+/** Send an event to ALL connected WebSocket instances (home + remotes). */
+export function wsSendAll(event: ClientEvent): void {
+  for (const [_origin, conn] of connections) {
+    if (conn.ws && conn.ws.readyState === WebSocket.OPEN) {
+      conn.ws.send(JSON.stringify(event));
+    }
+  }
+}
+
 /**
  * Hook to initialize the home WebSocket connection. Should only be called ONCE
  * from the top-level layout component (AppLayout). Other components should
