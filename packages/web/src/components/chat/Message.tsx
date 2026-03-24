@@ -340,11 +340,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         ) : (
           <div className="flex flex-col gap-1">
             {isGifOnly ? (
-              <div className="mt-1 max-w-[350px] rounded-lg overflow-hidden">
+              <div className="mt-1 max-w-[250px] rounded-lg overflow-hidden">
                 <img
                   src={message.content!.trim()}
                   alt="GIF"
-                  className="max-w-full max-h-[350px] object-contain rounded-lg"
+                  className="max-w-full max-h-[250px] object-contain rounded-lg"
                   loading="lazy"
                 />
               </div>
