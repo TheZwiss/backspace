@@ -522,21 +522,6 @@ function registerIpcHandlers(): void {
     // a safety net to prevent unhandled-message warnings
   });
 
-  // GPU feature status (debugging hardware encoding)
-  ipcMain.handle('get-gpu-info', async () => {
-    try {
-      const features = app.getGPUFeatureStatus();
-      const info: any = await app.getGPUInfo('complete');
-      return {
-        features,
-        gpu: info?.gpuDevice?.[0] ?? null,
-        videoEncode: (features as any)?.video_encode ?? 'unknown',
-      };
-    } catch {
-      return { features: {}, gpu: null, videoEncode: 'error' };
-    }
-  });
-
   // Auto-launch settings
   ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
     const saved = loadAutoLaunchSettings();
@@ -644,15 +629,6 @@ function handleDeepLink(url: string): void {
   }
 }
 
-// ─── GPU Acceleration ───────────────────────────────────────────────────────
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('enable-accelerated-video-decode');
-// Linux: enable VA-API hardware video encoding/decoding for WebRTC
-// (Windows/macOS hardware H.264 encoding is not reliably available in Electron's
-// Chromium WebRTC stack — VP9 via libvpx is the recommended codec for all platforms)
-if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('enable-features', 'AcceleratedVideoEncoder,VaapiVideoEncoder,VaapiVideoDecoder');
-}
 
 // Electron 36+ defaults to GTK 4 on GNOME, which crashes if GTK 2/3
 // libraries are loaded in the same process. Force GTK 3 for compatibility.
@@ -759,15 +735,6 @@ if (!gotTheLock) {
         },
       ]));
     }
-
-    // Log GPU capabilities for debugging hardware encoding support
-    const gpuFeatures = app.getGPUFeatureStatus();
-    console.log('[GPU] Feature status:', JSON.stringify(gpuFeatures, null, 2));
-    app.getGPUInfo('complete').then((info: any) => {
-      console.log('[GPU] Active GPU:', info?.gpuDevice?.[0]?.driverVendor, info?.gpuDevice?.[0]?.driverVersion);
-      console.log('[GPU] Video encode:', info?.featureStatus?.video_encode ?? 'unknown');
-      console.log('[GPU] Video decode:', info?.featureStatus?.video_decode ?? 'unknown');
-    }).catch(() => {});
 
     // Purge ALL stale caches so Electron always loads fresh code on launch
     await session.defaultSession.clearStorageData({ storages: ['serviceworkers'] });
