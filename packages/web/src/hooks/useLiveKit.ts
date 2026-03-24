@@ -30,6 +30,7 @@ import {
   resolveNativeOverdrive,
 } from '../utils/screenShare';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
+import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 
 let _activeRoom: Room | null = null;
 let _publishedScreenShareCodec: 'vp9' | 'h264' | null = null;
@@ -560,6 +561,7 @@ export function useLiveKit() {
   const disconnect = useCallback(async () => {
     _connectGeneration++;
     SpeakingDetector.getInstance().clear();
+    deactivateHwOverdrive();
     connectedChannelRef.current = null;
     setConnectedChannelId(null);
     if (roomRef.current) {
@@ -650,7 +652,7 @@ export function useLiveKit() {
   }, [room, screenShareConfig, isScreenSharing, isCameraOn, hwOverdrive]);
 
   useEffect(() => {
-    return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };
+    return () => { _connectGeneration++; SpeakingDetector.getInstance().clear(); deactivateHwOverdrive(); if (roomRef.current) { destroyRoom(roomRef.current); roomRef.current = null; _activeRoom = null; } };
   }, []);
 
 

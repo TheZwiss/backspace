@@ -401,6 +401,7 @@ export const useVoiceStore = create<VoiceState>()(
 
       resetSession: () => set({
         // Connection state
+        hwOverdrive: false,
         voiceUsers: new Map(),
         voiceUserStates: new Map(),
         currentVoiceChannelId: null,
@@ -459,6 +460,7 @@ export const useVoiceStore = create<VoiceState>()(
 
           return {
             currentVoiceChannelId: null,
+            hwOverdrive: false,
             isCameraOn: false,
             isScreenSharing: false,
             participants: [],
@@ -493,6 +495,7 @@ export const useVoiceStore = create<VoiceState>()(
       handleForceDisconnect: () => {
         set({
           currentVoiceChannelId: null,
+          hwOverdrive: false,
           isCameraOn: false,
           isScreenSharing: false,
           participants: [],
