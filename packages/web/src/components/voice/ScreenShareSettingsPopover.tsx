@@ -20,9 +20,9 @@ const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
   { value: 'text', label: 'Text' },
 ];
 
-const CODECS: { value: ScreenShareConfig['codec']; label: string }[] = [
-  { value: 'vp9', label: 'VP9' },
-  { value: 'h264', label: 'H.264' },
+const CODEC_OPTIONS = [
+  { value: 'vp9' as const, label: 'VP9' },
+  { value: 'hw' as const, label: 'H.264 HW' },
 ];
 
 function formatBitrate(bps: number): string {
@@ -48,6 +48,8 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
   const popoverRef = useRef<HTMLDivElement>(null);
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
+  const hwOverdrive = useVoiceStore((s) => s.hwOverdrive);
+  const setHwOverdrive = useVoiceStore((s) => s.setHwOverdrive);
   const limits = useSettingsStore((s) => s.streamingLimits);
 
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
@@ -189,23 +191,27 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
             Codec
           </div>
           <div className="flex gap-1.5">
-            {CODECS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setConfig({ codec: c.value })}
-                className={`${pillBase} ${
-                  config.codec === c.value
-                    ? (c.value === 'h264' ? 'bg-accent-amber/60 text-white' : pillSelected)
-                    : (c.value === 'h264' ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
+            {CODEC_OPTIONS.map((c) => {
+              const isHw = c.value === 'hw';
+              const isSelected = isHw ? hwOverdrive : !hwOverdrive;
+              return (
+                <button
+                  key={c.value}
+                  onClick={() => setHwOverdrive(isHw)}
+                  className={`${pillBase} ${
+                    isSelected
+                      ? (isHw ? 'bg-accent-amber/60 text-white' : pillSelected)
+                      : (isHw ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
           </div>
-          {config.codec !== 'vp9' && (
+          {hwOverdrive && (
             <div className="text-[10px] text-accent-amber/80 mt-1">
-              Not recommended — uses slower software encoder
+              GPU hardware encoder · resets when stream ends
             </div>
           )}
         </div>
