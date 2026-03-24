@@ -616,7 +616,11 @@ export function useLiveKit() {
         // Codec changed mid-stream — must restart (codec is baked into SDP negotiation)
         if (_publishedScreenShareCodec && _publishedScreenShareCodec !== opts.publish.videoCodec) {
           _publishedScreenShareCodec = null;
+          // Preserve hwOverdrive across restart — stopScreenShare() resets it,
+          // but the user's intent (the pill they just clicked) must survive.
+          const preserveHwOverdrive = useVoiceStore.getState().hwOverdrive;
           await stopScreenShare(room);
+          if (preserveHwOverdrive) useVoiceStore.setState({ hwOverdrive: true });
           setTimeout(() => startScreenShare(room).catch(() => {}), 200);
           return;
         }
