@@ -21,8 +21,8 @@ const MODES: { value: ScreenShareConfig['mode']; label: string }[] = [
 ];
 
 const CODEC_OPTIONS = [
-  { value: 'vp9' as const, label: 'VP9' },
-  { value: 'hw' as const, label: 'H.264 HW' },
+  { value: 'vp9' as const, label: 'Standard', sub: 'VP9' },
+  { value: 'hw' as const, label: 'NVIDIA / Apple', sub: 'H.264' },
 ];
 
 function formatBitrate(bps: number): string {
@@ -198,13 +198,14 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
                 <button
                   key={c.value}
                   onClick={() => setHwOverdrive(isHw)}
-                  className={`${pillBase} ${
+                  className={`${pillBase} flex flex-col items-center gap-0 leading-tight ${
                     isSelected
                       ? (isHw ? 'bg-accent-amber/60 text-white' : pillSelected)
                       : (isHw ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
                   }`}
                 >
-                  {c.label}
+                  <span>{c.label}</span>
+                  <span className="text-[10px] opacity-60">{c.sub}</span>
                 </button>
               );
             })}
