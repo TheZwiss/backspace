@@ -1,9 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useCallback, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
   useContextMenuStore,
   filterMenuItems,
   type ContextMenuItem,
+  type ContextMenuCheckbox,
   type ContextMenuLeafItem,
   type ContextMenuSubmenu,
 } from '../../stores/contextMenuStore';
@@ -38,6 +39,35 @@ function CheckboxIndicator({ checked }: { checked: boolean }) {
         </svg>
       )}
     </div>
+  );
+}
+
+// ── Reactive checkbox wrapper ───────────────────────────────────────────────
+
+interface ReactiveCheckboxItemProps {
+  item: ContextMenuCheckbox;
+  isMobile?: boolean;
+}
+
+function ReactiveCheckboxItem({ item, isMobile }: ReactiveCheckboxItemProps) {
+  const checked = useSyncExternalStore(item.subscribe, item.getChecked);
+
+  const className = isMobile
+    ? `${MOBILE_ITEM_CLASS} text-txt-primary`
+    : ITEM_CLASS;
+
+  return (
+    <button
+      className={className}
+      style={isMobile ? undefined : ITEM_STYLE}
+      onClick={(e) => {
+        e.stopPropagation();
+        item.onChange(!checked);
+      }}
+    >
+      <span className="flex-1">{item.label}</span>
+      <CheckboxIndicator checked={checked} />
+    </button>
   );
 }
 
@@ -115,19 +145,7 @@ function DesktopLeafItem({ item, close }: DesktopLeafItemProps) {
       return <div>{item.render()}</div>;
 
     case 'checkbox':
-      return (
-        <button
-          className={ITEM_CLASS}
-          style={ITEM_STYLE}
-          onClick={(e) => {
-            e.stopPropagation();
-            item.onChange(!item.checked);
-          }}
-        >
-          <span className="flex-1">{item.label}</span>
-          <CheckboxIndicator checked={item.checked} />
-        </button>
-      );
+      return <ReactiveCheckboxItem item={item} />;
 
     case 'action': {
       const className = item.disabled
@@ -413,18 +431,7 @@ function MobileLeafItem({ item, close }: MobileLeafItemProps) {
       return <div>{item.render()}</div>;
 
     case 'checkbox':
-      return (
-        <button
-          className={`${MOBILE_ITEM_CLASS} text-txt-primary`}
-          onClick={(e) => {
-            e.stopPropagation();
-            item.onChange(!item.checked);
-          }}
-        >
-          <span className="flex-1">{item.label}</span>
-          <CheckboxIndicator checked={item.checked} />
-        </button>
-      );
+      return <ReactiveCheckboxItem item={item} isMobile />;
 
     case 'action': {
       const colorClass = item.danger ? 'text-txt-danger' : 'text-txt-primary';
