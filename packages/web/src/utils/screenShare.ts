@@ -27,7 +27,7 @@ export interface ScreenShareBuildResult {
     videoCodec: 'vp9' | 'h264';
     videoEncoding: { maxBitrate: number; maxFramerate: number };
     simulcast: false;
-    backupCodec?: { codec: 'h264'; encoding: { maxBitrate: number; maxFramerate: number } };
+    backupCodec?: { codec: 'vp8' | 'h264'; encoding: { maxBitrate: number; maxFramerate: number } };
     backupCodecPolicy?: BackupCodecPolicy;
   };
   overdrive: OverdriveOptions;
@@ -131,11 +131,15 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   const bps = clampedKbps * 1000;
   const minBps = Math.round(bps * 0.25);
 
-  // VP9: better quality per bit, software-encoded (CPU). Best for text/static content.
-  // H.264: hardware-encoded via NVENC/QSV/VCE (zero CPU). Universal browser support.
-  // When VP9 is primary, H.264 SIMULCAST backup handles Safari/incompatible viewers.
-  // When H.264 is primary, no backup needed — universally supported.
+  // VP9: better quality per bit via libvpx (software, CPU).
+  // H.264: OpenH264 software encoder in Electron/Chrome (NOT hardware NVENC).
+  // When VP9 is primary, VP8 SIMULCAST backup (also libvpx, lightweight) handles
+  // incompatible viewers (Safari). Backup capped at 30fps to minimize dual-encode overhead.
   const useVp9 = config.codec !== 'h264';
+
+  // Backup encoding: cap at 30fps and proportional bitrate to keep CPU overhead low
+  const backupFps = Math.min(fps, 30);
+  const backupBps = Math.round(bps * (backupFps / fps));
 
   return {
     capture: { width: captureWidth, height: captureHeight, frameRate: fps },
@@ -145,8 +149,8 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
       simulcast: false,
       ...(useVp9 ? {
         backupCodec: {
-          codec: 'h264' as const,
-          encoding: { maxBitrate: bps, maxFramerate: fps },
+          codec: 'vp8' as const,
+          encoding: { maxBitrate: backupBps, maxFramerate: backupFps },
         },
         backupCodecPolicy: BackupCodecPolicy.SIMULCAST,
       } : {}),

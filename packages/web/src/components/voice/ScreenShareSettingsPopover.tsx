@@ -193,7 +193,11 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
               <button
                 key={c.value}
                 onClick={() => setConfig({ codec: c.value })}
-                className={`${pillBase} ${config.codec === c.value ? pillSelected : pillUnselected}`}
+                className={`${pillBase} ${
+                  config.codec === c.value
+                    ? (c.value === 'h264' ? 'bg-accent-amber/60 text-white' : pillSelected)
+                    : (c.value === 'h264' ? 'bg-surface-elevated/50 text-txt-tertiary hover:bg-interactive-hover' : pillUnselected)
+                }`}
               >
                 {c.label}
               </button>
@@ -201,7 +205,7 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
           </div>
           {config.codec !== 'vp9' && (
             <div className="text-[10px] text-accent-amber/80 mt-1">
-              VP9 is recommended for most setups
+              Not recommended — uses slower software encoder
             </div>
           )}
         </div>
