@@ -21,7 +21,8 @@ export interface ContextMenuAction extends ContextMenuItemBase {
 export interface ContextMenuCheckbox extends ContextMenuItemBase {
   type: 'checkbox';
   label: string;
-  checked: boolean;
+  subscribe: (onStoreChange: () => void) => () => void;
+  getChecked: () => boolean;
   onChange: (checked: boolean) => void;
 }
 
