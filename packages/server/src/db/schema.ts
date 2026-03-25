@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -93,6 +93,7 @@ export const attachments = sqliteTable('attachments', {
   width: integer('width'),
   height: integer('height'),
   duration: real('duration'),
+  sourceUrl: text('source_url'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -116,6 +117,7 @@ export const embeds = sqliteTable('embeds', {
 export const dmChannels = sqliteTable('dm_channels', {
   id: text('id').primaryKey(),
   ownerId: text('owner_id'),
+  canonicalPairId: text('canonical_pair_id'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -134,6 +136,9 @@ export const dmMessages = sqliteTable('dm_messages', {
   replyToId: text('reply_to_id'),
   content: text('content'),
   editedAt: integer('edited_at'),
+  sourceInstance: text('source_instance'),
+  sourceMessageId: text('source_message_id'),
+  encryptionVersion: integer('encryption_version').default(0),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   replyToFk: foreignKey({
@@ -261,6 +266,8 @@ export const instanceSettings = sqliteTable('instance_settings', {
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   allowCustomBitrate: integer('allow_custom_bitrate').notNull().default(1),
   maxUploadSizeBytes: integer('max_upload_size_bytes'),
+  federationRelayEnabled: integer('federation_relay_enabled').notNull().default(0),
+  federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   updatedAt: integer('updated_at').notNull(),
 });
 
@@ -294,3 +301,58 @@ export const voiceRestrictions = sqliteTable('voice_restrictions', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId, table.restrictionType] }),
 }));
+
+export const federationPeers = sqliteTable('federation_peers', {
+  id: text('id').primaryKey(),
+  origin: text('origin').notNull().unique(),
+  instanceName: text('instance_name'),
+  hmacSecret: text('hmac_secret').notNull(),
+  status: text('status').notNull().default('active'),
+  lastSeenAt: integer('last_seen_at'),
+  lastFailureAt: integer('last_failure_at'),
+  consecutiveFailures: integer('consecutive_failures').default(0),
+  lastSyncedAt: integer('last_synced_at').default(0),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const federationOutbox = sqliteTable('federation_outbox', {
+  id: text('id').primaryKey(),
+  peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
+  dmChannelId: text('dm_channel_id').notNull(),
+  messageId: text('message_id').notNull(),
+  eventType: text('event_type').notNull(),
+  payload: text('payload').notNull(),
+  encryptionVersion: integer('encryption_version').default(0),
+  attempts: integer('attempts').default(0),
+  nextRetryAt: integer('next_retry_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  uniquePerPeerMessage: unique().on(table.peerId, table.messageId),
+}));
+
+export const federationFileQueue = sqliteTable('federation_file_queue', {
+  id: text('id').primaryKey(),
+  peerOrigin: text('peer_origin').notNull(),
+  dmMessageId: text('dm_message_id').notNull(),
+  sourceUrl: text('source_url').notNull(),
+  targetFilename: text('target_filename'),
+  originalName: text('original_name').notNull(),
+  mimetype: text('mimetype').notNull(),
+  size: integer('size').notNull(),
+  status: text('status').notNull().default('pending'),
+  rejectionReason: text('rejection_reason'),
+  attempts: integer('attempts').default(0),
+  nextRetryAt: integer('next_retry_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const federationMutationLog = sqliteTable('federation_mutation_log', {
+  id: text('id').primaryKey(),
+  dmMessageId: text('dm_message_id').notNull(),
+  dmChannelId: text('dm_channel_id').notNull(),
+  mutationType: text('mutation_type').notNull(),
+  mutatedAt: integer('mutated_at').notNull(),
+  payload: text('payload'),
+});
