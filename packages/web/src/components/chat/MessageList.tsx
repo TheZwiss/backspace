@@ -151,12 +151,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         }
         // No saved anchor or message not in cache — snap to bottom
         container.scrollTop = container.scrollHeight;
+        isAtBottomRef.current = true;
+        setIsAtBottom(true);
       });
-    } else if (messages.length > prev && isAtBottom) {
+    } else if (messages.length > prev && isAtBottomRef.current) {
       // New messages arrived while at bottom — smooth scroll
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages.length, isAtBottom, channelId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isAtBottomRef read via ref intentionally
+  }, [messages.length, channelId]);
 
   // Auto-scroll when content height grows (embeds/images loading) while near bottom
   const hasMessages = messages.length > 0;
@@ -172,7 +175,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       // generous 5000px isNearBottomRef — prevents snapping the user back
       // to bottom during momentum/inertial scrolling on mobile.
       const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
-      if (dist < 150) {
+      if (isAtBottomRef.current && dist < 150) {
         c.scrollTop = c.scrollHeight;
       }
     });
@@ -191,7 +194,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       const c = containerRef.current;
       if (!c) return;
       const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
-      if (dist < 150) {
+      if (isAtBottomRef.current && dist < 150) {
         c.scrollTop = c.scrollHeight;
       }
     };
