@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { MessageWithUser } from '@backspace/shared';
+import type { MessageWithUser, Embed } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MentionBadge } from './MentionBadge';
 import { Avatar } from '../ui/Avatar';
@@ -59,6 +59,23 @@ function isGifOnlyMessage(content: string | null): boolean {
   if (!content) return false;
   const trimmed = content.trim();
   return GIF_URL_REGEX.test(trimmed);
+}
+
+/**
+ * Returns the original posted URL when a message is a single URL that resolved
+ * to an image embed, or null if the message should render normally.
+ */
+function getImageEmbedSourceUrl(content: string | null, embeds: Embed[]): string | null {
+  if (!content) return null;
+  const trimmed = content.trim();
+  // Must be a single URL with no surrounding text
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return null;
+  if (/\s/.test(trimmed)) return null;
+  // Must have at least one image embed whose URL matches the posted content
+  const hasMatchingImageEmbed = embeds.some(
+    (e) => e.embedType === 'image' && e.url === trimmed
+  );
+  return hasMatchingImageEmbed ? trimmed : null;
 }
 
 export function Message({ message, isCompact, isFirstInGroup, previousMessageId }: MessageProps) {
@@ -130,6 +147,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   }, []);
 
   const isGifOnly = isGifOnlyMessage(message.content);
+  const imageEmbedSourceUrl = getImageEmbedSourceUrl(message.content, message.embeds || []);
+  // sourceUrl: the original URL for context menu Copy/Open Link actions
+  const sourceUrl = isGifOnly
+    ? (message.content?.trim() ?? null)
+    : imageEmbedSourceUrl;
 
   // Close reaction picker on outside click
   useEffect(() => {
@@ -183,6 +205,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       selectedText,
       previousMessageId,
       imageUrl,
+      sourceUrl,
       isAuthor,
       isDm: isDmMessage,
       canAddReactions,
@@ -354,6 +377,20 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                   loading="lazy"
                 />
               </div>
+            ) : imageEmbedSourceUrl ? (
+              <>
+                {/* URL text suppressed — embeds render the image */}
+                {!isEditing && message.embeds && message.embeds.length > 0 && (
+                  <div className="flex flex-col gap-2 mt-1">
+                    {message.embeds.map((embed) => (
+                      <EmbedRenderer key={embed.id} embed={embed} />
+                    ))}
+                  </div>
+                )}
+                {message.editedAt && (
+                  <span className="text-[10px] text-txt-tertiary select-none font-medium">(edited)</span>
+                )}
+              </>
             ) : (
               <>
                 {message.content && (
