@@ -170,14 +170,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     const observer = new ResizeObserver(() => {
       const c = containerRef.current;
-      if (!c) return;
-      // Use a tight threshold (150px) checked at fire time instead of the
-      // generous 5000px isNearBottomRef — prevents snapping the user back
-      // to bottom during momentum/inertial scrolling on mobile.
-      const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
-      if (isAtBottomRef.current && dist < 150) {
-        c.scrollTop = c.scrollHeight;
-      }
+      if (!c || !isAtBottomRef.current) return;
+      c.scrollTop = c.scrollHeight;
     });
     observer.observe(content);
     return () => observer.disconnect();
@@ -192,11 +186,8 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     const handleMediaLoad = () => {
       const c = containerRef.current;
-      if (!c) return;
-      const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
-      if (isAtBottomRef.current && dist < 150) {
-        c.scrollTop = c.scrollHeight;
-      }
+      if (!c || !isAtBottomRef.current) return;
+      c.scrollTop = c.scrollHeight;
     };
 
     content.addEventListener('load', handleMediaLoad, true);
