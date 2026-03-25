@@ -261,9 +261,12 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         if (result.status !== 'fulfilled') return;
         const origin = searches[i]!.origin;
         for (const user of result.value) {
-          const dedupeKey = `${origin ?? ''}:${user.id}`;
-          if (seen.has(dedupeKey)) continue;
-          seen.add(dedupeKey);
+          // Deduplicate by canonical identity: replicated profiles share
+          // the same homeUserId as the native profile's id, so collapse them.
+          // Prefer the first seen (home instance is queried first → native wins).
+          const canonicalId = user.homeUserId ?? user.id;
+          if (seen.has(canonicalId)) continue;
+          seen.add(canonicalId);
           if (origin) normalizeUserAssets(user, origin);
           allUsers.push({ ...user, _instanceOrigin: origin });
         }
