@@ -11,12 +11,15 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
   // Direct video URL — no provider, no embedUrl
   if (!embed.provider && !embed.embedUrl) {
     return (
-      <div className="mt-2 max-w-[400px]">
+      <div
+        className="mt-2 max-w-[400px] rounded-lg overflow-hidden bg-surface-input"
+        style={{ aspectRatio: '16/9' }}
+      >
         <video
           src={embed.url}
           controls
           preload="none"
-          className="w-full rounded-lg bg-black"
+          className="w-full h-full rounded-lg"
         />
       </div>
     );
