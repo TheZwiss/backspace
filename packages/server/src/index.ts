@@ -25,6 +25,7 @@ import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
+import { federationRoutes } from './routes/federation.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -95,6 +96,7 @@ async function main(): Promise<void> {
   await app.register(searchRoutes);
   await app.register(adminRoutes);
   await app.register(gifRoutes);
+  await app.register(federationRoutes);
   await app.register(registerWebSocket);
 
   app.get('/api/health', async () => {
