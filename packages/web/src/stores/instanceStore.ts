@@ -289,6 +289,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         });
       }
 
+      // Initiate server-to-server peering for DM relay (non-fatal)
+      try {
+        await api.federation.initiatePeering({ remoteOrigin: origin });
+      } catch (err) {
+        console.warn('[federation] Peering initiation failed (non-fatal):', err);
+      }
+
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
     } catch (err) {

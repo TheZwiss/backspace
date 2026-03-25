@@ -198,6 +198,12 @@ export class BackspaceApiClient {
     enabled: () => Promise<{ enabled: boolean }>;
   };
 
+  readonly federation: {
+    initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: { id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; createdAt: number } }>;
+    peers: () => Promise<{ peers: Array<{ id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; lastFailureAt: number | null; consecutiveFailures: number | null; lastSyncedAt: number | null; createdAt: number }> }>;
+    revokePeer: (id: string) => Promise<{ success: boolean }>;
+  };
+
   readonly admin: {
     storageStats: () => Promise<StorageStats>;
     storageOrphans: () => Promise<{ orphans: OrphanedFile[] }>;
@@ -613,6 +619,19 @@ export class BackspaceApiClient {
         return request<{ results: GifResult[]; next: string }>('GET', `/gif/search?${params}`);
       },
       enabled: () => request<{ enabled: boolean }>('GET', '/gif/enabled'),
+    };
+
+    this.federation = {
+      initiatePeering: (data: { remoteOrigin: string }) =>
+        request<{ peer: { id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; createdAt: number } }>(
+          'POST', '/federation/peer/initiate', data
+        ),
+      peers: () =>
+        request<{ peers: Array<{ id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; lastFailureAt: number | null; consecutiveFailures: number | null; lastSyncedAt: number | null; createdAt: number }> }>(
+          'GET', '/federation/peers'
+        ),
+      revokePeer: (id: string) =>
+        request<{ success: boolean }>('DELETE', `/federation/peers/${id}`),
     };
 
     this.admin = {

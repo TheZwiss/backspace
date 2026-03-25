@@ -387,6 +387,11 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         <p className="text-txt-secondary text-[14px] mt-1">
           This is the beginning of your direct message history with <strong>@{username}</strong>.
         </p>
+        {otherUser?.homeInstance && (
+          <p className="text-xs text-txt-tertiary mt-1">
+            Messages are stored on your and your recipient's home instances. They are not end-to-end encrypted.
+          </p>
+        )}
         {isFriend && otherUser && (
           <div className="mt-4">
             <button

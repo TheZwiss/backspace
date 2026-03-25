@@ -606,6 +606,8 @@ export interface InstanceAdminSettings {
   gifApiKey?: string;
   gifEnabled?: boolean;
   maxUploadSizeMb: number;
+  federationRelayEnabled: boolean;
+  federationRelayTtlDays: number;
 }
 
 export interface InstanceStreamingLimits {

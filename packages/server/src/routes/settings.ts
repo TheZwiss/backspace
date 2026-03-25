@@ -189,6 +189,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
       gifEnabled: !!gifKey,
       maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
+      federationRelayEnabled: row.federationRelayEnabled === 1,
+      federationRelayTtlDays: row.federationRelayTtlDays,
     };
 
     return reply.code(200).send(response);
@@ -235,6 +237,18 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       updateData.maxUploadSizeBytes = Math.round(mb * 1024 * 1024);
     }
 
+    if (body.federationRelayEnabled !== undefined) {
+      updateData.federationRelayEnabled = body.federationRelayEnabled ? 1 : 0;
+    }
+
+    if (body.federationRelayTtlDays !== undefined) {
+      const ttl = Number(body.federationRelayTtlDays);
+      if (isNaN(ttl) || !Number.isInteger(ttl) || ttl < 1 || ttl > 365) {
+        return reply.code(400).send({ error: 'federationRelayTtlDays must be an integer between 1 and 365', statusCode: 400 });
+      }
+      updateData.federationRelayTtlDays = ttl;
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
@@ -251,6 +265,8 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       gifApiKey: updatedGifKey ? `****${updatedGifKey.slice(-4)}` : undefined,
       gifEnabled: !!updatedGifKey,
       maxUploadSizeMb: Math.round(updatedMaxUploadBytes / (1024 * 1024)),
+      federationRelayEnabled: updatedRow.federationRelayEnabled === 1,
+      federationRelayTtlDays: updatedRow.federationRelayTtlDays,
     };
 
     return reply.code(200).send(response);
