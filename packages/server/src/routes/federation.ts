@@ -4,14 +4,14 @@ import { eq, and, or, isNull } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { generateHmacSecret, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { canonicalDmPairId } from '../utils/federationOutbox.js';
 import { broadcastDmMessage } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, DmMessageWithUser } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -477,6 +477,331 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       };
 
       return reply.code(200).send(response);
+    },
+  );
+
+  // ─── POST /api/federation/sync ──────────────────────────────────────────────
+  // Server-to-server: checkpoint catch-up sync. A peer calls this after downtime
+  // to retrieve missed DM mutations from the mutation log.
+  // Authenticated via HMAC-SHA256 signature, same as /relay.
+  app.post<{ Body: FederationSyncRequest }>(
+    '/api/federation/sync',
+    { bodyLimit: 1024 * 64 },
+    async (request, reply) => {
+      const db = getDb();
+      const rawDb = getRawDb();
+
+      // 1. Verify HMAC signature
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // 2. Validate & normalize request body
+      const body = request.body;
+      if (!body || typeof body.sinceTimestamp !== 'number' || body.sinceTimestamp < 0) {
+        return reply.code(400).send({ error: 'sinceTimestamp must be a non-negative number', statusCode: 400 });
+      }
+
+      const sinceTimestamp = body.sinceTimestamp;
+      const dmChannelIdFilter = body.dmChannelId && typeof body.dmChannelId === 'string' ? body.dmChannelId : null;
+
+      // Clamp limit: min 1, max 500, default 100
+      let limit = typeof body.limit === 'number' ? body.limit : 100;
+      limit = Math.max(1, Math.min(500, Math.floor(limit)));
+
+      // 3. Determine shared DM channels between this instance and the requesting peer
+      //    Shared channels have one local user (home_instance IS NULL) and
+      //    one peer user (home_instance = peer hostname), with exactly 2 members.
+      let peerHost: string;
+      try {
+        peerHost = new URL(peer.origin).host;
+      } catch {
+        return reply.code(500).send({ error: 'Invalid peer origin in database', statusCode: 500 });
+      }
+
+      // Find shared 1-on-1 DM channel IDs using raw SQL for the complex JOIN.
+      // A shared channel is one where:
+      //   - There are exactly 2 members
+      //   - One member is a local user (home_instance IS NULL)
+      //   - One member is a user from the peer (home_instance = peerHost)
+      const sharedChannelRows = rawDb.prepare(`
+        SELECT DISTINCT dm1.dm_channel_id
+        FROM dm_members dm1
+        JOIN dm_members dm2 ON dm1.dm_channel_id = dm2.dm_channel_id AND dm1.user_id != dm2.user_id
+        JOIN users u1 ON dm1.user_id = u1.id
+        JOIN users u2 ON dm2.user_id = u2.id
+        WHERE u1.home_instance IS NULL
+          AND u2.home_instance = ?
+          AND (
+            SELECT COUNT(*) FROM dm_members dm3
+            WHERE dm3.dm_channel_id = dm1.dm_channel_id
+          ) = 2
+      `).all(peerHost) as Array<{ dm_channel_id: string }>;
+
+      const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
+
+      if (sharedChannelIds.length === 0) {
+        const syncResponse: FederationSyncResponse = {
+          events: [],
+          hasMore: false,
+          checkpoint: sinceTimestamp,
+        };
+        return reply.code(200).send(syncResponse);
+      }
+
+      // 4. Query mutation log for the relevant channels
+      //    Only return mutations for messages authored by LOCAL users
+      //    (source_instance IS NULL) — each instance is authoritative for its own users' messages.
+      let mutationRows: Array<{
+        id: string;
+        dm_message_id: string;
+        dm_channel_id: string;
+        mutation_type: string;
+        mutated_at: number;
+        payload: string | null;
+      }>;
+
+      if (dmChannelIdFilter) {
+        // Validate that the requested channel is actually shared with this peer
+        if (!sharedChannelIds.includes(dmChannelIdFilter)) {
+          const syncResponse: FederationSyncResponse = {
+            events: [],
+            hasMore: false,
+            checkpoint: sinceTimestamp,
+          };
+          return reply.code(200).send(syncResponse);
+        }
+
+        mutationRows = rawDb.prepare(`
+          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
+          FROM federation_mutation_log ml
+          JOIN dm_messages dm ON ml.dm_message_id = dm.id
+          WHERE ml.dm_channel_id = ?
+            AND ml.mutated_at > ?
+            AND dm.source_instance IS NULL
+          ORDER BY ml.mutated_at ASC
+          LIMIT ?
+        `).all(dmChannelIdFilter, sinceTimestamp, limit) as typeof mutationRows;
+
+        // For delete mutations, the dm_messages row won't exist — handle separately
+        const deleteMutations = rawDb.prepare(`
+          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
+          FROM federation_mutation_log ml
+          WHERE ml.dm_channel_id = ?
+            AND ml.mutated_at > ?
+            AND ml.mutation_type = 'delete'
+            AND ml.dm_message_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.dm_message_id)
+          ORDER BY ml.mutated_at ASC
+          LIMIT ?
+        `).all(dmChannelIdFilter, sinceTimestamp, limit) as typeof mutationRows;
+
+        // Merge, deduplicate, sort, and re-limit
+        const seen = new Set(mutationRows.map(r => r.id));
+        for (const row of deleteMutations) {
+          if (!seen.has(row.id)) {
+            mutationRows.push(row);
+            seen.add(row.id);
+          }
+        }
+        mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
+        if (mutationRows.length > limit) {
+          mutationRows = mutationRows.slice(0, limit);
+        }
+      } else {
+        // All shared channels — build IN clause with placeholders
+        const placeholders = sharedChannelIds.map(() => '?').join(',');
+
+        mutationRows = rawDb.prepare(`
+          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
+          FROM federation_mutation_log ml
+          JOIN dm_messages dm ON ml.dm_message_id = dm.id
+          WHERE ml.dm_channel_id IN (${placeholders})
+            AND ml.mutated_at > ?
+            AND dm.source_instance IS NULL
+          ORDER BY ml.mutated_at ASC
+          LIMIT ?
+        `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+
+        // For delete mutations, the dm_messages row won't exist — handle separately
+        const deleteMutations = rawDb.prepare(`
+          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
+          FROM federation_mutation_log ml
+          WHERE ml.dm_channel_id IN (${placeholders})
+            AND ml.mutated_at > ?
+            AND ml.mutation_type = 'delete'
+            AND ml.dm_message_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.dm_message_id)
+          ORDER BY ml.mutated_at ASC
+          LIMIT ?
+        `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+
+        // Merge, deduplicate, sort, and re-limit
+        const seen = new Set(mutationRows.map(r => r.id));
+        for (const row of deleteMutations) {
+          if (!seen.has(row.id)) {
+            mutationRows.push(row);
+            seen.add(row.id);
+          }
+        }
+        mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
+        if (mutationRows.length > limit) {
+          mutationRows = mutationRows.slice(0, limit);
+        }
+      }
+
+      // 5. Build response events from mutation log entries
+      const events: FederationRelayEvent[] = [];
+
+      for (const mutation of mutationRows) {
+        const mutationType = mutation.mutation_type as 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove';
+
+        if (mutationType === 'delete') {
+          // For deletes, we don't need the message content — just the ID and channel
+          events.push({
+            eventType: 'delete',
+            dmChannelId: mutation.dm_channel_id,
+            messageId: mutation.dm_message_id,
+            encryptionVersion: 0,
+            timestamp: mutation.mutated_at,
+          });
+          continue;
+        }
+
+        if (mutationType === 'reaction_add' || mutationType === 'reaction_remove') {
+          // Use the stored payload from the mutation log
+          if (mutation.payload) {
+            let reactionData: { userId: string; homeUserId: string; emoji: string; createdAt?: number } | null = null;
+            try {
+              reactionData = JSON.parse(mutation.payload) as { userId: string; homeUserId: string; emoji: string; createdAt?: number };
+            } catch {
+              // Skip malformed payload
+              continue;
+            }
+
+            events.push({
+              eventType: mutationType,
+              dmChannelId: mutation.dm_channel_id,
+              messageId: mutation.dm_message_id,
+              encryptionVersion: 0,
+              timestamp: mutation.mutated_at,
+              reaction: {
+                userId: reactionData.userId,
+                homeUserId: reactionData.homeUserId,
+                emoji: reactionData.emoji,
+                createdAt: reactionData.createdAt ?? mutation.mutated_at,
+              },
+            });
+          }
+          continue;
+        }
+
+        // For create and update: fetch the current message state
+        const message = db
+          .select()
+          .from(schema.dmMessages)
+          .where(eq(schema.dmMessages.id, mutation.dm_message_id))
+          .get();
+
+        if (!message) {
+          // Message was deleted after this create/update mutation was logged — skip it.
+          // The delete mutation will handle the cleanup on the peer side.
+          continue;
+        }
+
+        // Resolve the author user to get homeUserId and homeInstance
+        const authorUser = db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, message.userId))
+          .get();
+
+        if (!authorUser) {
+          continue;
+        }
+
+        const homeUserId = authorUser.homeUserId || authorUser.id;
+        const homeInstance = authorUser.homeInstance || (config.domain ? `https://${config.domain}` : '');
+
+        // Fetch attachments for the message
+        const attachmentRows = db
+          .select()
+          .from(schema.attachments)
+          .where(eq(schema.attachments.dmMessageId, message.id))
+          .all();
+
+        let localOrigin: string;
+        try {
+          localOrigin = resolveLocalOrigin(request);
+        } catch {
+          localOrigin = config.domain ? `https://${config.domain}` : '';
+        }
+
+        const attachments: FederationRelayAttachment[] = attachmentRows.map(a => ({
+          id: a.id,
+          filename: a.filename,
+          originalName: a.originalName,
+          mimetype: a.mimetype,
+          size: a.size,
+          width: a.width ?? undefined,
+          height: a.height ?? undefined,
+          duration: a.duration ?? undefined,
+          thumbnailFilename: a.thumbnailFilename ?? undefined,
+          sourceUrl: `${localOrigin}/api/uploads/${a.filename}`,
+        }));
+
+        events.push({
+          eventType: mutationType,
+          dmChannelId: mutation.dm_channel_id,
+          messageId: message.id,
+          encryptionVersion: 0,
+          timestamp: mutation.mutated_at,
+          message: {
+            userId: message.userId,
+            homeUserId,
+            homeInstance,
+            content: message.content,
+            replyToId: message.replyToId ?? null,
+            editedAt: message.editedAt ?? null,
+            createdAt: message.createdAt,
+            attachments: attachments.length > 0 ? attachments : undefined,
+          },
+        });
+      }
+
+      // 6. Compute pagination metadata
+      const hasMore = mutationRows.length >= limit;
+      const checkpoint = mutationRows.length > 0
+        ? mutationRows[mutationRows.length - 1]!.mutated_at
+        : sinceTimestamp;
+
+      // 7. Update peer last-seen timestamp
+      db.update(schema.federationPeers)
+        .set({ lastSeenAt: Date.now() })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      const syncResponse: FederationSyncResponse = {
+        events,
+        hasMore,
+        checkpoint,
+      };
+
+      return reply.code(200).send(syncResponse);
     },
   );
 }
