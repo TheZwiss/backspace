@@ -255,7 +255,8 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const results = await Promise.allSettled(searches.map(s => s.promise));
 
       const allUsers: TaggedUser[] = [];
-      const seen = new Set<string>();
+      // Map canonical ID → index in allUsers for dedup with replacement
+      const seen = new Map<string, number>();
 
       results.forEach((result, i) => {
         if (result.status !== 'fulfilled') return;
@@ -263,10 +264,21 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         for (const user of result.value) {
           // Deduplicate by canonical identity: replicated profiles share
           // the same homeUserId as the native profile's id, so collapse them.
-          // Prefer the first seen (home instance is queried first → native wins).
+          // Prefer native profiles (homeUserId is null) over replicated ones.
           const canonicalId = user.homeUserId ?? user.id;
-          if (seen.has(canonicalId)) continue;
-          seen.add(canonicalId);
+          const isNative = !user.homeUserId;
+          const existingIdx = seen.get(canonicalId);
+
+          if (existingIdx !== undefined) {
+            // Replace replicated with native when found
+            if (isNative) {
+              if (origin) normalizeUserAssets(user, origin);
+              allUsers[existingIdx] = { ...user, _instanceOrigin: origin };
+            }
+            continue;
+          }
+
+          seen.set(canonicalId, allUsers.length);
           if (origin) normalizeUserAssets(user, origin);
           allUsers.push({ ...user, _instanceOrigin: origin });
         }

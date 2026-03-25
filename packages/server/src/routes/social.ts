@@ -483,7 +483,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const { q } = request.query;
     const db = getDb();
 
-    if (!q || q.length < 2) {
+    if (!q || q.length < 1) {
       return reply.code(200).send([]);
     }
 
