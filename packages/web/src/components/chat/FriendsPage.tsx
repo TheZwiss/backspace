@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
+import { useAuthStore } from '../../stores/authStore';
 import { ConnectInstanceModal } from '../modals/ConnectInstanceModal';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
 import { useSpaceStore } from '../../stores/spaceStore';
@@ -26,14 +27,6 @@ interface FriendsPageProps {
 
 export function FriendsPage({ mobile }: FriendsPageProps) {
   const [activeTab, setActiveTab] = useState<Tab>('online');
-  const [addUsername, setAddUsername] = useState('');
-  const [addStatus, setAddStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-  const addToast = useUIStore((s) => s.addToast);
-  const [connectModal, setConnectModal] = useState<{
-    domain: string;
-    isReconnect: boolean;
-    username: string;
-  } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
 
@@ -43,7 +36,6 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
     isLoading,
     loadFriends,
     loadRequests,
-    sendFriendRequest,
     updateFriendRequest,
     cancelFriendRequest,
     removeFriend
@@ -60,41 +52,6 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const onlineFriends = friends.filter(f => f.status !== 'offline');
   const pendingIncoming = requests.filter(r => r.status === 'pending' && r.user?.id === r.fromId);
   const pendingOutgoing = requests.filter(r => r.status === 'pending' && r.user?.id === r.toId);
-
-  const handleAddFriend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addUsername.trim()) return;
-
-    try {
-      await sendFriendRequest(addUsername.trim());
-      setAddStatus({ type: 'success', message: `Success! Your friend request to ${addUsername} has been sent.` });
-      setAddUsername('');
-    } catch (err) {
-      if (err instanceof InstanceNotConnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: false, username: addUsername.trim() });
-      } else if (err instanceof InstanceDisconnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: true, username: addUsername.trim() });
-      } else {
-        setAddStatus({ type: 'error', message: (err as Error).message });
-      }
-    }
-  };
-
-  const handleAddFriendConnected = async (result: 'new' | 'reconnect') => {
-    const username = connectModal?.username;
-    const domain = connectModal?.domain;
-    setConnectModal(null);
-    if (!username) return;
-
-    try {
-      await sendFriendRequest(username);
-      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
-      setAddStatus({ type: 'success', message: `${verb} ${domain} — friend request sent!` });
-      setAddUsername('');
-    } catch (err) {
-      addToast((err as Error).message, 'warning');
-    }
-  };
 
   const handleOpenDm = async (friendId: string, instanceOrigin: string, homeUserId?: string) => {
     try {
@@ -201,11 +158,6 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'add':
         return (
           <AddFriendTab
-            addUsername={addUsername}
-            setAddUsername={setAddUsername}
-            addStatus={addStatus}
-            isLoading={isLoading}
-            onSubmit={handleAddFriend}
             onOpenDm={handleOpenDm}
           />
         );
@@ -396,16 +348,6 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       )}
 
       {renderTabContent()}
-
-      {connectModal && (
-        <ConnectInstanceModal
-          domain={connectModal.domain}
-          targetDisplayName={connectModal.username}
-          isReconnect={connectModal.isReconnect}
-          onConnected={handleAddFriendConnected}
-          onCancel={() => setConnectModal(null)}
-        />
-      )}
     </div>
   );
 }
@@ -413,98 +355,165 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
 // ─── Add Friend Tab ─────────────────────────────────────────────────────────
 
 function AddFriendTab({
-  addUsername,
-  setAddUsername,
-  addStatus,
-  isLoading,
-  onSubmit,
   onOpenDm,
 }: {
-  addUsername: string;
-  setAddUsername: (v: string) => void;
-  addStatus: { type: 'success' | 'error'; message: string } | null;
-  isLoading: boolean;
-  onSubmit: (e: React.FormEvent) => void;
   onOpenDm: (userId: string, origin: string, homeUserId?: string) => void;
 }) {
+  const searchUsers = useSocialStore((s) => s.searchUsers);
+  const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
+  const friends = useSocialStore((s) => s.friends);
+  const requests = useSocialStore((s) => s.requests);
+  const currentUser = useAuthStore((s) => s.user);
+  const instances = useInstanceStore((s) => s.instances);
+  const addToast = useUIStore((s) => s.addToast);
+
   const discoverUsers = useDiscoverStore((s) => s.users);
   const discoverLoading = useDiscoverStore((s) => s.isLoading);
-  const discoverQuery = useDiscoverStore((s) => s.searchQuery);
-  const setDiscoverQuery = useDiscoverStore((s) => s.setSearchQuery);
-  const fetchUsers = useDiscoverStore((s) => s.fetchUsers);
+  const fetchDiscoverUsers = useDiscoverStore((s) => s.fetchUsers);
   const updateRelationship = useDiscoverStore((s) => s.updateRelationship);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [query, setQuery] = useState('');
+  const [rawSearchResults, setRawSearchResults] = useState<TaggedUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [directAddLoading, setDirectAddLoading] = useState(false);
+  const [connectModal, setConnectModal] = useState<{
+    domain: string;
+    isReconnect: boolean;
+    username: string;
+  } | null>(null);
 
-  // Fetch discovery on mount
+  // Fetch discover on mount
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchDiscoverUsers();
+  }, [fetchDiscoverUsers]);
 
-  // Cleanup debounce timer
+  // Debounced search with race condition guard
   useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  const handleDiscoverSearch = useCallback((value: string) => {
-    setDiscoverQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchUsers(value || undefined);
+    if (!query.trim()) {
+      setRawSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    let isActive = true;
+    setSearchLoading(true);
+    const timer = setTimeout(async () => {
+      const results = await searchUsers(query.trim());
+      if (isActive) {
+        setRawSearchResults(results);
+        setSearchLoading(false);
+      }
     }, 300);
-  }, [setDiscoverQuery, fetchUsers]);
+    return () => { isActive = false; clearTimeout(timer); };
+  }, [query, searchUsers]);
+
+  // Self-exclusion set
+  const selfIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (currentUser?.id) ids.add(`${currentUser.id}:`);
+    for (const inst of instances) {
+      if (inst.user?.id) ids.add(`${inst.user.id}:${inst.origin}`);
+    }
+    return ids;
+  }, [currentUser?.id, instances]);
+
+  const isSearchMode = query.trim().length > 0;
+
+  // Enrich search results with friend/request status at render time
+  const enrichedSearchResults: TaggedDiscoverUser[] = useMemo(() => {
+    if (!isSearchMode) return [];
+    return rawSearchResults
+      .filter(u => !selfIds.has(`${u.id}:${u._instanceOrigin}`))
+      .map(user => {
+        const isFriend = friends.some(f => f.id === user.id && f._instanceOrigin === user._instanceOrigin);
+        if (isFriend) {
+          return { ...user, relationship: 'friends' as const, mutualFriendCount: 0, mutualSpaceCount: 0 };
+        }
+        const outbound = requests.find(r => r.status === 'pending' && r.user?.id === r.toId && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
+        if (outbound) {
+          return { ...user, relationship: 'outbound_pending' as const, requestId: outbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
+        }
+        const inbound = requests.find(r => r.status === 'pending' && r.user?.id === r.fromId && r.user?.id === user.id && r._instanceOrigin === user._instanceOrigin);
+        if (inbound) {
+          return { ...user, relationship: 'inbound_pending' as const, requestId: inbound.id, mutualFriendCount: 0, mutualSpaceCount: 0 };
+        }
+        return { ...user, relationship: 'none' as const, mutualFriendCount: 0, mutualSpaceCount: 0 };
+      });
+  }, [rawSearchResults, friends, requests, selfIds, isSearchMode]);
+
+  // Direct Add detection (synchronous, not debounced)
+  const atIndex = query.lastIndexOf('@');
+  const showDirectAdd = atIndex > 0 && atIndex < query.length - 1;
+
+  // Direct Add handler
+  const handleDirectAdd = async () => {
+    setDirectAddLoading(true);
+    try {
+      await sendFriendRequest(query.trim());
+      addToast('Friend request sent!', 'success');
+      setQuery('');
+    } catch (err) {
+      if (err instanceof InstanceNotConnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: false, username: query.trim() });
+      } else if (err instanceof InstanceDisconnectedError) {
+        setConnectModal({ domain: err.domain, isReconnect: true, username: query.trim() });
+      } else {
+        addToast((err as Error).message, 'warning');
+      }
+    } finally {
+      setDirectAddLoading(false);
+    }
+  };
+
+  // Connect modal handler
+  const handleConnected = async (result: 'new' | 'reconnect') => {
+    const username = connectModal?.username;
+    const domain = connectModal?.domain;
+    setConnectModal(null);
+    if (!username) return;
+    try {
+      await sendFriendRequest(username);
+      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
+      addToast(`${verb} ${domain} — friend request sent!`, 'success');
+      setQuery('');
+    } catch (err) {
+      addToast((err as Error).message, 'warning');
+    }
+  };
+
+  // No-op relationship change for search mode cards (useMemo re-derives from store)
+  const noopRelationshipChange = useCallback(() => {}, []);
+
+  // Determine which list to display
+  const displayUsers = isSearchMode ? enrichedSearchResults : discoverUsers;
+  const displayLoading = isSearchMode ? searchLoading : discoverLoading;
+  const emptyLabel = isSearchMode
+    ? 'No users match your search.'
+    : 'No discoverable users yet — invite people to join!';
 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="p-6 pb-4">
-        <h2 className="text-base font-bold text-txt-primary uppercase mb-2">Add Friend</h2>
-        <p className="text-sm text-txt-tertiary mb-4">You can add friends with their Backspace username.</p>
-        <form onSubmit={onSubmit} className="flex flex-col gap-2 mb-4">
-          <input
-            type="text"
-            placeholder="Enter a username..."
-            value={addUsername}
-            onChange={(e) => setAddUsername(e.target.value)}
-            className="input-search w-full px-4 py-3 rounded-lg"
-          />
-          <button
-            type="submit"
-            disabled={!addUsername.trim() || isLoading}
-            className="w-full py-2.5 rounded-lg bg-accent-primary hover:bg-accent-primary-hover disabled:opacity-50 disabled:bg-accent-primary text-white text-sm font-medium transition-colors"
-          >
-            Send Friend Request
-          </button>
-        </form>
-        {addStatus && (
-          <div className={`text-sm p-3 rounded-lg border mb-4 ${addStatus.type === 'success' ? 'text-txt-positive border-status-online/20 bg-status-online/5' : 'text-txt-danger border-accent-rose/20 bg-accent-rose/5'}`}>
-            {addStatus.message}
-          </div>
-        )}
-      </div>
-
-      {/* Discover People section */}
-      <div className="px-6 pb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
+        {/* Header */}
+        <div className="flex items-center gap-2 mb-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
+            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
-          <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary">Discover People</span>
+          <h2 className="text-base font-bold text-txt-primary uppercase">Find People</h2>
         </div>
+        <p className="text-sm text-txt-tertiary mb-4">Search by username or use <span className="font-medium text-txt-secondary">user@instance</span> to add someone directly.</p>
 
-        {/* Discover search */}
+        {/* Unified search input */}
         <div className="relative mb-4">
           <input
             type="text"
-            placeholder="Search people..."
-            value={discoverQuery}
-            onChange={(e) => handleDiscoverSearch(e.target.value)}
-            className="input-search w-full"
+            placeholder="Search or add by username..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="input-search w-full px-4 py-3 rounded-lg"
           />
-          {discoverQuery && (
+          {query && (
             <button
-              onClick={() => handleDiscoverSearch('')}
+              onClick={() => setQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-txt-tertiary hover:text-txt-secondary"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -514,35 +523,81 @@ function AddFriendTab({
           )}
         </div>
 
-        {/* Grid */}
-        {discoverLoading && discoverUsers.length === 0 ? (
+        {/* Direct Add action row */}
+        {showDirectAdd && (
+          <div className="bg-surface-input rounded-lg p-3 mb-4 flex items-center gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary flex-shrink-0">
+              <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+            <div className="flex-1 min-w-0 text-sm text-txt-secondary">
+              Send friend request to <span className="font-semibold text-txt-primary">{query.trim()}</span>
+            </div>
+            <button
+              onClick={handleDirectAdd}
+              disabled={directAddLoading}
+              className="px-3 py-1.5 rounded-md bg-accent-primary hover:bg-accent-primary-hover text-white text-sm font-medium transition-colors disabled:opacity-50 flex-shrink-0"
+            >
+              {directAddLoading ? 'Sending...' : 'Send Request'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Results grid */}
+      <div className="px-6 pb-6">
+        {!isSearchMode && (
+          <div className="flex items-center gap-2 mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
+            </svg>
+            <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary">Discover People</span>
+          </div>
+        )}
+
+        {displayLoading && displayUsers.length === 0 ? (
           <div className="flex items-center justify-center h-32">
             <LoadingSpinner />
           </div>
-        ) : discoverUsers.length === 0 ? (
+        ) : displayUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 opacity-60">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary mb-2">
               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
             </svg>
-            <p className="text-txt-tertiary text-sm">
-              {discoverQuery
-                ? 'No users match your search.'
-                : 'No discoverable users yet — invite people to join!'}
-            </p>
+            <p className="text-txt-tertiary text-sm">{emptyLabel}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {discoverUsers.map((user) => (
-              <UserDiscoverCard
-                key={`${user.id}:${user._instanceOrigin}`}
-                user={user}
-                onOpenDm={onOpenDm}
-                onRelationshipChange={updateRelationship}
-              />
-            ))}
+            {isSearchMode
+              ? enrichedSearchResults.map((user) => (
+                  <UserDiscoverCard
+                    key={`${user.id}:${user._instanceOrigin}`}
+                    user={user}
+                    onOpenDm={onOpenDm}
+                    onRelationshipChange={noopRelationshipChange}
+                  />
+                ))
+              : discoverUsers.map((user) => (
+                  <UserDiscoverCard
+                    key={`${user.id}:${user._instanceOrigin}`}
+                    user={user}
+                    onOpenDm={onOpenDm}
+                    onRelationshipChange={updateRelationship}
+                  />
+                ))
+            }
           </div>
         )}
       </div>
+
+      {connectModal && (
+        <ConnectInstanceModal
+          domain={connectModal.domain}
+          targetDisplayName={connectModal.username}
+          isReconnect={connectModal.isReconnect}
+          onConnected={handleConnected}
+          onCancel={() => setConnectModal(null)}
+        />
+      )}
     </div>
   );
 }
