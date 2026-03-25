@@ -87,6 +87,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
 
   return (
     <div
+      data-avatar
       className={`relative inline-flex flex-shrink-0 ${(onClick || user) ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: outerSize, height: outerSize }}
       onClick={handleClick}
