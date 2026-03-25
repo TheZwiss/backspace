@@ -217,8 +217,8 @@ export function buildRelayPayload(
   message: {
     id: string;
     content: string | null;
-    replyToId: string | null;
-    editedAt: number | null;
+    replyToId?: string | null;
+    editedAt?: number | null;
     createdAt: number;
   },
   user: {
@@ -232,8 +232,8 @@ export function buildRelayPayload(
     homeUserId: user.homeUserId || user.id,
     homeInstance: user.homeInstance || '',
     content: message.content,
-    replyToId: message.replyToId,
-    editedAt: message.editedAt,
+    replyToId: message.replyToId ?? null,
+    editedAt: message.editedAt ?? null,
     createdAt: message.createdAt,
   };
 }

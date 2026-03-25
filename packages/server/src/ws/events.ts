@@ -11,6 +11,7 @@ import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
+import { appendMutationLog, queueOutboxEvent, buildRelayPayload } from '../utils/federationOutbox.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -885,6 +886,12 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
   // Broadcast to all DM members (including those who closed the channel)
   broadcastDmMessage(dmChannelId, dmMessage);
 
+  // Federation: log mutation and queue for relay
+  appendMutationLog(messageId, dmChannelId, 'create');
+  queueOutboxEvent(messageId, dmChannelId, 'create', JSON.stringify({
+    message: { ...buildRelayPayload(dmMessage, dmMessage.user), attachments: [] },
+  }));
+
   // Resolve embeds asynchronously
   setImmediate(() => {
     resolveEmbeds(messageId, hasContent ? content!.trim() : null, dmChannelId, true, null).catch(() => {});
@@ -983,6 +990,12 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
     });
   }
 
+  // Federation: log mutation and queue for relay
+  appendMutationLog(messageId, msg.dmChannelId, 'update');
+  queueOutboxEvent(messageId, msg.dmChannelId, 'update', JSON.stringify({
+    message: buildRelayPayload(updated, updated.user),
+  }));
+
   // Resolve new embeds asynchronously (old ones already deleted above)
   setImmediate(() => {
     resolveEmbeds(messageId, content.trim(), msg.dmChannelId, true, null).catch(() => {});
@@ -1041,6 +1054,10 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
       dmChannelId: msg.dmChannelId,
     });
   }
+
+  // Federation: log mutation and queue for relay
+  appendMutationLog(messageId, msg.dmChannelId, 'delete');
+  queueOutboxEvent(messageId, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }));
 }
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
@@ -1114,6 +1131,22 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       messageId,
       reaction: { id: reactionId, messageId, userId, emoji, createdAt: now, user: userObj },
     });
+
+    // Federation: log reaction mutation and queue for relay
+    appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
+      userId,
+      homeUserId: reactionUser?.homeUserId || userId,
+      emoji,
+      createdAt: now,
+    }));
+    queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
+      reaction: {
+        userId,
+        homeUserId: reactionUser?.homeUserId || userId,
+        emoji,
+        createdAt: now,
+      },
+    }));
   } catch (err) {
     // Unique constraint violation (already reacted)
   }
@@ -1171,6 +1204,26 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       userId,
       emoji,
     });
+
+    // Federation: log reaction removal and queue for relay
+    const removingUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_remove', JSON.stringify({
+      userId,
+      homeUserId: removingUser?.homeUserId || userId,
+      emoji,
+    }));
+    queueOutboxEvent(
+      `${messageId}:${userId}:${emoji}`,
+      dmMsg.dmChannelId,
+      'reaction_remove',
+      JSON.stringify({
+        reaction: {
+          userId,
+          homeUserId: removingUser?.homeUserId || userId,
+          emoji,
+        },
+      }),
+    );
   }
 }
 
