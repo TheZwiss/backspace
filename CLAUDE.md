@@ -548,6 +548,9 @@ CREATE TABLE instance_settings (
     max_resolution INTEGER NOT NULL DEFAULT 1080,
     max_framerate INTEGER NOT NULL DEFAULT 60,
     registration_open INTEGER,               -- explicit registration override (null = use env)
+    gif_api_key TEXT,                        -- API key for GIF provider
+    bitrate_matrix_overrides TEXT,           -- JSON: sparse {res_fps: kbps} overrides
+    allow_custom_bitrate INTEGER NOT NULL DEFAULT 1,  -- toggle for user custom bitrate slider
     max_upload_size_bytes INTEGER,           -- admin-configurable upload limit (null = use env var)
     updated_at INTEGER NOT NULL
 );
