@@ -2,6 +2,7 @@ import React from 'react';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
 import type { MessageWithUser } from '@backspace/shared';
 import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
+import { useUIStore } from '../../stores/uiStore';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮'];
 
@@ -21,6 +22,7 @@ interface MessageMenuParams {
   onOpenEmojiPicker: () => void;
   onMarkUnread: (messageId: string) => void;
   imageUrl?: string | null;
+  sourceUrl?: string | null;
 }
 
 export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuItem[] {
@@ -40,6 +42,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     onOpenEmojiPicker,
     onMarkUnread,
     imageUrl,
+    sourceUrl,
   } = params;
 
   const items: ContextMenuItem[] = [];
@@ -84,6 +87,38 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
       },
     });
     items.push({ key: 'image-sep', type: 'separator' });
+  }
+
+  // ── Link Actions (when URL text is suppressed) ──────────────────────
+  if (sourceUrl) {
+    items.push({
+      key: 'copy-link',
+      type: 'action',
+      label: 'Copy Link',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
+        </svg>
+      ),
+      onClick: () => {
+        navigator.clipboard.writeText(sourceUrl);
+        useUIStore.getState().addToast('Copied link', 'success', 3000);
+      },
+    });
+    items.push({
+      key: 'open-link',
+      type: 'action',
+      label: 'Open Link',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+        </svg>
+      ),
+      onClick: () => {
+        window.open(sourceUrl, '_blank', 'noopener');
+      },
+    });
+    items.push({ key: 'link-sep', type: 'separator' });
   }
 
   // ── Quick Reaction Row ──────────────────────────────────────────────────
@@ -160,7 +195,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     key: 'copy-text',
     type: 'action',
     label: 'Copy Text',
-    hidden: !message.content,
+    hidden: !message.content || !!sourceUrl,
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
