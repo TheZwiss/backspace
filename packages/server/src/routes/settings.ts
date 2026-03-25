@@ -32,6 +32,7 @@ function rowToLimits(row: typeof schema.instanceSettings.$inferSelect): Instance
         return Object.keys(parsed).length > 0 ? parsed as Record<string, number> : null;
       } catch { return null; }
     })(),
+    allowCustomBitrate: row.allowCustomBitrate === 1,
   };
 }
 
@@ -117,6 +118,10 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.discoveryEnabled !== undefined) {
       updateData.discoveryEnabled = body.discoveryEnabled ? 1 : 0;
+    }
+
+    if (body.allowCustomBitrate !== undefined) {
+      updateData.allowCustomBitrate = body.allowCustomBitrate ? 1 : 0;
     }
 
     if (body.bitrateMatrixOverrides !== undefined) {
