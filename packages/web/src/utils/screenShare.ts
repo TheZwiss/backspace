@@ -113,9 +113,9 @@ export function buildScreenShareOptions(config: ScreenShareConfig): ScreenShareB
   const captureWidth = isNative ? 0 : WIDTH_MAP[height as StandardResolution] ?? 1920;
   const captureHeight = isNative ? 0 : (height as number);
 
-  // Resolve bitrate in kbps: custom > override > default > native estimate
+  // Resolve bitrate in kbps: custom (if allowed) > override > default > native estimate
   let rawKbps: number;
-  if (customBitrateKbps != null) {
+  if (customBitrateKbps != null && limits.allowCustomBitrate) {
     rawKbps = customBitrateKbps;
   } else if (isNative) {
     const nearestFps = STANDARD_FRAMERATES.reduce((a, b) =>
@@ -174,11 +174,12 @@ export function resolveNativeOverdrive(
   config: ScreenShareConfig,
   opts: ScreenShareBuildResult,
 ): void {
-  if (config.height !== 'native' || config.customBitrateKbps != null || !mediaTrack) return;
+  const limits = getStreamingLimits();
+  const effectiveCustom = limits.allowCustomBitrate ? config.customBitrateKbps : null;
+  if (config.height !== 'native' || effectiveCustom != null || !mediaTrack) return;
   const settings = mediaTrack.getSettings();
   if (!settings.width || !settings.height) return;
 
-  const limits = getStreamingLimits();
   const nativeKbps = computeNativeBitrate(settings.width, settings.height, config.fps, limits.bitrateMatrixOverrides);
   const clampedKbps = Math.min(Math.max(nativeKbps, limits.minBitrateKbps), limits.maxBitrateKbps);
 
