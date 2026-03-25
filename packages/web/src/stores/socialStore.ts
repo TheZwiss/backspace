@@ -26,6 +26,7 @@ export class InstanceDisconnectedError extends Error {
 
 export type TaggedFriend = Friend & { _instanceOrigin: string };
 export type TaggedFriendRequest = FriendRequest & { _instanceOrigin: string };
+export type TaggedUser = User & { _instanceOrigin: string };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ interface SocialState {
   updateFriendRequest: (id: string, status: 'accepted' | 'declined') => Promise<void>;
   cancelFriendRequest: (id: string) => Promise<void>;
   removeFriend: (id: string) => Promise<void>;
-  searchUsers: (query: string) => Promise<User[]>;
+  searchUsers: (query: string) => Promise<TaggedUser[]>;
   addIncomingRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
@@ -253,7 +254,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
       const results = await Promise.allSettled(searches.map(s => s.promise));
 
-      const allUsers: User[] = [];
+      const allUsers: TaggedUser[] = [];
       const seen = new Set<string>();
 
       results.forEach((result, i) => {
@@ -264,7 +265,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           if (seen.has(dedupeKey)) continue;
           seen.add(dedupeKey);
           if (origin) normalizeUserAssets(user, origin);
-          allUsers.push(user);
+          allUsers.push({ ...user, _instanceOrigin: origin });
         }
       });
 
