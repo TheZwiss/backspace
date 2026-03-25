@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, lt } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile } from './fileCleanup.js';
@@ -378,4 +378,55 @@ export function cleanupOldMedia(maxAgeDays: number, dryRun: boolean): CleanupRes
   }
 
   return { dryRun, deletedFiles, freedBytes, deletedAttachmentRecords, errors };
+}
+
+/**
+ * Delete expired federation outbox entries (expiresAt < now).
+ * Returns the number of rows deleted.
+ */
+export function cleanupFederationOutbox(): number {
+  const db = getDb();
+  const result = db.delete(schema.federationOutbox)
+    .where(lt(schema.federationOutbox.expiresAt, Date.now()))
+    .run();
+  return result.changes;
+}
+
+/**
+ * Delete federation mutation log entries older than `retentionDays` (default 90).
+ * Returns the number of rows deleted.
+ */
+export function cleanupFederationMutationLog(retentionDays: number = 90): number {
+  const db = getDb();
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const result = db.delete(schema.federationMutationLog)
+    .where(lt(schema.federationMutationLog.mutatedAt, cutoff))
+    .run();
+  return result.changes;
+}
+
+/**
+ * Delete stale federation file queue entries:
+ *   - completed entries older than 7 days
+ *   - any entries whose expiresAt has passed (regardless of status)
+ * Returns the total number of rows deleted.
+ */
+export function cleanupFederationFileQueue(): number {
+  const db = getDb();
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  // Completed entries older than 7 days
+  const completed = db.delete(schema.federationFileQueue)
+    .where(and(
+      eq(schema.federationFileQueue.status, 'completed'),
+      lt(schema.federationFileQueue.createdAt, sevenDaysAgo),
+    ))
+    .run();
+
+  // Expired entries (any status)
+  const expired = db.delete(schema.federationFileQueue)
+    .where(lt(schema.federationFileQueue.expiresAt, Date.now()))
+    .run();
+
+  return completed.changes + expired.changes;
 }
