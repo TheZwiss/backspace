@@ -83,6 +83,20 @@ describe('copyImageToClipboard', () => {
     expect(clipboardItem).toBeInstanceOf(ClipboardItem);
   });
 
+  it('copies GIF URLs as text to preserve animation', async () => {
+    const mockWriteText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { write: vi.fn(), writeText: mockWriteText },
+    });
+    const mockAddToast = vi.fn();
+    vi.mocked(useUIStore.getState).mockReturnValue({ addToast: mockAddToast } as any);
+
+    await copyImageToClipboard('https://media.tenor.com/abc/tenor.gif');
+
+    expect(mockWriteText).toHaveBeenCalledWith('https://media.tenor.com/abc/tenor.gif');
+    expect(mockAddToast).toHaveBeenCalledWith('Copied GIF link', 'success', 3000);
+  });
+
   it('falls back to copying URL as text on failure and shows toast', async () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('CORS'));
     const mockWriteText = vi.fn().mockResolvedValue(undefined);

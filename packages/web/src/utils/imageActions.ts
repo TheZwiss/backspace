@@ -27,20 +27,30 @@ export async function saveImage(url: string, filename?: string): Promise<void> {
 
 /**
  * Copies an image to the clipboard as PNG.
+ * GIFs are copied as URL text to preserve animation (PNG conversion strips it).
  * Falls back to copying the URL as text if CORS or clipboard API blocks it.
  */
 export async function copyImageToClipboard(url: string): Promise<void> {
+  // GIFs lose animation when converted to PNG — copy the URL instead
+  if (isGifUrl(url)) {
+    await navigator.clipboard.writeText(url);
+    useUIStore.getState().addToast('Copied GIF link', 'success', 3000);
+    return;
+  }
+
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
-    let pngBlob: Blob;
 
-    if (blob.type === 'image/png') {
-      pngBlob = blob;
-    } else {
-      pngBlob = await convertToPng(blob);
+    // If the server returned a GIF despite the URL not ending in .gif
+    if (blob.type === 'image/gif') {
+      await navigator.clipboard.writeText(url);
+      useUIStore.getState().addToast('Copied GIF link', 'success', 3000);
+      return;
     }
+
+    const pngBlob = blob.type === 'image/png' ? blob : await convertToPng(blob);
 
     await navigator.clipboard.write([
       new ClipboardItem({ 'image/png': pngBlob }),
@@ -49,6 +59,15 @@ export async function copyImageToClipboard(url: string): Promise<void> {
     await navigator.clipboard.writeText(url);
     useUIStore.getState().addToast('Copied image link', 'info', 3000);
   }
+}
+
+/** Checks if a URL points to a GIF by extension or known GIF CDN patterns. */
+function isGifUrl(url: string): boolean {
+  const path = url.split('?')[0]?.toLowerCase() ?? '';
+  if (path.endsWith('.gif')) return true;
+  // Tenor and Klipy serve GIFs even without .gif extension
+  if (/media\.tenor\.com|static\.klipy\.com/.test(url)) return true;
+  return false;
 }
 
 /** Draws a blob onto an offscreen canvas and exports as PNG. */
