@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type RefObject } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface GridLayoutOptions {
   gap?: number;
@@ -11,31 +11,37 @@ interface GridLayout {
   rows: number;
   tileWidth: number;
   tileHeight: number;
+  ref: (element: HTMLElement | null) => void;
 }
 
 export function useGridLayout(
-  containerRef: RefObject<HTMLElement | null>,
   tileCount: number,
   options: GridLayoutOptions = {},
 ): GridLayout {
   const { gap = 8, aspectRatio = 16 / 9, padding = 12 } = options;
 
-  const [layout, setLayout] = useState<GridLayout>({
+  const [element, setElement] = useState<HTMLElement | null>(null);
+
+  const [layout, setLayout] = useState({
     cols: 1,
     rows: 1,
     tileWidth: 320,
     tileHeight: 180,
   });
 
-  const prevRef = useRef<GridLayout>(layout);
+  const prevRef = useRef(layout);
+
+  // Stable callback ref — React calls this on mount (element) and unmount (null)
+  const ref = useCallback((el: HTMLElement | null) => {
+    setElement(el);
+  }, []);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el || tileCount === 0) return;
+    if (!element || tileCount === 0) return;
 
     const compute = () => {
-      const containerWidth = el.clientWidth - padding * 2;
-      const containerHeight = el.clientHeight - padding * 2;
+      const containerWidth = element.clientWidth - padding * 2;
+      const containerHeight = element.clientHeight - padding * 2;
       if (containerWidth <= 0 || containerHeight <= 0) return;
 
       let bestCols = 1;
@@ -68,7 +74,7 @@ export function useGridLayout(
       }
 
       const bestRows = Math.ceil(tileCount / bestCols);
-      const next: GridLayout = {
+      const next = {
         cols: bestCols,
         rows: bestRows,
         tileWidth: bestW,
@@ -90,9 +96,9 @@ export function useGridLayout(
     compute();
 
     const observer = new ResizeObserver(compute);
-    observer.observe(el);
+    observer.observe(element);
     return () => observer.disconnect();
-  }, [containerRef, tileCount, gap, aspectRatio, padding]);
+  }, [element, tileCount, gap, aspectRatio, padding]);
 
-  return layout;
+  return { ...layout, ref };
 }

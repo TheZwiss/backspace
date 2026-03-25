@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { VoiceUser } from './VoiceUser';
 import { StreamTile } from './StreamTile';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -17,8 +17,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
   const tiles = useMemo(() => deriveGridTiles(participants), [participants]);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { cols, tileWidth, tileHeight } = useGridLayout(containerRef, tiles.length);
+  const { cols, tileWidth, tileHeight, ref: gridRef } = useGridLayout(tiles.length);
 
   // Reset strip visibility when focus target changes
   useEffect(() => {
@@ -138,7 +137,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
         {/* Bottom strip of other tiles */}
         {!stripHidden && otherTiles.length > 0 && (
-          <div className="h-[120px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
+          <div className="h-[120px] max-h-[20vh] min-h-[80px] flex-shrink-0 flex items-center justify-center gap-2 p-2 bg-surface-base/50 overflow-x-auto no-scrollbar">
             {otherTiles.map((t) => (
               <div
                 key={t.key}
@@ -156,7 +155,7 @@ export function VoiceGrid({ participants }: VoiceGridProps) {
 
   // Default grid mode — container-aware layout via ResizeObserver
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden min-h-0">
+    <div ref={gridRef} className="flex-1 overflow-hidden min-h-0">
       <div
         className="grid h-full w-full"
         style={{
