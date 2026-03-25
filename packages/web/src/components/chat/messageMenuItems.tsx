@@ -101,8 +101,11 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
         </svg>
       ),
       onClick: () => {
-        navigator.clipboard.writeText(sourceUrl);
-        useUIStore.getState().addToast('Copied link', 'success', 3000);
+        navigator.clipboard.writeText(sourceUrl).then(() => {
+          useUIStore.getState().addToast('Copied link', 'success', 3000);
+        }).catch(() => {
+          useUIStore.getState().addToast('Failed to copy link', 'warning', 3000);
+        });
       },
     });
     items.push({
