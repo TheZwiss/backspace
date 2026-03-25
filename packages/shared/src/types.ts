@@ -712,3 +712,81 @@ export interface AdminUserListResponse {
 export interface AdminResetPasswordResponse {
   temporaryPassword: string;
 }
+
+// ─── Federation Relay Types ──────────────────────────────────────────────────
+
+export interface FederationRelayEvent {
+  eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove';
+  dmChannelId: string;
+  messageId: string;
+  encryptionVersion: 0;
+  timestamp: number;
+  message?: {
+    userId: string;
+    homeUserId: string;
+    homeInstance: string;
+    content: string | null;
+    replyToId: string | null;
+    editedAt: number | null;
+    createdAt: number;
+    attachments?: FederationRelayAttachment[];
+  };
+  reactions?: FederationRelayReaction[];
+  reaction?: FederationRelayReaction;
+}
+
+export interface FederationRelayReaction {
+  userId: string;
+  homeUserId: string;
+  emoji: string;
+  createdAt: number;
+}
+
+export interface FederationRelayAttachment {
+  id: string;
+  filename: string;
+  originalName: string;
+  mimetype: string;
+  size: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailFilename?: string;
+  sourceUrl: string;
+}
+
+export interface FederationRelayRequest {
+  version: 1;
+  sourceInstance: string;
+  events: FederationRelayEvent[];
+}
+
+export interface FederationRelayResponse {
+  accepted: string[];
+  rejected: Array<{ messageId: string; reason: string }>;
+  maxUploadSize: number;
+}
+
+export interface FederationSyncRequest {
+  sinceTimestamp: number;
+  dmChannelId?: string;
+  limit: number;
+}
+
+export interface FederationSyncResponse {
+  events: FederationRelayEvent[];
+  hasMore: boolean;
+  checkpoint: number;
+}
+
+export interface FederationPeer {
+  id: string;
+  origin: string;
+  instanceName: string | null;
+  status: 'pending' | 'active' | 'unreachable' | 'revoked';
+  lastSeenAt: number | null;
+  lastFailureAt: number | null;
+  consecutiveFailures: number;
+  lastSyncedAt: number;
+  createdAt: number;
+}
