@@ -380,7 +380,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             ) : imageEmbedSourceUrl ? (
               <>
                 {/* URL text suppressed — embeds render the image */}
-                {!isEditing && message.embeds && message.embeds.length > 0 && (
+                {message.embeds && message.embeds.length > 0 && (
                   <div className="flex flex-col gap-2 mt-1">
                     {message.embeds.map((embed) => (
                       <EmbedRenderer key={embed.id} embed={embed} />
