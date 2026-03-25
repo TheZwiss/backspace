@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { FriendsPage } from './FriendsPage';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useUIStore } from '../../stores/uiStore';
 import type { Friend, FriendRequest } from '@backspace/shared';
 
 // Mock the mascot animation hook
@@ -36,17 +37,80 @@ vi.mock('../../api/client', () => ({
       cancelRequest: vi.fn().mockResolvedValue({ success: true }),
       removeFriend: vi.fn().mockResolvedValue({ success: true }),
       search: vi.fn().mockResolvedValue([]),
+      discover: vi.fn().mockResolvedValue({ users: [], total: 0 }),
     },
   },
 }));
 
 // Mock the instanceStore (imported by socialStore)
 vi.mock('../../stores/instanceStore', () => ({
-  useInstanceStore: {
-    getState: () => ({ instances: [] }),
-    setState: vi.fn(),
-    subscribe: vi.fn(),
-  },
+  useInstanceStore: Object.assign(
+    (selector: (s: any) => any) => selector({
+      instances: [],
+      _autoConnectDone: true,
+    }),
+    {
+      getState: () => ({ instances: [], _autoConnectDone: true }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+vi.mock('../../stores/discoverStore', () => ({
+  useDiscoverStore: Object.assign(
+    (selector: (s: any) => any) => selector({
+      users: [],
+      isLoading: false,
+      searchQuery: '',
+      setSearchQuery: vi.fn(),
+      fetchUsers: vi.fn(),
+      updateRelationship: vi.fn(),
+    }),
+    {
+      getState: () => ({
+        users: [],
+        isLoading: false,
+        searchQuery: '',
+        fetchUsers: vi.fn(),
+        updateRelationship: vi.fn(),
+      }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+vi.mock('../../stores/authStore', () => ({
+  useAuthStore: Object.assign(
+    (selector: (s: any) => any) => selector({
+      user: { id: 'current-user' },
+    }),
+    {
+      getState: () => ({ user: { id: 'current-user' } }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+// Mock activityStore
+vi.mock('../../stores/activityStore', () => ({
+  useActivityStore: Object.assign(
+    (selector: (s: any) => any) => selector({
+      userActivities: new Map(),
+    }),
+    {
+      getState: () => ({ userActivities: new Map(), reset: vi.fn() }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+// Mock ConnectInstanceModal
+vi.mock('../modals/ConnectInstanceModal', () => ({
+  ConnectInstanceModal: () => null,
 }));
 
 const mockNavigate = vi.fn();
@@ -122,71 +186,102 @@ beforeEach(() => {
     error: null,
     loadFriends: vi.fn(),
     loadRequests: vi.fn(),
+    searchUsers: vi.fn().mockResolvedValue([]),
   });
   useSpaceStore.setState({
     dmChannels: [],
+    findExistingDmForUser: () => null,
   });
 });
 
 describe('FriendsPage', () => {
   describe('Add Friend tab', () => {
-    it('renders the Add Friend form when tab is clicked', async () => {
+    it('renders the search input when Add Friend tab is clicked', async () => {
       const user = userEvent.setup();
       renderFriendsPage();
 
       const addFriendTab = screen.getByText('Add Friend');
       await user.click(addFriendTab);
 
-      expect(screen.getByPlaceholderText('You can add a friend with their username')).toBeInTheDocument();
-      expect(screen.getByText('Send Friend Request')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Search or add by username/)).toBeInTheDocument();
+      expect(screen.getByText('Find People')).toBeInTheDocument();
     });
 
-    it('calls sendFriendRequest with the username when form is submitted', async () => {
+    it('shows Direct Add row and sends request for user@domain input', async () => {
       const user = userEvent.setup();
-      const mockSendFriendRequest = vi.fn().mockResolvedValue(undefined);
+      const mockSendFriendRequest = vi.fn().mockResolvedValue('req-123');
       useSocialStore.setState({
         sendFriendRequest: mockSendFriendRequest,
       });
 
       renderFriendsPage();
-
-      // Switch to Add Friend tab
       await user.click(screen.getByText('Add Friend'));
 
-      // Type username
-      const input = screen.getByPlaceholderText('You can add a friend with their username');
-      await user.type(input, 'newbuddy');
+      const input = screen.getByPlaceholderText(/Search or add by username/);
+      await user.type(input, 'newbuddy@remote.example.com');
 
-      // Click send
-      await user.click(screen.getByText('Send Friend Request'));
+      // Direct Add row should appear
+      expect(screen.getByText(/Send friend request to/)).toBeInTheDocument();
+
+      // Click Send Request
+      await user.click(screen.getByText('Send Request'));
 
       await waitFor(() => {
-        expect(mockSendFriendRequest).toHaveBeenCalledWith('newbuddy');
-      });
-
-      // Should show success message
-      await waitFor(() => {
-        expect(screen.getByText(/Success! Your friend request to newbuddy has been sent/)).toBeInTheDocument();
+        expect(mockSendFriendRequest).toHaveBeenCalledWith('newbuddy@remote.example.com');
       });
     });
 
-    it('shows error when sendFriendRequest fails', async () => {
+    it('shows toast when Direct Add request fails', async () => {
       const user = userEvent.setup();
       const mockSendFriendRequest = vi.fn().mockRejectedValue(new Error('User not found'));
+      const mockAddToast = vi.fn();
       useSocialStore.setState({
         sendFriendRequest: mockSendFriendRequest,
+      });
+      useUIStore.setState({
+        addToast: mockAddToast,
       });
 
       renderFriendsPage();
       await user.click(screen.getByText('Add Friend'));
 
-      const input = screen.getByPlaceholderText('You can add a friend with their username');
-      await user.type(input, 'ghost');
-      await user.click(screen.getByText('Send Friend Request'));
+      const input = screen.getByPlaceholderText(/Search or add by username/);
+      await user.type(input, 'ghost@remote.example.com');
+      await user.click(screen.getByText('Send Request'));
 
       await waitFor(() => {
-        expect(screen.getByText('User not found')).toBeInTheDocument();
+        expect(mockAddToast).toHaveBeenCalledWith('User not found', 'warning');
       });
+    });
+
+    it('does not show Direct Add row for plain usernames', async () => {
+      const user = userEvent.setup();
+      renderFriendsPage();
+      await user.click(screen.getByText('Add Friend'));
+
+      const input = screen.getByPlaceholderText(/Search or add by username/);
+      await user.type(input, 'marc');
+
+      expect(screen.queryByText(/Send friend request to/)).not.toBeInTheDocument();
+    });
+
+    it('calls searchUsers when typing a non-@ query', async () => {
+      const user = userEvent.setup();
+      const mockSearchUsers = vi.fn().mockResolvedValue([]);
+      useSocialStore.setState({
+        searchUsers: mockSearchUsers,
+      });
+
+      renderFriendsPage();
+      await user.click(screen.getByText('Add Friend'));
+
+      const input = screen.getByPlaceholderText(/Search or add by username/);
+      await user.type(input, 'marc');
+
+      // Wait for debounce
+      await waitFor(() => {
+        expect(mockSearchUsers).toHaveBeenCalledWith('marc');
+      }, { timeout: 500 });
     });
   });
 
@@ -202,6 +297,7 @@ describe('FriendsPage', () => {
       });
       useSpaceStore.setState({
         addDmChannel: mockAddDmChannel,
+        findExistingDmForUser: () => null,
       });
 
       // Mock the dm.create API
@@ -226,7 +322,7 @@ describe('FriendsPage', () => {
       });
 
       await waitFor(() => {
-        expect(mockAddDmChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'dm-channel-99' }));
+        expect(mockAddDmChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'dm-channel-99' }), '');
       });
 
       await waitFor(() => {
