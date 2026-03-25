@@ -187,14 +187,19 @@ function buildComponents(): Components {
 
     // Images (in markdown content — not attachments)
     img: ({ src, alt }) => (
-      <img
-        src={src}
-        alt={alt ?? ''}
-        className="max-w-[400px] max-h-[300px] rounded-md mt-1"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        crossOrigin="anonymous"
-      />
+      <div
+        className="mt-1 rounded-md overflow-hidden bg-surface-input"
+        style={{ aspectRatio: '4/3', maxWidth: 400, maxHeight: 300 }}
+      >
+        <img
+          src={src}
+          alt={alt ?? ''}
+          className="w-full h-full object-contain"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+        />
+      </div>
     ),
 
     // Tables (GFM)
