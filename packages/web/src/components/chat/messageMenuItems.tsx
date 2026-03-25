@@ -55,10 +55,7 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
           <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
         </svg>
       ),
-      onClick: () => {
-        const filename = imageUrl.split('/').pop()?.split('?')[0] ?? 'image';
-        saveImage(imageUrl, filename);
-      },
+      onClick: () => saveImage(imageUrl),
     });
     items.push({
       key: 'copy-image',

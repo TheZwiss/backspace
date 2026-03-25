@@ -45,6 +45,7 @@ export function VideoEmbed({ embed }: VideoEmbedProps) {
         ) : (
           <button
             type="button"
+            data-embed-thumbnail
             onClick={() => setIsPlaying(true)}
             className="absolute inset-0 w-full h-full flex items-center justify-center group focus:outline-none"
             aria-label={`Play ${embed.title ?? 'video'}`}

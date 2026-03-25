@@ -41,7 +41,7 @@ export function GenericEmbed({ embed }: GenericEmbedProps) {
         )}
       </div>
       {embed.image && (
-        <div className="w-[80px] h-[80px] m-3 flex-shrink-0">
+        <div data-embed-thumbnail className="w-[80px] h-[80px] m-3 flex-shrink-0">
           <img
             src={embed.image}
             alt=""

@@ -173,9 +173,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     e.stopPropagation();
     const selectedText = window.getSelection()?.toString() ?? '';
 
-    // Detect if the right-click target is a content image (not an avatar)
+    // Detect if the right-click target is a content image (not an avatar or embed thumbnail)
     const imgEl = (e.target as HTMLElement).closest('img') as HTMLImageElement | null;
-    const isContentImage = imgEl && !imgEl.closest('[data-avatar]');
+    const isContentImage = imgEl && !imgEl.closest('[data-avatar]') && !imgEl.closest('[data-embed-thumbnail]');
     const imageUrl = isContentImage ? imgEl.src : null;
 
     const items = buildMessageMenuItems({

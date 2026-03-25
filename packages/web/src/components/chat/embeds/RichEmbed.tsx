@@ -50,7 +50,7 @@ export function RichEmbed({ embed }: RichEmbedProps) {
         >
           <div className="flex items-start gap-3 p-3">
             {embed.image && (
-              <div className="w-[80px] h-[80px] flex-shrink-0">
+              <div data-embed-thumbnail className="w-[80px] h-[80px] flex-shrink-0">
                 <img
                   src={embed.image}
                   alt=""
