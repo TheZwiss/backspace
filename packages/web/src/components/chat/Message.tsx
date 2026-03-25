@@ -147,7 +147,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   }, []);
 
   const isGifOnly = isGifOnlyMessage(message.content);
-  const imageEmbedSourceUrl = getImageEmbedSourceUrl(message.content, message.embeds || []);
+  const imageEmbedSourceUrl = isGifOnly ? null : getImageEmbedSourceUrl(message.content, message.embeds || []);
   // sourceUrl: the original URL for context menu Copy/Open Link actions
   const sourceUrl = isGifOnly
     ? (message.content?.trim() ?? null)
