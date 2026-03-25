@@ -1,12 +1,77 @@
 import { eq, inArray } from 'drizzle-orm';
+import sharp from 'sharp';
 import type { Embed } from '@backspace/shared';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { classifyUrl } from './embedClassifier.js';
 import { fetchUrlMetadata } from './metadataFetcher.js';
+import { validateExternalUrl } from './ssrf.js';
 import { connectionManager } from '../ws/handler.js';
 
 const MAX_EMBEDS_PER_MESSAGE = 5;
+
+const PROBE_BYTES = 32_768; // 32KB — sufficient for common image headers
+const PROBE_TIMEOUT_MS = 3_000;
+
+/**
+ * Fetch just enough bytes from a remote image URL to determine its dimensions.
+ * Uses Range request to avoid downloading the entire file.
+ * Returns null on any failure (timeout, network, unrecognized format, SSRF block).
+ */
+async function probeRemoteImageDimensions(
+  url: string,
+): Promise<{ width: number; height: number } | null> {
+  try {
+    await validateExternalUrl(url);
+  } catch {
+    return null;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'BackspaceBot/1.0',
+        Accept: 'image/*',
+        Range: `bytes=0-${PROBE_BYTES - 1}`,
+      },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    // NOTE: Do NOT clearTimeout here — keep the abort active during body read.
+    // The finally block handles cleanup after all reads complete.
+
+    if (!response.ok && response.status !== 206) return null;
+    if (!response.body) return null;
+
+    // Read up to PROBE_BYTES regardless of whether server honored Range
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytesRead = 0;
+
+    while (bytesRead < PROBE_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      bytesRead += value.length;
+    }
+    reader.cancel().catch(() => {}); // Aggressively close the connection
+
+    const buffer = Buffer.concat(chunks);
+    const metadata = await sharp(buffer).metadata();
+
+    if (metadata.width && metadata.height && metadata.width > 0 && metadata.height > 0) {
+      return { width: metadata.width, height: metadata.height };
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 // ─── URL Extraction ────────────────────────────────────────────────────────
 
@@ -74,6 +139,8 @@ export async function resolveEmbeds(
       let description: string | null = null;
       let image: string | null = null;
       let siteName: string | null = null;
+      let width: number | null = null;
+      let height: number | null = null;
 
       // Track the effective embed type (may be overridden by Content-Type detection)
       let effectiveEmbedType = classification.embedType;
@@ -81,7 +148,11 @@ export async function resolveEmbeds(
       // For YouTube/Vimeo, use predictable thumbnail URLs as fallback
       if (classification.provider === 'youtube' && classification.embedUrl) {
         const ytId = classification.embedUrl.split('/').pop()?.split('?')[0];
-        if (ytId) image = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+        if (ytId) {
+          image = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+          width = 480;   // hqdefault.jpg is always 480x360
+          height = 360;
+        }
       }
 
       if (classification.embedType === 'image') {
@@ -106,12 +177,27 @@ export async function resolveEmbeds(
             description = metadata.description || description;
             image = metadata.image || image;
             siteName = metadata.siteName;
+
+            // Extract OG dimensions (only from HTML pages, not direct media)
+            if (metadata.imageWidth && metadata.imageHeight) {
+              width = width ?? metadata.imageWidth;
+              height = height ?? metadata.imageHeight;
+            }
           }
         }
 
         // For generic embeds, skip if we couldn't extract a title and it's not a media URL
         if (effectiveEmbedType === 'generic' && !title) {
           continue;
+        }
+      }
+
+      // Probe direct image URLs for dimensions if not already known
+      if (effectiveEmbedType === 'image' && image && width === null) {
+        const dims = await probeRemoteImageDimensions(image);
+        if (dims) {
+          width = dims.width;
+          height = dims.height;
         }
       }
 
@@ -127,8 +213,8 @@ export async function resolveEmbeds(
         description,
         image,
         embedUrl: classification.embedUrl,
-        width: null,
-        height: null,
+        width,
+        height,
         color: null,
         createdAt: now,
       };
