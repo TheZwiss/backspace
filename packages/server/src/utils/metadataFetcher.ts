@@ -9,6 +9,10 @@ export interface UrlMetadata {
   url: string;
   /** Set when the URL itself is a direct media resource (image/video/audio) */
   contentType?: string;
+  /** Extracted from og:image:width — only present for HTML pages with OG tags */
+  imageWidth?: number;
+  /** Extracted from og:image:height — only present for HTML pages with OG tags */
+  imageHeight?: number;
 }
 
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
@@ -67,6 +71,11 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
 
     const $ = cheerio.load(html);
 
+    const rawWidth = $('meta[property="og:image:width"]').attr('content');
+    const rawHeight = $('meta[property="og:image:height"]').attr('content');
+    const parsedWidth = rawWidth ? parseInt(rawWidth, 10) : NaN;
+    const parsedHeight = rawHeight ? parseInt(rawHeight, 10) : NaN;
+
     const metadata: UrlMetadata = {
       title: $('meta[property="og:title"]').attr('content') || $('title').text() || null,
       description:
@@ -76,6 +85,8 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null>
       image: $('meta[property="og:image"]').attr('content') || null,
       siteName: $('meta[property="og:site_name"]').attr('content') || null,
       url,
+      imageWidth: Number.isFinite(parsedWidth) && parsedWidth > 0 ? parsedWidth : undefined,
+      imageHeight: Number.isFinite(parsedHeight) && parsedHeight > 0 ? parsedHeight : undefined,
     };
 
     return metadata;
