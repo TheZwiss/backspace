@@ -26,6 +26,7 @@ import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
+import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -134,8 +135,12 @@ async function main(): Promise<void> {
     console.error('Media dimensions backfill failed (non-fatal):', err);
   });
 
+  // Start federation background workers (outbox delivery, file download, health check)
+  startFederationWorkers();
+
   const shutdown = async () => {
     console.log('Shutting down...');
+    stopFederationWorkers();
     await app.close();
     process.exit(0);
   };
