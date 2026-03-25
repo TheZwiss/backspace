@@ -180,6 +180,33 @@ export function runMigrations(db: Database.Database): void {
     },
     // gif_api_key is handled by migrateRenameGifApiKey() — do NOT add it here
     // or it will race with the tenor_api_key → gif_api_key rename migration
+    {
+      name: 'dm_channels',
+      columns: [
+        { name: 'canonical_pair_id', type: 'TEXT' },
+      ]
+    },
+    {
+      name: 'dm_messages',
+      columns: [
+        { name: 'source_instance', type: 'TEXT' },
+        { name: 'source_message_id', type: 'TEXT' },
+        { name: 'encryption_version', type: 'INTEGER DEFAULT 0' },
+      ]
+    },
+    {
+      name: 'attachments',
+      columns: [
+        { name: 'source_url', type: 'TEXT' },
+      ]
+    },
+    {
+      name: 'instance_settings',
+      columns: [
+        { name: 'federation_relay_enabled', type: 'INTEGER NOT NULL DEFAULT 0' },
+        { name: 'federation_relay_ttl_days', type: 'INTEGER NOT NULL DEFAULT 30' },
+      ]
+    },
   ];
 
   for (const table of tables) {
@@ -280,6 +307,69 @@ export function runMigrations(db: Database.Database): void {
         (message_id IS NOT NULL AND dm_message_id IS NULL) OR
         (message_id IS NULL AND dm_message_id IS NOT NULL)
       )
+    );
+  `);
+
+  // ─── Federation tables ───────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS federation_peers (
+      id TEXT PRIMARY KEY,
+      origin TEXT NOT NULL UNIQUE,
+      instance_name TEXT,
+      hmac_secret TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_seen_at INTEGER,
+      last_failure_at INTEGER,
+      consecutive_failures INTEGER DEFAULT 0,
+      last_synced_at INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS federation_outbox (
+      id TEXT PRIMARY KEY,
+      peer_id TEXT NOT NULL REFERENCES federation_peers(id) ON DELETE CASCADE,
+      dm_channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      encryption_version INTEGER DEFAULT 0,
+      attempts INTEGER DEFAULT 0,
+      next_retry_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(peer_id, message_id)
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS federation_file_queue (
+      id TEXT PRIMARY KEY,
+      peer_origin TEXT NOT NULL,
+      dm_message_id TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      target_filename TEXT,
+      original_name TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      rejection_reason TEXT,
+      attempts INTEGER DEFAULT 0,
+      next_retry_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS federation_mutation_log (
+      id TEXT PRIMARY KEY,
+      dm_message_id TEXT NOT NULL,
+      dm_channel_id TEXT NOT NULL,
+      mutation_type TEXT NOT NULL,
+      mutated_at INTEGER NOT NULL,
+      payload TEXT
     );
   `);
 
@@ -387,6 +477,33 @@ export function runMigrations(db: Database.Database): void {
   // ─── Add FK constraint to attachments.dm_message_id ─────────────────────
   migrateAttachmentsDmMessageFk(db);
 
+  // ─── Federation indexes ──────────────────────────────────────────────────
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_messages_source_unique ON dm_messages(source_instance, source_message_id) WHERE source_instance IS NOT NULL`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_canonical_pair ON dm_channels(canonical_pair_id) WHERE canonical_pair_id IS NOT NULL`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_outbox_retry ON federation_outbox(next_retry_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_mutation_log_time ON federation_mutation_log(mutated_at)`);
+
+  // ─── Backfill federation mutation log for existing DM messages (idempotent) ─
+  try {
+    const mutationLogExists = (db.pragma('table_info(federation_mutation_log)') as { name: string }[]).length > 0;
+    if (mutationLogExists) {
+      const count = (db.prepare('SELECT COUNT(*) as c FROM federation_mutation_log').get() as { c: number }).c;
+      if (count === 0) {
+        const result = db.prepare(`
+          INSERT OR IGNORE INTO federation_mutation_log (id, dm_message_id, dm_channel_id, mutation_type, mutated_at)
+          SELECT id, id, dm_channel_id, 'create', created_at
+          FROM dm_messages
+          WHERE source_instance IS NULL
+        `).run();
+        if (result.changes > 0) {
+          console.log(`Federation: Backfilled ${result.changes} mutation log entries for existing DM messages`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Federation mutation log backfill failed (non-fatal):', err);
+  }
+
   console.log('Migrations complete.');
 }
 
@@ -403,17 +520,32 @@ function migrateDmMessagesReplyToFk(db: Database.Database): void {
 
   console.log('Migrating: Adding FK constraint to dm_messages.reply_to_id...');
 
+  // Detect all current columns so we don't drop federation columns added before this migration runs
+  const columns = db.pragma('table_info(dm_messages)') as { name: string }[];
+  const colNames = columns.map(c => c.name);
+
+  // Build the new table with all existing columns, adding FK to reply_to_id
+  const colDefs: string[] = [];
+  for (const col of colNames) {
+    switch (col) {
+      case 'id': colDefs.push('id TEXT PRIMARY KEY'); break;
+      case 'dm_channel_id': colDefs.push('dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE'); break;
+      case 'user_id': colDefs.push('user_id TEXT NOT NULL REFERENCES users(id)'); break;
+      case 'reply_to_id': colDefs.push('reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL'); break;
+      case 'content': colDefs.push('content TEXT'); break;
+      case 'edited_at': colDefs.push('edited_at INTEGER'); break;
+      case 'created_at': colDefs.push('created_at INTEGER NOT NULL'); break;
+      case 'source_instance': colDefs.push('source_instance TEXT'); break;
+      case 'source_message_id': colDefs.push('source_message_id TEXT'); break;
+      case 'encryption_version': colDefs.push('encryption_version INTEGER DEFAULT 0'); break;
+      default: colDefs.push(`${col} TEXT`); break;
+    }
+  }
+
+  const colList = colNames.join(', ');
   db.exec(`
-    CREATE TABLE dm_messages_new (
-      id TEXT PRIMARY KEY,
-      dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
-      user_id TEXT NOT NULL REFERENCES users(id),
-      reply_to_id TEXT REFERENCES dm_messages_new(id) ON DELETE SET NULL,
-      content TEXT,
-      edited_at INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    INSERT INTO dm_messages_new SELECT id, dm_channel_id, user_id, reply_to_id, content, edited_at, created_at FROM dm_messages;
+    CREATE TABLE dm_messages_new (${colDefs.join(', ')});
+    INSERT INTO dm_messages_new SELECT ${colList} FROM dm_messages;
     DROP TABLE dm_messages;
     ALTER TABLE dm_messages_new RENAME TO dm_messages;
     CREATE INDEX IF NOT EXISTS idx_dm_messages_dm_channel_id ON dm_messages(dm_channel_id);
@@ -1055,25 +1187,36 @@ function migrateAttachmentsDmMessageFk(db: Database.Database): void {
 
   console.log('Migrating: Adding FK constraint to attachments.dm_message_id...');
 
+  // Detect all current columns so we don't drop federation columns added before this migration runs
+  const columns = db.pragma('table_info(attachments)') as { name: string }[];
+  const colNames = columns.map(c => c.name);
+
+  const colDefs: string[] = [];
+  for (const col of colNames) {
+    switch (col) {
+      case 'id': colDefs.push('id TEXT PRIMARY KEY'); break;
+      case 'message_id': colDefs.push('message_id TEXT REFERENCES messages(id) ON DELETE CASCADE'); break;
+      case 'dm_message_id': colDefs.push('dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE'); break;
+      case 'uploader_id': colDefs.push('uploader_id TEXT'); break;
+      case 'filename': colDefs.push('filename TEXT NOT NULL'); break;
+      case 'original_name': colDefs.push('original_name TEXT NOT NULL'); break;
+      case 'mimetype': colDefs.push('mimetype TEXT NOT NULL'); break;
+      case 'size': colDefs.push('size INTEGER NOT NULL'); break;
+      case 'thumbnail_filename': colDefs.push('thumbnail_filename TEXT'); break;
+      case 'width': colDefs.push('width INTEGER'); break;
+      case 'height': colDefs.push('height INTEGER'); break;
+      case 'duration': colDefs.push('duration REAL'); break;
+      case 'source_url': colDefs.push('source_url TEXT'); break;
+      case 'created_at': colDefs.push('created_at INTEGER NOT NULL'); break;
+      default: colDefs.push(`${col} TEXT`); break;
+    }
+  }
+
+  const colList = colNames.join(', ');
   db.exec(`
-    CREATE TABLE attachments_new (
-      id TEXT PRIMARY KEY,
-      message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
-      dm_message_id TEXT REFERENCES dm_messages(id) ON DELETE CASCADE,
-      uploader_id TEXT,
-      filename TEXT NOT NULL,
-      original_name TEXT NOT NULL,
-      mimetype TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      thumbnail_filename TEXT,
-      width INTEGER,
-      height INTEGER,
-      duration REAL,
-      created_at INTEGER NOT NULL
-    );
+    CREATE TABLE attachments_new (${colDefs.join(', ')});
     INSERT INTO attachments_new
-      SELECT id, message_id, dm_message_id, uploader_id, filename, original_name,
-             mimetype, size, thumbnail_filename, width, height, duration, created_at
+      SELECT ${colList}
       FROM attachments
       WHERE dm_message_id IS NULL
          OR dm_message_id IN (SELECT id FROM dm_messages);
