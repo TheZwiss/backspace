@@ -346,14 +346,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
         ) : (
           <div className="flex flex-col gap-1">
             {isGifOnly ? (
-              <div
-                className="mt-1 max-w-[250px] rounded-lg overflow-hidden bg-surface-input"
-                style={{ aspectRatio: '4/3', maxHeight: 250 }}
-              >
+              <div className="mt-1 max-w-[250px]">
                 <img
                   src={message.content!.trim()}
                   alt="GIF"
-                  className="w-full h-full object-contain rounded-lg"
+                  className="max-w-full max-h-[250px] rounded-lg"
                   loading="lazy"
                 />
               </div>

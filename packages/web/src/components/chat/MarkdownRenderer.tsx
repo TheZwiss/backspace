@@ -187,14 +187,11 @@ function buildComponents(): Components {
 
     // Images (in markdown content — not attachments)
     img: ({ src, alt }) => (
-      <div
-        className="mt-1 rounded-md overflow-hidden bg-surface-input"
-        style={{ aspectRatio: '4/3', maxWidth: 400, maxHeight: 300 }}
-      >
+      <div className="mt-1 max-w-[400px]">
         <img
           src={src}
           alt={alt ?? ''}
-          className="w-full h-full object-contain"
+          className="max-w-full max-h-[300px] rounded-md"
           loading="lazy"
           referrerPolicy="no-referrer"
           crossOrigin="anonymous"
