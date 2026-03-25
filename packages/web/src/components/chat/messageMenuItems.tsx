@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ContextMenuItem } from '../../stores/contextMenuStore';
 import type { MessageWithUser } from '@backspace/shared';
+import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮'];
 
@@ -19,6 +20,7 @@ interface MessageMenuParams {
   onReaction: (emoji: string) => void;
   onOpenEmojiPicker: () => void;
   onMarkUnread: (messageId: string) => void;
+  imageUrl?: string | null;
 }
 
 export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuItem[] {
@@ -37,9 +39,55 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     onReaction,
     onOpenEmojiPicker,
     onMarkUnread,
+    imageUrl,
   } = params;
 
   const items: ContextMenuItem[] = [];
+
+  // ── Image Actions (when right-clicking an image) ──────────────────────
+  if (imageUrl) {
+    items.push({
+      key: 'save-image',
+      type: 'action',
+      label: 'Save Image',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+        </svg>
+      ),
+      onClick: () => {
+        const filename = imageUrl.split('/').pop()?.split('?')[0] ?? 'image';
+        saveImage(imageUrl, filename);
+      },
+    });
+    items.push({
+      key: 'copy-image',
+      type: 'action',
+      label: 'Copy Image',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M21 9v10c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h7l6 6zm-2 1h-5V4H8v15h11V10zM3 15V3c0-1.1.9-2 2-2h9v2H5v12H3z" />
+        </svg>
+      ),
+      onClick: () => {
+        copyImageToClipboard(imageUrl);
+      },
+    });
+    items.push({
+      key: 'open-original',
+      type: 'action',
+      label: 'Open Original',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+        </svg>
+      ),
+      onClick: () => {
+        window.open(imageUrl, '_blank', 'noopener');
+      },
+    });
+    items.push({ key: 'image-sep', type: 'separator' });
+  }
 
   // ── Quick Reaction Row ──────────────────────────────────────────────────
   if (canAddReactions) {

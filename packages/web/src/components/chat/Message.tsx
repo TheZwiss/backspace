@@ -173,10 +173,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     e.stopPropagation();
     const selectedText = window.getSelection()?.toString() ?? '';
 
+    // Detect if the right-click target is a content image (not an avatar)
+    const imgEl = (e.target as HTMLElement).closest('img') as HTMLImageElement | null;
+    const isContentImage = imgEl && !imgEl.closest('[data-avatar]');
+    const imageUrl = isContentImage ? imgEl.src : null;
+
     const items = buildMessageMenuItems({
       message,
       selectedText,
       previousMessageId,
+      imageUrl,
       isAuthor,
       isDm: isDmMessage,
       canAddReactions,
