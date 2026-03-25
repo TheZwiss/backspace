@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import type { InstanceStreamingLimits } from '@backspace/shared';
+import { Toggle } from '../../ui/Toggle';
 import {
   STANDARD_RESOLUTIONS, STANDARD_FRAMERATES,
   ALL_RESOLUTIONS, RESOLUTION_LABELS,
@@ -173,6 +174,17 @@ export function StreamingPanel() {
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Bandwidth</div>
         <p className="text-xs text-txt-tertiary mb-2">Minimum and maximum bitrate bounds, and the step size for the quality slider.</p>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4">
+          {/* Allow Custom Bitrate */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-txt-primary">Allow Custom Bitrate</div>
+              <div className="text-xs text-txt-tertiary">Let users set their own bitrate instead of using the matrix defaults</div>
+            </div>
+            <Toggle
+              enabled={draft.allowCustomBitrate}
+              onChange={(enabled) => setDraft({ ...draft, allowCustomBitrate: enabled })}
+            />
+          </div>
           {/* Bitrate Range */}
           <div>
             <div className="text-xs text-txt-secondary mb-1.5">
