@@ -20,7 +20,7 @@ export async function saveImage(url: string, filename?: string): Promise<void> {
     a.remove();
     URL.revokeObjectURL(blobUrl);
   } catch {
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener');
     useUIStore.getState().addToast('Opened in new tab', 'info', 3000);
   }
 }

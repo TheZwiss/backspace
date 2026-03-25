@@ -57,7 +57,7 @@ describe('saveImage', () => {
 
     await saveImage('https://media.tenor.com/abc/tenor.gif');
 
-    expect(openSpy).toHaveBeenCalledWith('https://media.tenor.com/abc/tenor.gif', '_blank');
+    expect(openSpy).toHaveBeenCalledWith('https://media.tenor.com/abc/tenor.gif', '_blank', 'noopener');
     expect(mockAddToast).toHaveBeenCalledWith('Opened in new tab', 'info', 3000);
   });
 });
