@@ -1,20 +1,5 @@
-import dns from 'dns';
 import * as cheerio from 'cheerio';
-
-export function isPrivateIp(ip: string): boolean {
-  // IPv4
-  if (ip.startsWith('127.') || ip.startsWith('0.') || ip === '0.0.0.0') return true;
-  if (ip.startsWith('10.')) return true;
-  if (ip.startsWith('192.168.')) return true;
-  if (ip.startsWith('169.254.')) return true;
-  if (ip.startsWith('172.')) {
-    const second = parseInt(ip.split('.')[1] ?? '', 10);
-    if (second >= 16 && second <= 31) return true;
-  }
-  // IPv6
-  if (ip === '::1' || ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true;
-  return false;
-}
+import { validateExternalUrl } from './ssrf.js';
 
 export interface UrlMetadata {
   title: string | null;
@@ -27,28 +12,9 @@ export interface UrlMetadata {
 }
 
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
-  // Validate URL scheme
-  let parsed: URL;
   try {
-    parsed = new URL(url);
+    await validateExternalUrl(url);
   } catch {
-    return null;
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return null;
-  }
-
-  // Resolve hostname and block private/internal IPs
-  let address: string;
-  try {
-    const result = await dns.promises.lookup(parsed.hostname);
-    address = result.address;
-  } catch {
-    return null;
-  }
-
-  if (isPrivateIp(address)) {
     return null;
   }
 
