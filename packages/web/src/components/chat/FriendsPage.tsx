@@ -432,6 +432,7 @@ function AddFriendTab({
   const discoverQuery = useDiscoverStore((s) => s.searchQuery);
   const setDiscoverQuery = useDiscoverStore((s) => s.setSearchQuery);
   const fetchUsers = useDiscoverStore((s) => s.fetchUsers);
+  const updateRelationship = useDiscoverStore((s) => s.updateRelationship);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -536,6 +537,7 @@ function AddFriendTab({
                 key={`${user.id}:${user._instanceOrigin}`}
                 user={user}
                 onOpenDm={onOpenDm}
+                onRelationshipChange={updateRelationship}
               />
             ))}
           </div>
@@ -550,13 +552,14 @@ function AddFriendTab({
 function UserDiscoverCard({
   user,
   onOpenDm,
+  onRelationshipChange,
 }: {
   user: TaggedDiscoverUser;
   onOpenDm: (userId: string, origin: string, homeUserId?: string) => void;
+  onRelationshipChange: (userId: string, origin: string, relationship: TaggedDiscoverUser['relationship'], requestId?: string) => void;
 }) {
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
   const updateFriendRequest = useSocialStore((s) => s.updateFriendRequest);
-  const updateRelationship = useDiscoverStore((s) => s.updateRelationship);
   const openModal = useUIStore((s) => s.openModal);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
@@ -587,7 +590,7 @@ function UserDiscoverCard({
     const username = user._instanceOrigin ? baseName + '@' + (originLabel ?? '') : baseName;
     try {
       const requestId = await sendFriendRequest(username);
-      updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
+      onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
     } catch (err) {
       if (err instanceof InstanceNotConnectedError) {
         setConnectModal({ domain: err.domain, isReconnect: false, username });
@@ -610,7 +613,7 @@ function UserDiscoverCard({
     setActionLoading(true);
     try {
       const requestId = await sendFriendRequest(username);
-      updateRelationship(user.id, user._instanceOrigin, 'outbound_pending', requestId);
+      onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
       const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
       addToast(`${verb} ${domain} — friend request sent!`, 'success');
     } catch (err) {
@@ -626,7 +629,7 @@ function UserDiscoverCard({
     setError('');
     try {
       await updateFriendRequest(user.requestId, 'accepted');
-      updateRelationship(user.id, user._instanceOrigin, 'friends');
+      onRelationshipChange(user.id, user._instanceOrigin, 'friends');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept request');
     } finally {
@@ -640,7 +643,7 @@ function UserDiscoverCard({
     setError('');
     try {
       await updateFriendRequest(user.requestId, 'declined');
-      updateRelationship(user.id, user._instanceOrigin, 'none');
+      onRelationshipChange(user.id, user._instanceOrigin, 'none');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to decline request');
     } finally {
@@ -658,7 +661,7 @@ function UserDiscoverCard({
         ? (useInstanceStore.getState().instances.find(i => i.origin === origin)?.api ?? api)
         : api;
       await client.social.cancelRequest(user.requestId);
-      updateRelationship(user.id, user._instanceOrigin, 'none');
+      onRelationshipChange(user.id, user._instanceOrigin, 'none');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cancel request');
     } finally {
