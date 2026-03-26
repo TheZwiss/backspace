@@ -497,6 +497,9 @@ export function runMigrations(db: Database.Database): void {
   // ─── Rename canonical_pair_id → federated_id, add group DM columns ───────
   migrateDmChannelsFederatedId(db);
 
+  // ─── Fix ownerId on 1-on-1 DMs (must run before federated_id backfill) ──
+  migrateFixOneOnOneOwnerIds(db);
+
   // ─── Backfill federated_id for existing 1-on-1 DM channels ──────────────
   // (Runs after migrateDmChannelsFederatedId so the federated_id column is guaranteed to exist)
   try {
@@ -606,8 +609,6 @@ export function runMigrations(db: Database.Database): void {
   } catch (err) {
     console.error('Federation mutation log backfill failed (non-fatal):', err);
   }
-
-  migrateFixOneOnOneOwnerIds(db);
 
   console.log('Migrations complete.');
 }
