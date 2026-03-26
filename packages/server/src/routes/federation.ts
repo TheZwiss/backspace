@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { canonicalDmPairId, getDmParticipants } from '../utils/federationOutbox.js';
+import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
@@ -526,11 +526,12 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       limit = Math.max(1, Math.min(500, Math.floor(limit)));
 
       // 3. Determine which DM channels to sync.
-      //    Use canonical_pair_id: any channel with a pair ID is a federated 1-on-1 DM
+      //    Use federated_id: any channel with a federated ID is a federated DM
       //    that should be synced. The peer's relay endpoint will create the channel
-      //    if it doesn't exist, or match by canonical_pair_id if it does.
+      //    if it doesn't exist, or match by federated_id if it does.
       const sharedChannelRows = rawDb.prepare(`
-        SELECT id as dm_channel_id FROM dm_channels WHERE canonical_pair_id IS NOT NULL
+        SELECT id as dm_channel_id FROM dm_channels
+        WHERE federated_id IS NOT NULL AND deleted_at IS NULL
       `).all() as Array<{ dm_channel_id: string }>;
 
       const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
@@ -818,25 +819,24 @@ function resolveLocalUser(
 }
 
 /**
- * Find or create a local DM channel for a federated 1-on-1 pair.
- * Uses canonical_pair_id for deterministic cross-instance lookup.
+ * Find or create a local DM channel for a federated DM.
+ * Uses federated_id for deterministic cross-instance lookup.
  */
 function findOrCreateDmChannel(
-  canonicalPairId: string,
-  localUserIdA: string,
-  localUserIdB: string,
+  federatedId: string,
+  localUserIds: string[],
   db: ReturnType<typeof getDb>,
 ): string {
-  // Try to find existing channel by canonical pair ID
+  // Try to find existing channel by federated ID
   const existing = db
     .select()
     .from(schema.dmChannels)
-    .where(eq(schema.dmChannels.canonicalPairId, canonicalPairId))
+    .where(eq(schema.dmChannels.federatedId, federatedId))
     .get();
 
   if (existing) {
-    // Ensure both users are members (they might have been removed)
-    for (const userId of [localUserIdA, localUserIdB]) {
+    // Ensure all users are members (they might have been removed)
+    for (const userId of localUserIds) {
       const member = db
         .select()
         .from(schema.dmMembers)
@@ -861,19 +861,19 @@ function findOrCreateDmChannel(
     return existing.id;
   }
 
-  // Create new DM channel with canonical pair ID
+  // Create new DM channel with federated ID
   const channelId = generateSnowflake();
   const now = Date.now();
 
   db.insert(schema.dmChannels)
     .values({
       id: channelId,
-      canonicalPairId,
+      federatedId,
       createdAt: now,
     })
     .run();
 
-  for (const userId of [localUserIdA, localUserIdB]) {
+  for (const userId of localUserIds) {
     db.insert(schema.dmMembers)
       .values({
         dmChannelId: channelId,
@@ -993,15 +993,14 @@ function processCreateEvent(
   }
   const authorUser = authorEntry.localUser;
 
-  // Compute canonical pair ID from participants' home user IDs and find/create channel
-  const pairId = canonicalDmPairId(
+  // Compute federated ID from participants' home user IDs and find/create channel
+  const federatedId = computeFederatedId(
     resolvedParticipants[0]!.homeUserId,
     resolvedParticipants[1]!.homeUserId,
   );
   const localDmChannelId = findOrCreateDmChannel(
-    pairId,
-    resolvedParticipants[0]!.localUser.id,
-    resolvedParticipants[1]!.localUser.id,
+    federatedId,
+    [resolvedParticipants[0]!.localUser.id, resolvedParticipants[1]!.localUser.id],
     db,
   );
 

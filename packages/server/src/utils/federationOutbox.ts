@@ -201,13 +201,21 @@ export function queueOutboxEvent(
 }
 
 /**
- * Compute a deterministic canonical DM pair ID from two home user IDs.
- * The pair is sorted lexicographically before hashing to ensure the same
- * result regardless of argument order. Returns first 32 hex chars of SHA-256.
+ * Compute a federated ID for a DM channel.
+ *
+ * For 1-on-1 DMs: deterministic SHA-256 hash of 2 sorted home user IDs (backward compatible).
+ * For group DMs: call with no arguments to generate a new UUID.
  */
-export function canonicalDmPairId(homeUserIdA: string, homeUserIdB: string): string {
-  const sorted = [homeUserIdA, homeUserIdB].sort();
-  return crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
+export function computeFederatedId(homeUserIdA: string, homeUserIdB: string): string;
+export function computeFederatedId(): string;
+export function computeFederatedId(homeUserIdA?: string, homeUserIdB?: string): string {
+  if (homeUserIdA && homeUserIdB) {
+    // 1-on-1: deterministic pair hash (backward compatible with canonicalDmPairId)
+    const sorted = [homeUserIdA, homeUserIdB].sort();
+    return crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
+  }
+  // Group: origin-assigned UUID
+  return crypto.randomUUID();
 }
 
 /**
