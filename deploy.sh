@@ -70,9 +70,13 @@ deploy() {
     ./ "$PI_USER@$host:$path"
 
   # Rebuild
-  echo "  [3/3] Building and restarting..."
+  echo "  [3/4] Building and restarting..."
   # Clean up stale renamed containers left by failed recreates (e.g. "d420a6c00439_backspace")
   ssh "$PI_USER@$host" "cd $path && docker rm -f \$(docker ps -aq --filter 'name=_backspace' 2>/dev/null) 2>/dev/null; docker compose up -d --build"
+
+  # Prune old images and build cache to prevent disk bloat
+  echo "  [4/4] Pruning stale Docker data..."
+  ssh "$PI_USER@$host" "docker image prune -af --filter 'until=24h' 2>/dev/null; docker builder prune -af --filter 'until=24h' 2>/dev/null" || true
 
   echo ""
   echo "  Done: $name"
