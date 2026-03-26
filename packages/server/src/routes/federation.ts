@@ -443,6 +443,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             case 'reaction_remove':
               processReactionRemoveEvent(event, sourceInstance, db, accepted, rejected);
               break;
+            case 'member_add':
+              processMemberAddEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'member_remove':
+              processMemberRemoveEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'ownership_transfer':
+              processOwnershipTransferEvent(event, sourceInstance, db, accepted, rejected);
+              break;
             default:
               rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
               break;
@@ -1428,6 +1437,237 @@ function processReactionRemoveEvent(
       emoji: event.reaction.emoji,
     });
   }
+
+  accepted.push(event.messageId);
+}
+
+// ─── Membership mutation processors ──────────────────────────────────────────
+
+function processMemberAddEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.membership?.user) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_membership_payload' });
+    return;
+  }
+
+  // Look up local channel by federated_id
+  let channel = db
+    .select()
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  // Bootstrap: channel doesn't exist yet — create from group metadata
+  if (!channel && event.group) {
+    const channelId = generateSnowflake();
+    const now = Date.now();
+
+    // Resolve owner
+    let ownerId: string | null = null;
+    if (event.group.owner) {
+      const ownerLocal = resolveLocalUser(event.group.owner.homeUserId, db);
+      ownerId = ownerLocal?.id ?? null;
+    }
+
+    db.insert(schema.dmChannels)
+      .values({
+        id: channelId,
+        federatedId: event.federatedId,
+        ownerId,
+        ownerHomeUserId: event.group.owner?.homeUserId ?? null,
+        ownerHomeInstance: event.group.owner?.homeInstance ?? null,
+        createdAt: now,
+      })
+      .run();
+
+    // Add all roster members
+    for (const member of event.group.members) {
+      const localUser = resolveLocalUser(member.homeUserId, db);
+      if (localUser) {
+        const existing = db.select().from(schema.dmMembers)
+          .where(and(
+            eq(schema.dmMembers.dmChannelId, channelId),
+            eq(schema.dmMembers.userId, localUser.id),
+          )).get();
+        if (!existing) {
+          db.insert(schema.dmMembers).values({
+            dmChannelId: channelId,
+            userId: localUser.id,
+            closed: 0,
+          }).run();
+        }
+      }
+    }
+
+    channel = db.select().from(schema.dmChannels)
+      .where(eq(schema.dmChannels.id, channelId)).get();
+
+    console.log(`[federation] Bootstrapped group DM channel ${channelId} (federated_id: ${event.federatedId})`);
+  }
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  // Cancel soft-delete if channel was pending GC
+  if (channel.deletedAt) {
+    db.update(schema.dmChannels)
+      .set({ deletedAt: null })
+      .where(eq(schema.dmChannels.id, channel.id))
+      .run();
+  }
+
+  // Resolve the added user
+  const localUser = resolveLocalUser(event.membership.user.homeUserId, db);
+  if (!localUser) {
+    rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
+    return;
+  }
+
+  // Enforce max 10 members
+  const memberCount = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channel.id))
+    .all().length;
+  if (memberCount >= 10) {
+    rejected.push({ messageId: event.messageId, reason: 'max_members_exceeded' });
+    return;
+  }
+
+  // Add member (idempotent)
+  const existingMember = db.select().from(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    )).get();
+
+  if (!existingMember) {
+    db.insert(schema.dmMembers).values({
+      dmChannelId: channel.id,
+      userId: localUser.id,
+      closed: 0,
+    }).run();
+  }
+
+  // Broadcast to local WebSocket clients
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_member_added',
+    dmChannelId: channel.id,
+    user: sanitizeUser(localUser),
+  });
+
+  accepted.push(event.messageId);
+}
+
+function processMemberRemoveEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.membership?.user) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_membership_payload' });
+    return;
+  }
+
+  const channel = db
+    .select()
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  const localUser = resolveLocalUser(event.membership.user.homeUserId, db);
+  if (!localUser) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Remove member (idempotent)
+  db.delete(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    ))
+    .run();
+
+  // Clean up read states
+  db.delete(schema.readStates)
+    .where(and(
+      eq(schema.readStates.userId, localUser.id),
+      eq(schema.readStates.channelId, channel.id),
+    ))
+    .run();
+
+  // Broadcast to local WebSocket clients
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_member_removed',
+    dmChannelId: channel.id,
+    userId: localUser.id,
+  });
+
+  // Check if zero local members remain — begin soft-delete GC
+  const remaining = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channel.id))
+    .all();
+
+  if (remaining.length === 0) {
+    db.update(schema.dmChannels)
+      .set({ deletedAt: Date.now() })
+      .where(eq(schema.dmChannels.id, channel.id))
+      .run();
+    console.log(`[federation] Group DM ${channel.id} has no local members, soft-deleted for GC`);
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processOwnershipTransferEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.ownership) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_ownership_payload' });
+    return;
+  }
+
+  const channel = db
+    .select()
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Resolve new owner to local user (for local ownerId)
+  const newOwnerLocal = resolveLocalUser(event.ownership.newOwner.homeUserId, db);
+
+  db.update(schema.dmChannels)
+    .set({
+      ownerId: newOwnerLocal?.id ?? channel.ownerId,
+      ownerHomeUserId: event.ownership.newOwner.homeUserId,
+      ownerHomeInstance: event.ownership.newOwner.homeInstance,
+    })
+    .where(eq(schema.dmChannels.id, channel.id))
+    .run();
 
   accepted.push(event.messageId);
 }
