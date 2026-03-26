@@ -1640,6 +1640,12 @@ function processMemberAddEvent(
     return;
   }
 
+  // Validate authority: only the owner's instance can add members
+  if (channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
   // Cancel soft-delete if channel was pending GC
   if (channel.deletedAt) {
     db.update(schema.dmChannels)
@@ -1713,6 +1719,12 @@ function processMemberRemoveEvent(
     return;
   }
 
+  // Validate authority: owner's instance for kicks, any instance for self-leave
+  if (event.membership.reason !== 'leave' && channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
   const localUser = resolveLocalUser(event.membership.user.homeUserId, db);
   if (!localUser) {
     accepted.push(event.messageId);
@@ -1779,6 +1791,12 @@ function processOwnershipTransferEvent(
 
   if (!channel) {
     accepted.push(event.messageId);
+    return;
+  }
+
+  // Validate authority: only the current owner's instance can transfer ownership
+  if (channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
     return;
   }
 
