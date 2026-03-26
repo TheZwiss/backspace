@@ -392,6 +392,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
       if (current.find(m => m.id === normalizedMessage.id)) return state;
+      // Federation relay dedup: skip if this is a relay copy of a message we
+      // already have (sourceMessageId matches an existing ID), or if we already
+      // have the relay copy and the original is now arriving (existing
+      // sourceMessageId matches incoming ID).
+      if ('sourceMessageId' in normalizedMessage && normalizedMessage.sourceMessageId
+        && current.find(m => m.id === normalizedMessage.sourceMessageId)) return state;
+      if (current.find(m => 'sourceMessageId' in m && m.sourceMessageId === normalizedMessage.id)) return state;
       // Remove any optimistic temp message with same content (no userId check —
       // federated messages arrive with a different replicated user ID).
       // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
