@@ -595,7 +595,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           JOIN dm_messages dm ON ml.dm_message_id = dm.id
           WHERE ml.dm_channel_id = ?
             AND ml.mutated_at > ?
-            AND dm.source_instance IS NULL
           ORDER BY ml.mutated_at ASC
           LIMIT ?
         `).all(dmChannelIdFilter, sinceTimestamp, limit) as typeof mutationRows;
@@ -634,7 +633,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           JOIN dm_messages dm ON ml.dm_message_id = dm.id
           WHERE ml.dm_channel_id IN (${placeholders})
             AND ml.mutated_at > ?
-            AND dm.source_instance IS NULL
           ORDER BY ml.mutated_at ASC
           LIMIT ?
         `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
