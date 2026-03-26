@@ -607,6 +607,8 @@ export function runMigrations(db: Database.Database): void {
     console.error('Federation mutation log backfill failed (non-fatal):', err);
   }
 
+  migrateFixOneOnOneOwnerIds(db);
+
   console.log('Migrations complete.');
 }
 
@@ -1566,5 +1568,26 @@ function migrateDmChannelsFederatedId(db: Database.Database): void {
     }
   } catch (err) {
     console.error('migrateDmChannelsFederatedId: owner backfill failed (non-fatal):', err);
+  }
+}
+
+/** Fix ownerId on 1-on-1 DMs: should be NULL, not the creator's ID */
+function migrateFixOneOnOneOwnerIds(db: Database.Database): void {
+  try {
+    const result = db.prepare(`
+      UPDATE dm_channels SET owner_id = NULL
+      WHERE id IN (
+        SELECT dm_channel_id FROM dm_members
+        GROUP BY dm_channel_id
+        HAVING COUNT(*) = 2
+      )
+      AND owner_id IS NOT NULL
+    `).run();
+
+    if (result.changes > 0) {
+      console.log(`[migrate] Fixed ownerId on ${result.changes} 1-on-1 DM channel(s) (set to NULL)`);
+    }
+  } catch (err) {
+    console.error('migrateFixOneOnOneOwnerIds failed (non-fatal):', err);
   }
 }

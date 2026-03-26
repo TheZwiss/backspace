@@ -516,6 +516,10 @@ export interface AddDmMemberRequest {
   userId: string;
 }
 
+export interface CreateGroupDmRequest {
+  userIds: string[];
+}
+
 export interface CreateDmMessageRequest {
   content?: string;
   attachments?: string[];

@@ -444,7 +444,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     db.transaction((tx) => {
       tx.insert(schema.dmChannels).values({
         id: dmChannelId,
-        ownerId: request.userId,
+        ownerId: null,
         createdAt: now,
       }).run();
 
@@ -466,7 +466,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const result: DmChannel = {
       id: dmChannelId,
-      ownerId: request.userId,
+      ownerId: null,
       createdAt: now,
       members,
       lastMessage: null,
@@ -537,12 +537,16 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
     }
 
-    // Enforce DM channel ownership: only the owner can add members (for new-style group DMs)
+    // Fetch channel and enforce type + ownership constraints
     let dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
       return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
     }
-    if (dmChannel.ownerId && dmChannel.ownerId !== request.userId) {
+    // 1-on-1 DMs (ownerId=NULL) are immutable — cannot add members
+    if (!dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot add members to a 1-on-1 DM. Use POST /api/dm/group to create a group.', statusCode: 400 });
+    }
+    if (dmChannel.ownerId !== request.userId) {
       return reply.code(403).send({ error: 'Only the group owner can add members', statusCode: 403 });
     }
 
@@ -759,14 +763,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
     }
 
-    // Count members — can't leave a 1-on-1
-    const memberRows = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, id))
-      .all();
-
-    if (memberRows.length <= 2) {
-      return reply.code(400).send({ error: 'Cannot leave a 1-on-1 DM. Use close instead.', statusCode: 400 });
+    // Fetch channel — 1-on-1 DMs (ownerId=NULL) cannot be left, only closed
+    const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+    if (!dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot leave a 1-on-1 DM. Use DELETE /api/dm/:id to close it.', statusCode: 400 });
     }
 
     // If user is in this DM's VoiceRoom, leave it first
@@ -793,9 +796,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
       connectionManager.clearVoiceUserStatus(request.userId);
     }
-
-    // Check DM channel ownership before leaving
-    const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
 
     // Compute federation targets BEFORE member deletion so the leaving user's peer is included
     let fedTargetOrigins: string[] | undefined;
