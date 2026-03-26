@@ -546,58 +546,59 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const sinceTimestamp = body.sinceTimestamp;
       const dmChannelIdFilter = body.dmChannelId && typeof body.dmChannelId === 'string' ? body.dmChannelId : null;
       const federatedIdFilter = body.federatedId && typeof body.federatedId === 'string' ? body.federatedId : null;
+      const contextTypeFilter = body.contextType && typeof body.contextType === 'string'
+        ? body.contextType as 'dm' | 'friend'
+        : null;
 
       // Clamp limit: min 1, max 500, default 100
       let limit = typeof body.limit === 'number' ? body.limit : 100;
       limit = Math.max(1, Math.min(500, Math.floor(limit)));
 
-      // 3. Determine which DM channels to sync.
-      //    Use federated_id: any channel with a federated ID is a federated DM
-      //    that should be synced. The peer's relay endpoint will create the channel
-      //    if it doesn't exist, or match by federated_id if it does.
-      const sharedChannelRows = rawDb.prepare(`
-        SELECT id as dm_channel_id FROM dm_channels
-        WHERE federated_id IS NOT NULL AND deleted_at IS NULL
-      `).all() as Array<{ dm_channel_id: string }>;
-
-      const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
-
-      // If filtering by federatedId, resolve to local channel ID
-      let effectiveChannelFilter = dmChannelIdFilter;
-      if (federatedIdFilter && !effectiveChannelFilter) {
-        const fedChannel = rawDb.prepare(`
-          SELECT id FROM dm_channels WHERE federated_id = ?
-        `).get(federatedIdFilter) as { id: string } | undefined;
-        if (fedChannel) {
-          effectiveChannelFilter = fedChannel.id;
-        }
-      }
-
-      if (sharedChannelIds.length === 0) {
-        const syncResponse: FederationSyncResponse = {
-          events: [],
-          hasMore: false,
-          checkpoint: sinceTimestamp,
-        };
-        return reply.code(200).send(syncResponse);
-      }
-
-      // 4. Query mutation log for the relevant channels
-      //    Return mutations for ALL locally-created messages (source_instance IS NULL).
-      //    This includes messages by replicated users (e.g., Jannis browsing orbit)
-      //    because they were created on THIS instance and need to be synced to the peer.
+      // 3. Query mutation log — branch by contextType
       let mutationRows: Array<{
         id: string;
-        dm_message_id: string;
-        dm_channel_id: string;
+        entity_id: string;
+        context_id: string;
+        context_type: string;
         mutation_type: string;
         mutated_at: number;
         payload: string | null;
       }>;
 
-      if (effectiveChannelFilter) {
-        // Validate that the requested channel is actually shared with this peer
-        if (!sharedChannelIds.includes(effectiveChannelFilter)) {
+      if (contextTypeFilter === 'friend') {
+        // ── Friend event sync: no DM channel logic needed ──
+        mutationRows = rawDb.prepare(`
+          SELECT id, entity_id, context_id, context_type, mutation_type, mutated_at, payload
+          FROM federation_mutation_log
+          WHERE context_type = 'friend' AND mutated_at > ?
+          ORDER BY mutated_at ASC
+          LIMIT ?
+        `).all(sinceTimestamp, limit) as typeof mutationRows;
+      } else {
+        // ── DM sync path ──
+        // Determine which DM channels to sync.
+        // Use federated_id: any channel with a federated ID is a federated DM
+        // that should be synced. The peer's relay endpoint will create the channel
+        // if it doesn't exist, or match by federated_id if it does.
+        const sharedChannelRows = rawDb.prepare(`
+          SELECT id as dm_channel_id FROM dm_channels
+          WHERE federated_id IS NOT NULL AND deleted_at IS NULL
+        `).all() as Array<{ dm_channel_id: string }>;
+
+        const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
+
+        // If filtering by federatedId, resolve to local channel ID
+        let effectiveChannelFilter = dmChannelIdFilter;
+        if (federatedIdFilter && !effectiveChannelFilter) {
+          const fedChannel = rawDb.prepare(`
+            SELECT id FROM dm_channels WHERE federated_id = ?
+          `).get(federatedIdFilter) as { id: string } | undefined;
+          if (fedChannel) {
+            effectiveChannelFilter = fedChannel.id;
+          }
+        }
+
+        if (sharedChannelIds.length === 0) {
           const syncResponse: FederationSyncResponse = {
             events: [],
             hasMore: false,
@@ -606,79 +607,99 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(200).send(syncResponse);
         }
 
-        mutationRows = rawDb.prepare(`
-          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
-          FROM federation_mutation_log ml
-          LEFT JOIN dm_messages dm ON ml.dm_message_id = dm.id
-          WHERE ml.dm_channel_id = ?
-            AND ml.mutated_at > ?
-            AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
-          ORDER BY ml.mutated_at ASC
-          LIMIT ?
-        `).all(effectiveChannelFilter, sinceTimestamp, limit) as typeof mutationRows;
-
-        // For delete mutations, the dm_messages row won't exist — handle separately
-        const deleteMutations = rawDb.prepare(`
-          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
-          FROM federation_mutation_log ml
-          WHERE ml.dm_channel_id = ?
-            AND ml.mutated_at > ?
-            AND ml.mutation_type = 'delete'
-            AND ml.dm_message_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.dm_message_id)
-          ORDER BY ml.mutated_at ASC
-          LIMIT ?
-        `).all(effectiveChannelFilter, sinceTimestamp, limit) as typeof mutationRows;
-
-        // Merge, deduplicate, sort, and re-limit
-        const seen = new Set(mutationRows.map(r => r.id));
-        for (const row of deleteMutations) {
-          if (!seen.has(row.id)) {
-            mutationRows.push(row);
-            seen.add(row.id);
+        // 4. Query mutation log for the relevant channels
+        //    Return mutations for ALL locally-created messages (source_instance IS NULL).
+        //    This includes messages by replicated users (e.g., Jannis browsing orbit)
+        //    because they were created on THIS instance and need to be synced to the peer.
+        if (effectiveChannelFilter) {
+          // Validate that the requested channel is actually shared with this peer
+          if (!sharedChannelIds.includes(effectiveChannelFilter)) {
+            const syncResponse: FederationSyncResponse = {
+              events: [],
+              hasMore: false,
+              checkpoint: sinceTimestamp,
+            };
+            return reply.code(200).send(syncResponse);
           }
-        }
-        mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
-        if (mutationRows.length > limit) {
-          mutationRows = mutationRows.slice(0, limit);
-        }
-      } else {
-        // All shared channels — build IN clause with placeholders
-        const placeholders = sharedChannelIds.map(() => '?').join(',');
 
-        mutationRows = rawDb.prepare(`
-          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
-          FROM federation_mutation_log ml
-          LEFT JOIN dm_messages dm ON ml.dm_message_id = dm.id
-          WHERE ml.dm_channel_id IN (${placeholders})
-            AND ml.mutated_at > ?
-            AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
-          ORDER BY ml.mutated_at ASC
-          LIMIT ?
-        `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+          mutationRows = rawDb.prepare(`
+            SELECT ml.id, ml.entity_id, ml.context_id, ml.context_type, ml.mutation_type, ml.mutated_at, ml.payload
+            FROM federation_mutation_log ml
+            LEFT JOIN dm_messages dm ON ml.entity_id = dm.id
+            WHERE ml.context_id = ?
+              AND ml.context_type = 'dm'
+              AND ml.mutated_at > ?
+              AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
+            ORDER BY ml.mutated_at ASC
+            LIMIT ?
+          `).all(effectiveChannelFilter, sinceTimestamp, limit) as typeof mutationRows;
 
-        // For delete mutations, the dm_messages row won't exist — handle separately
-        const deleteMutations = rawDb.prepare(`
-          SELECT ml.id, ml.dm_message_id, ml.dm_channel_id, ml.mutation_type, ml.mutated_at, ml.payload
-          FROM federation_mutation_log ml
-          WHERE ml.dm_channel_id IN (${placeholders})
-            AND ml.mutated_at > ?
-            AND ml.mutation_type = 'delete'
-            AND ml.dm_message_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.dm_message_id)
-          ORDER BY ml.mutated_at ASC
-          LIMIT ?
-        `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+          // For delete mutations, the dm_messages row won't exist — handle separately
+          const deleteMutations = rawDb.prepare(`
+            SELECT ml.id, ml.entity_id, ml.context_id, ml.context_type, ml.mutation_type, ml.mutated_at, ml.payload
+            FROM federation_mutation_log ml
+            WHERE ml.context_id = ?
+              AND ml.context_type = 'dm'
+              AND ml.mutated_at > ?
+              AND ml.mutation_type = 'delete'
+              AND ml.entity_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.entity_id)
+            ORDER BY ml.mutated_at ASC
+            LIMIT ?
+          `).all(effectiveChannelFilter, sinceTimestamp, limit) as typeof mutationRows;
 
-        // Merge, deduplicate, sort, and re-limit
-        const seen = new Set(mutationRows.map(r => r.id));
-        for (const row of deleteMutations) {
-          if (!seen.has(row.id)) {
-            mutationRows.push(row);
-            seen.add(row.id);
+          // Merge, deduplicate, sort, and re-limit
+          const seen = new Set(mutationRows.map(r => r.id));
+          for (const row of deleteMutations) {
+            if (!seen.has(row.id)) {
+              mutationRows.push(row);
+              seen.add(row.id);
+            }
           }
-        }
-        mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
-        if (mutationRows.length > limit) {
-          mutationRows = mutationRows.slice(0, limit);
+          mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
+          if (mutationRows.length > limit) {
+            mutationRows = mutationRows.slice(0, limit);
+          }
+        } else {
+          // All shared channels — build IN clause with placeholders
+          const placeholders = sharedChannelIds.map(() => '?').join(',');
+
+          mutationRows = rawDb.prepare(`
+            SELECT ml.id, ml.entity_id, ml.context_id, ml.context_type, ml.mutation_type, ml.mutated_at, ml.payload
+            FROM federation_mutation_log ml
+            LEFT JOIN dm_messages dm ON ml.entity_id = dm.id
+            WHERE ml.context_id IN (${placeholders})
+              AND ml.context_type = 'dm'
+              AND ml.mutated_at > ?
+              AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
+            ORDER BY ml.mutated_at ASC
+            LIMIT ?
+          `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+
+          // For delete mutations, the dm_messages row won't exist — handle separately
+          const deleteMutations = rawDb.prepare(`
+            SELECT ml.id, ml.entity_id, ml.context_id, ml.context_type, ml.mutation_type, ml.mutated_at, ml.payload
+            FROM federation_mutation_log ml
+            WHERE ml.context_id IN (${placeholders})
+              AND ml.context_type = 'dm'
+              AND ml.mutated_at > ?
+              AND ml.mutation_type = 'delete'
+              AND ml.entity_id NOT IN (SELECT dm.id FROM dm_messages dm WHERE dm.id = ml.entity_id)
+            ORDER BY ml.mutated_at ASC
+            LIMIT ?
+          `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
+
+          // Merge, deduplicate, sort, and re-limit
+          const seen = new Set(mutationRows.map(r => r.id));
+          for (const row of deleteMutations) {
+            if (!seen.has(row.id)) {
+              mutationRows.push(row);
+              seen.add(row.id);
+            }
+          }
+          mutationRows.sort((a, b) => a.mutated_at - b.mutated_at);
+          if (mutationRows.length > limit) {
+            mutationRows = mutationRows.slice(0, limit);
+          }
         }
       }
 
@@ -686,15 +707,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const events: FederationRelayEvent[] = [];
 
       for (const mutation of mutationRows) {
-        const mutationType = mutation.mutation_type as 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove' | 'member_add' | 'member_remove' | 'ownership_transfer';
+        const mutationType = mutation.mutation_type as 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
+          | 'member_add' | 'member_remove' | 'ownership_transfer'
+          | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
+          | 'friend_add' | 'friend_remove';
 
-        if (['member_add', 'member_remove', 'ownership_transfer'].includes(mutationType)) {
-          // Membership mutations store the full event in the payload
+        if (['member_add', 'member_remove', 'ownership_transfer',
+             'friend_request_create', 'friend_request_update', 'friend_request_cancel',
+             'friend_add', 'friend_remove'].includes(mutationType)) {
+          // Membership and friend mutations store the full event in the payload
           const payload = mutation.payload ? JSON.parse(mutation.payload) : {};
           events.push({
             eventType: mutationType as FederationRelayEvent['eventType'],
-            dmChannelId: mutation.dm_channel_id,
-            messageId: mutation.dm_message_id,
+            contextType: (mutation.context_type ?? 'dm') as 'dm' | 'friend',
+            ...(mutation.context_type === 'dm' || !mutation.context_type ? { dmChannelId: mutation.context_id } : {}),
+            messageId: mutation.entity_id,
             encryptionVersion: 0,
             timestamp: mutation.mutated_at,
             ...payload,
@@ -706,8 +733,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // For deletes, we don't need the message content — just the ID and channel
           events.push({
             eventType: 'delete',
-            dmChannelId: mutation.dm_channel_id,
-            messageId: mutation.dm_message_id,
+            dmChannelId: mutation.context_id,
+            messageId: mutation.entity_id,
             encryptionVersion: 0,
             timestamp: mutation.mutated_at,
           });
@@ -727,8 +754,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
             events.push({
               eventType: mutationType,
-              dmChannelId: mutation.dm_channel_id,
-              messageId: mutation.dm_message_id,
+              dmChannelId: mutation.context_id,
+              messageId: mutation.entity_id,
               encryptionVersion: 0,
               timestamp: mutation.mutated_at,
               reaction: {
@@ -746,7 +773,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         const message = db
           .select()
           .from(schema.dmMessages)
-          .where(eq(schema.dmMessages.id, mutation.dm_message_id))
+          .where(eq(schema.dmMessages.id, mutation.entity_id))
           .get();
 
         if (!message) {
@@ -798,11 +825,11 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
         events.push({
           eventType: mutationType,
-          dmChannelId: mutation.dm_channel_id,
+          dmChannelId: mutation.context_id,
           messageId: message.id,
           encryptionVersion: 0,
           timestamp: mutation.mutated_at,
-          participants: getDmParticipants(mutation.dm_channel_id),
+          participants: getDmParticipants(mutation.context_id),
           message: {
             userId: message.userId,
             homeUserId,
