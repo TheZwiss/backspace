@@ -7,6 +7,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
+import { isSelf } from '../../utils/identity';
 
 export function AddDmMemberModal() {
   const [query, setQuery] = useState('');
@@ -20,7 +21,7 @@ export function AddDmMemberModal() {
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const navigate = useNavigate();
-  const myUserId = useAuthStore((s) => s.user?.id);
+  const myUser = useAuthStore((s) => s.user);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -74,19 +75,22 @@ export function AddDmMemberModal() {
     try {
       if (!dmChannel.ownerId) {
         // 1-on-1 DM → create a new group DM with all 3 users
-        const otherMember = dmChannel.members.find(m => m.id !== myUserId);
+        const otherMember = dmChannel.members.find(m => !isSelf(m, myUser));
         if (!otherMember) {
           setError('Could not determine the other member of this conversation.');
           return;
         }
-        const newChannel = await api.dm.createGroup({ userIds: [otherMember.id, user.id] });
+        const newChannel = await api.dm.createGroup({
+          users: [
+            { id: otherMember.id, homeUserId: otherMember.homeUserId, homeInstance: otherMember.homeInstance },
+            { id: user.id, homeUserId: user.homeUserId, homeInstance: user.homeInstance },
+          ],
+        });
         addDmChannel(newChannel);
         closeModal();
         navigate(`/channels/@me/${newChannel.id}`);
       } else {
         // Group DM → add to existing group
-        // Always call the home instance — S2S federation handles relay.
-        // Only the owner can add members, and the owner is always on the home instance.
         await api.dm.addMember(dmChannelId, { userId: user.id });
         closeModal();
       }
