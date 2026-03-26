@@ -492,6 +492,91 @@ export function runMigrations(db: Database.Database): void {
     }
   } catch { /* column may not exist yet on first run */ }
 
+  // ─── Backfill canonical_pair_id for existing 1-on-1 DM channels ─────────
+  try {
+    // Find 1-on-1 DM channels that don't have a canonical_pair_id yet
+    const channelsNeedingPairId = db.prepare(`
+      SELECT dc.id, GROUP_CONCAT(u.home_user_id || ':' || u.id) as member_info
+      FROM dm_channels dc
+      JOIN dm_members dm ON dc.id = dm.dm_channel_id
+      JOIN users u ON dm.user_id = u.id
+      WHERE dc.canonical_pair_id IS NULL
+      GROUP BY dc.id
+      HAVING COUNT(dm.user_id) = 2
+    `).all() as { id: string; member_info: string }[];
+
+    if (channelsNeedingPairId.length > 0) {
+      const crypto = require('crypto');
+      const update = db.prepare('UPDATE dm_channels SET canonical_pair_id = ? WHERE id = ? AND canonical_pair_id IS NULL');
+
+      let backfilled = 0;
+      for (const channel of channelsNeedingPairId) {
+        // member_info is like "homeUserId1:id1,homeUserId2:id2"
+        // Extract the homeUserIds (or fall back to regular ids)
+        const members = channel.member_info.split(',');
+        const homeUserIds = members.map((m: string) => {
+          const parts = m.split(':');
+          // home_user_id might be "null" string if NULL in DB
+          const homeUserId = parts[0];
+          const regularId = parts[1];
+          return (homeUserId && homeUserId !== 'null') ? homeUserId : regularId;
+        });
+
+        if (homeUserIds.length === 2) {
+          const sorted = homeUserIds.sort();
+          const pairId = crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
+          update.run(pairId, channel.id);
+          backfilled++;
+        }
+      }
+
+      if (backfilled > 0) {
+        console.log(`Federation: Backfilled canonical_pair_id for ${backfilled} existing DM channel(s)`);
+      }
+    }
+  } catch (err) {
+    console.error('Federation canonical_pair_id backfill failed (non-fatal):', err);
+  }
+
+  // ─── Merge duplicate DM channels with same canonical_pair_id ─────────────
+  try {
+    // Find canonical_pair_ids that appear more than once
+    const duplicates = db.prepare(`
+      SELECT canonical_pair_id, GROUP_CONCAT(id) as channel_ids
+      FROM dm_channels
+      WHERE canonical_pair_id IS NOT NULL
+      GROUP BY canonical_pair_id
+      HAVING COUNT(*) > 1
+    `).all() as { canonical_pair_id: string; channel_ids: string }[];
+
+    for (const dup of duplicates) {
+      const ids = dup.channel_ids.split(',');
+      // Keep the oldest channel (lowest snowflake ID = created first), move messages from newer ones
+      ids.sort();
+      const keepId = ids[0];
+      const removeIds = ids.slice(1);
+
+      for (const removeId of removeIds) {
+        // Move messages from duplicate channel to the keeper
+        db.prepare('UPDATE dm_messages SET dm_channel_id = ? WHERE dm_channel_id = ?').run(keepId, removeId);
+        // Move read states from duplicate channel to the keeper (ignore conflicts)
+        db.prepare('INSERT OR IGNORE INTO read_states SELECT user_id, ?, last_read_message_id, updated_at FROM read_states WHERE channel_id = ?').run(keepId, removeId);
+        db.prepare('DELETE FROM read_states WHERE channel_id = ?').run(removeId);
+        // Move DM members (ignore conflicts where member already exists in keeper)
+        db.prepare('INSERT OR IGNORE INTO dm_members (dm_channel_id, user_id, closed) SELECT ?, user_id, closed FROM dm_members WHERE dm_channel_id = ?').run(keepId, removeId);
+        // Delete duplicate members and channel
+        db.prepare('DELETE FROM dm_members WHERE dm_channel_id = ?').run(removeId);
+        db.prepare('DELETE FROM dm_channels WHERE id = ?').run(removeId);
+      }
+
+      if (removeIds.length > 0) {
+        console.log(`Federation: Merged ${removeIds.length} duplicate DM channel(s) for pair ${dup.canonical_pair_id} into ${keepId}`);
+      }
+    }
+  } catch (err) {
+    console.error('Federation DM channel merge failed (non-fatal):', err);
+  }
+
   // ─── Backfill federation mutation log for existing DM messages (idempotent) ─
   try {
     const mutationLogExists = (db.pragma('table_info(federation_mutation_log)') as { name: string }[]).length > 0;
