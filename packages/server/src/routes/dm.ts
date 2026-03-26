@@ -564,11 +564,13 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     });
 
+    // Fetch caller's user row once — used for response, federation, and relay
+    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+
     // Federation: assign federatedId if any member is from a remote instance
     let federatedId: string | null = null;
     if (isFederationRelayEnabled()) {
       const domainOrigin = getOurOrigin();
-      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
       const allUsers = [callerUser, ...targetUsers].filter((u): u is NonNullable<typeof u> => u !== undefined);
       const hasRemote = allUsers.some(u => u.homeInstance && u.homeInstance !== domainOrigin);
 
@@ -586,8 +588,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Build response
-    const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    const allMembers = [currentUserRow, ...targetUsers]
+    const allMembers = [callerUser, ...targetUsers]
       .filter((u): u is NonNullable<typeof u> => u !== undefined)
       .map(u => sanitizeUser(u));
 
@@ -610,7 +611,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Federation: relay member_add for each remote member
     if (isFederationRelayEnabled() && federatedId) {
       const domainOrigin = getOurOrigin();
-      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
       const allParticipants = getDmParticipants(dmChannelId);
 
       for (const targetUser of targetUsers) {
@@ -646,7 +646,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
         // Ensure the new member's instance is in targets
         let finalTargets = targetOrigins;
-        if (finalTargets && !finalTargets.includes(targetUser.homeInstance)) {
+        if (finalTargets && targetUser.homeInstance !== domainOrigin && !finalTargets.includes(targetUser.homeInstance)) {
           finalTargets = [...finalTargets, targetUser.homeInstance];
         }
 
