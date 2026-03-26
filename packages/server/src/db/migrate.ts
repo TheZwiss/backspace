@@ -612,7 +612,7 @@ function migrateDmMessagesReplyToFk(db: Database.Database): void {
   // Only migrate if reply_to_id exists but has no FK reference
   if (!tableInfo) return;
   if (!tableInfo.sql.includes('reply_to_id')) return;
-  if (tableInfo.sql.includes('REFERENCES dm_messages')) return;
+  if (tableInfo.sql.includes('REFERENCES dm_messages') || tableInfo.sql.includes('REFERENCES "dm_messages"')) return;
 
   console.log('Migrating: Adding FK constraint to dm_messages.reply_to_id...');
 
@@ -1279,7 +1279,7 @@ function migrateAttachmentsDmMessageFk(db: Database.Database): void {
   // Only migrate if dm_message_id exists but has no FK reference
   if (!tableInfo) return;
   if (!tableInfo.sql.includes('dm_message_id')) return;
-  if (tableInfo.sql.includes('REFERENCES dm_messages')) return;
+  if (tableInfo.sql.includes('REFERENCES dm_messages') || tableInfo.sql.includes('REFERENCES "dm_messages"')) return;
 
   console.log('Migrating: Adding FK constraint to attachments.dm_message_id...');
 
