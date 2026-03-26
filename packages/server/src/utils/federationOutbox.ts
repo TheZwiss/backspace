@@ -3,7 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayParticipant } from '@backspace/shared';
 import { config } from '../config.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
@@ -208,6 +208,33 @@ export function queueOutboxEvent(
 export function canonicalDmPairId(homeUserIdA: string, homeUserIdB: string): string {
   const sorted = [homeUserIdA, homeUserIdB].sort();
   return crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
+}
+
+/**
+ * Look up all members of a DM channel and return their federated identities.
+ * Used to include participants in relay events so the receiving instance can
+ * resolve both parties without relying on the friends list.
+ */
+export function getDmParticipants(dmChannelId: string): FederationRelayParticipant[] {
+  const db = getDb();
+  const members = db
+    .select({
+      userId: schema.dmMembers.userId,
+      homeUserId: schema.users.homeUserId,
+      homeInstance: schema.users.homeInstance,
+      id: schema.users.id,
+    })
+    .from(schema.dmMembers)
+    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  const domainOrigin = config.domain ? `https://${config.domain}` : '';
+
+  return members.map(m => ({
+    homeUserId: m.homeUserId || m.id,
+    homeInstance: m.homeInstance || domainOrigin,
+  }));
 }
 
 /**

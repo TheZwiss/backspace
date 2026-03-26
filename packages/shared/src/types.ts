@@ -717,12 +717,18 @@ export interface AdminResetPasswordResponse {
 
 // ─── Federation Relay Types ──────────────────────────────────────────────────
 
+export interface FederationRelayParticipant {
+  homeUserId: string;
+  homeInstance: string;
+}
+
 export interface FederationRelayEvent {
   eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove';
   dmChannelId: string;
   messageId: string;
   encryptionVersion: 0;
   timestamp: number;
+  participants?: FederationRelayParticipant[];
   message?: {
     userId: string;
     homeUserId: string;

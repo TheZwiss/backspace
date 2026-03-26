@@ -11,7 +11,7 @@ import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, buildRelayPayload } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, buildRelayPayload, getDmParticipants } from '../utils/federationOutbox.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -888,8 +888,10 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
 
   // Federation: log mutation and queue for relay
   appendMutationLog(messageId, dmChannelId, 'create');
+  const participants = getDmParticipants(dmChannelId);
   queueOutboxEvent(messageId, dmChannelId, 'create', JSON.stringify({
     message: { ...buildRelayPayload(dmMessage, dmMessage.user), attachments: [] },
+    participants,
   }));
 
   // Resolve embeds asynchronously
@@ -994,6 +996,7 @@ function handleDmMessageEdit(event: Record<string, unknown>, userId: string): vo
   appendMutationLog(messageId, msg.dmChannelId, 'update');
   queueOutboxEvent(messageId, msg.dmChannelId, 'update', JSON.stringify({
     message: buildRelayPayload(updated, updated.user),
+    participants: getDmParticipants(msg.dmChannelId),
   }));
 
   // Resolve new embeds asynchronously (old ones already deleted above)

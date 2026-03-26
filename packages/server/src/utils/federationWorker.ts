@@ -172,6 +172,7 @@ async function processOutboxTick(): Promise<void> {
         messageId: entry.messageId,
         encryptionVersion: (entry.encryptionVersion ?? 0) as 0,
         timestamp: entry.createdAt,
+        ...(parsed.participants ? { participants: parsed.participants } : {}),
         ...(parsed.message ? { message: parsed.message } : {}),
         ...(parsed.reactions ? { reactions: parsed.reactions } : {}),
         ...(parsed.reaction ? { reaction: parsed.reaction } : {}),

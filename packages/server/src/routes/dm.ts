@@ -21,7 +21,7 @@ import {
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, buildRelayPayload } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, buildRelayPayload, getDmParticipants } from '../utils/federationOutbox.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -973,8 +973,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     // Federation: log mutation and queue for relay
     appendMutationLog(messageId, id, 'create');
+    const participants = getDmParticipants(id);
     queueOutboxEvent(messageId, id, 'create', JSON.stringify({
       message: { ...buildRelayPayload(message, message.user), attachments: [] },
+      participants,
     }));
 
     // Resolve embeds asynchronously after responding
@@ -1042,6 +1044,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     appendMutationLog(id, msg.dmChannelId, 'update');
     queueOutboxEvent(id, msg.dmChannelId, 'update', JSON.stringify({
       message: buildRelayPayload(updated, updated.user),
+      participants: getDmParticipants(msg.dmChannelId),
     }));
 
     // Resolve new embeds asynchronously (old ones already deleted above)
