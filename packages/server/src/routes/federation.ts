@@ -10,7 +10,7 @@ import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { canonicalDmPairId, getDmParticipants } from '../utils/federationOutbox.js';
-import { broadcastDmMessage } from './dm.js';
+import { broadcastDmMessage, getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
@@ -1022,7 +1022,10 @@ function processCreateEvent(
     })
     .run();
 
-  // Queue attachment downloads (SSRF-validated)
+  // Create attachment rows and queue file downloads (SSRF-validated).
+  // Attachment rows are created immediately with filename = sourceUrl so the
+  // initial WebSocket broadcast includes working remote URLs. The background
+  // file worker will UPDATE the filename to the local path after download.
   if (event.message.attachments && event.message.attachments.length > 0) {
     const now = Date.now();
     for (const attachment of event.message.attachments) {
@@ -1033,6 +1036,30 @@ function processCreateEvent(
         continue;
       }
 
+      // Create the attachment row with sourceUrl as the interim filename.
+      // AttachmentRenderer already handles filenames starting with 'http' —
+      // it uses them as direct URLs. When the file worker downloads the file,
+      // it updates this row's filename to the local path.
+      const attachmentId = generateSnowflake();
+      db.insert(schema.attachments)
+        .values({
+          id: attachmentId,
+          dmMessageId: localMessageId,
+          uploaderId: null,
+          filename: attachment.sourceUrl,
+          originalName: attachment.originalName,
+          mimetype: attachment.mimetype,
+          size: attachment.size,
+          width: attachment.width ?? null,
+          height: attachment.height ?? null,
+          duration: attachment.duration ?? null,
+          thumbnailFilename: attachment.thumbnailFilename ?? null,
+          sourceUrl: attachment.sourceUrl,
+          createdAt: now,
+        })
+        .run();
+
+      // Queue the background file download
       db.insert(schema.federationFileQueue)
         .values({
           id: generateSnowflake(),
@@ -1051,20 +1078,12 @@ function processCreateEvent(
     }
   }
 
-  // Broadcast to local WebSocket clients
-  const messagePayload = buildDmMessagePayload(
-    {
-      id: localMessageId,
-      dmChannelId: localDmChannelId,
-      userId: authorUser.id,
-      content: event.message.content,
-      replyToId: null,
-      editedAt: null,
-      createdAt: event.message.createdAt,
-    },
-    authorUser,
-  );
-  broadcastDmMessage(localDmChannelId, messagePayload);
+  // Broadcast to local WebSocket clients — use getDmMessageWithUser to pick up
+  // the attachment rows we just created (with remote URLs as filenames)
+  const fullMessage = getDmMessageWithUser(localMessageId);
+  if (fullMessage) {
+    broadcastDmMessage(localDmChannelId, fullMessage);
+  }
 
   accepted.push(event.messageId);
 }
