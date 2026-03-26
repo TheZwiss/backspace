@@ -9,10 +9,10 @@ import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
+import { computeFederatedId, getDmParticipants, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import { AVATAR_COLORS } from '@backspace/shared';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationFriendshipPayload } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -452,6 +452,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
               break;
             case 'ownership_transfer':
               processOwnershipTransferEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'friend_request_create':
+              processFriendRequestCreateEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'friend_request_update':
+              processFriendRequestUpdateEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'friend_request_cancel':
+              processFriendRequestCancelEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'friend_add':
+              processFriendAddEvent(event, sourceInstance, db, accepted, rejected);
+              break;
+            case 'friend_remove':
+              processFriendRemoveEvent(event, sourceInstance, db, accepted, rejected);
               break;
             default:
               rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
@@ -1811,6 +1826,381 @@ function processOwnershipTransferEvent(
     })
     .where(eq(schema.dmChannels.id, channel.id))
     .run();
+
+  accepted.push(event.messageId);
+}
+
+// ─── Friend Event Processors ─────────────────────────────────────────────────
+
+function processFriendRequestCreateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.friendship) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
+    return;
+  }
+
+  const { from, to } = event.friendship;
+
+  // Authority check: the sender's home instance must be the source
+  if (from.homeInstance !== sourceInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Resolve the sender (create stub if needed — they're on a remote instance)
+  const fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+
+  // Resolve the recipient — must be a local user on this instance
+  const toUser = resolveLocalUser(to.homeUserId, db);
+  if (!toUser) {
+    rejected.push({ messageId: event.messageId, reason: 'recipient_not_found' });
+    return;
+  }
+
+  // Idempotency: if already friends, accept as no-op
+  const existingFriend = db
+    .select()
+    .from(schema.friends)
+    .where(
+      or(
+        and(eq(schema.friends.userId, fromUser.id), eq(schema.friends.friendId, toUser.id)),
+        and(eq(schema.friends.userId, toUser.id), eq(schema.friends.friendId, fromUser.id)),
+      ),
+    )
+    .get();
+
+  if (existingFriend) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Idempotency: if a pending request already exists from this sender to this recipient, accept as no-op
+  const existingRequest = db
+    .select()
+    .from(schema.friendRequests)
+    .where(
+      and(
+        eq(schema.friendRequests.fromId, fromUser.id),
+        eq(schema.friendRequests.toId, toUser.id),
+        eq(schema.friendRequests.status, 'pending'),
+      ),
+    )
+    .get();
+
+  if (existingRequest) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Create the friend request
+  const id = generateSnowflake();
+  const now = event.friendship.createdAt || Date.now();
+
+  db.insert(schema.friendRequests)
+    .values({
+      id,
+      fromId: fromUser.id,
+      toId: toUser.id,
+      status: 'pending',
+      createdAt: now,
+    })
+    .run();
+
+  // Broadcast to the recipient
+  connectionManager.sendToUser(toUser.id, {
+    type: 'friend_request_received',
+    request: {
+      id,
+      fromId: fromUser.id,
+      toId: toUser.id,
+      status: 'pending' as const,
+      createdAt: now,
+      user: sanitizeUser(fromUser),
+    },
+  });
+
+  accepted.push(event.messageId);
+}
+
+function processFriendRequestUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.friendship || !event.friendship.status) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
+    return;
+  }
+
+  const { from, to, status } = event.friendship;
+
+  // Authority check: the recipient's instance accepts/declines
+  if (to.homeInstance !== sourceInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Resolve the sender — must be a local user (the one who sent the original request)
+  const fromUser = resolveLocalUser(from.homeUserId, db);
+  if (!fromUser) {
+    rejected.push({ messageId: event.messageId, reason: 'sender_not_found' });
+    return;
+  }
+
+  // Resolve the recipient (create stub if needed — they're on the remote instance)
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+
+  // Find the pending request
+  const pendingRequest = db
+    .select()
+    .from(schema.friendRequests)
+    .where(
+      and(
+        eq(schema.friendRequests.fromId, fromUser.id),
+        eq(schema.friendRequests.toId, toUser.id),
+        eq(schema.friendRequests.status, 'pending'),
+      ),
+    )
+    .get();
+
+  if (!pendingRequest) {
+    // Accept idempotently — friend_add may have arrived first
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Update request status
+  db.update(schema.friendRequests)
+    .set({ status: status as string })
+    .where(eq(schema.friendRequests.id, pendingRequest.id))
+    .run();
+
+  if (status === 'accepted') {
+    const now = event.friendship.createdAt || Date.now();
+    connectionManager.sendToUser(fromUser.id, {
+      type: 'friend_request_accepted',
+      friend: {
+        ...sanitizeUser(toUser),
+        addedAt: now,
+      },
+      requestId: pendingRequest.id,
+    });
+  } else if (status === 'declined') {
+    connectionManager.sendToUser(fromUser.id, {
+      type: 'friend_request_declined',
+      requestId: pendingRequest.id,
+      userId: toUser.id,
+    });
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processFriendRequestCancelEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.friendship) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
+    return;
+  }
+
+  const { from, to } = event.friendship;
+
+  // Authority check: the sender cancels their own request
+  if (from.homeInstance !== sourceInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Resolve both users — must both exist locally for there to be a pending request
+  const fromUser = resolveLocalUser(from.homeUserId, db);
+  const toUser = resolveLocalUser(to.homeUserId, db);
+
+  if (!fromUser || !toUser) {
+    // Accept idempotently — if either user doesn't exist, there's nothing to cancel
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Find the pending request
+  const pendingRequest = db
+    .select()
+    .from(schema.friendRequests)
+    .where(
+      and(
+        eq(schema.friendRequests.fromId, fromUser.id),
+        eq(schema.friendRequests.toId, toUser.id),
+        eq(schema.friendRequests.status, 'pending'),
+      ),
+    )
+    .get();
+
+  if (!pendingRequest) {
+    // Accept idempotently — already cancelled or never existed
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Delete the request
+  db.delete(schema.friendRequests)
+    .where(eq(schema.friendRequests.id, pendingRequest.id))
+    .run();
+
+  // Broadcast to the recipient
+  connectionManager.sendToUser(toUser.id, {
+    type: 'friend_request_cancelled',
+    requestId: pendingRequest.id,
+    userId: fromUser.id,
+  });
+
+  accepted.push(event.messageId);
+}
+
+function processFriendAddEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.friendship) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
+    return;
+  }
+
+  const { from, to } = event.friendship;
+
+  // Authority check: the recipient's instance creates the friendship
+  if (to.homeInstance !== sourceInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Resolve both users (create stubs if needed)
+  const fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+
+  // Idempotency: if friendship already exists, accept as no-op
+  const existingFriend = db
+    .select()
+    .from(schema.friends)
+    .where(
+      or(
+        and(eq(schema.friends.userId, fromUser.id), eq(schema.friends.friendId, toUser.id)),
+        and(eq(schema.friends.userId, toUser.id), eq(schema.friends.friendId, fromUser.id)),
+      ),
+    )
+    .get();
+
+  if (existingFriend) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Insert friendship row
+  const now = event.friendship.createdAt || Date.now();
+  db.insert(schema.friends)
+    .values({
+      userId: fromUser.id,
+      friendId: toUser.id,
+      createdAt: now,
+    })
+    .run();
+
+  // Auto-resolve any pending friend request between these users to 'accepted'
+  // (handles friend_add arriving before friend_request_update)
+  db.update(schema.friendRequests)
+    .set({ status: 'accepted' })
+    .where(
+      and(
+        or(
+          and(eq(schema.friendRequests.fromId, fromUser.id), eq(schema.friendRequests.toId, toUser.id)),
+          and(eq(schema.friendRequests.fromId, toUser.id), eq(schema.friendRequests.toId, fromUser.id)),
+        ),
+        eq(schema.friendRequests.status, 'pending'),
+      ),
+    )
+    .run();
+
+  // Determine which user is local and broadcast to them
+  const ourOrigin = getOurOrigin();
+  const localUser = from.homeInstance === ourOrigin ? fromUser : toUser;
+  const remoteUser = from.homeInstance === ourOrigin ? toUser : fromUser;
+
+  connectionManager.sendToUser(localUser.id, {
+    type: 'friend_request_accepted',
+    friend: {
+      ...sanitizeUser(remoteUser),
+      addedAt: now,
+    },
+    // Use empty string for requestId since the request may not exist locally yet
+    requestId: '',
+  });
+
+  accepted.push(event.messageId);
+}
+
+function processFriendRemoveEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.friendship) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
+    return;
+  }
+
+  const { from, to } = event.friendship;
+
+  // Authority check: either side can unfriend
+  if (from.homeInstance !== sourceInstance && to.homeInstance !== sourceInstance) {
+    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Resolve both users — must both exist locally for there to be a friendship
+  const fromUser = resolveLocalUser(from.homeUserId, db);
+  const toUser = resolveLocalUser(to.homeUserId, db);
+
+  if (!fromUser || !toUser) {
+    // Accept idempotently — if either user doesn't exist locally, nothing to remove
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Delete friendship in both directions
+  db.delete(schema.friends)
+    .where(
+      or(
+        and(eq(schema.friends.userId, fromUser.id), eq(schema.friends.friendId, toUser.id)),
+        and(eq(schema.friends.userId, toUser.id), eq(schema.friends.friendId, fromUser.id)),
+      ),
+    )
+    .run();
+
+  // Determine which user is local (the one whose home instance is NOT the source)
+  // The removing user is on the source instance; broadcast to the other user
+  const ourOrigin = getOurOrigin();
+  const localUser = from.homeInstance === ourOrigin ? fromUser : toUser;
+  const removingUser = from.homeInstance === ourOrigin ? toUser : fromUser;
+
+  connectionManager.sendToUser(localUser.id, {
+    type: 'friend_removed',
+    userId: removingUser.id,
+  });
 
   accepted.push(event.messageId);
 }
