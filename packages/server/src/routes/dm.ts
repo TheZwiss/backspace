@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, or, desc, lt, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -19,7 +19,7 @@ import {
   type Embed,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import {
   appendMutationLog,
@@ -198,7 +198,7 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
 
       const dmChannel = db.select()
         .from(schema.dmChannels)
-        .where(eq(schema.dmChannels.id, dmChannelId))
+        .where(and(eq(schema.dmChannels.id, dmChannelId), isNull(schema.dmChannels.deletedAt)))
         .get();
 
       if (dmChannel) {
@@ -243,9 +243,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     const dmChannelIds = memberships.map(m => m.dmChannelId);
 
-    // Batch fetch all DM channels
+    // Batch fetch all DM channels (exclude soft-deleted)
     const channelRows = db.select().from(schema.dmChannels)
-      .where(inArray(schema.dmChannels.id, dmChannelIds)).all();
+      .where(and(inArray(schema.dmChannels.id, dmChannelIds), isNull(schema.dmChannels.deletedAt))).all();
     const channelMap = new Map(channelRows.map(c => [c.id, c]));
 
     // Batch fetch all DM members
@@ -383,10 +383,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .length;
         if (memberCount !== 2) continue;
 
-        // DM channel already exists between these users
+        // DM channel already exists between these users (exclude soft-deleted)
         const dmChannel = db.select()
           .from(schema.dmChannels)
-          .where(eq(schema.dmChannels.id, myDm.dmChannelId))
+          .where(and(eq(schema.dmChannels.id, myDm.dmChannelId), isNull(schema.dmChannels.deletedAt)))
           .get();
 
         if (!dmChannel) continue;
@@ -538,7 +538,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Enforce DM channel ownership: only the owner can add members (for new-style group DMs)
-    let dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+    let dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
     if (!dmChannel) {
       return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
     }
@@ -795,7 +795,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Check DM channel ownership before leaving
-    const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+    const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
 
     // Compute federation targets BEFORE member deletion so the leaving user's peer is included
     let fedTargetOrigins: string[] | undefined;
@@ -932,37 +932,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         });
       }
     } else {
-      // Last member left — clean up the entire DM channel
-      // Collect attachment filenames for disk cleanup
-      const msgIds = db.select({ id: schema.dmMessages.id })
-        .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, id))
-        .all()
-        .map(m => m.id);
-
-      const filesToDelete: { filename: string }[] = [];
-      if (msgIds.length > 0) {
-        const attachmentRows = db.select({ filename: schema.attachments.filename })
-          .from(schema.attachments)
-          .where(inArray(schema.attachments.dmMessageId, msgIds))
-          .all();
-        filesToDelete.push(...attachmentRows);
-
-        // Delete attachments and reactions before cascade
-        db.transaction((tx) => {
-          tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
-          tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
-        });
-      }
-
-      // Clean up all read_states for this DM channel (all members' rows)
-      db.delete(schema.readStates).where(eq(schema.readStates.channelId, id)).run();
-
-      // Delete the DM channel (cascades to dm_messages)
-      db.delete(schema.dmChannels).where(eq(schema.dmChannels.id, id)).run();
-
-      // Clean up files from disk
-      deleteAttachmentFiles(filesToDelete);
+      // Last member left — soft-delete for deferred GC (24h grace period)
+      db.update(schema.dmChannels)
+        .set({ deletedAt: Date.now() })
+        .where(eq(schema.dmChannels.id, id))
+        .run();
+      console.log(`[dm] Group DM ${id} has no remaining members, soft-deleted for GC`);
     }
 
     // Send dm_channel_closed to the leaving user

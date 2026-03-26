@@ -3,6 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and, lte, asc, inArray } from 'drizzle-orm';
 import { config } from '../config.js';
 import { isFederationRelayEnabled } from './federationOutbox.js';
+import { runFederationJanitor } from './storageJanitor.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
@@ -20,6 +21,7 @@ import { Readable } from 'node:stream';
 const OUTBOX_INTERVAL_MS = 10_000;        // 10 seconds
 const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
 const HEALTH_CHECK_INTERVAL_MS = 3_600_000; // 1 hour
+const JANITOR_INTERVAL_MS = 3_600_000;     // 1 hour
 
 const OUTBOX_BATCH_LIMIT = 50;
 const FILE_QUEUE_BATCH_LIMIT = 5;
@@ -47,6 +49,7 @@ const PEER_UNREACHABLE_THRESHOLD = 10;
 let outboxTimer: ReturnType<typeof setTimeout> | null = null;
 let fileQueueTimer: ReturnType<typeof setTimeout> | null = null;
 let healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let janitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 let outboxAbortController: AbortController | null = null;
 let fileQueueAbortController: AbortController | null = null;
@@ -595,6 +598,15 @@ async function processHealthCheckTick(): Promise<void> {
   }
 }
 
+// ─── Janitor Worker ──────────────────────────────────────────────────────────
+
+function scheduleJanitorTick(): void {
+  janitorTimer = setTimeout(() => {
+    runFederationJanitor();
+    scheduleJanitorTick();
+  }, JANITOR_INTERVAL_MS);
+}
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 /**
@@ -690,6 +702,7 @@ export function startFederationWorkers(): void {
   scheduleOutboxTick();
   scheduleFileQueueTick();
   scheduleHealthCheckTick();
+  scheduleJanitorTick();
   // Run initial sync for newly peered instances (async, non-blocking)
   runInitialSyncForNewPeers().catch((err) => {
     console.error('[federation-worker] Initial sync error:', err);
@@ -708,6 +721,11 @@ export function stopFederationWorkers(): void {
   if (healthCheckTimer) {
     clearTimeout(healthCheckTimer);
     healthCheckTimer = null;
+  }
+
+  if (janitorTimer) {
+    clearTimeout(janitorTimer);
+    janitorTimer = null;
   }
 
   outboxAbortController?.abort();

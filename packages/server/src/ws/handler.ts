@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, and, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, isNull, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
@@ -1050,10 +1050,10 @@ function buildReadyPayload(userId: string): {
   const dmChannels: DmChannel[] = [];
 
   if (dmChannelIds.length > 0) {
-    // Batch: all DM channels (1 query)
+    // Batch: all DM channels (1 query, exclude soft-deleted)
     const allDmChannelRows = batchInArray(
       dmChannelIds,
-      ids => db.select().from(schema.dmChannels).where(inArray(schema.dmChannels.id, ids)).all(),
+      ids => db.select().from(schema.dmChannels).where(and(inArray(schema.dmChannels.id, ids), isNull(schema.dmChannels.deletedAt))).all(),
     );
     const dmChannelMap = new Map(allDmChannelRows.map(c => [c.id, c]));
 

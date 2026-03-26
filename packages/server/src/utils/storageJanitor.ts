@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import { and, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
-import { deleteUploadFile } from './fileCleanup.js';
+import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -429,4 +429,143 @@ export function cleanupFederationFileQueue(): number {
     .run();
 
   return completed.changes + expired.changes;
+}
+
+/**
+ * Hard-delete DM channels that were soft-deleted more than 24 hours ago.
+ * Cascades: reactions, embeds, attachments (files + DB rows), messages,
+ * members, outbox entries, mutation log entries, file queue entries, then the channel.
+ * Returns the number of channels purged.
+ */
+export function cleanupSoftDeletedDmChannels(): number {
+  const db = getDb();
+  const gracePeriodMs = 24 * 60 * 60 * 1000; // 24 hours
+  const cutoff = Date.now() - gracePeriodMs;
+
+  const expired = db
+    .select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(
+      and(
+        isNotNull(schema.dmChannels.deletedAt),
+        lt(schema.dmChannels.deletedAt, cutoff),
+      ),
+    )
+    .all();
+
+  if (expired.length === 0) return 0;
+
+  let purged = 0;
+
+  for (const channel of expired) {
+    try {
+      // Get message IDs and attachment filenames before deletion
+      const msgIds = db.select({ id: schema.dmMessages.id })
+        .from(schema.dmMessages)
+        .where(eq(schema.dmMessages.dmChannelId, channel.id))
+        .all()
+        .map(m => m.id);
+
+      const filesToDelete: string[] = [];
+      if (msgIds.length > 0) {
+        const attachments = db.select({ filename: schema.attachments.filename })
+          .from(schema.attachments)
+          .where(inArray(schema.attachments.dmMessageId, msgIds))
+          .all();
+        filesToDelete.push(...attachments.map(a => a.filename));
+      }
+
+      db.transaction((tx) => {
+        if (msgIds.length > 0) {
+          // Delete reactions
+          tx.delete(schema.dmReactions)
+            .where(inArray(schema.dmReactions.dmMessageId, msgIds))
+            .run();
+
+          // Delete embeds
+          tx.delete(schema.embeds)
+            .where(inArray(schema.embeds.dmMessageId, msgIds))
+            .run();
+
+          // Delete attachments (DB rows)
+          tx.delete(schema.attachments)
+            .where(inArray(schema.attachments.dmMessageId, msgIds))
+            .run();
+
+          // Delete file queue entries
+          tx.delete(schema.federationFileQueue)
+            .where(inArray(schema.federationFileQueue.dmMessageId, msgIds))
+            .run();
+        }
+
+        // Delete messages
+        tx.delete(schema.dmMessages)
+          .where(eq(schema.dmMessages.dmChannelId, channel.id))
+          .run();
+
+        // Delete members (should be 0, defensive)
+        tx.delete(schema.dmMembers)
+          .where(eq(schema.dmMembers.dmChannelId, channel.id))
+          .run();
+
+        // Delete read states
+        tx.delete(schema.readStates)
+          .where(eq(schema.readStates.channelId, channel.id))
+          .run();
+
+        // Delete federation outbox entries
+        tx.delete(schema.federationOutbox)
+          .where(eq(schema.federationOutbox.dmChannelId, channel.id))
+          .run();
+
+        // Delete mutation log entries
+        tx.delete(schema.federationMutationLog)
+          .where(eq(schema.federationMutationLog.dmChannelId, channel.id))
+          .run();
+
+        // Delete the channel itself
+        tx.delete(schema.dmChannels)
+          .where(eq(schema.dmChannels.id, channel.id))
+          .run();
+      });
+
+      // Clean up files from disk (outside transaction — filesystem ops are idempotent)
+      deleteAttachmentFiles(filesToDelete.map(f => ({ filename: f })));
+
+      purged++;
+    } catch (err) {
+      console.error(`[storage-janitor] Failed to purge soft-deleted DM channel ${channel.id}:`, err);
+    }
+  }
+
+  if (purged > 0) {
+    console.log(`[storage-janitor] Purged ${purged} soft-deleted DM channels`);
+  }
+
+  return purged;
+}
+
+/**
+ * Run all periodic federation/GC cleanup tasks:
+ *  - Expired outbox entries
+ *  - Old mutation log entries
+ *  - Stale file queue entries
+ *  - Soft-deleted DM channels past grace period
+ */
+export function runFederationJanitor(): void {
+  try {
+    const outbox = cleanupFederationOutbox();
+    const mutLog = cleanupFederationMutationLog();
+    const fileQ = cleanupFederationFileQueue();
+    const dmGc = cleanupSoftDeletedDmChannels();
+
+    const total = outbox + mutLog + fileQ + dmGc;
+    if (total > 0) {
+      console.log(
+        `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc}`,
+      );
+    }
+  } catch (err) {
+    console.error('[storage-janitor] Federation GC sweep error:', err);
+  }
 }
