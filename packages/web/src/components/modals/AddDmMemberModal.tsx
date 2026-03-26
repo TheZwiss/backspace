@@ -18,6 +18,7 @@ export function AddDmMemberModal() {
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
+  const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const navigate = useNavigate();
   const myUserId = useAuthStore((s) => s.user?.id);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -74,8 +75,12 @@ export function AddDmMemberModal() {
       if (!dmChannel.ownerId) {
         // 1-on-1 DM → create a new group DM with all 3 users
         const otherMember = dmChannel.members.find(m => m.id !== myUserId);
-        if (!otherMember) return;
+        if (!otherMember) {
+          setError('Could not determine the other member of this conversation.');
+          return;
+        }
         const newChannel = await api.dm.createGroup({ userIds: [otherMember.id, user.id] });
+        addDmChannel(newChannel);
         closeModal();
         navigate(`/channels/@me/${newChannel.id}`);
       } else {
