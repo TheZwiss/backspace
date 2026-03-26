@@ -321,8 +321,9 @@ export const federationPeers = sqliteTable('federation_peers', {
 export const federationOutbox = sqliteTable('federation_outbox', {
   id: text('id').primaryKey(),
   peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
-  dmChannelId: text('dm_channel_id').notNull(),
-  messageId: text('message_id').notNull(),
+  contextId: text('context_id').notNull(),
+  entityId: text('entity_id').notNull(),
+  contextType: text('context_type').notNull().default('dm'),
   eventType: text('event_type').notNull(),
   payload: text('payload').notNull(),
   encryptionVersion: integer('encryption_version').default(0),
@@ -331,7 +332,7 @@ export const federationOutbox = sqliteTable('federation_outbox', {
   expiresAt: integer('expires_at').notNull(),
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
-  uniquePerPeerMessage: unique().on(table.peerId, table.messageId),
+  uniquePerPeerMessage: unique().on(table.peerId, table.entityId),
 }));
 
 export const federationFileQueue = sqliteTable('federation_file_queue', {
@@ -353,8 +354,9 @@ export const federationFileQueue = sqliteTable('federation_file_queue', {
 
 export const federationMutationLog = sqliteTable('federation_mutation_log', {
   id: text('id').primaryKey(),
-  dmMessageId: text('dm_message_id').notNull(),
-  dmChannelId: text('dm_channel_id').notNull(),
+  entityId: text('entity_id').notNull(),
+  contextId: text('context_id').notNull(),
+  contextType: text('context_type').notNull().default('dm'),
   mutationType: text('mutation_type').notNull(),
   mutatedAt: integer('mutated_at').notNull(),
   payload: text('payload'),

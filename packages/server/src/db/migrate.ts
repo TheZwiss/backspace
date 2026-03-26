@@ -332,8 +332,9 @@ export function runMigrations(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS federation_outbox (
       id TEXT PRIMARY KEY,
       peer_id TEXT NOT NULL REFERENCES federation_peers(id) ON DELETE CASCADE,
-      dm_channel_id TEXT NOT NULL,
-      message_id TEXT NOT NULL,
+      context_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      context_type TEXT NOT NULL DEFAULT 'dm',
       event_type TEXT NOT NULL,
       payload TEXT NOT NULL,
       encryption_version INTEGER DEFAULT 0,
@@ -341,7 +342,7 @@ export function runMigrations(db: Database.Database): void {
       next_retry_at INTEGER NOT NULL,
       expires_at INTEGER NOT NULL,
       created_at INTEGER NOT NULL,
-      UNIQUE(peer_id, message_id)
+      UNIQUE(peer_id, entity_id)
     );
   `);
 
@@ -367,8 +368,9 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS federation_mutation_log (
       id TEXT PRIMARY KEY,
-      dm_message_id TEXT NOT NULL,
-      dm_channel_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      context_id TEXT NOT NULL,
+      context_type TEXT NOT NULL DEFAULT 'dm',
       mutation_type TEXT NOT NULL,
       mutated_at INTEGER NOT NULL,
       payload TEXT
@@ -596,8 +598,8 @@ export function runMigrations(db: Database.Database): void {
       const count = (db.prepare('SELECT COUNT(*) as c FROM federation_mutation_log').get() as { c: number }).c;
       if (count === 0) {
         const result = db.prepare(`
-          INSERT OR IGNORE INTO federation_mutation_log (id, dm_message_id, dm_channel_id, mutation_type, mutated_at)
-          SELECT id, id, dm_channel_id, 'create', created_at
+          INSERT OR IGNORE INTO federation_mutation_log (id, entity_id, context_id, context_type, mutation_type, mutated_at)
+          SELECT id, id, dm_channel_id, 'dm', 'create', created_at
           FROM dm_messages
           WHERE source_instance IS NULL
         `).run();
@@ -611,6 +613,8 @@ export function runMigrations(db: Database.Database): void {
   }
 
   migrateResetFederationSyncForLegacyDms(db);
+
+  migrateGeneralizeOutbox(db);
 
   console.log('Migrations complete.');
 }
@@ -1620,5 +1624,89 @@ function migrateResetFederationSyncForLegacyDms(db: Database.Database): void {
     db.prepare('UPDATE instance_settings SET legacy_dm_sync_done = 1 WHERE id = 1').run();
   } catch (err) {
     console.error('migrateResetFederationSyncForLegacyDms failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Generalize federation_outbox and federation_mutation_log column names.
+ * Renames dm_channel_id → context_id, message_id → entity_id in federation_outbox,
+ * and dm_message_id → entity_id, dm_channel_id → context_id in federation_mutation_log.
+ * Adds context_type = 'dm' for all existing rows.
+ */
+function migrateGeneralizeOutbox(db: Database.Database): void {
+  // --- federation_outbox ---
+  const outboxCols = db.prepare(`PRAGMA table_info(federation_outbox)`).all() as Array<{ name: string }>;
+  const outboxColNames = new Set(outboxCols.map(c => c.name));
+
+  if (outboxColNames.has('context_id')) {
+    if (!outboxColNames.has('context_type')) {
+      db.exec(`ALTER TABLE federation_outbox ADD COLUMN context_type TEXT NOT NULL DEFAULT 'dm'`);
+    }
+  } else if (outboxColNames.has('dm_channel_id')) {
+    console.log('Migrating: Generalizing federation_outbox columns (dm_channel_id → context_id, message_id → entity_id)...');
+    db.exec(`PRAGMA foreign_keys = OFF`);
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE federation_outbox_new (
+            id TEXT PRIMARY KEY,
+            peer_id TEXT NOT NULL REFERENCES federation_peers(id) ON DELETE CASCADE,
+            context_id TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            context_type TEXT NOT NULL DEFAULT 'dm',
+            event_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            encryption_version INTEGER DEFAULT 0,
+            attempts INTEGER DEFAULT 0,
+            next_retry_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(peer_id, entity_id)
+          );
+          INSERT INTO federation_outbox_new (id, peer_id, context_id, entity_id, context_type, event_type, payload, encryption_version, attempts, next_retry_at, expires_at, created_at)
+            SELECT id, peer_id, dm_channel_id, message_id, 'dm', event_type, payload, encryption_version, attempts, next_retry_at, expires_at, created_at
+            FROM federation_outbox;
+          DROP TABLE federation_outbox;
+          ALTER TABLE federation_outbox_new RENAME TO federation_outbox;
+        `);
+      })();
+    } finally {
+      db.exec(`PRAGMA foreign_keys = ON`);
+    }
+  }
+
+  // --- federation_mutation_log ---
+  const logCols = db.prepare(`PRAGMA table_info(federation_mutation_log)`).all() as Array<{ name: string }>;
+  const logColNames = new Set(logCols.map(c => c.name));
+
+  if (logColNames.has('entity_id')) {
+    if (!logColNames.has('context_type')) {
+      db.exec(`ALTER TABLE federation_mutation_log ADD COLUMN context_type TEXT NOT NULL DEFAULT 'dm'`);
+    }
+  } else if (logColNames.has('dm_message_id')) {
+    console.log('Migrating: Generalizing federation_mutation_log columns (dm_message_id → entity_id, dm_channel_id → context_id)...');
+    db.exec(`PRAGMA foreign_keys = OFF`);
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE federation_mutation_log_new (
+            id TEXT PRIMARY KEY,
+            entity_id TEXT NOT NULL,
+            context_id TEXT NOT NULL,
+            context_type TEXT NOT NULL DEFAULT 'dm',
+            mutation_type TEXT NOT NULL,
+            mutated_at INTEGER NOT NULL,
+            payload TEXT
+          );
+          INSERT INTO federation_mutation_log_new (id, entity_id, context_id, context_type, mutation_type, mutated_at, payload)
+            SELECT id, dm_message_id, dm_channel_id, 'dm', mutation_type, mutated_at, payload
+            FROM federation_mutation_log;
+          DROP TABLE federation_mutation_log;
+          ALTER TABLE federation_mutation_log_new RENAME TO federation_mutation_log;
+        `);
+      })();
+    } finally {
+      db.exec(`PRAGMA foreign_keys = ON`);
+    }
   }
 }
