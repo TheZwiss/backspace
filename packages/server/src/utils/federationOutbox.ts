@@ -3,7 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent, FederationRelayParticipant } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser } from '@backspace/shared';
 import { config } from '../config.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
@@ -238,8 +238,50 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
 }
 
 /**
+ * Queue a DM message for federation relay to all active peers.
+ * Builds the complete relay payload including attachments with sourceUrl
+ * and participant identities. Single source of truth for relay payload
+ * construction — all create/update relay hooks call this function.
+ *
+ * Accepts the already-fetched DmMessageWithUser to avoid redundant DB queries
+ * and transaction timing issues — the caller has already committed writes and
+ * fetched the message for the WebSocket broadcast.
+ */
+export function queueDmRelay(
+  message: DmMessageWithUser,
+  dmChannelId: string,
+  eventType: 'create' | 'update',
+): void {
+  const domainOrigin = config.domain ? `https://${config.domain}` : `http://localhost:${config.port}`;
+
+  const attachments: FederationRelayAttachment[] = (message.attachments ?? []).map(a => ({
+    id: a.id,
+    filename: a.filename,
+    originalName: a.originalName,
+    mimetype: a.mimetype,
+    size: a.size,
+    width: a.width ?? undefined,
+    height: a.height ?? undefined,
+    duration: a.duration ?? undefined,
+    thumbnailFilename: a.thumbnailFilename ?? undefined,
+    sourceUrl: `${domainOrigin}/api/uploads/${a.filename}`,
+  }));
+
+  const participants = getDmParticipants(dmChannelId);
+
+  appendMutationLog(message.id, dmChannelId, eventType);
+  queueOutboxEvent(message.id, dmChannelId, eventType, JSON.stringify({
+    message: {
+      ...buildRelayPayload(message, message.user),
+      attachments: attachments.length > 0 ? attachments : undefined,
+    },
+    participants,
+  }));
+}
+
+/**
  * Build the relay payload object for a DM message.
- * The caller may augment the returned object with attachments before serialization.
+ * Used internally by queueDmRelay and the sync endpoint.
  */
 export function buildRelayPayload(
   message: {
