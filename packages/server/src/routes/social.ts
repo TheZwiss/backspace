@@ -4,6 +4,9 @@ import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
+import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
+import { getOurOrigin } from '../utils/federationAuth.js';
+import type { FederationRelayEvent } from '@backspace/shared';
 import type {
   Friend,
   FriendRequest,
@@ -171,6 +174,42 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       request: friendRequestPayload,
     });
 
+    // Federation relay: notify the target user's home instance
+    const domainOrigin = getOurOrigin();
+
+    const fromIdentity = {
+      homeUserId: senderUser?.homeUserId || request.userId,
+      homeInstance: senderUser?.homeInstance || domainOrigin,
+    };
+    const toIdentity = {
+      homeUserId: targetUser.homeUserId || targetUser.id,
+      homeInstance: targetUser.homeInstance || domainOrigin,
+    };
+
+    const targets = getFriendEventTargets(fromIdentity.homeInstance, toIdentity.homeInstance);
+    if (targets.length > 0) {
+      const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
+      const entityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now}`;
+
+      const payload: FederationRelayEvent = {
+        eventType: 'friend_request_create',
+        contextType: 'friend',
+        messageId: entityId,
+        encryptionVersion: 0,
+        timestamp: now,
+        friendship: {
+          from: fromIdentity,
+          to: toIdentity,
+          status: 'pending',
+          createdAt: now,
+        },
+      };
+
+      const payloadStr = JSON.stringify(payload);
+      appendMutationLog(entityId, contextId, 'friend_request_create', payloadStr, 'friend');
+      queueOutboxEvent(entityId, contextId, 'friend_request_create', payloadStr, targets, 'friend');
+    }
+
     return reply.code(201).send({ success: true, requestId: id });
   });
 
@@ -239,6 +278,68 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Federation relay: notify the other user's home instance
+    const domainOrigin = getOurOrigin();
+
+    const fromUser = db.select().from(schema.users).where(eq(schema.users.id, friendRequest.fromId)).get();
+    const toUser = db.select().from(schema.users).where(eq(schema.users.id, friendRequest.toId)).get();
+
+    if (fromUser && toUser) {
+      const fromIdentity = {
+        homeUserId: fromUser.homeUserId || fromUser.id,
+        homeInstance: fromUser.homeInstance || domainOrigin,
+      };
+      const toIdentity = {
+        homeUserId: toUser.homeUserId || toUser.id,
+        homeInstance: toUser.homeInstance || domainOrigin,
+      };
+
+      const targets = getFriendEventTargets(fromIdentity.homeInstance, toIdentity.homeInstance);
+      if (targets.length > 0) {
+        const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
+        const now2 = Date.now();
+
+        // Relay request status update
+        const updateEntityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now2}`;
+        const updatePayload: FederationRelayEvent = {
+          eventType: 'friend_request_update',
+          contextType: 'friend',
+          messageId: updateEntityId,
+          encryptionVersion: 0,
+          timestamp: now2,
+          friendship: {
+            from: fromIdentity,
+            to: toIdentity,
+            status: status as 'accepted' | 'declined',
+            createdAt: friendRequest.createdAt,
+          },
+        };
+        const updateStr = JSON.stringify(updatePayload);
+        appendMutationLog(updateEntityId, contextId, 'friend_request_update', updateStr, 'friend');
+        queueOutboxEvent(updateEntityId, contextId, 'friend_request_update', updateStr, targets, 'friend');
+
+        // If accepted, also relay friend_add
+        if (status === 'accepted') {
+          const addEntityId = `friend:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now2}`;
+          const addPayload: FederationRelayEvent = {
+            eventType: 'friend_add',
+            contextType: 'friend',
+            messageId: addEntityId,
+            encryptionVersion: 0,
+            timestamp: now2,
+            friendship: {
+              from: fromIdentity,
+              to: toIdentity,
+              createdAt: now2,
+            },
+          };
+          const addStr = JSON.stringify(addPayload);
+          appendMutationLog(addEntityId, contextId, 'friend_add', addStr, 'friend');
+          queueOutboxEvent(addEntityId, contextId, 'friend_add', addStr, targets, 'friend');
+        }
+      }
+    }
+
     return reply.code(200).send({ success: true });
   });
 
@@ -274,6 +375,45 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       userId: request.userId,
     });
 
+    // Federation relay: notify the recipient's home instance
+    const domainOrigin = getOurOrigin();
+    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    const recipientUser = db.select().from(schema.users).where(eq(schema.users.id, friendRequest.toId)).get();
+
+    if (callerUser && recipientUser) {
+      const fromIdentity = {
+        homeUserId: callerUser.homeUserId || callerUser.id,
+        homeInstance: callerUser.homeInstance || domainOrigin,
+      };
+      const toIdentity = {
+        homeUserId: recipientUser.homeUserId || recipientUser.id,
+        homeInstance: recipientUser.homeInstance || domainOrigin,
+      };
+
+      const targets = getFriendEventTargets(fromIdentity.homeInstance, toIdentity.homeInstance);
+      if (targets.length > 0) {
+        const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
+        const now = Date.now();
+        const entityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now}`;
+
+        const payload: FederationRelayEvent = {
+          eventType: 'friend_request_cancel',
+          contextType: 'friend',
+          messageId: entityId,
+          encryptionVersion: 0,
+          timestamp: now,
+          friendship: {
+            from: fromIdentity,
+            to: toIdentity,
+            createdAt: friendRequest.createdAt,
+          },
+        };
+        const payloadStr = JSON.stringify(payload);
+        appendMutationLog(entityId, contextId, 'friend_request_cancel', payloadStr, 'friend');
+        queueOutboxEvent(entityId, contextId, 'friend_request_cancel', payloadStr, targets, 'friend');
+      }
+    }
+
     return reply.code(200).send({ success: true });
   });
 
@@ -304,6 +444,45 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
       type: 'friend_removed',
       userId: request.userId,
     });
+
+    // Federation relay: notify the other user's home instance
+    const domainOrigin = getOurOrigin();
+    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    const otherUser = db.select().from(schema.users).where(eq(schema.users.id, id)).get();
+
+    if (callerUser && otherUser) {
+      const callerIdentity = {
+        homeUserId: callerUser.homeUserId || callerUser.id,
+        homeInstance: callerUser.homeInstance || domainOrigin,
+      };
+      const otherIdentity = {
+        homeUserId: otherUser.homeUserId || otherUser.id,
+        homeInstance: otherUser.homeInstance || domainOrigin,
+      };
+
+      const targets = getFriendEventTargets(callerIdentity.homeInstance, otherIdentity.homeInstance);
+      if (targets.length > 0) {
+        const contextId = buildFriendContextId(callerIdentity.homeUserId, otherIdentity.homeUserId);
+        const now = Date.now();
+        const entityId = `friend:${[callerIdentity.homeUserId, otherIdentity.homeUserId].sort().join(':')}:${now}`;
+
+        const payload: FederationRelayEvent = {
+          eventType: 'friend_remove',
+          contextType: 'friend',
+          messageId: entityId,
+          encryptionVersion: 0,
+          timestamp: now,
+          friendship: {
+            from: callerIdentity,
+            to: otherIdentity,
+            createdAt: now,
+          },
+        };
+        const payloadStr = JSON.stringify(payload);
+        appendMutationLog(entityId, contextId, 'friend_remove', payloadStr, 'friend');
+        queueOutboxEvent(entityId, contextId, 'friend_remove', payloadStr, targets, 'friend');
+      }
+    }
 
     return reply.code(200).send({ success: true });
   });
