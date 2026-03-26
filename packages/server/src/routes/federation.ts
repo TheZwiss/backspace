@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { eq, and, or, isNull } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
-import { generateHmacSecret, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
+import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
@@ -1259,6 +1259,44 @@ function processDeleteEvent(
   accepted.push(event.messageId);
 }
 
+/**
+ * Resolve a local DM message from a federation relay event's canonical identity.
+ * Uses messageHomeInstance to branch the lookup:
+ * - If the message originated on THIS instance → find by local ID
+ * - Otherwise → find by sourceInstance + sourceMessageId tracking
+ * Falls back to relay sender origin when messageHomeInstance is absent (backward compat).
+ */
+function resolveLocalDmMessage(
+  canonicalMessageId: string,
+  messageHomeInstance: string | undefined,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+): typeof schema.dmMessages.$inferSelect | undefined {
+  if (messageHomeInstance && messageHomeInstance === getOurOrigin()) {
+    return db
+      .select()
+      .from(schema.dmMessages)
+      .where(
+        and(
+          eq(schema.dmMessages.id, canonicalMessageId),
+          isNull(schema.dmMessages.sourceInstance),
+        ),
+      )
+      .get();
+  }
+  const originInstance = messageHomeInstance || sourceInstance;
+  return db
+    .select()
+    .from(schema.dmMessages)
+    .where(
+      and(
+        eq(schema.dmMessages.sourceInstance, originInstance),
+        eq(schema.dmMessages.sourceMessageId, canonicalMessageId),
+      ),
+    )
+    .get();
+}
+
 function processReactionAddEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -1271,19 +1309,13 @@ function processReactionAddEvent(
     return;
   }
 
-  // Find the local message — use the actual message ID from the reaction payload,
-  // not event.messageId which is the outbox dedup key (reactionId)
-  const sourceMessageId = event.reaction.messageId ?? event.messageId;
-  const localMsg = db
-    .select()
-    .from(schema.dmMessages)
-    .where(
-      and(
-        eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, sourceMessageId),
-      ),
-    )
-    .get();
+  const canonicalMessageId = event.reaction.messageId ?? event.messageId;
+  const localMsg = resolveLocalDmMessage(
+    canonicalMessageId,
+    event.reaction.messageHomeInstance,
+    sourceInstance,
+    db,
+  );
 
   if (!localMsg) {
     rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
@@ -1358,19 +1390,13 @@ function processReactionRemoveEvent(
     return;
   }
 
-  // Find the local message — use the actual message ID from the reaction payload,
-  // not event.messageId which is the outbox dedup key (composite string)
-  const sourceMessageId = event.reaction.messageId ?? event.messageId;
-  const localMsg = db
-    .select()
-    .from(schema.dmMessages)
-    .where(
-      and(
-        eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, sourceMessageId),
-      ),
-    )
-    .get();
+  const canonicalMessageId = event.reaction.messageId ?? event.messageId;
+  const localMsg = resolveLocalDmMessage(
+    canonicalMessageId,
+    event.reaction.messageHomeInstance,
+    sourceInstance,
+    db,
+  );
 
   if (!localMsg) {
     rejected.push({ messageId: event.messageId, reason: 'unknown_message' });
