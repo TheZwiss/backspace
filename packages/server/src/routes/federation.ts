@@ -11,6 +11,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
+import { AVATAR_COLORS } from '@backspace/shared';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
@@ -856,6 +857,80 @@ function resolveLocalUser(
 }
 
 /**
+ * Resolve a federated participant to a local user, creating a minimal
+ * replicated user stub if one doesn't already exist.  This is needed
+ * for the group-DM bootstrap path: when Instance C receives a
+ * member_add event whose roster includes users that only live on
+ * Instance A or B, those users won't have been pre-replicated via the
+ * friend-connect flow.  We create a bare-bones row so the local DB
+ * can reference them in dm_members / dm_messages.
+ */
+function resolveOrCreateReplicatedUser(
+  homeUserId: string,
+  homeInstance: string,
+  db: ReturnType<typeof getDb>,
+): typeof schema.users.$inferSelect {
+  const existing = resolveLocalUser(homeUserId, db);
+  if (existing) return existing;
+
+  // Build a username@domain identifier.  Extract the domain from the
+  // homeInstance URL (strip protocol) so it matches the convention used
+  // by the normal replicated-user registration path.
+  let domain: string;
+  try {
+    domain = new URL(homeInstance).hostname;
+  } catch {
+    // Fallback: strip protocol manually
+    domain = homeInstance.replace(/^https?:\/\//, '').split('/')[0] ?? homeInstance;
+  }
+
+  // Use the snowflake-style homeUserId as the local part; append the
+  // domain so the username is globally unique and human-readable.
+  const baseUsername = `${homeUserId}@${domain}`.toLowerCase();
+
+  // Guard against the (unlikely) case where this username already
+  // exists — e.g. a prior partial replication or manual creation.
+  let username = baseUsername;
+  let collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+  let attempt = 0;
+  while (collision) {
+    attempt++;
+    username = `${homeUserId}_${attempt}@${domain}`.toLowerCase();
+    collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+    if (attempt > 10) {
+      // Extremely unlikely; use a random suffix to break out
+      username = `${homeUserId}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
+      break;
+    }
+  }
+
+  const userId = generateSnowflake();
+  const now = Date.now();
+  const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
+
+  db.insert(schema.users).values({
+    id: userId,
+    username,
+    displayName: null,
+    passwordHash: '!federation-replicated',  // Cannot be used to log in (bcrypt never produces this)
+    status: 'offline',
+    isAdmin: 0,
+    homeInstance,
+    homeUserId,
+    avatarColor,
+    createdAt: now,
+  }).run();
+
+  const created = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (!created) {
+    throw new Error(`Failed to create replicated user for homeUserId=${homeUserId}`);
+  }
+
+  console.log(`[federation] Auto-created replicated user ${userId} (${username}) for homeUserId=${homeUserId} from ${homeInstance}`);
+  return created;
+}
+
+/**
  * Find or create a local DM channel for a federated DM.
  * Uses federated_id for deterministic cross-instance lookup.
  */
@@ -1518,11 +1593,11 @@ function processMemberAddEvent(
     const channelId = generateSnowflake();
     const now = Date.now();
 
-    // Resolve owner
+    // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveLocalUser(event.group.owner.homeUserId, db);
-      ownerId = ownerLocal?.id ?? null;
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db);
+      ownerId = ownerLocal.id;
     }
 
     db.insert(schema.dmChannels)
@@ -1536,22 +1611,21 @@ function processMemberAddEvent(
       })
       .run();
 
-    // Add all roster members
+    // Add all roster members — create replicated user stubs for any
+    // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const localUser = resolveLocalUser(member.homeUserId, db);
-      if (localUser) {
-        const existing = db.select().from(schema.dmMembers)
-          .where(and(
-            eq(schema.dmMembers.dmChannelId, channelId),
-            eq(schema.dmMembers.userId, localUser.id),
-          )).get();
-        if (!existing) {
-          db.insert(schema.dmMembers).values({
-            dmChannelId: channelId,
-            userId: localUser.id,
-            closed: 0,
-          }).run();
-        }
+      const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db);
+      const existing = db.select().from(schema.dmMembers)
+        .where(and(
+          eq(schema.dmMembers.dmChannelId, channelId),
+          eq(schema.dmMembers.userId, localUser.id),
+        )).get();
+      if (!existing) {
+        db.insert(schema.dmMembers).values({
+          dmChannelId: channelId,
+          userId: localUser.id,
+          closed: 0,
+        }).run();
       }
     }
 
@@ -1574,12 +1648,12 @@ function processMemberAddEvent(
       .run();
   }
 
-  // Resolve the added user
-  const localUser = resolveLocalUser(event.membership.user.homeUserId, db);
-  if (!localUser) {
-    rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
-    return;
-  }
+  // Resolve the added user — create a replicated stub if unknown
+  const localUser = resolveOrCreateReplicatedUser(
+    event.membership.user.homeUserId,
+    event.membership.user.homeInstance,
+    db,
+  );
 
   // Enforce max 10 members
   const memberCount = db.select()
