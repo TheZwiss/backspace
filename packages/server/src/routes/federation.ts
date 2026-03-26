@@ -10,7 +10,7 @@ import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { canonicalDmPairId, getDmParticipants } from '../utils/federationOutbox.js';
-import { broadcastDmMessage, getDmMessageWithUser } from './dm.js';
+import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
