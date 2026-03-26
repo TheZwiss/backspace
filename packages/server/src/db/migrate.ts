@@ -517,6 +517,16 @@ export function runMigrations(db: Database.Database): void {
         if (homeUserIds.length === 2) {
           const sorted = homeUserIds.sort();
           const pairId = crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
+          // Check if this pairId already exists on a relay-created channel
+          const existing = db.prepare('SELECT id FROM dm_channels WHERE canonical_pair_id = ?').get(pairId) as { id: string } | undefined;
+          if (existing) {
+            // A relay-created duplicate exists — merge it into this (older) channel, then set the pair ID
+            db.prepare('UPDATE dm_messages SET dm_channel_id = ? WHERE dm_channel_id = ?').run(channel.id, existing.id);
+            db.prepare('INSERT OR IGNORE INTO dm_members (dm_channel_id, user_id, closed) SELECT ?, user_id, closed FROM dm_members WHERE dm_channel_id = ?').run(channel.id, existing.id);
+            db.prepare('DELETE FROM dm_members WHERE dm_channel_id = ?').run(existing.id);
+            db.prepare('DELETE FROM dm_channels WHERE id = ?').run(existing.id);
+            console.log(`Federation: Merged relay-duplicate channel ${existing.id} into original ${channel.id}`);
+          }
           update.run(pairId, channel.id);
           backfilled++;
         }
