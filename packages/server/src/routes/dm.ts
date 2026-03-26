@@ -11,6 +11,7 @@ import {
   type DmMessage,
   type DmMessageWithUser,
   type CreateDmRequest,
+  type CreateGroupDmRequest,
   type CreateDmMessageRequest,
   type AddDmMemberRequest,
   type PaginatedQuery,
@@ -477,6 +478,193 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       type: 'dm_channel_created',
       dmChannel: result,
     });
+
+    return reply.code(201).send(result);
+  });
+
+  // POST /api/dm/group - Create a new group DM with multiple members
+  app.post<{ Body: CreateGroupDmRequest }>('/api/dm/group', {
+    preHandler: authenticate,
+  }, async (request, reply) => {
+    const { userIds } = request.body;
+
+    // Validate userIds is a non-empty array of at least 2 strings
+    if (!Array.isArray(userIds) || userIds.length < 2) {
+      return reply.code(400).send({ error: 'userIds must contain at least 2 user IDs', statusCode: 400 });
+    }
+    if (userIds.some(id => typeof id !== 'string' || !id)) {
+      return reply.code(400).send({ error: 'All userIds must be non-empty strings', statusCode: 400 });
+    }
+
+    // No duplicates
+    if (new Set(userIds).size !== userIds.length) {
+      return reply.code(400).send({ error: 'userIds must not contain duplicates', statusCode: 400 });
+    }
+
+    // Caller cannot include themselves
+    if (userIds.includes(request.userId)) {
+      return reply.code(400).send({ error: 'Do not include yourself in userIds — you are added automatically', statusCode: 400 });
+    }
+
+    // Total members (caller + userIds) capped at 10
+    const totalMembers = 1 + userIds.length;
+    if (totalMembers > 10) {
+      return reply.code(400).send({ error: `Group DMs are limited to 10 members (requested ${totalMembers})`, statusCode: 400 });
+    }
+
+    const db = getDb();
+
+    // Validate all target users exist and are not soft-deleted
+    const targetUsers = db.select().from(schema.users)
+      .where(inArray(schema.users.id, userIds))
+      .all()
+      .filter(u => !u.isDeleted);
+
+    if (targetUsers.length !== userIds.length) {
+      return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+    }
+
+    // Validate all target users are friends with the caller
+    for (const targetUser of targetUsers) {
+      const friendship = db.select().from(schema.friends).where(
+        or(
+          and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUser.id)),
+          and(eq(schema.friends.userId, targetUser.id), eq(schema.friends.friendId, request.userId)),
+        ),
+      ).get();
+
+      if (!friendship) {
+        return reply.code(403).send({ error: `You can only add friends to group DMs. ${targetUser.displayName ?? targetUser.username} is not your friend.`, statusCode: 403 });
+      }
+    }
+
+    // Create group DM channel + members in a single transaction
+    const dmChannelId = generateSnowflake();
+    const now = Date.now();
+
+    db.transaction((tx) => {
+      tx.insert(schema.dmChannels).values({
+        id: dmChannelId,
+        ownerId: request.userId,
+        createdAt: now,
+      }).run();
+
+      // Add caller as member
+      tx.insert(schema.dmMembers).values({
+        dmChannelId,
+        userId: request.userId,
+      }).run();
+
+      // Add all target users as members
+      for (const targetUser of targetUsers) {
+        tx.insert(schema.dmMembers).values({
+          dmChannelId,
+          userId: targetUser.id,
+        }).run();
+      }
+    });
+
+    // Federation: assign federatedId if any member is from a remote instance
+    let federatedId: string | null = null;
+    if (isFederationRelayEnabled()) {
+      const domainOrigin = getOurOrigin();
+      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+      const allUsers = [callerUser, ...targetUsers].filter((u): u is NonNullable<typeof u> => u !== undefined);
+      const hasRemote = allUsers.some(u => u.homeInstance && u.homeInstance !== domainOrigin);
+
+      if (hasRemote) {
+        federatedId = computeFederatedId();
+        db.update(schema.dmChannels)
+          .set({
+            federatedId,
+            ownerHomeUserId: callerUser?.homeUserId || request.userId,
+            ownerHomeInstance: callerUser?.homeInstance || domainOrigin,
+          })
+          .where(eq(schema.dmChannels.id, dmChannelId))
+          .run();
+      }
+    }
+
+    // Build response
+    const currentUserRow = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    const allMembers = [currentUserRow, ...targetUsers]
+      .filter((u): u is NonNullable<typeof u> => u !== undefined)
+      .map(u => sanitizeUser(u));
+
+    const result: DmChannel = {
+      id: dmChannelId,
+      ownerId: request.userId,
+      createdAt: now,
+      members: allMembers,
+      lastMessage: null,
+    };
+
+    // Broadcast dm_channel_created to ALL members (including caller — keeps all clients in sync)
+    for (const member of allMembers) {
+      connectionManager.sendToUser(member.id, {
+        type: 'dm_channel_created',
+        dmChannel: result,
+      });
+    }
+
+    // Federation: relay member_add for each remote member
+    if (isFederationRelayEnabled() && federatedId) {
+      const domainOrigin = getOurOrigin();
+      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+      const allParticipants = getDmParticipants(dmChannelId);
+
+      for (const targetUser of targetUsers) {
+        // Only relay for users from remote instances
+        if (!targetUser.homeInstance || targetUser.homeInstance === domainOrigin) continue;
+
+        const memberAddPayload: FederationRelayEvent = {
+          eventType: 'member_add',
+          dmChannelId,
+          messageId: `member_add:${targetUser.id}:${Date.now()}`,
+          federatedId,
+          encryptionVersion: 0,
+          timestamp: Date.now(),
+          membership: {
+            user: {
+              homeUserId: targetUser.homeUserId || targetUser.id,
+              homeInstance: targetUser.homeInstance || domainOrigin,
+            },
+            addedBy: {
+              homeUserId: callerUser?.homeUserId || request.userId,
+              homeInstance: callerUser?.homeInstance || domainOrigin,
+            },
+          },
+          group: {
+            owner: {
+              homeUserId: callerUser?.homeUserId || request.userId,
+              homeInstance: callerUser?.homeInstance || domainOrigin,
+            },
+            members: allParticipants,
+          },
+        };
+
+        const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
+        // Ensure the new member's instance is in targets
+        let finalTargets = targetOrigins;
+        if (finalTargets && !finalTargets.includes(targetUser.homeInstance)) {
+          finalTargets = [...finalTargets, targetUser.homeInstance];
+        }
+
+        appendMutationLog(
+          memberAddPayload.messageId,
+          dmChannelId,
+          'member_add',
+          JSON.stringify(memberAddPayload),
+        );
+        queueOutboxEvent(
+          memberAddPayload.messageId,
+          dmChannelId,
+          'member_add',
+          JSON.stringify(memberAddPayload),
+          finalTargets,
+        );
+      }
+    }
 
     return reply.code(201).send(result);
   });
