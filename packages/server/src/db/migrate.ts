@@ -481,7 +481,7 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Federation indexes ──────────────────────────────────────────────────
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_messages_source_unique ON dm_messages(source_instance, source_message_id) WHERE source_instance IS NOT NULL`);
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
+  // idx_dm_federated is created by migrateDmChannelsFederatedId (after column rename)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_outbox_retry ON federation_outbox(next_retry_at)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_mutation_log_time ON federation_mutation_log(mutated_at)`);
 
