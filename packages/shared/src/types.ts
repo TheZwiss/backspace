@@ -284,6 +284,9 @@ export interface DmMessage {
   channelId?: string;
   replyToId?: string | null;
   editedAt?: number | null;
+  // Federation relay identity
+  sourceMessageId?: string | null;
+  sourceInstance?: string | null;
 }
 
 export interface DmMessageWithUser extends DmMessage {
