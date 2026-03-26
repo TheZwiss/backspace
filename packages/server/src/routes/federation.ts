@@ -1053,7 +1053,7 @@ function processCreateEvent(
           width: attachment.width ?? null,
           height: attachment.height ?? null,
           duration: attachment.duration ?? null,
-          thumbnailFilename: attachment.thumbnailFilename ?? null,
+          thumbnailFilename: null,  // Don't copy source thumbnail — it doesn't exist locally
           sourceUrl: attachment.sourceUrl,
           createdAt: now,
         })
