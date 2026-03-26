@@ -737,8 +737,11 @@ export interface FederationRelayParticipant {
 
 export interface FederationRelayEvent {
   eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
-    | 'member_add' | 'member_remove' | 'ownership_transfer';
-  dmChannelId: string;
+    | 'member_add' | 'member_remove' | 'ownership_transfer'
+    | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
+    | 'friend_add' | 'friend_remove';
+  contextType?: 'dm' | 'friend';
+  dmChannelId?: string;
   messageId: string;
   federatedId?: string;
   encryptionVersion: 0;
@@ -759,6 +762,7 @@ export interface FederationRelayEvent {
   membership?: FederationMembershipPayload;
   ownership?: FederationOwnershipPayload;
   group?: FederationGroupPayload;
+  friendship?: FederationFriendshipPayload;
 }
 
 export interface FederationMembershipPayload {
@@ -776,6 +780,13 @@ export interface FederationOwnershipPayload {
 export interface FederationGroupPayload {
   owner: FederationRelayParticipant;
   members: FederationRelayParticipant[];
+}
+
+export interface FederationFriendshipPayload {
+  from: FederationRelayParticipant;
+  to: FederationRelayParticipant;
+  status?: 'pending' | 'accepted' | 'declined';
+  createdAt: number;
 }
 
 export interface FederationRelayReaction {
@@ -816,6 +827,7 @@ export interface FederationSyncRequest {
   sinceTimestamp: number;
   dmChannelId?: string;
   federatedId?: string;
+  contextType?: 'dm' | 'friend';
   limit: number;
 }
 
