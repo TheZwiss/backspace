@@ -77,10 +77,11 @@ export function getRelayTtlDays(): number {
  * Failures are logged but never propagate — federation must not break DM flow.
  */
 export function appendMutationLog(
-  dmMessageId: string,
-  dmChannelId: string,
+  entityId: string,
+  contextId: string,
   mutationType: string,
   payload?: string,
+  contextType: string = 'dm',
 ): void {
   try {
     if (!isFederationRelayEnabled()) {
@@ -91,8 +92,9 @@ export function appendMutationLog(
     db.insert(schema.federationMutationLog)
       .values({
         id: generateSnowflake(),
-        dmMessageId,
-        dmChannelId,
+        entityId,
+        contextId,
+        contextType,
         mutationType,
         mutatedAt: Date.now(),
         payload: payload ?? null,
@@ -117,11 +119,12 @@ export function appendMutationLog(
  * Failures are logged but never propagate — federation must not break DM flow.
  */
 export function queueOutboxEvent(
-  messageId: string,
-  dmChannelId: string,
+  entityId: string,
+  contextId: string,
   eventType: string,
   payload: string,
   targetPeerOrigins?: string[],
+  contextType: string = 'dm',
 ): void {
   try {
     if (!isFederationRelayEnabled()) {
@@ -161,13 +164,13 @@ export function queueOutboxEvent(
           .where(
             and(
               eq(schema.federationOutbox.peerId, peer.id),
-              eq(schema.federationOutbox.messageId, messageId),
+              eq(schema.federationOutbox.entityId, entityId),
             ),
           )
           .get();
 
         if (eventType === 'delete' && existing?.eventType === 'create') {
-          // Message created and deleted before relay — net effect is nothing
+          // Entity created and deleted before relay — net effect is nothing
           tx.delete(schema.federationOutbox)
             .where(eq(schema.federationOutbox.id, existing.id))
             .run();
@@ -191,8 +194,9 @@ export function queueOutboxEvent(
             .values({
               id: generateSnowflake(),
               peerId: peer.id,
-              dmChannelId,
-              messageId,
+              contextId,
+              entityId,
+              contextType,
               eventType,
               payload,
               encryptionVersion: 0,
@@ -335,6 +339,36 @@ export function queueDmRelay(
     },
     participants,
   }), targetOrigins);
+}
+
+/**
+ * Compute a deterministic context ID for friend events between two users.
+ * Sorts home user IDs so the context is the same regardless of who initiates.
+ */
+export function buildFriendContextId(homeUserIdA: string, homeUserIdB: string): string {
+  const sorted = [homeUserIdA, homeUserIdB].sort();
+  return `friend:${sorted[0]}:${sorted[1]}`;
+}
+
+/**
+ * Determine which peer instance origins need to receive a friend event.
+ * Returns an empty array if both users are local (no relay needed).
+ */
+export function getFriendEventTargets(
+  fromHomeInstance: string | null | undefined,
+  toHomeInstance: string | null | undefined,
+): string[] {
+  const ourOrigin = getOurOrigin();
+  const targets = new Set<string>();
+
+  if (fromHomeInstance && fromHomeInstance !== ourOrigin) {
+    targets.add(fromHomeInstance);
+  }
+  if (toHomeInstance && toHomeInstance !== ourOrigin) {
+    targets.add(toHomeInstance);
+  }
+
+  return Array.from(targets);
 }
 
 /**
