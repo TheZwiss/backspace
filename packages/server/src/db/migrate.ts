@@ -610,6 +610,8 @@ export function runMigrations(db: Database.Database): void {
     console.error('Federation mutation log backfill failed (non-fatal):', err);
   }
 
+  migrateResetFederationSyncForLegacyDms(db);
+
   console.log('Migrations complete.');
 }
 
@@ -1590,5 +1592,33 @@ function migrateFixOneOnOneOwnerIds(db: Database.Database): void {
     }
   } catch (err) {
     console.error('migrateFixOneOnOneOwnerIds failed (non-fatal):', err);
+  }
+}
+
+/** Reset federation sync checkpoint so legacy DMs get replicated via S2S */
+function migrateResetFederationSyncForLegacyDms(db: Database.Database): void {
+  try {
+    const peersTable = db.prepare(`PRAGMA table_info(federation_peers)`).all() as Array<{ name: string }>;
+    if (peersTable.length === 0) return; // No federation tables yet
+
+    const hasSyncFlag = (db.pragma('table_info(instance_settings)') as Array<{ name: string }>)
+      .some(c => c.name === 'legacy_dm_sync_done');
+
+    if (!hasSyncFlag) {
+      db.exec(`ALTER TABLE instance_settings ADD COLUMN legacy_dm_sync_done INTEGER DEFAULT 0`);
+    }
+
+    const settings = db.prepare('SELECT legacy_dm_sync_done FROM instance_settings WHERE id = 1').get() as { legacy_dm_sync_done: number } | undefined;
+    if (settings?.legacy_dm_sync_done) return; // Already ran
+
+    const result = db.prepare(`UPDATE federation_peers SET last_synced_at = 0 WHERE status = 'active'`).run();
+
+    if (result.changes > 0) {
+      console.log(`[migrate] Reset sync checkpoint on ${result.changes} federation peer(s) for legacy DM replication`);
+    }
+
+    db.prepare('UPDATE instance_settings SET legacy_dm_sync_done = 1 WHERE id = 1').run();
+  } catch (err) {
+    console.error('migrateResetFederationSyncForLegacyDms failed (non-fatal):', err);
   }
 }
