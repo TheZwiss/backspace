@@ -831,7 +831,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
  * Matches users where home_user_id = homeUserId, or where
  * the user's own id equals homeUserId and they have no home_instance set (local user).
  */
-function resolveLocalUser(
+export function resolveLocalUser(
   homeUserId: string,
   db: ReturnType<typeof getDb>,
 ): typeof schema.users.$inferSelect | undefined {
@@ -865,7 +865,7 @@ function resolveLocalUser(
  * friend-connect flow.  We create a bare-bones row so the local DB
  * can reference them in dm_members / dm_messages.
  */
-function resolveOrCreateReplicatedUser(
+export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
