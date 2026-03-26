@@ -121,6 +121,7 @@ export function queueOutboxEvent(
   dmChannelId: string,
   eventType: string,
   payload: string,
+  targetPeerOrigins?: string[],
 ): void {
   try {
     if (!isFederationRelayEnabled()) {
@@ -139,11 +140,20 @@ export function queueOutboxEvent(
       return;
     }
 
+    // If targetPeerOrigins specified, only queue to those peers
+    const peers = targetPeerOrigins
+      ? activePeers.filter(p => targetPeerOrigins.includes(p.origin))
+      : activePeers;
+
+    if (peers.length === 0) {
+      return;
+    }
+
     const ttlDays = getRelayTtlDays();
     const now = Date.now();
     const expiresAt = now + (ttlDays * 86_400_000);
 
-    for (const peer of activePeers) {
+    for (const peer of peers) {
       db.transaction((tx) => {
         const existing = tx
           .select()
@@ -246,6 +256,35 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
 }
 
 /**
+ * Compute which peer origins need to receive events for a group DM.
+ * Returns undefined for 1-on-1 DMs (broadcast to all).
+ * Returns a list of origins for group DMs (participant-aware routing).
+ */
+export function getGroupDmTargetOrigins(dmChannelId: string): string[] | undefined {
+  const db = getDb();
+  const channel = db
+    .select({ ownerId: schema.dmChannels.ownerId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, dmChannelId))
+    .get();
+
+  // Not a group DM (no owner) — broadcast to all
+  if (!channel?.ownerId) return undefined;
+
+  const participants = getDmParticipants(dmChannelId);
+  const ourOrigin = getOurOrigin();
+
+  const origins = new Set<string>();
+  for (const p of participants) {
+    if (p.homeInstance !== ourOrigin) {
+      origins.add(p.homeInstance);
+    }
+  }
+
+  return Array.from(origins);
+}
+
+/**
  * Queue a DM message for federation relay to all active peers.
  * Builds the complete relay payload including attachments with sourceUrl
  * and participant identities. Single source of truth for relay payload
@@ -277,6 +316,8 @@ export function queueDmRelay(
 
   const participants = getDmParticipants(dmChannelId);
 
+  const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
+
   appendMutationLog(message.id, dmChannelId, eventType);
   queueOutboxEvent(message.id, dmChannelId, eventType, JSON.stringify({
     message: {
@@ -284,7 +325,7 @@ export function queueDmRelay(
       attachments: attachments.length > 0 ? attachments : undefined,
     },
     participants,
-  }));
+  }), targetOrigins);
 }
 
 /**
