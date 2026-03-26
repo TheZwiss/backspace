@@ -3,7 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and, lte, asc, inArray } from 'drizzle-orm';
 import { config } from '../config.js';
 import { isFederationRelayEnabled } from './federationOutbox.js';
-import { buildFederationHeaders } from './federationAuth.js';
+import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
@@ -61,17 +61,6 @@ let healthCheckAbortController: AbortController | null = null;
 function getBackoffMs(attempt: number): number {
   const index = Math.min(attempt - 1, BACKOFF_SCHEDULE_MS.length - 1);
   return BACKOFF_SCHEDULE_MS[Math.max(0, index)] ?? 86_400_000;
-}
-
-/**
- * Build the origin URL for this instance.
- * Uses DOMAIN env var for production, falls back to localhost for dev.
- */
-function getOurOrigin(): string {
-  if (config.domain) {
-    return `https://${config.domain}`;
-  }
-  return `http://localhost:${config.port}`;
 }
 
 /**
@@ -627,7 +616,7 @@ async function runInitialSyncForNewPeers(): Promise<void> {
 
   if (unsyncedPeers.length === 0) return;
 
-  const ourOrigin = config.domain ? `https://${config.domain}` : `http://localhost:${config.port}`;
+  const ourOrigin = getOurOrigin();
 
   for (const peer of unsyncedPeers) {
     try {

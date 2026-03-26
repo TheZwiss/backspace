@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { config } from '../config.js';
 
 const DEFAULT_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -121,4 +122,15 @@ export function parseFederationHeaders(
   if (!origin) return null;
 
   return { origin, timestamp: timestampMs, signature };
+}
+
+/**
+ * Return the canonical origin URL for this instance.
+ * Uses DOMAIN env var for production, falls back to localhost for dev.
+ */
+export function getOurOrigin(): string {
+  if (config.domain) {
+    return `https://${config.domain}`;
+  }
+  return `http://localhost:${config.port}`;
 }

@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser } from '@backspace/shared';
-import { config } from '../config.js';
+import { getOurOrigin } from './federationAuth.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -229,7 +229,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
     .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
     .all();
 
-  const domainOrigin = config.domain ? `https://${config.domain}` : '';
+  const domainOrigin = getOurOrigin();
 
   return members.map(m => ({
     homeUserId: m.homeUserId || m.id,
@@ -252,7 +252,7 @@ export function queueDmRelay(
   dmChannelId: string,
   eventType: 'create' | 'update',
 ): void {
-  const domainOrigin = config.domain ? `https://${config.domain}` : `http://localhost:${config.port}`;
+  const domainOrigin = getOurOrigin();
 
   const attachments: FederationRelayAttachment[] = (message.attachments ?? []).map(a => ({
     id: a.id,
@@ -300,7 +300,7 @@ export function buildRelayPayload(
   return {
     userId: user.id,
     homeUserId: user.homeUserId || user.id,
-    homeInstance: user.homeInstance || config.domain || '',
+    homeInstance: user.homeInstance || getOurOrigin(),
     content: message.content,
     replyToId: message.replyToId ?? null,
     editedAt: message.editedAt ?? null,
