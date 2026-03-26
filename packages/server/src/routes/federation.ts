@@ -1002,16 +1002,39 @@ function processCreateEvent(
   }
   const authorUser = authorEntry.localUser;
 
-  // Compute federated ID from participants' home user IDs and find/create channel
-  const federatedId = computeFederatedId(
-    resolvedParticipants[0]!.homeUserId,
-    resolvedParticipants[1]!.homeUserId,
-  );
-  const localDmChannelId = findOrCreateDmChannel(
-    federatedId,
-    [resolvedParticipants[0]!.localUser.id, resolvedParticipants[1]!.localUser.id],
-    db,
-  );
+  // Resolve local DM channel: group DMs carry a federatedId and the channel
+  // must already exist (bootstrapped by a prior member_add event); 1-on-1 DMs
+  // are computed from the pair of home user IDs and created on demand.
+  let localDmChannelId: string;
+
+  if (event.federatedId) {
+    // Group DM: look up by federated_id (channel must already exist from member_add bootstrap)
+    const channel = db
+      .select()
+      .from(schema.dmChannels)
+      .where(and(
+        eq(schema.dmChannels.federatedId, event.federatedId),
+        isNull(schema.dmChannels.deletedAt),
+      ))
+      .get();
+
+    if (!channel) {
+      rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+      return;
+    }
+    localDmChannelId = channel.id;
+  } else {
+    // 1-on-1 DM: compute federated_id from pair and find/create channel
+    const federatedId = computeFederatedId(
+      resolvedParticipants[0]!.homeUserId,
+      resolvedParticipants[1]!.homeUserId,
+    );
+    localDmChannelId = findOrCreateDmChannel(
+      federatedId,
+      [resolvedParticipants[0]!.localUser.id, resolvedParticipants[1]!.localUser.id],
+      db,
+    );
+  }
 
   // Insert the message
   const localMessageId = generateSnowflake();

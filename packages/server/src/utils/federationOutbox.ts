@@ -318,8 +318,17 @@ export function queueDmRelay(
 
   const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
 
+  // Fetch channel to check if it's a group DM with a federatedId
+  const db = getDb();
+  const channel = db
+    .select({ federatedId: schema.dmChannels.federatedId, ownerId: schema.dmChannels.ownerId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, dmChannelId))
+    .get();
+
   appendMutationLog(message.id, dmChannelId, eventType);
   queueOutboxEvent(message.id, dmChannelId, eventType, JSON.stringify({
+    ...(channel?.federatedId && channel.ownerId ? { federatedId: channel.federatedId } : {}),
     message: {
       ...buildRelayPayload(message, message.user),
       attachments: attachments.length > 0 ? attachments : undefined,
