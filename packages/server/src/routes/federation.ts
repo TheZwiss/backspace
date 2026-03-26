@@ -1078,11 +1078,30 @@ function processCreateEvent(
     }
   }
 
-  // Broadcast to local WebSocket clients — use getDmMessageWithUser to pick up
-  // the attachment rows we just created (with remote URLs as filenames)
+  // Broadcast to local WebSocket clients, but skip members whose home instance
+  // is the source instance — they already have the original message via their
+  // home instance's WebSocket connection.
   const fullMessage = getDmMessageWithUser(localMessageId);
   if (fullMessage) {
-    broadcastDmMessage(localDmChannelId, fullMessage);
+    const dmMembers = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
+      .all();
+
+    for (const member of dmMembers) {
+      const memberUser = db.select()
+        .from(schema.users)
+        .where(eq(schema.users.id, member.userId))
+        .get();
+
+      // Skip members whose home instance is the source — they already have this message
+      if (memberUser?.homeInstance === sourceInstance) continue;
+
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_message_created',
+        message: fullMessage,
+      });
+    }
   }
 
   accepted.push(event.messageId);
