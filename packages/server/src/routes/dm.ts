@@ -80,6 +80,8 @@ export function buildDmMessageWithUser(
     content: message.content,
     editedAt: message.editedAt,
     createdAt: message.createdAt,
+    sourceMessageId: message.sourceMessageId ?? null,
+    sourceInstance: message.sourceInstance ?? null,
     user: sanitizeUser(user),
     attachments: attachmentRows.map(a => ({
       id: a.id,
