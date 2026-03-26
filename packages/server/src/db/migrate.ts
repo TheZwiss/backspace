@@ -203,7 +203,7 @@ export function runMigrations(db: Database.Database): void {
     {
       name: 'instance_settings',
       columns: [
-        { name: 'federation_relay_enabled', type: 'INTEGER NOT NULL DEFAULT 0' },
+        { name: 'federation_relay_enabled', type: 'INTEGER NOT NULL DEFAULT 1' },
         { name: 'federation_relay_ttl_days', type: 'INTEGER NOT NULL DEFAULT 30' },
       ]
     },
@@ -482,6 +482,15 @@ export function runMigrations(db: Database.Database): void {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_canonical_pair ON dm_channels(canonical_pair_id) WHERE canonical_pair_id IS NOT NULL`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_outbox_retry ON federation_outbox(next_retry_at)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_mutation_log_time ON federation_mutation_log(mutated_at)`);
+
+  // ─── Ensure federation relay is enabled (fix: was incorrectly defaulting to 0) ─
+  try {
+    const relayState = db.prepare('SELECT federation_relay_enabled FROM instance_settings WHERE id = 1').get() as { federation_relay_enabled: number } | undefined;
+    if (relayState && relayState.federation_relay_enabled === 0) {
+      db.prepare('UPDATE instance_settings SET federation_relay_enabled = 1 WHERE id = 1').run();
+      console.log('Federation: Enabled relay (was incorrectly defaulting to disabled)');
+    }
+  } catch { /* column may not exist yet on first run */ }
 
   // ─── Backfill federation mutation log for existing DM messages (idempotent) ─
   try {

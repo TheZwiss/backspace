@@ -266,7 +266,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   allowCustomBitrate: integer('allow_custom_bitrate').notNull().default(1),
   maxUploadSizeBytes: integer('max_upload_size_bytes'),
-  federationRelayEnabled: integer('federation_relay_enabled').notNull().default(0),
+  federationRelayEnabled: integer('federation_relay_enabled').notNull().default(1),
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   updatedAt: integer('updated_at').notNull(),
 });
