@@ -516,8 +516,14 @@ export interface AddDmMemberRequest {
   userId: string;
 }
 
+export interface GroupDmUserIdentity {
+  id: string;
+  homeUserId?: string | null;
+  homeInstance?: string | null;
+}
+
 export interface CreateGroupDmRequest {
-  userIds: string[];
+  users: GroupDmUserIdentity[];
 }
 
 export interface CreateDmMessageRequest {
