@@ -5,6 +5,8 @@ import { config } from '../config.js';
 import { isFederationRelayEnabled } from './federationOutbox.js';
 import { buildFederationHeaders } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
+import { getDmMessageWithUser } from '../routes/dm.js';
+import { connectionManager } from '../ws/handler.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -442,21 +444,38 @@ async function processFileQueueEntry(
       return;
     }
 
-    // Create a local attachment record
-    const attachmentId = generateSnowflake();
-    db.insert(schema.attachments)
-      .values({
-        id: attachmentId,
-        dmMessageId: entry.dmMessageId,
-        uploaderId: null,
+    // Update the existing attachment row (created by processCreateEvent with
+    // sourceUrl as interim filename) to point to the local file
+    const updated = db.update(schema.attachments)
+      .set({
         filename: localFilename,
-        originalName: entry.originalName,
-        mimetype: entry.mimetype,
         size: stat.size,
-        sourceUrl: entry.sourceUrl,
-        createdAt: now,
       })
+      .where(
+        and(
+          eq(schema.attachments.dmMessageId, entry.dmMessageId),
+          eq(schema.attachments.sourceUrl, entry.sourceUrl),
+        ),
+      )
       .run();
+
+    // Fallback: if no existing row was found (e.g., legacy queue entry from
+    // before processCreateEvent created rows), insert a new one
+    if (updated.changes === 0) {
+      db.insert(schema.attachments)
+        .values({
+          id: generateSnowflake(),
+          dmMessageId: entry.dmMessageId,
+          uploaderId: null,
+          filename: localFilename,
+          originalName: entry.originalName,
+          mimetype: entry.mimetype,
+          size: stat.size,
+          sourceUrl: entry.sourceUrl,
+          createdAt: now,
+        })
+        .run();
+    }
 
     // Mark file queue entry as completed
     db.update(schema.federationFileQueue)
@@ -470,6 +489,15 @@ async function processFileQueueEntry(
     console.log(
       `[federation-worker] Downloaded federated file: ${entry.originalName} -> ${localFilename}`,
     );
+
+    // Notify connected clients that the attachment is now available locally
+    const updatedMsg = getDmMessageWithUser(entry.dmMessageId);
+    if (updatedMsg) {
+      connectionManager.sendToDmMembers(updatedMsg.dmChannelId, {
+        type: 'dm_message_updated',
+        message: updatedMsg,
+      });
+    }
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       // Worker is stopping — leave entry as pending for next tick
