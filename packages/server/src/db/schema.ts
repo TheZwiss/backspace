@@ -117,7 +117,10 @@ export const embeds = sqliteTable('embeds', {
 export const dmChannels = sqliteTable('dm_channels', {
   id: text('id').primaryKey(),
   ownerId: text('owner_id'),
-  canonicalPairId: text('canonical_pair_id'),
+  federatedId: text('federated_id'),
+  ownerHomeUserId: text('owner_home_user_id'),
+  ownerHomeInstance: text('owner_home_instance'),
+  deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
 });
 

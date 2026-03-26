@@ -183,7 +183,10 @@ export function runMigrations(db: Database.Database): void {
     {
       name: 'dm_channels',
       columns: [
-        { name: 'canonical_pair_id', type: 'TEXT' },
+        { name: 'federated_id', type: 'TEXT' },
+        { name: 'owner_home_user_id', type: 'TEXT' },
+        { name: 'owner_home_instance', type: 'TEXT' },
+        { name: 'deleted_at', type: 'INTEGER' },
       ]
     },
     {
@@ -479,7 +482,7 @@ export function runMigrations(db: Database.Database): void {
 
   // ─── Federation indexes ──────────────────────────────────────────────────
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_messages_source_unique ON dm_messages(source_instance, source_message_id) WHERE source_instance IS NOT NULL`);
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_canonical_pair ON dm_channels(canonical_pair_id) WHERE canonical_pair_id IS NOT NULL`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_outbox_retry ON federation_outbox(next_retry_at)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_mutation_log_time ON federation_mutation_log(mutated_at)`);
 
@@ -492,22 +495,27 @@ export function runMigrations(db: Database.Database): void {
     }
   } catch { /* column may not exist yet on first run */ }
 
-  // ─── Backfill canonical_pair_id for existing 1-on-1 DM channels ─────────
+  // ─── Rename canonical_pair_id → federated_id, add group DM columns ───────
+  migrateDmChannelsFederatedId(db);
+
+  // ─── Backfill federated_id for existing 1-on-1 DM channels ──────────────
+  // (Runs after migrateDmChannelsFederatedId so the federated_id column is guaranteed to exist)
   try {
-    // Find 1-on-1 DM channels that don't have a canonical_pair_id yet
+    // Find 1-on-1 DM channels that don't have a federated_id yet
     const channelsNeedingPairId = db.prepare(`
       SELECT dc.id, GROUP_CONCAT(COALESCE(u.home_user_id, u.id)) as home_ids
       FROM dm_channels dc
       JOIN dm_members dm ON dc.id = dm.dm_channel_id
       JOIN users u ON dm.user_id = u.id
-      WHERE dc.canonical_pair_id IS NULL
+      WHERE dc.federated_id IS NULL
+        AND dc.owner_id IS NULL
       GROUP BY dc.id
       HAVING COUNT(dm.user_id) = 2
     `).all() as { id: string; home_ids: string }[];
 
     if (channelsNeedingPairId.length > 0) {
       // crypto is already imported at the top of this file
-      const update = db.prepare('UPDATE dm_channels SET canonical_pair_id = ? WHERE id = ? AND canonical_pair_id IS NULL');
+      const update = db.prepare('UPDATE dm_channels SET federated_id = ? WHERE id = ? AND federated_id IS NULL');
 
       let backfilled = 0;
       for (const channel of channelsNeedingPairId) {
@@ -518,7 +526,7 @@ export function runMigrations(db: Database.Database): void {
           const sorted = homeUserIds.sort();
           const pairId = crypto.createHash('sha256').update(sorted.join(':')).digest('hex').slice(0, 32);
           // Check if this pairId already exists on a relay-created channel
-          const existing = db.prepare('SELECT id FROM dm_channels WHERE canonical_pair_id = ?').get(pairId) as { id: string } | undefined;
+          const existing = db.prepare('SELECT id FROM dm_channels WHERE federated_id = ?').get(pairId) as { id: string } | undefined;
           if (existing) {
             // A relay-created duplicate exists — merge it into this (older) channel, then set the pair ID
             db.prepare('UPDATE dm_messages SET dm_channel_id = ? WHERE dm_channel_id = ?').run(channel.id, existing.id);
@@ -533,23 +541,23 @@ export function runMigrations(db: Database.Database): void {
       }
 
       if (backfilled > 0) {
-        console.log(`Federation: Backfilled canonical_pair_id for ${backfilled} existing DM channel(s)`);
+        console.log(`Federation: Backfilled federated_id for ${backfilled} existing DM channel(s)`);
       }
     }
   } catch (err) {
-    console.error('Federation canonical_pair_id backfill failed (non-fatal):', err);
+    console.error('Federation federated_id backfill failed (non-fatal):', err);
   }
 
-  // ─── Merge duplicate DM channels with same canonical_pair_id ─────────────
+  // ─── Merge duplicate DM channels with same federated_id ──────────────────
   try {
-    // Find canonical_pair_ids that appear more than once
+    // Find federated_ids that appear more than once
     const duplicates = db.prepare(`
-      SELECT canonical_pair_id, GROUP_CONCAT(id) as channel_ids
+      SELECT federated_id, GROUP_CONCAT(id) as channel_ids
       FROM dm_channels
-      WHERE canonical_pair_id IS NOT NULL
-      GROUP BY canonical_pair_id
+      WHERE federated_id IS NOT NULL
+      GROUP BY federated_id
       HAVING COUNT(*) > 1
-    `).all() as { canonical_pair_id: string; channel_ids: string }[];
+    `).all() as { federated_id: string; channel_ids: string }[];
 
     for (const dup of duplicates) {
       const ids = dup.channel_ids.split(',');
@@ -572,7 +580,7 @@ export function runMigrations(db: Database.Database): void {
       }
 
       if (removeIds.length > 0) {
-        console.log(`Federation: Merged ${removeIds.length} duplicate DM channel(s) for pair ${dup.canonical_pair_id} into ${keepId}`);
+        console.log(`Federation: Merged ${removeIds.length} duplicate DM channel(s) for pair ${dup.federated_id} into ${keepId}`);
       }
     }
   } catch (err) {
@@ -1451,4 +1459,106 @@ export async function backfillMediaDimensions(db: Database.Database, uploadDir: 
 
   console.log(`Backfill: Processed ${processed} media attachment(s), skipped ${skipped}`);
   db.prepare('UPDATE instance_settings SET media_dimensions_backfilled = 1 WHERE id = 1').run();
+}
+
+/**
+ * Rename canonical_pair_id → federated_id in dm_channels and add the new
+ * group DM federation columns (owner_home_user_id, owner_home_instance, deleted_at).
+ *
+ * Handles three upgrade paths:
+ *   1. Existing install with canonical_pair_id column → full table rebuild to rename + add columns
+ *   2. Existing install without canonical_pair_id but missing new columns → ALTER TABLE adds them
+ *   3. Fresh install → DDL in index.ts already has the correct schema; this is a no-op
+ */
+function migrateDmChannelsFederatedId(db: Database.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(dm_channels)`).all() as Array<{ name: string }>;
+  const hasOldCol = cols.some(c => c.name === 'canonical_pair_id');
+  const hasNewCol = cols.some(c => c.name === 'federated_id');
+
+  if (!hasOldCol && hasNewCol) {
+    // Already migrated — ensure auxiliary columns exist (handles partial migration states)
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('owner_home_user_id')) {
+      db.exec(`ALTER TABLE dm_channels ADD COLUMN owner_home_user_id TEXT`);
+    }
+    if (!colNames.has('owner_home_instance')) {
+      db.exec(`ALTER TABLE dm_channels ADD COLUMN owner_home_instance TEXT`);
+    }
+    if (!colNames.has('deleted_at')) {
+      db.exec(`ALTER TABLE dm_channels ADD COLUMN deleted_at INTEGER`);
+    }
+    // Rebuild index in case it was dropped
+    db.exec(`DROP INDEX IF EXISTS idx_dm_canonical_pair`);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
+    return;
+  }
+
+  if (hasOldCol && !hasNewCol) {
+    // Full table rebuild to rename column and add new columns in one atomic step
+    console.log('Migrating: Renaming canonical_pair_id → federated_id in dm_channels and adding group DM columns...');
+    db.exec(`
+      CREATE TABLE dm_channels_new (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT,
+        federated_id TEXT,
+        owner_home_user_id TEXT,
+        owner_home_instance TEXT,
+        deleted_at INTEGER,
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO dm_channels_new (id, owner_id, federated_id, created_at)
+        SELECT id, owner_id, canonical_pair_id, created_at FROM dm_channels;
+      DROP TABLE dm_channels;
+      ALTER TABLE dm_channels_new RENAME TO dm_channels;
+    `);
+    db.exec(`DROP INDEX IF EXISTS idx_dm_canonical_pair`);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
+    console.log('Migrating: dm_channels rename complete.');
+  } else if (!hasOldCol && !hasNewCol) {
+    // Neither column exists — this is either a very old install or an odd state.
+    // Just add all the new columns via ALTER TABLE.
+    db.exec(`ALTER TABLE dm_channels ADD COLUMN federated_id TEXT`);
+    db.exec(`ALTER TABLE dm_channels ADD COLUMN owner_home_user_id TEXT`);
+    db.exec(`ALTER TABLE dm_channels ADD COLUMN owner_home_instance TEXT`);
+    db.exec(`ALTER TABLE dm_channels ADD COLUMN deleted_at INTEGER`);
+    db.exec(`DROP INDEX IF EXISTS idx_dm_canonical_pair`);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
+  }
+  // hasOldCol && hasNewCol — both columns exist (shouldn't happen, but safe to skip)
+
+  // Backfill owner_home_user_id / owner_home_instance from existing group DMs
+  try {
+    const groupDms = db.prepare(`
+      SELECT dc.id, dc.owner_id, u.home_user_id, u.home_instance
+      FROM dm_channels dc
+      JOIN users u ON dc.owner_id = u.id
+      WHERE dc.owner_id IS NOT NULL
+        AND dc.owner_home_user_id IS NULL
+    `).all() as Array<{
+      id: string;
+      owner_id: string;
+      home_user_id: string | null;
+      home_instance: string | null;
+    }>;
+
+    if (groupDms.length > 0) {
+      const updateStmt = db.prepare(`
+        UPDATE dm_channels
+        SET owner_home_user_id = ?, owner_home_instance = ?
+        WHERE id = ?
+      `);
+
+      for (const gd of groupDms) {
+        updateStmt.run(
+          gd.home_user_id || gd.owner_id,
+          gd.home_instance || null,
+          gd.id,
+        );
+      }
+
+      console.log(`[migrate] Backfilled owner federation identity for ${groupDms.length} group DMs`);
+    }
+  } catch (err) {
+    console.error('migrateDmChannelsFederatedId: owner backfill failed (non-fatal):', err);
+  }
 }

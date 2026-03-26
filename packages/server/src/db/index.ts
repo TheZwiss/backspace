@@ -92,8 +92,13 @@ function createTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS dm_channels (
       id TEXT PRIMARY KEY,
       owner_id TEXT,
+      federated_id TEXT,
+      owner_home_user_id TEXT,
+      owner_home_instance TEXT,
+      deleted_at INTEGER,
       created_at INTEGER NOT NULL
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS dm_members (
       dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
