@@ -568,11 +568,103 @@ async function processHealthCheckTick(): Promise<void> {
 
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
+/**
+ * Trigger checkpoint sync for peers that have never been synced (lastSyncedAt === 0).
+ * This catches historical messages that existed before the relay was enabled.
+ */
+async function runInitialSyncForNewPeers(): Promise<void> {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const unsyncedPeers = db
+    .select()
+    .from(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.status, 'active'),
+      eq(schema.federationPeers.lastSyncedAt, 0),
+    ))
+    .all();
+
+  if (unsyncedPeers.length === 0) return;
+
+  const ourOrigin = config.domain ? `https://${config.domain}` : `http://localhost:${config.port}`;
+
+  for (const peer of unsyncedPeers) {
+    try {
+      console.log(`[federation-worker] Running initial sync with ${peer.origin}...`);
+      let sinceTimestamp = 0;
+      let totalEvents = 0;
+
+      // Paginate through all events from the peer
+      while (true) {
+        const body = JSON.stringify({ sinceTimestamp, limit: 100 });
+        const headers = buildFederationHeaders(body, peer.hmacSecret, ourOrigin);
+
+        const response = await fetch(`${peer.origin}/api/federation/sync`, {
+          method: 'POST',
+          headers,
+          body,
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        if (!response.ok) {
+          console.error(`[federation-worker] Sync with ${peer.origin} failed: ${response.status}`);
+          break;
+        }
+
+        const data = await response.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
+
+        if (data.events.length === 0) break;
+
+        // Relay the events through our own relay endpoint logic
+        // For simplicity, POST them to ourselves
+        const relayBody = JSON.stringify({
+          version: 1,
+          sourceInstance: peer.origin,
+          events: data.events,
+        });
+        const relayHeaders = buildFederationHeaders(relayBody, peer.hmacSecret, peer.origin);
+
+        await fetch(`${ourOrigin}/api/federation/relay`, {
+          method: 'POST',
+          headers: relayHeaders,
+          body: relayBody,
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        totalEvents += data.events.length;
+        sinceTimestamp = data.checkpoint;
+
+        if (!data.hasMore) break;
+      }
+
+      // Update lastSyncedAt so this doesn't run again
+      db.update(schema.federationPeers)
+        .set({ lastSyncedAt: Date.now() })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      if (totalEvents > 0) {
+        console.log(`[federation-worker] Initial sync with ${peer.origin}: ${totalEvents} events synced`);
+      } else {
+        console.log(`[federation-worker] Initial sync with ${peer.origin}: no events to sync`);
+      }
+    } catch (err) {
+      console.error(`[federation-worker] Initial sync with ${peer.origin} failed:`, err);
+      // Don't update lastSyncedAt — will retry next startup
+    }
+  }
+}
+
 export function startFederationWorkers(): void {
   console.log('[federation-worker] Federation workers started');
   scheduleOutboxTick();
   scheduleFileQueueTick();
   scheduleHealthCheckTick();
+  // Run initial sync for newly peered instances (async, non-blocking)
+  runInitialSyncForNewPeers().catch((err) => {
+    console.error('[federation-worker] Initial sync error:', err);
+  });
 }
 
 export function stopFederationWorkers(): void {
