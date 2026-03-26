@@ -98,7 +98,7 @@ function createTables(db: Database.Database): void {
       deleted_at INTEGER,
       created_at INTEGER NOT NULL
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL;
+    -- Note: idx_dm_federated index is created after this block (may fail on pre-migration tables, handled gracefully)
 
     CREATE TABLE IF NOT EXISTS dm_members (
       dm_channel_id TEXT NOT NULL REFERENCES dm_channels(id) ON DELETE CASCADE,
@@ -268,6 +268,14 @@ function createTables(db: Database.Database): void {
       PRIMARY KEY (space_id, user_id, restriction_type)
     );
   `);
+
+  // Index on federated_id — may fail on existing installs where the column hasn't been
+  // renamed yet (migration handles it). Safe to skip; migration creates the index.
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
+  } catch {
+    // Column doesn't exist yet — migration will create the index
+  }
 }
 
 export function initDatabase() {
