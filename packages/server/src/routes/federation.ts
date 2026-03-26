@@ -525,34 +525,13 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       let limit = typeof body.limit === 'number' ? body.limit : 100;
       limit = Math.max(1, Math.min(500, Math.floor(limit)));
 
-      // 3. Determine shared DM channels between this instance and the requesting peer
-      //    Shared channels have one local user (home_instance IS NULL) and
-      //    one peer user (home_instance = peer hostname), with exactly 2 members.
-      let peerHost: string;
-      try {
-        peerHost = new URL(peer.origin).host;
-      } catch {
-        return reply.code(500).send({ error: 'Invalid peer origin in database', statusCode: 500 });
-      }
-
-      // Find shared 1-on-1 DM channel IDs using raw SQL for the complex JOIN.
-      // A shared channel is one where:
-      //   - There are exactly 2 members
-      //   - One member is a local user (home_instance IS NULL)
-      //   - One member is a user from the peer (home_instance = peerHost)
+      // 3. Determine which DM channels to sync.
+      //    Use canonical_pair_id: any channel with a pair ID is a federated 1-on-1 DM
+      //    that should be synced. The peer's relay endpoint will create the channel
+      //    if it doesn't exist, or match by canonical_pair_id if it does.
       const sharedChannelRows = rawDb.prepare(`
-        SELECT DISTINCT dm1.dm_channel_id
-        FROM dm_members dm1
-        JOIN dm_members dm2 ON dm1.dm_channel_id = dm2.dm_channel_id AND dm1.user_id != dm2.user_id
-        JOIN users u1 ON dm1.user_id = u1.id
-        JOIN users u2 ON dm2.user_id = u2.id
-        WHERE u1.home_instance IS NULL
-          AND u2.home_instance = ?
-          AND (
-            SELECT COUNT(*) FROM dm_members dm3
-            WHERE dm3.dm_channel_id = dm1.dm_channel_id
-          ) = 2
-      `).all(peerHost) as Array<{ dm_channel_id: string }>;
+        SELECT id as dm_channel_id FROM dm_channels WHERE canonical_pair_id IS NOT NULL
+      `).all() as Array<{ dm_channel_id: string }>;
 
       const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
 
