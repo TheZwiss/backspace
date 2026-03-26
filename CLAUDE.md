@@ -680,6 +680,7 @@ GET    /api/uploads/:filename      (public)                                → f
 # Direct Messages
 GET    /api/dm                     (auth)                                   → { dmChannels[] }
 POST   /api/dm                     (auth) { userId }                       → { dmChannel }
+POST   /api/dm/group              (auth) { userIds: string[] }             → { dmChannel }
 DELETE /api/dm/:id                 (auth, member)                           → { success } (soft-close)
 GET    /api/dm/:id/messages        (auth, member) ?before=&limit=50       → { messages[] }
 POST   /api/dm/:id/messages        (auth, member) { content }             → { message }
