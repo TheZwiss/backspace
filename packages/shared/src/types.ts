@@ -726,9 +726,11 @@ export interface FederationRelayParticipant {
 }
 
 export interface FederationRelayEvent {
-  eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove';
+  eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
+    | 'member_add' | 'member_remove' | 'ownership_transfer';
   dmChannelId: string;
   messageId: string;
+  federatedId?: string;
   encryptionVersion: 0;
   timestamp: number;
   participants?: FederationRelayParticipant[];
@@ -744,6 +746,26 @@ export interface FederationRelayEvent {
   };
   reactions?: FederationRelayReaction[];
   reaction?: FederationRelayReaction;
+  membership?: FederationMembershipPayload;
+  ownership?: FederationOwnershipPayload;
+  group?: FederationGroupPayload;
+}
+
+export interface FederationMembershipPayload {
+  user: FederationRelayParticipant;
+  addedBy?: FederationRelayParticipant;
+  removedBy?: FederationRelayParticipant;
+  reason?: 'kick' | 'leave';
+}
+
+export interface FederationOwnershipPayload {
+  newOwner: FederationRelayParticipant;
+  previousOwner: FederationRelayParticipant;
+}
+
+export interface FederationGroupPayload {
+  owner: FederationRelayParticipant;
+  members: FederationRelayParticipant[];
 }
 
 export interface FederationRelayReaction {
@@ -783,6 +805,7 @@ export interface FederationRelayResponse {
 export interface FederationSyncRequest {
   sinceTimestamp: number;
   dmChannelId?: string;
+  federatedId?: string;
   limit: number;
 }
 
