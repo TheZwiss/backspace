@@ -21,7 +21,17 @@ import {
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay } from '../utils/federationOutbox.js';
+import {
+  appendMutationLog,
+  queueOutboxEvent,
+  queueDmRelay,
+  getDmParticipants,
+  getGroupDmTargetOrigins,
+  isFederationRelayEnabled,
+  computeFederatedId,
+} from '../utils/federationOutbox.js';
+import { getOurOrigin } from '../utils/federationAuth.js';
+import type { FederationRelayEvent } from '@backspace/shared';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -528,7 +538,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Enforce DM channel ownership: only the owner can add members (for new-style group DMs)
-    const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+    let dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
     if (!dmChannel) {
       return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
     }
@@ -583,6 +593,33 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       userId: targetUserId,
     }).run();
 
+    // If the channel doesn't have a federatedId and now has a remote member, assign one
+    if (!dmChannel.federatedId && isFederationRelayEnabled()) {
+      const domainOrigin = getOurOrigin();
+      const participants = getDmParticipants(id);
+      const hasRemote = participants.some(p => p.homeInstance !== domainOrigin);
+
+      if (hasRemote) {
+        const newFederatedId = computeFederatedId();
+        const ownerUser = db.select().from(schema.users).where(eq(schema.users.id, dmChannel.ownerId!)).get();
+        db.update(schema.dmChannels)
+          .set({
+            federatedId: newFederatedId,
+            ownerHomeUserId: ownerUser?.homeUserId || dmChannel.ownerId!,
+            ownerHomeInstance: ownerUser?.homeInstance || domainOrigin,
+          })
+          .where(eq(schema.dmChannels.id, id))
+          .run();
+        // Refresh for subsequent federation code
+        dmChannel = {
+          ...dmChannel,
+          federatedId: newFederatedId,
+          ownerHomeUserId: ownerUser?.homeUserId || dmChannel.ownerId!,
+          ownerHomeInstance: ownerUser?.homeInstance || domainOrigin,
+        };
+      }
+    }
+
     // Build full DmChannel response with all members
     const allMemberRows = db.select()
       .from(schema.dmMembers)
@@ -632,6 +669,63 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       type: 'dm_channel_created',
       dmChannel: result,
     });
+
+    // Federation: relay member_add to peers
+    if (isFederationRelayEnabled() && dmChannel.federatedId) {
+      const domainOrigin = getOurOrigin();
+      const allParticipants = getDmParticipants(id);
+
+      const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
+      const adderUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+
+      const memberAddPayload: FederationRelayEvent = {
+        eventType: 'member_add',
+        dmChannelId: id,
+        messageId: `member_add:${targetUserId}:${Date.now()}`,
+        federatedId: dmChannel.federatedId,
+        encryptionVersion: 0,
+        timestamp: Date.now(),
+        membership: {
+          user: {
+            homeUserId: addedUser?.homeUserId || targetUserId,
+            homeInstance: addedUser?.homeInstance || domainOrigin,
+          },
+          addedBy: {
+            homeUserId: adderUser?.homeUserId || request.userId,
+            homeInstance: adderUser?.homeInstance || domainOrigin,
+          },
+        },
+        group: {
+          owner: {
+            homeUserId: dmChannel.ownerHomeUserId || request.userId,
+            homeInstance: dmChannel.ownerHomeInstance || domainOrigin,
+          },
+          members: allParticipants,
+        },
+      };
+
+      // Include the new member's instance in targets even if not previously in the group
+      const targetOrigins = getGroupDmTargetOrigins(id);
+      const newMemberInstance = addedUser?.homeInstance || domainOrigin;
+      let finalTargets = targetOrigins;
+      if (finalTargets && newMemberInstance !== domainOrigin && !finalTargets.includes(newMemberInstance)) {
+        finalTargets = [...finalTargets, newMemberInstance];
+      }
+
+      appendMutationLog(
+        memberAddPayload.messageId,
+        id,
+        'member_add',
+        JSON.stringify(memberAddPayload),
+      );
+      queueOutboxEvent(
+        memberAddPayload.messageId,
+        id,
+        'member_add',
+        JSON.stringify(memberAddPayload),
+        finalTargets,
+      );
+    }
 
     // Active call sync: if there's an active call in this DM, notify the new member
     const room = connectionManager.getRoom(id);
@@ -717,6 +811,50 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       eq(schema.readStates.channelId, id),
     )).run();
 
+    // Federation: relay member_remove (leave) to peers
+    const dmChannelForFed = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
+    let leavingUser: typeof schema.users.$inferSelect | undefined;
+    let targetOrigins: string[] | undefined;
+    if (isFederationRelayEnabled() && dmChannelForFed?.federatedId) {
+      const domainOrigin = getOurOrigin();
+      leavingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+
+      const memberRemovePayload: FederationRelayEvent = {
+        eventType: 'member_remove',
+        dmChannelId: id,
+        messageId: `member_remove:${request.userId}:${Date.now()}`,
+        federatedId: dmChannelForFed.federatedId,
+        encryptionVersion: 0,
+        timestamp: Date.now(),
+        membership: {
+          user: {
+            homeUserId: leavingUser?.homeUserId || request.userId,
+            homeInstance: leavingUser?.homeInstance || domainOrigin,
+          },
+          removedBy: {
+            homeUserId: leavingUser?.homeUserId || request.userId,
+            homeInstance: leavingUser?.homeInstance || domainOrigin,
+          },
+          reason: 'leave',
+        },
+      };
+
+      targetOrigins = getGroupDmTargetOrigins(id);
+      appendMutationLog(
+        memberRemovePayload.messageId,
+        id,
+        'member_remove',
+        JSON.stringify(memberRemovePayload),
+      );
+      queueOutboxEvent(
+        memberRemovePayload.messageId,
+        id,
+        'member_remove',
+        JSON.stringify(memberRemovePayload),
+        targetOrigins,
+      );
+    }
+
     // Check remaining members
     const remainingMembers = db.select()
       .from(schema.dmMembers)
@@ -731,6 +869,55 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .set({ ownerId: nextOwner.userId })
           .where(eq(schema.dmChannels.id, id))
           .run();
+
+        // Federation: relay ownership transfer
+        if (isFederationRelayEnabled() && dmChannelForFed?.federatedId) {
+          const domainOrigin = getOurOrigin();
+          const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
+          const prevOwnerUser = leavingUser; // Already queried above in step D
+
+          // Update federated owner columns
+          db.update(schema.dmChannels)
+            .set({
+              ownerHomeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
+              ownerHomeInstance: newOwnerUser?.homeInstance || domainOrigin,
+            })
+            .where(eq(schema.dmChannels.id, id))
+            .run();
+
+          const transferPayload: FederationRelayEvent = {
+            eventType: 'ownership_transfer',
+            dmChannelId: id,
+            messageId: `ownership_transfer:${nextOwner.userId}:${Date.now()}`,
+            federatedId: dmChannelForFed.federatedId,
+            encryptionVersion: 0,
+            timestamp: Date.now(),
+            ownership: {
+              newOwner: {
+                homeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
+                homeInstance: newOwnerUser?.homeInstance || domainOrigin,
+              },
+              previousOwner: {
+                homeUserId: prevOwnerUser?.homeUserId || request.userId,
+                homeInstance: prevOwnerUser?.homeInstance || domainOrigin,
+              },
+            },
+          };
+
+          appendMutationLog(
+            transferPayload.messageId,
+            id,
+            'ownership_transfer',
+            JSON.stringify(transferPayload),
+          );
+          queueOutboxEvent(
+            transferPayload.messageId,
+            id,
+            'ownership_transfer',
+            JSON.stringify(transferPayload),
+            targetOrigins,
+          );
+        }
       }
 
       // Broadcast dm_member_removed to remaining members
