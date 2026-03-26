@@ -566,8 +566,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // 4. Query mutation log for the relevant channels
-      //    Only return mutations for messages authored by LOCAL users
-      //    (source_instance IS NULL) — each instance is authoritative for its own users' messages.
+      //    Return mutations for ALL locally-created messages (source_instance IS NULL).
+      //    This includes messages by replicated users (e.g., Jannis browsing orbit)
+      //    because they were created on THIS instance and need to be synced to the peer.
       let mutationRows: Array<{
         id: string;
         dm_message_id: string;
