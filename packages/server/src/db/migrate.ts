@@ -183,7 +183,6 @@ export function runMigrations(db: Database.Database): void {
     {
       name: 'dm_channels',
       columns: [
-        { name: 'federated_id', type: 'TEXT' },
         { name: 'owner_home_user_id', type: 'TEXT' },
         { name: 'owner_home_instance', type: 'TEXT' },
         { name: 'deleted_at', type: 'INTEGER' },
@@ -1494,23 +1493,30 @@ function migrateDmChannelsFederatedId(db: Database.Database): void {
   }
 
   if (hasOldCol && !hasNewCol) {
-    // Full table rebuild to rename column and add new columns in one atomic step
+    // Full table rebuild to rename column — disable FK enforcement during DROP
     console.log('Migrating: Renaming canonical_pair_id → federated_id in dm_channels and adding group DM columns...');
-    db.exec(`
-      CREATE TABLE dm_channels_new (
-        id TEXT PRIMARY KEY,
-        owner_id TEXT,
-        federated_id TEXT,
-        owner_home_user_id TEXT,
-        owner_home_instance TEXT,
-        deleted_at INTEGER,
-        created_at INTEGER NOT NULL
-      );
-      INSERT INTO dm_channels_new (id, owner_id, federated_id, created_at)
-        SELECT id, owner_id, canonical_pair_id, created_at FROM dm_channels;
-      DROP TABLE dm_channels;
-      ALTER TABLE dm_channels_new RENAME TO dm_channels;
-    `);
+    db.exec(`PRAGMA foreign_keys = OFF`);
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE dm_channels_new (
+            id TEXT PRIMARY KEY,
+            owner_id TEXT,
+            federated_id TEXT,
+            owner_home_user_id TEXT,
+            owner_home_instance TEXT,
+            deleted_at INTEGER,
+            created_at INTEGER NOT NULL
+          );
+          INSERT INTO dm_channels_new (id, owner_id, federated_id, created_at)
+            SELECT id, owner_id, canonical_pair_id, created_at FROM dm_channels;
+          DROP TABLE dm_channels;
+          ALTER TABLE dm_channels_new RENAME TO dm_channels;
+        `);
+      })();
+    } finally {
+      db.exec(`PRAGMA foreign_keys = ON`);
+    }
     db.exec(`DROP INDEX IF EXISTS idx_dm_canonical_pair`);
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_federated ON dm_channels(federated_id) WHERE federated_id IS NOT NULL`);
     console.log('Migrating: dm_channels rename complete.');
