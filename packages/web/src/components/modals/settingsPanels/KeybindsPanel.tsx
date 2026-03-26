@@ -286,6 +286,7 @@ export function KeybindsPanel() {
 
   return (
     <div className="space-y-5">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Keybinds</h2>
       {/* macOS Accessibility Warning */}
       {isElectronMac() && accessibilityTrusted === false && (
         <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5">

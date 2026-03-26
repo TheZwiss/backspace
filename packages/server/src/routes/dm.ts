@@ -797,6 +797,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     // Check DM channel ownership before leaving
     const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
 
+    // Compute federation targets BEFORE member deletion so the leaving user's peer is included
+    let fedTargetOrigins: string[] | undefined;
+    let leavingUser: typeof schema.users.$inferSelect | undefined;
+    if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+      fedTargetOrigins = getGroupDmTargetOrigins(id);
+      leavingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get() ?? undefined;
+    }
+
     // Delete dm_members row
     db.delete(schema.dmMembers)
       .where(and(
@@ -812,18 +820,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     )).run();
 
     // Federation: relay member_remove (leave) to peers
-    const dmChannelForFed = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, id)).get();
-    let leavingUser: typeof schema.users.$inferSelect | undefined;
-    let targetOrigins: string[] | undefined;
-    if (isFederationRelayEnabled() && dmChannelForFed?.federatedId) {
+    if (isFederationRelayEnabled() && dmChannel?.federatedId) {
       const domainOrigin = getOurOrigin();
-      leavingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
 
       const memberRemovePayload: FederationRelayEvent = {
         eventType: 'member_remove',
         dmChannelId: id,
         messageId: `member_remove:${request.userId}:${Date.now()}`,
-        federatedId: dmChannelForFed.federatedId,
+        federatedId: dmChannel.federatedId,
         encryptionVersion: 0,
         timestamp: Date.now(),
         membership: {
@@ -839,7 +843,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         },
       };
 
-      targetOrigins = getGroupDmTargetOrigins(id);
       appendMutationLog(
         memberRemovePayload.messageId,
         id,
@@ -851,7 +854,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         id,
         'member_remove',
         JSON.stringify(memberRemovePayload),
-        targetOrigins,
+        fedTargetOrigins,
       );
     }
 
@@ -871,10 +874,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .run();
 
         // Federation: relay ownership transfer
-        if (isFederationRelayEnabled() && dmChannelForFed?.federatedId) {
+        if (isFederationRelayEnabled() && dmChannel?.federatedId) {
           const domainOrigin = getOurOrigin();
           const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
-          const prevOwnerUser = leavingUser; // Already queried above in step D
+          const prevOwnerUser = leavingUser; // Already queried above before member deletion
 
           // Update federated owner columns
           db.update(schema.dmChannels)
@@ -889,7 +892,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             eventType: 'ownership_transfer',
             dmChannelId: id,
             messageId: `ownership_transfer:${nextOwner.userId}:${Date.now()}`,
-            federatedId: dmChannelForFed.federatedId,
+            federatedId: dmChannel.federatedId,
             encryptionVersion: 0,
             timestamp: Date.now(),
             ownership: {
@@ -915,7 +918,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             id,
             'ownership_transfer',
             JSON.stringify(transferPayload),
-            targetOrigins,
+            fedTargetOrigins,
           );
         }
       }
