@@ -108,8 +108,9 @@ async function processOutboxTick(): Promise<void> {
     .select({
       outboxId: schema.federationOutbox.id,
       peerId: schema.federationOutbox.peerId,
-      dmChannelId: schema.federationOutbox.dmChannelId,
-      messageId: schema.federationOutbox.messageId,
+      contextId: schema.federationOutbox.contextId,
+      entityId: schema.federationOutbox.entityId,
+      contextType: schema.federationOutbox.contextType,
       eventType: schema.federationOutbox.eventType,
       payload: schema.federationOutbox.payload,
       encryptionVersion: schema.federationOutbox.encryptionVersion,
@@ -161,17 +162,24 @@ async function processOutboxTick(): Promise<void> {
     // Build relay events from outbox entries
     const events: FederationRelayEvent[] = peerEntries.map((entry) => {
       const parsed = JSON.parse(entry.payload) as Partial<FederationRelayEvent>;
-      return {
+      const isDm = entry.contextType === 'dm' || !entry.contextType;
+      const evt: FederationRelayEvent = {
         eventType: entry.eventType as FederationRelayEvent['eventType'],
-        dmChannelId: entry.dmChannelId,
-        messageId: entry.messageId,
+        contextType: (entry.contextType ?? 'dm') as 'dm' | 'friend',
+        messageId: entry.entityId ?? '',
         encryptionVersion: (entry.encryptionVersion ?? 0) as 0,
         timestamp: entry.createdAt,
-        ...(parsed.participants ? { participants: parsed.participants } : {}),
-        ...(parsed.message ? { message: parsed.message } : {}),
-        ...(parsed.reactions ? { reactions: parsed.reactions } : {}),
-        ...(parsed.reaction ? { reaction: parsed.reaction } : {}),
       };
+      if (isDm && entry.contextId) evt.dmChannelId = entry.contextId;
+      if (parsed.participants) evt.participants = parsed.participants;
+      if (parsed.message) evt.message = parsed.message;
+      if (parsed.reactions) evt.reactions = parsed.reactions;
+      if (parsed.reaction) evt.reaction = parsed.reaction;
+      if (parsed.membership) evt.membership = parsed.membership;
+      if (parsed.ownership) evt.ownership = parsed.ownership;
+      if (parsed.group) evt.group = parsed.group;
+      if (parsed.friendship) evt.friendship = parsed.friendship;
+      return evt;
     });
 
     const request: FederationRelayRequest = {
@@ -205,7 +213,7 @@ async function processOutboxTick(): Promise<void> {
           // Map accepted messageIds to outbox IDs
           const acceptedSet = new Set(result.accepted);
           const acceptedOutboxIds = peerEntries
-            .filter((e) => acceptedSet.has(e.messageId))
+            .filter((e) => acceptedSet.has(e.entityId))
             .map((e) => e.outboxId);
 
           if (acceptedOutboxIds.length > 0) {
@@ -677,6 +685,48 @@ async function runInitialSyncForNewPeers(): Promise<void> {
         sinceTimestamp = data.checkpoint;
 
         if (!data.hasMore) break;
+      }
+
+      // Second pass: sync friend events
+      let friendSinceTimestamp = 0;
+      while (true) {
+        const friendBody = JSON.stringify({ sinceTimestamp: friendSinceTimestamp, contextType: 'friend', limit: 100 });
+        const friendHeaders = buildFederationHeaders(friendBody, peer.hmacSecret, ourOrigin);
+
+        const friendResponse = await fetch(`${peer.origin}/api/federation/sync`, {
+          method: 'POST',
+          headers: friendHeaders,
+          body: friendBody,
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        if (!friendResponse.ok) {
+          console.error(`[federation-worker] Friend sync with ${peer.origin} failed: ${friendResponse.status}`);
+          break;
+        }
+
+        const friendData = await friendResponse.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
+
+        if (friendData.events.length === 0) break;
+
+        const friendRelayBody = JSON.stringify({
+          version: 1,
+          sourceInstance: peer.origin,
+          events: friendData.events,
+        });
+        const friendRelayHeaders = buildFederationHeaders(friendRelayBody, peer.hmacSecret, peer.origin);
+
+        await fetch(`${ourOrigin}/api/federation/relay`, {
+          method: 'POST',
+          headers: friendRelayHeaders,
+          body: friendRelayBody,
+          signal: AbortSignal.timeout(30_000),
+        });
+
+        totalEvents += friendData.events.length;
+        friendSinceTimestamp = friendData.checkpoint;
+
+        if (!friendData.hasMore) break;
       }
 
       // Update lastSyncedAt so this doesn't run again

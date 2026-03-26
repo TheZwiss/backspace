@@ -515,12 +515,12 @@ export function cleanupSoftDeletedDmChannels(): number {
 
         // Delete federation outbox entries
         tx.delete(schema.federationOutbox)
-          .where(eq(schema.federationOutbox.dmChannelId, channel.id))
+          .where(eq(schema.federationOutbox.contextId, channel.id))
           .run();
 
         // Delete mutation log entries
         tx.delete(schema.federationMutationLog)
-          .where(eq(schema.federationMutationLog.dmChannelId, channel.id))
+          .where(eq(schema.federationMutationLog.contextId, channel.id))
           .run();
 
         // Delete the channel itself
