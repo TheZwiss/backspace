@@ -11,7 +11,7 @@ import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 
 /**
@@ -1052,7 +1052,8 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
 
   // Federation: log mutation and queue for relay
   appendMutationLog(messageId, msg.dmChannelId, 'delete');
-  queueOutboxEvent(messageId, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }));
+  const targetOrigins = getGroupDmTargetOrigins(msg.dmChannelId);
+  queueOutboxEvent(messageId, msg.dmChannelId, 'delete', JSON.stringify({ deleted: true }), targetOrigins);
 }
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
@@ -1136,6 +1137,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
       emoji,
       createdAt: now,
     }));
+    const reactionAddTargetOrigins = getGroupDmTargetOrigins(dmMsg.dmChannelId);
     queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
       reaction: {
         messageId: canonicalMessageId,
@@ -1145,7 +1147,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
         emoji,
         createdAt: now,
       },
-    }));
+    }), reactionAddTargetOrigins);
   } catch (err) {
     // Unique constraint violation (already reacted)
   }
@@ -1213,6 +1215,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       homeUserId: removingUser?.homeUserId || userId,
       emoji,
     }));
+    const reactionRemoveTargetOrigins = getGroupDmTargetOrigins(dmMsg.dmChannelId);
     queueOutboxEvent(
       `${messageId}:${userId}:${emoji}`,
       dmMsg.dmChannelId,
@@ -1226,6 +1229,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
           emoji,
         },
       }),
+      reactionRemoveTargetOrigins,
     );
   }
 }
