@@ -7,6 +7,7 @@ import { buildFederationHeaders } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
+import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -444,12 +445,21 @@ async function processFileQueueEntry(
       return;
     }
 
+    // Generate thumbnail for images (same as local upload flow)
+    let thumbnailFilename: string | null = null;
+    try {
+      thumbnailFilename = await generateThumbnail(localPath, entry.mimetype, config.uploadDir);
+    } catch {
+      // Non-fatal — full image will be used instead
+    }
+
     // Update the existing attachment row (created by processCreateEvent with
     // sourceUrl as interim filename) to point to the local file
     const updated = db.update(schema.attachments)
       .set({
         filename: localFilename,
         size: stat.size,
+        thumbnailFilename,
       })
       .where(
         and(
@@ -471,6 +481,7 @@ async function processFileQueueEntry(
           originalName: entry.originalName,
           mimetype: entry.mimetype,
           size: stat.size,
+          thumbnailFilename,
           sourceUrl: entry.sourceUrl,
           createdAt: now,
         })
