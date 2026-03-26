@@ -33,6 +33,7 @@ import {
 } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import type { FederationRelayEvent } from '@backspace/shared';
+import { resolveLocalUser, resolveOrCreateReplicatedUser } from './federation.js';
 
 /**
  * Batch-fetch reactions for a set of DM message IDs.
@@ -486,42 +487,64 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateGroupDmRequest }>('/api/dm/group', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { userIds } = request.body;
+    const { users: userIdentities } = request.body;
 
-    // Validate userIds is a non-empty array of at least 2 strings
-    if (!Array.isArray(userIds) || userIds.length < 2) {
-      return reply.code(400).send({ error: 'userIds must contain at least 2 user IDs', statusCode: 400 });
+    // Validate input is a non-empty array of at least 2 identity objects
+    if (!Array.isArray(userIdentities) || userIdentities.length < 2) {
+      return reply.code(400).send({ error: 'users must contain at least 2 entries', statusCode: 400 });
     }
-    if (userIds.some(id => typeof id !== 'string' || !id)) {
-      return reply.code(400).send({ error: 'All userIds must be non-empty strings', statusCode: 400 });
-    }
-
-    // No duplicates
-    if (new Set(userIds).size !== userIds.length) {
-      return reply.code(400).send({ error: 'userIds must not contain duplicates', statusCode: 400 });
+    if (userIdentities.some(u => !u || typeof u.id !== 'string' || !u.id)) {
+      return reply.code(400).send({ error: 'All entries must have a non-empty id', statusCode: 400 });
     }
 
-    // Caller cannot include themselves
-    if (userIds.includes(request.userId)) {
-      return reply.code(400).send({ error: 'Do not include yourself in userIds — you are added automatically', statusCode: 400 });
-    }
-
-    // Total members (caller + userIds) capped at 10
-    const totalMembers = 1 + userIds.length;
+    // Total members (caller + users) capped at 10
+    const totalMembers = 1 + userIdentities.length;
     if (totalMembers > 10) {
       return reply.code(400).send({ error: `Group DMs are limited to 10 members (requested ${totalMembers})`, statusCode: 400 });
     }
 
     const db = getDb();
 
-    // Validate all target users exist and are not soft-deleted
-    const targetUsers = db.select().from(schema.users)
-      .where(inArray(schema.users.id, userIds))
-      .all()
-      .filter(u => !u.isDeleted);
+    // Resolve each identity to a local user row
+    const targetUsers: Array<typeof schema.users.$inferSelect> = [];
+    for (const identity of userIdentities) {
+      let localUser: typeof schema.users.$inferSelect | undefined;
 
-    if (targetUsers.length !== userIds.length) {
-      return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+      if (identity.homeUserId && identity.homeInstance) {
+        // Federated user — resolve via homeUserId, creating a replicated stub if needed
+        localUser = resolveOrCreateReplicatedUser(identity.homeUserId, identity.homeInstance, db);
+      } else {
+        // Local user — direct ID lookup
+        localUser = db.select().from(schema.users).where(
+          and(eq(schema.users.id, identity.id), eq(schema.users.isDeleted, 0)),
+        ).get();
+
+        // Fallback: if direct ID lookup fails, try homeUserId resolution
+        // (handles case where identity.id is a remote snowflake but homeUserId wasn't provided)
+        if (!localUser) {
+          localUser = resolveLocalUser(identity.id, db);
+        }
+      }
+
+      if (!localUser) {
+        return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+      }
+      if (localUser.isDeleted) {
+        return reply.code(404).send({ error: 'One or more users not found', statusCode: 404 });
+      }
+
+      targetUsers.push(localUser);
+    }
+
+    // Dedup: check no resolved user appears twice
+    const resolvedIds = new Set(targetUsers.map(u => u.id));
+    if (resolvedIds.size !== targetUsers.length) {
+      return reply.code(400).send({ error: 'Duplicate users after identity resolution', statusCode: 400 });
+    }
+
+    // Caller cannot include themselves
+    if (targetUsers.some(u => u.id === request.userId)) {
+      return reply.code(400).send({ error: 'Do not include yourself — you are added automatically', statusCode: 400 });
     }
 
     // Validate all target users are friends with the caller
@@ -549,13 +572,11 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         createdAt: now,
       }).run();
 
-      // Add caller as member
       tx.insert(schema.dmMembers).values({
         dmChannelId,
         userId: request.userId,
       }).run();
 
-      // Add all target users as members
       for (const targetUser of targetUsers) {
         tx.insert(schema.dmMembers).values({
           dmChannelId,
@@ -600,7 +621,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       lastMessage: null,
     };
 
-    // Broadcast dm_channel_created to ALL members (including caller — keeps all clients in sync)
+    // Broadcast dm_channel_created to ALL members (including caller)
     for (const member of allMembers) {
       connectionManager.sendToUser(member.id, {
         type: 'dm_channel_created',
@@ -614,7 +635,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const allParticipants = getDmParticipants(dmChannelId);
 
       for (const targetUser of targetUsers) {
-        // Only relay for users from remote instances
         if (!targetUser.homeInstance || targetUser.homeInstance === domainOrigin) continue;
 
         const memberAddPayload: FederationRelayEvent = {
@@ -644,7 +664,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         };
 
         const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
-        // Ensure the new member's instance is in targets
         let finalTargets = targetOrigins;
         if (finalTargets && targetUser.homeInstance !== domainOrigin && !finalTargets.includes(targetUser.homeInstance)) {
           finalTargets = [...finalTargets, targetUser.homeInstance];
