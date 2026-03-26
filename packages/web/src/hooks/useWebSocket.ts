@@ -533,9 +533,34 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
-      addRealtimeMessage(event.message.dmChannelId, event.message as any);
       const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useSpaceStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
+
+      // Check if this is a relay-created channel that duplicates an existing DM
+      // (same conversation, different channel ID). If so, skip adding a new sidebar entry
+      // and route the message to the existing channel instead.
+      if (!knownDm) {
+        const msgUser = event.message.user;
+        const msgHomeUserId = msgUser?.homeUserId || msgUser?.id;
+        if (msgHomeUserId) {
+          const existingDm = currentDmChannels.find(dm =>
+            dm.members.length === 2 &&
+            dm.members.some(m => (m.homeUserId || m.id) === msgHomeUserId),
+          );
+          if (existingDm) {
+            // Route message to the existing channel instead of creating a duplicate
+            addRealtimeMessage(existingDm.id, { ...event.message, dmChannelId: existingDm.id } as any);
+            const updatedDms = currentDmChannels.map(dm =>
+              dm.id === existingDm.id ? { ...dm, lastMessage: event.message } : dm,
+            );
+            updatedDms.sort((a, b) => (b.lastMessage?.createdAt ?? b.createdAt) - (a.lastMessage?.createdAt ?? a.createdAt));
+            setDms(updatedDms);
+            break;
+          }
+        }
+      }
+
+      addRealtimeMessage(event.message.dmChannelId, event.message as any);
       if (!knownDm) {
         addDmCh({
           id: event.message.dmChannelId,
