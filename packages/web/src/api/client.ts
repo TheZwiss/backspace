@@ -23,6 +23,7 @@ import type {
   UpdateMemberRequest,
   LiveKitTokenResponse,
   CreateDmRequest,
+  CreateGroupDmRequest,
   CreateDmMessageRequest,
   Friend,
   FriendRequest,
@@ -135,6 +136,7 @@ export class BackspaceApiClient {
   readonly dm: {
     list: () => Promise<DmChannel[]>;
     create: (data: CreateDmRequest) => Promise<DmChannel>;
+    createGroup: (data: CreateGroupDmRequest) => Promise<DmChannel>;
     close: (id: string) => Promise<{ success: boolean }>;
     messages: (id: string, before?: string, limit?: number) => Promise<DmMessageWithUser[]>;
     messagesAround: (id: string, messageId: string) => Promise<DmMessageWithUser[]>;
@@ -480,6 +482,7 @@ export class BackspaceApiClient {
     this.dm = {
       list: () => request<DmChannel[]>('GET', '/dm'),
       create: (data: CreateDmRequest) => request<DmChannel>('POST', '/dm', data),
+      createGroup: (data: CreateGroupDmRequest) => request<DmChannel>('POST', '/dm/group', data),
       close: (id: string) => request<{ success: boolean }>('DELETE', `/dm/${id}`),
       messages: (id: string, before?: string, limit = 50) => {
         const params = new URLSearchParams();

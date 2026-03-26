@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore, getApiForOrigin } from '../../stores/spaceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 
@@ -16,7 +18,8 @@ export function AddDmMemberModal() {
   const modalData = useUIStore((s) => s.modalData);
   const closeModal = useUIStore((s) => s.closeModal);
   const dmChannels = useSpaceStore((s) => s.dmChannels);
-  const channelOriginMap = useSpaceStore((s) => s.channelOriginMap);
+  const navigate = useNavigate();
+  const myUserId = useAuthStore((s) => s.user?.id);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -64,14 +67,24 @@ export function AddDmMemberModal() {
   };
 
   const handleSelectUser = async (user: User) => {
-    if (!dmChannelId || isAdding) return;
+    if (!dmChannelId || !dmChannel || isAdding) return;
     setError('');
     setIsAdding(true);
     try {
-      const origin = channelOriginMap.get(dmChannelId) || '';
-      const targetApi = getApiForOrigin(origin);
-      await targetApi.dm.addMember(dmChannelId, { userId: user.id });
-      closeModal();
+      if (!dmChannel.ownerId) {
+        // 1-on-1 DM → create a new group DM with all 3 users
+        const otherMember = dmChannel.members.find(m => m.id !== myUserId);
+        if (!otherMember) return;
+        const newChannel = await api.dm.createGroup({ userIds: [otherMember.id, user.id] });
+        closeModal();
+        navigate(`/channels/@me/${newChannel.id}`);
+      } else {
+        // Group DM → add to existing group
+        // Always call the home instance — S2S federation handles relay.
+        // Only the owner can add members, and the owner is always on the home instance.
+        await api.dm.addMember(dmChannelId, { userId: user.id });
+        closeModal();
+      }
     } catch (err) {
       setError((err as Error).message || 'Failed to add member');
     } finally {
