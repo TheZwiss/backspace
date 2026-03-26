@@ -651,6 +651,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             syncProfileToRemote(connectedInstance).catch((err) => {
               console.warn(`[ProfileSync] Reconnect sync to ${origin} failed:`, err);
             });
+
+            // Initiate server-to-server peering for DM relay (non-fatal, idempotent)
+            api.federation.initiatePeering({ remoteOrigin: origin }).catch(() => {});
           } catch (err) {
             if (isNetworkError(err)) {
               // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid

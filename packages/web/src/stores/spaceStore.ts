@@ -668,9 +668,44 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     });
     const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
 
+    // Deduplicate DMs: if the same 1-on-1 conversation exists from multiple origins,
+    // prefer the home-origin copy (empty string origin = home). This handles the case
+    // where the federation relay created a local copy of a remote DM.
+    const deduplicatedDms: typeof mergedDms = [];
+    const seenPairs = new Map<string, number>(); // canonicalKey -> index in deduplicatedDms
+
+    for (const dm of mergedDms) {
+      if (dm.members.length !== 2) {
+        // Group DMs: no dedup
+        deduplicatedDms.push(dm);
+        continue;
+      }
+
+      // Build a canonical key from the two members' homeUserIds
+      const memberIds = dm.members.map(m => m.homeUserId || m.id).sort();
+      const canonicalKey = memberIds.join(':');
+      const dmOrigin = channelOriginMap.get(dm.id) ?? '';
+
+      const existingIdx = seenPairs.get(canonicalKey);
+      if (existingIdx !== undefined) {
+        // Duplicate found — keep the home-origin copy
+        const existingDm = deduplicatedDms[existingIdx]!;
+        const existingOrigin = channelOriginMap.get(existingDm.id) ?? '';
+
+        if (dmOrigin === '' && existingOrigin !== '') {
+          // New one is home, existing is remote — replace with home copy
+          deduplicatedDms[existingIdx] = dm;
+        }
+        // Otherwise keep existing (it's already home or first-seen)
+      } else {
+        seenPairs.set(canonicalKey, deduplicatedDms.length);
+        deduplicatedDms.push(dm);
+      }
+    }
+
     const update: Partial<SpaceState> = {
       spaces: mergedSpaces,
-      dmChannels: mergedDms,
+      dmChannels: deduplicatedDms,
       channelToSpaceMap,
       channelLastMessageIds,
       spacePermissions,
