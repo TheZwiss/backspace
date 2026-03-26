@@ -496,14 +496,14 @@ export function runMigrations(db: Database.Database): void {
   try {
     // Find 1-on-1 DM channels that don't have a canonical_pair_id yet
     const channelsNeedingPairId = db.prepare(`
-      SELECT dc.id, GROUP_CONCAT(u.home_user_id || ':' || u.id) as member_info
+      SELECT dc.id, GROUP_CONCAT(COALESCE(u.home_user_id, u.id)) as home_ids
       FROM dm_channels dc
       JOIN dm_members dm ON dc.id = dm.dm_channel_id
       JOIN users u ON dm.user_id = u.id
       WHERE dc.canonical_pair_id IS NULL
       GROUP BY dc.id
       HAVING COUNT(dm.user_id) = 2
-    `).all() as { id: string; member_info: string }[];
+    `).all() as { id: string; home_ids: string }[];
 
     if (channelsNeedingPairId.length > 0) {
       const crypto = require('crypto');
@@ -511,16 +511,8 @@ export function runMigrations(db: Database.Database): void {
 
       let backfilled = 0;
       for (const channel of channelsNeedingPairId) {
-        // member_info is like "homeUserId1:id1,homeUserId2:id2"
-        // Extract the homeUserIds (or fall back to regular ids)
-        const members = channel.member_info.split(',');
-        const homeUserIds = members.map((m: string) => {
-          const parts = m.split(':');
-          // home_user_id might be "null" string if NULL in DB
-          const homeUserId = parts[0];
-          const regularId = parts[1];
-          return (homeUserId && homeUserId !== 'null') ? homeUserId : regularId;
-        });
+        // home_ids is like "homeUserId1,homeUserId2" (COALESCE handles NULL home_user_id)
+        const homeUserIds = channel.home_ids.split(',');
 
         if (homeUserIds.length === 2) {
           const sorted = homeUserIds.sort();

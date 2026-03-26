@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
 import type { FederationRelayEvent } from '@backspace/shared';
+import { config } from '../config.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export function buildRelayPayload(
   return {
     userId: user.id,
     homeUserId: user.homeUserId || user.id,
-    homeInstance: user.homeInstance || '',
+    homeInstance: user.homeInstance || config.domain || '',
     content: message.content,
     replyToId: message.replyToId ?? null,
     editedAt: message.editedAt ?? null,
