@@ -12,6 +12,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import { appendMutationLog, queueOutboxEvent, queueDmRelay } from '../utils/federationOutbox.js';
+import { getOurOrigin } from '../utils/federationAuth.js';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -1127,6 +1128,8 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     });
 
     // Federation: log reaction mutation and queue for relay
+    const canonicalMessageId = dmMsg.sourceMessageId || messageId;
+    const messageHomeInstance = dmMsg.sourceInstance || getOurOrigin();
     appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
       userId,
       homeUserId: reactionUser?.homeUserId || userId,
@@ -1135,7 +1138,8 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     }));
     queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
       reaction: {
-        messageId,
+        messageId: canonicalMessageId,
+        messageHomeInstance,
         userId,
         homeUserId: reactionUser?.homeUserId || userId,
         emoji,
@@ -1202,6 +1206,8 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
 
     // Federation: log reaction removal and queue for relay
     const removingUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    const canonicalMessageId = dmMsg.sourceMessageId || messageId;
+    const messageHomeInstance = dmMsg.sourceInstance || getOurOrigin();
     appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_remove', JSON.stringify({
       userId,
       homeUserId: removingUser?.homeUserId || userId,
@@ -1213,7 +1219,8 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       'reaction_remove',
       JSON.stringify({
         reaction: {
-          messageId,
+          messageId: canonicalMessageId,
+          messageHomeInstance,
           userId,
           homeUserId: removingUser?.homeUserId || userId,
           emoji,
