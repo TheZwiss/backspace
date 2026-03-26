@@ -744,6 +744,7 @@ export interface FederationRelayEvent {
 }
 
 export interface FederationRelayReaction {
+  messageId?: string;
   userId: string;
   homeUserId: string;
   emoji: string;

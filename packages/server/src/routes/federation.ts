@@ -1252,14 +1252,16 @@ function processReactionAddEvent(
     return;
   }
 
-  // Find the local message corresponding to the source message
+  // Find the local message — use the actual message ID from the reaction payload,
+  // not event.messageId which is the outbox dedup key (reactionId)
+  const sourceMessageId = event.reaction.messageId ?? event.messageId;
   const localMsg = db
     .select()
     .from(schema.dmMessages)
     .where(
       and(
         eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, event.messageId),
+        eq(schema.dmMessages.sourceMessageId, sourceMessageId),
       ),
     )
     .get();
@@ -1337,14 +1339,16 @@ function processReactionRemoveEvent(
     return;
   }
 
-  // Find the local message
+  // Find the local message — use the actual message ID from the reaction payload,
+  // not event.messageId which is the outbox dedup key (composite string)
+  const sourceMessageId = event.reaction.messageId ?? event.messageId;
   const localMsg = db
     .select()
     .from(schema.dmMessages)
     .where(
       and(
         eq(schema.dmMessages.sourceInstance, sourceInstance),
-        eq(schema.dmMessages.sourceMessageId, event.messageId),
+        eq(schema.dmMessages.sourceMessageId, sourceMessageId),
       ),
     )
     .get();

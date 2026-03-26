@@ -1135,6 +1135,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     }));
     queueOutboxEvent(reactionId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
       reaction: {
+        messageId,
         userId,
         homeUserId: reactionUser?.homeUserId || userId,
         emoji,
@@ -1212,6 +1213,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
       'reaction_remove',
       JSON.stringify({
         reaction: {
+          messageId,
           userId,
           homeUserId: removingUser?.homeUserId || userId,
           emoji,
