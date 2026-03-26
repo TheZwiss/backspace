@@ -506,7 +506,7 @@ export function runMigrations(db: Database.Database): void {
     `).all() as { id: string; home_ids: string }[];
 
     if (channelsNeedingPairId.length > 0) {
-      const crypto = require('crypto');
+      // crypto is already imported at the top of this file
       const update = db.prepare('UPDATE dm_channels SET canonical_pair_id = ? WHERE id = ? AND canonical_pair_id IS NULL');
 
       let backfilled = 0;
