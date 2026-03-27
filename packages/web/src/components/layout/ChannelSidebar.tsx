@@ -887,31 +887,6 @@ export function ChannelSidebar() {
     </div>
     {floatingPanel}
     <ConfirmDialog
-      isOpen={leaveGroupDmId !== null}
-      onClose={() => setLeaveGroupDmId(null)}
-      onConfirm={async () => {
-        if (!leaveGroupDmId) return;
-        setLeaveGroupDmLoading(true);
-        try {
-          if (currentChannelId === leaveGroupDmId) {
-            navigate('/channels/@me');
-            setCurrentChannel(null);
-          }
-          await useSpaceStore.getState().leaveDm(leaveGroupDmId);
-          setLeaveGroupDmId(null);
-        } catch {
-          // leaveDm already handles errors
-        } finally {
-          setLeaveGroupDmLoading(false);
-        }
-      }}
-      title="Leave Group DM"
-      description="Are you sure you want to leave? You won't be able to rejoin unless someone adds you back."
-      confirmLabel="Leave"
-      variant="danger"
-      loading={leaveGroupDmLoading}
-    />
-    <ConfirmDialog
       isOpen={deleteCategoryId !== null}
       onClose={() => setDeleteCategoryId(null)}
       onConfirm={async () => {
