@@ -782,9 +782,19 @@ export interface FederationGroupPayload {
   members: FederationRelayParticipant[];
 }
 
+export interface FederationRelayProfileSnapshot {
+  displayName?: string | null;
+  avatar?: string | null;
+  avatarColor?: string | null;
+  banner?: string | null;
+  bio?: string | null;
+}
+
 export interface FederationFriendshipPayload {
   from: FederationRelayParticipant;
   to: FederationRelayParticipant;
+  fromProfile?: FederationRelayProfileSnapshot;
+  toProfile?: FederationRelayProfileSnapshot;
   status?: 'pending' | 'accepted' | 'declined';
   createdAt: number;
 }

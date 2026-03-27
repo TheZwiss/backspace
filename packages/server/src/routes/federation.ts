@@ -12,7 +12,7 @@ import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import { AVATAR_COLORS } from '@backspace/shared';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -1859,6 +1859,36 @@ function processOwnershipTransferEvent(
 
 // ─── Friend Event Processors ─────────────────────────────────────────────────
 
+/**
+ * Hydrate a replicated user stub with profile data from a relay event.
+ * Only updates fields that are currently null/empty on the local row,
+ * so manually-set local values are preserved.
+ */
+function hydrateReplicatedUserProfile(
+  user: typeof schema.users.$inferSelect,
+  profile: FederationRelayProfileSnapshot | undefined,
+  db: ReturnType<typeof getDb>,
+): typeof schema.users.$inferSelect {
+  if (!profile) return user;
+  if (!user.homeInstance) return user; // Don't update native users
+
+  const updates: Record<string, string | null> = {};
+  if (profile.displayName && !user.displayName) updates.displayName = profile.displayName;
+  if (profile.avatar && !user.avatar) updates.avatar = profile.avatar;
+  if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
+  if (profile.banner && !user.banner) updates.banner = profile.banner;
+  if (profile.bio && !user.bio) updates.bio = profile.bio;
+
+  if (Object.keys(updates).length === 0) return user;
+
+  db.update(schema.users)
+    .set(updates)
+    .where(eq(schema.users.id, user.id))
+    .run();
+
+  return { ...user, ...updates };
+}
+
 function processFriendRequestCreateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
@@ -1880,7 +1910,8 @@ function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  const fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
 
   // Resolve the recipient — must be a local user on this instance
   const toUser = resolveLocalUser(to.homeUserId, db);
@@ -2114,9 +2145,11 @@ function processFriendAddEvent(
     return;
   }
 
-  // Resolve both users (create stubs if needed)
-  const fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+  // Resolve both users (create stubs if needed) and hydrate with profile data
+  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
+  let toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+  toUser = hydrateReplicatedUserProfile(toUser, event.friendship.toProfile, db);
 
   // Idempotency: if friendship already exists, accept as no-op
   const existingFriend = db

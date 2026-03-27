@@ -6,7 +6,7 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
 import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
-import type { FederationRelayEvent } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import type {
   Friend,
   FriendRequest,
@@ -15,6 +15,16 @@ import type {
   DiscoverUser,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+
+function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
+  return {
+    displayName: user.displayName ?? null,
+    avatar: user.avatar ?? null,
+    avatarColor: user.avatarColor ?? null,
+    banner: user.banner ?? null,
+    bio: user.bio ?? null,
+  };
+}
 
 export async function socialRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/social/friends - List all friends
@@ -200,6 +210,8 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
         friendship: {
           from: fromIdentity,
           to: toIdentity,
+          fromProfile: senderUser ? buildProfileSnapshot(senderUser) : undefined,
+          toProfile: buildProfileSnapshot(targetUser),
           status: 'pending',
           createdAt: now,
         },
@@ -310,6 +322,8 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
           friendship: {
             from: fromIdentity,
             to: toIdentity,
+            fromProfile: buildProfileSnapshot(fromUser),
+            toProfile: buildProfileSnapshot(toUser),
             status: status as 'accepted' | 'declined',
             createdAt: friendRequest.createdAt,
           },
@@ -330,6 +344,8 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
             friendship: {
               from: fromIdentity,
               to: toIdentity,
+              fromProfile: buildProfileSnapshot(fromUser),
+              toProfile: buildProfileSnapshot(toUser),
               createdAt: now2,
             },
           };
