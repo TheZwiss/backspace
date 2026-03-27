@@ -492,7 +492,7 @@ export function ChannelSidebar() {
             {dmChannels.map((dm) => {
               const otherMembers = dm.members.filter(m => !isSelf(m, user));
               if (otherMembers.length === 0) return null;
-              const isGroup = dm.members.length > 2;
+              const isGroup = !!dm.ownerId;
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
 
               const firstOtherDm = isGroup ? null : otherMembers[0];
