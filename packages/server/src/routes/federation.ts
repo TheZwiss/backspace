@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
-import { eq, and, or, isNull } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -1637,6 +1637,8 @@ function processMemberAddEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
 
+  let bootstrapped = false;
+
   // Bootstrap: channel doesn't exist yet — create from group metadata
   if (!channel && event.group) {
     const channelId = generateSnowflake();
@@ -1682,6 +1684,34 @@ function processMemberAddEvent(
       .where(eq(schema.dmChannels.id, channelId)).get();
 
     console.log(`[federation] Bootstrapped group DM channel ${channelId} (federated_id: ${event.federatedId})`);
+
+    bootstrapped = true;
+
+    // Build full DmChannel response for dm_channel_created
+    const memberRows = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, channelId))
+      .all();
+    const memberUserIds = memberRows.map(m => m.userId);
+    const memberUsers = memberUserIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
+      : [];
+
+    const bootstrapResult = {
+      id: channelId,
+      ownerId,
+      createdAt: now,
+      members: memberUsers.map(u => sanitizeUser(u)),
+      lastMessage: null,
+    };
+
+    // Send dm_channel_created to all local WebSocket-connected members
+    for (const mu of memberUsers) {
+      connectionManager.sendToUser(mu.id, {
+        type: 'dm_channel_created',
+        dmChannel: bootstrapResult,
+      });
+    }
   }
 
   if (!channel) {
@@ -1735,12 +1765,14 @@ function processMemberAddEvent(
     }).run();
   }
 
-  // Broadcast to local WebSocket clients
-  connectionManager.sendToDmMembers(channel.id, {
-    type: 'dm_member_added',
-    dmChannelId: channel.id,
-    user: sanitizeUser(localUser),
-  });
+  if (!bootstrapped) {
+    // Broadcast to local WebSocket clients
+    connectionManager.sendToDmMembers(channel.id, {
+      type: 'dm_member_added',
+      dmChannelId: channel.id,
+      user: sanitizeUser(localUser),
+    });
+  }
 
   accepted.push(event.messageId);
 }
