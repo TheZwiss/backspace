@@ -770,6 +770,7 @@ export interface FederationRelayEvent {
   friendship?: FederationFriendshipPayload;
   // file_rejected event fields
   attachmentId?: string;
+  sourceFilename?: string;
   rejectionReason?: string;
   rejectionLimit?: number;
   affectedUserIds?: string[];

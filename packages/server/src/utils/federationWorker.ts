@@ -179,6 +179,12 @@ async function processOutboxTick(): Promise<void> {
       if (parsed.ownership) evt.ownership = parsed.ownership;
       if (parsed.group) evt.group = parsed.group;
       if (parsed.friendship) evt.friendship = parsed.friendship;
+      // file_rejected event fields
+      if (parsed.attachmentId) evt.attachmentId = parsed.attachmentId;
+      if (parsed.sourceFilename) evt.sourceFilename = parsed.sourceFilename;
+      if (parsed.rejectionReason) evt.rejectionReason = parsed.rejectionReason;
+      if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
+      if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
       return evt;
     });
 
@@ -420,12 +426,16 @@ function handleSizeRejection(
   }
 
   // Queue a file_rejected reverse relay event to the sender's instance
+  // Extract the filename from the sourceUrl (e.g., "https://sender/api/uploads/12345.png" → "12345.png")
+  const sourceFilename = entry.sourceUrl.split('/').pop() ?? entry.sourceUrl;
+
   const event: FederationRelayEvent = {
     eventType: 'file_rejected',
     messageId: localMsg.sourceMessageId,
     encryptionVersion: 0,
     timestamp: now,
     attachmentId: att?.id ?? entry.sourceUrl,
+    sourceFilename,
     rejectionReason: 'size_limit_exceeded',
     rejectionLimit: maxUploadSize,
     affectedUserIds,

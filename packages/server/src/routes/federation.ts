@@ -2312,14 +2312,13 @@ function processFileRejectedEvent(
     .where(eq(schema.attachments.dmMessageId, localMsg.id))
     .all();
 
-  // The attachmentId from the remote is their local attachment ID, not ours.
-  // Match by sourceUrl instead — the remote's sourceUrl points to our upload endpoint.
-  const ourOrigin = getOurOrigin();
-  let matchedAttachment = messageAttachments.find(a =>
-    a.sourceUrl && a.sourceUrl.startsWith(ourOrigin),
-  );
+  // Match by filename from the sourceUrl — the remote sends the filename portion
+  // (e.g., "12345.png") which matches our local attachment's filename.
+  let matchedAttachment = event.sourceFilename
+    ? messageAttachments.find(a => a.filename === event.sourceFilename)
+    : undefined;
 
-  // If only one attachment, use it directly
+  // Fallback: if only one attachment, use it directly
   if (!matchedAttachment && messageAttachments.length === 1) {
     matchedAttachment = messageAttachments[0];
   }
@@ -2357,7 +2356,8 @@ function processFileRejectedEvent(
   let existingMeta: Array<{ userId: string; username: string; limit: number }> = [];
   if (matchedAttachment.federationMeta) {
     try {
-      existingMeta = JSON.parse(matchedAttachment.federationMeta);
+      const parsed = JSON.parse(matchedAttachment.federationMeta);
+      existingMeta = Array.isArray(parsed) ? parsed : [];
     } catch { /* ignore parse errors */ }
   }
 
