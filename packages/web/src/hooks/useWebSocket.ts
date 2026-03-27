@@ -605,6 +605,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
       updateMessage(event.message as any);
       break;
 
+    case 'federation_file_rejected': {
+      const { addToast } = useUIStore.getState();
+      const users = event.affectedUsers;
+      if (users && users.length > 0) {
+        const parts = users.map(u => {
+          const limitMb = Math.round(u.limit / (1024 * 1024));
+          return `${u.username}'s instance (limit: ${limitMb} MB)`;
+        });
+        const msg = `File couldn't be cached on ${parts.join(' and ')}. They can still view it from yours.`;
+        addToast(msg, 'warning', 7000);
+      }
+      break;
+    }
+
     case 'dm_message_deleted':
       removeMessage(event.messageId, event.dmChannelId);
       break;
