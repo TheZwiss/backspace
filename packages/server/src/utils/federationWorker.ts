@@ -2,7 +2,7 @@ import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { eq, and, lte, asc, inArray } from 'drizzle-orm';
 import { config } from '../config.js';
-import { isFederationRelayEnabled } from './federationOutbox.js';
+import { isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
 import { runFederationJanitor } from './storageJanitor.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
@@ -355,6 +355,100 @@ async function processFileQueueTick(): Promise<void> {
   }
 }
 
+function handleSizeRejection(
+  db: ReturnType<typeof getDb>,
+  entry: typeof schema.federationFileQueue.$inferSelect,
+  maxUploadSize: number,
+  now: number,
+): void {
+  // Look up the local DM message to find the sender and channel info
+  const localMsg = db.select()
+    .from(schema.dmMessages)
+    .where(eq(schema.dmMessages.id, entry.dmMessageId))
+    .get();
+
+  if (!localMsg || !localMsg.sourceInstance || !localMsg.sourceMessageId) return;
+
+  // Find the attachment row to get its ID
+  const att = db.select()
+    .from(schema.attachments)
+    .where(
+      and(
+        eq(schema.attachments.dmMessageId, entry.dmMessageId),
+        eq(schema.attachments.sourceUrl, entry.sourceUrl),
+      ),
+    )
+    .get();
+
+  // Resolve the sender's username from their local replicated user stub
+  const senderUser = db.select()
+    .from(schema.users)
+    .where(eq(schema.users.id, localMsg.userId))
+    .get();
+  const sourceUsername = senderUser?.displayName || senderUser?.username || 'unknown';
+
+  // Update attachment federation status
+  if (att) {
+    db.update(schema.attachments)
+      .set({
+        federationStatus: 'remote',
+        federationMeta: JSON.stringify({
+          sourceInstance: localMsg.sourceInstance,
+          sourceUserId: localMsg.userId,
+          sourceUsername,
+        }),
+      })
+      .where(eq(schema.attachments.id, att.id))
+      .run();
+  }
+
+  // Find local DM members native to THIS instance
+  const ourOrigin = getOurOrigin();
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, localMsg.dmChannelId))
+    .all();
+  const affectedUserIds: string[] = [];
+  for (const member of dmMembers) {
+    const user = db.select()
+      .from(schema.users)
+      .where(eq(schema.users.id, member.userId))
+      .get();
+    if (user && (!user.homeInstance || user.homeInstance === ourOrigin)) {
+      affectedUserIds.push(user.homeUserId || user.id);
+    }
+  }
+
+  // Queue a file_rejected reverse relay event to the sender's instance
+  const event: FederationRelayEvent = {
+    eventType: 'file_rejected',
+    messageId: localMsg.sourceMessageId,
+    encryptionVersion: 0,
+    timestamp: now,
+    attachmentId: att?.id ?? entry.sourceUrl,
+    rejectionReason: 'size_limit_exceeded',
+    rejectionLimit: maxUploadSize,
+    affectedUserIds,
+  };
+
+  queueOutboxEvent(
+    localMsg.sourceMessageId,
+    localMsg.dmChannelId,
+    'file_rejected',
+    JSON.stringify(event),
+    [localMsg.sourceInstance],
+  );
+
+  // Broadcast updated message to local clients so they see the 'remote' badge
+  const updatedMsg = getDmMessageWithUser(entry.dmMessageId);
+  if (updatedMsg) {
+    connectionManager.sendToDmMembers(updatedMsg.dmChannelId, {
+      type: 'dm_message_updated',
+      message: updatedMsg,
+    });
+  }
+}
+
 async function processFileQueueEntry(
   db: ReturnType<typeof getDb>,
   entry: typeof schema.federationFileQueue.$inferSelect,
@@ -398,6 +492,7 @@ async function processFileQueueEntry(
       })
       .where(eq(schema.federationFileQueue.id, entry.id))
       .run();
+    handleSizeRejection(db, entry, maxUploadSize, now);
     return;
   }
 
@@ -450,6 +545,7 @@ async function processFileQueueEntry(
         })
         .where(eq(schema.federationFileQueue.id, entry.id))
         .run();
+      handleSizeRejection(db, entry, maxUploadSize, now);
       return;
     }
 
