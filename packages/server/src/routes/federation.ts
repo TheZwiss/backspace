@@ -1872,11 +1872,21 @@ function hydrateReplicatedUserProfile(
   if (!profile) return user;
   if (!user.homeInstance) return user; // Don't update native users
 
+  // Resolve bare filenames to absolute URLs pointing to the home instance.
+  // The home WS doesn't run normalizeUserAssets on replicated users' avatars,
+  // so they must be stored as absolute URLs to render correctly.
+  const resolveUrl = (filename: string | null | undefined): string | null => {
+    if (!filename) return null;
+    if (filename.startsWith('http')) return filename;
+    return `${user.homeInstance}/api/uploads/${filename}`;
+  };
+
   const updates: Record<string, string | null> = {};
   if (profile.displayName && !user.displayName) updates.displayName = profile.displayName;
-  if (profile.avatar && !user.avatar) updates.avatar = profile.avatar;
+  // Overwrite avatar/banner if missing OR if it's a stale bare filename (not an absolute URL)
+  if (profile.avatar && (!user.avatar || !user.avatar.startsWith('http'))) updates.avatar = resolveUrl(profile.avatar);
   if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
-  if (profile.banner && !user.banner) updates.banner = profile.banner;
+  if (profile.banner && (!user.banner || !user.banner.startsWith('http'))) updates.banner = resolveUrl(profile.banner);
   if (profile.bio && !user.bio) updates.bio = profile.bio;
 
   if (Object.keys(updates).length === 0) return user;
