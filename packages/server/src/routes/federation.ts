@@ -468,6 +468,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             case 'friend_remove':
               processFriendRemoveEvent(event, sourceInstance, db, accepted, rejected);
               break;
+            case 'file_rejected':
+              processFileRejectedEvent(event, sourceInstance, db, accepted, rejected);
+              break;
             default:
               rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
               break;
@@ -2276,6 +2279,122 @@ function processFriendRemoveEvent(
     type: 'friend_removed',
     userId: removingUser.id,
   });
+
+  accepted.push(event.messageId);
+}
+
+function processFileRejectedEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.attachmentId || !event.rejectionReason) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_file_rejected_payload' });
+    return;
+  }
+
+  // event.messageId is the original local message ID on THIS (sender) instance
+  const localMsg = db.select()
+    .from(schema.dmMessages)
+    .where(eq(schema.dmMessages.id, event.messageId))
+    .get();
+
+  if (!localMsg) {
+    rejected.push({ messageId: event.messageId, reason: 'message_not_found' });
+    return;
+  }
+
+  // Find the attachment — try by sourceUrl matching, then by checking all attachments on the message
+  const messageAttachments = db.select()
+    .from(schema.attachments)
+    .where(eq(schema.attachments.dmMessageId, localMsg.id))
+    .all();
+
+  // The attachmentId from the remote is their local attachment ID, not ours.
+  // Match by sourceUrl instead — the remote's sourceUrl points to our upload endpoint.
+  const ourOrigin = getOurOrigin();
+  let matchedAttachment = messageAttachments.find(a =>
+    a.sourceUrl && a.sourceUrl.startsWith(ourOrigin),
+  );
+
+  // If only one attachment, use it directly
+  if (!matchedAttachment && messageAttachments.length === 1) {
+    matchedAttachment = messageAttachments[0];
+  }
+
+  if (!matchedAttachment) {
+    rejected.push({ messageId: event.messageId, reason: 'attachment_not_found' });
+    return;
+  }
+
+  // Resolve affected user IDs to local usernames
+  const affectedUsers: Array<{ userId: string; username: string; limit: number }> = [];
+  for (const remoteUserId of (event.affectedUserIds ?? [])) {
+    // These are homeUserIds — find the replicated user stub
+    const user = db.select()
+      .from(schema.users)
+      .where(eq(schema.users.homeUserId, remoteUserId))
+      .get();
+    if (user) {
+      affectedUsers.push({
+        userId: user.id,
+        username: user.displayName || user.username,
+        limit: event.rejectionLimit ?? 0,
+      });
+    }
+  }
+
+  if (affectedUsers.length === 0) {
+    // Fallback: if we can't resolve usernames, still accept the event
+    // but skip the UI update since we can't show meaningful info
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Merge into federation_meta — accumulate rejections from multiple peers
+  let existingMeta: Array<{ userId: string; username: string; limit: number }> = [];
+  if (matchedAttachment.federationMeta) {
+    try {
+      existingMeta = JSON.parse(matchedAttachment.federationMeta);
+    } catch { /* ignore parse errors */ }
+  }
+
+  // Add new affected users, avoiding duplicates by userId
+  const existingUserIds = new Set(existingMeta.map(u => u.userId));
+  for (const user of affectedUsers) {
+    if (!existingUserIds.has(user.userId)) {
+      existingMeta.push(user);
+    }
+  }
+
+  // Update attachment
+  db.update(schema.attachments)
+    .set({
+      federationStatus: 'remote_partial',
+      federationMeta: JSON.stringify(existingMeta),
+    })
+    .where(eq(schema.attachments.id, matchedAttachment.id))
+    .run();
+
+  // Broadcast dm_message_updated to all DM members (persistent indicator)
+  const updatedMsg = getDmMessageWithUser(localMsg.id);
+  if (updatedMsg) {
+    connectionManager.sendToDmMembers(updatedMsg.dmChannelId, {
+      type: 'dm_message_updated',
+      message: updatedMsg,
+    });
+
+    // Send targeted toast event to the message author only
+    connectionManager.sendToUser(localMsg.userId, {
+      type: 'federation_file_rejected',
+      messageId: localMsg.id,
+      dmChannelId: localMsg.dmChannelId,
+      attachmentId: matchedAttachment.id,
+      affectedUsers,
+    });
+  }
 
   accepted.push(event.messageId);
 }
