@@ -107,7 +107,7 @@ export function MobileDmsScreen() {
                   onClick={() => {
                     // Find or create DM with this friend
                     const existingDm = dmChannels.find(dm =>
-                      dm.members.length === 2 && dm.members.some(m => m.id === friend.id)
+                      !dm.ownerId && dm.members.some(m => m.id === friend.id)
                     );
                     if (existingDm) {
                       handleDmTap(existingDm.id);
@@ -142,7 +142,7 @@ export function MobileDmsScreen() {
       <div className="flex-1 overflow-y-auto">
         {sortedDms.map(dm => {
           const otherMembers = dm.members.filter(m => m.id !== authUser?.id);
-          const isGroup = dm.members.length > 2;
+          const isGroup = !!dm.ownerId;
           const name = isGroup
             ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
             : otherMembers[0]?.displayName ?? (parseFederatedUsername(otherMembers[0]?.username ?? '').baseName || 'Unknown');
