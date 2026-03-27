@@ -37,7 +37,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
     const dm = dmChannels.find(d => d.id === channelId);
     if (dm) {
       const otherMembers = dm.members.filter(m => m.id !== authUser?.id);
-      const isGroup = dm.members.length > 2;
+      const isGroup = !!dm.ownerId;
       channelName = isGroup
         ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
         : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? 'Direct Message';
