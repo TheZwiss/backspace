@@ -140,6 +140,7 @@ export const dmMessages = sqliteTable('dm_messages', {
   userId: text('user_id').notNull().references(() => users.id),
   replyToId: text('reply_to_id'),
   content: text('content'),
+  type: text('type').notNull().default('user'),
   editedAt: integer('edited_at'),
   sourceInstance: text('source_instance'),
   sourceMessageId: text('source_message_id'),

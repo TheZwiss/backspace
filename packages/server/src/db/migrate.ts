@@ -197,6 +197,12 @@ export function runMigrations(db: Database.Database): void {
       ]
     },
     {
+      name: 'dm_messages',
+      columns: [
+        { name: 'type', type: "TEXT NOT NULL DEFAULT 'user'" },
+      ]
+    },
+    {
       name: 'attachments',
       columns: [
         { name: 'source_url', type: 'TEXT' },

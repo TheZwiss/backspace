@@ -281,6 +281,7 @@ export interface DmMessage {
   dmChannelId: string;
   userId: string;
   content: string | null;
+  type?: 'user' | 'system';
   createdAt: number;
   // Compatibility fields
   channelId?: string;
