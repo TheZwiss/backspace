@@ -53,6 +53,7 @@ interface SpaceState {
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
+  updateDmOwner: (dmChannelId: string, newOwnerId: string) => void;
   closeDm: (id: string) => Promise<void>;
   leaveDm: (id: string) => Promise<void>;
   loadSpaces: () => Promise<void>;
@@ -198,6 +199,12 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       dm.id === dmChannelId
         ? { ...dm, members: dm.members.filter(m => m.id !== userId) }
         : dm
+    ),
+  })),
+
+  updateDmOwner: (dmChannelId, newOwnerId) => set((state) => ({
+    dmChannels: state.dmChannels.map(dm =>
+      dm.id === dmChannelId ? { ...dm, ownerId: newOwnerId } : dm
     ),
   })),
 

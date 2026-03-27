@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../../api/client';
 import { Message } from './Message';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
@@ -19,6 +21,7 @@ interface MessageListProps {
 }
 
 function isSameGroup(prev: MessageWithUser, curr: MessageWithUser): boolean {
+  if ((prev as any).type === 'system' || (curr as any).type === 'system') return false;
   if (prev.userId !== curr.userId) return false;
   const timeDiff = curr.createdAt - prev.createdAt;
   return timeDiff < 5 * 60 * 1000; // 5 minutes
@@ -335,12 +338,16 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
                 )}
-                <Message
-                  message={msg}
-                  isCompact={!isFirstInGroup}
-                  isFirstInGroup={isFirstInGroup}
-                  previousMessageId={messages[i - 1]?.id ?? null}
-                />
+                {(msg as any).type === 'system' ? (
+                  <SystemMessage message={msg} />
+                ) : (
+                  <Message
+                    message={msg}
+                    isCompact={!isFirstInGroup}
+                    isFirstInGroup={isFirstInGroup}
+                    previousMessageId={messages[i - 1]?.id ?? null}
+                  />
+                )}
               </React.Fragment>
             );
           })}
@@ -364,17 +371,126 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   );
 }
 
+function SystemMessage({ message }: { message: MessageWithUser }) {
+  let text = '';
+  let icon = '';
+
+  try {
+    const data = JSON.parse(message.content ?? '{}');
+    const actorName = message.user?.displayName ?? message.user?.username ?? 'Someone';
+
+    switch (data.event) {
+      case 'member_added':
+        icon = '\u2192'; // →
+        text = `${actorName} added ${data.targetDisplayName} to the group`;
+        break;
+      case 'member_removed':
+        if (data.reason === 'leave') {
+          icon = '\u2190'; // ←
+          text = `${data.targetDisplayName} left the group`;
+        } else {
+          icon = '\u2190';
+          text = `${actorName} removed ${data.targetDisplayName} from the group`;
+        }
+        break;
+      case 'owner_changed':
+        icon = '\u265B'; // ♛
+        text = `${data.newOwnerDisplayName} is now the group owner`;
+        break;
+      default:
+        text = 'Unknown event';
+    }
+  } catch {
+    text = message.content ?? '';
+  }
+
+  return (
+    <div className="flex items-center justify-center py-1 px-4 select-none">
+      <span className="text-xs text-txt-tertiary">
+        <span className="mr-1.5">{icon}</span>
+        {text}
+      </span>
+    </div>
+  );
+}
+
 function WelcomeHeader({ channelId }: { channelId: string }) {
   const dmChannels = useSpaceStore((s) => s.dmChannels);
   const authUser = useAuthStore((s) => s.user);
   const removeFriend = useSocialStore((s) => s.removeFriend);
   const friends = useSocialStore((s) => s.friends);
   const isDm = isDmChannel(channelId);
+  const navigate = useNavigate();
 
   if (isDm) {
     const dm = dmChannels.find(d => d.id === channelId);
     if (!dm) return null; // DM data not yet loaded (WebSocket ready pending)
-    const otherUser = dm.members.find(m => !isSelf(m, authUser));
+    const otherMembers = dm.members.filter(m => !isSelf(m, authUser));
+    const isGroupDm = !!dm.ownerId;
+
+    if (isGroupDm) {
+      const groupName = otherMembers
+        .map(m => m.displayName ?? (m.username?.includes('@') ? m.username.split('@')[0] : m.username))
+        .join(', ');
+      const ownerMember = dm.members.find(m => m.id === dm.ownerId);
+      const ownerName = ownerMember?.displayName ?? ownerMember?.username ?? 'Unknown';
+      const hasFederated = dm.members.some(m => m.homeInstance);
+
+      const handleLeaveGroup = async () => {
+        try {
+          await api.dm.leaveGroup(channelId);
+          navigate('/channels/@me');
+        } catch (err) {
+          console.error('Failed to leave group:', err);
+        }
+      };
+
+      return (
+        <div className="px-4 pt-8 pb-4">
+          <div className="mb-2 relative" style={{ width: 80, height: 80 }}>
+            {otherMembers.slice(0, 2).map((m, idx) => (
+              <div
+                key={m.id}
+                className="absolute rounded-full overflow-hidden border-2 border-surface-chat"
+                style={{
+                  width: 56,
+                  height: 56,
+                  left: idx * 28,
+                  top: idx * 12,
+                  zIndex: 2 - idx,
+                }}
+              >
+                <Avatar src={m.avatar} name={m.displayName ?? m.username ?? ''} size={56} user={m} />
+              </div>
+            ))}
+          </div>
+          <h3 className="text-[32px] leading-10 font-bold text-txt-primary mt-2">{groupName}</h3>
+          <p className="text-txt-secondary text-[14px] mt-1">
+            This is the beginning of your group conversation.
+          </p>
+          <p className="text-xs text-txt-tertiary mt-1">
+            Group created by <strong>@{ownerName}</strong>
+          </p>
+          {hasFederated && (
+            <p className="text-xs text-txt-tertiary mt-1">
+              Messages are stored on your and your recipients' home instances. They are not end-to-end encrypted.
+            </p>
+          )}
+          <div className="mt-4">
+            <button
+              onClick={handleLeaveGroup}
+              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
+            >
+              Leave Group
+            </button>
+          </div>
+          <div className="mt-6 border-b border-interactive-muted" />
+        </div>
+      );
+    }
+
+    // 1-on-1 DM welcome header
+    const otherUser = otherMembers[0];
     const { baseName } = parseFederatedUsername(otherUser?.username ?? '');
     const displayName = otherUser?.displayName ?? (baseName || 'Direct Message');
     const mentionName = otherUser?.displayName ?? baseName;

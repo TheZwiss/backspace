@@ -1972,6 +1972,12 @@ function processOwnershipTransferEvent(
     .where(eq(schema.dmChannels.id, channel.id))
     .run();
 
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_owner_updated',
+    dmChannelId: channel.id,
+    newOwnerId: newOwnerLocal?.id ?? channel.ownerId!,
+  });
+
   const prevOwnerLocal = event.ownership.previousOwner
     ? resolveLocalUser(event.ownership.previousOwner.homeUserId, db)
     : null;

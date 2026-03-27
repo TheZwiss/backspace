@@ -413,6 +413,7 @@ export type ServerEvent =
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
   | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
+  | { type: 'dm_owner_updated'; dmChannelId: string; newOwnerId: string }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 

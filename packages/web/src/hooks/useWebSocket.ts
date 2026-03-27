@@ -814,6 +814,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    case 'dm_owner_updated': {
+      const { updateDmOwner } = useSpaceStore.getState();
+      updateDmOwner(event.dmChannelId, event.newOwnerId);
+      break;
+    }
+
     // ─── Channel/space events (all origins) ─────────────────────────────────
 
     case 'channel_created': {

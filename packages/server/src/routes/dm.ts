@@ -1214,6 +1214,15 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.dmChannels.id, id))
           .run();
 
+        // Broadcast ownership change via dedicated event
+        for (const member of remainingMembers) {
+          connectionManager.sendToUser(member.userId, {
+            type: 'dm_owner_updated',
+            dmChannelId: id,
+            newOwnerId: nextOwner.userId,
+          });
+        }
+
         // Query new owner user outside federation block so it's available for system message
         const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
 
