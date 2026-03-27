@@ -487,7 +487,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateGroupDmRequest }>('/api/dm/group', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { users: userIdentities } = request.body;
+    const { users: userIdentities, fromDmChannelId } = request.body;
 
     // Validate input is a non-empty array of at least 2 identity objects
     if (!Array.isArray(userIdentities) || userIdentities.length < 2) {
@@ -547,8 +547,29 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Do not include yourself — you are added automatically', statusCode: 400 });
     }
 
-    // Validate all target users are friends with the caller
+    // When converting a 1-on-1 DM to a group, existing DM members are exempt
+    // from the friendship check (DMs don't require friendship).
+    const exemptUserIds = new Set<string>();
+    if (fromDmChannelId) {
+      const sourceDm = db.select().from(schema.dmChannels).where(
+        and(eq(schema.dmChannels.id, fromDmChannelId), isNull(schema.dmChannels.deletedAt)),
+      ).get();
+      if (sourceDm && !sourceDm.ownerId) {
+        // Only exempt members from 1-on-1 DMs (ownerId is null)
+        if (isDmMember(fromDmChannelId, request.userId)) {
+          const members = db.select().from(schema.dmMembers)
+            .where(eq(schema.dmMembers.dmChannelId, fromDmChannelId)).all();
+          for (const m of members) {
+            exemptUserIds.add(m.userId);
+          }
+        }
+      }
+    }
+
+    // Validate all target users are friends with the caller (exempt existing DM members)
     for (const targetUser of targetUsers) {
+      if (exemptUserIds.has(targetUser.id)) continue;
+
       const friendship = db.select().from(schema.friends).where(
         or(
           and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUser.id)),

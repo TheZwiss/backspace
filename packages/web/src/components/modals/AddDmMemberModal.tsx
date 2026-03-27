@@ -107,7 +107,7 @@ export function AddDmMemberModal() {
             homeInstance: f.homeInstance,
           })),
         ];
-        const newChannel = await api.dm.createGroup({ users });
+        const newChannel = await api.dm.createGroup({ users, fromDmChannelId: dmChannelId });
         addDmChannel(newChannel);
         closeModal();
         navigate(`/channels/@me/${newChannel.id}`);

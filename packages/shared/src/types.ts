@@ -524,6 +524,7 @@ export interface GroupDmUserIdentity {
 
 export interface CreateGroupDmRequest {
   users: GroupDmUserIdentity[];
+  fromDmChannelId?: string;
 }
 
 export interface CreateDmMessageRequest {
