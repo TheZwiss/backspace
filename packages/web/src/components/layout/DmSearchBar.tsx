@@ -60,7 +60,7 @@ export function DmSearchBar() {
       .map((dm): DmItem | null => {
         const otherMembers = dm.members.filter(m => !isSelf(m, user));
         if (otherMembers.length === 0) return null;
-        const isGroup = dm.members.length > 2;
+        const isGroup = !!dm.ownerId;
         const displayName = isGroup
           ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
           : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? '';
