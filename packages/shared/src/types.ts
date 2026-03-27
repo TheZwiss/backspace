@@ -229,6 +229,8 @@ export interface Attachment {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  federationStatus?: string | null;
+  federationMeta?: string | null;
   createdAt: number;
 }
 
@@ -409,6 +411,7 @@ export type ServerEvent =
   | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'embeds_resolved'; messageId: string; channelId: string; embeds: Embed[] }
   | { type: 'dm_embeds_resolved'; messageId: string; dmChannelId: string; embeds: Embed[] }
+  | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 
@@ -741,7 +744,7 @@ export interface FederationRelayEvent {
   eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
     | 'member_add' | 'member_remove' | 'ownership_transfer'
     | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
-    | 'friend_add' | 'friend_remove';
+    | 'friend_add' | 'friend_remove' | 'file_rejected';
   contextType?: 'dm' | 'friend';
   dmChannelId?: string;
   messageId: string;
@@ -765,6 +768,11 @@ export interface FederationRelayEvent {
   ownership?: FederationOwnershipPayload;
   group?: FederationGroupPayload;
   friendship?: FederationFriendshipPayload;
+  // file_rejected event fields
+  attachmentId?: string;
+  rejectionReason?: string;
+  rejectionLimit?: number;
+  affectedUserIds?: string[];
 }
 
 export interface FederationMembershipPayload {
