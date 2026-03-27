@@ -64,21 +64,7 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     return null;
   })();
 
-  // Overlay badge for media (images/video) — absolute positioned inside overflow-hidden container
-  const federationOverlayBadge = federationTooltip ? (
-    <Tooltip content={federationTooltip.text} position="top">
-      <div className={`absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded glass-pill text-xs ${federationTooltip.type === 'remote' ? 'text-txt-muted' : 'text-accent-amber'}`}>
-        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          {federationTooltip.type === 'remote'
-            ? <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
-            : <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>
-          }
-        </svg>
-      </div>
-    </Tooltip>
-  ) : null;
-
-  // Inline badge for file cards (audio/generic) — sits inside the card layout, not absolute
+  // Inline badge — sits next to file size or below media, never absolute-positioned
   const federationInlineBadge = federationTooltip ? (
     <Tooltip content={federationTooltip.text} position="top">
       <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded glass-pill text-xs cursor-default ${federationTooltip.type === 'remote' ? 'text-txt-muted' : 'text-accent-amber'}`}>
@@ -95,18 +81,20 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   if (mimetype.startsWith('image/')) {
     const { width, height } = attachment;
     return (
-      <div
-        className="relative max-w-fit mt-1 rounded-lg overflow-hidden border border-white/[0.06]"
-        style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 400), maxHeight: 300 } : undefined}
-      >
-        <img
-          src={thumbUrl ?? attUrl}
-          alt={originalName}
-          className="w-full h-full max-w-[400px] max-h-[300px] object-contain cursor-pointer hover:brightness-95 transition-all"
-          onClick={() => openImagePreview(attUrl)}
-          loading="lazy"
-        />
-        {federationOverlayBadge}
+      <div className="mt-1 max-w-fit">
+        <div
+          className="relative rounded-lg overflow-hidden border border-white/[0.06]"
+          style={width && height ? { aspectRatio: `${width}/${height}`, maxWidth: Math.min(width, 400), maxHeight: 300 } : undefined}
+        >
+          <img
+            src={thumbUrl ?? attUrl}
+            alt={originalName}
+            className="w-full h-full max-w-[400px] max-h-[300px] object-contain cursor-pointer hover:brightness-95 transition-all"
+            onClick={() => openImagePreview(attUrl)}
+            loading="lazy"
+          />
+        </div>
+        {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
       </div>
     );
   }
@@ -115,20 +103,22 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     const { width, height } = attachment;
     const hasDimensions = width && height;
     return (
-      <div
-        className="relative mt-1 max-w-[400px] max-h-[300px] rounded-lg overflow-hidden"
-        style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 300 } : undefined}
-      >
-        <video
-          controls
-          preload={hasDimensions ? 'none' : 'metadata'}
-          poster={thumbUrl ?? undefined}
-          className="w-full h-full rounded-lg"
+      <div className="mt-1 max-w-[400px]">
+        <div
+          className="relative max-h-[300px] rounded-lg overflow-hidden"
+          style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 300 } : undefined}
         >
-          <source src={attUrl} type={mimetype} />
-          Your browser does not support video playback.
-        </video>
-        {federationOverlayBadge}
+          <video
+            controls
+            preload={hasDimensions ? 'none' : 'metadata'}
+            poster={thumbUrl ?? undefined}
+            className="w-full h-full rounded-lg"
+          >
+            <source src={attUrl} type={mimetype} />
+            Your browser does not support video playback.
+          </video>
+        </div>
+        {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
       </div>
     );
   }
