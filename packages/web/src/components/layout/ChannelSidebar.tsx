@@ -109,6 +109,8 @@ export function ChannelSidebar() {
   // Delete category confirmation state
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [deleteCategoryLoading, setDeleteCategoryLoading] = useState(false);
+  const [leaveGroupDmId, setLeaveGroupDmId] = useState<string | null>(null);
+  const [leaveGroupDmLoading, setLeaveGroupDmLoading] = useState(false);
 
   // Centralized context menu
   const openContextMenu = useContextMenuStore((s) => s.open);
@@ -378,15 +380,11 @@ export function ChannelSidebar() {
           </svg>
         ),
         onClick: () => {
-          if (currentChannelId === dmId) {
-            navigate('/channels/@me');
-            setCurrentChannel(null);
-          }
-          useSpaceStore.getState().leaveDm(dmId);
+          setLeaveGroupDmId(dmId);
         },
       },
     ]);
-  }, [openContextMenu, currentChannelId, navigate, setCurrentChannel]);
+  }, [openContextMenu]);
 
   const handleChannelClick = (channelId: string) => {
     setCurrentChannel(channelId);
@@ -568,15 +566,18 @@ export function ChannelSidebar() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      // Navigate away if currently viewing this DM
-                      if (currentChannelId === dm.id) {
-                        navigate('/channels/@me');
-                        setCurrentChannel(null);
+                      if (isGroup) {
+                        setLeaveGroupDmId(dm.id);
+                      } else {
+                        if (currentChannelId === dm.id) {
+                          navigate('/channels/@me');
+                          setCurrentChannel(null);
+                        }
+                        useSpaceStore.getState().closeDm(dm.id);
                       }
-                      useSpaceStore.getState().closeDm(dm.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity flex-shrink-0 ml-1"
-                    title="Close DM"
+                    title={isGroup ? 'Leave Group DM' : 'Close DM'}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
@@ -606,6 +607,31 @@ export function ChannelSidebar() {
 
       </div>
       {floatingPanel}
+      <ConfirmDialog
+        isOpen={leaveGroupDmId !== null}
+        onClose={() => setLeaveGroupDmId(null)}
+        onConfirm={async () => {
+          if (!leaveGroupDmId) return;
+          setLeaveGroupDmLoading(true);
+          try {
+            if (currentChannelId === leaveGroupDmId) {
+              navigate('/channels/@me');
+              setCurrentChannel(null);
+            }
+            await useSpaceStore.getState().leaveDm(leaveGroupDmId);
+            setLeaveGroupDmId(null);
+          } catch {
+            // leaveDm already handles errors
+          } finally {
+            setLeaveGroupDmLoading(false);
+          }
+        }}
+        title="Leave Group DM"
+        description="Are you sure you want to leave? You won't be able to rejoin unless someone adds you back."
+        confirmLabel="Leave"
+        variant="danger"
+        loading={leaveGroupDmLoading}
+      />
       </>
     );
   }
@@ -860,6 +886,31 @@ export function ChannelSidebar() {
 
     </div>
     {floatingPanel}
+    <ConfirmDialog
+      isOpen={leaveGroupDmId !== null}
+      onClose={() => setLeaveGroupDmId(null)}
+      onConfirm={async () => {
+        if (!leaveGroupDmId) return;
+        setLeaveGroupDmLoading(true);
+        try {
+          if (currentChannelId === leaveGroupDmId) {
+            navigate('/channels/@me');
+            setCurrentChannel(null);
+          }
+          await useSpaceStore.getState().leaveDm(leaveGroupDmId);
+          setLeaveGroupDmId(null);
+        } catch {
+          // leaveDm already handles errors
+        } finally {
+          setLeaveGroupDmLoading(false);
+        }
+      }}
+      title="Leave Group DM"
+      description="Are you sure you want to leave? You won't be able to rejoin unless someone adds you back."
+      confirmLabel="Leave"
+      variant="danger"
+      loading={leaveGroupDmLoading}
+    />
     <ConfirmDialog
       isOpen={deleteCategoryId !== null}
       onClose={() => setDeleteCategoryId(null)}
