@@ -156,6 +156,8 @@ export function buildMessageWithUser(
       width: a.width ?? null,
       height: a.height ?? null,
       duration: a.duration ?? null,
+      federationStatus: a.federationStatus ?? null,
+      federationMeta: a.federationMeta ?? null,
       createdAt: a.createdAt,
     })),
     embeds: embedRows.map(e => embedRowToEmbed(e)),
