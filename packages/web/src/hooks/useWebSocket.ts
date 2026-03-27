@@ -681,12 +681,18 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (!isHome) normalizeUserAssets(event.friend, origin);
       const { addFriendFromAccepted } = useSocialStore.getState();
       addFriendFromAccepted(event.friend, event.requestId, origin);
+      import('../stores/discoverStore').then(({ useDiscoverStore }) => {
+        useDiscoverStore.getState().updateRelationship(event.friend.id, origin, 'friends');
+      });
       break;
     }
 
     case 'friend_removed': {
       const { removeFriendLocally } = useSocialStore.getState();
       removeFriendLocally(event.userId, origin);
+      import('../stores/discoverStore').then(({ useDiscoverStore }) => {
+        useDiscoverStore.getState().updateRelationship(event.userId, origin, 'none');
+      });
       break;
     }
 
