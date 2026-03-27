@@ -83,7 +83,7 @@ export function MainContent() {
 
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
     const otherMembers = dmChannel?.members.filter(m => !isSelf(m, authUser)) ?? [];
-    const isGroupDm = (dmChannel?.members.length ?? 0) > 2;
+    const isGroupDm = !!dmChannel?.ownerId;
     const firstOther = otherMembers[0];
     const { baseName: firstBaseName, domain: firstDomain } = parseFederatedUsername(firstOther?.username ?? '');
     const dmName = isGroupDm
