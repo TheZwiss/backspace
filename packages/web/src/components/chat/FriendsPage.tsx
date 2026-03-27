@@ -625,8 +625,8 @@ function UserDiscoverCard({
     username: string;
   } | null>(null);
 
-  const displayName = user.displayName ?? user.username;
   const baseName = user.username.includes('@') ? user.username.split('@')[0]! : user.username;
+  const displayName = user.displayName ?? baseName;
   const gradient = getAvatarGradient(user.homeUserId ?? user.id, displayName, user.avatarColor);
   const originLabel = user._instanceOrigin
     ? (() => { try { return new URL(user._instanceOrigin).host; } catch { return user._instanceOrigin; } })()

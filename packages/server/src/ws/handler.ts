@@ -1070,12 +1070,22 @@ function buildReadyPayload(userId: string): {
       : [];
     const dmUserMap = new Map(allDmUsers.map(u => [u.id, u]));
 
-    // Batch: last message per DM channel (1 query — fixes the full-table-scan bug)
+    // Batch: last message per DM channel.
+    // Use MAX(created_at) instead of MAX(id) because federated relay messages
+    // can have local snowflake IDs that don't match chronological order — a
+    // message sent earlier on the remote instance can arrive (and get a higher
+    // local ID) after a message sent later.  The DM REST API already uses
+    // ORDER BY created_at DESC, so this keeps the ready payload consistent.
     const dmLastMsgIdRows = batchInArray(
       dmChannelIds,
       ids => db.select({
         dmChannelId: schema.dmMessages.dmChannelId,
-        lastId: sql<string>`max(${schema.dmMessages.id})`,
+        lastId: sql<string>`(
+          SELECT id FROM ${schema.dmMessages} sub
+          WHERE sub.dm_channel_id = ${schema.dmMessages.dmChannelId}
+          ORDER BY sub.created_at DESC, sub.id DESC
+          LIMIT 1
+        )`,
       }).from(schema.dmMessages).where(inArray(schema.dmMessages.dmChannelId, ids)).groupBy(schema.dmMessages.dmChannelId).all(),
     );
     const dmLastMsgIds = dmLastMsgIdRows.map(r => r.lastId).filter((id): id is string => id != null);

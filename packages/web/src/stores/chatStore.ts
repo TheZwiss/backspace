@@ -623,13 +623,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const msgs = get().messages.get(channelId);
     if (!msgs || msgs.length === 0) return;
 
-    // Walk backward to find the last server-confirmed (non-temp) message
+    // Find the highest server-confirmed (non-temp) message ID.
+    // We use MAX(id) rather than "last in display order" because federated
+    // relay messages can have local snowflake IDs that don't match createdAt
+    // order — the ack must cover the highest ID to stay consistent with the
+    // server's read-state comparison (which uses BigInt ID comparison).
     let messageId: string | null = null;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const msg = msgs[i];
+    let maxId = 0n;
+    for (const msg of msgs) {
       if (msg && !msg.id.startsWith('temp_')) {
-        messageId = msg.id;
-        break;
+        try {
+          const id = BigInt(msg.id);
+          if (id > maxId) {
+            maxId = id;
+            messageId = msg.id;
+          }
+        } catch { /* non-numeric ID — skip */ }
       }
     }
     if (!messageId) return; // All messages are temp — nothing to ack yet
