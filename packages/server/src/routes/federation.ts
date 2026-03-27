@@ -1119,17 +1119,21 @@ function processCreateEvent(
     return;
   }
 
-  // Resolve ALL participants to local users
+  // Resolve ALL participants to local users, auto-creating replicated stubs
+  // for remote users that don't have a local record yet. This ensures 1-on-1
+  // federated DMs work even when the remote user hasn't connected or friended.
   const resolvedParticipants: Array<{
     localUser: typeof schema.users.$inferSelect;
     homeUserId: string;
   }> = [];
 
   for (const p of event.participants) {
-    const localUser = resolveLocalUser(p.homeUserId, db);
-    if (localUser) {
-      resolvedParticipants.push({ localUser, homeUserId: p.homeUserId });
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db);
+    // Hydrate with profile data from the relay event (displayName, avatar, etc.)
+    if (p.profile) {
+      localUser = hydrateReplicatedUserProfile(localUser, p.profile, db);
     }
+    resolvedParticipants.push({ localUser, homeUserId: p.homeUserId });
   }
 
   if (resolvedParticipants.length < 2) {
@@ -1875,10 +1879,11 @@ function hydrateReplicatedUserProfile(
   // Resolve bare filenames to absolute URLs pointing to the home instance.
   // The home WS doesn't run normalizeUserAssets on replicated users' avatars,
   // so they must be stored as absolute URLs to render correctly.
+  const baseUrl = user.homeInstance!.startsWith('http') ? user.homeInstance! : `https://${user.homeInstance}`;
   const resolveUrl = (filename: string | null | undefined): string | null => {
     if (!filename) return null;
     if (filename.startsWith('http')) return filename;
-    return `${user.homeInstance}/api/uploads/${filename}`;
+    return `${baseUrl}/api/uploads/${filename}`;
   };
 
   const updates: Record<string, string | null> = {};

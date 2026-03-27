@@ -245,6 +245,9 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       homeUserId: schema.users.homeUserId,
       homeInstance: schema.users.homeInstance,
       id: schema.users.id,
+      displayName: schema.users.displayName,
+      avatar: schema.users.avatar,
+      avatarColor: schema.users.avatarColor,
     })
     .from(schema.dmMembers)
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
@@ -256,6 +259,11 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
   return members.map(m => ({
     homeUserId: m.homeUserId || m.id,
     homeInstance: m.homeInstance || domainOrigin,
+    profile: {
+      displayName: m.displayName ?? null,
+      avatar: m.avatar ?? null,
+      avatarColor: m.avatarColor ?? null,
+    },
   }));
 }
 

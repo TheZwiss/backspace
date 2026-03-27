@@ -373,10 +373,11 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
 
   if (isDm) {
     const dm = dmChannels.find(d => d.id === channelId);
-    const otherUser = dm?.members.find(m => !isSelf(m, authUser));
-    const { baseName } = parseFederatedUsername(otherUser?.username ?? 'unknown');
-    const displayName = otherUser?.displayName ?? baseName;
-    const username = baseName;
+    if (!dm) return null; // DM data not yet loaded (WebSocket ready pending)
+    const otherUser = dm.members.find(m => !isSelf(m, authUser));
+    const { baseName } = parseFederatedUsername(otherUser?.username ?? '');
+    const displayName = otherUser?.displayName ?? (baseName || 'Direct Message');
+    const mentionName = otherUser?.displayName ?? baseName;
     const isFriend = otherUser ? friends.some(f => f.id === otherUser.id) : false;
 
     return (
@@ -386,7 +387,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
         <p className="text-txt-secondary text-[14px] mt-1">
-          This is the beginning of your direct message history with <strong>@{username}</strong>.
+          This is the beginning of your direct message history with <strong>@{mentionName}</strong>.
         </p>
         {otherUser?.homeInstance && (
           <p className="text-xs text-txt-tertiary mt-1">

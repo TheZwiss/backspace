@@ -734,6 +734,7 @@ export interface AdminResetPasswordResponse {
 export interface FederationRelayParticipant {
   homeUserId: string;
   homeInstance: string;
+  profile?: FederationRelayProfileSnapshot;
 }
 
 export interface FederationRelayEvent {
