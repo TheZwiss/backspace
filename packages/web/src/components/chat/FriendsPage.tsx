@@ -886,15 +886,13 @@ function TabButton({ children, active, onClick }: { children: React.ReactNode, a
 
 function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove: () => void, onDm: () => void }) {
   const instanceLabel = friend._instanceOrigin ? (() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })() : '';
-  const { baseName: friendBaseName } = parseFederatedUsername(friend.username);
-  const friendDisplayName = friend.displayName ?? friendBaseName;
   return (
     <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
-        <Avatar src={friend.avatar} name={friendDisplayName} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
+        <Avatar src={friend.avatar} name={friend.displayName ?? friend.username} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
-            <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
+            <span className="text-txt-primary font-semibold text-[15px]">{friend.displayName ?? friend.username}</span>
             <span className="text-txt-tertiary text-[13px] opacity-0 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -939,16 +937,14 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   const user = request.user;
   if (!user) return null;
   const instanceLabel = request._instanceOrigin ? (() => { try { return new URL(request._instanceOrigin).host; } catch { return request._instanceOrigin; } })() : '';
-  const { baseName: reqBaseName } = parseFederatedUsername(user.username);
-  const reqDisplayName = user.displayName ?? reqBaseName;
 
   return (
     <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
-        <Avatar src={user.avatar} name={reqDisplayName} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
+        <Avatar src={user.avatar} name={user.displayName ?? user.username} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
-            <span className="text-txt-primary font-bold text-sm">{reqDisplayName}</span>
+            <span className="text-txt-primary font-bold text-sm">{user.displayName ?? user.username}</span>
             <span className="text-txt-tertiary text-xs">@{user.username}</span>
           </div>
           <div className="flex items-center gap-1.5">

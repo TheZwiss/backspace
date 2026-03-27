@@ -6,7 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { Avatar } from '../ui/Avatar';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isSelf } from '../../utils/identity';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import type { MessageWithUser } from '@backspace/shared';
 
@@ -374,9 +374,8 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
   if (isDm) {
     const dm = dmChannels.find(d => d.id === channelId);
     const otherUser = dm?.members.find(m => !isSelf(m, authUser));
-    const { baseName } = parseFederatedUsername(otherUser?.username ?? 'unknown');
-    const displayName = otherUser?.displayName ?? baseName;
-    const username = baseName;
+    const displayName = otherUser?.displayName ?? otherUser?.username ?? 'Unknown';
+    const username = otherUser?.username ?? 'unknown';
     const isFriend = otherUser ? friends.some(f => f.id === otherUser.id) : false;
 
     return (
