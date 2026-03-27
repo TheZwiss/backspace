@@ -9,10 +9,10 @@ import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { computeFederatedId, getDmParticipants, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
+import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import { AVATAR_COLORS } from '@backspace/shared';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationFriendshipPayload } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
