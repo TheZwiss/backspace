@@ -1043,7 +1043,10 @@ function buildReadyPayload(userId: string): {
   // Get DM channels
   const dmMemberships = db.select()
     .from(schema.dmMembers)
-    .where(eq(schema.dmMembers.userId, userId))
+    .where(and(
+      eq(schema.dmMembers.userId, userId),
+      eq(schema.dmMembers.closed, 0),
+    ))
     .all();
 
   const dmChannelIds = dmMemberships.map(dm => dm.dmChannelId);
