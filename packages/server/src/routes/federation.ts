@@ -1967,12 +1967,18 @@ function processOwnershipTransferEvent(
     return;
   }
 
-  // Resolve new owner to local user (for local ownerId)
-  const newOwnerLocal = resolveLocalUser(event.ownership.newOwner.homeUserId, db);
+  // Resolve new owner to local user — use resolveOrCreateReplicatedUser to
+  // guarantee we always get a valid user ID. Never fall back to null, as that
+  // would convert the group DM into a 1-on-1 and destroy its type identity.
+  const newOwnerLocal = resolveOrCreateReplicatedUser(
+    event.ownership.newOwner.homeUserId,
+    event.ownership.newOwner.homeInstance,
+    db,
+  );
 
   db.update(schema.dmChannels)
     .set({
-      ownerId: newOwnerLocal?.id ?? null,
+      ownerId: newOwnerLocal.id,
       ownerHomeUserId: event.ownership.newOwner.homeUserId,
       ownerHomeInstance: event.ownership.newOwner.homeInstance,
     })
@@ -1982,7 +1988,7 @@ function processOwnershipTransferEvent(
   connectionManager.sendToDmMembers(channel.id, {
     type: 'dm_owner_updated',
     dmChannelId: channel.id,
-    newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
+    newOwnerId: newOwnerLocal.id,
   });
 
   const prevOwnerLocal = event.ownership.previousOwner
@@ -1998,8 +2004,8 @@ function processOwnershipTransferEvent(
     userId: prevOwnerId,
     content: JSON.stringify({
       event: 'owner_changed',
-      newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
-      newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
+      newOwnerId: newOwnerLocal.id,
+      newOwnerDisplayName: newOwnerLocal.displayName ?? newOwnerBaseName,
     }),
     type: 'system',
     createdAt: Date.now(),

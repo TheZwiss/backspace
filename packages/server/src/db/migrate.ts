@@ -635,6 +635,37 @@ export function runMigrations(db: Database.Database): void {
     db.exec(`ALTER TABLE federation_peers ADD COLUMN remote_max_upload_size INTEGER`);
   } catch { /* column already exists */ }
 
+  // ─── Data integrity: repair group DMs with nulled-out owner_id ───────────
+  // A bug in processOwnershipTransferEvent (fixed in cd7aff0) could set
+  // owner_id to NULL when resolveLocalUser failed, converting a group DM into
+  // a 1-on-1-looking channel. Detect these by finding dm_channels with a
+  // UUID-format federated_id (group DMs) but NULL owner_id, and restore the
+  // owner from the first remaining member.
+  const corruptedGroups = db.prepare(`
+    SELECT c.id, c.federated_id
+    FROM dm_channels c
+    WHERE c.owner_id IS NULL
+      AND c.federated_id IS NOT NULL
+      AND c.deleted_at IS NULL
+      AND length(c.federated_id) = 36
+      AND c.federated_id LIKE '________-____-____-____-____________'
+  `).all() as Array<{ id: string; federated_id: string }>;
+
+  for (const ch of corruptedGroups) {
+    const firstMember = db.prepare(
+      `SELECT user_id FROM dm_members WHERE dm_channel_id = ? LIMIT 1`
+    ).get(ch.id) as { user_id: string } | undefined;
+
+    if (firstMember) {
+      db.prepare(`UPDATE dm_channels SET owner_id = ? WHERE id = ?`).run(firstMember.user_id, ch.id);
+      console.log(`[migration] Repaired group DM ${ch.id}: restored owner_id to ${firstMember.user_id}`);
+    }
+  }
+
+  if (corruptedGroups.length > 0) {
+    console.log(`[migration] Repaired ${corruptedGroups.length} corrupted group DM(s).`);
+  }
+
   console.log('Migrations complete.');
 }
 

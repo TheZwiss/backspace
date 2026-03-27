@@ -489,14 +489,16 @@ export function ChannelSidebar() {
           <div className="space-y-[2px]">
             {dmChannels.map((dm) => {
               const otherMembers = dm.members.filter(m => !isSelf(m, user));
-              if (otherMembers.length === 0) return null;
               const isGroup = !!dm.ownerId;
+              if (otherMembers.length === 0 && !isGroup) return null;
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
 
               const firstOtherDm = isGroup ? null : otherMembers[0];
               const { baseName: dmBaseName, domain: dmDomain } = parseFederatedUsername(firstOtherDm?.username ?? '');
               const dmDisplayName = isGroup
-                ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+                ? (otherMembers.length > 0
+                  ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+                  : 'Empty Group')
                 : firstOtherDm?.displayName ?? dmBaseName;
 
               const dmItem = (

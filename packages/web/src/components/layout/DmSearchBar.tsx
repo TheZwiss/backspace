@@ -59,10 +59,12 @@ export function DmSearchBar() {
     return dmChannels
       .map((dm): DmItem | null => {
         const otherMembers = dm.members.filter(m => !isSelf(m, user));
-        if (otherMembers.length === 0) return null;
         const isGroup = !!dm.ownerId;
+        if (otherMembers.length === 0 && !isGroup) return null;
         const displayName = isGroup
-          ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+          ? (otherMembers.length > 0
+            ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+            : 'Empty Group')
           : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? '';
         return { type: 'dm', dm, displayName, otherMembers, isGroup };
       })
