@@ -94,6 +94,8 @@ export const attachments = sqliteTable('attachments', {
   height: integer('height'),
   duration: real('duration'),
   sourceUrl: text('source_url'),
+  federationStatus: text('federation_status'),
+  federationMeta: text('federation_meta'),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -315,6 +317,7 @@ export const federationPeers = sqliteTable('federation_peers', {
   lastFailureAt: integer('last_failure_at'),
   consecutiveFailures: integer('consecutive_failures').default(0),
   lastSyncedAt: integer('last_synced_at').default(0),
+  remoteMaxUploadSize: integer('remote_max_upload_size'),
   createdAt: integer('created_at').notNull(),
 });
 

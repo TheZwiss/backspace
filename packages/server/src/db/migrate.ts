@@ -616,6 +616,19 @@ export function runMigrations(db: Database.Database): void {
 
   migrateGeneralizeOutbox(db);
 
+  // ─── Federation upload size mismatch columns ─────────────────────────────
+  try {
+    db.exec(`ALTER TABLE attachments ADD COLUMN federation_status TEXT`);
+  } catch { /* column already exists */ }
+
+  try {
+    db.exec(`ALTER TABLE attachments ADD COLUMN federation_meta TEXT`);
+  } catch { /* column already exists */ }
+
+  try {
+    db.exec(`ALTER TABLE federation_peers ADD COLUMN remote_max_upload_size INTEGER`);
+  } catch { /* column already exists */ }
+
   console.log('Migrations complete.');
 }
 
