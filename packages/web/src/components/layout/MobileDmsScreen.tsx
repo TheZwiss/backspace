@@ -118,7 +118,7 @@ export function MobileDmsScreen() {
                   <div className="relative">
                     <Avatar
                       src={avatarUrl}
-                      name={friend.displayName ?? friend.username}
+                      name={friend.displayName ?? parseFederatedUsername(friend.username).baseName}
                       avatarColor={friend.avatarColor}
                       size={40}
                     />
@@ -129,7 +129,7 @@ export function MobileDmsScreen() {
                     }`} />
                   </div>
                   <span className="text-[10px] text-txt-secondary truncate w-full text-center">
-                    {friend.displayName ?? friend.username}
+                    {friend.displayName ?? parseFederatedUsername(friend.username).baseName}
                   </span>
                 </button>
               );
@@ -144,8 +144,8 @@ export function MobileDmsScreen() {
           const otherMembers = dm.members.filter(m => m.id !== authUser?.id);
           const isGroup = dm.members.length > 2;
           const name = isGroup
-            ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
-            : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? 'Unknown';
+            ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+            : otherMembers[0]?.displayName ?? (parseFederatedUsername(otherMembers[0]?.username ?? '').baseName || 'Unknown');
 
           const lastMsgId = dm.lastMessage?.id;
           const readState = readStates.get(dm.id);
@@ -207,7 +207,7 @@ export function MobileDmsScreen() {
                 {preview && (
                   <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-txt-secondary font-medium' : 'text-txt-tertiary'}`}>
                     {previewSender && previewSender.id !== authUser?.id
-                      ? `${previewSender.displayName ?? previewSender.username}: ${preview}`
+                      ? `${previewSender.displayName ?? parseFederatedUsername(previewSender.username).baseName}: ${preview}`
                       : preview}
                   </p>
                 )}
