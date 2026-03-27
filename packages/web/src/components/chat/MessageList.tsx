@@ -21,7 +21,7 @@ interface MessageListProps {
 }
 
 function isSameGroup(prev: MessageWithUser, curr: MessageWithUser): boolean {
-  if ((prev as any).type === 'system' || (curr as any).type === 'system') return false;
+  if (prev.type === 'system' || curr.type === 'system') return false;
   if (prev.userId !== curr.userId) return false;
   const timeDiff = curr.createdAt - prev.createdAt;
   return timeDiff < 5 * 60 * 1000; // 5 minutes
@@ -338,7 +338,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
                     <div className="flex-1 h-[1px] bg-border-hard" />
                   </div>
                 )}
-                {(msg as any).type === 'system' ? (
+                {msg.type === 'system' ? (
                   <SystemMessage message={msg} />
                 ) : (
                   <Message
@@ -438,7 +438,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
 
       const handleLeaveGroup = async () => {
         try {
-          await api.dm.leaveGroup(channelId);
+          await api.dm.leave(channelId);
           navigate('/channels/@me');
         } catch (err) {
           console.error('Failed to leave group:', err);

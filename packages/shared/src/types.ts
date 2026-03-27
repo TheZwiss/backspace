@@ -193,6 +193,7 @@ export interface Message {
   userId: string;
   replyToId: string | null;
   content: string | null;
+  type?: 'user' | 'system';
   editedAt: number | null;
   createdAt: number;
 }

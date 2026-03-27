@@ -145,7 +145,6 @@ export class BackspaceApiClient {
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
     addMember: (dmChannelId: string, data: { userId: string }) => Promise<DmChannel>;
     leave: (dmChannelId: string) => Promise<{ success: boolean }>;
-    leaveGroup: (dmChannelId: string) => Promise<{ success: boolean }>;
   };
 
   readonly social: {
@@ -505,8 +504,6 @@ export class BackspaceApiClient {
       addMember: (dmChannelId: string, data: { userId: string }) =>
         request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
       leave: (dmChannelId: string) =>
-        request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
-      leaveGroup: (dmChannelId: string) =>
         request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
     };
 

@@ -1965,7 +1965,7 @@ function processOwnershipTransferEvent(
 
   db.update(schema.dmChannels)
     .set({
-      ownerId: newOwnerLocal?.id ?? channel.ownerId,
+      ownerId: newOwnerLocal?.id ?? null,
       ownerHomeUserId: event.ownership.newOwner.homeUserId,
       ownerHomeInstance: event.ownership.newOwner.homeInstance,
     })
@@ -1975,7 +1975,7 @@ function processOwnershipTransferEvent(
   connectionManager.sendToDmMembers(channel.id, {
     type: 'dm_owner_updated',
     dmChannelId: channel.id,
-    newOwnerId: newOwnerLocal?.id ?? channel.ownerId!,
+    newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
   });
 
   const prevOwnerLocal = event.ownership.previousOwner
@@ -1991,7 +1991,7 @@ function processOwnershipTransferEvent(
     userId: prevOwnerId,
     content: JSON.stringify({
       event: 'owner_changed',
-      newOwnerId: newOwnerLocal?.id ?? channel.ownerId,
+      newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
       newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
     }),
     type: 'system',
@@ -2006,7 +2006,7 @@ function processOwnershipTransferEvent(
       userId: prevOwnerId,
       content: JSON.stringify({
         event: 'owner_changed',
-        newOwnerId: newOwnerLocal?.id ?? channel.ownerId,
+        newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
         newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
       }),
       type: 'system',
