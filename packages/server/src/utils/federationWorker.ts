@@ -230,6 +230,14 @@ async function processOutboxTick(): Promise<void> {
           );
         }
 
+        // Store the peer's max upload size for informational display
+        if (typeof result.maxUploadSize === 'number') {
+          db.update(schema.federationPeers)
+            .set({ remoteMaxUploadSize: result.maxUploadSize })
+            .where(eq(schema.federationPeers.origin, peerOrigin))
+            .run();
+        }
+
         // Update peer health
         db.update(schema.federationPeers)
           .set({
