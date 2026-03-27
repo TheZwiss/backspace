@@ -653,6 +653,42 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Insert & broadcast system messages for each added member
+    for (const targetUser of targetUsers) {
+      if (!targetUser) continue;
+      const baseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
+      const sysMsg = {
+        id: generateSnowflake(),
+        dmChannelId: dmChannelId,
+        userId: request.userId,
+        content: JSON.stringify({
+          event: 'member_added',
+          targetUserId: targetUser.id,
+          targetDisplayName: targetUser.displayName ?? baseName,
+        }),
+        type: 'system' as const,
+        createdAt: now,
+        user: callerUser ? sanitizeUser(callerUser) : undefined,
+        attachments: [],
+        embeds: [],
+        reactions: [],
+      };
+
+      db.insert(schema.dmMessages).values({
+        id: sysMsg.id,
+        dmChannelId: sysMsg.dmChannelId,
+        userId: sysMsg.userId,
+        content: sysMsg.content,
+        type: 'system',
+        createdAt: sysMsg.createdAt,
+      }).run();
+
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'dm_message_created',
+        message: sysMsg as any,
+      });
+    }
+
     // Federation: relay member_add for each remote member
     if (isFederationRelayEnabled() && federatedId) {
       const domainOrigin = getOurOrigin();
@@ -905,6 +941,39 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       dmChannel: result,
     });
 
+    // Insert & broadcast system message for member addition
+    const addBaseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
+    const addSysMsg = {
+      id: generateSnowflake(),
+      dmChannelId: id,
+      userId: request.userId,
+      content: JSON.stringify({
+        event: 'member_added',
+        targetUserId: targetUserId,
+        targetDisplayName: targetUser.displayName ?? addBaseName,
+      }),
+      type: 'system' as const,
+      createdAt: Date.now(),
+      user: db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get(),
+      attachments: [],
+      embeds: [],
+      reactions: [],
+    };
+
+    db.insert(schema.dmMessages).values({
+      id: addSysMsg.id,
+      dmChannelId: addSysMsg.dmChannelId,
+      userId: addSysMsg.userId,
+      content: addSysMsg.content,
+      type: 'system',
+      createdAt: addSysMsg.createdAt,
+    }).run();
+
+    connectionManager.sendToDmMembers(id, {
+      type: 'dm_message_created',
+      message: { ...addSysMsg, user: addSysMsg.user ? sanitizeUser(addSysMsg.user) : undefined } as any,
+    });
+
     // Federation: relay member_add to peers
     if (isFederationRelayEnabled() && dmChannel.federatedId) {
       const domainOrigin = getOurOrigin();
@@ -1036,6 +1105,47 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       leavingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get() ?? undefined;
     }
 
+    // Insert system message for member leaving (before deletion so they're still a member)
+    const leavingUserRow = leavingUser ?? db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    const leaveBaseName = leavingUserRow?.username?.includes('@') ? leavingUserRow.username.split('@')[0] : (leavingUserRow?.username ?? 'Unknown');
+    const leaveSysMsgId = generateSnowflake();
+    const leaveNow = Date.now();
+
+    db.insert(schema.dmMessages).values({
+      id: leaveSysMsgId,
+      dmChannelId: id,
+      userId: request.userId,
+      content: JSON.stringify({
+        event: 'member_removed',
+        targetUserId: request.userId,
+        targetDisplayName: leavingUserRow?.displayName ?? leaveBaseName,
+        reason: 'leave',
+      }),
+      type: 'system',
+      createdAt: leaveNow,
+    }).run();
+
+    connectionManager.sendToDmMembers(id, {
+      type: 'dm_message_created',
+      message: {
+        id: leaveSysMsgId,
+        dmChannelId: id,
+        userId: request.userId,
+        content: JSON.stringify({
+          event: 'member_removed',
+          targetUserId: request.userId,
+          targetDisplayName: leavingUserRow?.displayName ?? leaveBaseName,
+          reason: 'leave',
+        }),
+        type: 'system',
+        createdAt: leaveNow,
+        user: leavingUserRow ? sanitizeUser(leavingUserRow) : undefined,
+        attachments: [],
+        embeds: [],
+        reactions: [],
+      } as any,
+    });
+
     // Delete dm_members row
     db.delete(schema.dmMembers)
       .where(and(
@@ -1104,10 +1214,52 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.dmChannels.id, id))
           .run();
 
+        // Query new owner user outside federation block so it's available for system message
+        const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
+
+        // Insert system message for ownership transfer
+        const newOwnerBaseName = newOwnerUser?.username?.includes('@') ? newOwnerUser.username.split('@')[0] : (newOwnerUser?.username ?? 'Unknown');
+        const ownerSysMsgId = generateSnowflake();
+        const ownerNow = Date.now();
+
+        db.insert(schema.dmMessages).values({
+          id: ownerSysMsgId,
+          dmChannelId: id,
+          userId: request.userId,
+          content: JSON.stringify({
+            event: 'owner_changed',
+            newOwnerId: nextOwner.userId,
+            newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
+          }),
+          type: 'system',
+          createdAt: ownerNow,
+        }).run();
+
+        for (const member of remainingMembers) {
+          connectionManager.sendToUser(member.userId, {
+            type: 'dm_message_created',
+            message: {
+              id: ownerSysMsgId,
+              dmChannelId: id,
+              userId: request.userId,
+              content: JSON.stringify({
+                event: 'owner_changed',
+                newOwnerId: nextOwner.userId,
+                newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
+              }),
+              type: 'system',
+              createdAt: ownerNow,
+              user: leavingUserRow ? sanitizeUser(leavingUserRow) : undefined,
+              attachments: [],
+              embeds: [],
+              reactions: [],
+            } as any,
+          });
+        }
+
         // Federation: relay ownership transfer
         if (isFederationRelayEnabled() && dmChannel?.federatedId) {
           const domainOrigin = getOurOrigin();
-          const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
           const prevOwnerUser = leavingUser; // Already queried above before member deletion
 
           // Update federated owner columns
