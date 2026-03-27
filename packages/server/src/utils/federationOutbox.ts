@@ -288,8 +288,10 @@ export function getGroupDmTargetOrigins(dmChannelId: string): string[] | undefin
 
   const origins = new Set<string>();
   for (const p of participants) {
-    if (p.homeInstance !== ourOrigin) {
-      origins.add(p.homeInstance);
+    // Normalize homeInstance to full URL format to match federation_peers.origin
+    const normalized = p.homeInstance.startsWith('http') ? p.homeInstance : `https://${p.homeInstance}`;
+    if (normalized !== ourOrigin) {
+      origins.add(normalized);
     }
   }
 

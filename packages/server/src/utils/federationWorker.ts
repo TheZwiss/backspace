@@ -171,6 +171,7 @@ async function processOutboxTick(): Promise<void> {
         timestamp: entry.createdAt,
       };
       if (isDm && entry.contextId) evt.dmChannelId = entry.contextId;
+      if (parsed.federatedId) evt.federatedId = parsed.federatedId;
       if (parsed.participants) evt.participants = parsed.participants;
       if (parsed.message) evt.message = parsed.message;
       if (parsed.reactions) evt.reactions = parsed.reactions;

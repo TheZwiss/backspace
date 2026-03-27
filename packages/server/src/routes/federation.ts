@@ -1705,8 +1705,15 @@ function processMemberAddEvent(
       lastMessage: null,
     };
 
-    // Send dm_channel_created to all local WebSocket-connected members
+    // Send dm_channel_created only to members whose home is THIS instance.
+    // Remote replicas will get the channel from their own home instance's
+    // federation bootstrap — prevents duplicate channels in their sidebar.
+    const bootstrapOrigin = getOurOrigin();
     for (const mu of memberUsers) {
+      const muHome = mu.homeInstance
+        ? (mu.homeInstance.startsWith('http') ? mu.homeInstance : `https://${mu.homeInstance}`)
+        : bootstrapOrigin;  // null homeInstance = native local user
+      if (muHome !== bootstrapOrigin) continue;
       connectionManager.sendToUser(mu.id, {
         type: 'dm_channel_created',
         dmChannel: bootstrapResult,

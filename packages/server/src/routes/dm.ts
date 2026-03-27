@@ -645,15 +645,25 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       lastMessage: null,
     };
 
-    // Broadcast dm_channel_created to ALL members (including caller)
+    // Broadcast dm_channel_created only to LOCAL members.
+    // Remote members will receive the channel via federation relay → bootstrap
+    // on their home instance, preventing duplicate channels in their sidebar.
+    const domainOriginForBroadcast = isFederationRelayEnabled() ? getOurOrigin() : null;
+    const isLocalMember = (u: { homeInstance?: string | null }) =>
+      !u.homeInstance || !domainOriginForBroadcast ||
+      u.homeInstance === domainOriginForBroadcast ||
+      `https://${u.homeInstance}` === domainOriginForBroadcast;
+
     for (const member of allMembers) {
+      if (!isLocalMember(member)) continue;
       connectionManager.sendToUser(member.id, {
         type: 'dm_channel_created',
         dmChannel: result,
       });
     }
 
-    // Insert & broadcast system messages for each added member
+    // Insert system messages (DB) for all members, but only broadcast to local members.
+    // Remote instances create their own system messages via federation event handlers.
     for (const targetUser of targetUsers) {
       if (!targetUser) continue;
       const baseName = targetUser.username.includes('@') ? targetUser.username.split('@')[0] : targetUser.username;
@@ -683,10 +693,14 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         createdAt: sysMsg.createdAt,
       }).run();
 
-      connectionManager.sendToDmMembers(dmChannelId, {
-        type: 'dm_message_created',
-        message: sysMsg as any,
-      });
+      // Only broadcast to local members — remote instances handle their own
+      for (const member of allMembers) {
+        if (!isLocalMember(member)) continue;
+        connectionManager.sendToUser(member.id, {
+          type: 'dm_message_created',
+          message: sysMsg as any,
+        });
+      }
     }
 
     // Federation: relay member_add for each remote member
@@ -725,8 +739,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
         const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
         let finalTargets = targetOrigins;
-        if (finalTargets && targetUser.homeInstance !== domainOrigin && !finalTargets.includes(targetUser.homeInstance)) {
-          finalTargets = [...finalTargets, targetUser.homeInstance];
+        // Normalize homeInstance to full URL to match peer origin format
+        const targetHomeOrigin = targetUser.homeInstance?.startsWith('http') ? targetUser.homeInstance : `https://${targetUser.homeInstance}`;
+        if (finalTargets && targetHomeOrigin !== domainOrigin && !finalTargets.includes(targetHomeOrigin)) {
+          finalTargets = [...finalTargets, targetHomeOrigin];
         }
 
         appendMutationLog(
@@ -1010,7 +1026,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       // Include the new member's instance in targets even if not previously in the group
       const targetOrigins = getGroupDmTargetOrigins(id);
-      const newMemberInstance = addedUser?.homeInstance || domainOrigin;
+      // Normalize homeInstance to full URL to match peer origin format
+      const rawNewMemberInstance = addedUser?.homeInstance || domainOrigin;
+      const newMemberInstance = rawNewMemberInstance.startsWith('http') ? rawNewMemberInstance : `https://${rawNewMemberInstance}`;
       let finalTargets = targetOrigins;
       if (finalTargets && newMemberInstance !== domainOrigin && !finalTargets.includes(newMemberInstance)) {
         finalTargets = [...finalTargets, newMemberInstance];
