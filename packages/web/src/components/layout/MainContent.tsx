@@ -15,7 +15,8 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
-import { isSelf } from '../../utils/identity';
+import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
 import { isDmChannel, getChannelOrigin } from '../../stores/spaceStore';
@@ -83,9 +84,11 @@ export function MainContent() {
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
     const otherMembers = dmChannel?.members.filter(m => !isSelf(m, authUser)) ?? [];
     const isGroupDm = (dmChannel?.members.length ?? 0) > 2;
+    const firstOther = otherMembers[0];
+    const { baseName: firstBaseName, domain: firstDomain } = parseFederatedUsername(firstOther?.username ?? '');
     const dmName = isGroupDm
-      ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
-      : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? 'Direct Message';
+      ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+      : firstOther?.displayName ?? (firstBaseName || 'Direct Message');
 
     const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
@@ -166,6 +169,13 @@ export function MainContent() {
               <path d="M12.5 2A6.5 6.5 0 0 0 6 8.5c0 1.82.75 3.47 1.95 4.65A10.02 10.02 0 0 0 2 22h2c0-4.42 3.58-8 8-8 .35 0 .69.03 1.03.07A6.49 6.49 0 0 0 19 8.5 6.5 6.5 0 0 0 12.5 2Zm0 11A4.5 4.5 0 1 1 17 8.5a4.5 4.5 0 0 1-4.5 4.5Z" />
             </svg>
             <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate">{dmName}</span>
+            {!isGroupDm && firstDomain && (
+              <Tooltip content={firstOther?.username ?? ''} position="bottom">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80 flex-shrink-0">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                </svg>
+              </Tooltip>
+            )}
             {isGroupDm && (
               <span className="text-xs text-txt-tertiary flex-shrink-0">({dmChannel?.members.length} Members)</span>
             )}

@@ -12,6 +12,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 import { Mascot } from '../ui/Mascot';
 import { Username } from '../ui/Username';
+import { Tooltip } from '../ui/Tooltip';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
@@ -494,9 +495,11 @@ export function ChannelSidebar() {
               const isGroup = dm.members.length > 2;
               const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
 
+              const firstOtherDm = isGroup ? null : otherMembers[0];
+              const { baseName: dmBaseName, domain: dmDomain } = parseFederatedUsername(firstOtherDm?.username ?? '');
               const dmDisplayName = isGroup
                 ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-                : otherMembers[0]?.displayName ?? otherMembers[0]?.username;
+                : firstOtherDm?.displayName ?? dmBaseName;
 
               const dmItem = (
                 <div
@@ -534,14 +537,24 @@ export function ChannelSidebar() {
                     <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} user={otherMembers[0]} />
                   )}
                   <div className="flex-1 min-w-0">
-                    <Username
-                      username={dmDisplayName ?? ''}
-                      className={`text-[15px] truncate leading-tight block ${
-                        currentChannelId === dm.id ? 'text-white font-medium'
-                          : isDmUnread ? 'text-white font-bold'
-                          : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
-                      }`}
-                    />
+                    <div className="flex items-center gap-1 min-w-0">
+                      <span
+                        className={`text-[15px] truncate leading-tight ${
+                          currentChannelId === dm.id ? 'text-white font-medium'
+                            : isDmUnread ? 'text-white font-bold'
+                            : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
+                        }`}
+                      >
+                        {dmDisplayName}
+                      </span>
+                      {!isGroup && dmDomain && (
+                        <Tooltip content={firstOtherDm?.username ?? ''} position="top">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/60 flex-shrink-0">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                          </svg>
+                        </Tooltip>
+                      )}
+                    </div>
                     {isGroup ? (
                       <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
                         {dm.members.length} Members
