@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
+import { useSocialStore } from '../../stores/socialStore';
 import { api } from '../../api/client';
 import { isSelf } from '../../utils/identity';
 
@@ -224,7 +224,7 @@ export function AddDmMemberModal() {
                       : friend.username.includes('@')
                         ? `@${friend.username}`
                         : friend._instanceOrigin
-                          ? `@${friend.username}@${new URL(friend._instanceOrigin).host}`
+                          ? `@${friend.username}@${(() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })()}`
                           : `@${friend.username}`}
                   </div>
                 </div>
