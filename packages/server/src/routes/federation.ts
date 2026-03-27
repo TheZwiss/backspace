@@ -1766,6 +1766,47 @@ function processMemberAddEvent(
   }
 
   if (!bootstrapped) {
+    // Insert system message for member addition
+    const actorUser = event.membership.addedBy
+      ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db)
+      : null;
+    const actorId = actorUser?.id ?? localUser.id;
+
+    const addSysMsgId = generateSnowflake();
+    const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
+    db.insert(schema.dmMessages).values({
+      id: addSysMsgId,
+      dmChannelId: channel.id,
+      userId: actorId,
+      content: JSON.stringify({
+        event: 'member_added',
+        targetUserId: localUser.id,
+        targetDisplayName: localUser.displayName ?? addBaseName,
+      }),
+      type: 'system',
+      createdAt: Date.now(),
+    }).run();
+
+    connectionManager.sendToDmMembers(channel.id, {
+      type: 'dm_message_created',
+      message: {
+        id: addSysMsgId,
+        dmChannelId: channel.id,
+        userId: actorId,
+        content: JSON.stringify({
+          event: 'member_added',
+          targetUserId: localUser.id,
+          targetDisplayName: localUser.displayName ?? addBaseName,
+        }),
+        type: 'system',
+        createdAt: Date.now(),
+        user: actorUser ? sanitizeUser(actorUser) : sanitizeUser(localUser),
+        attachments: [],
+        embeds: [],
+        reactions: [],
+      } as any,
+    });
+
     // Broadcast to local WebSocket clients
     connectionManager.sendToDmMembers(channel.id, {
       type: 'dm_member_added',
@@ -1811,6 +1852,44 @@ function processMemberRemoveEvent(
     accepted.push(event.messageId);
     return;
   }
+
+  // Insert system message for member leaving (before deletion)
+  const leaveBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
+  const leaveSysMsgId = generateSnowflake();
+  db.insert(schema.dmMessages).values({
+    id: leaveSysMsgId,
+    dmChannelId: channel.id,
+    userId: localUser.id,
+    content: JSON.stringify({
+      event: 'member_removed',
+      targetUserId: localUser.id,
+      targetDisplayName: localUser.displayName ?? leaveBaseName,
+      reason: event.membership?.reason ?? 'leave',
+    }),
+    type: 'system',
+    createdAt: Date.now(),
+  }).run();
+
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_message_created',
+    message: {
+      id: leaveSysMsgId,
+      dmChannelId: channel.id,
+      userId: localUser.id,
+      content: JSON.stringify({
+        event: 'member_removed',
+        targetUserId: localUser.id,
+        targetDisplayName: localUser.displayName ?? leaveBaseName,
+        reason: event.membership?.reason ?? 'leave',
+      }),
+      type: 'system',
+      createdAt: Date.now(),
+      user: sanitizeUser(localUser),
+      attachments: [],
+      embeds: [],
+      reactions: [],
+    } as any,
+  });
 
   // Remove member (idempotent)
   db.delete(schema.dmMembers)
@@ -1892,6 +1971,46 @@ function processOwnershipTransferEvent(
     })
     .where(eq(schema.dmChannels.id, channel.id))
     .run();
+
+  const prevOwnerLocal = event.ownership.previousOwner
+    ? resolveLocalUser(event.ownership.previousOwner.homeUserId, db)
+    : null;
+  const ownerSysMsgId = generateSnowflake();
+  const newOwnerBaseName = newOwnerLocal?.username?.includes('@') ? newOwnerLocal.username.split('@')[0] : (newOwnerLocal?.username ?? 'Unknown');
+  const prevOwnerId = prevOwnerLocal?.id ?? channel.ownerId ?? 'system';
+
+  db.insert(schema.dmMessages).values({
+    id: ownerSysMsgId,
+    dmChannelId: channel.id,
+    userId: prevOwnerId,
+    content: JSON.stringify({
+      event: 'owner_changed',
+      newOwnerId: newOwnerLocal?.id ?? channel.ownerId,
+      newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
+    }),
+    type: 'system',
+    createdAt: Date.now(),
+  }).run();
+
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_message_created',
+    message: {
+      id: ownerSysMsgId,
+      dmChannelId: channel.id,
+      userId: prevOwnerId,
+      content: JSON.stringify({
+        event: 'owner_changed',
+        newOwnerId: newOwnerLocal?.id ?? channel.ownerId,
+        newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
+      }),
+      type: 'system',
+      createdAt: Date.now(),
+      user: prevOwnerLocal ? sanitizeUser(prevOwnerLocal) : undefined,
+      attachments: [],
+      embeds: [],
+      reactions: [],
+    } as any,
+  });
 
   accepted.push(event.messageId);
 }
