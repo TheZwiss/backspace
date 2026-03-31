@@ -361,15 +361,45 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
   onAction: (type: 'rotate' | 'revoke' | 'reinitiate' | 'delete') => void;
   defaultAutoRotateIntervalDays: number;
 }) {
+  const [editingInterval, setEditingInterval] = useState(false);
+  const [intervalDraft, setIntervalDraft] = useState(peer.autoRotateIntervalDays);
+  const [intervalSaving, setIntervalSaving] = useState(false);
+  const [intervalError, setIntervalError] = useState('');
+  const addToast = useUIStore((s) => s.addToast);
+
   const name = peer.instanceName || new URL(peer.origin).host;
   const isRevoked = view === 'revoked';
+  const isDefault = peer.autoRotateIntervalDays === defaultAutoRotateIntervalDays;
+
+  const handleSaveInterval = async () => {
+    if (intervalDraft < 1 || intervalDraft > 365) {
+      setIntervalError('Must be 1-365');
+      return;
+    }
+    setIntervalSaving(true);
+    setIntervalError('');
+    try {
+      const result = await api.federation.updatePeer(peer.id, { autoRotateIntervalDays: intervalDraft });
+      // Update peer in parent state via a re-fetch would be cleanest,
+      // but for responsiveness we update the peer object directly.
+      // This works because React re-renders from the parent's setPeers.
+      peer.autoRotateIntervalDays = result.peer.autoRotateIntervalDays;
+      setEditingInterval(false);
+      addToast('Rotation interval updated', 'success', 2000);
+    } catch (err) {
+      setIntervalError(err instanceof Error ? err.message : 'Failed to update');
+    } finally {
+      setIntervalSaving(false);
+    }
+  };
 
   return (
-    <div
-      className={`bg-white/[0.02] rounded-md px-3 py-2.5 cursor-pointer transition-colors hover:bg-white/[0.03] ${isRevoked ? 'opacity-70' : ''}`}
-      onClick={onToggleExpand}
-    >
-      <div className="flex items-center justify-between">
+    <div className={`bg-white/[0.02] rounded-md transition-colors ${isRevoked ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
+      {/* Compact row */}
+      <div
+        className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
+        onClick={onToggleExpand}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className={`w-2 h-2 rounded-full shrink-0 ${isRevoked ? 'bg-txt-tertiary' : peerStatusDotColor(peer.status)}`} />
           <div className="min-w-0">
@@ -393,6 +423,133 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
           <span className="text-txt-tertiary text-xs">{expanded ? '▾' : '▸'}</span>
         </div>
       </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="px-3 pb-3">
+          <div className="border-t border-white/[0.05] pt-3">
+            {isRevoked ? (
+              /* Revoked peer actions */
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAction('reinitiate'); }}
+                  className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
+                >
+                  Re-initiate Peering
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAction('delete'); }}
+                  className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
+                >
+                  Delete Permanently
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Stats grid */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Consecutive Failures</div>
+                    <div className={`text-xs ${(peer.consecutiveFailures ?? 0) > 0 ? 'text-accent-amber font-medium' : 'text-txt-secondary'}`}>
+                      {peer.consecutiveFailures ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last Failure</div>
+                    <div className="text-xs text-txt-secondary">{formatRelativeTime(peer.lastFailureAt)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Peered Since</div>
+                    <div className="text-xs text-txt-secondary">{formatAbsoluteDate(peer.createdAt)}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Secret Rotated</div>
+                    <div className="text-xs text-txt-secondary">{formatRelativeTime(peer.secretRotatedAt)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Auto-Rotate</div>
+                    {editingInterval ? (
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={intervalDraft}
+                          onChange={(e) => setIntervalDraft(parseInt(e.target.value, 10) || 0)}
+                          className="input-standard w-16 py-0.5 text-xs"
+                          disabled={intervalSaving}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveInterval}
+                          disabled={intervalSaving}
+                          className="text-[10px] text-accent-primary hover:text-accent-primary/80 disabled:opacity-50"
+                        >
+                          {intervalSaving ? '...' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setEditingInterval(false); setIntervalDraft(peer.autoRotateIntervalDays); setIntervalError(''); }}
+                          className="text-[10px] text-txt-tertiary hover:text-txt-secondary"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-txt-secondary">
+                        Every {peer.autoRotateIntervalDays}d
+                        {isDefault && <span className="text-[10px] text-txt-tertiary ml-1">(default)</span>}
+                      </div>
+                    )}
+                    {intervalError && <div className="text-[10px] text-txt-danger mt-0.5">{intervalError}</div>}
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Rotation Status</div>
+                    <div className="text-xs text-txt-secondary">
+                      {peer.rotationInProgress ? 'In progress' : 'Idle'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
+                    disabled={peer.rotationInProgress}
+                    className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors disabled:opacity-50"
+                    title={peer.rotationInProgress ? 'Rotation already in progress' : undefined}
+                  >
+                    Rotate Secret
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
+                    className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
+                  >
+                    Revoke
+                  </button>
+                  {!editingInterval && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
+                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                    >
+                      Edit rotation interval
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
