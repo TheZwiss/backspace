@@ -274,6 +274,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   maxUploadSizeBytes: integer('max_upload_size_bytes'),
   federationRelayEnabled: integer('federation_relay_enabled').notNull().default(1),
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
+  defaultAutoRotateIntervalDays: integer('default_auto_rotate_interval_days').notNull().default(90),
   updatedAt: integer('updated_at').notNull(),
 });
 

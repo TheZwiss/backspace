@@ -216,6 +216,12 @@ export function runMigrations(db: Database.Database): void {
       ]
     },
     {
+      name: 'instance_settings',
+      columns: [
+        { name: 'default_auto_rotate_interval_days', type: 'INTEGER NOT NULL DEFAULT 90' },
+      ]
+    },
+    {
       name: 'federation_peers',
       columns: [
         { name: 'pending_hmac_secret', type: 'TEXT' },

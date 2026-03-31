@@ -191,6 +191,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       maxUploadSizeMb: Math.round(maxUploadBytes / (1024 * 1024)),
       federationRelayEnabled: row.federationRelayEnabled === 1,
       federationRelayTtlDays: row.federationRelayTtlDays,
+      defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
     };
 
     return reply.code(200).send(response);
@@ -249,6 +250,14 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       updateData.federationRelayTtlDays = ttl;
     }
 
+    if (body.defaultAutoRotateIntervalDays !== undefined) {
+      const interval = Number(body.defaultAutoRotateIntervalDays);
+      if (isNaN(interval) || !Number.isInteger(interval) || interval < 1 || interval > 365) {
+        return reply.code(400).send({ error: 'defaultAutoRotateIntervalDays must be an integer between 1 and 365', statusCode: 400 });
+      }
+      updateData.defaultAutoRotateIntervalDays = interval;
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
@@ -267,6 +276,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       maxUploadSizeMb: Math.round(updatedMaxUploadBytes / (1024 * 1024)),
       federationRelayEnabled: updatedRow.federationRelayEnabled === 1,
       federationRelayTtlDays: updatedRow.federationRelayTtlDays,
+      defaultAutoRotateIntervalDays: updatedRow.defaultAutoRotateIntervalDays,
     };
 
     return reply.code(200).send(response);
