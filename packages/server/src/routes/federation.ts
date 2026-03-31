@@ -121,6 +121,24 @@ function isRelayRateLimited(peerOrigin: string): boolean {
   return false;
 }
 
+// ─── In-memory nonce store for replay protection (per-peer) ──────────────────
+// Maps peerOrigin → (nonce → insertion timestamp). Nonces are evicted after
+// NONCE_MAX_AGE_MS (15 min) to match the HMAC timestamp window.
+const NONCE_MAX_AGE_MS = 15 * 60 * 1000;
+const nonceStore = new Map<string, Map<string, number>>();
+
+/** Returns true if the nonce is a duplicate (already seen for this peer). */
+function isNonceDuplicate(peerOrigin: string, nonce: string): boolean {
+  let peerNonces = nonceStore.get(peerOrigin);
+  if (!peerNonces) {
+    peerNonces = new Map();
+    nonceStore.set(peerOrigin, peerNonces);
+  }
+  if (peerNonces.has(nonce)) return true;
+  peerNonces.set(nonce, Date.now());
+  return false;
+}
+
 // Periodically clean stale buckets to prevent unbounded memory growth
 setInterval(() => {
   const cutoff = Date.now() - ACCEPT_RATE_WINDOW_MS;
@@ -140,6 +158,14 @@ setInterval(() => {
     if (timestamps.length === 0) {
       relayRateBuckets.delete(origin);
     }
+  }
+  // Evict expired nonces
+  const nonceCutoff = Date.now() - NONCE_MAX_AGE_MS;
+  for (const [origin, nonces] of nonceStore) {
+    for (const [nonce, ts] of nonces) {
+      if (ts < nonceCutoff) nonces.delete(nonce);
+    }
+    if (nonces.size === 0) nonceStore.delete(origin);
   }
 }, ACCEPT_RATE_WINDOW_MS).unref();
 
