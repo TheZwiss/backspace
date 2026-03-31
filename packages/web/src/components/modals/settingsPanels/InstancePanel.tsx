@@ -4,14 +4,16 @@ import { useSettingsSections } from '../../../hooks/useSettingsSections';
 import type { SettingsSection } from '../SettingsSectionsContext';
 import { SettingsTabBar } from '../SettingsTabBar';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
+import { FederationPanel } from '../instanceSettingsPanels/FederationPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 
-type SubTab = 'general' | 'streaming' | 'storage' | 'users';
+type SubTab = 'general' | 'federation' | 'streaming' | 'storage' | 'users';
 
 const SECTIONS: SettingsSection[] = [
   { id: 'general', label: 'General' },
+  { id: 'federation', label: 'Federation' },
   { id: 'streaming', label: 'Streaming' },
   { id: 'storage', label: 'Storage' },
   { id: 'users', label: 'Users' },
@@ -40,6 +42,7 @@ export function InstancePanel() {
       <SettingsTabBar />
 
       {subTab === 'general' && <GeneralPanel />}
+      {subTab === 'federation' && <FederationPanel />}
       {subTab === 'streaming' && <StreamingPanel />}
       {subTab === 'storage' && <StoragePanel />}
       {subTab === 'users' && <UsersPanel />}
