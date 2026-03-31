@@ -819,6 +819,7 @@ export interface FederationRelayReaction {
   messageHomeInstance?: string;
   userId: string;
   homeUserId: string;
+  homeInstance: string;
   emoji: string;
   createdAt: number;
 }

@@ -780,9 +780,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         if (mutationType === 'reaction_add' || mutationType === 'reaction_remove') {
           // Use the stored payload from the mutation log
           if (mutation.payload) {
-            let reactionData: { userId: string; homeUserId: string; emoji: string; createdAt?: number } | null = null;
+            let reactionData: { userId: string; homeUserId: string; homeInstance?: string; emoji: string; createdAt?: number } | null = null;
             try {
-              reactionData = JSON.parse(mutation.payload) as { userId: string; homeUserId: string; emoji: string; createdAt?: number };
+              reactionData = JSON.parse(mutation.payload) as { userId: string; homeUserId: string; homeInstance?: string; emoji: string; createdAt?: number };
             } catch {
               // Skip malformed payload
               continue;
@@ -797,6 +797,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
               reaction: {
                 userId: reactionData.userId,
                 homeUserId: reactionData.homeUserId,
+                homeInstance: reactionData.homeInstance || getOurOrigin(),
                 emoji: reactionData.emoji,
                 createdAt: reactionData.createdAt ?? mutation.mutated_at,
               },
@@ -990,6 +991,15 @@ export function extractDomain(homeInstance: string): string {
     // Already a bare domain or malformed — strip protocol manually
     return homeInstance.replace(/^https?:\/\//, '').split('/')[0] ?? homeInstance;
   }
+}
+
+/**
+ * Verify that an acting user's homeInstance matches the source instance (X-Federation-Origin).
+ * In direct S2S federation, a peer should only send events for its own users.
+ * Both sides are normalized to bare domain before comparison.
+ */
+export function verifyAttribution(actingUserHomeInstance: string, sourceInstance: string): boolean {
+  return extractDomain(actingUserHomeInstance) === extractDomain(sourceInstance);
 }
 
 /**
@@ -1301,6 +1311,13 @@ function processCreateEvent(
     return;
   }
 
+  // Attribution: message author must belong to source instance (FED-010)
+  if (!verifyAttribution(event.message.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in create: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   // Dedup: check for existing message with same source
   const existingMsg = db
     .select()
@@ -1494,6 +1511,13 @@ function processUpdateEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
+  // Attribution: if homeInstance present, verify it matches source (FED-010)
+  if (event.message?.homeInstance && !verifyAttribution(event.message.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in update: message homeInstance=${extractDomain(event.message.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   const localMsg = db
     .select()
     .from(schema.dmMessages)
@@ -1590,6 +1614,7 @@ function processDeleteEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
+  // FED-010: delete is safe by design — lookup scoped to sourceInstance+sourceMessageId
   const localMsg = db
     .select()
     .from(schema.dmMessages)
@@ -1689,6 +1714,13 @@ function processReactionAddEvent(
     return;
   }
 
+  // Attribution: reacting user must belong to source instance (FED-010)
+  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in reaction_add: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   const canonicalMessageId = event.reaction.messageId ?? event.messageId;
   const localMsg = resolveLocalDmMessage(
     canonicalMessageId,
@@ -1770,6 +1802,13 @@ function processReactionRemoveEvent(
     return;
   }
 
+  // Attribution: reacting user must belong to source instance (FED-010)
+  if (!event.reaction.homeInstance || !verifyAttribution(event.reaction.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in reaction_remove: reaction homeInstance=${event.reaction.homeInstance ? extractDomain(event.reaction.homeInstance) : 'missing'} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
   const canonicalMessageId = event.reaction.messageId ?? event.messageId;
   const localMsg = resolveLocalDmMessage(
     canonicalMessageId,
@@ -1838,6 +1877,13 @@ function processMemberAddEvent(
 
   // Bootstrap: channel doesn't exist yet — create from group metadata
   if (!channel && event.group) {
+    // Attribution: only the owner's instance can bootstrap a group (FED-010)
+    if (event.group.owner && !verifyAttribution(event.group.owner.homeInstance, sourceInstance)) {
+      console.warn(`[federation] Attribution mismatch in member_add bootstrap: owner homeInstance=${extractDomain(event.group.owner.homeInstance)} source=${extractDomain(sourceInstance)}`);
+      rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+      return;
+    }
+
     const channelId = generateSnowflake();
     const now = Date.now();
 
@@ -1926,6 +1972,13 @@ function processMemberAddEvent(
   // Validate authority: only the owner's instance can add members
   if (channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
     rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+    return;
+  }
+
+  // Attribution: adder must belong to source instance (FED-010)
+  if (event.membership.addedBy && !verifyAttribution(event.membership.addedBy.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in member_add: addedBy homeInstance=${extractDomain(event.membership.addedBy.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2032,6 +2085,13 @@ function processMemberRemoveEvent(
 ): void {
   if (!event.federatedId || !event.membership?.user) {
     rejected.push({ messageId: event.messageId, reason: 'missing_membership_payload' });
+    return;
+  }
+
+  // Attribution: for self-leave, user must belong to source instance (FED-010)
+  if (event.membership.reason === 'leave' && !verifyAttribution(event.membership.user.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in member_remove: user homeInstance=${extractDomain(event.membership.user.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2145,6 +2205,13 @@ function processOwnershipTransferEvent(
 ): void {
   if (!event.federatedId || !event.ownership) {
     rejected.push({ messageId: event.messageId, reason: 'missing_ownership_payload' });
+    return;
+  }
+
+  // Attribution: previous owner must belong to source instance (FED-010)
+  if (event.ownership.previousOwner && !verifyAttribution(event.ownership.previousOwner.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in ownership_transfer: previousOwner homeInstance=${extractDomain(event.ownership.previousOwner.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2295,9 +2362,10 @@ function processFriendRequestCreateEvent(
 
   const { from, to } = event.friendship;
 
-  // Authority check: the sender's home instance must be the source
-  if (from.homeInstance !== sourceInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+  // Attribution: sender must belong to source instance (FED-010)
+  if (!verifyAttribution(from.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in friend_request_create: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2391,9 +2459,10 @@ function processFriendRequestUpdateEvent(
 
   const { from, to, status } = event.friendship;
 
-  // Authority check: the recipient's instance accepts/declines
-  if (to.homeInstance !== sourceInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+  // Attribution: recipient (acceptor/decliner) must belong to source instance (FED-010)
+  if (!verifyAttribution(to.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in friend_request_update: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2467,9 +2536,10 @@ function processFriendRequestCancelEvent(
 
   const { from, to } = event.friendship;
 
-  // Authority check: the sender cancels their own request
-  if (from.homeInstance !== sourceInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+  // Attribution: sender must belong to source instance (FED-010)
+  if (!verifyAttribution(from.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in friend_request_cancel: from homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2531,9 +2601,10 @@ function processFriendAddEvent(
 
   const { from, to } = event.friendship;
 
-  // Authority check: the recipient's instance creates the friendship
-  if (to.homeInstance !== sourceInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+  // Attribution: acceptor must belong to source instance (FED-010)
+  if (!verifyAttribution(to.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in friend_add: to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2617,9 +2688,10 @@ function processFriendRemoveEvent(
 
   const { from, to } = event.friendship;
 
-  // Authority check: either side can unfriend
-  if (from.homeInstance !== sourceInstance && to.homeInstance !== sourceInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
+  // Attribution: at least one side must belong to source instance (FED-010)
+  if (!verifyAttribution(from.homeInstance, sourceInstance) && !verifyAttribution(to.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in friend_remove: from homeInstance=${extractDomain(from.homeInstance)} to homeInstance=${extractDomain(to.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
     return;
   }
 
@@ -2664,6 +2736,7 @@ function processFileRejectedEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
+  // FED-010: file_rejected is a system event from the rejecting peer — no user attribution to verify
   if (!event.attachmentId || !event.rejectionReason) {
     rejected.push({ messageId: event.messageId, reason: 'missing_file_rejected_payload' });
     return;

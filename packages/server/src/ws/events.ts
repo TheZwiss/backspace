@@ -1134,6 +1134,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
     appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_add', JSON.stringify({
       userId,
       homeUserId: reactionUser?.homeUserId || userId,
+      homeInstance: reactionUser?.homeInstance || getOurOrigin(),
       emoji,
       createdAt: now,
     }));
@@ -1144,6 +1145,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
         messageHomeInstance,
         userId,
         homeUserId: reactionUser?.homeUserId || userId,
+        homeInstance: reactionUser?.homeInstance || getOurOrigin(),
         emoji,
         createdAt: now,
       },
@@ -1213,6 +1215,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
     appendMutationLog(messageId, dmMsg.dmChannelId, 'reaction_remove', JSON.stringify({
       userId,
       homeUserId: removingUser?.homeUserId || userId,
+      homeInstance: removingUser?.homeInstance || getOurOrigin(),
       emoji,
     }));
     const reactionRemoveTargetOrigins = getGroupDmTargetOrigins(dmMsg.dmChannelId);
@@ -1226,6 +1229,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
           messageHomeInstance,
           userId,
           homeUserId: removingUser?.homeUserId || userId,
+          homeInstance: removingUser?.homeInstance || getOurOrigin(),
           emoji,
         },
       }),

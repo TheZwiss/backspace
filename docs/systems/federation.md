@@ -211,6 +211,11 @@ Locations where normalization is applied:
 - `dm.ts:655` -- `isLocalMember` broadcast filter checks both formats
 - `dm.ts:743` -- normalizes target homeInstance before peer origin comparison
 
+**Attribution verification (`verifyAttribution`):**
+- `verifyAttribution(actingUserHomeInstance, sourceInstance)` normalizes both via `extractDomain` and compares
+- Applied as the FIRST check in every relay event processor (13 handlers) — before user resolution or DB writes
+- Prevents malicious peers from forging events attributed to users on other instances (FED-010)
+
 **Locations with potential mismatch (see Known Issues):**
 - `federation.ts:1278` -- `memberUser?.homeInstance === sourceInstance` -- compares stored homeInstance (possibly bare domain) against `sourceInstance` (full URL from relay request header)
 - `federationOutbox.ts:376-379` -- `getFriendEventTargets` compares `fromHomeInstance` against `ourOrigin` without normalization. The passed values come from `user.homeInstance || domainOrigin` where `domainOrigin = getOurOrigin()`. If `homeInstance` is a bare domain, `homeInstance !== ourOrigin` is true, so the bare domain gets added to targets, but `queueOutboxEvent` then fails to match it against `federation_peers.origin`
@@ -848,7 +853,7 @@ The third case is the most dangerous -- it looks like the event was queued but n
 | Threat | Mitigation | Gap |
 |--------|-----------|-----|
 | Peer impersonation | `X-Federation-Origin` is verified against `federation_peers.origin` | An attacker who compromises the HMAC secret can impersonate the peer |
-| User attribution fraud | Authority checks: e.g., `from.homeInstance !== sourceInstance` rejects events where the acting user doesn't belong to the source instance | The check is string equality on `homeInstance` from the payload, which the sender controls. A malicious peer could claim any user belongs to them by setting `homeInstance` to their own origin. |
+| User attribution fraud | `verifyAttribution()` guard on every event processor: acting user's `homeInstance` (from payload) is normalized to bare domain via `extractDomain` and compared against `X-Federation-Origin` (from HMAC-verified header). Rejects with `attribution_mismatch` before any user resolution or DB writes. Reaction events include `homeInstance` in the payload for verification. | A compromised peer can still forge content from its own users, but cannot impersonate users from other instances. |
 | Event flooding | Outbox batches limited to 50 events. `/api/federation/peer/accept` rate-limited to 10/min/IP. `/api/federation/relay` rate-limited to 30/min/peer (sliding window, keyed by `peer.origin`). | A sustained attack from multiple compromised peers could still cause load, but individual peers are throttled. |
 | Replay attacks | 15-minute timestamp window + per-request nonce (UUID v4) in HMAC, in-memory dedup store with TTL, auto-ratchet enforcement | Nonces are in-memory only — a server restart clears the store, allowing replays of requests from the last 15 minutes of the previous session. Acceptable given the narrow window and idempotency of most events. |
 | Message content manipulation | None | A compromised peer can forge message content attributed to any user on their instance |
