@@ -379,6 +379,64 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/peer/rotate ───────────────────────────────────────
+  // Server-to-server: accept a secret rotation request from a peer instance.
+  // Authenticated via HMAC-SHA256 signature (current secret), NOT JWT.
+  app.post<{ Body: { newSecret: string } }>(
+    '/api/federation/peer/rotate',
+    async (request, reply) => {
+      const db = getDb();
+
+      // 1. Verify HMAC signature
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // 2. Validate request body
+      const { newSecret } = request.body ?? {};
+      if (!newSecret || typeof newSecret !== 'string' || newSecret.length !== 64) {
+        return reply.code(400).send({ error: 'newSecret must be a 64-character hex string', statusCode: 400 });
+      }
+
+      // 3. Reject if rotation already in progress
+      if (peer.pendingHmacSecret) {
+        return reply.code(409).send({
+          error: 'A secret rotation is already in progress — wait for it to complete',
+          statusCode: 409,
+        });
+      }
+
+      // 4. Store pending secret and activate grace period
+      db.update(schema.federationPeers)
+        .set({
+          pendingHmacSecret: newSecret,
+          secretRotationAt: Date.now(),
+        })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      console.log(`[federation] Secret rotation accepted from peer ${peer.origin}`);
+
+      return reply.code(200).send({ accepted: true, gracePeriodMs: 900_000 });
+    },
+  );
+
   // ─── GET /api/federation/peers ─────────────────────────────────────────────
   // Admin-only: list all federation peers (hmacSecret excluded).
   app.get(
