@@ -143,22 +143,32 @@ The 15-minute timestamp window prevents replaying old requests. However, there i
 
 ### Functions
 
-**`resolveLocalUser(homeUserId, db)`** -- `federation.ts:878`
+**`extractDomain(homeInstance)`** -- `federation.ts`
+- Extracts bare domain from a homeInstance value (full URL or bare domain)
+- `"https://nova.ddns.net"` → `"nova.ddns.net"`, `"nova.ddns.net"` → `"nova.ddns.net"`
+- **Use when:** Normalizing homeInstance for comparison or storage
+
+**`findFederatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
+- Three-tier lookup: homeUserId match → domain + username hint match → not found
+- Tier 1: delegates to `resolveLocalUser` (fast path)
+- Tier 2: uses `extractDomain(homeInstance)` + `hints.username` to match stubs created by the auth registration path (which may have a different homeUserId)
+- Side-effect-free — does not modify any records
+- When multiple candidates match in tier 2, prefers real accounts over stubs, then most profile data
+- **Use when:** Read-only lookup that needs to find users created by either auth or relay path
+
+**`resolveLocalUser(homeUserId, db)`** -- `federation.ts`
 - Read-only lookup. Returns `undefined` if not found.
 - Matches: `(users.homeUserId = homeUserId)` OR `(users.id = homeUserId AND homeInstance IS NULL)`
 - Excludes deleted users (`isDeleted = 0`)
 - When multiple candidates exist: prefers the one with `homeUserId` set (replicated stub) over a local ID match
 - **Use when:** Optional lookups where null is acceptable (member_remove, reaction processing, friend_remove)
 
-**`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db)`** -- `federation.ts:912`
-- Calls `resolveLocalUser` first. If found, returns it.
-- If not found, creates a stub with:
-  - `username`: `{homeUserId}@{domain}` (domain extracted from homeInstance URL)
-  - `passwordHash`: `'!federation-replicated'`
-  - `homeInstance`: the full URL passed in
-  - `homeUserId`: the remote user's home ID
-  - Collision-safe: appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
-- **Use when:** You MUST have a valid user ID (setting `ownerId`, inserting `dm_members`, creating messages)
+**`resolveOrCreateReplicatedUser(homeUserId, homeInstance, db, hints?)`** -- `federation.ts`
+- Calls `findFederatedUser` first. If found, backfills `homeUserId` for future fast-path lookups and returns.
+- Accepts optional `hints: { username?: string | null }` for tier-2 matching
+- If not found, creates a stub with `homeInstance` normalized to bare domain via `extractDomain`
+- Collision-safe: appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
+- **Use when:** You MUST have a valid user ID. Always pass `{ username: profile?.username }` when profile data is available.
 
 **`hydrateReplicatedUserProfile(user, profile, db)`** -- `federation.ts:2041`
 - Updates replicated stubs only (`homeInstance` must be set)
@@ -177,16 +187,13 @@ Any code path that sets `ownerId`, creates a `dm_members` row, or inserts a mess
 
 | Location | Format | Example |
 |----------|--------|---------|
-| `users.home_instance` | Bare domain OR full URL | `nova.ddns.net` or `https://nova.ddns.net` |
+| `users.home_instance` | Bare domain (normalized) | `nova.ddns.net` |
 | `federation_peers.origin` | Full URL | `https://nova.ddns.net` |
 | `getOurOrigin()` return | Full URL | `https://orbit.ddns.net` |
-| `resolveOrCreateReplicatedUser` stores | Full URL (passed through) | `https://nova.ddns.net` |
+| `resolveOrCreateReplicatedUser` stores | Bare domain (normalized via `extractDomain`) | `nova.ddns.net` |
 | Auth registration stores | Bare domain | `nova.ddns.net` |
 
-The inconsistency exists because:
-- `resolveOrCreateReplicatedUser` stores `homeInstance` as-is from the relay event (full URL)
-- The auth registration path (`/api/auth/register` with `homeInstance` param) validates as bare domain only (regex: `/^[a-zA-Z0-9._-]+$/`)
-- Relay event payloads populate `homeInstance` from `getOurOrigin()` (full URL) or from `user.homeInstance || getOurOrigin()` (which falls back to full URL)
+Both user creation paths now store bare domain. A self-healing migration in `migrate.ts` normalizes any existing full-URL `homeInstance` values to bare domain on startup.
 
 **Normalization pattern used in code:**
 ```typescript
@@ -815,17 +822,16 @@ If the `federation_mutation_log` table exists but is empty, populates it with `c
 - `getFriendEventTargets()` (`federationOutbox.ts:376-379`) -- compares `fromHomeInstance`/`toHomeInstance` against `getOurOrigin()` without normalization. When a local user's `homeInstance` is null, the fallback `domainOrigin` (full URL) is used, which works correctly. But when a user has `homeInstance` stored as a bare domain and that domain is **this instance** (e.g., an old replicated stub), the comparison `bareDomain !== fullUrl` evaluates to true, incorrectly including the local instance as a target, which then silently drops in `queueOutboxEvent`.
 - `federationWorker.ts:424` -- `user.homeInstance === ourOrigin` in `handleSizeRejection`. Bare domain homeInstance won't match, potentially including a user in `affectedUserIds` who shouldn't be (minor).
 
-### 2. Duplicate User Stubs
+### 2. Duplicate User Stubs (RESOLVED)
 
-The same remote user can have multiple replicated records. Code paths that call `resolveOrCreateReplicatedUser`:
-- `processCreateEvent` (for each participant)
-- `processMemberAddEvent` (bootstrap roster + incremental add + owner + addedBy)
-- `processOwnershipTransferEvent` (new owner)
-- `processFriendRequestCreateEvent` (sender)
-- `processFriendRequestUpdateEvent` (recipient)
-- `processFriendAddEvent` (both users)
+**Root cause:** Two independent code paths (auth registration and S2S relay) created user stubs with different identity key formats and different homeInstance formats.
 
-`resolveLocalUser` (called first by `resolveOrCreateReplicatedUser`) matches on `homeUserId` OR `(id = homeUserId AND homeInstance IS NULL)`. If a user was created via auth registration (with `homeInstance` as bare domain) and later via relay (with `homeInstance` as full URL), `resolveLocalUser` may not find the first record if the IDs differ. The collision-safe username suffix ensures the insert succeeds, but now two stubs exist for the same person.
+**Fix (FED-006):**
+- `findFederatedUser` provides a unified three-tier lookup that bridges both paths (homeUserId match → domain+username hint match → not found)
+- `resolveOrCreateReplicatedUser` normalizes homeInstance to bare domain on write
+- Auth registration upgrades existing stubs instead of creating duplicates (`auth.ts`)
+- Self-healing migration in `migrate.ts` normalizes existing homeInstance values and merges duplicate pairs
+- All `resolveOrCreateReplicatedUser` call sites pass `{ username: profile?.username }` hints for tier-2 matching
 
 ### 3. Silent Failures in queueOutboxEvent
 

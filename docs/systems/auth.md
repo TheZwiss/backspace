@@ -145,12 +145,26 @@ If `requestedAvatarColor` is provided and is in `AVATAR_COLORS`, use it. Otherwi
 
 1. Validate inputs (username format, password length)
 2. Check registration is open
-3. Check username uniqueness (exact match on lowercased username)
-4. Hash password (bcrypt, 12 rounds)
-5. Generate Snowflake ID
-6. Insert user row with `status: 'online'`, admin flag if first user
-7. Sign JWT with `{ userId, username }`
-8. Return `{ token, user }` (user sanitized via `sanitizeUser(user, true)`)
+3. **Federated stub upgrade check** (if `homeInstance` is set): call `findFederatedUser` to look for an existing relay-created stub. If found and upgradeable, upgrade it instead of creating a new record (see below).
+4. Check username uniqueness (exact match on lowercased username)
+5. Hash password (bcrypt, 12 rounds)
+6. Generate Snowflake ID
+7. Insert user row with `status: 'online'`, admin flag if first user
+8. Sign JWT with `{ userId, username }`
+9. Return `{ token, user }` (user sanitized via `sanitizeUser(user, true)`)
+
+### Federated Stub Upgrade
+
+When a user registers with `homeInstance` set (federated registration via friend-connect), the registration path checks for an existing relay-created stub using `findFederatedUser`. If found and the stub has `passwordHash = '!federation-replicated'` (not a real account), the stub is upgraded:
+
+- `passwordHash` is set to the new bcrypt hash (enables login)
+- `username` is updated to the registration's chosen username (replaces placeholder like `291255103060533248@nova.ddns.net` with `nova@nova.ddns.net`)
+- `homeUserId` is backfilled if null
+- Missing profile fields (`displayName`, `avatarColor`) are filled
+
+The user's ID remains the same, preserving all existing FK references (DM memberships, messages, reactions, friendships). The user logs in and sees their full history. Returns HTTP 200 (not 201).
+
+If the found user has a real password hash (already registered), the registration returns 409 and the client falls back to login.
 
 ### Username Availability Check
 
