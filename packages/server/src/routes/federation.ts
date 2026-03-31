@@ -461,8 +461,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       // Serialize body back to JSON for HMAC verification (we control both sides)
       const bodyString = JSON.stringify(request.body);
-      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp)) {
+      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp, fedHeaders.nonce)) {
         return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // 1c. Nonce-based replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        // Peer previously sent nonces but this request doesn't have one — reject
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      } else {
+        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce)`);
       }
 
       // 2. Validate request body shape
@@ -488,6 +500,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .set({
           lastSeenAt: Date.now(),
           consecutiveFailures: 0,
+          ...(fedHeaders.nonce && !peer.nonceSupported ? { nonceSupported: 1 } : {}),
         })
         .where(eq(schema.federationPeers.id, peer.id))
         .run();
@@ -537,8 +550,27 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const bodyString = JSON.stringify(request.body);
-      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp)) {
+      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp, fedHeaders.nonce)) {
         return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // 1b. Nonce-based replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      } else {
+        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce) [sync]`);
+      }
+
+      // Ratchet: mark peer as nonce-supporting if this is the first nonce we've seen
+      if (fedHeaders.nonce && !peer.nonceSupported) {
+        db.update(schema.federationPeers)
+          .set({ nonceSupported: 1 })
+          .where(eq(schema.federationPeers.id, peer.id))
+          .run();
       }
 
       // 2. Validate & normalize request body
