@@ -312,14 +312,18 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Restore DM call state from server (all origins — federated DMs live on remote instances)
       {
-        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, connectFn, disconnectFn } = useVoiceStore.getState();
+        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, connectFn, disconnectFn, setFederatedCallData } = useVoiceStore.getState();
         const myId = event.user.id;
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
-            const isParticipant = call.participants.includes(myId);
+            // For federated calls, check membership via token presence (participants may be empty)
+            const isParticipant = call.participants.includes(myId) || !!call.livekitToken;
             if (call.state === 'active' && isParticipant) {
               setActiveDmCall({ dmChannelId: call.dmChannelId });
-              // Re-establish LiveKit connection for DM call if needed (WS reconnect)
+              // Store federated call data if present (server already filtered to this user's token)
+              if (call.livekitUrl && call.livekitToken) {
+                setFederatedCallData(call.livekitToken, call.livekitUrl);
+              }
               if (connectFn) {
                 connectFn(call.dmChannelId, true).catch((err) => {
                   console.error('[WS] DM call reconnect failed:', err);
@@ -334,6 +338,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
                 callerId: call.callerId,
                 callerName: callerUser?.displayName || callerUser?.username || call.callerId,
               });
+              // Store federated call data for ringing calls too
+              if (call.livekitUrl && call.livekitToken) {
+                setFederatedCallData(call.livekitToken, call.livekitUrl);
+              }
             }
           }
         } else {
@@ -745,22 +753,26 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {
-      const { setIncomingCall } = useVoiceStore.getState();
+      const { setIncomingCall, setFederatedCallData } = useVoiceStore.getState();
       setIncomingCall({
         dmChannelId: event.dmChannelId,
         callerId: event.callerId,
         callerName: event.callerName,
       });
+      // Store federated call data if present (remote LiveKit URL + token)
+      if (event.livekitUrl && event.livekitToken) {
+        setFederatedCallData(event.livekitToken, event.livekitUrl);
+      }
       break;
     }
 
     case 'dm_call_accepted': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, connectFn } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall({ dmChannelId: event.dmChannelId });
-      // Initiate LiveKit connection for the DM call
-      if (connectFn) {
+      // Only connect if not already connected (federated acceptor connects immediately in handleAccept)
+      if (connectFn && !isLiveKitConnected) {
         connectFn(event.dmChannelId, true).catch((err) => {
           console.error('[WS] DM call connect failed:', err);
         });
@@ -769,19 +781,21 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_rejected': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall(null);
+      clearFederatedCallData();
       if (disconnectFn) disconnectFn();
       break;
     }
 
     case 'dm_call_ended': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
       setActiveDmCall(null);
+      clearFederatedCallData();
       if (disconnectFn) disconnectFn();
       break;
     }

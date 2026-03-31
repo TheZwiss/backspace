@@ -383,7 +383,7 @@ export type ServerEvent =
   | { type: 'channel_ack'; channelId: string; messageId: string }
   | { type: 'friend_request_received'; request: FriendRequest }
   | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
-  | { type: 'dm_call_incoming'; dmChannelId: string; callerId: string; callerName: string }
+  | { type: 'dm_call_incoming'; dmChannelId: string; callerId: string; callerName: string; livekitUrl?: string; livekitToken?: string }
   | { type: 'dm_call_accepted'; dmChannelId: string }
   | { type: 'dm_call_rejected'; dmChannelId: string }
   | { type: 'dm_call_ended'; dmChannelId: string }
