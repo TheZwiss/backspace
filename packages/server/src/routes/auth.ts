@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { findFederatedUser } from './federation.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
@@ -83,12 +84,77 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Registration is currently closed', statusCode: 403 });
     }
 
+    const passwordHash = await hashPassword(password);
+
+    // --- Federated stub upgrade path (BEFORE username uniqueness check) ---
+    // If this is a federated registration, check if a relay-created stub already
+    // exists for this person. If so, upgrade it (add credentials, update username)
+    // instead of creating a duplicate record. The user gets their full DM history.
+    // This must run BEFORE the username check because the stub may have a different
+    // username (e.g., "291255103060533248@nova.ddns.net") that wouldn't collide.
+    if (homeInstance && homeUserId) {
+      const usernameBase = trimmedUsername.includes('@') ? trimmedUsername.split('@')[0]! : trimmedUsername;
+      const existingStub = findFederatedUser(homeUserId, homeInstance, db, { username: usernameBase });
+
+      if (existingStub) {
+        // If the found user already has real credentials, they already registered.
+        // Return 409 so the client falls back to login.
+        if (existingStub.passwordHash !== '!federation-replicated') {
+          return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
+        }
+
+        // Check the NEW username isn't taken by someone else (not the stub itself)
+        const usernameCollision = db.select().from(schema.users)
+          .where(eq(schema.users.username, trimmedUsername)).get();
+        if (usernameCollision && usernameCollision.id !== existingStub.id) {
+          return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
+        }
+
+        // Upgrade the stub: add credentials, update username and profile
+        const updates: Record<string, string | number | null> = {
+          passwordHash,
+          username: trimmedUsername,
+          homeUserId,
+        };
+        if (displayName?.trim() && !existingStub.displayName) {
+          updates.displayName = displayName.trim();
+        }
+        const avatarColor = (requestedAvatarColor && (AVATAR_COLORS as readonly string[]).includes(requestedAvatarColor))
+          ? requestedAvatarColor
+          : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]!;
+        if (!existingStub.avatarColor) {
+          updates.avatarColor = avatarColor;
+        }
+
+        db.update(schema.users)
+          .set(updates)
+          .where(eq(schema.users.id, existingStub.id))
+          .run();
+
+        const upgraded = db.select().from(schema.users).where(eq(schema.users.id, existingStub.id)).get();
+        if (!upgraded) {
+          return reply.code(500).send({ error: 'Failed to upgrade user stub', statusCode: 500 });
+        }
+
+        console.log(`[auth] Upgraded federation stub ${existingStub.id} (${existingStub.username} → ${trimmedUsername}) to full account`);
+
+        const token = signJwt({ userId: upgraded.id, username: upgraded.username });
+        const response: AuthResponse = {
+          token,
+          user: sanitizeUser(upgraded, true),
+        };
+        return reply.code(200).send(response);
+      }
+    }
+
+    // --- Normal registration path (no existing stub found) ---
+    // Username uniqueness check (for non-federated registrations, or federated
+    // registrations where no stub was found to upgrade)
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmedUsername)).get();
     if (existing) {
       return reply.code(409).send({ error: 'Username already taken', statusCode: 409 });
     }
 
-    const passwordHash = await hashPassword(password);
     const userId = generateSnowflake();
     const now = Date.now();
 
