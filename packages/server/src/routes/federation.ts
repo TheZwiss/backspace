@@ -3082,12 +3082,17 @@ function processDmCallStartEvent(
     .all();
 
   for (const member of localMembers) {
+    const homeUserId = member.homeUserId || member.userId;
+    const token = event.call!.tokens![homeUserId];
+
     connectionManager.sendToUser(member.userId, {
       type: 'dm_call_incoming',
       dmChannelId: localDmChannelId,
       callerId: callerStub.id,
       callerName: callerStub.displayName ?? callerStub.username,
-    });
+      livekitUrl: event.call!.livekitUrl,
+      livekitToken: token,
+    } as any);
   }
 
   accepted.push(event.messageId);
