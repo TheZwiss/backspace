@@ -743,16 +743,83 @@ The event processing logic is extracted into `processRelayEvents()` (exported fr
 
 ## 12. DM Calls over Federation
 
-DM calls use LiveKit for WebRTC signaling and media transport. The call lifecycle is managed entirely via WebSocket events (`dm_call_start`, `dm_call_accept`, `dm_call_reject`, `dm_call_end` in `ws/events.ts`).
+DM calls work across federated instances. The caller's instance hosts the LiveKit room. Remote clients connect directly to the caller's LiveKit server using a token passed through S2S relay — no media is routed through the federation layer.
 
-**Current state: DM calls do NOT work across federated instances.**
+```
+User A's client <--WS--> Instance 1 (hosts LiveKit) <--S2S HTTP--> Instance 2 <--WS--> User B's client
+                              |                                                            |
+                              +------------- LiveKit (direct client connection) -----------+
+```
 
-The call state machine is local to a single server instance -- there is no federation relay for call events. When user A on instance 1 calls user B on instance 2:
-- The `dm_call_incoming` event is sent via `connectionManager.sendToUser(targetUser.id, ...)` which only broadcasts to WebSocket connections on the local instance
-- User B's replicated stub exists on instance 1, but user B is connected via WebSocket to instance 2
-- The call event is never delivered
+### S2S Event Types
 
-LiveKit tokens are also instance-local (`/api/livekit/token` requires JWT auth for the local instance).
+Four relay event types are processed in `processRelayEvents()`:
+
+| Event Type | Direction | Key Payload Fields |
+|---|---|---|
+| `dm_call_start` | Host → Peers | `federatedId`, `livekitUrl`, `tokens: Record<string, string>` (keyed by `homeUserId`), `caller: { homeUserId, homeInstance, displayName }`, `participants` |
+| `dm_call_accept` | Participant → Host, then Host → All Peers | `federatedId`, `acceptor: { homeUserId, homeInstance }` |
+| `dm_call_reject` | Participant → Host, then Host → All Peers | `federatedId`, `rejector: { homeUserId, homeInstance }` |
+| `dm_call_end` | Any → Host (if not host), then Host → All Peers | `federatedId`, `endedBy: { homeUserId, homeInstance }` |
+
+All events carry standard relay fields: `eventType`, `messageId`, `encryptionVersion: 0`, `timestamp`. All events pass through `verifyAttribution()` before any DB or state mutations.
+
+### Direct Delivery (No Outbox)
+
+Call signaling is time-critical and bypasses the outbox entirely. `sendCallRelay()` sends a synchronous HTTP POST to the peer's `/api/federation/relay` endpoint using existing HMAC signing (`buildFederationHeaders`). If delivery fails, the call operation fails — there is no retry.
+
+### Call Flows
+
+**Start:** Host validates membership, generates LiveKit tokens for all DM members (local + remote), broadcasts `dm_call_incoming` to local WS clients, then sends `dm_call_start` S2S to each remote instance with per-user tokens.
+
+**Accept:** Remote instance sends `dm_call_accept` S2S to host. Host transitions `ringing → active`, broadcasts `dm_call_accepted` locally, fans out `dm_call_accept` to all other remote instances.
+
+**Reject:** Remote sends `dm_call_reject` to host. Host destroys room, sends `dm_call_end` to all peers. (For 1-on-1 DMs, reject = end.)
+
+**End:** Initiating instance (host or not) routes through the host. Host destroys room, fans out `dm_call_end` to all remote instances.
+
+**Timeout:** Both host and remote instances auto-clean stale ringing calls after 60 seconds.
+
+### LiveKit Room Naming
+
+Room name = `federatedId` (the cross-instance stable UUID), never the local `dmChannelId` (which differs per instance).
+
+- 1-on-1 DMs: `federatedId` is a deterministic SHA-256 hash of the sorted `homeUserId` pair
+- Group DMs: `federatedId` is a UUID assigned at creation
+
+### LiveKit Token Generation
+
+`generateFederatedCallToken(roomName, homeUserId, displayName)` generates tokens with:
+- **TTL:** 5 minutes (short join window; local calls use 1 hour)
+- **Room:** scoped to exact `federatedId`
+- **Identity:** `${homeUserId}:${displayName}`
+- **Permissions:** full DM grants (mic, camera, screen share, subscribe, data channel)
+
+### Public LiveKit URL
+
+The URL sent in S2S payloads is always `https://${DOMAIN}/livekit` (the Caddy-proxied public address). The internal `LIVEKIT_URL` env var (`http://livekit:7880`) is never sent to peers.
+
+Instances without LiveKit configured can still receive federated calls — they pass the host's URL and token to the client, which does all the heavy lifting.
+
+### In-Memory Call Registry
+
+When a remote instance receives `dm_call_start`, it creates a `FederatedCallEntry` in memory:
+
+```typescript
+interface FederatedCallEntry {
+  dmChannelId: string;          // local dmChannelId for this DM
+  federatedId: string;          // cross-instance room identifier
+  callerId: string;             // local userId of caller's stub
+  callerHomeUserId: string;
+  federatedCallHost: string;    // peer origin of the host instance
+  livekitUrl: string;
+  tokens: Map<string, string>;  // homeUserId → LiveKit token
+  state: 'ringing' | 'active';
+  startedAt: number;
+}
+```
+
+This registry ensures tokens and `livekitUrl` survive browser refreshes via the `activeCalls` array in the `ready` WS payload. The server filters to the per-user token at payload assembly time.
 
 ---
 
@@ -832,6 +899,4 @@ If the `federation_mutation_log` table exists but is empty, populates it with `c
 
 ## Known Issues
 
-### 1. DM Calls Do Not Work over Federation
-
-See section 12. The call state machine is entirely local to a single server instance. No federation relay exists for call events (`dm_call_start`, `dm_call_incoming`, `dm_call_accept`, `dm_call_reject`, `dm_call_end`).
+No critical known issues. See `docs/federation-production-roadmap.md` for open items (FED-001 through FED-013).

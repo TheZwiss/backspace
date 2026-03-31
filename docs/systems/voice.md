@@ -50,6 +50,24 @@ States: `ringing` → `active` → destroyed
 
 ---
 
+## Federated DM Calls
+
+DM calls work across federated instances. The caller's instance hosts the LiveKit room; remote clients connect to it directly.
+
+**Token generation:** `generateFederatedCallToken(federatedId, homeUserId, displayName)` in `routes/livekit.ts` issues 5-minute tokens scoped to the `federatedId` room (not the local `dmChannelId`). Grants full DM permissions (mic, camera, screen share, subscribe, data channel).
+
+**Public URL:** `https://${DOMAIN}/livekit` — the Caddy-proxied address. Never the internal `LIVEKIT_URL`. Instances without LiveKit can still receive federated calls by forwarding the host's URL and token to the client.
+
+**Token endpoint:** `POST /api/livekit/token` uses `federatedId` as the room name when the DM channel has a `federatedId` set, ensuring both instances join the same LiveKit room.
+
+**Identity format:**
+- Federated calls: `${homeUserId}:${displayName}` — stable across all instances
+- Local calls: `${userId}:${username}` — unchanged
+
+**Client identity resolution:** For federated calls, the client splits the LiveKit participant identity on `:` and matches `homeUserId` against the DM member list (which stores `homeUserId` for all members). This resolves the correct display name and avatar regardless of which instance the participant is on.
+
+---
+
 ## Voice Moderation
 
 Three independent muting mechanisms:
