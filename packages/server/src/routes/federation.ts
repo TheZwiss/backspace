@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
-import { eq, and, or, isNull, inArray } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray, sql } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -909,6 +909,90 @@ export function resolveLocalUser(
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
   return candidates.find(u => u.homeUserId === homeUserId) ?? candidates[0];
+}
+
+/**
+ * Unified federated user lookup — finds a user regardless of which code path
+ * created them (auth registration vs S2S relay stub).
+ *
+ * Three-tier matching:
+ * 1. Fast path: homeUserId column match (existing resolveLocalUser logic)
+ * 2. Domain + username hint: normalized homeInstance domain + username base match
+ * 3. Not found: returns undefined
+ *
+ * Does NOT perform side effects (backfill). See `backfillHomeUserId` for that.
+ */
+export function findFederatedUser(
+  homeUserId: string,
+  homeInstance: string,
+  db: ReturnType<typeof getDb>,
+  hints?: { username?: string | null },
+): typeof schema.users.$inferSelect | undefined {
+  // Tier 1: fast path — existing resolveLocalUser logic
+  const fastMatch = resolveLocalUser(homeUserId, db);
+  if (fastMatch) return fastMatch;
+
+  // Tier 2: domain + username hint match
+  if (!hints?.username) return undefined;
+
+  const domain = extractDomain(homeInstance);
+  const hintLower = hints.username.toLowerCase();
+
+  // Scoped SQL query: match on homeInstance domain + username base
+  // Username base is the part before '@'. We use SQL LIKE to match
+  // '{hint}@%' pattern, plus an exact match for users without '@'.
+  const candidates = db
+    .select()
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.homeInstance, domain),
+        eq(schema.users.isDeleted, 0),
+        or(
+          sql`lower(substr(${schema.users.username}, 1, instr(${schema.users.username}, '@') - 1)) = ${hintLower}`,
+          and(
+            sql`instr(${schema.users.username}, '@') = 0`,
+            sql`lower(${schema.users.username}) = ${hintLower}`,
+          ),
+        ),
+      ),
+    )
+    .all();
+
+  if (candidates.length === 0) return undefined;
+
+  // Pick best candidate: prefer real accounts over stubs, then most profile data
+  if (candidates.length === 1) return candidates[0]!;
+
+  return candidates.sort((a, b) => {
+    // Real account (not federation-replicated) wins
+    const aReal = a.passwordHash !== '!federation-replicated' ? 1 : 0;
+    const bReal = b.passwordHash !== '!federation-replicated' ? 1 : 0;
+    if (aReal !== bReal) return bReal - aReal;
+    // More profile data wins
+    const profileCount = (u: typeof a) =>
+      [u.displayName, u.avatar, u.banner, u.bio].filter(Boolean).length;
+    return profileCount(b) - profileCount(a);
+  })[0]!;
+}
+
+/**
+ * Backfill homeUserId on an existing user record so future lookups
+ * use the fast path (tier 1). Called by resolveOrCreateReplicatedUser
+ * after findFederatedUser matches via tier 2.
+ */
+function backfillHomeUserId(
+  user: typeof schema.users.$inferSelect,
+  homeUserId: string,
+  db: ReturnType<typeof getDb>,
+): typeof schema.users.$inferSelect {
+  if (user.homeUserId === homeUserId) return user;
+  db.update(schema.users)
+    .set({ homeUserId })
+    .where(eq(schema.users.id, user.id))
+    .run();
+  console.log(`[federation] Backfilled homeUserId=${homeUserId} on user ${user.id} (${user.username})`);
+  return { ...user, homeUserId };
 }
 
 /**
