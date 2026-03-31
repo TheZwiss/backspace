@@ -868,6 +868,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 // ─── Relay Event Processors ──────────────────────────────────────────────────
 
 /**
+ * Extract bare domain from a homeInstance value.
+ * Handles both full URLs ("https://nova.ddns.net") and bare domains ("nova.ddns.net").
+ * Used to normalize homeInstance to a canonical format for identity matching.
+ */
+export function extractDomain(homeInstance: string): string {
+  try {
+    return new URL(homeInstance).hostname;
+  } catch {
+    // Already a bare domain or malformed — strip protocol manually
+    return homeInstance.replace(/^https?:\/\//, '').split('/')[0] ?? homeInstance;
+  }
+}
+
+/**
  * Resolve a home user ID to a local user.
  * Matches users where home_user_id = homeUserId, or where
  * the user's own id equals homeUserId and they have no home_instance set (local user).
@@ -914,16 +928,8 @@ export function resolveOrCreateReplicatedUser(
   const existing = resolveLocalUser(homeUserId, db);
   if (existing) return existing;
 
-  // Build a username@domain identifier.  Extract the domain from the
-  // homeInstance URL (strip protocol) so it matches the convention used
-  // by the normal replicated-user registration path.
-  let domain: string;
-  try {
-    domain = new URL(homeInstance).hostname;
-  } catch {
-    // Fallback: strip protocol manually
-    domain = homeInstance.replace(/^https?:\/\//, '').split('/')[0] ?? homeInstance;
-  }
+  // Extract bare domain from homeInstance for username construction
+  const domain = extractDomain(homeInstance);
 
   // Use the snowflake-style homeUserId as the local part; append the
   // domain so the username is globally unique and human-readable.
