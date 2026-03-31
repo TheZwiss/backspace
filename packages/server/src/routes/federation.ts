@@ -1216,7 +1216,7 @@ function processCreateEvent(
   }> = [];
 
   for (const p of event.participants) {
-    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db);
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username });
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
     if (p.profile) {
       localUser = hydrateReplicatedUserProfile(localUser, p.profile, db);
@@ -1733,7 +1733,7 @@ function processMemberAddEvent(
     // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db);
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username });
       ownerId = ownerLocal.id;
     }
 
@@ -1751,7 +1751,7 @@ function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db);
+      const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
       const existing = db.select().from(schema.dmMembers)
         .where(and(
           eq(schema.dmMembers.dmChannelId, channelId),
@@ -1831,6 +1831,7 @@ function processMemberAddEvent(
     event.membership.user.homeUserId,
     event.membership.user.homeInstance,
     db,
+    { username: event.membership.user.profile?.username },
   );
 
   // Enforce max 10 members
@@ -1861,7 +1862,7 @@ function processMemberAddEvent(
   if (!bootstrapped) {
     // Insert system message for member addition
     const actorUser = event.membership.addedBy
-      ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db)
+      ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username })
       : null;
     const actorId = actorUser?.id ?? localUser.id;
 
@@ -2060,6 +2061,7 @@ function processOwnershipTransferEvent(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
+    { username: event.ownership.newOwner.profile?.username },
   );
 
   db.update(schema.dmChannels)
@@ -2189,7 +2191,7 @@ function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
   fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
 
   // Resolve the recipient — must be a local user on this instance
@@ -2292,7 +2294,7 @@ function processFriendRequestUpdateEvent(
   }
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
 
   // Find the pending request
   const pendingRequest = db
@@ -2425,9 +2427,9 @@ function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db);
+  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
   fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
-  let toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db);
+  let toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
   toUser = hydrateReplicatedUserProfile(toUser, event.friendship.toProfile, db);
 
   // Idempotency: if friendship already exists, accept as no-op
