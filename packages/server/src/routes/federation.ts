@@ -98,16 +98,47 @@ function isAcceptRateLimited(ip: string): boolean {
   return false;
 }
 
+// ─── In-memory rate limiter for the relay endpoint (per-peer) ────────────────
+const relayRateBuckets = new Map<string, number[]>();
+const RELAY_RATE_WINDOW_MS = 60_000;
+const RELAY_RATE_MAX = 30;
+
+function isRelayRateLimited(peerOrigin: string): boolean {
+  const now = Date.now();
+  let timestamps = relayRateBuckets.get(peerOrigin);
+  if (!timestamps) {
+    timestamps = [];
+    relayRateBuckets.set(peerOrigin, timestamps);
+  }
+  const cutoff = now - RELAY_RATE_WINDOW_MS;
+  while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < cutoff) {
+    timestamps.shift();
+  }
+  if (timestamps.length >= RELAY_RATE_MAX) {
+    return true;
+  }
+  timestamps.push(now);
+  return false;
+}
+
 // Periodically clean stale buckets to prevent unbounded memory growth
 setInterval(() => {
   const cutoff = Date.now() - ACCEPT_RATE_WINDOW_MS;
   for (const [ip, timestamps] of acceptRateBuckets) {
-    // Remove expired entries
     while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < cutoff) {
       timestamps.shift();
     }
     if (timestamps.length === 0) {
       acceptRateBuckets.delete(ip);
+    }
+  }
+  const relayCutoff = Date.now() - RELAY_RATE_WINDOW_MS;
+  for (const [origin, timestamps] of relayRateBuckets) {
+    while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < relayCutoff) {
+      timestamps.shift();
+    }
+    if (timestamps.length === 0) {
+      relayRateBuckets.delete(origin);
     }
   }
 }, ACCEPT_RATE_WINDOW_MS).unref();
@@ -395,6 +426,11 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       if (!peer || peer.status !== 'active') {
         return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      // 1b. Per-peer rate limiting (before expensive HMAC verification)
+      if (isRelayRateLimited(peer.origin)) {
+        return reply.code(429).send({ error: 'Rate limit exceeded', statusCode: 429 });
       }
 
       // Serialize body back to JSON for HMAC verification (we control both sides)

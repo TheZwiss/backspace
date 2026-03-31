@@ -371,7 +371,7 @@ interface FederationRelayResponse {
 
 ### Inbound Relay Dispatch (`POST /api/federation/relay`)
 
-Body limit: 10 MB. Max 50 events per batch.
+Body limit: 10 MB. Max 50 events per batch. Rate-limited to 30 requests/min per peer (sliding window, keyed by `peer.origin`). Returns 429 when exceeded.
 
 | eventType | Processor | contextType |
 |-----------|-----------|-------------|
@@ -843,7 +843,7 @@ The third case is the most dangerous -- it looks like the event was queued but n
 |--------|-----------|-----|
 | Peer impersonation | `X-Federation-Origin` is verified against `federation_peers.origin` | An attacker who compromises the HMAC secret can impersonate the peer |
 | User attribution fraud | Authority checks: e.g., `from.homeInstance !== sourceInstance` rejects events where the acting user doesn't belong to the source instance | The check is string equality on `homeInstance` from the payload, which the sender controls. A malicious peer could claim any user belongs to them by setting `homeInstance` to their own origin. |
-| Event flooding | Outbox batches limited to 50 events. `/api/federation/peer/accept` rate-limited to 10/min. | No rate limit on `/api/federation/relay` itself. A peer could send unlimited relay requests. |
+| Event flooding | Outbox batches limited to 50 events. `/api/federation/peer/accept` rate-limited to 10/min/IP. `/api/federation/relay` rate-limited to 30/min/peer (sliding window, keyed by `peer.origin`). | A sustained attack from multiple compromised peers could still cause load, but individual peers are throttled. |
 | Replay attacks | 15-minute timestamp window | No nonce -- valid requests can be replayed within the window |
 | Message content manipulation | None | A compromised peer can forge message content attributed to any user on their instance |
 
