@@ -666,6 +666,32 @@ export function runMigrations(db: Database.Database): void {
     console.log(`[migration] Repaired ${corruptedGroups.length} corrupted group DM(s).`);
   }
 
+  // ─── Data integrity: normalize homeInstance to bare domain ────────────────
+  // resolveOrCreateReplicatedUser historically stored homeInstance as a full URL
+  // (e.g., "https://nova.ddns.net") while auth registration stored bare domains
+  // ("nova.ddns.net"). Normalize all to bare domain for consistent identity matching.
+  const fullUrlUsers = db.prepare(`
+    SELECT id, home_instance
+    FROM users
+    WHERE home_instance IS NOT NULL
+      AND (home_instance LIKE 'http://%' OR home_instance LIKE 'https://%')
+      AND is_deleted = 0
+  `).all() as Array<{ id: string; home_instance: string }>;
+
+  for (const u of fullUrlUsers) {
+    let domain: string;
+    try {
+      domain = new URL(u.home_instance).hostname;
+    } catch {
+      domain = u.home_instance.replace(/^https?:\/\//, '').split('/')[0] ?? u.home_instance;
+    }
+    db.prepare(`UPDATE users SET home_instance = ? WHERE id = ?`).run(domain, u.id);
+  }
+
+  if (fullUrlUsers.length > 0) {
+    console.log(`[migration] Normalized ${fullUrlUsers.length} homeInstance value(s) from full URL to bare domain.`);
+  }
+
   console.log('Migrations complete.');
 }
 
