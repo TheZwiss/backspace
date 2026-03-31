@@ -52,9 +52,20 @@ Backspace federation is peer-to-peer with no central authority. Each instance ma
 - New peer: creates record with provided `hmacSecret`, sets `status='active'`
 - Returns `{ accepted: true }` on success
 
-### Secret Storage
+### Secret Storage & Rotation
 
-Both instances store the **same** HMAC secret. The initiating instance generates it and sends it in the accept request. There is no secret rotation mechanism -- the secret persists until the peer is revoked and re-initiated.
+Both instances store the **same** HMAC secret. The initiating instance generates it and sends it in the accept request.
+
+**Rotation protocol:** Either peer (or automatically on a configurable interval, default 90 days) can trigger rotation:
+
+1. Initiator generates a new secret, stores it as `pendingHmacSecret`, and POSTs to `{peer}/api/federation/peer/rotate` signed with the current secret
+2. Acceptor verifies the HMAC, stores `pendingHmacSecret`, and returns `{ accepted: true }`
+3. Both sides enter a 15-minute grace period where either secret is accepted for verification, while outbound requests are signed with the new secret
+4. After the grace period, the health check worker promotes `pendingHmacSecret` → `hmacSecret` and clears the pending fields
+
+**Conflict guard:** If `pendingHmacSecret` is already set, the rotate endpoint returns 409.
+
+**Schema columns:** `pending_hmac_secret` (TEXT NULL), `secret_rotation_at` (INTEGER NULL), `secret_rotated_at` (INTEGER NULL), `auto_rotate_interval_days` (INTEGER NOT NULL DEFAULT 90).
 
 ### Peer Status Lifecycle
 
@@ -94,6 +105,13 @@ Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failu
 | `/api/federation/peer/accept` | POST | None (rate-limited) | Accept incoming handshake |
 | `/api/federation/peers` | GET | JWT + admin | List all peers (secret excluded) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
+| `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
+
+### S2S Endpoints
+
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/api/federation/peer/rotate` | POST | HMAC | Accept secret rotation from peer |
 
 ---
 
