@@ -67,4 +67,14 @@ describe('verifyPeerSignature', () => {
     const sig = signRequest(body, primarySecret, timestamp, null);
     expect(verifyPeerSignature(body, sig, timestamp, null, makePeer())).toBe(true);
   });
+
+  it('does not try pending secret when secretRotationAt is null', () => {
+    const timestamp = Date.now();
+    const sig = signRequest(body, pendingSecret, timestamp, nonce);
+    const peer = makePeer({
+      pendingHmacSecret: pendingSecret,
+      secretRotationAt: null,
+    });
+    expect(verifyPeerSignature(body, sig, timestamp, nonce, peer)).toBe(false);
+  });
 });

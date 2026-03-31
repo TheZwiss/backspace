@@ -733,15 +733,6 @@ async function processHealthCheckTick(): Promise<void> {
     // Time to rotate
     const newSecret = generateHmacSecret();
 
-    // Store pending locally first
-    db.update(schema.federationPeers)
-      .set({
-        pendingHmacSecret: newSecret,
-        secretRotationAt: Date.now(),
-      })
-      .where(eq(schema.federationPeers.id, peer.id))
-      .run();
-
     try {
       const rotateBody = JSON.stringify({ newSecret });
       const headers = buildFederationHeaders(rotateBody, peer.hmacSecret, ourOrigin);
@@ -754,21 +745,19 @@ async function processHealthCheckTick(): Promise<void> {
       });
 
       if (response.ok) {
-        console.log(`[federation-worker] Auto-rotation initiated with peer ${peer.origin}`);
-      } else {
-        // Rollback
+        // Store pending locally AFTER remote peer confirms acceptance
         db.update(schema.federationPeers)
-          .set({ pendingHmacSecret: null, secretRotationAt: null })
+          .set({
+            pendingHmacSecret: newSecret,
+            secretRotationAt: Date.now(),
+          })
           .where(eq(schema.federationPeers.id, peer.id))
           .run();
+        console.log(`[federation-worker] Auto-rotation initiated with peer ${peer.origin}`);
+      } else {
         console.warn(`[federation-worker] Auto-rotation rejected by peer ${peer.origin} (HTTP ${response.status})`);
       }
     } catch (err) {
-      // Rollback
-      db.update(schema.federationPeers)
-        .set({ pendingHmacSecret: null, secretRotationAt: null })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.warn(`[federation-worker] Auto-rotation failed for peer ${peer.origin}: ${message}`);
     }
@@ -854,6 +843,9 @@ async function runInitialSyncForNewPeers(): Promise<void> {
   const ourOrigin = getOurOrigin();
 
   for (const peer of unsyncedPeers) {
+    const signingSecret = (peer.pendingHmacSecret && peer.secretRotationAt)
+      ? peer.pendingHmacSecret
+      : peer.hmacSecret;
     try {
       console.log(`[federation-worker] Running initial sync with ${peer.origin}...`);
       let sinceTimestamp = 0;
@@ -862,7 +854,7 @@ async function runInitialSyncForNewPeers(): Promise<void> {
       // Paginate through all events from the peer
       while (true) {
         const body = JSON.stringify({ sinceTimestamp, limit: 100 });
-        const headers = buildFederationHeaders(body, peer.hmacSecret, ourOrigin);
+        const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
 
         const response = await fetch(`${peer.origin}/api/federation/sync`, {
           method: 'POST',
@@ -893,7 +885,7 @@ async function runInitialSyncForNewPeers(): Promise<void> {
       let friendSinceTimestamp = 0;
       while (true) {
         const friendBody = JSON.stringify({ sinceTimestamp: friendSinceTimestamp, contextType: 'friend', limit: 100 });
-        const friendHeaders = buildFederationHeaders(friendBody, peer.hmacSecret, ourOrigin);
+        const friendHeaders = buildFederationHeaders(friendBody, signingSecret, ourOrigin);
 
         const friendResponse = await fetch(`${peer.origin}/api/federation/sync`, {
           method: 'POST',

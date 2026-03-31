@@ -416,7 +416,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       // 2. Validate request body
       const { newSecret } = request.body ?? {};
-      if (!newSecret || typeof newSecret !== 'string' || newSecret.length !== 64) {
+      if (!newSecret || typeof newSecret !== 'string' || newSecret.length !== 64 || !/^[0-9a-f]+$/.test(newSecret)) {
         return reply.code(400).send({ error: 'newSecret must be a 64-character hex string', statusCode: 400 });
       }
 
@@ -534,15 +534,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // Store pending secret locally BEFORE posting to peer (per audit recommendation)
-      db.update(schema.federationPeers)
-        .set({
-          pendingHmacSecret: newSecret,
-          secretRotationAt: Date.now(),
-        })
-        .where(eq(schema.federationPeers.id, peer.id))
-        .run();
-
       // Send rotation request to peer, signed with the CURRENT (old) secret
       try {
         const rotateBody = JSON.stringify({ newSecret });
@@ -556,12 +547,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
 
         if (!response.ok) {
-          // Rollback — clear pending secret
-          db.update(schema.federationPeers)
-            .set({ pendingHmacSecret: null, secretRotationAt: null })
-            .where(eq(schema.federationPeers.id, peer.id))
-            .run();
-
           let errorMessage = `Remote instance rejected rotation (HTTP ${response.status})`;
           try {
             const body = await response.json() as { error?: string };
@@ -571,16 +556,19 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
         }
 
+        // Store pending secret locally AFTER remote peer confirms acceptance
+        db.update(schema.federationPeers)
+          .set({
+            pendingHmacSecret: newSecret,
+            secretRotationAt: Date.now(),
+          })
+          .where(eq(schema.federationPeers.id, peer.id))
+          .run();
+
         console.log(`[federation] Secret rotation initiated with peer ${peer.origin}`);
 
         return reply.code(200).send({ success: true, gracePeriodMs: 900_000 });
       } catch (err: unknown) {
-        // Rollback — clear pending secret
-        db.update(schema.federationPeers)
-          .set({ pendingHmacSecret: null, secretRotationAt: null })
-          .where(eq(schema.federationPeers.id, peer.id))
-          .run();
-
         const message = err instanceof Error ? err.message : 'Unknown error';
         if (err instanceof DOMException && err.name === 'TimeoutError') {
           return reply.code(504).send({
