@@ -184,7 +184,21 @@ export function useLiveKit() {
     const allParticipants: ParticipantInfo[] = [];
     const processParticipant = (p: Participant, isLocal: boolean) => {
       if (!p.identity) return;
-      const { userId, username } = parseIdentity(p.identity);
+      const { userId: rawId, username } = parseIdentity(p.identity);
+
+      // Resolve identity: for federated calls rawId may be homeUserId from another instance.
+      // Check DM members for a user whose homeUserId matches.
+      let userId = rawId;
+      const activeDmCall = useVoiceStore.getState().activeDmCall;
+      if (activeDmCall) {
+        const dmChannels = useSpaceStore.getState().dmChannels;
+        const dmChannel = dmChannels.find(d => d.id === activeDmCall.dmChannelId);
+        if (dmChannel) {
+          const match = dmChannel.members.find(m => m.homeUserId === rawId || m.id === rawId);
+          if (match) userId = match.id;
+        }
+      }
+
       const memberMatch = useSpaceStore.getState().members.find(m => m.userId === userId);
       let cachedUser: User | null;
       let homeUserId: string | null;
@@ -418,8 +432,21 @@ export function useLiveKit() {
     }
     
     try {
-      const client = getApiForOrigin(getChannelOrigin(channelId));
-      const { token, url } = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
+      let token: string;
+      let url: string;
+
+      // For federated calls, use the stored token from S2S relay
+      const { federatedCallToken, federatedCallUrl, clearFederatedCallData } = useVoiceStore.getState();
+      if (isDm && federatedCallToken && federatedCallUrl) {
+        token = federatedCallToken;
+        url = federatedCallUrl;
+        clearFederatedCallData();
+      } else {
+        const client = getApiForOrigin(getChannelOrigin(channelId));
+        const resp = isDm ? await client.livekit.dmToken(channelId) : await client.livekit.token(channelId);
+        token = resp.token;
+        url = resp.url;
+      }
       if (gen !== _connectGeneration) return;
       const newRoom = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: { videoCodec: 'h264', simulcast: true } });
       roomRef.current = newRoom;
