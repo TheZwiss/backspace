@@ -58,6 +58,19 @@ export interface DmRoomMeta {
   state: 'ringing' | 'active';
 }
 
+/** In-memory registry for federated calls on REMOTE instances. */
+export interface FederatedCallEntry {
+  dmChannelId: string;
+  federatedId: string;
+  callerId: string;             // local stub userId of the caller
+  callerHomeUserId: string;
+  federatedCallHost: string;    // peer origin of the host instance
+  livekitUrl: string;
+  tokens: Map<string, string>;  // homeUserId → LiveKit token
+  state: 'ringing' | 'active';
+  startedAt: number;
+}
+
 export interface VoiceRoom {
   roomId: string;
   roomType: 'space' | 'dm';
@@ -85,6 +98,9 @@ class ConnectionManager {
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  /** Federated calls where this instance is NOT the host. Keyed by local dmChannelId. */
+  private federatedCalls: Map<string, FederatedCallEntry> = new Map();
+  private federatedCallTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // Space-muted/deafened users (moderator action)
   private spaceMutedUsers: Set<string> = new Set(); // Stores spaceId:userId
   private spaceDeafenedUsers: Set<string> = new Set(); // Stores spaceId:userId
@@ -425,6 +441,53 @@ class ConnectionManager {
       this.ringingTimeouts.delete(dmChannelId);
     }
     return true;
+  }
+
+  /** Register a federated call received via S2S. Adds 60s ringing timeout. */
+  createFederatedCall(entry: FederatedCallEntry): void {
+    this.federatedCalls.set(entry.dmChannelId, entry);
+
+    // 60s ringing timeout — mirrors host behavior
+    const timeout = setTimeout(() => {
+      this.federatedCallTimeouts.delete(entry.dmChannelId);
+      const call = this.federatedCalls.get(entry.dmChannelId);
+      if (call && call.state === 'ringing') {
+        this.federatedCalls.delete(entry.dmChannelId);
+        this.sendToDmMembers(entry.dmChannelId, {
+          type: 'dm_call_ended',
+          dmChannelId: entry.dmChannelId,
+        });
+      }
+    }, 60_000);
+    this.federatedCallTimeouts.set(entry.dmChannelId, timeout);
+  }
+
+  /** Get a federated call entry by local dmChannelId. */
+  getFederatedCall(dmChannelId: string): FederatedCallEntry | undefined {
+    return this.federatedCalls.get(dmChannelId);
+  }
+
+  /** Transition a federated call from ringing → active. */
+  activateFederatedCall(dmChannelId: string): boolean {
+    const call = this.federatedCalls.get(dmChannelId);
+    if (!call || call.state !== 'ringing') return false;
+    call.state = 'active';
+    const timeout = this.federatedCallTimeouts.get(dmChannelId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.federatedCallTimeouts.delete(dmChannelId);
+    }
+    return true;
+  }
+
+  /** Remove a federated call entry and clear its timeout. */
+  clearFederatedCall(dmChannelId: string): void {
+    this.federatedCalls.delete(dmChannelId);
+    const timeout = this.federatedCallTimeouts.get(dmChannelId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.federatedCallTimeouts.delete(dmChannelId);
+    }
   }
 
   /** Add a user to a room. Enforces one-room-per-user invariant. Returns the room or null if room doesn't exist. */
@@ -1189,6 +1252,30 @@ function buildReadyPayload(userId: string): {
       if (room.participants.size > 0) {
         voiceStates[dm.dmChannelId] = Array.from(room.participants);
       }
+    }
+  }
+
+  // Resolve this user's homeUserId for token lookup
+  const readyUser = db.select({ homeUserId: schema.users.homeUserId })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .get();
+  const myHomeUserId = readyUser?.homeUserId || userId;
+
+  // Also include federated calls (this instance is NOT the host)
+  for (const dm of dmMemberships) {
+    const fedCall = connectionManager.getFederatedCall(dm.dmChannelId);
+    if (fedCall) {
+      activeCalls.push({
+        dmChannelId: dm.dmChannelId,
+        callerId: fedCall.callerId,
+        participants: [],
+        startedAt: fedCall.startedAt,
+        state: fedCall.state,
+        federatedCallHost: fedCall.federatedCallHost,
+        livekitUrl: fedCall.livekitUrl,
+        livekitToken: fedCall.tokens.get(myHomeUserId),  // only this user's token
+      });
     }
   }
 
