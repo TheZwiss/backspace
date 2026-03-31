@@ -7,9 +7,10 @@ import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
+import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
+import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot } from '@backspace/shared';
 
@@ -1117,6 +1118,18 @@ export function processRelayEvents(
           break;
         case 'file_rejected':
           processFileRejectedEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_call_start':
+          processDmCallStartEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_call_accept':
+          processDmCallAcceptEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_call_reject':
+          processDmCallRejectEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_call_end':
+          processDmCallEndEvent(event, sourceInstance, db, accepted, rejected);
           break;
         default:
           rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
@@ -2999,4 +3012,332 @@ function processFileRejectedEvent(
   }
 
   accepted.push(event.messageId);
+}
+
+// ─── DM Call Relay Processors ─────────────────────────────────────────────────
+
+function processDmCallStartEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.call?.caller || !event.call.livekitUrl || !event.call.tokens || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
+    return;
+  }
+
+  // Attribution: caller must belong to source instance
+  if (!verifyAttribution(event.call.caller.homeInstance, sourceInstance)) {
+    console.warn(`[federation] Attribution mismatch in dm_call_start: caller=${extractDomain(event.call.caller.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  // Find local DM channel by federatedId
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  const localDmChannelId = channel.id;
+
+  // Resolve caller to local stub
+  const callerStub = resolveOrCreateReplicatedUser(
+    event.call.caller.homeUserId,
+    event.call.caller.homeInstance,
+    db,
+    { username: event.call.caller.displayName },
+  );
+
+  // Create federated call entry in registry
+  const entry: FederatedCallEntry = {
+    dmChannelId: localDmChannelId,
+    federatedId: event.federatedId,
+    callerId: callerStub.id,
+    callerHomeUserId: event.call.caller.homeUserId,
+    federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
+    livekitUrl: event.call.livekitUrl,
+    tokens: new Map(Object.entries(event.call.tokens)),
+    state: 'ringing',
+    startedAt: Date.now(),
+  };
+
+  connectionManager.createFederatedCall(entry);
+
+  // Send dm_call_incoming to each local member
+  const localMembers = db.select({
+    userId: schema.dmMembers.userId,
+    homeUserId: schema.users.homeUserId,
+  })
+    .from(schema.dmMembers)
+    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+    .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
+    .all();
+
+  for (const member of localMembers) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_call_incoming',
+      dmChannelId: localDmChannelId,
+      callerId: callerStub.id,
+      callerName: callerStub.displayName ?? callerStub.username,
+    });
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processDmCallAcceptEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.call?.acceptor || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
+    return;
+  }
+
+  if (!verifyAttribution(event.call.acceptor.homeInstance, sourceInstance)) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  const dmChannelId = channel.id;
+
+  // Check if we're the HOST (have a VoiceRoom)
+  const room = connectionManager.getRoom(dmChannelId);
+  if (room && room.roomType === 'dm') {
+    const meta = room.metadata as DmRoomMeta;
+
+    if (meta.state === 'ringing') {
+      connectionManager.activateDmRoom(dmChannelId);
+
+      // Join caller to room
+      connectionManager.leaveCurrentRoom(meta.callerId);
+      connectionManager.joinRoom(dmChannelId, meta.callerId);
+
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'voice_state_update',
+        channelId: dmChannelId,
+        userId: meta.callerId,
+        action: 'join',
+      });
+    }
+
+    // Broadcast accepted locally
+    connectionManager.sendToDmMembers(dmChannelId, {
+      type: 'dm_call_accepted',
+      dmChannelId,
+    });
+
+    // Fan out to ALL other remote instances (exclude the one that sent the accept)
+    const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_accept', {
+      call: { acceptor: event.call.acceptor },
+    }, normalizedSource, db).catch(err =>
+      console.error('[federation] Fan-out dm_call_accept failed:', err)
+    );
+  } else {
+    // We're a REMOTE instance receiving fan-out — transition local state
+    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    if (fedCall) {
+      connectionManager.activateFederatedCall(dmChannelId);
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'dm_call_accepted',
+        dmChannelId,
+      });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processDmCallRejectEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.call?.rejector || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
+    return;
+  }
+
+  if (!verifyAttribution(event.call.rejector.homeInstance, sourceInstance)) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  const dmChannelId = channel.id;
+
+  const room = connectionManager.getRoom(dmChannelId);
+  if (room && room.roomType === 'dm') {
+    const meta = room.metadata as DmRoomMeta;
+    connectionManager.clearVoiceWs(meta.callerId);
+    connectionManager.destroyRoom(dmChannelId);
+
+    connectionManager.sendToDmMembers(dmChannelId, {
+      type: 'dm_call_rejected',
+      dmChannelId,
+    });
+
+    const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_end', {
+      call: { endedBy: event.call.rejector },
+    }, normalizedSource, db).catch(err =>
+      console.error('[federation] Fan-out dm_call_end (reject) failed:', err)
+    );
+  } else {
+    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    if (fedCall) {
+      connectionManager.clearFederatedCall(dmChannelId);
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'dm_call_rejected',
+        dmChannelId,
+      });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processDmCallEndEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.call?.endedBy || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
+    return;
+  }
+
+  if (!verifyAttribution(event.call.endedBy.homeInstance, sourceInstance)) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  const dmChannelId = channel.id;
+
+  const room = connectionManager.getRoom(dmChannelId);
+  if (room && room.roomType === 'dm') {
+    const meta = room.metadata as DmRoomMeta;
+    connectionManager.clearVoiceWs(meta.callerId);
+    for (const pid of room.participants) {
+      connectionManager.clearVoiceUserStatus(pid);
+      connectionManager.clearVoiceWs(pid);
+    }
+    connectionManager.destroyRoom(dmChannelId);
+
+    connectionManager.sendToDmMembers(dmChannelId, {
+      type: 'dm_call_ended',
+      dmChannelId,
+    });
+
+    const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_end', {
+      call: { endedBy: event.call.endedBy },
+    }, normalizedSource, db).catch(err =>
+      console.error('[federation] Fan-out dm_call_end failed:', err)
+    );
+  } else {
+    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    if (fedCall) {
+      connectionManager.clearFederatedCall(dmChannelId);
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'dm_call_ended',
+        dmChannelId,
+      });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+/**
+ * Fan out a call event to all remote instances with DM members,
+ * optionally excluding the instance that triggered the event.
+ */
+async function fanOutCallEvent(
+  dmChannelId: string,
+  federatedId: string,
+  eventType: 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end',
+  extraFields: Partial<FederationRelayEvent>,
+  excludeOrigin: string | undefined,
+  db: ReturnType<typeof getDb>,
+): Promise<void> {
+  const members = db.select({ homeInstance: schema.users.homeInstance })
+    .from(schema.dmMembers)
+    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  const ourOrigin = getOurOrigin();
+  const targets = new Set<string>();
+  for (const m of members) {
+    if (m.homeInstance) {
+      const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
+      if (normalized !== ourOrigin && normalized !== excludeOrigin) {
+        targets.add(normalized);
+      }
+    }
+  }
+  if (targets.size === 0) return;
+
+  const relayEvent: FederationRelayEvent = {
+    eventType,
+    messageId: generateSnowflake(),
+    encryptionVersion: 0,
+    timestamp: Date.now(),
+    federatedId,
+    ...extraFields,
+  } as FederationRelayEvent;
+
+  await Promise.all(
+    Array.from(targets).map(origin =>
+      sendCallRelay(origin, [relayEvent]).catch(err =>
+        console.error(`[federation] Fan-out ${eventType} to ${origin} failed:`, err)
+      )
+    )
+  );
 }
