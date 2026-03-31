@@ -19,7 +19,7 @@ import { Readable } from 'node:stream';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const OUTBOX_INTERVAL_MS = 10_000;        // 10 seconds
+const OUTBOX_INTERVAL_MS = 1_000;         // 1 second (idle polls are no-ops)
 const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
 const HEALTH_CHECK_INTERVAL_MS = 3_600_000; // 1 hour
 const JANITOR_INTERVAL_MS = 3_600_000;     // 1 hour
