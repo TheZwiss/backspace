@@ -692,6 +692,308 @@ export function runMigrations(db: Database.Database): void {
     console.log(`[migration] Normalized ${fullUrlUsers.length} homeInstance value(s) from full URL to bare domain.`);
   }
 
+  // ─── Data integrity: merge duplicate federated user stubs ─────────────────
+  // The same remote user could accumulate multiple replicated records because
+  // resolveLocalUser matched on homeUserId but missed stubs created with a
+  // different homeUserId (e.g., auth registration vs S2S relay). Now that
+  // homeInstance is normalized to bare domain, we can detect and merge duplicates.
+  //
+  // Detection criteria (at least one must match, PLUS same homeInstance domain):
+  // 1. Shared 1-on-1 DM membership (strongest signal)
+  // 2. Username cross-reference (one's homeUserId in the other's username base)
+  // 3. homeUserId cross-match (same homeUserId, missed due to old format mismatch)
+  //
+  // Winner selection: real account > stub, then most profile data, then lower ID.
+
+  const federatedUsers = db.prepare(`
+    SELECT id, username, display_name, avatar, banner, bio, avatar_color,
+           home_instance, home_user_id, password_hash, is_deleted
+    FROM users
+    WHERE home_instance IS NOT NULL
+      AND is_deleted = 0
+  `).all() as Array<{
+    id: string; username: string; display_name: string | null;
+    avatar: string | null; banner: string | null; bio: string | null;
+    avatar_color: string | null; home_instance: string; home_user_id: string | null;
+    password_hash: string; is_deleted: number;
+  }>;
+
+  // Group by normalized homeInstance domain
+  const domainGroups = new Map<string, typeof federatedUsers>();
+  for (const u of federatedUsers) {
+    const domain = u.home_instance.toLowerCase();
+    const group = domainGroups.get(domain);
+    if (group) group.push(u);
+    else domainGroups.set(domain, [u]);
+  }
+
+  type MergePair = { winner: typeof federatedUsers[0]; loser: typeof federatedUsers[0]; reason: string };
+  const mergePairs: MergePair[] = [];
+
+  for (const [domain, users] of domainGroups) {
+    if (users.length < 2) continue;
+
+    // Check all pairs within this domain group
+    for (let i = 0; i < users.length; i++) {
+      for (let j = i + 1; j < users.length; j++) {
+        const a = users[i]!;
+        const b = users[j]!;
+        let reason: string | null = null;
+
+        // Criterion 1: shared 1-on-1 DM membership
+        if (!reason) {
+          const shared = db.prepare(`
+            SELECT m1.dm_channel_id
+            FROM dm_members m1
+            JOIN dm_members m2 ON m1.dm_channel_id = m2.dm_channel_id
+            JOIN dm_channels c ON c.id = m1.dm_channel_id
+            WHERE m1.user_id = ? AND m2.user_id = ?
+              AND c.owner_id IS NULL
+            LIMIT 1
+          `).get(a.id, b.id) as { dm_channel_id: string } | undefined;
+          if (shared) reason = `shared 1-on-1 DM channel ${shared.dm_channel_id}`;
+        }
+
+        // Criterion 2: username cross-reference
+        if (!reason) {
+          const aBase = a.username.includes('@') ? a.username.split('@')[0]! : a.username;
+          const bBase = b.username.includes('@') ? b.username.split('@')[0]! : b.username;
+          if (a.home_user_id && bBase.toLowerCase() === a.home_user_id.toLowerCase()) {
+            reason = `b username base "${bBase}" matches a homeUserId "${a.home_user_id}"`;
+          } else if (b.home_user_id && aBase.toLowerCase() === b.home_user_id.toLowerCase()) {
+            reason = `a username base "${aBase}" matches b homeUserId "${b.home_user_id}"`;
+          }
+        }
+
+        // Criterion 3: homeUserId cross-match
+        if (!reason) {
+          if (a.home_user_id && b.home_user_id && a.home_user_id === b.home_user_id) {
+            reason = `same homeUserId "${a.home_user_id}"`;
+          }
+        }
+
+        if (!reason) continue;
+
+        // Winner selection
+        const aReal = a.password_hash !== '!federation-replicated' ? 1 : 0;
+        const bReal = b.password_hash !== '!federation-replicated' ? 1 : 0;
+
+        let winner: typeof a;
+        let loser: typeof a;
+
+        if (aReal !== bReal) {
+          winner = aReal > bReal ? a : b;
+          loser = aReal > bReal ? b : a;
+        } else {
+          const profileCount = (u: typeof a) =>
+            [u.display_name, u.avatar, u.banner, u.bio].filter(Boolean).length;
+          const aCount = profileCount(a);
+          const bCount = profileCount(b);
+          if (aCount !== bCount) {
+            winner = aCount > bCount ? a : b;
+            loser = aCount > bCount ? b : a;
+          } else {
+            winner = a.id < b.id ? a : b;
+            loser = a.id < b.id ? b : a;
+          }
+        }
+
+        // Check we haven't already scheduled either user in a merge
+        const alreadyScheduled = mergePairs.some(
+          p => p.winner.id === winner.id || p.winner.id === loser.id ||
+               p.loser.id === winner.id || p.loser.id === loser.id
+        );
+        if (!alreadyScheduled) {
+          mergePairs.push({ winner, loser, reason });
+        }
+      }
+    }
+  }
+
+  // Execute merges — each pair in its own transaction for atomicity
+  const mergeOne = db.transaction((pair: MergePair) => {
+    const { winner, loser, reason } = pair;
+    let migratedDmMembers = 0;
+    let migratedDmMessages = 0;
+    let migratedDmReactions = 0;
+    let migratedFriends = 0;
+    let migratedFriendRequests = 0;
+    let migratedDmChannels = 0;
+
+    // Step 1: Enrich winner with loser's non-null profile fields
+    const enrichUpdates: Record<string, string | null> = {};
+    if (loser.display_name && !winner.display_name) enrichUpdates.display_name = loser.display_name;
+    if (loser.avatar && !winner.avatar) enrichUpdates.avatar = loser.avatar;
+    if (loser.avatar_color && !winner.avatar_color) enrichUpdates.avatar_color = loser.avatar_color;
+    if (loser.banner && !winner.banner) enrichUpdates.banner = loser.banner;
+    if (loser.bio && !winner.bio) enrichUpdates.bio = loser.bio;
+
+    // Prefer snowflake-format homeUserId (purely numeric) over username-format
+    const isNumeric = (s: string | null) => s !== null && /^\d+$/.test(s);
+    if (!winner.home_user_id && loser.home_user_id) {
+      enrichUpdates.home_user_id = loser.home_user_id;
+    } else if (winner.home_user_id && loser.home_user_id &&
+               !isNumeric(winner.home_user_id) && isNumeric(loser.home_user_id)) {
+      enrichUpdates.home_user_id = loser.home_user_id;
+    }
+
+    if (Object.keys(enrichUpdates).length > 0) {
+      const setClauses = Object.keys(enrichUpdates).map(k => `${k} = ?`).join(', ');
+      const values = [...Object.values(enrichUpdates), winner.id];
+      db.prepare(`UPDATE users SET ${setClauses} WHERE id = ?`).run(...values);
+    }
+
+    // Step 2: Re-point FK references — loser ID → winner ID
+
+    // dm_members: check for conflicts (winner already in the same channel)
+    // When both have membership, keep winner's row but set closed = MIN (if either had it open, keep open)
+    const loserMemberships = db.prepare(
+      `SELECT dm_channel_id, closed FROM dm_members WHERE user_id = ?`
+    ).all(loser.id) as Array<{ dm_channel_id: string; closed: number }>;
+
+    for (const m of loserMemberships) {
+      const winnerMembership = db.prepare(
+        `SELECT closed FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`
+      ).get(m.dm_channel_id, winner.id) as { closed: number } | undefined;
+      if (winnerMembership) {
+        const mergedClosed = Math.min(winnerMembership.closed, m.closed);
+        if (mergedClosed !== winnerMembership.closed) {
+          db.prepare(`UPDATE dm_members SET closed = ? WHERE dm_channel_id = ? AND user_id = ?`).run(mergedClosed, m.dm_channel_id, winner.id);
+        }
+        db.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id = ?`).run(m.dm_channel_id, loser.id);
+      } else {
+        db.prepare(`UPDATE dm_members SET user_id = ? WHERE dm_channel_id = ? AND user_id = ?`).run(winner.id, m.dm_channel_id, loser.id);
+      }
+      migratedDmMembers++;
+    }
+
+    // dm_messages: no uniqueness constraint — safe to update all
+    const msgResult = db.prepare(`UPDATE dm_messages SET user_id = ? WHERE user_id = ?`).run(winner.id, loser.id);
+    migratedDmMessages = msgResult.changes;
+
+    // dm_reactions: check for conflicts (winner already has same reaction on same message)
+    const loserReactions = db.prepare(
+      `SELECT id, dm_message_id, emoji FROM dm_reactions WHERE user_id = ?`
+    ).all(loser.id) as Array<{ id: string; dm_message_id: string; emoji: string }>;
+
+    for (const r of loserReactions) {
+      const winnerAlreadyReacted = db.prepare(
+        `SELECT 1 FROM dm_reactions WHERE dm_message_id = ? AND user_id = ? AND emoji = ?`
+      ).get(r.dm_message_id, winner.id, r.emoji);
+      if (winnerAlreadyReacted) {
+        db.prepare(`DELETE FROM dm_reactions WHERE id = ?`).run(r.id);
+      } else {
+        db.prepare(`UPDATE dm_reactions SET user_id = ? WHERE id = ?`).run(winner.id, r.id);
+      }
+      migratedDmReactions++;
+    }
+
+    // friends: check for conflicts
+    const loserFriendships = db.prepare(
+      `SELECT user_id, friend_id FROM friends WHERE user_id = ? OR friend_id = ?`
+    ).all(loser.id, loser.id) as Array<{ user_id: string; friend_id: string }>;
+
+    for (const f of loserFriendships) {
+      const newUserId = f.user_id === loser.id ? winner.id : f.user_id;
+      const newFriendId = f.friend_id === loser.id ? winner.id : f.friend_id;
+
+      // Skip self-friendships that would result from merge
+      if (newUserId === newFriendId) {
+        db.prepare(`DELETE FROM friends WHERE user_id = ? AND friend_id = ?`).run(f.user_id, f.friend_id);
+        migratedFriends++;
+        continue;
+      }
+
+      const alreadyExists = db.prepare(
+        `SELECT 1 FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)`
+      ).get(newUserId, newFriendId, newFriendId, newUserId);
+      if (alreadyExists) {
+        db.prepare(`DELETE FROM friends WHERE user_id = ? AND friend_id = ?`).run(f.user_id, f.friend_id);
+      } else {
+        if (f.user_id === loser.id) {
+          db.prepare(`UPDATE friends SET user_id = ? WHERE user_id = ? AND friend_id = ?`).run(winner.id, loser.id, f.friend_id);
+        } else {
+          db.prepare(`UPDATE friends SET friend_id = ? WHERE user_id = ? AND friend_id = ?`).run(winner.id, f.user_id, loser.id);
+        }
+      }
+      migratedFriends++;
+    }
+
+    // friend_requests: check for conflicts
+    const loserRequests = db.prepare(
+      `SELECT id, from_id, to_id FROM friend_requests WHERE from_id = ? OR to_id = ?`
+    ).all(loser.id, loser.id) as Array<{ id: string; from_id: string; to_id: string }>;
+
+    for (const r of loserRequests) {
+      const newFromId = r.from_id === loser.id ? winner.id : r.from_id;
+      const newToId = r.to_id === loser.id ? winner.id : r.to_id;
+
+      if (newFromId === newToId) {
+        db.prepare(`DELETE FROM friend_requests WHERE id = ?`).run(r.id);
+        migratedFriendRequests++;
+        continue;
+      }
+
+      const alreadyExists = db.prepare(
+        `SELECT 1 FROM friend_requests WHERE from_id = ? AND to_id = ?`
+      ).get(newFromId, newToId);
+      if (alreadyExists) {
+        db.prepare(`DELETE FROM friend_requests WHERE id = ?`).run(r.id);
+      } else {
+        if (r.from_id === loser.id) {
+          db.prepare(`UPDATE friend_requests SET from_id = ? WHERE id = ?`).run(winner.id, r.id);
+        }
+        if (r.to_id === loser.id) {
+          db.prepare(`UPDATE friend_requests SET to_id = ? WHERE id = ?`).run(winner.id, r.id);
+        }
+      }
+      migratedFriendRequests++;
+    }
+
+    // dm_channels: update owner_id
+    const ownerResult = db.prepare(`UPDATE dm_channels SET owner_id = ? WHERE owner_id = ?`).run(winner.id, loser.id);
+    migratedDmChannels = ownerResult.changes;
+
+    // read_states: conflict handling — keep the row with more recent updated_at
+    let migratedReadStates = 0;
+    const loserReadStates = db.prepare(
+      `SELECT user_id, channel_id, last_read_message_id, updated_at FROM read_states WHERE user_id = ?`
+    ).all(loser.id) as Array<{ user_id: string; channel_id: string; last_read_message_id: string; updated_at: number }>;
+
+    for (const rs of loserReadStates) {
+      const winnerRs = db.prepare(
+        `SELECT updated_at FROM read_states WHERE user_id = ? AND channel_id = ?`
+      ).get(winner.id, rs.channel_id) as { updated_at: number } | undefined;
+      if (winnerRs) {
+        if (rs.updated_at > winnerRs.updated_at) {
+          db.prepare(`UPDATE read_states SET last_read_message_id = ?, updated_at = ? WHERE user_id = ? AND channel_id = ?`)
+            .run(rs.last_read_message_id, rs.updated_at, winner.id, rs.channel_id);
+        }
+        db.prepare(`DELETE FROM read_states WHERE user_id = ? AND channel_id = ?`).run(loser.id, rs.channel_id);
+      } else {
+        db.prepare(`UPDATE read_states SET user_id = ? WHERE user_id = ? AND channel_id = ?`).run(winner.id, loser.id, rs.channel_id);
+      }
+      migratedReadStates++;
+    }
+
+    // Step 4: Soft-delete loser
+    db.prepare(`UPDATE users SET is_deleted = 1 WHERE id = ?`).run(loser.id);
+
+    console.log(`[migration] Merged duplicate user stubs for domain ${winner.home_instance}:`);
+    console.log(`  Winner: ${winner.id} (${winner.username}) — kept`);
+    console.log(`  Loser:  ${loser.id} (${loser.username}) — soft-deleted`);
+    console.log(`  Migrated: ${migratedDmMembers} dm_members, ${migratedDmMessages} dm_messages, ${migratedDmReactions} dm_reactions, ${migratedFriends} friends, ${migratedFriendRequests} friend_requests, ${migratedDmChannels} dm_channels, ${migratedReadStates} read_states`);
+    console.log(`  Match reason: ${reason}`);
+  });
+
+  for (const pair of mergePairs) {
+    mergeOne(pair);
+  }
+
+  if (mergePairs.length > 0) {
+    console.log(`[migration] Merged ${mergePairs.length} duplicate user stub pair(s).`);
+  }
+
   console.log('Migrations complete.');
 }
 
