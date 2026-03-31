@@ -109,6 +109,7 @@ export function UserSettingsModal() {
               name={user?.displayName || user?.username || ''}
               size={36}
               userId={user?.id}
+              avatarColor={user?.avatarColor}
             />
             <div className="min-w-0">
               <div className="text-sm font-medium text-txt-primary truncate">{user?.displayName || user?.username}</div>
@@ -160,6 +161,7 @@ export function UserSettingsModal() {
                 name={user?.displayName || user?.username || ''}
                 size={36}
                 userId={user?.id}
+                avatarColor={user?.avatarColor}
               />
               <div className="min-w-0">
                 <div className="text-sm font-medium text-txt-primary truncate">{user?.displayName || user?.username}</div>

@@ -7,7 +7,7 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { api } from '../../api/client';
-import { isSelf } from '../../utils/identity';
+import { isSelf, parseFederatedUsername } from '../../utils/identity';
 
 export function AddDmMemberModal() {
   const [query, setQuery] = useState('');
@@ -150,7 +150,7 @@ export function AddDmMemberModal() {
                 key={f.id}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] bg-accent-mint/15 text-accent-mint"
               >
-                {f.displayName ?? f.username}
+                {f.displayName ?? parseFederatedUsername(f.username).baseName}
                 <button
                   onClick={() => removeFriend(f.id)}
                   className="opacity-60 hover:opacity-100 transition-opacity text-[14px] leading-none"
@@ -193,6 +193,8 @@ export function AddDmMemberModal() {
             const isInDm = currentMemberIds.has(friend.id);
             const isSelected = selected.has(friend.id);
             const atCapacity = !isSelected && selected.size >= remainingSlots;
+            const { baseName, domain } = parseFederatedUsername(friend.username);
+            const friendDisplayName = friend.displayName ?? baseName;
 
             return (
               <button
@@ -209,23 +211,18 @@ export function AddDmMemberModal() {
               >
                 <Avatar
                   src={friend.avatar}
-                  name={friend.displayName ?? friend.username}
+                  name={friendDisplayName}
                   size={30}
                   status={friend.status as any}
                   userId={friend.homeUserId ?? friend.id}
+                  avatarColor={friend.avatarColor}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium text-txt-primary truncate">
-                    {friend.displayName ?? friend.username}
+                    {friendDisplayName}
                   </div>
                   <div className="text-[11px] text-txt-tertiary truncate">
-                    {isInDm
-                      ? 'Already in this DM'
-                      : friend.username.includes('@')
-                        ? `@${friend.username}`
-                        : friend._instanceOrigin
-                          ? `@${friend.username}@${(() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })()}`
-                          : `@${friend.username}`}
+                    {isInDm ? 'Already in this DM' : `@${friend.username}`}
                   </div>
                 </div>
                 {!isInDm && (

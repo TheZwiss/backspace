@@ -797,6 +797,7 @@ export interface FederationGroupPayload {
 }
 
 export interface FederationRelayProfileSnapshot {
+  username?: string | null;
   displayName?: string | null;
   avatar?: string | null;
   avatarColor?: string | null;

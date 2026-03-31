@@ -18,6 +18,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 
 function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
   return {
+    username: user.username ?? null,
     displayName: user.displayName ?? null,
     avatar: user.avatar ?? null,
     avatarColor: user.avatarColor ?? null,
