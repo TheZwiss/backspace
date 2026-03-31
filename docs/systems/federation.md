@@ -135,10 +135,11 @@ Two layers of replay protection:
 
 ### Inbound Verification Flow (`POST /api/federation/relay`)
 
-1. `parseFederationHeaders()` extracts origin, timestamp, signature from headers
+1. `parseFederationHeaders()` extracts origin, timestamp, signature, and nonce from headers
 2. Look up peer by `origin` in `federation_peers` -- must exist and be `status = 'active'`
 3. Re-serialize request body to JSON: `JSON.stringify(request.body)`
-4. `verifySignature(bodyString, signature, peer.hmacSecret, timestamp)` -- reject if false
+4. `verifySignature(bodyString, signature, peer.hmacSecret, timestamp, nonce)` -- reject if false
+5. Nonce enforcement: duplicate nonce → 409, missing nonce from ratcheted peer → 401, legacy peer → warn
 
 **Important:** The body is re-serialized server-side. This means Fastify's JSON parsing and re-stringification must produce identical output to the sender's `JSON.stringify`. In practice this works because both sides use standard `JSON.stringify` with no custom replacers.
 

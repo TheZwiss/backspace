@@ -132,6 +132,9 @@ export function parseFederationHeaders(
   const rawNonce = getHeader('x-federation-nonce') ?? getHeader('X-Federation-Nonce');
   const nonce = rawNonce && typeof rawNonce === 'string' && rawNonce.trim() ? rawNonce.trim() : null;
 
+  // Reject nonces that are unreasonably long (UUID v4 is 36 chars)
+  if (nonce && nonce.length > 64) return null;
+
   return { origin, timestamp: timestampMs, signature, nonce };
 }
 
