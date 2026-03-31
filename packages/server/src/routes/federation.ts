@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { eq, and, or, isNull, inArray, sql } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
-import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature } from '../utils/federationAuth.js';
+import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
@@ -24,6 +24,9 @@ interface SanitizedPeer {
   consecutiveFailures: number | null;
   lastSyncedAt: number | null;
   createdAt: number;
+  rotationInProgress: boolean;
+  secretRotatedAt: number | null;
+  autoRotateIntervalDays: number;
 }
 
 function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): SanitizedPeer {
@@ -37,6 +40,9 @@ function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): Sanitize
     consecutiveFailures: row.consecutiveFailures,
     lastSyncedAt: row.lastSyncedAt,
     createdAt: row.createdAt,
+    rotationInProgress: row.pendingHmacSecret !== null,
+    secretRotatedAt: row.secretRotatedAt,
+    autoRotateIntervalDays: row.autoRotateIntervalDays,
   };
 }
 
@@ -484,6 +490,109 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .run();
 
       return reply.code(200).send({ success: true });
+    },
+  );
+
+  // ─── POST /api/federation/peers/:id/rotate ──────────────────────────────────
+  // Admin-only: trigger immediate secret rotation for a peer.
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/peers/:id/rotate',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const db = getDb();
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
+      }
+
+      if (peer.status !== 'active') {
+        return reply.code(400).send({ error: 'Can only rotate secrets for active peers', statusCode: 400 });
+      }
+
+      if (peer.pendingHmacSecret) {
+        return reply.code(409).send({
+          error: 'A secret rotation is already in progress — wait for it to complete',
+          statusCode: 409,
+        });
+      }
+
+      const newSecret = generateHmacSecret();
+      let localOrigin: string;
+      try {
+        localOrigin = resolveLocalOrigin(request);
+      } catch {
+        return reply.code(500).send({
+          error: 'Cannot determine local instance origin. Set the DOMAIN environment variable.',
+          statusCode: 500,
+        });
+      }
+
+      // Store pending secret locally BEFORE posting to peer (per audit recommendation)
+      db.update(schema.federationPeers)
+        .set({
+          pendingHmacSecret: newSecret,
+          secretRotationAt: Date.now(),
+        })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      // Send rotation request to peer, signed with the CURRENT (old) secret
+      try {
+        const rotateBody = JSON.stringify({ newSecret });
+        const headers = buildFederationHeaders(rotateBody, peer.hmacSecret, localOrigin);
+
+        const response = await fetch(`${peer.origin}/api/federation/peer/rotate`, {
+          method: 'POST',
+          headers,
+          body: rotateBody,
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (!response.ok) {
+          // Rollback — clear pending secret
+          db.update(schema.federationPeers)
+            .set({ pendingHmacSecret: null, secretRotationAt: null })
+            .where(eq(schema.federationPeers.id, peer.id))
+            .run();
+
+          let errorMessage = `Remote instance rejected rotation (HTTP ${response.status})`;
+          try {
+            const body = await response.json() as { error?: string };
+            if (body.error) errorMessage = body.error;
+          } catch { /* ignore parse failures */ }
+
+          return reply.code(502).send({ error: errorMessage, statusCode: 502 });
+        }
+
+        console.log(`[federation] Secret rotation initiated with peer ${peer.origin}`);
+
+        return reply.code(200).send({ success: true, gracePeriodMs: 900_000 });
+      } catch (err: unknown) {
+        // Rollback — clear pending secret
+        db.update(schema.federationPeers)
+          .set({ pendingHmacSecret: null, secretRotationAt: null })
+          .where(eq(schema.federationPeers.id, peer.id))
+          .run();
+
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        if (err instanceof DOMException && err.name === 'TimeoutError') {
+          return reply.code(504).send({
+            error: 'Remote instance did not respond within 10 seconds',
+            statusCode: 504,
+          });
+        }
+        return reply.code(502).send({
+          error: `Failed to reach remote instance: ${message}`,
+          statusCode: 502,
+        });
+      }
     },
   );
 
