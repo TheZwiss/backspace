@@ -119,6 +119,8 @@ async function processOutboxTick(): Promise<void> {
       createdAt: schema.federationOutbox.createdAt,
       peerOrigin: schema.federationPeers.origin,
       peerHmacSecret: schema.federationPeers.hmacSecret,
+      peerPendingHmacSecret: schema.federationPeers.pendingHmacSecret,
+      peerSecretRotationAt: schema.federationPeers.secretRotationAt,
       peerStatus: schema.federationPeers.status,
     })
     .from(schema.federationOutbox)
@@ -158,7 +160,9 @@ async function processOutboxTick(): Promise<void> {
     if (!firstEntry) continue; // Should never happen given grouping logic above
 
     const peerOrigin = firstEntry.peerOrigin;
-    const peerHmacSecret = firstEntry.peerHmacSecret;
+    const peerHmacSecret = (firstEntry.peerPendingHmacSecret && firstEntry.peerSecretRotationAt)
+      ? firstEntry.peerPendingHmacSecret
+      : firstEntry.peerHmacSecret;
 
     // Build relay events from outbox entries
     const events: FederationRelayEvent[] = peerEntries.map((entry) => {
