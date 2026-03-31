@@ -203,7 +203,7 @@ Two layers of replay protection:
 
 ### Critical Rule
 
-Any code path that sets `ownerId`, creates a `dm_members` row, or inserts a message MUST use `resolveOrCreateReplicatedUser`. Using `resolveLocalUser` with a `?? null` fallback has caused data corruption (see Known Issues: ownerId nulling).
+Any code path that sets `ownerId`, creates a `dm_members` row, or inserts a message MUST use `resolveOrCreateReplicatedUser`. Using `resolveLocalUser` with a `?? null` fallback can cause data corruption (e.g., `ownerId` set to null for group DMs).
 
 ### Origin Normalization
 
@@ -234,11 +234,7 @@ Locations where normalization is applied:
 - Applied as the FIRST check in every relay event processor (13 handlers) — before user resolution or DB writes
 - Prevents malicious peers from forging events attributed to users on other instances
 
-**Locations with potential mismatch (see Known Issues):**
-- `federation.ts:1278` -- `memberUser?.homeInstance === sourceInstance` -- compares stored homeInstance (possibly bare domain) against `sourceInstance` (full URL from relay request header)
-- `federationOutbox.ts:376-379` -- `getFriendEventTargets` compares `fromHomeInstance` against `ourOrigin` without normalization. The passed values come from `user.homeInstance || domainOrigin` where `domainOrigin = getOurOrigin()`. If `homeInstance` is a bare domain, `homeInstance !== ourOrigin` is true, so the bare domain gets added to targets, but `queueOutboxEvent` then fails to match it against `federation_peers.origin`
-- `federationWorker.ts:424` -- `user.homeInstance === ourOrigin` in `handleSizeRejection`. Bare domain homeInstance won't match, potentially including a user in `affectedUserIds` who shouldn't be (minor).
-- `federation.ts:2388` -- `from.homeInstance === ourOrigin` in `processFriendAddEvent` determines which user is "local" for broadcasting. The `from.homeInstance` comes from the relay event payload, which should be a full URL, so this comparison works correctly in practice.
+All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalization, handling both bare domains and full URLs consistently.
 - `federation.ts:2447` -- same pattern in `processFriendRemoveEvent`
 
 ---
@@ -316,7 +312,7 @@ Trigger (API/WS handler)
   -> isFederationRelayEnabled()? No -> return silently
   -> Fetch active peers from federation_peers
   -> Filter to targetPeerOrigins (if specified) -- EXACT string match against peer.origin
-  -> If zero peers match -> return silently (KNOWN ISSUE: silent event dropping)
+  -> If zero peers match -> logs warning and returns
   -> For each peer, in a transaction:
       -> Check for existing outbox entry by (peerId, entityId)
       -> COALESCE:
@@ -592,7 +588,7 @@ Uses the same backoff schedule as outbox delivery. Max attempts: 10 (`MAX_FILE_A
 
 ### Target Resolution (`getFriendEventTargets`)
 
-Computes which peer origins need the event. Compares `fromHomeInstance` and `toHomeInstance` against `getOurOrigin()`. **Known issue:** no normalization -- bare domain homeInstance will not match full URL `ourOrigin`, causing the bare domain to be passed as a target. However, `queueOutboxEvent` then fails to match it against `federation_peers.origin` (full URL), silently dropping the event.
+Computes which peer origins need the event. Compares `fromHomeInstance` and `toHomeInstance` against `getOurOrigin()` with normalization applied, correctly handling both bare domain and full URL formats.
 
 ### Context ID
 
