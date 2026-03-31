@@ -265,6 +265,10 @@ export interface ActiveCallInfo {
   participants: string[];
   startedAt: number;
   state: 'ringing' | 'active';
+  // Federation fields (present only for federated calls on remote instances)
+  federatedCallHost?: string;
+  livekitUrl?: string;
+  livekitToken?: string;  // this user's LiveKit token (server filters per-user at payload assembly)
 }
 
 // ─── DM Types ───────────────────────────────────────────────────────────────
@@ -747,7 +751,8 @@ export interface FederationRelayEvent {
   eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
     | 'member_add' | 'member_remove' | 'ownership_transfer'
     | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
-    | 'friend_add' | 'friend_remove' | 'file_rejected';
+    | 'friend_add' | 'friend_remove' | 'file_rejected'
+    | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end';
   contextType?: 'dm' | 'friend';
   dmChannelId?: string;
   messageId: string;
@@ -777,6 +782,16 @@ export interface FederationRelayEvent {
   rejectionReason?: string;
   rejectionLimit?: number;
   affectedUserIds?: string[];
+  call?: FederationCallPayload;
+}
+
+export interface FederationCallPayload {
+  livekitUrl?: string;
+  tokens?: Record<string, string>;  // homeUserId → LiveKit token
+  caller?: { homeUserId: string; homeInstance: string; displayName: string };
+  acceptor?: { homeUserId: string; homeInstance: string };
+  rejector?: { homeUserId: string; homeInstance: string };
+  endedBy?: { homeUserId: string; homeInstance: string };
 }
 
 export interface FederationMembershipPayload {
