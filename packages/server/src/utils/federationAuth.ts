@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 
 const DEFAULT_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes
@@ -11,12 +11,14 @@ export function generateHmacSecret(): string {
 }
 
 /**
- * Compute HMAC-SHA256 of `${timestamp}.${body}` using the given secret.
+ * Compute HMAC-SHA256 of `${timestamp}.${nonce}.${body}` (or `${timestamp}.${body}` when nonce
+ * is absent, for backward compat with legacy peers) using the given secret.
  * Returns a hex-encoded signature string.
  */
-export function signRequest(body: string, secret: string, timestamp: number): string {
+export function signRequest(body: string, secret: string, timestamp: number, nonce: string | null = null): string {
+  const payload = nonce ? `${timestamp}.${nonce}.${body}` : `${timestamp}.${body}`;
   return createHmac('sha256', secret)
-    .update(`${timestamp}.${body}`)
+    .update(payload)
     .digest('hex');
 }
 
@@ -25,7 +27,8 @@ export function signRequest(body: string, secret: string, timestamp: number): st
  *
  * Returns true only if:
  *   - The timestamp is within maxAgeMs of Date.now()
- *   - The HMAC-SHA256 of `${timestamp}.${body}` matches the provided signature
+ *   - The HMAC-SHA256 of `${timestamp}.${nonce}.${body}` (or `${timestamp}.${body}` when nonce
+ *     is absent) matches the provided signature
  *
  * Uses constant-time comparison to prevent timing attacks.
  */
@@ -34,6 +37,7 @@ export function verifySignature(
   signature: string,
   secret: string,
   timestamp: number,
+  nonce: string | null = null,
   maxAgeMs: number = DEFAULT_MAX_AGE_MS,
 ): boolean {
   // Guard against empty or obviously invalid inputs
@@ -44,7 +48,7 @@ export function verifySignature(
   const age = Math.abs(Date.now() - timestamp);
   if (age > maxAgeMs) return false;
 
-  const expected = signRequest(body, secret, timestamp);
+  const expected = signRequest(body, secret, timestamp, nonce);
 
   // Convert both to Buffers for constant-time comparison
   const expectedBuf = Buffer.from(expected, 'hex');
@@ -63,6 +67,7 @@ export function verifySignature(
  *   X-Federation-Signature: sha256=<hmac-hex>
  *   X-Federation-Origin:    <origin>
  *   X-Federation-Timestamp: <unix-ms>
+ *   X-Federation-Nonce:     <uuid-v4>
  *   Content-Type:           application/json
  */
 export function buildFederationHeaders(
@@ -71,12 +76,14 @@ export function buildFederationHeaders(
   origin: string,
 ): Record<string, string> {
   const timestamp = Date.now();
-  const sig = signRequest(body, secret, timestamp);
+  const nonce = randomUUID();
+  const sig = signRequest(body, secret, timestamp, nonce);
 
   return {
     'X-Federation-Signature': `sha256=${sig}`,
     'X-Federation-Origin': origin,
     'X-Federation-Timestamp': String(timestamp),
+    'X-Federation-Nonce': nonce,
     'Content-Type': 'application/json',
   };
 }
@@ -84,14 +91,15 @@ export function buildFederationHeaders(
 /**
  * Parse and validate the federation headers from an inbound request.
  *
- * Returns the extracted { origin, timestamp, signature } on success,
+ * Returns the extracted { origin, timestamp, signature, nonce } on success,
  * or null if any required header is missing or malformed.
+ * `nonce` is null when the peer did not send X-Federation-Nonce (legacy peers).
  *
  * Signature header format: `sha256=<hex>`
  */
 export function parseFederationHeaders(
   headers: Record<string, string | string[] | undefined>,
-): { origin: string; timestamp: number; signature: string } | null {
+): { origin: string; timestamp: number; signature: string; nonce: string | null } | null {
   // Helper to extract a single string value from a potentially multi-value header
   const getHeader = (name: string): string | null => {
     const value = headers[name];
@@ -121,7 +129,10 @@ export function parseFederationHeaders(
   const origin = rawOrigin.trim();
   if (!origin) return null;
 
-  return { origin, timestamp: timestampMs, signature };
+  const rawNonce = getHeader('x-federation-nonce') ?? getHeader('X-Federation-Nonce');
+  const nonce = rawNonce && typeof rawNonce === 'string' && rawNonce.trim() ? rawNonce.trim() : null;
+
+  return { origin, timestamp: timestampMs, signature, nonce };
 }
 
 /**
