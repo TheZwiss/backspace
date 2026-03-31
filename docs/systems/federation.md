@@ -675,8 +675,8 @@ Triggered once at server startup (async, non-blocking). Finds peers with `status
 
 **For each unsynced peer:**
 1. **DM sync pass:** Paginate through `POST {peerOrigin}/api/federation/sync` with `sinceTimestamp = 0`, `limit = 100`
-2. **Self-POST:** Relay received events by POSTing to `{ourOrigin}/api/federation/relay` -- this routes through the standard inbound processing
-3. **Friend sync pass:** Same pagination with `contextType: 'friend'`
+2. **Direct processing:** Call `processRelayEvents()` to process received events in-process (no HTTP round-trip)
+3. **Friend sync pass:** Same pagination with `contextType: 'friend'`, also processed via `processRelayEvents()`
 4. Update `lastSyncedAt = Date.now()` after completion
 5. On failure: don't update `lastSyncedAt` -- retried on next startup
 
@@ -706,14 +706,9 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 - Queries `federation_mutation_log WHERE context_type = 'friend'`
 - Returns stored payloads directly (friend events carry their complete data)
 
-### Known Bug: DNS Hairpin Self-POST
+### Relay Event Processing
 
-`runInitialSyncForNewPeers` POSTs to `{ourOrigin}/api/federation/relay` where `ourOrigin = getOurOrigin()`. In production, `ourOrigin` is `https://{DOMAIN}`, e.g., `https://nova.ddns.net`. This means the server makes an HTTP request to itself through the public DNS and reverse proxy (Caddy). This works but:
-- Adds unnecessary network round-trip latency
-- Fails if DNS hairpin is not supported by the network
-- Fails if the server is behind NAT without hairpin NAT configured
-
-A direct function call to the relay processing logic would be more robust.
+The event processing logic is extracted into `processRelayEvents()` (exported from `federation.ts`), shared by both the HTTP relay endpoint and the initial sync worker. This avoids the DNS hairpin self-POST bug (FED-005) where the server would HTTP-request itself through public DNS, which failed on networks without hairpin NAT.
 
 ---
 
@@ -852,9 +847,9 @@ The third case is the most dangerous -- it looks like the event was queued but n
 | Replay attacks | 15-minute timestamp window | No nonce -- valid requests can be replayed within the window |
 | Message content manipulation | None | A compromised peer can forge message content attributed to any user on their instance |
 
-### 5. DNS Hairpin Self-POST Bug
+### 5. ~~DNS Hairpin Self-POST Bug~~ (Fixed — FED-005)
 
-`runInitialSyncForNewPeers` (`federationWorker.ts:792-797`) POSTs received sync events to `{ourOrigin}/api/federation/relay` via public DNS. This adds unnecessary latency and fails when DNS hairpin is not configured. The function should call the relay processing logic directly instead of making an HTTP request to itself.
+Resolved. Initial sync now calls `processRelayEvents()` directly instead of self-POSTing through public DNS.
 
 ### 6. DM Calls Do Not Work over Federation
 

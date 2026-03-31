@@ -419,64 +419,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // 3. Process each event
-      const accepted: string[] = [];
-      const rejected: Array<{ messageId: string; reason: string }> = [];
-
-      for (const event of body.events) {
-        try {
-          switch (event.eventType) {
-            case 'create':
-              processCreateEvent(event, sourceInstance, peer.origin, db, accepted, rejected);
-              break;
-            case 'update':
-              processUpdateEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'delete':
-              processDeleteEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'reaction_add':
-              processReactionAddEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'reaction_remove':
-              processReactionRemoveEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'member_add':
-              processMemberAddEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'member_remove':
-              processMemberRemoveEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'ownership_transfer':
-              processOwnershipTransferEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'friend_request_create':
-              processFriendRequestCreateEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'friend_request_update':
-              processFriendRequestUpdateEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'friend_request_cancel':
-              processFriendRequestCancelEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'friend_add':
-              processFriendAddEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'friend_remove':
-              processFriendRemoveEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            case 'file_rejected':
-              processFileRejectedEvent(event, sourceInstance, db, accepted, rejected);
-              break;
-            default:
-              rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
-              break;
-          }
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : 'unknown_error';
-          console.error(`[federation-relay] Error processing event ${event.messageId}:`, errMsg);
-          rejected.push({ messageId: event.messageId, reason: 'processing_error' });
-        }
-      }
+      const { accepted, rejected } = processRelayEvents(body.events, sourceInstance, peer.origin, db);
 
       // 4. Update peer status
       db.update(schema.federationPeers)
@@ -863,6 +806,80 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(syncResponse);
     },
   );
+}
+
+// ─── Relay Event Processing (shared by HTTP handler and initial sync) ────────
+
+/**
+ * Process an array of federation relay events. Used by the HTTP relay endpoint
+ * and directly by the initial-sync worker (which skips the HTTP round-trip).
+ */
+export function processRelayEvents(
+  events: FederationRelayEvent[],
+  sourceInstance: string,
+  peerOrigin: string,
+  db: ReturnType<typeof getDb>,
+): { accepted: string[]; rejected: Array<{ messageId: string; reason: string }> } {
+  const accepted: string[] = [];
+  const rejected: Array<{ messageId: string; reason: string }> = [];
+
+  for (const event of events) {
+    try {
+      switch (event.eventType) {
+        case 'create':
+          processCreateEvent(event, sourceInstance, peerOrigin, db, accepted, rejected);
+          break;
+        case 'update':
+          processUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'delete':
+          processDeleteEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'reaction_add':
+          processReactionAddEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'reaction_remove':
+          processReactionRemoveEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'member_add':
+          processMemberAddEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'member_remove':
+          processMemberRemoveEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'ownership_transfer':
+          processOwnershipTransferEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'friend_request_create':
+          processFriendRequestCreateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'friend_request_update':
+          processFriendRequestUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'friend_request_cancel':
+          processFriendRequestCancelEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'friend_add':
+          processFriendAddEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'friend_remove':
+          processFriendRemoveEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'file_rejected':
+          processFileRejectedEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        default:
+          rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
+          break;
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'unknown_error';
+      console.error(`[federation-relay] Error processing event ${event.messageId}:`, errMsg);
+      rejected.push({ messageId: event.messageId, reason: 'processing_error' });
+    }
+  }
+
+  return { accepted, rejected };
 }
 
 // ─── Relay Event Processors ──────────────────────────────────────────────────

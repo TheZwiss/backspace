@@ -373,8 +373,8 @@ When a new peer is established (`federation_peers.lastSyncedAt = 0`), the federa
 **Flow (`federationWorker.ts:runInitialSyncForNewPeers`):**
 
 1. Query all active peers with `lastSyncedAt = 0`
-2. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), relaying each batch through the local `/api/federation/relay` endpoint
-3. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same relay-to-self pattern
+2. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), processing each batch via `processRelayEvents()` directly
+3. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same direct processing
 4. After both passes complete, updates `lastSyncedAt = Date.now()` so the sync doesn't repeat
 
 The sync endpoint (`POST /api/federation/sync`) returns events from the `federation_mutation_log` table, which retains entries for 90 days. This means friend relationships established within the last 90 days are backfilled when a new peer connection is created.

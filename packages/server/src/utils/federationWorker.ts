@@ -9,6 +9,7 @@ import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
+import { processRelayEvents } from '../routes/federation.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -781,21 +782,8 @@ async function runInitialSyncForNewPeers(): Promise<void> {
 
         if (data.events.length === 0) break;
 
-        // Relay the events through our own relay endpoint logic
-        // For simplicity, POST them to ourselves
-        const relayBody = JSON.stringify({
-          version: 1,
-          sourceInstance: peer.origin,
-          events: data.events,
-        });
-        const relayHeaders = buildFederationHeaders(relayBody, peer.hmacSecret, peer.origin);
-
-        await fetch(`${ourOrigin}/api/federation/relay`, {
-          method: 'POST',
-          headers: relayHeaders,
-          body: relayBody,
-          signal: AbortSignal.timeout(30_000),
-        });
+        // Process events directly — no HTTP round-trip (FED-005)
+        processRelayEvents(data.events, peer.origin, peer.origin, db);
 
         totalEvents += data.events.length;
         sinceTimestamp = data.checkpoint;
@@ -825,19 +813,8 @@ async function runInitialSyncForNewPeers(): Promise<void> {
 
         if (friendData.events.length === 0) break;
 
-        const friendRelayBody = JSON.stringify({
-          version: 1,
-          sourceInstance: peer.origin,
-          events: friendData.events,
-        });
-        const friendRelayHeaders = buildFederationHeaders(friendRelayBody, peer.hmacSecret, peer.origin);
-
-        await fetch(`${ourOrigin}/api/federation/relay`, {
-          method: 'POST',
-          headers: friendRelayHeaders,
-          body: friendRelayBody,
-          signal: AbortSignal.timeout(30_000),
-        });
+        // Process events directly — no HTTP round-trip (FED-005)
+        processRelayEvents(friendData.events, peer.origin, peer.origin, db);
 
         totalEvents += friendData.events.length;
         friendSinceTimestamp = friendData.checkpoint;
