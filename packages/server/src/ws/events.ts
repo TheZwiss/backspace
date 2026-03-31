@@ -11,8 +11,11 @@ import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
+import { generateFederatedCallToken } from '../routes/livekit.js';
+import { config } from '../config.js';
+import crypto from 'node:crypto';
 
 /**
  * Re-evaluate SPEAK permission for all participants in voice channels
@@ -1409,6 +1412,10 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
     callerId: userId,
     callerName: username,
   }, userId);
+
+  // Federation: notify remote instances (fire-and-forget)
+  sendFederatedCallStart(dmChannelId, userId, username)
+    .catch(err => console.error('[federation] sendFederatedCallStart error:', err));
 }
 
 function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
@@ -1546,6 +1553,122 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
     type: 'dm_call_ended',
     dmChannelId,
   });
+}
+
+/**
+ * Send S2S dm_call_start to all remote instances with DM members.
+ * Fire-and-forget — if delivery fails, the call still works locally.
+ */
+async function sendFederatedCallStart(
+  dmChannelId: string,
+  callerId: string,
+  callerName: string,
+): Promise<void> {
+  const db = getDb();
+
+  // Look up DM channel for federatedId
+  const channel = db.select({
+    federatedId: schema.dmChannels.federatedId,
+    ownerId: schema.dmChannels.ownerId,
+  })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, dmChannelId))
+    .get();
+
+  if (!channel) return;
+
+  // Get all DM members with their user records
+  const members = db.select({
+    userId: schema.dmMembers.userId,
+    homeUserId: schema.users.homeUserId,
+    homeInstance: schema.users.homeInstance,
+    username: schema.users.username,
+    displayName: schema.users.displayName,
+  })
+    .from(schema.dmMembers)
+    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+    .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
+    .all();
+
+  const ourOrigin = getOurOrigin();
+
+  // Filter to remote members
+  const remoteMembers = members.filter(m => {
+    if (!m.homeInstance) return false;
+    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
+    return normalized !== ourOrigin;
+  });
+
+  if (remoteMembers.length === 0) return;
+
+  // Compute or reuse federatedId
+  let federatedId = channel.federatedId;
+  if (!federatedId) {
+    if (!channel.ownerId) {
+      // 1-on-1: compute from homeUserId pair
+      const callerMember = members.find(m => m.userId === callerId);
+      const otherMember = members.find(m => m.userId !== callerId);
+      if (!callerMember || !otherMember) return;
+      federatedId = computeFederatedId(
+        callerMember.homeUserId || callerMember.userId,
+        otherMember.homeUserId || otherMember.userId,
+      );
+    } else {
+      federatedId = crypto.randomUUID();
+    }
+    // Persist for future use
+    db.update(schema.dmChannels)
+      .set({ federatedId })
+      .where(eq(schema.dmChannels.id, dmChannelId))
+      .run();
+  }
+
+  // Check LiveKit configuration
+  if (!config.livekit.apiKey || !config.livekit.apiSecret) {
+    console.warn('[federation] Cannot start federated call: LiveKit not configured');
+    return;
+  }
+
+  // Group remote members by home instance
+  const peerGroups = new Map<string, typeof remoteMembers>();
+  for (const m of remoteMembers) {
+    const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
+    if (!peerGroups.has(origin)) peerGroups.set(origin, []);
+    peerGroups.get(origin)!.push(m);
+  }
+
+  const livekitUrl = `https://${config.domain}/livekit`;
+
+  for (const [peerOrigin, peerMembers] of peerGroups) {
+    // Generate per-user tokens for this peer's members
+    const tokens: Record<string, string> = {};
+    for (const m of peerMembers) {
+      const homeUserId = m.homeUserId || m.userId;
+      const name = m.displayName || m.username;
+      tokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
+    }
+
+    const result = await sendCallRelay(peerOrigin, [{
+      eventType: 'dm_call_start',
+      messageId: generateSnowflake(),
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId,
+      call: {
+        livekitUrl,
+        tokens,
+        caller: {
+          homeUserId: callerId,
+          homeInstance: ourOrigin,
+          displayName: callerName,
+        },
+      },
+    }]);
+
+    if (!result.ok) {
+      console.error(`[federation] Failed to send dm_call_start to ${peerOrigin}: ${result.error}`);
+    }
+  }
 }
 
 // ─── Voice Moderation Handlers ──────────────────────────────────────────────
