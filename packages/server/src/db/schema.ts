@@ -320,6 +320,10 @@ export const federationPeers = sqliteTable('federation_peers', {
   lastSyncedAt: integer('last_synced_at').default(0),
   remoteMaxUploadSize: integer('remote_max_upload_size'),
   nonceSupported: integer('nonce_supported').notNull().default(0),
+  pendingHmacSecret: text('pending_hmac_secret'),
+  secretRotationAt: integer('secret_rotation_at'),
+  secretRotatedAt: integer('secret_rotated_at'),
+  autoRotateIntervalDays: integer('auto_rotate_interval_days').notNull().default(90),
   createdAt: integer('created_at').notNull(),
 });
 

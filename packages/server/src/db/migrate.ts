@@ -215,6 +215,15 @@ export function runMigrations(db: Database.Database): void {
         { name: 'federation_relay_ttl_days', type: 'INTEGER NOT NULL DEFAULT 30' },
       ]
     },
+    {
+      name: 'federation_peers',
+      columns: [
+        { name: 'pending_hmac_secret', type: 'TEXT' },
+        { name: 'secret_rotation_at', type: 'INTEGER' },
+        { name: 'secret_rotated_at', type: 'INTEGER' },
+        { name: 'auto_rotate_interval_days', type: 'INTEGER NOT NULL DEFAULT 90' },
+      ]
+    },
   ];
 
   for (const table of tables) {
