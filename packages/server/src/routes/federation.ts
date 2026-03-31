@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import { eq, and, or, isNull, inArray, sql } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
-import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature } from '../utils/federationAuth.js';
+import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
@@ -461,7 +461,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       // Serialize body back to JSON for HMAC verification (we control both sides)
       const bodyString = JSON.stringify(request.body);
-      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp, fedHeaders.nonce)) {
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
         return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
       }
 
@@ -550,7 +550,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const bodyString = JSON.stringify(request.body);
-      if (!verifySignature(bodyString, fedHeaders.signature, peer.hmacSecret, fedHeaders.timestamp, fedHeaders.nonce)) {
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
         return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
       }
 
