@@ -4,6 +4,40 @@ import { authenticate } from '../utils/auth.js';
 import { config } from '../config.js';
 import { getChannelSpaceId, hasPermission, computePermissions, isDmMember, PermissionBits } from '../utils/permissions.js';
 import type { LiveKitTokenRequest, LiveKitTokenResponse } from '@backspace/shared';
+import { getDb, schema } from '../db/index.js';
+import { eq } from 'drizzle-orm';
+
+/**
+ * Generate a LiveKit token for a federated call participant.
+ * Uses homeUserId as identity (stable across instances).
+ * Short TTL (5 min) — must join quickly.
+ */
+export async function generateFederatedCallToken(
+  roomName: string,
+  homeUserId: string,
+  displayName: string,
+): Promise<string> {
+  const token = new AccessToken(config.livekit.apiKey!, config.livekit.apiSecret!, {
+    identity: `${homeUserId}:${displayName}`,
+    ttl: '5m',
+  });
+
+  token.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canPublishSources: [
+      TrackSource.MICROPHONE,
+      TrackSource.CAMERA,
+      TrackSource.SCREEN_SHARE,
+      TrackSource.SCREEN_SHARE_AUDIO,
+    ],
+    canSubscribe: true,
+    canPublishData: true,
+  });
+
+  return token.toJwt();
+}
 
 export async function livekitRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: LiveKitTokenRequest & { dmChannelId?: string } }>('/api/livekit/token', {
@@ -27,7 +61,16 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
       if (!isDmMember(dmChannelId, request.userId)) {
         return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
       }
-      roomName = `dm-${dmChannelId}`;
+
+      // Federated DMs use federatedId as room name (cross-instance stable).
+      // Local-only DMs use dm-{dmChannelId}.
+      const db = getDb();
+      const channel = db.select({ federatedId: schema.dmChannels.federatedId })
+        .from(schema.dmChannels)
+        .where(eq(schema.dmChannels.id, dmChannelId))
+        .get();
+
+      roomName = channel?.federatedId ? channel.federatedId : `dm-${dmChannelId}`;
     } else if (channelId && typeof channelId === 'string') {
       // Space voice channel token
       const spaceId = getChannelSpaceId(channelId);
