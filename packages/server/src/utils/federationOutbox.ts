@@ -3,8 +3,8 @@ import * as schema from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser } from '@backspace/shared';
-import { getOurOrigin } from './federationAuth.js';
+import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest } from '@backspace/shared';
+import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -416,4 +416,57 @@ export function buildRelayPayload(
     editedAt: message.editedAt ?? null,
     createdAt: message.createdAt,
   };
+}
+
+/**
+ * Send call signaling events directly to a remote peer (bypasses outbox).
+ * Used for time-critical call events where latency matters.
+ * If the HTTP POST fails, the call operation fails — no retry.
+ */
+export async function sendCallRelay(
+  targetPeerOrigin: string,
+  events: FederationRelayEvent[],
+): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  const peer = db.select()
+    .from(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.origin, targetPeerOrigin),
+      eq(schema.federationPeers.status, 'active'),
+    ))
+    .get();
+
+  if (!peer) {
+    return { ok: false, error: `No active peer for origin ${targetPeerOrigin}` };
+  }
+
+  const ourOrigin = getOurOrigin();
+  const body: FederationRelayRequest = {
+    version: 1,
+    sourceInstance: ourOrigin,
+    events,
+  };
+  const bodyStr = JSON.stringify(body);
+
+  // Use pending secret during rotation (FED-011), otherwise current
+  const signingSecret = peer.pendingHmacSecret ?? peer.hmacSecret;
+  const headers = buildFederationHeaders(bodyStr, signingSecret, ourOrigin);
+
+  try {
+    const res = await fetch(`${targetPeerOrigin}/api/federation/relay`, {
+      method: 'POST',
+      headers,
+      body: bodyStr,
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { ok: false, error: `HTTP ${res.status}: ${text}` };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'fetch_failed' };
+  }
 }
