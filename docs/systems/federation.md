@@ -126,7 +126,12 @@ Where `timestamp` is `Date.now()` (Unix milliseconds) and `requestBody` is the J
 
 ### Replay Attack Prevention
 
-The 15-minute timestamp window prevents replaying old requests. However, there is **no nonce or sequence number** -- a valid request can be replayed within the 15-minute window. See Known Issues.
+Two layers of replay protection:
+
+1. **Timestamp window:** Requests older than 15 minutes are rejected (`DEFAULT_MAX_AGE_MS`).
+2. **Nonce:** Each request includes a `X-Federation-Nonce` header (UUID v4). The nonce is included in the HMAC payload (`${timestamp}.${nonce}.${body}`) so it cannot be stripped. The receiver stores seen nonces in memory (keyed by peer origin, evicted after 15 min) and rejects duplicates with `409 Conflict`.
+
+**Auto-ratchet:** The `nonceSupported` column on `federation_peers` tracks whether a peer has ever sent a nonce. Once set to `1`, nonce-less requests from that peer are permanently rejected (`401`). This allows graceful rollout — new peers get nonce enforcement automatically, legacy peers are warned in logs until they upgrade.
 
 ### Inbound Verification Flow (`POST /api/federation/relay`)
 
@@ -844,7 +849,7 @@ The third case is the most dangerous -- it looks like the event was queued but n
 | Peer impersonation | `X-Federation-Origin` is verified against `federation_peers.origin` | An attacker who compromises the HMAC secret can impersonate the peer |
 | User attribution fraud | Authority checks: e.g., `from.homeInstance !== sourceInstance` rejects events where the acting user doesn't belong to the source instance | The check is string equality on `homeInstance` from the payload, which the sender controls. A malicious peer could claim any user belongs to them by setting `homeInstance` to their own origin. |
 | Event flooding | Outbox batches limited to 50 events. `/api/federation/peer/accept` rate-limited to 10/min/IP. `/api/federation/relay` rate-limited to 30/min/peer (sliding window, keyed by `peer.origin`). | A sustained attack from multiple compromised peers could still cause load, but individual peers are throttled. |
-| Replay attacks | 15-minute timestamp window | No nonce -- valid requests can be replayed within the window |
+| Replay attacks | 15-minute timestamp window + per-request nonce (UUID v4) in HMAC, in-memory dedup store with TTL, auto-ratchet enforcement | Nonces are in-memory only — a server restart clears the store, allowing replays of requests from the last 15 minutes of the previous session. Acceptable given the narrow window and idempotency of most events. |
 | Message content manipulation | None | A compromised peer can forge message content attributed to any user on their instance |
 
 ### 5. ~~DNS Hairpin Self-POST Bug~~ (Fixed — FED-005)
