@@ -611,6 +611,91 @@ export function FederationPanel() {
         ? 'No revoked peers.'
         : null;
 
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { type, peer } = confirmAction;
+    setActionLoading(true);
+
+    try {
+      switch (type) {
+        case 'rotate': {
+          await api.federation.rotatePeerSecret(peer.id);
+          setPeers((prev) => prev.map((p) =>
+            p.id === peer.id ? { ...p, rotationInProgress: true } : p
+          ));
+          addToast('Secret rotation initiated — 15 minute grace period', 'success', 3000);
+          break;
+        }
+        case 'revoke': {
+          await api.federation.revokePeer(peer.id);
+          setPeers((prev) => prev.map((p) =>
+            p.id === peer.id ? { ...p, status: 'revoked' } : p
+          ));
+          addToast('Peer revoked', 'success', 2000);
+          break;
+        }
+        case 'reinitiate': {
+          const origin = peer.origin;
+          await api.federation.deletePeerPermanently(peer.id);
+          setPeers((prev) => prev.filter((p) => p.id !== peer.id));
+          try {
+            const result = await api.federation.initiatePeering({ remoteOrigin: origin });
+            setPeers((prev) => [...prev, result.peer]);
+            addToast('Peering re-initiated', 'success', 2000);
+          } catch (err) {
+            addToast(
+              `Peer record deleted but handshake failed: ${(err as Error).message}. Re-peer manually with ${origin}`,
+              'warning',
+              5000,
+            );
+          }
+          break;
+        }
+        case 'delete': {
+          await api.federation.deletePeerPermanently(peer.id);
+          setPeers((prev) => prev.filter((p) => p.id !== peer.id));
+          addToast('Peer permanently deleted', 'success', 2000);
+          break;
+        }
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Action failed', 'warning', 3000);
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const confirmDialogProps = confirmAction ? (() => {
+    const name = confirmAction.peer.instanceName || new URL(confirmAction.peer.origin).host;
+    switch (confirmAction.type) {
+      case 'rotate': return {
+        title: 'Rotate HMAC Secret',
+        description: `This will generate a new HMAC secret for ${name}. Both instances will accept old and new secrets during a 15-minute grace period.`,
+        confirmLabel: 'Rotate',
+        variant: 'warning' as const,
+      };
+      case 'revoke': return {
+        title: 'Revoke Peer',
+        description: `This will stop all federation relay traffic with ${name}. Pending outbox entries will be purged. You can re-initiate peering later.`,
+        confirmLabel: 'Revoke',
+        variant: 'danger' as const,
+      };
+      case 'reinitiate': return {
+        title: 'Re-initiate Peering',
+        description: `This will delete the revoked record and start a fresh handshake with ${confirmAction.peer.origin}. The remote instance must be reachable.`,
+        confirmLabel: 'Re-initiate',
+        variant: 'warning' as const,
+      };
+      case 'delete': return {
+        title: 'Delete Peer Record',
+        description: `This will permanently delete the peer record for ${name}. This cannot be undone.`,
+        confirmLabel: 'Delete',
+        variant: 'danger' as const,
+      };
+    }
+  })() : null;
+
   return (
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
       <h2 className="text-lg font-semibold text-txt-primary">Federation</h2>
@@ -676,6 +761,19 @@ export function FederationPanel() {
           )}
         </div>
       </div>
+
+      {confirmAction && confirmDialogProps && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => { if (!actionLoading) setConfirmAction(null); }}
+          onConfirm={handleConfirmAction}
+          title={confirmDialogProps.title}
+          description={confirmDialogProps.description}
+          confirmLabel={confirmDialogProps.confirmLabel}
+          variant={confirmDialogProps.variant}
+          loading={actionLoading}
+        />
+      )}
     </form>
   );
 }
