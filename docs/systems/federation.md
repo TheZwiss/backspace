@@ -104,7 +104,9 @@ Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failu
 | `/api/federation/peer/initiate` | POST | JWT + admin | Start peering handshake |
 | `/api/federation/peer/accept` | POST | None (rate-limited) | Accept incoming handshake |
 | `/api/federation/peers` | GET | JWT + admin | List all peers (secret excluded) |
+| `/api/federation/peers/:id` | PATCH | JWT + admin | Update peer settings (auto-rotation interval) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
+| `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
 
 ### S2S Endpoints
