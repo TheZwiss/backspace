@@ -11,7 +11,6 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { computeFederatedId, getDmParticipants } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import { AVATAR_COLORS } from '@backspace/shared';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
@@ -66,7 +65,9 @@ function validateOrigin(raw: string): string | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    // origin is scheme + host (+ port if non-default) — no trailing slash
+    if (url.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
+      return null;
+    }
     return url.origin;
   } catch {
     return null;
@@ -125,7 +126,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       const remoteOrigin = validateOrigin(rawOrigin);
       if (!remoteOrigin) {
-        return reply.code(400).send({ error: 'remoteOrigin must be a valid HTTP/HTTPS URL', statusCode: 400 });
+        return reply.code(400).send({ error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)', statusCode: 400 });
       }
 
       const db = getDb();
@@ -169,7 +170,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const hmacSecret = generateHmacSecret();
-      const challenge = randomBytes(16).toString('hex');
       const peerId = generateSnowflake();
       const now = Date.now();
 
@@ -189,7 +189,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sourceOrigin: localOrigin,
-            challenge,
             hmacSecret,
           }),
           signal: AbortSignal.timeout(10_000),
@@ -250,7 +249,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
   // ─── POST /api/federation/peer/accept ──────────────────────────────────────
   // Server-to-server: accept a peering request from a remote instance.
   // No JWT auth — this is first contact. Rate-limited by IP.
-  app.post<{ Body: { sourceOrigin: string; challenge: string; hmacSecret: string } }>(
+  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string } }>(
     '/api/federation/peer/accept',
     async (request, reply) => {
       const clientIp = request.ip;
@@ -261,13 +260,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const { sourceOrigin: rawOrigin, challenge, hmacSecret } = request.body ?? {};
+      const { sourceOrigin: rawOrigin, hmacSecret } = request.body ?? {};
 
       if (!rawOrigin || typeof rawOrigin !== 'string') {
         return reply.code(400).send({ error: 'sourceOrigin is required', statusCode: 400 });
-      }
-      if (!challenge || typeof challenge !== 'string') {
-        return reply.code(400).send({ error: 'challenge is required', statusCode: 400 });
       }
       if (!hmacSecret || typeof hmacSecret !== 'string') {
         return reply.code(400).send({ error: 'hmacSecret is required', statusCode: 400 });
@@ -275,7 +271,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       const sourceOrigin = validateOrigin(rawOrigin);
       if (!sourceOrigin) {
-        return reply.code(400).send({ error: 'sourceOrigin must be a valid HTTP/HTTPS URL', statusCode: 400 });
+        return reply.code(400).send({ error: 'sourceOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)', statusCode: 400 });
       }
 
       const db = getDb();
@@ -951,7 +947,6 @@ export function resolveOrCreateReplicatedUser(
 
   const userId = generateSnowflake();
   const now = Date.now();
-  const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
   db.insert(schema.users).values({
     id: userId,
@@ -962,7 +957,6 @@ export function resolveOrCreateReplicatedUser(
     isAdmin: 0,
     homeInstance,
     homeUserId,
-    avatarColor,
     createdAt: now,
   }).run();
 
@@ -1278,7 +1272,8 @@ function processCreateEvent(
         .get();
 
       // Skip members whose home instance is the source — they already have this message
-      if (memberUser?.homeInstance === sourceInstance) continue;
+      const memberHome = memberUser?.homeInstance?.startsWith('http') ? memberUser.homeInstance : `https://${memberUser?.homeInstance}`;
+      if (memberHome === sourceInstance) continue;
 
       connectionManager.sendToUser(member.userId, {
         type: 'dm_message_created',
@@ -2060,10 +2055,15 @@ function hydrateReplicatedUserProfile(
   };
 
   const updates: Record<string, string | null> = {};
-  if (profile.displayName && !user.displayName) updates.displayName = profile.displayName;
+  // Use displayName from profile, falling back to the home username (without
+  // the @domain suffix that the local replicated username carries).  This
+  // ensures federated users show a human-readable name instead of the raw
+  // "user@instance.example" federation username.
+  const effectiveDisplayName = profile.displayName || profile.username || null;
+  if (effectiveDisplayName && !user.displayName) updates.displayName = effectiveDisplayName;
   // Overwrite avatar/banner if missing OR if it's a stale bare filename (not an absolute URL)
   if (profile.avatar && (!user.avatar || !user.avatar.startsWith('http'))) updates.avatar = resolveUrl(profile.avatar);
-  if (profile.avatarColor && !user.avatarColor) updates.avatarColor = profile.avatarColor;
+  if (profile.avatarColor) updates.avatarColor = profile.avatarColor;
   if (profile.banner && (!user.banner || !user.banner.startsWith('http'))) updates.banner = resolveUrl(profile.banner);
   if (profile.bio && !user.bio) updates.bio = profile.bio;
 

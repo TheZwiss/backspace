@@ -421,7 +421,8 @@ function handleSizeRejection(
       .from(schema.users)
       .where(eq(schema.users.id, member.userId))
       .get();
-    if (user && (!user.homeInstance || user.homeInstance === ourOrigin)) {
+    const userHome = user?.homeInstance?.startsWith('http') ? user.homeInstance : user?.homeInstance ? `https://${user.homeInstance}` : null;
+    if (user && (!user.homeInstance || userHome === ourOrigin)) {
       affectedUserIds.push(user.homeUserId || user.id);
     }
   }

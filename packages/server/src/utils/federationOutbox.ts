@@ -149,6 +149,9 @@ export function queueOutboxEvent(
       : activePeers;
 
     if (peers.length === 0) {
+      if (targetPeerOrigins) {
+        console.warn(`[federation] queueOutboxEvent: zero peers matched targets ${JSON.stringify(targetPeerOrigins)}. Active peer origins: ${JSON.stringify(activePeers.map(p => p.origin))}`);
+      }
       return;
     }
 
@@ -245,6 +248,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       homeUserId: schema.users.homeUserId,
       homeInstance: schema.users.homeInstance,
       id: schema.users.id,
+      username: schema.users.username,
       displayName: schema.users.displayName,
       avatar: schema.users.avatar,
       avatarColor: schema.users.avatarColor,
@@ -260,6 +264,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
     homeUserId: m.homeUserId || m.id,
     homeInstance: m.homeInstance || domainOrigin,
     profile: {
+      username: m.username ?? null,
       displayName: m.displayName ?? null,
       avatar: m.avatar ?? null,
       avatarColor: m.avatarColor ?? null,
@@ -371,11 +376,14 @@ export function getFriendEventTargets(
   const ourOrigin = getOurOrigin();
   const targets = new Set<string>();
 
-  if (fromHomeInstance && fromHomeInstance !== ourOrigin) {
-    targets.add(fromHomeInstance);
+  const normalizedFrom = fromHomeInstance?.startsWith('http') ? fromHomeInstance : fromHomeInstance ? `https://${fromHomeInstance}` : null;
+  const normalizedTo = toHomeInstance?.startsWith('http') ? toHomeInstance : toHomeInstance ? `https://${toHomeInstance}` : null;
+
+  if (normalizedFrom && normalizedFrom !== ourOrigin) {
+    targets.add(normalizedFrom);
   }
-  if (toHomeInstance && toHomeInstance !== ourOrigin) {
-    targets.add(toHomeInstance);
+  if (normalizedTo && normalizedTo !== ourOrigin) {
+    targets.add(normalizedTo);
   }
 
   return Array.from(targets);
