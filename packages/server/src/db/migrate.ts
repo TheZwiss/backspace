@@ -698,8 +698,12 @@ export function runMigrations(db: Database.Database): void {
   // different homeUserId (e.g., auth registration vs S2S relay). Now that
   // homeInstance is normalized to bare domain, we can detect and merge duplicates.
   //
+  // Safety guard: at least one user in the pair must be a stub
+  // (passwordHash = '!federation-replicated'). Two real accounts from the same
+  // instance are different people who share a relayed DM, not duplicates.
+  //
   // Detection criteria (at least one must match, PLUS same homeInstance domain):
-  // 1. Shared 1-on-1 DM membership (strongest signal)
+  // 1. Shared 1-on-1 DM membership (only when at least one is a stub)
   // 2. Username cross-reference (one's homeUserId in the other's username base)
   // 3. homeUserId cross-match (same homeUserId, missed due to old format mismatch)
   //
@@ -738,6 +742,13 @@ export function runMigrations(db: Database.Database): void {
       for (let j = i + 1; j < users.length; j++) {
         const a = users[i]!;
         const b = users[j]!;
+
+        // Safety guard: at least one must be a stub. Two real accounts from the
+        // same instance are different people (they share relayed DMs, not identities).
+        const aIsStub = a.password_hash === '!federation-replicated';
+        const bIsStub = b.password_hash === '!federation-replicated';
+        if (!aIsStub && !bIsStub) continue;
+
         let reason: string | null = null;
 
         // Criterion 1: shared 1-on-1 DM membership
