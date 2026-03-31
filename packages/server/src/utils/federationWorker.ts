@@ -1,10 +1,10 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq, and, lte, asc, inArray } from 'drizzle-orm';
+import { eq, and, lte, asc, inArray, sql } from 'drizzle-orm';
 import { config } from '../config.js';
 import { isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
 import { runFederationJanitor } from './storageJanitor.js';
-import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
+import { buildFederationHeaders, getOurOrigin, generateHmacSecret, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
@@ -679,6 +679,100 @@ function scheduleHealthCheckTick(): void {
 
 async function processHealthCheckTick(): Promise<void> {
   const db = getDb();
+
+  // ── Grace period finalization ──────────────────────────────────────────────
+  // Promote pending secrets that have completed their grace period.
+  const rotatingPeers = db
+    .select()
+    .from(schema.federationPeers)
+    .where(
+      and(
+        sql`${schema.federationPeers.pendingHmacSecret} IS NOT NULL`,
+        sql`${schema.federationPeers.secretRotationAt} IS NOT NULL`,
+      ),
+    )
+    .all();
+
+  for (const peer of rotatingPeers) {
+    const elapsed = Date.now() - (peer.secretRotationAt ?? 0);
+    if (elapsed > ROTATION_GRACE_PERIOD_MS) {
+      db.update(schema.federationPeers)
+        .set({
+          hmacSecret: peer.pendingHmacSecret!,
+          pendingHmacSecret: null,
+          secretRotationAt: null,
+          secretRotatedAt: Date.now(),
+        })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+      console.log(`[federation-worker] Secret rotation finalized for peer ${peer.origin}`);
+    }
+  }
+
+  // ── Auto-rotation ──────────────────────────────────────────────────────────
+  // Initiate rotation for active peers whose secret has aged past the threshold.
+  const autoRotateCandidates = db
+    .select()
+    .from(schema.federationPeers)
+    .where(
+      and(
+        eq(schema.federationPeers.status, 'active'),
+        sql`${schema.federationPeers.pendingHmacSecret} IS NULL`,
+        sql`${schema.federationPeers.autoRotateIntervalDays} > 0`,
+      ),
+    )
+    .all();
+
+  const ourOrigin = getOurOrigin();
+
+  for (const peer of autoRotateCandidates) {
+    const lastRotation = peer.secretRotatedAt ?? peer.createdAt;
+    const intervalMs = peer.autoRotateIntervalDays * 86_400_000;
+    if (Date.now() - lastRotation < intervalMs) continue;
+
+    // Time to rotate
+    const newSecret = generateHmacSecret();
+
+    // Store pending locally first
+    db.update(schema.federationPeers)
+      .set({
+        pendingHmacSecret: newSecret,
+        secretRotationAt: Date.now(),
+      })
+      .where(eq(schema.federationPeers.id, peer.id))
+      .run();
+
+    try {
+      const rotateBody = JSON.stringify({ newSecret });
+      const headers = buildFederationHeaders(rotateBody, peer.hmacSecret, ourOrigin);
+
+      const response = await fetch(`${peer.origin}/api/federation/peer/rotate`, {
+        method: 'POST',
+        headers,
+        body: rotateBody,
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (response.ok) {
+        console.log(`[federation-worker] Auto-rotation initiated with peer ${peer.origin}`);
+      } else {
+        // Rollback
+        db.update(schema.federationPeers)
+          .set({ pendingHmacSecret: null, secretRotationAt: null })
+          .where(eq(schema.federationPeers.id, peer.id))
+          .run();
+        console.warn(`[federation-worker] Auto-rotation rejected by peer ${peer.origin} (HTTP ${response.status})`);
+      }
+    } catch (err) {
+      // Rollback
+      db.update(schema.federationPeers)
+        .set({ pendingHmacSecret: null, secretRotationAt: null })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.warn(`[federation-worker] Auto-rotation failed for peer ${peer.origin}: ${message}`);
+    }
+  }
 
   const unreachablePeers = db
     .select()
