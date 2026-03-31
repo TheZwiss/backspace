@@ -59,6 +59,21 @@ export class RateLimitError extends Error {
   }
 }
 
+export interface FederationPeer {
+  id: string;
+  origin: string;
+  instanceName: string | null;
+  status: string;
+  lastSeenAt: number | null;
+  lastFailureAt: number | null;
+  consecutiveFailures: number | null;
+  lastSyncedAt: number | null;
+  createdAt: number;
+  secretRotatedAt: number | null;
+  rotationInProgress: boolean;
+  autoRotateIntervalDays: number;
+}
+
 export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
@@ -201,9 +216,12 @@ export class BackspaceApiClient {
   };
 
   readonly federation: {
-    initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: { id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; createdAt: number } }>;
-    peers: () => Promise<{ peers: Array<{ id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; lastFailureAt: number | null; consecutiveFailures: number | null; lastSyncedAt: number | null; createdAt: number }> }>;
+    initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: FederationPeer }>;
+    peers: () => Promise<{ peers: FederationPeer[] }>;
     revokePeer: (id: string) => Promise<{ success: boolean }>;
+    rotatePeerSecret: (id: string) => Promise<{ success: boolean; gracePeriodMs: number }>;
+    updatePeer: (id: string, data: { autoRotateIntervalDays: number }) => Promise<{ peer: FederationPeer }>;
+    deletePeerPermanently: (id: string) => Promise<{ success: boolean }>;
   };
 
   readonly admin: {
@@ -626,15 +644,21 @@ export class BackspaceApiClient {
 
     this.federation = {
       initiatePeering: (data: { remoteOrigin: string }) =>
-        request<{ peer: { id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; createdAt: number } }>(
+        request<{ peer: FederationPeer }>(
           'POST', '/federation/peer/initiate', data
         ),
       peers: () =>
-        request<{ peers: Array<{ id: string; origin: string; instanceName: string | null; status: string; lastSeenAt: number | null; lastFailureAt: number | null; consecutiveFailures: number | null; lastSyncedAt: number | null; createdAt: number }> }>(
+        request<{ peers: FederationPeer[] }>(
           'GET', '/federation/peers'
         ),
       revokePeer: (id: string) =>
         request<{ success: boolean }>('DELETE', `/federation/peers/${id}`),
+      rotatePeerSecret: (id: string) =>
+        request<{ success: boolean; gracePeriodMs: number }>('POST', `/federation/peers/${id}/rotate`),
+      updatePeer: (id: string, data: { autoRotateIntervalDays: number }) =>
+        request<{ peer: FederationPeer }>('PATCH', `/federation/peers/${id}`, data),
+      deletePeerPermanently: (id: string) =>
+        request<{ success: boolean }>('DELETE', `/federation/peers/${id}/permanent`),
     };
 
     this.admin = {
