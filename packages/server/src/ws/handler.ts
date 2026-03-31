@@ -445,6 +445,8 @@ class ConnectionManager {
 
   /** Register a federated call received via S2S. Adds 60s ringing timeout. */
   createFederatedCall(entry: FederatedCallEntry): void {
+    // Clear any existing entry + timeout to avoid leaked timers
+    this.clearFederatedCall(entry.dmChannelId);
     this.federatedCalls.set(entry.dmChannelId, entry);
 
     // 60s ringing timeout — mirrors host behavior

@@ -3092,7 +3092,7 @@ function processDmCallStartEvent(
       callerName: callerStub.displayName ?? callerStub.username,
       livekitUrl: event.call!.livekitUrl,
       livekitToken: token,
-    } as any);
+    });
   }
 
   accepted.push(event.messageId);

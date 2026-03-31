@@ -1765,7 +1765,7 @@ async function sendFederatedCallStart(
         livekitUrl,
         tokens,
         caller: {
-          homeUserId: callerId,
+          homeUserId: members.find(m => m.userId === callerId)?.homeUserId || callerId,
           homeInstance: ourOrigin,
           displayName: callerName,
         },
@@ -1852,6 +1852,13 @@ async function sendFederatedCallEnd(dmChannelId: string, endedByUserId: string):
   }
   if (targets.size === 0) return;
 
+  // Resolve actual homeUserId from DB
+  const endUser = db.select({ homeUserId: schema.users.homeUserId })
+    .from(schema.users)
+    .where(eq(schema.users.id, endedByUserId))
+    .get();
+  const resolvedHomeUserId = endUser?.homeUserId || endedByUserId;
+
   const event = {
     eventType: 'dm_call_end' as const,
     messageId: generateSnowflake(),
@@ -1859,7 +1866,7 @@ async function sendFederatedCallEnd(dmChannelId: string, endedByUserId: string):
     timestamp: Date.now(),
     federatedId: channel.federatedId,
     call: {
-      endedBy: { homeUserId: endedByUserId, homeInstance: ourOrigin },
+      endedBy: { homeUserId: resolvedHomeUserId, homeInstance: ourOrigin },
     },
   };
 
