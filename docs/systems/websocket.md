@@ -165,7 +165,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 ### DM Calls
 | type | fields | scope |
 |------|--------|-------|
-| `dm_call_incoming` | dmChannelId, callerId, callerName | DM members (excludes caller) |
+| `dm_call_incoming` | dmChannelId, callerId, callerName, livekitUrl?, livekitToken? | DM members (excludes caller). Federation fields present for cross-instance calls. |
 | `dm_call_accepted` | dmChannelId | DM members |
 | `dm_call_rejected` | dmChannelId | DM members |
 | `dm_call_ended` | dmChannelId | DM members |
@@ -208,7 +208,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
   voiceUserStates?: Record<string, { isMuted, isDeafened, isCameraOn, isScreenSharing }>,
   spaceVoiceStates?: Record<string, { spaceMuted, spaceDeafened, permissionMuted }>,
   readStates?: ReadState[],
-  activeCalls?: ActiveCallInfo[],
+  activeCalls?: ActiveCallInfo[],  // includes federatedCallHost?, livekitUrl?, livekitToken? for federated calls
   userActivities?: Record<userId, Activity[]>
 }
 ```
