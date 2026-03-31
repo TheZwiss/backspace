@@ -60,6 +60,40 @@ export function verifySignature(
   return timingSafeEqual(expectedBuf, actualBuf);
 }
 
+/** Grace period during which both old and new secrets are accepted for verification. */
+export const ROTATION_GRACE_PERIOD_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Verify a federation request signature against a peer's secrets.
+ *
+ * During secret rotation (when pendingHmacSecret is set and within the grace period),
+ * accepts signatures made with either the primary or pending secret.
+ */
+export function verifyPeerSignature(
+  body: string,
+  signature: string,
+  timestamp: number,
+  nonce: string | null,
+  peer: {
+    hmacSecret: string;
+    pendingHmacSecret: string | null;
+    secretRotationAt: number | null;
+  },
+): boolean {
+  // Try primary secret first
+  if (verifySignature(body, signature, peer.hmacSecret, timestamp, nonce)) return true;
+
+  // During grace period, try pending secret
+  if (peer.pendingHmacSecret && peer.secretRotationAt) {
+    const elapsed = Date.now() - peer.secretRotationAt;
+    if (elapsed <= ROTATION_GRACE_PERIOD_MS) {
+      return verifySignature(body, signature, peer.pendingHmacSecret, timestamp, nonce);
+    }
+  }
+
+  return false;
+}
+
 /**
  * Build the HTTP headers required for an outbound federation request.
  *
