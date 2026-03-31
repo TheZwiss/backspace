@@ -2098,4 +2098,9 @@ function migrateGeneralizeOutbox(db: Database.Database): void {
       db.exec(`PRAGMA foreign_keys = ON`);
     }
   }
+
+  // ─── FED-008: Add nonceSupported column for replay attack protection ───────
+  try {
+    db.exec(`ALTER TABLE federation_peers ADD COLUMN nonce_supported INTEGER NOT NULL DEFAULT 0`);
+  } catch { /* column already exists */ }
 }
