@@ -494,6 +494,88 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── PATCH /api/federation/peers/:id ────────────────────────────────────────
+  // Admin-only: update peer settings (e.g. auto-rotation interval).
+  app.patch<{ Params: { id: string }; Body: { autoRotateIntervalDays?: number } }>(
+    '/api/federation/peers/:id',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const db = getDb();
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
+      }
+
+      const updateData: Record<string, number> = {};
+
+      if (request.body.autoRotateIntervalDays !== undefined) {
+        const interval = Number(request.body.autoRotateIntervalDays);
+        if (isNaN(interval) || !Number.isInteger(interval) || interval < 1 || interval > 365) {
+          return reply.code(400).send({ error: 'autoRotateIntervalDays must be an integer between 1 and 365', statusCode: 400 });
+        }
+        updateData.autoRotateIntervalDays = interval;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return reply.code(400).send({ error: 'No valid fields to update', statusCode: 400 });
+      }
+
+      db.update(schema.federationPeers)
+        .set(updateData)
+        .where(eq(schema.federationPeers.id, id))
+        .run();
+
+      const updated = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      return reply.code(200).send({ peer: sanitizePeer(updated!) });
+    },
+  );
+
+  // ─── DELETE /api/federation/peers/:id/permanent ─────────────────────────────
+  // Admin-only: permanently delete a revoked peer record.
+  app.delete<{ Params: { id: string } }>(
+    '/api/federation/peers/:id/permanent',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const db = getDb();
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
+      }
+
+      if (peer.status !== 'revoked') {
+        return reply.code(400).send({
+          error: 'Only revoked peers can be permanently deleted. Revoke the peer first.',
+          statusCode: 400,
+        });
+      }
+
+      db.delete(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .run();
+
+      return reply.code(200).send({ success: true });
+    },
+  );
+
   // ─── POST /api/federation/peers/:id/rotate ──────────────────────────────────
   // Admin-only: trigger immediate secret rotation for a peer.
   app.post<{ Params: { id: string } }>(
