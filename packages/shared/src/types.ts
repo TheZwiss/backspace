@@ -632,6 +632,7 @@ export interface InstanceAdminSettings {
   maxUploadSizeMb: number;
   federationRelayEnabled: boolean;
   federationRelayTtlDays: number;
+  defaultAutoRotateIntervalDays: number;
 }
 
 export interface InstanceStreamingLimits {
