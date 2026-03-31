@@ -232,7 +232,7 @@ Locations where normalization is applied:
 **Attribution verification (`verifyAttribution`):**
 - `verifyAttribution(actingUserHomeInstance, sourceInstance)` normalizes both via `extractDomain` and compares
 - Applied as the FIRST check in every relay event processor (13 handlers) — before user resolution or DB writes
-- Prevents malicious peers from forging events attributed to users on other instances (FED-010)
+- Prevents malicious peers from forging events attributed to users on other instances
 
 **Locations with potential mismatch (see Known Issues):**
 - `federation.ts:1278` -- `memberUser?.homeInstance === sourceInstance` -- compares stored homeInstance (possibly bare domain) against `sourceInstance` (full URL from relay request header)
@@ -737,7 +737,7 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 
 ### Relay Event Processing
 
-The event processing logic is extracted into `processRelayEvents()` (exported from `federation.ts`), shared by both the HTTP relay endpoint and the initial sync worker. This avoids the DNS hairpin self-POST bug (FED-005) where the server would HTTP-request itself through public DNS, which failed on networks without hairpin NAT.
+The event processing logic is extracted into `processRelayEvents()` (exported from `federation.ts`), shared by both the HTTP relay endpoint and the initial sync worker. This avoids a DNS hairpin issue where the server would HTTP-request itself through public DNS, which fails on networks without hairpin NAT.
 
 ---
 
@@ -832,54 +832,6 @@ If the `federation_mutation_log` table exists but is empty, populates it with `c
 
 ## Known Issues
 
-### 1. Origin Format Inconsistency (PARTIALLY FIXED)
-
-**Root cause:** `users.home_instance` stores both bare domains (from auth registration: `nova.ddns.net`) and full URLs (from `resolveOrCreateReplicatedUser`: `https://nova.ddns.net`). `federation_peers.origin` and `getOurOrigin()` always use full URLs.
-
-**Fixed locations:**
-- `getGroupDmTargetOrigins()` normalizes before comparison (`federationOutbox.ts:294`)
-- `isLocalMember` in `dm.ts:655` checks both formats
-- DM member_add target resolution in `dm.ts:743` normalizes
-
-**Remaining unpatched comparisons:**
-- `federation.ts:1278` -- `memberUser?.homeInstance === sourceInstance` in `processCreateEvent`. If the member's `homeInstance` is a bare domain and `sourceInstance` is a full URL, this comparison fails. Result: the member receives the message even though they should be skipped (minor -- causes duplicate delivery, not data loss).
-- `getFriendEventTargets()` (`federationOutbox.ts:376-379`) -- compares `fromHomeInstance`/`toHomeInstance` against `getOurOrigin()` without normalization. When a local user's `homeInstance` is null, the fallback `domainOrigin` (full URL) is used, which works correctly. But when a user has `homeInstance` stored as a bare domain and that domain is **this instance** (e.g., an old replicated stub), the comparison `bareDomain !== fullUrl` evaluates to true, incorrectly including the local instance as a target, which then silently drops in `queueOutboxEvent`.
-- `federationWorker.ts:424` -- `user.homeInstance === ourOrigin` in `handleSizeRejection`. Bare domain homeInstance won't match, potentially including a user in `affectedUserIds` who shouldn't be (minor).
-
-### 2. Duplicate User Stubs (RESOLVED)
-
-**Root cause:** Two independent code paths (auth registration and S2S relay) created user stubs with different identity key formats and different homeInstance formats.
-
-**Fix (FED-006):**
-- `findFederatedUser` provides a unified three-tier lookup that bridges both paths (homeUserId match → domain+username hint match → not found)
-- `resolveOrCreateReplicatedUser` normalizes homeInstance to bare domain on write
-- Auth registration upgrades existing stubs instead of creating duplicates (`auth.ts`)
-- Self-healing migration in `migrate.ts` normalizes existing homeInstance values and merges duplicate pairs
-- All `resolveOrCreateReplicatedUser` call sites pass `{ username: profile?.username }` hints for tier-2 matching
-
-### 3. Silent Failures in queueOutboxEvent
-
-`queueOutboxEvent` returns silently (no error, no log) when:
-- Federation relay is disabled
-- Zero active peers exist
-- `targetPeerOrigins` filter produces zero matches (origin format mismatch)
-
-The third case is the most dangerous -- it looks like the event was queued but nothing was actually written. This has been the root cause of events silently disappearing for group DMs and friend events.
-
-### 4. Trust Model Analysis
-
-| Threat | Mitigation | Gap |
-|--------|-----------|-----|
-| Peer impersonation | `X-Federation-Origin` is verified against `federation_peers.origin` | An attacker who compromises the HMAC secret can impersonate the peer |
-| User attribution fraud | `verifyAttribution()` guard on every event processor: acting user's `homeInstance` (from payload) is normalized to bare domain via `extractDomain` and compared against `X-Federation-Origin` (from HMAC-verified header). Rejects with `attribution_mismatch` before any user resolution or DB writes. Reaction events include `homeInstance` in the payload for verification. | A compromised peer can still forge content from its own users, but cannot impersonate users from other instances. |
-| Event flooding | Outbox batches limited to 50 events. `/api/federation/peer/accept` rate-limited to 10/min/IP. `/api/federation/relay` rate-limited to 30/min/peer (sliding window, keyed by `peer.origin`). | A sustained attack from multiple compromised peers could still cause load, but individual peers are throttled. |
-| Replay attacks | 15-minute timestamp window + per-request nonce (UUID v4) in HMAC, in-memory dedup store with TTL, auto-ratchet enforcement | Nonces are in-memory only — a server restart clears the store, allowing replays of requests from the last 15 minutes of the previous session. Acceptable given the narrow window and idempotency of most events. |
-| Message content manipulation | None | A compromised peer can forge message content attributed to any user on their instance |
-
-### 5. ~~DNS Hairpin Self-POST Bug~~ (Fixed — FED-005)
-
-Resolved. Initial sync now calls `processRelayEvents()` directly instead of self-POSTing through public DNS.
-
-### 6. DM Calls Do Not Work over Federation
+### 1. DM Calls Do Not Work over Federation
 
 See section 12. The call state machine is entirely local to a single server instance. No federation relay exists for call events (`dm_call_start`, `dm_call_incoming`, `dm_call_accept`, `dm_call_reject`, `dm_call_end`).
