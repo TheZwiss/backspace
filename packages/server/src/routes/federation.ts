@@ -1008,11 +1008,12 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
+  hints?: { username?: string | null },
 ): typeof schema.users.$inferSelect {
-  const existing = resolveLocalUser(homeUserId, db);
-  if (existing) return existing;
+  const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
+  if (existing) return backfillHomeUserId(existing, homeUserId, db);
 
-  // Extract bare domain from homeInstance for username construction
+  // Normalize homeInstance to bare domain for consistent storage
   const domain = extractDomain(homeInstance);
 
   // Use the snowflake-style homeUserId as the local part; append the
@@ -1045,7 +1046,7 @@ export function resolveOrCreateReplicatedUser(
     passwordHash: '!federation-replicated',  // Cannot be used to log in (bcrypt never produces this)
     status: 'offline',
     isAdmin: 0,
-    homeInstance,
+    homeInstance: domain,  // Normalized to bare domain
     homeUserId,
     createdAt: now,
   }).run();
@@ -1055,7 +1056,7 @@ export function resolveOrCreateReplicatedUser(
     throw new Error(`Failed to create replicated user for homeUserId=${homeUserId}`);
   }
 
-  console.log(`[federation] Auto-created replicated user ${userId} (${username}) for homeUserId=${homeUserId} from ${homeInstance}`);
+  console.log(`[federation] Auto-created replicated user ${userId} (${username}) for homeUserId=${homeUserId} from ${domain}`);
   return created;
 }
 
