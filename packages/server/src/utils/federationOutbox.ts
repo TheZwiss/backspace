@@ -5,6 +5,7 @@ import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
+import { extractDomain } from '../routes/federation.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -468,5 +469,65 @@ export async function sendCallRelay(
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'fetch_failed' };
+  }
+}
+
+/**
+ * Send typing indicator events directly to remote peers (bypasses outbox).
+ * Fire-and-forget — typing is ephemeral, lost packets are acceptable.
+ */
+export async function sendTypingRelay(
+  dmChannelId: string,
+  eventType: 'dm_typing_start' | 'dm_typing_stop',
+  userId: string,
+): Promise<void> {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const participants = getDmParticipants(dmChannelId);
+  const ourOrigin = getOurOrigin();
+
+  // Find the typing user's identity
+  const typingUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (!typingUser) return;
+
+  // Get the channel's federatedId for cross-instance identification
+  const channel = db.select({ federatedId: schema.dmChannels.federatedId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, dmChannelId))
+    .get();
+  if (!channel?.federatedId) return;
+
+  // Find unique remote peer origins
+  const remoteOrigins = new Set<string>();
+  for (const p of participants) {
+    const normalized = p.homeInstance.startsWith('http') ? p.homeInstance : `https://${p.homeInstance}`;
+    if (normalized !== ourOrigin) {
+      remoteOrigins.add(normalized);
+    }
+  }
+
+  if (remoteOrigins.size === 0) return;
+
+  const event: FederationRelayEvent = {
+    eventType,
+    contextType: 'dm',
+    messageId: `typing:${userId}:${Date.now()}`,
+    federatedId: channel.federatedId,
+    participants,
+    encryptionVersion: 0,
+    timestamp: Date.now(),
+    typing: {
+      homeUserId: typingUser.homeUserId || typingUser.id,
+      homeInstance: typingUser.homeInstance || extractDomain(ourOrigin),
+      username: typingUser.username ?? '',
+    },
+  };
+
+  // Fire-and-forget to each remote peer
+  for (const peerOrigin of remoteOrigins) {
+    sendCallRelay(peerOrigin, [event]).catch(err => {
+      console.warn(`[federation] Typing relay to ${peerOrigin} failed:`, err);
+    });
   }
 }

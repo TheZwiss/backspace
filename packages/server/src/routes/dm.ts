@@ -30,6 +30,7 @@ import {
   getGroupDmTargetOrigins,
   isFederationRelayEnabled,
   computeFederatedId,
+  sendTypingRelay,
 } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import type { FederationRelayEvent } from '@backspace/shared';
@@ -190,6 +191,9 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
       });
     }
   }
+
+  // Relay typing stop to remote peers (fire-and-forget)
+  sendTypingRelay(dmChannelId, 'dm_typing_stop', message.userId);
 
   for (const member of dmMembers) {
     // If this member had closed the DM, resurface it first

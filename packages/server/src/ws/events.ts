@@ -11,7 +11,7 @@ import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
-import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId } from '../utils/federationOutbox.js';
+import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import { generateFederatedCallToken } from '../routes/livekit.js';
 import { config } from '../config.js';
@@ -937,6 +937,9 @@ function handleDmTypingStart(event: Record<string, unknown>, userId: string, use
       });
     }
   }
+
+  // Relay typing indicator to remote peers (fire-and-forget)
+  sendTypingRelay(dmChannelId, 'dm_typing_start', userId);
 
   const timeout = setTimeout(() => {
     typingTimeouts.delete(key);
