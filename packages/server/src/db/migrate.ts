@@ -1993,6 +1993,7 @@ function migrateFixOneOnOneOwnerIds(db: Database.Database): void {
         HAVING COUNT(*) = 2
       )
       AND owner_id IS NOT NULL
+      AND (federated_id IS NULL OR length(federated_id) = 32)
     `).run();
 
     if (result.changes > 0) {
