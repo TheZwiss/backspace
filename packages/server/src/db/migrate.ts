@@ -230,6 +230,12 @@ export function runMigrations(db: Database.Database): void {
         { name: 'auto_rotate_interval_days', type: 'INTEGER NOT NULL DEFAULT 90' },
       ]
     },
+    {
+      name: 'users',
+      columns: [
+        { name: 'federation_registry_updated_at', type: 'INTEGER DEFAULT 0' },
+      ]
+    },
   ];
 
   for (const table of tables) {
@@ -395,6 +401,23 @@ export function runMigrations(db: Database.Database): void {
       mutation_type TEXT NOT NULL,
       mutated_at INTEGER NOT NULL,
       payload TEXT
+    );
+  `);
+
+  // ─── User federation registry ───────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_federation_registry (
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      origin TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      username TEXT NOT NULL DEFAULT '',
+      remote_user_id TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'connected',
+      added_at INTEGER NOT NULL,
+      last_connected_at INTEGER,
+      disconnected_at INTEGER,
+      error_message TEXT,
+      PRIMARY KEY (user_id, origin)
     );
   `);
 

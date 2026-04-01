@@ -21,6 +21,7 @@ export const users = sqliteTable('users', {
   profileUpdatedAt: integer('profile_updated_at'),
   passwordChangedAt: integer('password_changed_at'),
   showActivity: integer('show_activity').notNull().default(1),
+  federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -371,3 +372,18 @@ export const federationMutationLog = sqliteTable('federation_mutation_log', {
   mutatedAt: integer('mutated_at').notNull(),
   payload: text('payload'),
 });
+
+export const userFederationRegistry = sqliteTable('user_federation_registry', {
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  origin: text('origin').notNull(),
+  label: text('label').notNull().default(''),
+  username: text('username').notNull().default(''),
+  remoteUserId: text('remote_user_id').notNull().default(''),
+  status: text('status').notNull().default('connected'),
+  addedAt: integer('added_at').notNull(),
+  lastConnectedAt: integer('last_connected_at'),
+  disconnectedAt: integer('disconnected_at'),
+  errorMessage: text('error_message'),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.origin] }),
+}));
