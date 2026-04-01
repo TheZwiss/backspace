@@ -467,6 +467,107 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(sanitized);
   });
 
+  // GET /api/users/@me/federation-registry — retrieve persistent federation registry
+  app.get('/api/users/@me/federation-registry', { preHandler: authenticate }, async (request, reply) => {
+    const userId = request.userId;
+    const db = getDb();
+
+    const entries = db.select().from(schema.userFederationRegistry)
+      .where(eq(schema.userFederationRegistry.userId, userId))
+      .all();
+
+    const user = db.select({ federationRegistryUpdatedAt: schema.users.federationRegistryUpdatedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .get();
+
+    return reply.code(200).send({
+      registry: entries.map((e) => ({
+        origin: e.origin,
+        label: e.label,
+        username: e.username,
+        remoteUserId: e.remoteUserId,
+        status: e.status,
+        addedAt: e.addedAt,
+        lastConnectedAt: e.lastConnectedAt,
+        disconnectedAt: e.disconnectedAt,
+        errorMessage: e.errorMessage,
+      })),
+      updatedAt: user?.federationRegistryUpdatedAt ?? 0,
+    });
+  });
+
+  // PUT /api/users/@me/federation-registry — replace federation registry (LWW)
+  app.put<{ Body: { registry: Array<{ origin: string; label?: string; username?: string; remoteUserId?: string; status: string; addedAt: number; lastConnectedAt?: number | null; disconnectedAt?: number | null; errorMessage?: string | null }>; updatedAt: number } }>(
+    '/api/users/@me/federation-registry', { preHandler: authenticate }, async (request, reply) => {
+    const userId = request.userId;
+    const { registry, updatedAt } = request.body;
+
+    if (!Array.isArray(registry)) {
+      return reply.code(400).send({ error: 'registry must be an array', statusCode: 400 });
+    }
+    if (typeof updatedAt !== 'number' || updatedAt <= 0) {
+      return reply.code(400).send({ error: 'updatedAt must be a positive number', statusCode: 400 });
+    }
+
+    const validStatuses = ['connected', 'disconnected', 'unreachable', 'auth_expired'];
+    for (const entry of registry) {
+      if (!entry || typeof entry.origin !== 'string' || !entry.origin) {
+        return reply.code(400).send({ error: 'Each entry must have a string origin', statusCode: 400 });
+      }
+      if (!validStatuses.includes(entry.status)) {
+        return reply.code(400).send({ error: `Invalid status "${entry.status}" — must be one of: ${validStatuses.join(', ')}`, statusCode: 400 });
+      }
+      if (typeof entry.addedAt !== 'number') {
+        return reply.code(400).send({ error: 'Each entry must have a numeric addedAt', statusCode: 400 });
+      }
+    }
+
+    const db = getDb();
+
+    // LWW guard: reject if incoming timestamp is not newer than stored
+    const user = db.select({ federationRegistryUpdatedAt: schema.users.federationRegistryUpdatedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .get();
+
+    const storedUpdatedAt = user?.federationRegistryUpdatedAt ?? 0;
+    if (updatedAt <= storedUpdatedAt) {
+      return reply.code(409).send({ error: 'Conflict: incoming registry is not newer than stored version', statusCode: 409 });
+    }
+
+    // Atomic replace: delete existing, insert all incoming, update timestamp
+    db.transaction((tx) => {
+      tx.delete(schema.userFederationRegistry)
+        .where(eq(schema.userFederationRegistry.userId, userId))
+        .run();
+
+      if (registry.length > 0) {
+        tx.insert(schema.userFederationRegistry).values(
+          registry.map((e) => ({
+            userId,
+            origin: e.origin,
+            label: e.label ?? '',
+            username: e.username ?? '',
+            remoteUserId: e.remoteUserId ?? '',
+            status: e.status,
+            addedAt: e.addedAt,
+            lastConnectedAt: e.lastConnectedAt ?? null,
+            disconnectedAt: e.disconnectedAt ?? null,
+            errorMessage: e.errorMessage ?? null,
+          }))
+        ).run();
+      }
+
+      tx.update(schema.users)
+        .set({ federationRegistryUpdatedAt: updatedAt })
+        .where(eq(schema.users.id, userId))
+        .run();
+    });
+
+    return reply.code(200).send({ ok: true, updatedAt });
+  });
+
   // PUT /api/users/@me/space-layout — save sidebar layout (reorder, folders)
   app.put<{ Body: { items: SpaceLayoutItem[]; folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>; updatedAt?: number } }>(
     '/api/users/@me/space-layout', { preHandler: authenticate }, async (request, reply) => {
