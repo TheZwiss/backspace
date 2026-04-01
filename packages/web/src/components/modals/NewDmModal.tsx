@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
-import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -67,10 +67,12 @@ export function NewDmModal() {
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      const origin = resolveUserOrigin(user);
-      const dmApi = getApiForOrigin(origin);
-      const channel = await dmApi.dm.create({ userId: user.id });
-      addDmChannel(channel, origin);
+      const channel = await api.dm.create({
+        userId: user.homeInstance ? undefined : user.id,
+        homeUserId: user.homeUserId ?? undefined,
+        homeInstance: user.homeInstance ?? undefined,
+      });
+      addDmChannel(channel);
       closeModal();
       useUIStore.getState().setShowDms(true);
       navigate(`/channels/@me/${channel.id}`);

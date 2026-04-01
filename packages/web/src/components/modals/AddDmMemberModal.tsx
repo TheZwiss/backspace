@@ -114,7 +114,11 @@ export function AddDmMemberModal() {
       } else {
         // Existing group DM → add each friend sequentially
         for (const friend of selectedFriends) {
-          await api.dm.addMember(dmChannelId, { userId: friend.id });
+          await api.dm.addMember(dmChannelId, {
+            userId: friend.homeInstance ? undefined : friend.id,
+            homeUserId: friend.homeUserId ?? undefined,
+            homeInstance: friend.homeInstance ?? undefined,
+          });
         }
         closeModal();
       }

@@ -6,6 +6,7 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { api } from '../../api/client';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
 import { ConnectInstanceModal } from './ConnectInstanceModal';
 import { useAuthStore } from '../../stores/authStore';
@@ -170,9 +171,12 @@ export function UserProfileModal() {
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      const dmApi = getApiForOrigin(userOrigin);
-      const channel = await dmApi.dm.create({ userId: user.id });
-      addDmChannel(channel, userOrigin);
+      const channel = await api.dm.create({
+        userId: user.homeInstance ? undefined : user.id,
+        homeUserId: user.homeUserId ?? undefined,
+        homeInstance: user.homeInstance ?? undefined,
+      });
+      addDmChannel(channel);
       useUIStore.getState().setShowDms(true);
       closeModal();
       navigate(`/channels/@me/${channel.id}`);

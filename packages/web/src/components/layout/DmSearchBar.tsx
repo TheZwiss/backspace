@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import type { User, DmChannel } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
-import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../api/client';
@@ -182,10 +182,12 @@ export function DmSearchBar() {
           navigate(`/channels/@me/${existing.dm.id}`);
           return;
         }
-        const origin = resolveUserOrigin(item.user);
-        const dmApi = getApiForOrigin(origin);
-        const channel = await dmApi.dm.create({ userId: item.user.id });
-        addDmChannel(channel, origin);
+        const channel = await api.dm.create({
+          userId: item.user.homeInstance ? undefined : item.user.id,
+          homeUserId: item.user.homeUserId ?? undefined,
+          homeInstance: item.user.homeInstance ?? undefined,
+        });
+        addDmChannel(channel);
         close();
         useUIStore.getState().setShowDms(true);
         navigate(`/channels/@me/${channel.id}`);

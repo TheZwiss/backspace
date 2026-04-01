@@ -5,6 +5,7 @@ import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
+import { api } from '../../api/client';
 import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
@@ -50,9 +51,12 @@ export function UserProfilePopout({ user, onClose, position }: UserProfilePopout
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      const dmApi = getApiForOrigin(origin);
-      const channel = await dmApi.dm.create({ userId: user.id });
-      addDmChannel(channel, origin);
+      const channel = await api.dm.create({
+        userId: user.homeInstance ? undefined : user.id,
+        homeUserId: user.homeUserId ?? undefined,
+        homeInstance: user.homeInstance ?? undefined,
+      });
+      addDmChannel(channel);
       useUIStore.getState().setShowDms(true);
       onClose();
       navigate(`/channels/@me/${channel.id}`);

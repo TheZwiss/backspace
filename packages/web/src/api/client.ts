@@ -23,6 +23,7 @@ import type {
   UpdateMemberRequest,
   LiveKitTokenResponse,
   CreateDmRequest,
+  AddDmMemberRequest,
   CreateGroupDmRequest,
   CreateDmMessageRequest,
   Friend,
@@ -158,7 +159,7 @@ export class BackspaceApiClient {
     sendMessage: (id: string, data: CreateDmMessageRequest) => Promise<DmMessageWithUser>;
     updateMessage: (id: string, data: UpdateMessageRequest) => Promise<DmMessageWithUser>;
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
-    addMember: (dmChannelId: string, data: { userId: string }) => Promise<DmChannel>;
+    addMember: (dmChannelId: string, data: AddDmMemberRequest) => Promise<DmChannel>;
     leave: (dmChannelId: string) => Promise<{ success: boolean }>;
   };
 
@@ -519,7 +520,7 @@ export class BackspaceApiClient {
         request<DmMessageWithUser>('PATCH', `/dm/messages/${id}`, data),
       deleteMessage: (id: string) =>
         request<{ success: boolean }>('DELETE', `/dm/messages/${id}`),
-      addMember: (dmChannelId: string, data: { userId: string }) =>
+      addMember: (dmChannelId: string, data: AddDmMemberRequest) =>
         request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
       leave: (dmChannelId: string) =>
         request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),

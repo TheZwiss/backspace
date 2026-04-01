@@ -53,7 +53,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const pendingIncoming = requests.filter(r => r.status === 'pending' && r.user?.id === r.fromId);
   const pendingOutgoing = requests.filter(r => r.status === 'pending' && r.user?.id === r.toId);
 
-  const handleOpenDm = async (friendId: string, instanceOrigin: string, homeUserId?: string) => {
+  const handleOpenDm = async (friendId: string, homeUserId?: string, homeInstance?: string | null) => {
     try {
       // Check if a DM already exists with this user (on any instance)
       const existing = useSpaceStore.getState().findExistingDmForUser({ id: friendId, homeUserId: homeUserId ?? undefined });
@@ -62,13 +62,12 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         navigate(`/channels/@me/${existing.dm.id}`);
         return;
       }
-      let client = api;
-      if (instanceOrigin) {
-        const instance = useInstanceStore.getState().instances.find(i => i.origin === instanceOrigin);
-        if (instance?.api) client = instance.api;
-      }
-      const dmChannel = await client.dm.create({ userId: friendId });
-      addDmChannel(dmChannel, instanceOrigin);
+      const dmChannel = await api.dm.create({
+        userId: homeInstance ? undefined : friendId,
+        homeUserId: homeUserId ?? undefined,
+        homeInstance: homeInstance ?? undefined,
+      });
+      addDmChannel(dmChannel);
       navigate(`/channels/@me/${dmChannel.id}`);
     } catch (err) {
       console.error('Failed to open DM:', err);
@@ -98,7 +97,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               </div>
             ) : (
               onlineFriends.map(friend => (
-                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend._instanceOrigin, friend.homeUserId ?? undefined)} />
+                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
               ))
             )}
           </div>
@@ -116,7 +115,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               </div>
             ) : (
               friends.map(friend => (
-                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend._instanceOrigin, friend.homeUserId ?? undefined)} />
+                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
               ))
             )}
           </div>
@@ -198,7 +197,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 if (mobile) {
                   pushMobileScreen('user-profile', { userId: friend.id });
                 } else {
-                  handleOpenDm(friend.id, friend._instanceOrigin ?? '', friend.homeUserId ?? undefined);
+                  handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance);
                 }
               }}
               className={rowClass}
@@ -357,7 +356,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
 function AddFriendTab({
   onOpenDm,
 }: {
-  onOpenDm: (userId: string, origin: string, homeUserId?: string) => void;
+  onOpenDm: (userId: string, homeUserId?: string, homeInstance?: string | null) => void;
 }) {
   const searchUsers = useSocialStore((s) => s.searchUsers);
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
@@ -610,7 +609,7 @@ function UserDiscoverCard({
   onRelationshipChange,
 }: {
   user: TaggedDiscoverUser;
-  onOpenDm: (userId: string, origin: string, homeUserId?: string) => void;
+  onOpenDm: (userId: string, homeUserId?: string, homeInstance?: string | null) => void;
   onRelationshipChange: (userId: string, origin: string, relationship: TaggedDiscoverUser['relationship'], requestId?: string) => void;
 }) {
   const sendFriendRequest = useSocialStore((s) => s.sendFriendRequest);
@@ -729,7 +728,7 @@ function UserDiscoverCard({
   };
 
   const handleMessage = () => {
-    onOpenDm(user.id, user._instanceOrigin, user.homeUserId ?? undefined);
+    onOpenDm(user.id, user.homeUserId ?? undefined, user.homeInstance);
   };
 
   return (
