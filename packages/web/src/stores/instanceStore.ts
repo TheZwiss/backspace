@@ -313,6 +313,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         return { instances: updated, isLoading: false };
       });
 
+      // Upsert registry entry for the new connection
+      const registry = upsertRegistryEntry(get().registry, origin, {
+        origin,
+        label: instance.label,
+        username: instance.username,
+        remoteUserId: instance.user.id,
+        status: 'connected',
+        addedAt: get().registry.get(origin)?.addedAt ?? Date.now(),
+        lastConnectedAt: Date.now(),
+        disconnectedAt: null,
+        errorMessage: null,
+      });
+      const registryUpdatedAt = Date.now();
+      set({ registry, registryUpdatedAt });
+
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
@@ -333,6 +348,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
+      get().syncRegistry().catch(() => {});
     } catch (err) {
       set({ isLoading: false, error: (err as Error).message });
       throw err;
@@ -368,6 +384,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         return { instances: updated, isLoading: false };
       });
 
+      // Upsert registry entry for the login connection
+      const registry = upsertRegistryEntry(get().registry, origin, {
+        origin,
+        label: instance.label,
+        username: instance.username,
+        remoteUserId: instance.user.id,
+        status: 'connected',
+        addedAt: get().registry.get(origin)?.addedAt ?? Date.now(),
+        lastConnectedAt: Date.now(),
+        disconnectedAt: null,
+        errorMessage: null,
+      });
+      const registryUpdatedAt = Date.now();
+      set({ registry, registryUpdatedAt });
+
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
@@ -378,6 +409,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
+      get().syncRegistry().catch(() => {});
     } catch (err) {
       set({ isLoading: false, error: (err as Error).message });
       throw err;
@@ -442,6 +474,18 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
           i.origin === origin ? { ...i, status: 'connected' as const, user, error: undefined } : i
         ),
       }));
+
+      // Update registry entry on successful reconnect
+      const registry = upsertRegistryEntry(get().registry, origin, {
+        origin,
+        status: 'connected',
+        lastConnectedAt: Date.now(),
+        disconnectedAt: null,
+        errorMessage: null,
+      });
+      const registryUpdatedAt = Date.now();
+      set({ registry, registryUpdatedAt });
+      get().syncRegistry().catch(() => {});
 
       connectInstance(origin, inst.token);
     } catch (err) {
