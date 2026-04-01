@@ -437,12 +437,17 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     });
     const registryUpdatedAt = Date.now();
 
-    set((state) => {
-      const updated = state.instances.filter(i => i.origin !== origin);
-      const userId = useAuthStore.getState().user?.id;
-      if (userId) saveCachedTokens(updated, userId);
-      return { instances: updated, registry, registryUpdatedAt };
-    });
+    // Save the token BEFORE filtering it out of instances — this preserves
+    // the cached token in localStorage so reconnectInstance can restore it later.
+    const currentInstances = get().instances;
+    const userId = useAuthStore.getState().user?.id;
+    if (userId) saveCachedTokens(currentInstances, userId);
+
+    set((state) => ({
+      instances: state.instances.filter(i => i.origin !== origin),
+      registry,
+      registryUpdatedAt,
+    }));
 
     // Remove spaces from this instance from the space store
     useSpaceStore.getState().removeInstanceSpaces(origin);
@@ -453,8 +458,39 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   reconnectInstance: async (origin: string) => {
-    const inst = get().instances.find(i => i.origin === origin);
-    if (!inst || inst.status === 'connected' || inst.status === 'connecting') return;
+    let inst = get().instances.find(i => i.origin === origin);
+
+    // If the instance was disconnected (removed from active instances array) but
+    // has a cached token in localStorage, restore it so reconnect can proceed.
+    if (!inst) {
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) return;
+      const cached = loadCachedTokens(userId);
+      const entry = cached[origin];
+      if (!entry?.token) return; // No cached token — needs full re-authentication via connectToRemote
+
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser) return;
+
+      const client = createApiClient(origin, () => entry.token);
+      const restoredInstance: ConnectedInstance = {
+        origin,
+        label: entry.label || new URL(origin).host,
+        token: entry.token,
+        user: currentUser,
+        username: entry.username || '',
+        status: 'connecting' as const,
+        api: client,
+      };
+
+      set((state) => ({
+        instances: [...state.instances, restoredInstance],
+      }));
+
+      inst = restoredInstance;
+    }
+
+    if (inst.status === 'connected' || inst.status === 'connecting') return;
 
     // Tokenless placeholders can't reconnect — they need full re-authentication
     if (!inst.token) return;
@@ -497,6 +533,15 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               : i
           ),
         }));
+
+        // Update registry on network error
+        const errRegistry = upsertRegistryEntry(get().registry, origin, {
+          origin,
+          status: 'unreachable',
+          errorMessage: 'Instance unreachable',
+        });
+        set({ registry: errRegistry, registryUpdatedAt: Date.now() });
+
         connectInstance(origin, inst.token);
       } else {
         set((state) => ({
@@ -506,6 +551,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               : i
           ),
         }));
+
+        // Update registry on auth error
+        const errRegistry = upsertRegistryEntry(get().registry, origin, {
+          origin,
+          status: 'auth_expired',
+          errorMessage: 'Token expired',
+        });
+        set({ registry: errRegistry, registryUpdatedAt: Date.now() });
       }
     }
   },
@@ -655,10 +708,25 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   forceRemoveEntry: (origin: string) => {
+    // Tear down WebSocket if connected
+    disconnectWs(origin);
+
+    // Remove from registry
     const registry = new Map(get().registry);
     registry.delete(origin);
     const registryUpdatedAt = Date.now();
-    set({ registry, registryUpdatedAt });
+
+    // Remove from instances and purge token from localStorage
+    set((state) => {
+      const updated = state.instances.filter(i => i.origin !== origin);
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) saveCachedTokens(updated, userId);
+      return { instances: updated, registry, registryUpdatedAt };
+    });
+
+    // Clean up spaces belonging to this instance
+    useSpaceStore.getState().removeInstanceSpaces(origin);
+
     get().syncRegistry().catch(() => {});
   },
 
