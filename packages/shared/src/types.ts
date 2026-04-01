@@ -519,11 +519,15 @@ export interface LiveKitTokenResponse {
 }
 
 export interface CreateDmRequest {
-  userId: string;
+  userId?: string;
+  homeUserId?: string;
+  homeInstance?: string;
 }
 
 export interface AddDmMemberRequest {
-  userId: string;
+  userId?: string;
+  homeUserId?: string;
+  homeInstance?: string;
 }
 
 export interface GroupDmUserIdentity {
