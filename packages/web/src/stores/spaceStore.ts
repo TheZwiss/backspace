@@ -58,7 +58,6 @@ interface SpaceState {
   leaveDm: (id: string) => Promise<void>;
   loadSpaces: () => Promise<void>;
   loadSpaceDetail: (spaceId: string) => Promise<void>;
-  loadDmChannels: () => Promise<void>;
   createSpace: (data: CreateSpaceRequest) => Promise<Space>;
   updateSpace: (spaceId: string, data: UpdateSpaceRequest) => Promise<void>;
   deleteSpace: (spaceId: string) => Promise<void>;
@@ -279,15 +278,6 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       });
     } catch {
       set({ loadingSpaceId: null });
-    }
-  },
-
-  loadDmChannels: async () => {
-    try {
-      const dmChannels = await api.dm.list();
-      set({ dmChannels });
-    } catch {
-      // Handle error silently
     }
   },
 
@@ -653,21 +643,26 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    // DM channels: process from any origin, normalize remote assets
-    const incomingDms = dmChannels || [];
-    if (!isHome) {
+    // S2S DM Unification: DMs are managed exclusively by the home instance.
+    // Skip DM channels from remote origins — they're replicas served by S2S relay.
+    const incomingDms = origin === '' ? (dmChannels ?? []) : [];
+
+    // Normalize asset URLs for DMs (only relevant for home origin in practice)
+    if (origin !== '') {
       for (const dm of incomingDms) {
         for (const member of dm.members) {
           normalizeUserAssets(member, origin);
         }
       }
     }
+
     for (const dm of incomingDms) {
       channelOriginMap.set(dm.id, origin);
       if (dm.lastMessage?.id) {
         channelLastMessageIds.set(dm.id, dm.lastMessage.id);
       }
     }
+
     // Merge: remove DMs belonging to this origin from existing state, then append incoming
     const existingDmsFromOtherOrigins = get().dmChannels.filter(dm => {
       const dmOrigin = get().channelOriginMap.get(dm.id);
@@ -675,44 +670,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     });
     const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
 
-    // Deduplicate DMs: if the same 1-on-1 conversation exists from multiple origins,
-    // prefer the home-origin copy (empty string origin = home). This handles the case
-    // where the federation relay created a local copy of a remote DM.
-    const deduplicatedDms: typeof mergedDms = [];
-    const seenPairs = new Map<string, number>(); // canonicalKey -> index in deduplicatedDms
-
-    for (const dm of mergedDms) {
-      if (dm.members.length !== 2) {
-        // Group DMs: no dedup
-        deduplicatedDms.push(dm);
-        continue;
-      }
-
-      // Build a canonical key from the two members' homeUserIds
-      const memberIds = dm.members.map(m => m.homeUserId || m.id).sort();
-      const canonicalKey = memberIds.join(':');
-      const dmOrigin = channelOriginMap.get(dm.id) ?? '';
-
-      const existingIdx = seenPairs.get(canonicalKey);
-      if (existingIdx !== undefined) {
-        // Duplicate found — keep the home-origin copy
-        const existingDm = deduplicatedDms[existingIdx]!;
-        const existingOrigin = channelOriginMap.get(existingDm.id) ?? '';
-
-        if (dmOrigin === '' && existingOrigin !== '') {
-          // New one is home, existing is remote — replace with home copy
-          deduplicatedDms[existingIdx] = dm;
-        }
-        // Otherwise keep existing (it's already home or first-seen)
-      } else {
-        seenPairs.set(canonicalKey, deduplicatedDms.length);
-        deduplicatedDms.push(dm);
-      }
-    }
-
     const update: Partial<SpaceState> = {
       spaces: mergedSpaces,
-      dmChannels: deduplicatedDms,
+      dmChannels: mergedDms,
       channelToSpaceMap,
       channelLastMessageIds,
       spacePermissions,
