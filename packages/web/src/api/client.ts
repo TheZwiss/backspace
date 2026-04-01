@@ -49,6 +49,7 @@ import type {
   SpaceFolder,
   InvitePreview,
   GifResult,
+  FederationRegistryEntry,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -90,6 +91,8 @@ export class BackspaceApiClient {
     changePassword: (data: ChangePasswordRequest) => Promise<ChangePasswordResponse>;
     deleteAccount: (data: DeleteAccountRequest) => Promise<{ success: boolean }>;
     getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>;
+    getFederationRegistry: () => Promise<{ registry: FederationRegistryEntry[]; updatedAt: number }>;
+    putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) => Promise<{ ok: boolean; updatedAt: number }>;
   };
 
   readonly spaceLayout: {
@@ -406,6 +409,14 @@ export class BackspaceApiClient {
           'GET', `/users/${id}/mutuals${qs ? `?${qs}` : ''}`
         );
       },
+      getFederationRegistry: () =>
+        request<{ registry: FederationRegistryEntry[]; updatedAt: number }>(
+          'GET', '/users/@me/federation-registry'
+        ),
+      putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) =>
+        request<{ ok: boolean; updatedAt: number }>(
+          'PUT', '/users/@me/federation-registry', data
+        ),
     };
 
     this.spaceLayout = {
