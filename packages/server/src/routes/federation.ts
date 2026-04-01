@@ -108,7 +108,7 @@ function isAcceptRateLimited(ip: string): boolean {
 // ─── In-memory rate limiter for the relay endpoint (per-peer) ────────────────
 const relayRateBuckets = new Map<string, number[]>();
 const RELAY_RATE_WINDOW_MS = 60_000;
-const RELAY_RATE_MAX = 30;
+const RELAY_RATE_MAX = 90;
 
 function isRelayRateLimited(peerOrigin: string): boolean {
   const now = Date.now();
