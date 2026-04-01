@@ -35,6 +35,20 @@ export interface ReplicatedInstance {
   domain?: string;  // Legacy field — kept for backward compat with existing data
 }
 
+export type FederationRegistryStatus = 'connected' | 'disconnected' | 'unreachable' | 'auth_expired';
+
+export interface FederationRegistryEntry {
+  origin: string;
+  label: string;
+  username: string;
+  remoteUserId: string;
+  status: FederationRegistryStatus;
+  addedAt: number;
+  lastConnectedAt: number | null;
+  disconnectedAt: number | null;
+  errorMessage: string | null;
+}
+
 export type UserStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
 export interface UserWithPassword extends User {
