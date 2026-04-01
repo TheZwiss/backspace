@@ -3,7 +3,7 @@ import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, Fede
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
-import { connectInstance, disconnectInstance, disconnectAllRemote } from '../hooks/useWebSocket';
+import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
 import { syncProfileToRemote } from '../utils/profileSync';
 // Circular dependency: federationOps imports useInstanceStore, instanceStore imports this.
 // Safe because both modules access each other lazily (at call time, not import time).
@@ -163,7 +163,7 @@ interface InstanceState {
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
   connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
   loginToRemote: (origin: string, username: string, password: string) => Promise<void>;
-  removeInstance: (origin: string) => void;
+  disconnectInstance: (origin: string) => void;
   setInstanceStatus: (origin: string, status: ConnectedInstance['status'], error?: string) => void;
   reconnectInstance: (origin: string) => Promise<void>;
   reauthenticateInstance: (origin: string, password: string) => Promise<void>;
@@ -392,22 +392,32 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }));
   },
 
-  removeInstance: (origin: string) => {
+  disconnectInstance: (origin: string) => {
     // Tear down WebSocket connection
-    disconnectInstance(origin);
+    disconnectWs(origin);
+
+    // Update registry entry to disconnected (preserve the entry)
+    const registry = upsertRegistryEntry(get().registry, origin, {
+      origin,
+      status: 'disconnected',
+      disconnectedAt: Date.now(),
+      errorMessage: null,
+    });
+    const registryUpdatedAt = Date.now();
 
     set((state) => {
       const updated = state.instances.filter(i => i.origin !== origin);
       const userId = useAuthStore.getState().user?.id;
       if (userId) saveCachedTokens(updated, userId);
-      return { instances: updated };
+      return { instances: updated, registry, registryUpdatedAt };
     });
 
     // Remove spaces from this instance from the space store
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
-    // Sync updated list to remaining instances (fire-and-forget)
+    // Sync updated lists to remaining instances (fire-and-forget)
     get().syncInstanceList().catch(() => {});
+    get().syncRegistry().catch(() => {});
   },
 
   reconnectInstance: async (origin: string) => {
@@ -469,7 +479,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
     // Disconnect any lingering WS
-    disconnectInstance(origin);
+    disconnectWs(origin);
 
     // Re-connect through the standard flow (handles register/login)
     const currentUser = useAuthStore.getState().user;
@@ -498,7 +508,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     if (userId) saveCachedTokens(get().instances, userId);
 
     // Reconnect WebSocket with new token
-    disconnectInstance(origin);
+    disconnectWs(origin);
     connectInstance(origin, newToken);
   },
 

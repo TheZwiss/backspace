@@ -266,7 +266,7 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').ConnectedInstance }) {
-  const removeInstance = useInstanceStore((s) => s.removeInstance);
+  const disconnectInstance = useInstanceStore((s) => s.disconnectInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
   const hasPendingSync = useInstanceStore((s) => s.pendingSyncOrigins.includes(inst.origin));
@@ -345,7 +345,7 @@ function InstanceRow({ inst }: { inst: import('../../stores/instanceStore').Conn
             )
           )}
           <button
-            onClick={() => removeInstance(inst.origin)}
+            onClick={() => disconnectInstance(inst.origin)}
             className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
             title="Disconnect"
           >
