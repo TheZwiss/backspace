@@ -446,10 +446,27 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const dmChannelId = generateSnowflake();
     const now = Date.now();
 
+    // Compute deterministic federatedId for federated 1-on-1 DMs so that the
+    // S2S relay can find this channel when the reply arrives, preventing duplicates.
+    let federatedId: string | null = null;
+    if (isFederationRelayEnabled()) {
+      const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+      const callerHomeUserId = callerUser?.homeUserId || request.userId;
+      const targetHomeUserId = targetUser.homeUserId || targetUser.id;
+      const callerHomeInstance = callerUser?.homeInstance || null;
+      const targetHomeInstance = targetUser.homeInstance || null;
+
+      // If either user is federated, this DM needs a federatedId for S2S relay matching
+      if (callerHomeInstance || targetHomeInstance) {
+        federatedId = computeFederatedId(callerHomeUserId, targetHomeUserId);
+      }
+    }
+
     db.transaction((tx) => {
       tx.insert(schema.dmChannels).values({
         id: dmChannelId,
         ownerId: null,
+        federatedId,
         createdAt: now,
       }).run();
 
