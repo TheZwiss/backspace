@@ -74,9 +74,9 @@ deploy() {
   # Clean up stale renamed containers left by failed recreates (e.g. "d420a6c00439_backspace")
   ssh "$PI_USER@$host" "cd $path && docker rm -f \$(docker ps -aq --filter 'name=_backspace' 2>/dev/null) 2>/dev/null; docker compose up -d --build"
 
-  # Prune old images and build cache to prevent disk bloat
+  # Prune old images; keep build cache capped at 2GB for fast rebuilds
   echo "  [4/4] Pruning stale Docker data..."
-  ssh "$PI_USER@$host" "docker image prune -af --filter 'until=24h' 2>/dev/null; docker builder prune -af --filter 'until=24h' 2>/dev/null" || true
+  ssh "$PI_USER@$host" "docker image prune -af --filter 'until=24h' 2>/dev/null; docker builder prune -f --keep-storage=2GB 2>/dev/null" || true
 
   echo ""
   echo "  Done: $name"
@@ -114,8 +114,9 @@ case "$TARGET" in
 
   all|both)
     PI_HOST=$(resolve_pi_host)
-    deploy "Pi" "$PI_HOST" "$PI_PATH"
-    deploy "Beta VM" "$BETA_HOST" "$BETA_PATH"
+    deploy "Pi" "$PI_HOST" "$PI_PATH" &
+    deploy "Beta VM" "$BETA_HOST" "$BETA_PATH" &
+    wait
     ;;
 
   *)

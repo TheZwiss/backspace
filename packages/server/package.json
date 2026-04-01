@@ -26,7 +26,8 @@
     "fastify": "^4.28.1",
     "jsonwebtoken": "^9.0.2",
     "livekit-server-sdk": "^2.6.1",
-    "sharp": "^0.33.0"
+    "sharp": "^0.33.0",
+    "tsx": "^4.16.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -35,7 +36,6 @@
     "@types/node": "^20.14.0",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.24.0",
-    "tsx": "^4.16.0",
     "typescript": "^5.4.0",
     "vitest": "^4.0.18"
   }
