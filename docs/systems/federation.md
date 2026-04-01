@@ -398,7 +398,7 @@ interface FederationRelayResponse {
 
 ### Inbound Relay Dispatch (`POST /api/federation/relay`)
 
-Body limit: 10 MB. Max 50 events per batch. Rate-limited to 30 requests/min per peer (sliding window, keyed by `peer.origin`). Returns 429 when exceeded.
+Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per peer (sliding window, keyed by `peer.origin`). Returns 429 when exceeded. Raised from 30 after FED-009 reduced the outbox worker interval from 10s to 1s — a busy sender can now hit 60 req/min during sustained traffic.
 
 | eventType | Processor | contextType |
 |-----------|-----------|-------------|
