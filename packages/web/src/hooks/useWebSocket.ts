@@ -87,7 +87,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
   const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useSpaceStore.getState();
-  const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
+  const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, clearTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
   const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
   switch (event.type) {
@@ -677,6 +677,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
         try { dmTypingUsername = `${dmTypingUsername}@${new URL(origin).host}`; } catch {}
       }
       setTyping(event.dmChannelId, event.userId, dmTypingUsername);
+      break;
+    }
+
+    case 'dm_typing_stop': {
+      clearTyping(event.dmChannelId as string, event.userId as string);
       break;
     }
 

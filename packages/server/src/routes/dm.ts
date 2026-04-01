@@ -180,6 +180,17 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
     .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
     .all();
 
+  // Clear typing indicator for the message author — the message itself proves they stopped
+  for (const member of dmMembers) {
+    if (member.userId !== message.userId) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_typing_stop',
+        dmChannelId,
+        userId: message.userId,
+      });
+    }
+  }
+
   for (const member of dmMembers) {
     // If this member had closed the DM, resurface it first
     if (member.closed === 1) {

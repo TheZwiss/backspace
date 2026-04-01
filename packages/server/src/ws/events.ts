@@ -893,6 +893,14 @@ function handleDmMessageCreate(event: Record<string, unknown>, userId: string): 
   // Federation: queue for relay
   queueDmRelay(dmMessage, dmChannelId, 'create');
 
+  // Clear any pending typing timeout for this user+channel
+  const typingKey = `dm:${userId}:${dmChannelId}`;
+  const existingTimeout = typingTimeouts.get(typingKey);
+  if (existingTimeout) {
+    clearTimeout(existingTimeout);
+    typingTimeouts.delete(typingKey);
+  }
+
   // Resolve embeds asynchronously
   setImmediate(() => {
     resolveEmbeds(messageId, hasContent ? content!.trim() : null, dmChannelId, true, null).catch(() => {});

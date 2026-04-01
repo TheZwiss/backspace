@@ -378,6 +378,7 @@ export type ServerEvent =
   | { type: 'dm_message_updated'; message: DmMessageWithUser }
   | { type: 'dm_message_deleted'; messageId: string; dmChannelId: string }
   | { type: 'dm_typing'; dmChannelId: string; userId: string; username: string }
+  | { type: 'dm_typing_stop'; dmChannelId: string; userId: string }
   | { type: 'reaction_added'; messageId: string; reaction: Reaction }
   | { type: 'reaction_removed'; messageId: string; userId: string; emoji: string }
   | { type: 'channel_ack'; channelId: string; messageId: string }
