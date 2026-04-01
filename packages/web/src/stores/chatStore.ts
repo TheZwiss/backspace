@@ -687,12 +687,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newUnread = new Set(state.unreadChannels);
       const newReadStates = new Map(state.readStates);
       const newMessages = new Map(state.messages);
+      const newHasMore = new Map(state.hasMore);
       for (const channelId of channelIds) {
         newUnread.delete(channelId);
         newReadStates.delete(channelId);
         newMessages.delete(channelId);
+        newHasMore.delete(channelId);
       }
-      return { unreadChannels: newUnread, readStates: newReadStates, messages: newMessages };
+      return { unreadChannels: newUnread, readStates: newReadStates, messages: newMessages, hasMore: newHasMore };
     });
   },
 
