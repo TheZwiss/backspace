@@ -831,13 +831,26 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     preHandler: authenticate,
   }, async (request, reply) => {
     const { id } = request.params;
-    const { userId: targetUserId } = request.body;
-
-    if (!targetUserId || typeof targetUserId !== 'string') {
-      return reply.code(400).send({ error: 'userId is required', statusCode: 400 });
-    }
+    const { userId: targetUserIdRaw, homeUserId, homeInstance } = request.body;
 
     const db = getDb();
+    let targetUser: typeof schema.users.$inferSelect | undefined;
+
+    if (homeUserId && homeInstance) {
+      // Federated identity: resolve or create a replicated user stub
+      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+    } else if (targetUserIdRaw && typeof targetUserIdRaw === 'string') {
+      // Local ID: direct lookup (existing behavior)
+      targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserIdRaw)).get();
+    } else {
+      return reply.code(400).send({ error: 'userId or (homeUserId + homeInstance) is required', statusCode: 400 });
+    }
+
+    if (!targetUser) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    const targetUserId = targetUser.id;
 
     // Validate caller is a member
     if (!isDmMember(id, request.userId)) {
@@ -855,12 +868,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
     if (dmChannel.ownerId !== request.userId) {
       return reply.code(403).send({ error: 'Only the group owner can add members', statusCode: 403 });
-    }
-
-    // Validate target user exists
-    const targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
-    if (!targetUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
     // Validate the adder and target are friends
