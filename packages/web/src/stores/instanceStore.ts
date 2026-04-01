@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse } from '@backspace/shared';
+import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, FederationRegistryEntry } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
@@ -9,6 +9,7 @@ import { syncProfileToRemote } from '../utils/profileSync';
 // Safe because both modules access each other lazily (at call time, not import time).
 // clearPasswordSyncTimers itself does not reference useInstanceStore.
 import { clearPasswordSyncTimers } from '../utils/federationOps';
+import { useUIStore } from './uiStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,33 @@ function normalizeOrigin(url: string): string {
 
 // ─── API client resolution ───────────────────────────────────────────────────
 
+// ─── Registry helpers ────────────────────────────────────────────────────────
+
+function upsertRegistryEntry(
+  registry: Map<string, FederationRegistryEntry>,
+  origin: string,
+  updates: Partial<FederationRegistryEntry> & { origin: string },
+): Map<string, FederationRegistryEntry> {
+  const next = new Map(registry);
+  const existing = next.get(origin);
+  if (existing) {
+    next.set(origin, { ...existing, ...updates });
+  } else {
+    next.set(origin, {
+      label: '',
+      username: '',
+      remoteUserId: '',
+      status: 'connected',
+      addedAt: Date.now(),
+      lastConnectedAt: null,
+      disconnectedAt: null,
+      errorMessage: null,
+      ...updates,
+    });
+  }
+  return next;
+}
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 interface InstanceState {
@@ -126,6 +154,11 @@ interface InstanceState {
   error: string | null;
   _autoConnectDone: boolean;
   pendingSyncOrigins: string[];
+  registry: Map<string, FederationRegistryEntry>;
+  registryUpdatedAt: number;
+  syncRegistry: () => Promise<void>;
+  deleteIdentity: (origin: string) => void;
+  forceRemoveEntry: (origin: string) => void;
 
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
   connectToRemote: (origin: string, password: string, displayName?: string) => Promise<void>;
@@ -148,6 +181,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   error: null,
   _autoConnectDone: false,
   pendingSyncOrigins: [],
+  registry: new Map(),
+  registryUpdatedAt: 0,
 
   probeInstance: async (url: string) => {
     const origin = normalizeOrigin(url);
@@ -535,6 +570,44 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     await Promise.all([homePromise, ...remotePromises]);
   },
 
+  syncRegistry: async () => {
+    if (!get()._autoConnectDone) return;
+
+    const { registry, registryUpdatedAt, instances } = get();
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) return;
+
+    const entries = Array.from(registry.values());
+    const payload = { registry: entries, updatedAt: registryUpdatedAt };
+
+    // Push to home instance
+    const homePromise = api.users.putFederationRegistry(payload).catch((err) => {
+      console.warn('Failed to sync registry to home:', err);
+    });
+
+    // Push to all connected remote instances
+    const connectedInstances = instances.filter(i => i.status === 'connected');
+    const remotePromises = connectedInstances.map(inst =>
+      inst.api.users.putFederationRegistry(payload).catch((err) => {
+        console.warn(`Failed to sync registry to ${inst.origin}:`, err);
+      })
+    );
+
+    await Promise.all([homePromise, ...remotePromises]);
+  },
+
+  deleteIdentity: (_origin: string) => {
+    useUIStore.getState().addToast('Identity deletion is not yet implemented', 'info', 3000);
+  },
+
+  forceRemoveEntry: (origin: string) => {
+    const registry = new Map(get().registry);
+    registry.delete(origin);
+    const registryUpdatedAt = Date.now();
+    set({ registry, registryUpdatedAt });
+    get().syncRegistry().catch(() => {});
+  },
+
   autoConnectAll: async () => {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser || currentUser.replicatedInstances.length === 0) {
@@ -712,7 +785,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     clearPasswordSyncTimers();
 
-    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [] });
+    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [], registry: new Map(), registryUpdatedAt: 0 });
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));
