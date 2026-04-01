@@ -1244,12 +1244,23 @@ export function extractDomain(homeInstance: string): string {
 }
 
 /**
- * Verify that an acting user's homeInstance matches the source instance (X-Federation-Origin).
- * In direct S2S federation, a peer should only send events for its own users.
+ * Verify that an acting user's homeInstance is legitimate for this relay.
+ *
+ * Two valid cases:
+ * 1. **Direct**: author is from the source instance (standard S2S — peer sends events for its own users).
+ * 2. **Homeward relay**: author is from the *receiving* instance. This happens when a client-federation
+ *    user (e.g., youruser@nova logged into orbit) sends a message on a remote server, and the
+ *    S2S relay forwards it back to the author's home instance. The trusted peer is just the messenger.
+ *
  * Both sides are normalized to bare domain before comparison.
  */
 export function verifyAttribution(actingUserHomeInstance: string, sourceInstance: string): boolean {
-  return extractDomain(actingUserHomeInstance) === extractDomain(sourceInstance);
+  const authorDomain = extractDomain(actingUserHomeInstance);
+  // Case 1: author belongs to the source peer
+  if (authorDomain === extractDomain(sourceInstance)) return true;
+  // Case 2: homeward relay — author belongs to THIS (receiving) instance
+  if (authorDomain === extractDomain(getOurOrigin())) return true;
+  return false;
 }
 
 /**
