@@ -2,10 +2,15 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import type { InstanceInfoResponse, FederationRegistryEntry } from '@backspace/shared';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
-import type { ConnectedInstance } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+
+// ─── URL helpers ─────────────────────────────────────────────────────────────
+
+function safeHost(origin: string): string {
+  try { return new URL(origin).host; } catch { return origin; }
+}
 
 // ─── Status indicator ────────────────────────────────────────────────────────
 
@@ -546,11 +551,16 @@ function RegistryRow({
   const disconnectInstance = useInstanceStore((s) => s.disconnectInstance);
   const reconnectInstance = useInstanceStore((s) => s.reconnectInstance);
   const forceRemoveEntry = useInstanceStore((s) => s.forceRemoveEntry);
+  const reauthenticateInstance = useInstanceStore((s) => s.reauthenticateInstance);
 
   const [showForceRemoveConfirm, setShowForceRemoveConfirm] = useState(false);
   const [showDeleteIdentity, setShowDeleteIdentity] = useState(false);
+  const [showReauth, setShowReauth] = useState(false);
+  const [reauthPassword, setReauthPassword] = useState('');
+  const [reauthLoading, setReauthLoading] = useState(false);
+  const [reauthError, setReauthError] = useState('');
 
-  const name = entry.label || new URL(entry.origin).host;
+  const name = entry.label || safeHost(entry.origin);
   const isDisconnected = entry.status === 'disconnected';
   const isConnected = entry.status === 'connected';
   const hasIssue = entry.status === 'unreachable' || entry.status === 'auth_expired';
@@ -592,6 +602,21 @@ function RegistryRow({
     setShowForceRemoveConfirm(false);
   };
 
+  const handleReauth = async () => {
+    if (!reauthPassword) return;
+    setReauthError('');
+    setReauthLoading(true);
+    try {
+      await reauthenticateInstance(entry.origin, reauthPassword);
+      setShowReauth(false);
+      setReauthPassword('');
+    } catch (err) {
+      setReauthError((err as Error).message);
+    } finally {
+      setReauthLoading(false);
+    }
+  };
+
   return (
     <>
       <div className={`bg-white/[0.02] rounded-md transition-colors ${isDisconnected ? 'opacity-70' : ''} ${expanded ? 'border border-white/[0.06]' : ''}`}>
@@ -610,7 +635,7 @@ function RegistryRow({
                 </span>
               </div>
               <div className="text-[11px] text-txt-tertiary truncate">
-                {new URL(entry.origin).host}
+                {safeHost(entry.origin)}
                 {entry.username && (
                   <span className="ml-1">as {entry.username}</span>
                 )}
@@ -661,6 +686,44 @@ function RegistryRow({
                 </div>
               )}
 
+              {/* Re-auth inline form */}
+              {showReauth && (
+                <form onSubmit={(e) => { e.preventDefault(); handleReauth(); }} className="mt-3 space-y-2">
+                  <input type="text" autoComplete="username" value={entry.username ?? ''} readOnly tabIndex={-1} className="sr-only" />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={reauthPassword}
+                      onChange={(e) => setReauthPassword(e.target.value)}
+                      placeholder="Your account password"
+                      className="input-standard flex-1 py-1.5"
+                      disabled={reauthLoading}
+                      autoFocus
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="submit"
+                      disabled={reauthLoading || !reauthPassword}
+                      className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-xs font-medium rounded transition-colors disabled:opacity-50"
+                    >
+                      {reauthLoading ? 'Connecting...' : 'Connect'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowReauth(false); setReauthPassword(''); setReauthError(''); }}
+                      className="px-2 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {reauthError && (
+                    <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-xs">
+                      {reauthError}
+                    </div>
+                  )}
+                </form>
+              )}
+
               {/* Actions */}
               <div className="flex items-center gap-2 flex-wrap">
                 {isConnected && (
@@ -696,6 +759,13 @@ function RegistryRow({
                     )}
                     <button
                       type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
+                    >
+                      Re-authenticate
+                    </button>
+                    <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); setShowDeleteIdentity(true); }}
                       className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
@@ -713,6 +783,15 @@ function RegistryRow({
                         className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/15 text-accent-lavender hover:bg-accent-lavender/25 rounded transition-colors"
                       >
                         Reconnect
+                      </button>
+                    )}
+                    {entry.status === 'auth_expired' && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowReauth((v) => !v); }}
+                        className="px-3 py-1.5 text-xs font-medium bg-accent-amber/15 text-accent-amber hover:bg-accent-amber/25 rounded transition-colors"
+                      >
+                        Re-authenticate
                       </button>
                     )}
                     <button
@@ -745,7 +824,7 @@ function RegistryRow({
         title="Force Remove Entry"
         description={`This will remove the registry entry for ${name}. The remote instance will not be notified. Use this only if the instance is permanently unreachable.`}
         confirmLabel="Force Remove"
-        variant="danger"
+        variant="warning"
       />
 
       {/* Delete Identity dialog */}
@@ -766,8 +845,8 @@ function sortEntries(entries: FederationRegistryEntry[], sortBy: SortBy): Federa
   return [...entries].sort((a, b) => {
     switch (sortBy) {
       case 'name': {
-        const nameA = (a.label || new URL(a.origin).host).toLowerCase();
-        const nameB = (b.label || new URL(b.origin).host).toLowerCase();
+        const nameA = (a.label || safeHost(a.origin)).toLowerCase();
+        const nameB = (b.label || safeHost(b.origin)).toLowerCase();
         return nameA.localeCompare(nameB);
       }
       case 'dateAdded':
@@ -789,7 +868,7 @@ export function ConnectedInstances() {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>('all');
-  const [sortBy, setSortBy] = useState<SortBy>('name');
+  const [sortBy, setSortBy] = useState<SortBy>('dateAdded');
   const [expandedOrigins, setExpandedOrigins] = useState<Set<string>>(new Set());
 
   const toggleExpand = (origin: string) => {
