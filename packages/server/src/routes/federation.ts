@@ -1213,6 +1213,12 @@ export function processRelayEvents(
         case 'dm_call_end':
           processDmCallEndEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'dm_typing_start':
+          processDmTypingStartEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_typing_stop':
+          processDmTypingStopEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         default:
           rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
           break;
@@ -1758,6 +1764,23 @@ function processCreateEvent(
       connectionManager.sendToUser(member.userId, {
         type: 'dm_message_created',
         message: fullMessage,
+      });
+    }
+  }
+
+  // Belt-and-suspenders: clear typing indicator for the author on inbound relay.
+  // This catches the case where the explicit dm_typing_stop relay was lost.
+  const relayDmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
+    .all();
+
+  for (const member of relayDmMembers) {
+    if (member.userId !== authorUser.id) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_typing_stop',
+        dmChannelId: localDmChannelId,
+        userId: authorUser.id,
       });
     }
   }
@@ -3385,6 +3408,113 @@ function processDmCallEndEvent(
       connectionManager.sendToDmMembers(dmChannelId, {
         type: 'dm_call_ended',
         dmChannelId,
+      });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processDmTypingStartEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.typing || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_typing_payload' });
+    return;
+  }
+
+  // Look up local channel by federatedId
+  const channel = db.select()
+    .from(schema.dmChannels)
+    .where(and(
+      eq(schema.dmChannels.federatedId, event.federatedId),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .get();
+
+  if (!channel) {
+    // Channel not bootstrapped yet — discard silently
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Resolve the typing user (read-only — don't create stubs for ephemeral events)
+  const typingUser = resolveLocalUser(event.typing.homeUserId, db);
+  if (!typingUser) {
+    // User stub doesn't exist — discard silently
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Broadcast dm_typing to local DM members (excluding the typer)
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channel.id))
+    .all();
+
+  for (const member of dmMembers) {
+    if (member.userId !== typingUser.id) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_typing',
+        dmChannelId: channel.id,
+        userId: typingUser.id,
+        username: typingUser.username ?? event.typing.username,
+      });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processDmTypingStopEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.typing || !event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_typing_payload' });
+    return;
+  }
+
+  // Look up local channel by federatedId
+  const channel = db.select()
+    .from(schema.dmChannels)
+    .where(and(
+      eq(schema.dmChannels.federatedId, event.federatedId),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .get();
+
+  if (!channel) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Resolve the typing user (read-only)
+  const typingUser = resolveLocalUser(event.typing.homeUserId, db);
+  if (!typingUser) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Broadcast dm_typing_stop to local DM members
+  const dmMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channel.id))
+    .all();
+
+  for (const member of dmMembers) {
+    if (member.userId !== typingUser.id) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_typing_stop',
+        dmChannelId: channel.id,
+        userId: typingUser.id,
       });
     }
   }
