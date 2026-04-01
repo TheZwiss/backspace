@@ -664,12 +664,53 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   autoConnectAll: async () => {
     const currentUser = useAuthStore.getState().user;
-    if (!currentUser || currentUser.replicatedInstances.length === 0) {
+    if (!currentUser) {
       set({ _autoConnectDone: true });
       return;
     }
 
     const cached = loadCachedTokens(currentUser.id);
+
+    // Fetch server-side registry (source of truth for entry list)
+    let serverRegistry: FederationRegistryEntry[] = [];
+    let serverRegistryUpdatedAt = 0;
+    try {
+      const res = await api.users.getFederationRegistry();
+      serverRegistry = res.registry;
+      serverRegistryUpdatedAt = res.updatedAt;
+    } catch (err) {
+      console.warn('Failed to fetch federation registry from home:', err);
+    }
+
+    // Initialize registry from server data
+    const registry = new Map<string, FederationRegistryEntry>();
+    for (const entry of serverRegistry) {
+      registry.set(entry.origin, entry);
+    }
+
+    // Migration: promote localStorage-only entries to registry
+    for (const [origin] of Object.entries(cached)) {
+      if (origin === window.location.origin) continue;
+      if (!registry.has(origin)) {
+        registry.set(origin, {
+          origin,
+          label: cached[origin]?.label || new URL(origin).host,
+          username: cached[origin]?.username || '',
+          remoteUserId: '',
+          status: 'connected',
+          addedAt: Date.now(),
+          lastConnectedAt: Date.now(),
+          disconnectedAt: null,
+          errorMessage: null,
+        });
+      }
+    }
+
+    // Early return if there's nothing to connect
+    if (currentUser.replicatedInstances.length === 0 && registry.size === 0) {
+      set({ _autoConnectDone: true });
+      return;
+    }
 
     // Split server-known instances into two groups:
     // - withToken: have a cached token → attempt reconnection
@@ -706,6 +747,14 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
         }));
         return { instances: [...state.instances, ...placeholders] };
       });
+    }
+
+    // Update registry for tokenless placeholders
+    for (const { origin } of withoutToken) {
+      const entry = registry.get(origin);
+      if (entry) {
+        registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Session expired — re-authenticate to reconnect' });
+      }
     }
 
     // Connect instances with cached tokens in parallel
@@ -771,6 +820,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
               instances: state.instances.map(i => i.origin === origin ? connectedInstance : i),
             }));
 
+            // Update registry entry on successful reconnect
+            const entry = registry.get(origin);
+            if (entry) {
+              registry.set(origin, { ...entry, status: 'connected', lastConnectedAt: Date.now(), disconnectedAt: null, errorMessage: null, remoteUserId: user.id, label });
+            }
+
             // Open WebSocket connection now that we've verified the token
             connectInstance(origin, cachedEntry.token);
 
@@ -791,6 +846,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
                     : i
                 ),
               }));
+
+              // Update registry entry on network error
+              const entry = registry.get(origin);
+              if (entry) {
+                registry.set(origin, { ...entry, status: 'unreachable', errorMessage: 'Instance unreachable' });
+              }
+
               // Start WebSocket — its built-in exponential backoff retry will auto-recover
               // when the network path becomes available (e.g. user switches networks)
               connectInstance(origin, cachedEntry.token);
@@ -803,6 +865,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
                     : i
                 ),
               }));
+
+              // Update registry entry on auth error
+              const entry = registry.get(origin);
+              if (entry) {
+                registry.set(origin, { ...entry, status: 'auth_expired', errorMessage: 'Token expired' });
+              }
             }
           }
         })
@@ -824,7 +892,13 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const pendingOrigins = Object.entries(freshCached)
       .filter(([, v]) => v.pendingPasswordSync)
       .map(([origin]) => origin);
-    set({ _autoConnectDone: true, pendingSyncOrigins: pendingOrigins });
+
+    // Persist reconciled registry
+    const registryUpdatedAt = serverRegistryUpdatedAt > 0 ? Math.max(serverRegistryUpdatedAt, Date.now()) : Date.now();
+    set({ _autoConnectDone: true, pendingSyncOrigins: pendingOrigins, registry, registryUpdatedAt });
+
+    // Sync reconciled registry to all instances
+    get().syncRegistry().catch(() => {});
   },
 
   reset: () => {
