@@ -758,7 +758,8 @@ export interface FederationRelayEvent {
     | 'member_add' | 'member_remove' | 'ownership_transfer'
     | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
     | 'friend_add' | 'friend_remove' | 'file_rejected'
-    | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end';
+    | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
+    | 'dm_typing_start' | 'dm_typing_stop';
   contextType?: 'dm' | 'friend';
   dmChannelId?: string;
   messageId: string;
@@ -789,6 +790,11 @@ export interface FederationRelayEvent {
   rejectionLimit?: number;
   affectedUserIds?: string[];
   call?: FederationCallPayload;
+  typing?: {
+    homeUserId: string;
+    homeInstance: string;
+    username: string;
+  };
 }
 
 export interface FederationCallPayload {
