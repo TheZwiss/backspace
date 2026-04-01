@@ -510,6 +510,17 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'updatedAt must be a positive number', statusCode: 400 });
     }
 
+    // Size cap — prevent unbounded registry writes
+    if (registry.length > 100) {
+      return reply.code(400).send({ error: 'Registry cannot exceed 100 entries', statusCode: 400 });
+    }
+
+    // Duplicate origin check
+    const origins = registry.map(e => e.origin);
+    if (new Set(origins).size !== origins.length) {
+      return reply.code(400).send({ error: 'Duplicate origins are not allowed', statusCode: 400 });
+    }
+
     const validStatuses = ['connected', 'disconnected', 'unreachable', 'auth_expired'];
     for (const entry of registry) {
       if (!entry || typeof entry.origin !== 'string' || !entry.origin) {

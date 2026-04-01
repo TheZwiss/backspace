@@ -22,6 +22,8 @@ POST   /users/@me/verify-password  { password }          → { valid }
 POST   /users/@me/change-password  { currentPassword?, newPassword } → { token }
 DELETE /users/@me             { password, username }      → { success }
 PUT    /users/@me/space-layout { items, folders, updatedAt? } → { items, folders, updatedAt }
+GET    /users/@me/federation-registry                    → { registry: FederationRegistryEntry[], updatedAt: number }
+PUT    /users/@me/federation-registry { registry, updatedAt } → { ok: true, updatedAt } (409 if not newer)
 GET    /users/:id                                        → { user }
 GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], mutualSpaces[] }
 ```

@@ -32,6 +32,7 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | profileUpdatedAt | integer | | Epoch ms |
 | passwordChangedAt | integer | | Token revocation: tokens before this rejected |
 | showActivity | integer NOT NULL | 1 | Rich presence visibility |
+| federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
 | createdAt | integer NOT NULL | | Epoch ms |
 
 ### spaces
@@ -409,3 +410,21 @@ UNIQUE: (peerId, entityId)
 | mutatedAt | integer NOT NULL | | Checkpoint for sync |
 | payload | text | | JSON |
 Retention: 90 days (cleaned by federation janitor)
+
+### user_federation_registry
+Persistent registry of all instances a user has federated with. Tracks full lifecycle.
+
+| Column | Type | Constraints | Purpose |
+|--------|------|-------------|---------|
+| user_id | TEXT | NOT NULL, FK→users(id) CASCADE | Owner |
+| origin | TEXT | NOT NULL | Instance origin URL (e.g., `https://domain.com`) |
+| label | TEXT | NOT NULL DEFAULT '' | Instance display name |
+| username | TEXT | NOT NULL DEFAULT '' | Federated username on remote |
+| remote_user_id | TEXT | NOT NULL DEFAULT '' | Snowflake ID on remote |
+| status | TEXT | NOT NULL DEFAULT 'connected' | connected/disconnected/unreachable/auth_expired |
+| added_at | INTEGER | NOT NULL | Epoch ms — when first federated |
+| last_connected_at | INTEGER | | Epoch ms — last successful connection |
+| disconnected_at | INTEGER | | Epoch ms — when user disconnected |
+| error_message | TEXT | | Last error message |
+
+**PK:** `(user_id, origin)`
