@@ -344,22 +344,29 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: CreateDmRequest }>('/api/dm', {
     preHandler: authenticate,
   }, async (request, reply) => {
-    const { userId } = request.body;
-
-    if (!userId || typeof userId !== 'string') {
-      return reply.code(400).send({ error: 'userId is required', statusCode: 400 });
-    }
-
-    if (userId === request.userId) {
-      return reply.code(400).send({ error: 'Cannot create DM with yourself', statusCode: 400 });
-    }
+    const { userId, homeUserId, homeInstance } = request.body;
 
     const db = getDb();
+    let targetUser: typeof schema.users.$inferSelect | undefined;
 
-    // Check if target user exists
-    const targetUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    if (homeUserId && homeInstance) {
+      // Federated identity: resolve or create a replicated user stub
+      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+    } else if (userId && typeof userId === 'string') {
+      // Local ID: direct lookup (existing behavior)
+      targetUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    } else {
+      return reply.code(400).send({ error: 'userId or (homeUserId + homeInstance) is required', statusCode: 400 });
+    }
+
     if (!targetUser) {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    const targetUserId = targetUser.id;
+
+    if (targetUserId === request.userId) {
+      return reply.code(400).send({ error: 'Cannot create DM with yourself', statusCode: 400 });
     }
 
     // Check if DM channel already exists between these two users
@@ -374,7 +381,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         .from(schema.dmMembers)
         .where(and(
           eq(schema.dmMembers.dmChannelId, myDm.dmChannelId),
-          eq(schema.dmMembers.userId, userId),
+          eq(schema.dmMembers.userId, targetUserId),
         ))
         .get();
 
@@ -477,7 +484,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       tx.insert(schema.dmMembers).values({
         dmChannelId,
-        userId,
+        userId: targetUserId,
       }).run();
     });
 
@@ -495,7 +502,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     };
 
     // Broadcast dm_channel_created to the other user so their sidebar updates
-    connectionManager.sendToUser(userId, {
+    connectionManager.sendToUser(targetUserId, {
       type: 'dm_channel_created',
       dmChannel: result,
     });
