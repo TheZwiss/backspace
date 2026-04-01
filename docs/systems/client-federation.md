@@ -247,7 +247,45 @@ The **Connections** panel (in user settings) allows managing remote instance con
 
 ---
 
-## 7. Relationship to S2S Federation
+## 7. Federation Registry
+
+The federation registry is a persistent server-side record of all instances a user has federated with. Unlike the `replicatedInstances` field (which serves S2S topology relay), the registry tracks the full lifecycle of each connection.
+
+### Storage
+
+- **Server:** `user_federation_registry` table — composite PK `(userId, origin)`
+- **Client:** `registry` Map in `instanceStore` (Zustand)
+- **LWW timestamp:** `federationRegistryUpdatedAt` on `users` table
+
+### Lifecycle States
+
+| State | Meaning |
+|-------|---------|
+| `connected` | Active WebSocket, valid token |
+| `disconnected` | User intentionally disconnected; account exists on remote |
+| `unreachable` | Remote is down/unresponsive |
+| `auth_expired` | Token invalid; needs re-authentication |
+
+### Sync Pattern
+
+Client-driven LWW whole-registry push (same pattern as `profileSync.ts`):
+1. User mutates registry → `registryUpdatedAt = Date.now()`
+2. Client calls `PUT /api/users/@me/federation-registry` on all connected instances
+3. Server rejects if `updatedAt <= stored` (409 Conflict)
+4. On startup, client fetches registry from home via `GET`, merges with localStorage tokens
+
+### API
+
+- `GET /api/users/@me/federation-registry` — fetch registry + updatedAt
+- `PUT /api/users/@me/federation-registry` — LWW whole-registry push
+
+### Relationship to replicatedInstances
+
+`replicatedInstances` continues to serve S2S topology relay — it tells the federation layer which peers to relay events to. The registry is a superset that also includes disconnected, unreachable, and auth-expired entries. The two are maintained independently.
+
+---
+
+## 8. Relationship to S2S Federation
 
 Client-side and S2S federation serve different purposes:
 
