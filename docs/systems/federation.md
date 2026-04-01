@@ -312,6 +312,28 @@ Every relayed message is stored with:
 
 The `(source_instance, source_message_id)` pair is checked before insertion. Duplicates are rejected with reason `'duplicate'`. A unique partial index enforces this at the DB level: `idx_dm_messages_source_unique ON dm_messages(source_instance, source_message_id) WHERE source_instance IS NOT NULL`.
 
+### Typing Indicator Relay
+
+**Event types:** `dm_typing_start`, `dm_typing_stop`
+
+**Model:** Fire-and-forget, same as call signaling. No outbox, no retry, no mutation log. Typing is ephemeral — lost packets are acceptable.
+
+**Channel identification:** Uses `federatedId` (not instance-local `dmChannelId`) for cross-instance channel lookup, plus `participants` for resolution context.
+
+**Outbound (`events.ts` / `dm.ts`):**
+- `handleDmTypingStart()` → after local broadcast, calls `sendTypingRelay(dmChannelId, 'dm_typing_start', userId)`
+- `broadcastDmMessage()` → after local `dm_typing_stop` broadcast, calls `sendTypingRelay(dmChannelId, 'dm_typing_stop', message.userId)`
+
+**`sendTypingRelay()` (`federationOutbox.ts`):**
+- Fetches channel's `federatedId` and `getDmParticipants()` for target resolution
+- Builds `FederationRelayEvent` with `typing: { homeUserId, homeInstance, username }`
+- Reuses `sendCallRelay()` for the actual POST to each remote peer origin
+
+**Inbound (`federation.ts`):**
+- `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveLocalUser()` (no stub creation for ephemeral events), broadcast `dm_typing` to local members
+- `processDmTypingStopEvent` → same, broadcast `dm_typing_stop` to local members
+- **Implicit clear:** `processCreateEvent()` also emits `dm_typing_stop` for the message author after processing an inbound relay — primary typing clear mechanism for relayed messages
+
 ---
 
 ## 5. Outbox & Relay Pipeline
@@ -425,6 +447,8 @@ Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per 
 | `friend_add` | `processFriendAddEvent` | friend |
 | `friend_remove` | `processFriendRemoveEvent` | friend |
 | `file_rejected` | `processFileRejectedEvent` | dm |
+| `dm_typing_start` | `processDmTypingStartEvent` | dm (fire-and-forget, no outbox) |
+| `dm_typing_stop` | `processDmTypingStopEvent` | dm (fire-and-forget, no outbox) |
 
 After processing all events, the relay endpoint updates the peer's `lastSeenAt` and resets `consecutiveFailures`, then returns accepted/rejected arrays plus `maxUploadSize`.
 

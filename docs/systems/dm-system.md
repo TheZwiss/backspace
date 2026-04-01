@@ -79,6 +79,8 @@ The format difference (32-char hex vs 36-char UUID with dashes) allows detecting
 
 **No federation event queued at creation time.** The `federatedId` for 1-on-1 DMs is computed on demand when the first message is relayed via `queueDmRelay()`. The receiving instance uses `findOrCreateDmChannel()` which computes the deterministic hash and creates the channel if needed.
 
+**Client routing:** DM creation always goes to the home instance. For federated users, the client passes `{ homeUserId, homeInstance }` and the server resolves the target via `resolveOrCreateReplicatedUser()`. The `federatedId` is computed at creation time when either participant has `homeInstance` set.
+
 ---
 
 ## Group DM Creation
@@ -603,10 +605,10 @@ const normalized = homeInstance.startsWith('http')
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET` | `/api/dm` | JWT | List caller's DM channels (excludes `closed=1` and `deleted_at` IS NOT NULL) |
-| `POST` | `/api/dm` | JWT | Create or get existing 1-on-1 DM |
+| `POST` | `/api/dm` | JWT | Create or get existing 1-on-1 DM. Accepts `{ userId }` (local) or `{ homeUserId, homeInstance }` (federated) |
 | `POST` | `/api/dm/group` | JWT | Create group DM with multiple members |
 | `DELETE` | `/api/dm/:id` | JWT | Soft-close DM for caller |
-| `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (owner only) |
+| `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (owner only). Accepts `{ userId }` or `{ homeUserId, homeInstance }` |
 | `DELETE` | `/api/dm/:id/members` | JWT | Leave group DM |
 | `GET` | `/api/dm/:id/messages` | JWT | Get messages with cursor pagination |
 | `POST` | `/api/dm/:id/messages` | JWT | Send message (rate-limited: 5/5s) |
@@ -647,6 +649,7 @@ For full wire formats, see `docs/systems/websocket.md`.
 | `dm_message_created` | S->C | New message (user or system) |
 | `dm_message_updated` | S->C | Message edit |
 | `dm_message_deleted` | S->C | Message delete |
+| `dm_typing_stop` | S->C | Message send (clears indicator immediately) |
 
 ---
 

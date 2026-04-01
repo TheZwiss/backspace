@@ -111,6 +111,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | `dm_message_updated` | message: DmMessageWithUser | DM members |
 | `dm_message_deleted` | messageId, dmChannelId | DM members |
 | `dm_typing` | dmChannelId, userId, username | DM members (excludes sender) |
+| `dm_typing_stop` | dmChannelId, userId | DM members (excludes typer) |
 | `dm_embeds_resolved` | messageId, dmChannelId, embeds[] | DM members |
 
 ### Read State

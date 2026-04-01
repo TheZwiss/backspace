@@ -151,6 +151,8 @@ getChannelOrigin(channelId): string    // Returns '' for home, origin URL for re
 
 Built during `populateFromReady()` when WS ready events arrive from each instance.
 
+> **DM channels** are always mapped to `''` (home origin). `channelOriginMap` is only relevant for Space channels. DM operations always route to the home instance; S2S relay handles cross-instance distribution.
+
 ### API Client Resolution
 
 ```typescript
@@ -199,7 +201,7 @@ When a WS connection opens and authenticates, the server sends a `ready` event c
 2. Merge into the unified space list (replacing stale data from same origin)
 3. Build/update `channelOriginMap`, `channelToSpaceMap`
 4. Normalize remote asset URLs to absolute paths
-5. Deduplicate 1-on-1 DMs that appear from multiple origins (prefer home)
+5. Skip DM channels from remote origins — DMs are managed exclusively by the home instance
 6. Last-write-wins layout merge for sidebar order
 
 ---
@@ -261,7 +263,5 @@ Client-side and S2S federation serve different purposes:
 1. User adds a remote instance via Connections (client-side)
 2. The client triggers S2S peering between the two servers (automatic)
 3. User joins Spaces on the remote instance (client-side — API calls go directly to remote)
-4. User sends DMs (messages go to the appropriate server, S2S relay distributes to peers)
+4. User sends DMs — all DM writes go to the home instance. S2S relay distributes messages, reactions, and membership changes to peer instances.
 5. Friend requests and discovery work across instances (client loads friends from all connected instances, S2S relays friend events)
-
-> **Note on DMs (2026-04-01):** DM operations currently use a dual path — the client may route DM writes to the remote instance directly (client-side) or through the home instance (S2S relay). This is being unified to S2S-only for DMs. See the S2S DM Unification project.
