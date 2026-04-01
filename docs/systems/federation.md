@@ -233,8 +233,11 @@ Locations where normalization is applied:
 
 **Attribution verification (`verifyAttribution`):**
 - `verifyAttribution(actingUserHomeInstance, sourceInstance)` normalizes both via `extractDomain` and compares
-- Applied as the FIRST check in every relay event processor (13 handlers) — before user resolution or DB writes
-- Prevents malicious peers from forging events attributed to users on other instances
+- Two valid cases:
+  1. **Direct**: `authorDomain === sourceDomain` — standard S2S, peer sends events for its own users
+  2. **Homeward relay**: `authorDomain === extractDomain(getOurOrigin())` — a client-federation user sent a message on a remote server, and the S2S relay forwards it back to the author's home instance
+- Applied as the FIRST check in every relay event processor (13+ handlers) — before user resolution or DB writes
+- Prevents malicious peers from forging events attributed to users on *unrelated* instances (neither source nor receiver)
 
 All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalization, handling both bare domains and full URLs consistently.
 - `federation.ts:2447` -- same pattern in `processFriendRemoveEvent`
@@ -252,6 +255,10 @@ All origin comparisons use `extractDomain()` or `getOurOrigin()` with normalizat
 4. `getDmParticipants(channelId)` resolves all members to `(homeUserId, homeInstance)` pairs with profile snapshots
 5. `getGroupDmTargetOrigins(channelId)` returns `undefined` (no owner -> broadcast to all)
 6. `queueOutboxEvent(messageId, channelId, 'create', payload, undefined)` -> queued to ALL active peers
+
+**Channel creation (1-on-1 with federated user):**
+- When `POST /api/dm` creates a channel where either participant has `homeInstance` set, the deterministic `federatedId = SHA256(sorted([homeUserIdA, homeUserIdB])).slice(0, 32)` is computed and stored immediately
+- This ensures `findOrCreateDmChannel` on the receiving instance finds the existing channel when the S2S reply arrives, preventing duplicate channels
 
 **Inbound (receiving instance -- `processCreateEvent`):**
 1. Validate: `event.message` and `event.participants` (>= 2) required
