@@ -18,6 +18,7 @@ import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/Act
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
 import { Username } from '../ui/Username';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 const statusLabel: Record<string, string> = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', offline: 'Offline' };
 
@@ -29,6 +30,7 @@ interface FriendsPageProps {
 
 export function FriendsPage({ mobile }: FriendsPageProps) {
   const [activeTab, setActiveTab] = useState<Tab>('online');
+  const [pendingUnfriend, setPendingUnfriend] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
 
@@ -100,7 +102,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             ) : (
               <div className="divide-y divide-interactive-muted">
                 {onlineFriends.map(friend => (
-                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: friend.displayName ?? parseFederatedUsername(friend.username).baseName })} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
                 ))}
               </div>
             )}
@@ -120,7 +122,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
             ) : (
               <div className="divide-y divide-interactive-muted">
                 {friends.map(friend => (
-                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: friend.displayName ?? parseFederatedUsername(friend.username).baseName })} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
                 ))}
               </div>
             )}
@@ -353,6 +355,21 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       )}
 
       {renderTabContent()}
+
+      <ConfirmDialog
+        isOpen={pendingUnfriend !== null}
+        onClose={() => setPendingUnfriend(null)}
+        onConfirm={async () => {
+          if (pendingUnfriend) {
+            await removeFriend(pendingUnfriend.id);
+            setPendingUnfriend(null);
+          }
+        }}
+        title="Remove Friend"
+        description={`Are you sure you want to remove ${pendingUnfriend?.name ?? 'this user'} as a friend? You can always send them a new friend request later.`}
+        confirmLabel="Remove"
+        variant="danger"
+      />
     </div>
   );
 }
