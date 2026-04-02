@@ -122,11 +122,11 @@ export function ImageCropModal({
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2 p-4">
+        <div className="flex gap-3 p-4">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
+            className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors"
           >
             Cancel
           </button>
@@ -134,7 +134,7 @@ export function ImageCropModal({
             type="button"
             onClick={handleApply}
             disabled={isProcessing || !croppedAreaPixels}
-            className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+            className="flex-1 py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
           >
             {isProcessing ? 'Applying...' : 'Apply'}
           </button>

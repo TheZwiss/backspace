@@ -516,16 +516,16 @@ function DeleteIdentityDialog({
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2">
+        <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
+            className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
-            className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded transition-colors"
+            className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors"
           >
             Delete Identity
           </button>

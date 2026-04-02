@@ -94,10 +94,10 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               </p>
               <p className="text-xs text-txt-tertiary mt-1.5">You will become a regular member.</p>
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-3">
               <button
                 onClick={() => setSelectedUserId(null)}
-                className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors"
+                className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
                 disabled={transferring}
               >
                 Cancel
@@ -105,7 +105,7 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               <button
                 onClick={handleTransfer}
                 disabled={transferring}
-                className="px-3 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded transition-colors disabled:opacity-50"
+                className="flex-1 py-2.5 bg-accent-amber hover:bg-accent-amber/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
               >
                 {transferring ? 'Transferring...' : 'Transfer'}
               </button>
