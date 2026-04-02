@@ -472,7 +472,7 @@ export function ChannelSidebar() {
           </div>
 
           <div className="mt-[18px] px-2 mb-1 flex items-center justify-between group">
-            <span className="text-[12px] font-bold text-txt-tertiary uppercase tracking-wider">Direct Messages</span>
+            <span className="text-[12px] font-bold text-txt-tertiary tracking-wider">Direct Messages</span>
             <button
               onClick={() => openModal('newDm')}
               className="text-txt-tertiary hover:text-txt-primary transition-colors"
