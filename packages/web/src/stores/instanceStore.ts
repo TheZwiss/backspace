@@ -780,23 +780,48 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return;
     }
 
-    // Split server-known instances into two groups:
-    // - withToken: have a cached token → attempt reconnection
+    // Split server-known instances into three groups:
+    // - withToken: have a cached token and should auto-connect
     // - withoutToken: no cached token → add as error placeholder
+    // - userDisconnected: user explicitly disconnected → add as disconnected placeholder (no auto-connect)
     const withToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0]; entry: CachedInstanceToken }> = [];
     const withoutToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0] }> = [];
+    const userDisconnected: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0]; entry: CachedInstanceToken }> = [];
 
     for (const ri of currentUser.replicatedInstances) {
       const origin = ri.origin || `https://${ri.domain}`;
       // Never connect to ourselves — home WS is managed separately
       if (origin === window.location.origin) continue;
       if (get().instances.some(i => i.origin === origin)) continue; // already loaded
-      const entry = cached[origin];
-      if (entry) {
-        withToken.push({ origin, ri, entry });
+      const cachedEntry = cached[origin];
+      const regEntry = registry.get(origin);
+      if (cachedEntry) {
+        // Respect user's explicit disconnect — don't auto-reconnect
+        if (regEntry?.status === 'disconnected') {
+          userDisconnected.push({ origin, ri, entry: cachedEntry });
+        } else {
+          withToken.push({ origin, ri, entry: cachedEntry });
+        }
       } else {
         withoutToken.push({ origin, ri });
       }
+    }
+
+    // Add user-disconnected instances as disconnected placeholders (token preserved
+    // so reconnect is instant, but no WebSocket or API calls until user clicks reconnect)
+    if (userDisconnected.length > 0) {
+      set((state) => {
+        const placeholders: ConnectedInstance[] = userDisconnected.map(({ origin, entry: cachedEntry }) => ({
+          origin,
+          label: cachedEntry.label || new URL(origin).host,
+          token: cachedEntry.token,
+          user: currentUser,
+          username: cachedEntry.username || '',
+          status: 'disconnected' as const,
+          api: createApiClient(origin, () => cachedEntry.token),
+        }));
+        return { instances: [...state.instances, ...placeholders] };
+      });
     }
 
     // Immediately add tokenless placeholders so they're visible in Zustand
@@ -952,7 +977,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     }
 
     // Save final state to localStorage — persist ALL instances regardless of status
-    // so disconnected instances survive page reload and can auto-reconnect later
+    // so tokens are preserved for instant reconnect (registry controls auto-connect behavior)
     saveCachedTokens(get().instances, currentUser.id);
 
     // Hydrate pendingSyncOrigins from localStorage cache and mark auto-connect done
