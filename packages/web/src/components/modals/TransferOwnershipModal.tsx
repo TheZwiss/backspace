@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { Avatar } from '../ui/Avatar';
 
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -129,24 +130,19 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
                 <p className="text-xs text-txt-tertiary text-center py-4">No members found</p>
               ) : (
                 filteredMembers.map((member) => {
-                  const avatarUrl = member.user.avatar
-                    ? (member.user.avatar.startsWith('http') || member.user.avatar.startsWith('/') ? member.user.avatar : `/api/uploads/${member.user.avatar}`)
-                    : null;
                   return (
                     <button
                       key={member.userId}
                       onClick={() => setSelectedUserId(member.userId)}
                       className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
                     >
-                      <div className="w-8 h-8 rounded-full bg-surface-input flex-shrink-0 overflow-hidden flex items-center justify-center">
-                        {avatarUrl ? (
-                          <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xs font-bold text-txt-secondary">
-                            {(member.user.displayName || member.user.username).charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
+                      <Avatar
+                        src={member.user.avatar}
+                        name={member.user.displayName || member.user.username}
+                        size={32}
+                        user={member.user}
+                        userId={member.userId}
+                      />
                       <div className="flex flex-col items-start min-w-0">
                         <span className="text-sm text-txt-primary truncate max-w-full">
                           {member.user.displayName || member.user.username}
