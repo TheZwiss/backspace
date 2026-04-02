@@ -564,25 +564,26 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   reauthenticateInstance: async (origin: string, password: string) => {
     const inst = get().instances.find(i => i.origin === origin);
-    if (!inst) return;
 
-    // Remove the stale placeholder
-    set((state) => ({
-      instances: state.instances.filter(i => i.origin !== origin),
-    }));
-
-    // Remove its spaces from the space store
-    useSpaceStore.getState().removeInstanceSpaces(origin);
+    // Clean up existing instance if present (stale placeholder or disconnected entry)
+    if (inst) {
+      set((state) => ({
+        instances: state.instances.filter(i => i.origin !== origin),
+      }));
+      useSpaceStore.getState().removeInstanceSpaces(origin);
+    }
 
     // Disconnect any lingering WS
     disconnectWs(origin);
 
     // Re-connect through the standard flow (handles register/login)
     const currentUser = useAuthStore.getState().user;
+    if (!currentUser) return;
+
     await get().connectToRemote(
       origin,
       password,
-      currentUser?.displayName || undefined,
+      currentUser.displayName || undefined,
     );
 
     // Clear pending password sync — connectToRemote uses the current password
