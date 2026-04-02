@@ -318,6 +318,23 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // Batch fetch attachments for last messages
+    const lastMsgIds = [...lastMessageMap.values()].map(m => m.id);
+    const lastMsgAttachments = lastMsgIds.length > 0
+      ? db.select({
+          dmMessageId: schema.attachments.dmMessageId,
+          type: schema.attachments.mimetype,
+          filename: schema.attachments.originalName,
+        }).from(schema.attachments).where(inArray(schema.attachments.dmMessageId, lastMsgIds)).all()
+      : [];
+    const lastMsgAttachmentMap = new Map<string, Array<{ type: string; filename: string }>>();
+    for (const a of lastMsgAttachments) {
+      if (!a.dmMessageId) continue;
+      const arr = lastMsgAttachmentMap.get(a.dmMessageId) ?? [];
+      arr.push({ type: a.type, filename: a.filename });
+      lastMsgAttachmentMap.set(a.dmMessageId, arr);
+    }
+
     // Assemble results
     const dmChannels: DmChannel[] = [];
     for (const channelId of dmChannelIds) {
@@ -343,6 +360,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           userId: lastMsg.userId,
           content: lastMsg.content,
           createdAt: lastMsg.createdAt,
+          attachments: lastMsgAttachmentMap.get(lastMsg.id) ?? [],
         } : null,
       });
     }
