@@ -98,9 +98,11 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No one's online right now.</p>
               </div>
             ) : (
-              onlineFriends.map(friend => (
-                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
-              ))
+              <div className="divide-y divide-interactive-muted">
+                {onlineFriends.map(friend => (
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
+                ))}
+              </div>
             )}
           </div>
         );
@@ -116,9 +118,11 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No friends yet — add someone!</p>
               </div>
             ) : (
-              friends.map(friend => (
-                <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
-              ))
+              <div className="divide-y divide-interactive-muted">
+                {friends.map(friend => (
+                  <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => removeFriend(friend.id)} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
+                ))}
+              </div>
             )}
           </div>
         );
@@ -134,7 +138,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No pending requests — Nori is napping.</p>
               </div>
             ) : (
-              <>
+              <div className="divide-y divide-interactive-muted">
                 {pendingIncoming.map(req => (
                   <RequestItem
                     key={`${req.id}:${req._instanceOrigin}`}
@@ -152,7 +156,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                     onCancel={() => cancelFriendRequest(req.id)}
                   />
                 ))}
-              </>
+              </div>
             )}
           </div>
         );
@@ -890,7 +894,7 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
   const { baseName: friendBaseName } = parseFederatedUsername(friend.username);
   const friendDisplayName = friend.displayName ?? friendBaseName;
   return (
-    <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+    <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors mx-2">
       <div className="flex items-center gap-3">
         <Avatar src={friend.avatar} name={friendDisplayName} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
         <div className="flex flex-col leading-tight">
@@ -944,7 +948,7 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   const reqDisplayName = user.displayName ?? reqBaseName;
 
   return (
-    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors mx-2">
       <div className="flex items-center gap-3">
         <Avatar src={user.avatar} name={reqDisplayName} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
         <div className="flex flex-col">
