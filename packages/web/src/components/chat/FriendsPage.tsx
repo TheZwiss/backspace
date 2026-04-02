@@ -89,7 +89,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'online':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-4 tracking-wider px-2">
+            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               Online — {onlineFriends.length}
             </h2>
             {onlineFriends.length === 0 ? (
@@ -109,7 +109,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'all':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-4 tracking-wider px-2">
+            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               All Friends — {friends.length}
             </h2>
             {friends.length === 0 ? (
@@ -129,7 +129,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
       case 'pending':
         return (
           <div className="flex-1 overflow-y-auto p-4">
-            <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-4 tracking-wider px-2">
+            <h2 className="text-xs font-bold text-txt-tertiary mb-4 tracking-wider px-2">
               Pending — {pendingIncoming.length + pendingOutgoing.length}
             </h2>
             {[...pendingIncoming, ...pendingOutgoing].length === 0 ? (
@@ -249,7 +249,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
               <>
                 {activeFriends.length > 0 && (
                   <div className="mb-4">
-                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                    <h2 className="text-xs font-bold text-txt-tertiary mb-2 tracking-wider px-2">
                       Active — {activeFriends.length}
                     </h2>
                     {activeFriends.map(f => renderActivityFriend(f))}
@@ -257,7 +257,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 )}
                 {idleFriends.length > 0 && (
                   <div className="mb-4">
-                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                    <h2 className="text-xs font-bold text-txt-tertiary mb-2 tracking-wider px-2">
                       Online — {idleFriends.length}
                     </h2>
                     {idleFriends.map(f => renderActivityFriend(f))}
@@ -265,7 +265,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 )}
                 {offlineActivityFriends.length > 0 && (
                   <div>
-                    <h2 className="text-xs font-bold text-txt-tertiary uppercase mb-2 tracking-wider px-2">
+                    <h2 className="text-xs font-bold text-txt-tertiary mb-2 tracking-wider px-2">
                       Offline — {offlineActivityFriends.length}
                     </h2>
                     {offlineActivityFriends.map(f => renderActivityFriend(f, true))}
@@ -503,7 +503,7 @@ function AddFriendTab({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
             <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
           </svg>
-          <h2 className="text-base font-bold text-txt-primary uppercase">Find People</h2>
+          <h2 className="text-base font-bold text-txt-primary">Find People</h2>
         </div>
         <p className="text-sm text-txt-tertiary mb-4">Search by username or use <span className="font-medium text-txt-secondary">user@instance</span> to add someone directly.</p>
 
@@ -555,7 +555,7 @@ function AddFriendTab({
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" />
             </svg>
-            <span className="text-xs font-semibold uppercase tracking-wider text-txt-tertiary">Discover People</span>
+            <span className="text-xs font-semibold tracking-wider text-txt-tertiary">Discover People</span>
           </div>
         )}
 
