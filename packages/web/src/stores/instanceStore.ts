@@ -425,10 +425,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   disconnectInstance: (origin: string) => {
-    // Tear down WebSocket connection
+    // Tear down WebSocket connection (stops auto-reconnect)
     disconnectWs(origin);
 
-    // Update registry entry to disconnected (preserve the entry)
+    // Update registry entry to disconnected
     const registry = upsertRegistryEntry(get().registry, origin, {
       origin,
       status: 'disconnected',
@@ -437,17 +437,16 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     });
     const registryUpdatedAt = Date.now();
 
-    // Save the token BEFORE filtering it out of instances — this preserves
-    // the cached token in localStorage so reconnectInstance can restore it later.
-    const currentInstances = get().instances;
-    const userId = useAuthStore.getState().user?.id;
-    if (userId) saveCachedTokens(currentInstances, userId);
-
-    set((state) => ({
-      instances: state.instances.filter(i => i.origin !== origin),
-      registry,
-      registryUpdatedAt,
-    }));
+    // Keep the instance in the array with status 'disconnected' — preserves
+    // the token and API client so reconnect is instant (no re-auth needed).
+    set((state) => {
+      const updated = state.instances.map(i =>
+        i.origin === origin ? { ...i, status: 'disconnected' as const, error: undefined } : i
+      );
+      const userId = useAuthStore.getState().user?.id;
+      if (userId) saveCachedTokens(updated, userId);
+      return { instances: updated, registry, registryUpdatedAt };
+    });
 
     // Remove spaces from this instance from the space store
     useSpaceStore.getState().removeInstanceSpaces(origin);
