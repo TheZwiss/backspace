@@ -1374,6 +1374,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
     let authenticated = false;
     let userId: string | undefined;
     let username: string | undefined;
+    let isFederated = false;
 
     // Set auth timeout - must authenticate within 10 seconds
     const authTimeout = setTimeout(() => {
@@ -1427,6 +1428,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
           }
 
           authenticated = true;
+          isFederated = !!userRow.homeInstance;
           clearTimeout(authTimeout);
 
           // Update user status to online
@@ -1477,7 +1479,7 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
       // Handle authenticated events
       if (userId && username) {
         try {
-          handleClientEvent(parsed, userId, username, ws);
+          handleClientEvent(parsed, userId, username, ws, isFederated);
         } catch (err) {
           app.log.error({ err, eventType: parsed.type, userId }, 'Unhandled error in WS event handler');
           try {
