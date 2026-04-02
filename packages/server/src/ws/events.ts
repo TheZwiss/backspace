@@ -141,8 +141,18 @@ export function handleClientEvent(
   userId: string,
   username: string,
   ws: WebSocket,
+  isFederated: boolean,
 ): void {
   const type = event.type as string;
+
+  // Federation gating: federated users must use their home instance for DM operations
+  if (isFederated && type.startsWith('dm_')) {
+    connectionManager.sendToUser(userId, {
+      type: 'error',
+      message: 'Federated users must use their home instance for DM operations',
+    });
+    return;
+  }
 
   switch (type) {
     case 'message_create':
@@ -179,16 +189,16 @@ export function handleClientEvent(
       handleDmMessageDelete(event, userId);
       break;
     case 'reaction_add':
-      handleReactionAdd(event, userId);
+      handleReactionAdd(event, userId, isFederated);
       break;
     case 'reaction_remove':
-      handleReactionRemove(event, userId);
+      handleReactionRemove(event, userId, isFederated);
       break;
     case 'channel_ack':
-      handleChannelAck(event, userId);
+      handleChannelAck(event, userId, isFederated);
       break;
     case 'mark_unread':
-      handleMarkUnread(event, userId);
+      handleMarkUnread(event, userId, isFederated);
       break;
     case 'dm_call_start':
       handleDmCallStart(event, userId, username, ws);
@@ -1072,7 +1082,7 @@ function handleDmMessageDelete(event: Record<string, unknown>, userId: string): 
 
 // ─── Reaction Handlers ─────────────────────────────────────────────────────
 
-function handleReactionAdd(event: Record<string, unknown>, userId: string): void {
+function handleReactionAdd(event: Record<string, unknown>, userId: string, isFederated: boolean): void {
   const messageId = event.messageId as string;
   const emoji = event.emoji as string;
 
@@ -1118,6 +1128,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
   }
 
   // Fall through to DM message
+  if (isFederated) return;
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
 
@@ -1169,7 +1180,7 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string): void
   }
 }
 
-function handleReactionRemove(event: Record<string, unknown>, userId: string): void {
+function handleReactionRemove(event: Record<string, unknown>, userId: string, isFederated: boolean): void {
   const messageId = event.messageId as string;
   const emoji = event.emoji as string;
 
@@ -1203,6 +1214,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
   }
 
   // Fall through to DM message
+  if (isFederated) return;
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
 
@@ -1254,7 +1266,7 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string): v
 
 // ─── Read State Handler ────────────────────────────────────────────────────
 
-function handleChannelAck(event: Record<string, unknown>, userId: string): void {
+function handleChannelAck(event: Record<string, unknown>, userId: string, isFederated: boolean): void {
   const channelId = event.channelId as string;
   const messageId = event.messageId as string;
   if (!channelId || !messageId) return;
@@ -1266,6 +1278,7 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   if (spaceId) {
     if (!isMember(spaceId, userId)) return;
   } else {
+    if (isFederated) return;
     if (!isDmMember(channelId, userId)) return;
   }
 
@@ -1309,7 +1322,7 @@ function handleChannelAck(event: Record<string, unknown>, userId: string): void 
   });
 }
 
-function handleMarkUnread(event: Record<string, unknown>, userId: string): void {
+function handleMarkUnread(event: Record<string, unknown>, userId: string, isFederated: boolean): void {
   const channelId = event.channelId as string;
   const messageId = event.messageId as string;
   if (!channelId || !messageId) return;
@@ -1320,6 +1333,7 @@ function handleMarkUnread(event: Record<string, unknown>, userId: string): void 
   if (spaceId) {
     if (!isMember(spaceId, userId)) return;
   } else {
+    if (isFederated) return;
     if (!isDmMember(channelId, userId)) return;
   }
 
