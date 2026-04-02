@@ -1165,6 +1165,24 @@ function buildReadyPayload(userId: string): {
       : [];
     const dmLastMsgMap = new Map(dmLastMessages.map(m => [m.dmChannelId, m]));
 
+    // Batch: attachments for last messages (1 query)
+    const dmLastMsgAttachments = dmLastMsgIds.length > 0
+      ? batchInArray(dmLastMsgIds, ids =>
+          db.select({
+            dmMessageId: schema.attachments.dmMessageId,
+            type: schema.attachments.mimetype,
+            filename: schema.attachments.originalName,
+          }).from(schema.attachments).where(inArray(schema.attachments.dmMessageId, ids)).all()
+        )
+      : [];
+    const dmLastMsgAttachmentMap = new Map<string, Array<{ type: string; filename: string }>>();
+    for (const a of dmLastMsgAttachments) {
+      if (!a.dmMessageId) continue;
+      const arr = dmLastMsgAttachmentMap.get(a.dmMessageId) ?? [];
+      arr.push({ type: a.type, filename: a.filename });
+      dmLastMsgAttachmentMap.set(a.dmMessageId, arr);
+    }
+
     // Assemble DM channels with zero additional queries
     for (const dm of dmMemberships) {
       const dmChannel = dmChannelMap.get(dm.dmChannelId);
@@ -1189,6 +1207,7 @@ function buildReadyPayload(userId: string): {
           userId: last.userId,
           content: last.content,
           createdAt: last.createdAt,
+          attachments: dmLastMsgAttachmentMap.get(last.id) ?? [],
         } : null,
       });
     }
