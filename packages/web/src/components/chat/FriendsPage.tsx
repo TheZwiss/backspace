@@ -19,6 +19,8 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername } from '../../utils/identity';
 import { Username } from '../ui/Username';
 
+const statusLabel: Record<string, string> = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', offline: 'Offline' };
+
 type Tab = 'online' | 'all' | 'pending' | 'add' | 'activity';
 
 interface FriendsPageProps {
@@ -288,7 +290,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
           <span className="font-semibold text-sm text-txt-primary">Friends</span>
         </div>
       ) : (
-        <div className="h-12 px-4 flex items-center shadow-header flex-shrink-0 z-10 bg-surface-chat">
+        <div className="h-14 px-4 flex items-center border-b border-border-hard flex-shrink-0 z-10 bg-surface-chat">
           <div className="flex items-center gap-2 mr-4">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary">
               <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -894,17 +896,17 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
-            <span className="text-txt-tertiary text-[13px] opacity-0 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
+            <span className="text-txt-tertiary text-[13px] opacity-60 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[12px] text-txt-tertiary font-medium uppercase">{friend.status}</span>
+            <span className="text-[12px] text-txt-tertiary font-medium">{statusLabel[friend.status] ?? friend.status}</span>
             {instanceLabel && (
               <span className="text-[11px] text-txt-tertiary/60 font-medium">via {instanceLabel}</span>
             )}
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity pr-2">
         <button
           onClick={(e) => { e.stopPropagation(); onDm(); }}
           className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-primary transition-colors"
