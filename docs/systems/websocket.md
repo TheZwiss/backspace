@@ -213,3 +213,5 @@ reason: `'displaced'` (new tab) | `'session_closed'`
   userActivities?: Record<userId, Activity[]>
 }
 ```
+
+**Federation filtering:** When the connecting user is federated (`homeInstance` is set), the server omits all DM-related data from the ready payload. `dmChannels` and `activeCalls` are sent as empty arrays, and `readStates` is filtered to only include space channel entries. Federated users receive their DM data from their home instance's ready payload instead.
