@@ -11,17 +11,14 @@ import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { Avatar } from '../ui/Avatar';
 import { Mascot } from '../ui/Mascot';
-import { Username } from '../ui/Username';
-import { Tooltip } from '../ui/Tooltip';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
-import { parseFederatedUsername, isSelf } from '../../utils/identity';
-import { formatDmTimestamp, formatDmPreview } from '../../utils/dmFormatters';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmSearchBar } from './DmSearchBar';
+import { DmListItem } from './DmListItem';
 import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
@@ -442,7 +439,7 @@ export function ChannelSidebar() {
         <div className="flex-1 overflow-y-auto pt-4 px-2 no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }}>
           <div
             onClick={handleHomeClick}
-            className={`flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer mb-[2px] transition-colors group ${
+            className={`flex items-center gap-3 px-2 h-[42px] rounded-[6px] cursor-pointer mb-[2px] transition-colors group ${
               !currentChannelId && location.pathname !== '/explore'
                 ? 'bg-interactive-selected text-white'
                 : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
@@ -458,7 +455,7 @@ export function ChannelSidebar() {
 
           {/* Placeholder nav items */}
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
@@ -466,7 +463,7 @@ export function ChannelSidebar() {
             <span className="font-medium text-[16px]">Coming Soon</span>
           </div>
           <div
-            className="flex items-center gap-3 px-2 h-[42px] rounded-[4px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
+            className="flex items-center gap-3 px-2 h-[42px] rounded-[6px] mb-[2px] text-txt-tertiary cursor-default opacity-50"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="flex-shrink-0">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
@@ -488,138 +485,25 @@ export function ChannelSidebar() {
           </div>
 
           <div className="space-y-[2px]">
-            {dmChannels.map((dm) => {
-              const otherMembers = dm.members.filter(m => !isSelf(m, user));
-              const isGroup = !!dm.ownerId;
-              if (otherMembers.length === 0 && !isGroup) return null;
-              const isDmUnread = unreadChannels.has(dm.id) && currentChannelId !== dm.id;
-
-              const firstOtherDm = isGroup ? null : otherMembers[0];
-              const { baseName: dmBaseName, domain: dmDomain } = parseFederatedUsername(firstOtherDm?.username ?? '');
-              const dmDisplayName = isGroup
-                ? (otherMembers.length > 0
-                  ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-                  : 'Empty Group')
-                : firstOtherDm?.displayName ?? dmBaseName;
-
-              const dmItem = (
-                <div
-                  key={dm.id}
-                  onClick={() => handleChannelClick(dm.id)}
-                  className={`relative flex items-center gap-3 px-2 h-[42px] rounded-[4px] cursor-pointer transition-colors group ${
-                    currentChannelId === dm.id
-                      ? 'bg-interactive-selected text-white'
-                      : isDmUnread
-                        ? 'text-white hover:bg-interactive-hover'
-                        : 'text-txt-tertiary hover:bg-interactive-hover hover:text-txt-secondary'
-                  }`}
-                >
-                  {isDmUnread && (
-                    <div className="absolute -left-1 w-1 h-2 bg-white rounded-r-full" />
-                  )}
-                  {isGroup ? (
-                    <div className="relative w-8 h-8 flex-shrink-0">
-                      {otherMembers.slice(0, 2).map((m, i) => (
-                        <div
-                          key={m.id}
-                          className="absolute rounded-full overflow-hidden border-2 border-surface-channel"
-                          style={{
-                            width: 22, height: 22,
-                            left: i * 10,
-                            top: i * 6,
-                            zIndex: 2 - i,
-                          }}
-                        >
-                          <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={22} userId={m.homeUserId ?? m.id} user={m} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} user={otherMembers[0]} />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 min-w-0">
-                      <span
-                        className={`text-[15px] truncate leading-tight ${
-                          currentChannelId === dm.id ? 'text-white font-medium'
-                            : isDmUnread ? 'text-white font-bold'
-                            : 'text-txt-tertiary group-hover:text-txt-secondary font-medium'
-                        }`}
-                      >
-                        {dmDisplayName}
-                      </span>
-                      {!isGroup && dmDomain && (
-                        <Tooltip content={firstOtherDm?.username ?? ''} position="top">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/60 flex-shrink-0">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-                          </svg>
-                        </Tooltip>
-                      )}
-                      {dm.lastMessage && (
-                        <span className="text-[11px] text-txt-tertiary ml-auto flex-shrink-0">
-                          {formatDmTimestamp(dm.lastMessage.createdAt)}
-                        </span>
-                      )}
-                    </div>
-                    {(() => {
-                      const preview = formatDmPreview(dm.lastMessage ?? null);
-                      if (isGroup) {
-                        const lastMsg = dm.lastMessage;
-                        const senderName = (lastMsg && 'user' in lastMsg ? lastMsg.user?.displayName : undefined)
-                          ?? dm.members.find(m => m.id === lastMsg?.userId)?.displayName
-                          ?? 'Unknown';
-                        const groupPreview = preview
-                          ? `${senderName}: ${preview}`
-                          : `${dm.members.length} Members`;
-                        return (
-                          <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
-                            {groupPreview}
-                          </div>
-                        );
-                      }
-                      if (preview) {
-                        return (
-                          <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
-                            {preview}
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isGroup) {
-                        setLeaveGroupDmId(dm.id);
-                      } else {
-                        if (currentChannelId === dm.id) {
-                          navigate('/channels/@me');
-                          setCurrentChannel(null);
-                        }
-                        useSpaceStore.getState().closeDm(dm.id);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-txt-tertiary hover:text-txt-primary transition-opacity flex-shrink-0 ml-1"
-                    title={isGroup ? 'Leave Group DM' : 'Close DM'}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18.4 4L12 10.4L5.6 4L4 5.6L10.4 12L4 18.4L5.6 20L12 13.6L18.4 20L20 18.4L13.6 12L20 5.6L18.4 4Z" />
-                    </svg>
-                  </button>
-                </div>
-              );
-
-              if (isGroup) {
-                return (
-                  <div key={dm.id} onContextMenu={(e) => handleDmContextMenu(e, dm.id)}>
-                    {dmItem}
-                  </div>
-                );
-              }
-
-              return dmItem;
-            })}
+            {dmChannels.map((dm) => (
+              <DmListItem
+                key={dm.id}
+                dm={dm}
+                isActive={currentChannelId === dm.id}
+                isUnread={unreadChannels.has(dm.id) && currentChannelId !== dm.id}
+                user={user!}
+                onSelect={handleChannelClick}
+                onClose={(id) => {
+                  if (currentChannelId === id) {
+                    navigate('/channels/@me');
+                    setCurrentChannel(null);
+                  }
+                  useSpaceStore.getState().closeDm(id);
+                }}
+                onLeave={(id) => setLeaveGroupDmId(id)}
+                onContextMenu={handleDmContextMenu}
+              />
+            ))}
             {dmChannels.length === 0 && (
               <div className="flex flex-col items-center py-6 opacity-80">
                 <Mascot state="sleeping" className="w-20 h-20 mb-2" />
