@@ -100,11 +100,11 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No one's online right now.</p>
               </div>
             ) : (
-              <div className="divide-y divide-interactive-muted border-t border-interactive-muted">
+              <>
                 {onlineFriends.map(friend => (
                   <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: friend.displayName ?? parseFederatedUsername(friend.username).baseName })} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
                 ))}
-              </div>
+              </>
             )}
           </div>
         );
@@ -120,11 +120,11 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No friends yet — add someone!</p>
               </div>
             ) : (
-              <div className="divide-y divide-interactive-muted border-t border-interactive-muted">
+              <>
                 {friends.map(friend => (
                   <FriendItem key={`${friend.id}:${friend._instanceOrigin}`} friend={friend} onRemove={() => setPendingUnfriend({ id: friend.id, name: friend.displayName ?? parseFederatedUsername(friend.username).baseName })} onDm={() => handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance)} />
                 ))}
-              </div>
+              </>
             )}
           </div>
         );
@@ -140,7 +140,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                 <p className="text-txt-tertiary text-sm">No pending requests — Nori is napping.</p>
               </div>
             ) : (
-              <div className="divide-y divide-interactive-muted border-t border-interactive-muted">
+              <>
                 {pendingIncoming.map(req => (
                   <RequestItem
                     key={`${req.id}:${req._instanceOrigin}`}
@@ -158,7 +158,7 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
                     onCancel={() => cancelFriendRequest(req.id)}
                   />
                 ))}
-              </div>
+              </>
             )}
           </div>
         );
@@ -911,43 +911,41 @@ function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove
   const { baseName: friendBaseName } = parseFederatedUsername(friend.username);
   const friendDisplayName = friend.displayName ?? friendBaseName;
   return (
-    <div className="px-2">
-      <div className="flex items-center justify-between px-1 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors">
-        <div className="flex items-center gap-3 pl-2">
-          <Avatar src={friend.avatar} name={friendDisplayName} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
-          <div className="flex flex-col leading-tight">
-            <div className="flex items-center gap-1.5">
-              <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
-              <span className="text-txt-tertiary text-[13px] opacity-60 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[12px] text-txt-tertiary font-medium">{statusLabel[friend.status] ?? friend.status}</span>
-              {instanceLabel && (
-                <span className="text-[11px] text-txt-tertiary/60 font-medium">via {instanceLabel}</span>
-              )}
-            </div>
+    <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+      <div className="flex items-center gap-3">
+        <Avatar src={friend.avatar} name={friendDisplayName} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
+        <div className="flex flex-col leading-tight">
+          <div className="flex items-center gap-1.5">
+            <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
+            <span className="text-txt-tertiary text-[13px] opacity-60 group-hover:opacity-100 transition-opacity font-medium">@{friend.username}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[12px] text-txt-tertiary font-medium">{statusLabel[friend.status] ?? friend.status}</span>
+            {instanceLabel && (
+              <span className="text-[11px] text-txt-tertiary/60 font-medium">via {instanceLabel}</span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity pr-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); onDm(); }}
-            className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-primary transition-colors"
-            title="Message"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z" />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-colors"
-            title="Remove Friend"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
-        </div>
+      </div>
+      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity pr-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDm(); }}
+          className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-primary transition-colors"
+          title="Message"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-5H6V7h12v2z" />
+          </svg>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="w-9 h-9 flex items-center justify-center bg-surface-base rounded-full text-txt-tertiary hover:text-txt-danger transition-colors"
+          title="Remove Friend"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          </svg>
+        </button>
       </div>
     </div>
   );
@@ -967,10 +965,9 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   const reqDisplayName = user.displayName ?? reqBaseName;
 
   return (
-    <div className="px-2">
-      <div className="flex items-center justify-between px-1 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors">
-        <div className="flex items-center gap-3 pl-2">
-          <Avatar src={user.avatar} name={reqDisplayName} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
+    <div className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
+      <div className="flex items-center gap-3">
+        <Avatar src={user.avatar} name={reqDisplayName} size={32} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
             <span className="text-txt-primary font-bold text-sm">{reqDisplayName}</span>
@@ -1017,7 +1014,6 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
             </svg>
           </button>
         )}
-        </div>
       </div>
     </div>
   );
