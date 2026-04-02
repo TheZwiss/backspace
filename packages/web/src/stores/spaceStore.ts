@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { isSelf } from '../utils/identity';
+import { isSelf, canonicalUserMatch, parseFederatedUsername } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import { useAuthStore } from './authStore';
 import { useChatStore } from './chatStore';
@@ -115,6 +115,115 @@ async function pushLayoutToOrigin(
   }
 }
 
+/**
+ * Check if two users are the same person who registered on multiple instances.
+ *
+ * Extends `canonicalUserMatch` with a replicatedInstances cross-check:
+ * if user A has a replicated account on user B's home instance (or vice versa)
+ * and both share the same base username, they represent the same person.
+ *
+ * Example: local "nova" has replicatedInstances on orbit.ddns.net, and
+ * federated "nova@orbit.ddns.net" has homeInstance "orbit.ddns.net"
+ * with base username "nova" → same person.
+ */
+function isSameCounterpart(a: User, b: User): boolean {
+  // Fast path: canonical identity match handles same-ID, homeUserId cross-match,
+  // and same-instance username match
+  if (canonicalUserMatch(a, b)) return true;
+
+  // Extended check: replicatedInstances linking.
+  // If user A is local (no homeInstance) and has a replicated account on user B's
+  // homeInstance, and the base usernames match, they're the same person with
+  // accounts on both instances.
+  const aBase = parseFederatedUsername(a.username).baseName;
+  const bBase = parseFederatedUsername(b.username).baseName;
+  if (aBase !== bBase) return false;
+
+  // Check if A has a replicated account on B's home instance
+  if (b.homeInstance && a.replicatedInstances?.length) {
+    const bOrigin = b.homeInstance.startsWith('http') ? b.homeInstance : `https://${b.homeInstance}`;
+    for (const ri of a.replicatedInstances) {
+      const riOrigin = ri.origin ?? (ri.domain ? `https://${ri.domain}` : '');
+      if (riOrigin === bOrigin) return true;
+    }
+  }
+
+  // Check the reverse: B has a replicated account on A's home instance
+  if (a.homeInstance && b.replicatedInstances?.length) {
+    const aOrigin = a.homeInstance.startsWith('http') ? a.homeInstance : `https://${a.homeInstance}`;
+    for (const ri of b.replicatedInstances) {
+      const riOrigin = ri.origin ?? (ri.domain ? `https://${ri.domain}` : '');
+      if (riOrigin === aOrigin) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Safety-net deduplication for 1-on-1 DM channels.
+ *
+ * When the same person has accounts on multiple federated instances (or when
+ * federation relay creates duplicate channel records), the sidebar can show
+ * multiple DM entries for the same counterpart. This function collapses them
+ * by using identity matching to detect when two counterpart users represent
+ * the same person, keeping the DM with the most recent activity.
+ *
+ * Detection layers:
+ * 1. `canonicalUserMatch` — same local ID, homeUserId cross-match, or
+ *    same base username + home instance
+ * 2. `replicatedInstances` cross-check — local user has a replicated account
+ *    on the federated user's home instance with the same base username
+ *
+ * Group DMs (ownerId set) are never deduplicated.
+ */
+function deduplicateDmChannels(dmChannels: DmChannel[], myUserId: string): DmChannel[] {
+  const counterparts: Array<{ user: User; resultIdx: number }> = [];
+  const result: DmChannel[] = [];
+
+  for (const dm of dmChannels) {
+    // Only dedup 1-on-1 DMs (no ownerId = not a group DM)
+    if (dm.ownerId) {
+      result.push(dm);
+      continue;
+    }
+
+    // Find the counterpart (the other member)
+    const other = dm.members.find(m => {
+      const mHomeId = m.homeUserId ?? m.id;
+      return mHomeId !== myUserId && m.id !== myUserId;
+    });
+    if (!other) {
+      result.push(dm);
+      continue;
+    }
+
+    // Check if we've already seen a DM with a matching counterpart
+    let duplicate = false;
+    for (const prev of counterparts) {
+      if (isSameCounterpart(other, prev.user)) {
+        // Found a duplicate — keep the one with the most recent activity
+        const existing = result[prev.resultIdx]!;
+        const existingTime = existing.lastMessage?.createdAt ?? existing.createdAt;
+        const currentTime = dm.lastMessage?.createdAt ?? dm.createdAt;
+        if (currentTime > existingTime) {
+          result[prev.resultIdx] = dm;
+          prev.user = other; // update counterpart reference
+        }
+        duplicate = true;
+        break;
+      }
+    }
+
+    if (!duplicate) {
+      counterparts.push({ user: other, resultIdx: result.length });
+      result.push(dm);
+    }
+  }
+
+  return result;
+}
+
 export const useSpaceStore = create<SpaceState>((set, get) => ({
   spaces: [],
   currentSpaceId: null,
@@ -165,7 +274,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   setCategories: (categories) => set({ categories }),
   setMembers: (members) => set({ members }),
   setRoles: (roles) => set({ roles }),
-  setDmChannels: (dmChannels) => set({ dmChannels }),
+  setDmChannels: (dmChannels) => {
+    const myUserId = useAuthStore.getState().user?.id;
+    set({ dmChannels: myUserId ? deduplicateDmChannels(dmChannels, myUserId) : dmChannels });
+  },
 
   addDmChannel: (channel, origin?: string) => set((state) => {
     const channelOriginMap = new Map(state.channelOriginMap);
@@ -669,7 +781,13 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       const dmOrigin = get().channelOriginMap.get(dm.id);
       return dmOrigin !== origin;
     });
-    const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
+    const rawMergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
+
+    // Deduplicate 1-on-1 DMs that target the same counterpart across federated
+    // identities (e.g., local "nova" and federated "nova@orbit.ddns.net"
+    // are the same person — keep only the most recently active DM).
+    const myUserId = useAuthStore.getState().user?.id;
+    const mergedDms = myUserId ? deduplicateDmChannels(rawMergedDms, myUserId) : rawMergedDms;
 
     // Sort DMs using unread-first ordering. On initial load, unreadChannels may
     // still be empty (read states are processed after populateFromReady); the
