@@ -4,6 +4,7 @@ import { wsSend } from '../hooks/useWebSocket';
 import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
 import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
+import { sortDmChannels } from '../utils/dmSorting';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_CACHED_CHANNELS = 20;
@@ -285,12 +286,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ? { ...dm, lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() } }
             : dm
         );
-        updatedDms.sort((a, b) => {
-          const aTime = a.lastMessage?.createdAt ?? a.createdAt;
-          const bTime = b.lastMessage?.createdAt ?? b.createdAt;
-          return bTime - aTime;
-        });
-        setDmChannels(updatedDms);
+        setDmChannels(sortDmChannels(updatedDms, get().unreadChannels, get().currentChannelId));
       }
     }
 
@@ -589,6 +585,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     set({ readStates: rsMap, unreadChannels: unread });
+
+    // Re-sort DM list now that unread state is known (handles initial load
+    // where populateFromReady runs before read states are processed)
+    const { dmChannels, setDmChannels } = useSpaceStore.getState();
+    if (dmChannels.length > 0) {
+      setDmChannels(sortDmChannels(dmChannels, unread, currentChannelId));
+    }
   },
 
   markChannelUnread: (channelId: string) => {
@@ -651,6 +654,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       newUnread.delete(channelId);
       return { readStates: newReadStates, unreadChannels: newUnread };
     });
+
+    // Re-sort DM list when a DM is marked as read (moves from unread to read group)
+    if (isDmChannel(channelId)) {
+      const { dmChannels, setDmChannels } = useSpaceStore.getState();
+      setDmChannels(sortDmChannels(dmChannels, get().unreadChannels, channelId));
+    }
 
     // Send to the correct instance
     const origin = getChannelOrigin(channelId);

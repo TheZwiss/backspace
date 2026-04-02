@@ -3,6 +3,7 @@ import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannels
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
+import { sortDmChannels } from '../utils/dmSorting';
 import { useAuthStore } from './authStore';
 import { useChatStore } from './chatStore';
 
@@ -670,9 +671,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     });
     const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
 
+    // Sort DMs using unread-first ordering. On initial load, unreadChannels may
+    // still be empty (read states are processed after populateFromReady); the
+    // safety-net re-sort in setReadStates handles that case.
+    const { unreadChannels, currentChannelId } = useChatStore.getState();
+    const sortedDms = sortDmChannels(mergedDms, unreadChannels, currentChannelId);
+
     const update: Partial<SpaceState> = {
       spaces: mergedSpaces,
-      dmChannels: mergedDms,
+      dmChannels: sortedDms,
       channelToSpaceMap,
       channelLastMessageIds,
       spacePermissions,

@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
+import { sortDmChannels } from '../utils/dmSorting';
 import { registerSelfId } from '../utils/identity';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
@@ -561,8 +562,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
             const updatedDms = currentDmChannels.map(dm =>
               dm.id === existingDm.id ? { ...dm, lastMessage: event.message } : dm,
             );
-            updatedDms.sort((a, b) => (b.lastMessage?.createdAt ?? b.createdAt) - (a.lastMessage?.createdAt ?? a.createdAt));
-            setDms(updatedDms);
+            const { unreadChannels, currentChannelId } = useChatStore.getState();
+            setDms(sortDmChannels(updatedDms, unreadChannels, currentChannelId));
             break;
           }
         }
@@ -582,12 +583,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
             ? { ...dm, lastMessage: event.message }
             : dm
         );
-        updatedDms.sort((a, b) => {
-          const aTime = a.lastMessage?.createdAt ?? a.createdAt;
-          const bTime = b.lastMessage?.createdAt ?? b.createdAt;
-          return bTime - aTime;
-        });
-        setDms(updatedDms);
+        const { unreadChannels: unread, currentChannelId: curCh } = useChatStore.getState();
+        setDms(sortDmChannels(updatedDms, unread, curCh));
       }
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
