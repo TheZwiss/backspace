@@ -1335,10 +1335,12 @@ function buildReadyPayload(userId: string): {
     .where(eq(schema.readStates.userId, userId))
     .all();
 
-  const readStates: ReadState[] = readStateRows.map(rs => ({
-    channelId: rs.channelId,
-    lastReadMessageId: rs.lastReadMessageId,
-  }));
+  const readStates: ReadState[] = readStateRows
+    .filter(rs => !isFederated || visibleChannelIdSet.has(rs.channelId))
+    .map(rs => ({
+      channelId: rs.channelId,
+      lastReadMessageId: rs.lastReadMessageId,
+    }));
 
   // Build user activities snapshot for all visible users
   // Auto-inject customStatus as a 'custom' activity for users with no ephemeral activities
