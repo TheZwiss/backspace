@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { useSpaceStore } from '../../stores/spaceStore';
+import type { MemberWithUser } from '@backspace/shared';
+import { useSpaceStore, getApiForOrigin, type TaggedSpace } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { normalizeUserAssets } from '../../utils/assetUrls';
 import { Avatar } from '../ui/Avatar';
 
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const modalRef = useRef<HTMLDivElement>(null);
   const space = useSpaceStore((s) => s.spaces.find(sp => sp.id === spaceId));
-  const members = useSpaceStore((s) => s.members);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const transferOwnership = useSpaceStore((s) => s.transferOwnership);
   const addToast = useUIStore((s) => s.addToast);
@@ -16,6 +17,30 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [transferring, setTransferring] = useState(false);
+  const [members, setMembers] = useState<MemberWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch members for the target space on mount (federation-aware)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const origin = (space as TaggedSpace)?._instanceOrigin ?? '';
+        const client = getApiForOrigin(origin);
+        const fetched = await client.spaces.members(spaceId);
+        if (cancelled) return;
+        if (origin) {
+          for (const m of fetched) normalizeUserAssets(m.user, origin);
+        }
+        setMembers(fetched);
+      } catch {
+        // Space may have been deleted or we lost access
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [spaceId, space]);
 
   // Filter members: exclude self, filter by search
   const filteredMembers = useMemo(() => {
@@ -126,7 +151,9 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               />
             </div>
             <div className="flex-1 overflow-y-auto p-2 min-h-0">
-              {filteredMembers.length === 0 ? (
+              {loading ? (
+                <p className="text-xs text-txt-tertiary text-center py-4">Loading members...</p>
+              ) : filteredMembers.length === 0 ? (
                 <p className="text-xs text-txt-tertiary text-center py-4">No members found</p>
               ) : (
                 filteredMembers.map((member) => {
