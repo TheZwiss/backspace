@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { formatDmTimestamp } from './dmFormatters';
+import { formatDmPreview } from './dmFormatters';
 
 /** Build a local-time Date: new Date(year, month-1, day, hour, minute) as a timestamp. */
 function localTs(year: number, month: number, day: number, hour = 12, minute = 0): number {
@@ -56,5 +57,126 @@ describe('formatDmTimestamp', () => {
 
     const lastNight = localTs(2026, 4, 1, 23, 55); // Apr 1 2026, 23:55 local
     expect(formatDmTimestamp(lastNight)).toBe('Yesterday');
+  });
+});
+
+describe('formatDmPreview', () => {
+  it('returns null for null lastMessage', () => {
+    expect(formatDmPreview(null)).toBeNull();
+  });
+
+  it('returns text content when no attachments', () => {
+    expect(formatDmPreview({
+      content: 'hello world',
+    })).toBe('hello world');
+  });
+
+  it('returns text content when attachments array is empty', () => {
+    expect(formatDmPreview({
+      content: 'hello world', attachments: [],
+    })).toBe('hello world');
+  });
+
+  it('shows image icon for image-only message', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [{ type: 'image/png', filename: 'photo.png' }],
+    })).toBe('📷 Image');
+  });
+
+  it('shows video icon for video-only message', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [{ type: 'video/mp4', filename: 'clip.mp4' }],
+    })).toBe('🎬 Video');
+  });
+
+  it('shows audio icon for audio-only message', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [{ type: 'audio/mpeg', filename: 'song.mp3' }],
+    })).toBe('🎵 Audio');
+  });
+
+  it('shows file icon with filename for other types', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [{ type: 'application/pdf', filename: 'report.pdf' }],
+    })).toBe('📎 report.pdf');
+  });
+
+  it('shows count for multiple attachments without text', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [
+        { type: 'image/png', filename: 'a.png' },
+        { type: 'image/jpeg', filename: 'b.jpg' },
+      ],
+    })).toBe('📎 2 files');
+  });
+
+  it('appends image icon to text when text + image', () => {
+    expect(formatDmPreview({
+      content: 'check this out',
+      attachments: [{ type: 'image/png', filename: 'photo.png' }],
+    })).toBe('check this out 📷');
+  });
+
+  it('appends video icon to text when text + video', () => {
+    expect(formatDmPreview({
+      content: 'look at this',
+      attachments: [{ type: 'video/webm', filename: 'vid.webm' }],
+    })).toBe('look at this 🎬');
+  });
+
+  it('appends audio icon to text when text + audio', () => {
+    expect(formatDmPreview({
+      content: 'listen',
+      attachments: [{ type: 'audio/ogg', filename: 'voice.ogg' }],
+    })).toBe('listen 🎵');
+  });
+
+  it('appends file icon to text when text + file', () => {
+    expect(formatDmPreview({
+      content: 'here you go',
+      attachments: [{ type: 'application/zip', filename: 'archive.zip' }],
+    })).toBe('here you go 📎');
+  });
+
+  it('uses generic file icon for mixed attachment types with text', () => {
+    expect(formatDmPreview({
+      content: 'stuff',
+      attachments: [
+        { type: 'image/png', filename: 'a.png' },
+        { type: 'application/pdf', filename: 'b.pdf' },
+      ],
+    })).toBe('stuff 📎');
+  });
+
+  it('returns null for message with no content and no attachments', () => {
+    expect(formatDmPreview({
+      content: null,
+    })).toBeNull();
+  });
+
+  it('returns null for empty string content and no attachments', () => {
+    expect(formatDmPreview({
+      content: '',
+    })).toBeNull();
+  });
+
+  // Compatibility with Attachment type (mimetype/originalName field names)
+  it('works with mimetype and originalName fields (Attachment shape)', () => {
+    expect(formatDmPreview({
+      content: null,
+      attachments: [{ mimetype: 'image/png', originalName: 'photo.png' }],
+    })).toBe('📷 Image');
+  });
+
+  it('appends icon to text with mimetype/originalName fields', () => {
+    expect(formatDmPreview({
+      content: 'check this',
+      attachments: [{ mimetype: 'video/mp4', originalName: 'clip.mp4' }],
+    })).toBe('check this 🎬');
   });
 });
