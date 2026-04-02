@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
 import { verifyJwt } from '../utils/auth.js';
 import { getDb, schema } from '../db/index.js';
-import { eq, and, inArray, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, or, inArray, isNull, desc, sql } from 'drizzle-orm';
 import { handleClientEvent } from './events.js';
 import { computePermissions, PermissionBits, permissionsToString } from '../utils/permissions.js';
 import type {
@@ -1142,28 +1142,28 @@ function buildReadyPayload(userId: string): {
     const dmUserMap = new Map(allDmUsers.map(u => [u.id, u]));
 
     // Batch: last message per DM channel.
-    // Use MAX(created_at) instead of MAX(id) because federated relay messages
-    // can have local snowflake IDs that don't match chronological order — a
-    // message sent earlier on the remote instance can arrive (and get a higher
-    // local ID) after a message sent later.  The DM REST API already uses
-    // ORDER BY created_at DESC, so this keeps the ready payload consistent.
-    const dmLastMsgIdRows = batchInArray(
+    // Two-step approach (same as GET /api/dm): get MAX(created_at) per channel,
+    // then fetch the actual message rows matching those timestamps.
+    const dmMaxTimestamps = batchInArray(
       dmChannelIds,
       ids => db.select({
         dmChannelId: schema.dmMessages.dmChannelId,
-        lastId: sql<string>`(
-          SELECT id FROM ${schema.dmMessages} sub
-          WHERE sub.dm_channel_id = ${schema.dmMessages.dmChannelId}
-          ORDER BY sub.created_at DESC, sub.id DESC
-          LIMIT 1
-        )`,
+        maxCreatedAt: sql<number>`MAX(${schema.dmMessages.createdAt})`.as('max_created_at'),
       }).from(schema.dmMessages).where(inArray(schema.dmMessages.dmChannelId, ids)).groupBy(schema.dmMessages.dmChannelId).all(),
     );
-    const dmLastMsgIds = dmLastMsgIdRows.map(r => r.lastId).filter((id): id is string => id != null);
-    const dmLastMessages = dmLastMsgIds.length > 0
-      ? batchInArray(dmLastMsgIds, ids => db.select().from(schema.dmMessages).where(inArray(schema.dmMessages.id, ids)).all())
-      : [];
-    const dmLastMsgMap = new Map(dmLastMessages.map(m => [m.dmChannelId, m]));
+    const dmLastMsgMap = new Map<string, typeof schema.dmMessages.$inferSelect>();
+    if (dmMaxTimestamps.length > 0) {
+      const conditions = dmMaxTimestamps.map(t =>
+        and(eq(schema.dmMessages.dmChannelId, t.dmChannelId), eq(schema.dmMessages.createdAt, t.maxCreatedAt!))
+      );
+      const dmLastMessages = db.select().from(schema.dmMessages).where(or(...conditions)).all();
+      for (const m of dmLastMessages) {
+        if (!dmLastMsgMap.has(m.dmChannelId)) {
+          dmLastMsgMap.set(m.dmChannelId, m);
+        }
+      }
+    }
+    const dmLastMsgIds = [...dmLastMsgMap.values()].map(m => m.id);
 
     // Batch: attachments for last messages (1 query)
     const dmLastMsgAttachments = dmLastMsgIds.length > 0
@@ -1211,6 +1211,7 @@ function buildReadyPayload(userId: string): {
         } : null,
       });
     }
+
   }
 
   // Get Space Folders
