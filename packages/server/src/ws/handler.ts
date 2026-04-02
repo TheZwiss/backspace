@@ -1108,8 +1108,8 @@ function buildReadyPayload(userId: string): {
   // Store user's space IDs for broadcasting
   connectionManager.setUserSpaces(userId, spaceIds);
 
-  // Get DM channels
-  const dmMemberships = db.select()
+  // Get DM channels — skip entirely for federated users (they get DMs from their home instance)
+  const dmMemberships = isFederated ? [] : db.select()
     .from(schema.dmMembers)
     .where(and(
       eq(schema.dmMembers.userId, userId),
