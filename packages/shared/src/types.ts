@@ -287,12 +287,21 @@ export interface ActiveCallInfo {
 
 // ─── DM Types ───────────────────────────────────────────────────────────────
 
+export interface DmLastMessagePreview {
+  id: string;
+  dmChannelId: string;
+  userId: string;
+  content: string | null;
+  createdAt: number;
+  attachments?: Array<{ type: string; filename: string }>;
+}
+
 export interface DmChannel {
   id: string;
   ownerId?: string | null;
   createdAt: number;
   members: User[];
-  lastMessage?: DmMessage | null;
+  lastMessage?: DmLastMessagePreview | DmMessageWithUser | null;
 }
 
 export interface DmMessage {
