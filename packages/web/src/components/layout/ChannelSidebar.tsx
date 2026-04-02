@@ -17,6 +17,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
+import { formatDmTimestamp, formatDmPreview } from '../../utils/dmFormatters';
 import { joinVoiceChannel, broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../../utils/voice';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -554,16 +555,37 @@ export function ChannelSidebar() {
                           </svg>
                         </Tooltip>
                       )}
+                      {dm.lastMessage && (
+                        <span className="text-[11px] text-txt-tertiary ml-auto flex-shrink-0">
+                          {formatDmTimestamp(dm.lastMessage.createdAt)}
+                        </span>
+                      )}
                     </div>
-                    {isGroup ? (
-                      <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
-                        {dm.members.length} Members
-                      </div>
-                    ) : dm.lastMessage ? (
-                      <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
-                        {dm.lastMessage.content}
-                      </div>
-                    ) : null}
+                    {(() => {
+                      const preview = formatDmPreview(dm.lastMessage ?? null);
+                      if (isGroup) {
+                        const lastMsg = dm.lastMessage;
+                        const senderName = (lastMsg && 'user' in lastMsg ? lastMsg.user?.displayName : undefined)
+                          ?? dm.members.find(m => m.id === lastMsg?.userId)?.displayName
+                          ?? 'Unknown';
+                        const groupPreview = preview
+                          ? `${senderName}: ${preview}`
+                          : `${dm.members.length} Members`;
+                        return (
+                          <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
+                            {groupPreview}
+                          </div>
+                        );
+                      }
+                      if (preview) {
+                        return (
+                          <div className="text-[12px] text-txt-tertiary truncate leading-tight mt-0.5">
+                            {preview}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <button
                     onClick={(e) => {
