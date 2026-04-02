@@ -53,6 +53,7 @@ export async function authenticate(
       id: schema.users.id,
       isDeleted: schema.users.isDeleted,
       passwordChangedAt: schema.users.passwordChangedAt,
+      homeInstance: schema.users.homeInstance,
     }).from(schema.users).where(eq(schema.users.id, payload.userId)).get();
 
     if (!user || user.isDeleted === 1) {
@@ -69,6 +70,7 @@ export async function authenticate(
 
     (request as FastifyRequest & { userId: string; username: string }).userId = payload.userId;
     (request as FastifyRequest & { userId: string; username: string }).username = payload.username;
+    (request as FastifyRequest & { userId: string; username: string }).homeInstance = user.homeInstance ?? null;
   } catch {
     return reply.code(401).send({ error: 'Invalid or expired token', statusCode: 401 });
   }
@@ -85,9 +87,22 @@ export async function requireAdmin(
   }
 }
 
+export async function requireLocalUser(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (request.homeInstance) {
+    return reply.code(403).send({
+      error: 'Federated users must use their home instance for DM operations',
+      statusCode: 403,
+    });
+  }
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     userId: string;
     username: string;
+    homeInstance: string | null;
   }
 }
