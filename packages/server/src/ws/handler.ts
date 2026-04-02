@@ -906,6 +906,7 @@ function buildReadyPayload(userId: string): {
     throw new Error('User not found');
   }
   const user = sanitizeUser(userRow, true);
+  const isFederated = !!userRow.homeInstance;
 
   // Cache showActivity and status for Rich Presence
   connectionManager.setUserShowActivity(userId, userRow.showActivity !== 0);
@@ -919,6 +920,7 @@ function buildReadyPayload(userId: string): {
 
   const spaceIds = memberships.map(m => m.spaceId);
 
+  const visibleChannelIdSet = new Set<string>();
   const spaces: SpaceWithChannelsAndMembers[] = [];
 
   if (spaceIds.length > 0) {
@@ -1057,6 +1059,7 @@ function buildReadyPayload(userId: string): {
         const chPerms = computePermissions(userId, spaceRow.id, ch.id);
         const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
         if (hasView) {
+          visibleChannelIdSet.add(ch.id);
           visibleChannels.push({
             id: ch.id,
             spaceId: ch.spaceId,
