@@ -46,7 +46,7 @@ function getAttachmentLabel(mimeType: string, name: string): string {
  */
 function getUnifiedAttachmentIcon(attachments: PreviewAttachment[]): string {
   const icons = new Set(attachments.map(a => getAttachmentIcon(resolveAttachmentType(a))));
-  return icons.size === 1 ? [...icons][0] : '📎';
+  return icons.size === 1 ? [...icons][0]! : '📎';
 }
 
 /**
@@ -74,7 +74,7 @@ export function formatDmPreview(lastMessage: PreviewMessage | null | undefined):
 
   if (!hasText && hasAttachments) {
     if (attachments!.length === 1) {
-      const a = attachments![0];
+      const a = attachments![0]!;
       return getAttachmentLabel(resolveAttachmentType(a), resolveAttachmentName(a));
     }
     return `📎 ${attachments!.length} files`;
