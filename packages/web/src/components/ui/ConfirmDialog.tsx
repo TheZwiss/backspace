@@ -38,8 +38,6 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   const isDanger = variant === 'danger';
-  const accentBg = isDanger ? 'bg-accent-rose/10' : 'bg-accent-amber/10';
-  const accentBorder = isDanger ? 'border-accent-rose/20' : 'border-accent-amber/20';
   const confirmBg = isDanger
     ? 'bg-accent-rose hover:bg-accent-rose/80'
     : 'bg-accent-amber hover:bg-accent-amber/80';
@@ -50,24 +48,22 @@ export function ConfirmDialog({
         className="absolute inset-0 bg-black/50"
         onClick={() => { if (!loading) onClose(); }}
       />
-      <div className="relative max-w-sm w-full mx-4 glass-modal rounded-lg animate-slide-up">
-        <div className="p-4">
-          <h3 className="text-base font-semibold text-txt-primary mb-3">{title}</h3>
-          <div className={`p-3 rounded-lg ${accentBg} border ${accentBorder} mb-4`}>
-            <div className="text-sm text-txt-secondary">{description}</div>
-          </div>
-          <div className="flex justify-end gap-2">
+      <div className="relative max-w-[440px] w-full mx-4 glass-modal rounded-xl animate-slide-up">
+        <div className="p-5">
+          <h3 className="text-lg font-semibold text-txt-primary mb-2">{title}</h3>
+          <div className="text-sm text-txt-secondary mb-5 leading-relaxed">{description}</div>
+          <div className="flex gap-3">
             <button
               onClick={onClose}
               disabled={loading}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
             >
               {cancelLabel}
             </button>
             <button
               onClick={onConfirm}
               disabled={loading}
-              className={`px-3 py-1.5 ${confirmBg} text-white text-sm font-medium rounded transition-colors disabled:opacity-50`}
+              className={`flex-1 py-2.5 ${confirmBg} text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50`}
             >
               {loading ? 'Please wait...' : confirmLabel}
             </button>
