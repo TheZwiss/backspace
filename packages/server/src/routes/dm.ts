@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
-import { authenticate } from '../utils/auth.js';
+import { authenticate, requireLocalUser } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
@@ -243,10 +243,12 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
 }
 
 export async function dmRoutes(app: FastifyInstance): Promise<void> {
+  // Centralized auth + federation gating for all DM routes
+  app.addHook('preHandler', authenticate);
+  app.addHook('preHandler', requireLocalUser);
+
   // GET /api/dm - List user's DM channels
-  app.get('/api/dm', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.get('/api/dm', async (request, reply) => {
     const db = getDb();
 
     const memberships = db.select()
@@ -356,9 +358,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/dm - Create or get existing DM channel
-  app.post<{ Body: CreateDmRequest }>('/api/dm', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.post<{ Body: CreateDmRequest }>('/api/dm', async (request, reply) => {
     const { userId, homeUserId, homeInstance } = request.body;
 
     const db = getDb();
@@ -526,9 +526,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/dm/group - Create a new group DM with multiple members
-  app.post<{ Body: CreateGroupDmRequest }>('/api/dm/group', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.post<{ Body: CreateGroupDmRequest }>('/api/dm/group', async (request, reply) => {
     const { users: userIdentities, fromDmChannelId } = request.body;
 
     // Validate input is a non-empty array of at least 2 identity objects
@@ -804,9 +802,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/dm/:id - Close (hide) a DM channel for the requesting user
-  app.delete<{ Params: { id: string } }>('/api/dm/:id', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/api/dm/:id', async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
@@ -842,9 +838,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/dm/:id/members - Add a user to an existing DM channel (group DM upgrade)
-  app.post<{ Params: { id: string }; Body: AddDmMemberRequest }>('/api/dm/:id/members', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: AddDmMemberRequest }>('/api/dm/:id/members', async (request, reply) => {
     const { id } = request.params;
     const { userId: targetUserIdRaw, homeUserId, homeInstance } = request.body;
 
@@ -1116,9 +1110,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/dm/:id/members - Leave a group DM
-  app.delete<{ Params: { id: string } }>('/api/dm/:id/members', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/api/dm/:id/members', async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
@@ -1406,9 +1398,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // GET /api/dm/:id/messages - Get DM messages with pagination
-  app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/dm/:id/messages', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/dm/:id/messages', async (request, reply) => {
     const { id } = request.params;
     const before = request.query.before;
     const limit = Math.min(Math.max(Number(request.query.limit) || 50, 1), 100);
@@ -1522,7 +1512,6 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/dm/:id/messages - Send a DM message
   app.post<{ Params: { id: string }; Body: CreateDmMessageRequest }>('/api/dm/:id/messages', {
-    preHandler: authenticate,
     config: {
       rateLimit: {
         max: 5,
@@ -1607,9 +1596,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PATCH /api/dm/messages/:id - Edit a DM message
-  app.patch<{ Params: { id: string }; Body: { content: string } }>('/api/dm/messages/:id', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.patch<{ Params: { id: string }; Body: { content: string } }>('/api/dm/messages/:id', async (request, reply) => {
     const { id } = request.params;
     const { content } = request.body;
 
@@ -1671,9 +1658,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/dm/messages/:id - Delete a DM message
-  app.delete<{ Params: { id: string } }>('/api/dm/messages/:id', {
-    preHandler: authenticate,
-  }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>('/api/dm/messages/:id', async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
 
