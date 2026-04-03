@@ -5,7 +5,7 @@ import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
 import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from '../ws/handler.js';
-import { tombstoneUser } from '../utils/userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
 import { deleteUploadFile } from '../utils/fileCleanup.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import type { AdminUser, AdminUserListResponse, AdminResetPasswordResponse } from '@backspace/shared';
@@ -297,9 +297,31 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Collect broadcast targets BEFORE tombstone deletes DB rows
+      const { memberSpaceIds, targetUserIds } = collectDeletionBroadcastTargets(targetId);
+
       const filesToDelete = tombstoneUser(targetId);
       for (const filename of filesToDelete) {
         deleteUploadFile(filename);
+      }
+
+      // Broadcast member_left to each space
+      for (const spaceId of memberSpaceIds) {
+        connectionManager.sendToSpace(spaceId, {
+          type: 'member_left',
+          spaceId,
+          userId: targetId,
+        });
+      }
+
+      // Broadcast user_updated with sanitized deleted user data
+      const deletedRow = getDb().select().from(schema.users).where(eq(schema.users.id, targetId)).get();
+      if (deletedRow) {
+        const deletedUser = sanitizeUser(deletedRow);
+        const userUpdatedEvent = { type: 'user_updated' as const, user: deletedUser };
+        for (const uid of targetUserIds) {
+          connectionManager.sendToUser(uid, userUpdatedEvent);
+        }
       }
 
       connectionManager.forceDisconnectUser(targetId);
