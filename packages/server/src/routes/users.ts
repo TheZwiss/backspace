@@ -7,7 +7,7 @@ import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, 
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
-import { tombstoneUser } from '../utils/userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
@@ -143,12 +143,34 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Collect broadcast targets BEFORE tombstone deletes DB rows
+    const { memberSpaceIds, targetUserIds } = collectDeletionBroadcastTargets(request.userId);
+
     // Tombstone the account (transaction handles all DB cleanup)
     const filesToDelete = tombstoneUser(request.userId);
 
     // Clean up files from disk after transaction commits
     for (const filename of filesToDelete) {
       deleteUploadFile(filename);
+    }
+
+    // Broadcast member_left to each space
+    for (const spaceId of memberSpaceIds) {
+      connectionManager.sendToSpace(spaceId, {
+        type: 'member_left',
+        spaceId,
+        userId: request.userId,
+      });
+    }
+
+    // Broadcast user_updated with sanitized deleted user data
+    const deletedRow = getDb().select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (deletedRow) {
+      const deletedUser = sanitizeUser(deletedRow);
+      const userUpdatedEvent = { type: 'user_updated' as const, user: deletedUser };
+      for (const uid of targetUserIds) {
+        connectionManager.sendToUser(uid, userUpdatedEvent);
+      }
     }
 
     // Force-close all WebSocket connections
