@@ -3,7 +3,7 @@ import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
@@ -11,6 +11,8 @@ import { tombstoneUser } from '../utils/userDeletion.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
+import { buildFederationHeaders, getOurOrigin } from '../utils/federationAuth.js';
+import { extractDomain } from './federation.js';
 import path from 'path';
 
 /** Validates that a URL is a safe asset URL (relative upload path, bare filename, or http/https) */
@@ -577,6 +579,99 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.code(200).send({ ok: true, updatedAt });
+  });
+
+  // POST /api/users/@me/federation-identity/delete — request identity deletion on remote instances via S2S
+  app.post<{ Body: FederationIdentityDeleteRequest }>('/api/users/@me/federation-identity/delete', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const { origins, mode } = request.body;
+
+    if (!mode || !['soft', 'full'].includes(mode)) {
+      return reply.code(400).send({ error: 'Invalid mode: must be "soft" or "full"', statusCode: 400 });
+    }
+    if (!Array.isArray(origins) || origins.length === 0 || !origins.every(o => typeof o === 'string')) {
+      return reply.code(400).send({ error: 'origins must be a non-empty array of strings', statusCode: 400 });
+    }
+
+    const db = getDb();
+    const ourOrigin = getOurOrigin();
+    const homeInstance = extractDomain(ourOrigin);
+
+    const results: Record<string, FederationIdentityDeleteResult> = {};
+
+    await Promise.all(origins.map(async (origin) => {
+      try {
+        // Look up peer
+        const peer = db
+          .select()
+          .from(schema.federationPeers)
+          .where(eq(schema.federationPeers.origin, origin))
+          .get();
+
+        if (!peer || peer.status !== 'active') {
+          results[origin] = { success: false, error: 'no_active_peer' };
+          return;
+        }
+
+        // Build HMAC-signed request
+        const body = JSON.stringify({
+          homeUserId: request.userId,
+          homeInstance,
+          mode,
+        });
+
+        const headers = buildFederationHeaders(body, peer.hmacSecret, ourOrigin);
+
+        // Send to remote with 15s timeout
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+
+        try {
+          const response = await fetch(`${origin}/api/federation/identity`, {
+            method: 'DELETE',
+            headers,
+            body,
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+
+          const data = await response.json() as Record<string, unknown>;
+
+          if (response.ok) {
+            results[origin] = { success: true };
+          } else if (data.error === 'owns_spaces') {
+            results[origin] = {
+              success: false,
+              error: 'owns_spaces',
+              ownedSpaces: data.ownedSpaces as { id: string; name: string }[],
+            };
+          } else {
+            results[origin] = {
+              success: false,
+              error: (data.error as string) || `HTTP ${response.status}`,
+            };
+          }
+        } catch (err) {
+          clearTimeout(timeout);
+          if (err instanceof Error && err.name === 'AbortError') {
+            results[origin] = { success: false, error: 'timeout' };
+          } else {
+            results[origin] = { success: false, error: 'unreachable' };
+          }
+        }
+      } catch (err) {
+        results[origin] = {
+          success: false,
+          error: err instanceof Error ? err.message : 'Unknown error',
+        };
+      }
+    }));
+
+    const response: FederationIdentityDeleteResponse = { results };
+    return reply.code(200).send(response);
   });
 
   // PUT /api/users/@me/space-layout — save sidebar layout (reorder, folders)
