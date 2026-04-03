@@ -50,6 +50,8 @@ import type {
   InvitePreview,
   GifResult,
   FederationRegistryEntry,
+  FederationIdentityDeleteRequest,
+  FederationIdentityDeleteResponse,
 } from '@backspace/shared';
 
 export class RateLimitError extends Error {
@@ -93,6 +95,7 @@ export class BackspaceApiClient {
     getMutuals: (id: string, homeUserId?: string) => Promise<{ mutualFriends: User[]; mutualSpaces: { id: string; name: string; icon: string | null; avatarColor: string | null }[] }>;
     getFederationRegistry: () => Promise<{ registry: FederationRegistryEntry[]; updatedAt: number }>;
     putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) => Promise<{ ok: boolean; updatedAt: number }>;
+    deleteFederationIdentity: (data: FederationIdentityDeleteRequest) => Promise<FederationIdentityDeleteResponse>;
   };
 
   readonly spaceLayout: {
@@ -416,6 +419,10 @@ export class BackspaceApiClient {
       putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) =>
         request<{ ok: boolean; updatedAt: number }>(
           'PUT', '/users/@me/federation-registry', data
+        ),
+      deleteFederationIdentity: (data: FederationIdentityDeleteRequest) =>
+        request<FederationIdentityDeleteResponse>(
+          'POST', '/users/@me/federation-identity/delete', data
         ),
     };
 
