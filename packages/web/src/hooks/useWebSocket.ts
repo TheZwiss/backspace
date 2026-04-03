@@ -13,6 +13,7 @@ import { registerSelfId } from '../utils/identity';
 import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
+import { useDiscoverStore } from '../stores/discoverStore';
 
 // ─── Connection state ─────────────────────────────────────────────────────────
 
@@ -434,7 +435,21 @@ function handleEvent(origin: string, event: ServerEvent): void {
         ? useAuthStore.getState().user?.id
         : getMyUserIdForOrigin(origin);
       if (event.user.id === myId && isHome) {
+        // Self-deletion detected on another tab — log out
+        if (event.user.isDeleted) {
+          useAuthStore.getState().logout();
+          break;
+        }
         setUser(event.user);
+      }
+
+      // Deleted user cleanup: remove from caches the existing pipeline doesn't cover
+      if (event.user.isDeleted) {
+        useSocialStore.getState().removeFriendLocally(event.user.id, origin);
+        useSocialStore.getState().removeRequestsForUser(event.user.id);
+        useActivityStore.getState().clearUserActivities(event.user.id);
+        useDiscoverStore.getState().removeUser(event.user.id);
+        useChatStore.getState().clearTypingForUser(event.user.id);
       }
       break;
     }
