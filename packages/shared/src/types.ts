@@ -706,6 +706,29 @@ export interface DeleteAccountRequest {
   username: string;  // Must match — confirmation safeguard
 }
 
+// ─── Federation Identity Delete Types ────────────────────────────────────
+
+export interface FederationIdentityDeleteRequest {
+  origins: string[];
+  mode: 'soft' | 'full';
+}
+
+export interface FederationIdentityDeleteResult {
+  success: boolean;
+  error?: string;
+  ownedSpaces?: { id: string; name: string }[];
+}
+
+export interface FederationIdentityDeleteResponse {
+  results: Record<string, FederationIdentityDeleteResult>;
+}
+
+export interface FederationIdentityDeleteS2SRequest {
+  homeUserId: string;
+  homeInstance: string;
+  mode: 'soft' | 'full';
+}
+
 // ─── Storage Management Types ─────────────────────────────────────────────
 
 export interface StorageBreakdown {
