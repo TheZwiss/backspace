@@ -714,11 +714,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Invalid request: homeUserId, homeInstance, and mode (soft|full) required', statusCode: 400 });
       }
 
-      // 3. Resolve federated user — query directly (not resolveLocalUser which filters isDeleted)
-      const user = db.select().from(schema.users).where(eq(schema.users.homeUserId, homeUserId)).get();
+      // 3. Resolve the live (non-deleted) federated user.
+      // Must filter isDeleted=0: after a prior deletion + re-federation,
+      // multiple records share the same homeUserId (one deleted, one live).
+      const user = db.select().from(schema.users)
+        .where(and(eq(schema.users.homeUserId, homeUserId), eq(schema.users.isDeleted, 0)))
+        .get();
 
-      // Idempotent: already deleted or never existed
-      if (!user || user.isDeleted) {
+      // Idempotent: no live user means already deleted or never existed
+      if (!user) {
         return reply.code(200).send({ success: true });
       }
 
