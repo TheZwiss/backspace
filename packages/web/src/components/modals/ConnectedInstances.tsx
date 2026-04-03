@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import type { InstanceInfoResponse, FederationRegistryEntry } from '@backspace/shared';
 import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useUIStore } from '../../stores/uiStore';
 import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
@@ -410,7 +411,7 @@ function RegistryFilterBar({
 
 // ─── DeleteIdentityDialog ───────────────────────────────────────────────────
 
-type DeletionMode = 'leave' | 'nuke' | 'evaporate';
+type DeletionMode = 'leave' | 'soft' | 'full';
 type DeletionScope = 'this' | 'select' | 'all';
 
 function DeleteIdentityDialog({
@@ -423,19 +424,77 @@ function DeleteIdentityDialog({
   onClose: () => void;
 }) {
   const deleteIdentity = useInstanceStore((s) => s.deleteIdentity);
+  const registry = useInstanceStore((s) => s.registry);
   const [mode, setMode] = useState<DeletionMode>('leave');
   const [scope, setScope] = useState<DeletionScope>('this');
+  const [loading, setLoading] = useState(false);
 
-  const handleConfirm = () => {
-    deleteIdentity(origin);
-    onClose();
+  const handleConfirm = async () => {
+    // Resolve target origins based on scope
+    let targetOrigins: string[];
+    if (scope === 'all') {
+      targetOrigins = Array.from(registry.keys());
+    } else {
+      targetOrigins = [origin];
+    }
+
+    if (targetOrigins.length === 0) {
+      onClose();
+      return;
+    }
+
+    if (mode !== 'leave') {
+      setLoading(true);
+    }
+
+    const results = await deleteIdentity(targetOrigins, mode);
+
+    // Check results
+    const failed = Object.entries(results).filter(([, r]) => !r.success);
+    if (failed.length === 0) {
+      useUIStore.getState().addToast(
+        mode === 'leave'
+          ? 'Disconnected successfully'
+          : targetOrigins.length === 1
+            ? 'Identity deleted successfully'
+            : `Identity deleted on ${targetOrigins.length} instances`,
+        'success',
+        3000,
+      );
+      onClose();
+    } else {
+      for (const [failOrigin, result] of failed) {
+        let host: string;
+        try { host = new URL(failOrigin).hostname; } catch { host = failOrigin; }
+        if (result.error === 'owns_spaces') {
+          useUIStore.getState().addToast(
+            `${host}: Transfer space ownership first`,
+            'warning',
+            5000,
+          );
+        } else {
+          useUIStore.getState().addToast(
+            `${host}: ${result.error || 'Failed'}`,
+            'warning',
+            5000,
+          );
+        }
+      }
+      // Close if some succeeded, keep open if all failed
+      const succeeded = Object.values(results).filter(r => r.success).length;
+      if (succeeded > 0) {
+        onClose();
+      } else {
+        setLoading(false);
+      }
+    }
   };
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-[10000] flex items-center justify-center animate-fade-in">
       <div
         className="absolute inset-0 bg-black/50"
-        onClick={onClose}
+        onClick={loading ? undefined : onClose}
       />
       <div className="relative max-w-md w-full mx-4 glass-modal rounded-xl p-6 animate-slide-up">
         <h3 className="text-base font-semibold text-txt-primary mb-1">Delete Identity</h3>
@@ -449,45 +508,54 @@ function DeleteIdentityDialog({
           <button
             type="button"
             onClick={() => setMode('leave')}
+            disabled={loading}
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
               mode === 'leave'
                 ? 'bg-white/[0.03] border-white/[0.08]'
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
-            }`}
+            } disabled:opacity-50`}
           >
             <div className="text-sm font-medium text-txt-primary">Leave quietly</div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Remove the connection. Your messages and data remain on the remote instance.
+              Disconnect from this instance. Your account and all data remain.
             </div>
           </button>
 
-          {/* Nuke everything */}
+          {/* Delete User (soft) */}
           <button
             type="button"
-            onClick={() => setMode('nuke')}
+            onClick={() => setMode('soft')}
+            disabled={loading}
             className={`w-full text-left p-3 rounded-lg border transition-colors ${
-              mode === 'nuke'
+              mode === 'soft'
+                ? 'bg-white/[0.03] border-white/[0.08]'
+                : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
+            } disabled:opacity-50`}
+          >
+            <div className="text-sm font-medium text-txt-primary">Delete User</div>
+            <div className="text-[11px] text-txt-tertiary mt-0.5">
+              Delete your account. Your messages stay visible as &lsquo;Deleted User&rsquo;.
+            </div>
+          </button>
+
+          {/* Nuke everything (full) */}
+          <button
+            type="button"
+            onClick={() => setMode('full')}
+            disabled={loading}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${
+              mode === 'full'
                 ? 'bg-accent-rose/[0.04] border-accent-rose/20'
                 : 'bg-transparent border-white/[0.04] hover:border-white/[0.06]'
-            }`}
+            } disabled:opacity-50`}
           >
-            <div className={`text-sm font-medium ${mode === 'nuke' ? 'text-txt-danger' : 'text-txt-primary'}`}>
+            <div className={`text-sm font-medium ${mode === 'full' ? 'text-txt-danger' : 'text-txt-primary'}`}>
               Nuke everything
             </div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account and all associated data on the remote instance.
+              Delete your account and purge all private data (DMs, reactions). Space messages remain as &lsquo;Deleted User&rsquo;.
             </div>
           </button>
-
-          {/* Evaporate (coming soon) */}
-          <div
-            className="w-full text-left p-3 rounded-lg border border-dashed border-white/[0.04] opacity-40 cursor-not-allowed"
-          >
-            <div className="text-sm font-medium text-txt-primary">Evaporate</div>
-            <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Gradually fade your presence — coming soon.
-            </div>
-          </div>
         </div>
 
         {/* Scope selector */}
@@ -495,18 +563,22 @@ function DeleteIdentityDialog({
           <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Scope</div>
           <div className="flex gap-1.5">
             {([
-              { key: 'this' as DeletionScope, label: 'This instance only' },
-              { key: 'select' as DeletionScope, label: 'Select instances...' },
-              { key: 'all' as DeletionScope, label: 'All remote instances' },
+              { key: 'this' as DeletionScope, label: 'This instance only', disabled: false },
+              { key: 'select' as DeletionScope, label: 'Select instances...', disabled: true },
+              { key: 'all' as DeletionScope, label: 'All remote instances', disabled: false },
             ]).map((opt) => (
               <button
                 key={opt.key}
                 type="button"
-                onClick={() => setScope(opt.key)}
+                onClick={() => !opt.disabled && setScope(opt.key)}
+                disabled={opt.disabled || loading}
+                title={opt.disabled ? 'Coming soon' : undefined}
                 className={`flex-1 px-2 py-1.5 text-[11px] font-medium rounded transition-colors ${
-                  scope === opt.key
-                    ? 'bg-accent-lavender/15 text-accent-lavender'
-                    : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
+                  opt.disabled
+                    ? 'bg-white/[0.02] text-txt-tertiary/40 cursor-not-allowed'
+                    : scope === opt.key
+                      ? 'bg-accent-lavender/15 text-accent-lavender'
+                      : 'bg-white/[0.04] text-txt-tertiary hover:text-txt-secondary'
                 }`}
               >
                 {opt.label}
@@ -519,15 +591,17 @@ function DeleteIdentityDialog({
         <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors"
+            disabled={loading}
+            className="flex-1 py-2.5 text-sm font-medium text-txt-secondary bg-interactive-hover hover:bg-interactive-selected rounded-lg transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleConfirm}
-            className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors"
+            disabled={loading}
+            className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Delete Identity
+            {loading ? 'Deleting...' : mode === 'leave' ? 'Disconnect' : 'Delete Identity'}
           </button>
         </div>
       </div>

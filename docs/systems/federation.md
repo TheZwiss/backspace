@@ -116,6 +116,25 @@ Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failu
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/api/federation/peer/rotate` | POST | HMAC | Accept secret rotation from peer |
+| `/api/federation/identity` | DELETE | HMAC | Delete federated user identity (soft/full mode) |
+
+### S2S Identity Deletion (`DELETE /api/federation/identity`)
+
+Allows a home instance to remove a user's replicated identity from a remote instance.
+
+**Request body:**
+```json
+{ "homeUserId": "<string>", "homeInstance": "<string>", "mode": "soft" | "full" }
+```
+
+**Behavior:**
+
+- **Attribution guard:** Rejects with `403` if the user's `homeInstance` doesn't match the `X-Federation-Origin` of the signing peer. Prevents one instance from deleting another instance's users.
+- **Idempotent:** Returns `{ success: true }` for already-deleted or nonexistent users (no error).
+- **Owned spaces check:** Returns `409` with `{ ownedSpaces: string[] }` if the user owns any spaces on the remote. The user must transfer or delete those spaces before identity removal proceeds.
+- **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes memberships, but skips reaction deletion and orphaned DM purge.
+- **Mode `"full"`:** Calls `tombstoneUser(uid, { purgeContent: true })` — full tombstone including reactions and orphaned DM cleanup.
+- **Post-deletion:** Broadcasts `member_left` WS events for all spaces the user belonged to before removal.
 
 ---
 

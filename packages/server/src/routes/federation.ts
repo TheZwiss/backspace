@@ -10,9 +10,10 @@ import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { tombstoneUser } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -664,6 +665,105 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           statusCode: 502,
         });
       }
+    },
+  );
+
+  // ─── DELETE /api/federation/identity ──────────────────────────────────────
+  // S2S endpoint: delete a federated user's identity on this instance.
+  // Called by the user's home instance via HMAC-signed request.
+  app.delete<{ Body: FederationIdentityDeleteS2SRequest }>(
+    '/api/federation/identity',
+    async (request, reply) => {
+      const db = getDb();
+
+      // 1. Verify HMAC signature (same pattern as relay endpoint)
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // Nonce-based replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      } else {
+        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce)`);
+      }
+
+      // 2. Validate body
+      const { homeUserId, homeInstance, mode } = request.body;
+      if (!homeUserId || !homeInstance || !['soft', 'full'].includes(mode)) {
+        return reply.code(400).send({ error: 'Invalid request: homeUserId, homeInstance, and mode (soft|full) required', statusCode: 400 });
+      }
+
+      // 3. Resolve federated user — query directly (not resolveLocalUser which filters isDeleted)
+      const user = db.select().from(schema.users).where(eq(schema.users.homeUserId, homeUserId)).get();
+
+      // Idempotent: already deleted or never existed
+      if (!user || user.isDeleted) {
+        return reply.code(200).send({ success: true });
+      }
+
+      // 4. Attribution guard: only the user's home instance can delete them
+      if (!user.homeInstance || extractDomain(user.homeInstance) !== extractDomain(fedHeaders.origin)) {
+        return reply.code(403).send({ error: 'Attribution mismatch: you can only delete users from your own instance', statusCode: 403 });
+      }
+
+      // 5. Check for owned spaces
+      const ownedSpaces = db.select({ id: schema.spaces.id, name: schema.spaces.name })
+        .from(schema.spaces)
+        .where(eq(schema.spaces.ownerId, user.id))
+        .all();
+      if (ownedSpaces.length > 0) {
+        return reply.code(409).send({ error: 'owns_spaces', ownedSpaces, statusCode: 409 });
+      }
+
+      // 6. Collect spaces for broadcast BEFORE deletion removes memberships
+      const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
+        .from(schema.spaceMembers)
+        .where(eq(schema.spaceMembers.userId, user.id))
+        .all()
+        .map(m => m.spaceId);
+
+      // 7. Execute deletion
+      const filesToDelete = tombstoneUser(user.id, { purgeContent: mode === 'full' });
+
+      // 8. Clean up files from disk
+      deleteAttachmentFiles(filesToDelete.map(f => ({ filename: f })));
+
+      // 9. Force-disconnect WS if somehow still connected (unlikely but safe)
+      connectionManager.forceDisconnectUser(user.id);
+
+      // 10. Broadcast member_left to other connected clients for each space
+      for (const spaceId of memberSpaceIds) {
+        connectionManager.sendToSpace(spaceId, {
+          type: 'member_left',
+          spaceId,
+          userId: user.id,
+        });
+      }
+
+      console.log(`[federation] Identity deleted for user ${user.id} (${user.username}) via S2S from ${fedHeaders.origin}, mode=${mode}`);
+
+      return reply.code(200).send({ success: true });
     },
   );
 
@@ -1397,12 +1497,23 @@ export function resolveOrCreateReplicatedUser(
   homeInstance: string,
   db: ReturnType<typeof getDb>,
   hints?: { username?: string | null },
-): typeof schema.users.$inferSelect {
+): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
 
-  // Normalize homeInstance to bare domain for consistent storage
+  // Check if this identity was previously deleted — don't resurrect a tombstoned
+  // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
+  // already hides the deleted row, so we must query without that filter here.
   const domain = extractDomain(homeInstance);
+  const deletedMatch = db
+    .select({ id: schema.users.id, isDeleted: schema.users.isDeleted })
+    .from(schema.users)
+    .where(and(eq(schema.users.homeUserId, homeUserId), eq(schema.users.homeInstance, domain)))
+    .get();
+  if (deletedMatch?.isDeleted) {
+    console.log(`[federation] Skipping stub creation for deleted identity homeUserId=${homeUserId} (tombstoned)`);
+    return null;
+  }
 
   // Use the snowflake-style homeUserId as the local part; append the
   // domain so the username is globally unique and human-readable.
@@ -1612,6 +1723,8 @@ function processCreateEvent(
 
   for (const p of event.participants) {
     let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username });
+    // Skip deleted identities — don't include tombstoned users in the DM
+    if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
     if (p.profile) {
       localUser = hydrateReplicatedUserProfile(localUser, p.profile, db);
@@ -2175,7 +2288,7 @@ function processMemberAddEvent(
     let ownerId: string | null = null;
     if (event.group.owner) {
       const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username });
-      ownerId = ownerLocal.id;
+      ownerId = ownerLocal?.id ?? null;
     }
 
     db.insert(schema.dmChannels)
@@ -2193,6 +2306,8 @@ function processMemberAddEvent(
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
       const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
+      // Skip deleted identities — tombstoned users can't be added to a DM
+      if (!localUser) continue;
       const existing = db.select().from(schema.dmMembers)
         .where(and(
           eq(schema.dmMembers.dmChannelId, channelId),
@@ -2281,6 +2396,11 @@ function processMemberAddEvent(
     db,
     { username: event.membership.user.profile?.username },
   );
+  if (!localUser) {
+    // The user's identity has been deleted — don't add a tombstoned user to the DM
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   // Enforce max 10 members
   const memberCount = db.select()
@@ -2516,15 +2636,19 @@ function processOwnershipTransferEvent(
     return;
   }
 
-  // Resolve new owner to local user — use resolveOrCreateReplicatedUser to
-  // guarantee we always get a valid user ID. Never fall back to null, as that
-  // would convert the group DM into a 1-on-1 and destroy its type identity.
+  // Resolve new owner to local user. If the new owner's identity has been
+  // deleted, we cannot complete the transfer — reject so the event can be
+  // retried or dropped by the sender.
   const newOwnerLocal = resolveOrCreateReplicatedUser(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
     { username: event.ownership.newOwner.profile?.username },
   );
+  if (!newOwnerLocal) {
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   db.update(schema.dmChannels)
     .set({
@@ -2654,8 +2778,13 @@ function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
-  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  if (!fromUserResolved) {
+    // Sender's identity has been deleted — silently accept to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
+  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
 
   // Resolve the recipient — must be a local user on this instance
   const toUser = resolveLocalUser(to.homeUserId, db);
@@ -2759,6 +2888,11 @@ function processFriendRequestUpdateEvent(
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
   const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  if (!toUser) {
+    // Recipient's identity has been deleted — accept idempotently to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Find the pending request
   const pendingRequest = db
@@ -2893,10 +3027,19 @@ function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
-  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
-  let toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
-  toUser = hydrateReplicatedUserProfile(toUser, event.friendship.toProfile, db);
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  if (!fromUserResolved) {
+    // One party's identity is deleted — accept idempotently to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
+  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  if (!toUserResolved) {
+    accepted.push(event.messageId);
+    return;
+  }
+  let toUser = hydrateReplicatedUserProfile(toUserResolved, event.friendship.toProfile, db);
 
   // Idempotency: if friendship already exists, accept as no-op
   const existingFriend = db
@@ -3171,6 +3314,11 @@ function processDmCallStartEvent(
     db,
     { username: event.call.caller.displayName },
   );
+  if (!callerStub) {
+    // Caller's identity has been deleted — can't initiate a call as a tombstoned user
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   // Create federated call entry in registry
   const entry: FederatedCallEntry = {

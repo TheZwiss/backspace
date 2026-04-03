@@ -2,6 +2,11 @@ import crypto from 'crypto';
 import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 
+export interface TombstoneOptions {
+  /** When false, skip reaction deletion and orphaned DM purge (soft-delete mode). Default: true */
+  purgeContent?: boolean;
+}
+
 /**
  * Tombstone a user account: removes them from all spaces, DMs, friends,
  * roles, reactions, folders, bans, voice restrictions, channel overrides,
@@ -12,7 +17,7 @@ import { getDb, schema } from '../db/index.js';
  * orphaned DM attachments). The caller is responsible for disk cleanup
  * and WebSocket disconnection after calling this.
  */
-export function tombstoneUser(uid: string): string[] {
+export function tombstoneUser(uid: string, options?: TombstoneOptions): string[] {
   const db = getDb();
 
   const user = db.select().from(schema.users).where(eq(schema.users.id, uid)).get();
@@ -21,6 +26,8 @@ export function tombstoneUser(uid: string): string[] {
   const filesToDelete: string[] = [];
   if (user.avatar) filesToDelete.push(user.avatar);
   if (user.banner) filesToDelete.push(user.banner);
+
+  const purge = options?.purgeContent !== false; // default true
 
   // Find group DMs this user owns so we can transfer ownership
   const ownedGroupDms = db.select({ id: schema.dmChannels.id })
@@ -36,8 +43,10 @@ export function tombstoneUser(uid: string): string[] {
     tx.delete(schema.friendRequests).where(or(eq(schema.friendRequests.fromId, uid), eq(schema.friendRequests.toId, uid))).run();
     tx.delete(schema.dmMembers).where(eq(schema.dmMembers.userId, uid)).run();
     tx.delete(schema.readStates).where(eq(schema.readStates.userId, uid)).run();
-    tx.delete(schema.reactions).where(eq(schema.reactions.userId, uid)).run();
-    tx.delete(schema.dmReactions).where(eq(schema.dmReactions.userId, uid)).run();
+    if (purge) {
+      tx.delete(schema.reactions).where(eq(schema.reactions.userId, uid)).run();
+      tx.delete(schema.dmReactions).where(eq(schema.dmReactions.userId, uid)).run();
+    }
     tx.delete(schema.spaceFolders).where(eq(schema.spaceFolders.userId, uid)).run();
 
     // Conditional deletes for tables that may reference userId
@@ -76,38 +85,40 @@ export function tombstoneUser(uid: string): string[] {
       }
     }
 
-    // Clean up orphaned DM channels (zero members after our removal)
-    const orphanedDmIds = tx.select({ id: schema.dmChannels.id })
-      .from(schema.dmChannels)
-      .all()
-      .filter(dc => {
-        const memberCount = tx.select({ id: schema.dmMembers.dmChannelId })
-          .from(schema.dmMembers)
-          .where(eq(schema.dmMembers.dmChannelId, dc.id))
-          .all()
-          .length;
-        return memberCount === 0;
-      })
-      .map(dc => dc.id);
-
-    for (const dmId of orphanedDmIds) {
-      const msgIds = tx.select({ id: schema.dmMessages.id })
-        .from(schema.dmMessages)
-        .where(eq(schema.dmMessages.dmChannelId, dmId))
+    if (purge) {
+      // Clean up orphaned DM channels (zero members after our removal)
+      const orphanedDmIds = tx.select({ id: schema.dmChannels.id })
+        .from(schema.dmChannels)
         .all()
-        .map(m => m.id);
+        .filter(dc => {
+          const memberCount = tx.select({ id: schema.dmMembers.dmChannelId })
+            .from(schema.dmMembers)
+            .where(eq(schema.dmMembers.dmChannelId, dc.id))
+            .all()
+            .length;
+          return memberCount === 0;
+        })
+        .map(dc => dc.id);
 
-      if (msgIds.length > 0) {
-        const dmAttachments = tx.select({ filename: schema.attachments.filename })
-          .from(schema.attachments)
-          .where(inArray(schema.attachments.dmMessageId, msgIds))
-          .all();
-        for (const att of dmAttachments) filesToDelete.push(att.filename);
+      for (const dmId of orphanedDmIds) {
+        const msgIds = tx.select({ id: schema.dmMessages.id })
+          .from(schema.dmMessages)
+          .where(eq(schema.dmMessages.dmChannelId, dmId))
+          .all()
+          .map(m => m.id);
 
-        tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
-        tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
+        if (msgIds.length > 0) {
+          const dmAttachments = tx.select({ filename: schema.attachments.filename })
+            .from(schema.attachments)
+            .where(inArray(schema.attachments.dmMessageId, msgIds))
+            .all();
+          for (const att of dmAttachments) filesToDelete.push(att.filename);
+
+          tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
+          tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
+        }
+        tx.delete(schema.dmChannels).where(eq(schema.dmChannels.id, dmId)).run();
       }
-      tx.delete(schema.dmChannels).where(eq(schema.dmChannels.id, dmId)).run();
     }
 
     // Tombstone user row — rename username to free it for reuse
