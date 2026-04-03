@@ -710,7 +710,7 @@ export interface DeleteAccountRequest {
 
 export interface FederationIdentityDeleteRequest {
   origins: string[];
-  mode: 'soft' | 'full';
+  mode: 'leave' | 'soft' | 'full';
 }
 
 export interface FederationIdentityDeleteResult {

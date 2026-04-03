@@ -704,15 +704,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   deleteIdentity: async (origins: string[], mode: 'leave' | 'soft' | 'full' = 'leave') => {
-    // Leave mode: client-only cleanup, no server call
-    if (mode === 'leave') {
-      for (const origin of origins) {
-        get().forceRemoveEntry(origin);
-      }
-      return Object.fromEntries(origins.map(o => [o, { success: true as const }]));
-    }
-
-    // Soft/full mode: S2S relay via home instance
     try {
       const { results } = await api.users.deleteFederationIdentity({ origins, mode });
 

@@ -427,6 +427,7 @@ function DeleteIdentityDialog({
   const registry = useInstanceStore((s) => s.registry);
   const [mode, setMode] = useState<DeletionMode>('leave');
   const [scope, setScope] = useState<DeletionScope>('this');
+  const [selectedOrigins, setSelectedOrigins] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
   const handleConfirm = async () => {
@@ -434,6 +435,8 @@ function DeleteIdentityDialog({
     let targetOrigins: string[];
     if (scope === 'all') {
       targetOrigins = Array.from(registry.keys());
+    } else if (scope === 'select') {
+      targetOrigins = Array.from(selectedOrigins);
     } else {
       targetOrigins = [origin];
     }
@@ -564,7 +567,7 @@ function DeleteIdentityDialog({
           <div className="flex gap-1.5">
             {([
               { key: 'this' as DeletionScope, label: 'This instance only', disabled: false },
-              { key: 'select' as DeletionScope, label: 'Select instances...', disabled: true },
+              { key: 'select' as DeletionScope, label: 'Select instances...', disabled: false },
               { key: 'all' as DeletionScope, label: 'All remote instances', disabled: false },
             ]).map((opt) => (
               <button
@@ -587,6 +590,37 @@ function DeleteIdentityDialog({
           </div>
         </div>
 
+        {/* Instance picker for 'select' scope */}
+        {scope === 'select' && (
+          <div className="mb-4 p-2 bg-surface-input rounded-lg max-h-40 overflow-y-auto scrollbar-thin space-y-0.5">
+            {Array.from(registry.values()).map((entry) => {
+              const checked = selectedOrigins.has(entry.origin);
+              return (
+                <label
+                  key={entry.origin}
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-interactive-hover transition-colors cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      setSelectedOrigins((prev) => {
+                        const next = new Set(prev);
+                        if (checked) next.delete(entry.origin);
+                        else next.add(entry.origin);
+                        return next;
+                      });
+                    }}
+                    disabled={loading}
+                    className="accent-accent-lavender w-3.5 h-3.5 shrink-0"
+                  />
+                  <span className="text-xs text-txt-secondary truncate">{safeHost(entry.origin)}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3">
           <button
@@ -598,7 +632,7 @@ function DeleteIdentityDialog({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || (scope === 'select' && selectedOrigins.size === 0)}
             className="flex-1 py-2.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Deleting...' : mode === 'leave' ? 'Disconnect' : 'Delete Identity'}

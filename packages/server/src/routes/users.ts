@@ -610,8 +610,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   }, async (request, reply) => {
     const { origins, mode } = request.body;
 
-    if (!mode || !['soft', 'full'].includes(mode)) {
-      return reply.code(400).send({ error: 'Invalid mode: must be "soft" or "full"', statusCode: 400 });
+    if (!mode || !['leave', 'soft', 'full'].includes(mode)) {
+      return reply.code(400).send({ error: 'Invalid mode: must be "leave", "soft", or "full"', statusCode: 400 });
     }
     if (!Array.isArray(origins) || origins.length === 0 || !origins.every(o => typeof o === 'string')) {
       return reply.code(400).send({ error: 'origins must be a non-empty array of strings', statusCode: 400 });
@@ -625,64 +625,82 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     await Promise.all(origins.map(async (origin) => {
       try {
-        // Look up peer
-        const peer = db
-          .select()
-          .from(schema.federationPeers)
-          .where(eq(schema.federationPeers.origin, origin))
-          .get();
+        // Leave mode: no S2S call, just clean up the registry entry
+        if (mode === 'leave') {
+          results[origin] = { success: true };
+        } else {
+          // Soft/full mode: S2S relay to remote instance
+          const peer = db
+            .select()
+            .from(schema.federationPeers)
+            .where(eq(schema.federationPeers.origin, origin))
+            .get();
 
-        if (!peer || peer.status !== 'active') {
-          results[origin] = { success: false, error: 'no_active_peer' };
-          return;
-        }
+          if (!peer || peer.status !== 'active') {
+            results[origin] = { success: false, error: 'no_active_peer' };
+            return;
+          }
 
-        // Build HMAC-signed request
-        const body = JSON.stringify({
-          homeUserId: request.userId,
-          homeInstance,
-          mode,
-        });
-
-        const headers = buildFederationHeaders(body, peer.hmacSecret, ourOrigin);
-
-        // Send to remote with 15s timeout
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15_000);
-
-        try {
-          const response = await fetch(`${origin}/api/federation/identity`, {
-            method: 'DELETE',
-            headers,
-            body,
-            signal: controller.signal,
+          const body = JSON.stringify({
+            homeUserId: request.userId,
+            homeInstance,
+            mode,
           });
 
-          clearTimeout(timeout);
+          const headers = buildFederationHeaders(body, peer.hmacSecret, ourOrigin);
 
-          const data = await response.json() as Record<string, unknown>;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15_000);
 
-          if (response.ok) {
-            results[origin] = { success: true };
-          } else if (data.error === 'owns_spaces') {
-            results[origin] = {
-              success: false,
-              error: 'owns_spaces',
-              ownedSpaces: data.ownedSpaces as { id: string; name: string }[],
-            };
-          } else {
-            results[origin] = {
-              success: false,
-              error: (data.error as string) || `HTTP ${response.status}`,
-            };
+          try {
+            const response = await fetch(`${origin}/api/federation/identity`, {
+              method: 'DELETE',
+              headers,
+              body,
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeout);
+
+            const data = await response.json() as Record<string, unknown>;
+
+            if (response.ok) {
+              results[origin] = { success: true };
+            } else if (data.error === 'owns_spaces') {
+              results[origin] = {
+                success: false,
+                error: 'owns_spaces',
+                ownedSpaces: data.ownedSpaces as { id: string; name: string }[],
+              };
+            } else {
+              results[origin] = {
+                success: false,
+                error: (data.error as string) || `HTTP ${response.status}`,
+              };
+            }
+          } catch (err) {
+            clearTimeout(timeout);
+            if (err instanceof Error && err.name === 'AbortError') {
+              results[origin] = { success: false, error: 'timeout' };
+            } else {
+              results[origin] = { success: false, error: 'unreachable' };
+            }
           }
-        } catch (err) {
-          clearTimeout(timeout);
-          if (err instanceof Error && err.name === 'AbortError') {
-            results[origin] = { success: false, error: 'timeout' };
-          } else {
-            results[origin] = { success: false, error: 'unreachable' };
-          }
+        }
+
+        // On success, authoritatively remove the registry entry and bump LWW timestamp
+        if (results[origin]?.success) {
+          db.delete(schema.userFederationRegistry)
+            .where(and(
+              eq(schema.userFederationRegistry.userId, request.userId),
+              eq(schema.userFederationRegistry.origin, origin),
+            ))
+            .run();
+
+          db.update(schema.users)
+            .set({ federationRegistryUpdatedAt: Date.now() })
+            .where(eq(schema.users.id, request.userId))
+            .run();
         }
       } catch (err) {
         results[origin] = {
@@ -691,6 +709,27 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         };
       }
     }));
+
+    // Remove successful origins from the user's replicatedInstances JSON column
+    const successfulOrigins = Object.entries(results)
+      .filter(([, r]) => r.success)
+      .map(([o]) => o);
+
+    if (successfulOrigins.length > 0) {
+      const user = db.select({ replicatedInstances: schema.users.replicatedInstances })
+        .from(schema.users)
+        .where(eq(schema.users.id, request.userId))
+        .get();
+
+      if (user?.replicatedInstances) {
+        const parsed: ReplicatedInstance[] = JSON.parse(user.replicatedInstances);
+        const filtered = parsed.filter(ri => !successfulOrigins.includes(ri.origin));
+        db.update(schema.users)
+          .set({ replicatedInstances: JSON.stringify(filtered) })
+          .where(eq(schema.users.id, request.userId))
+          .run();
+      }
+    }
 
     const response: FederationIdentityDeleteResponse = { results };
     return reply.code(200).send(response);
