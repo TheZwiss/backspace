@@ -384,7 +384,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     if (homeUserId && homeInstance) {
       // Federated identity: resolve or create a replicated user stub
-      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db) ?? undefined;
     } else if (userId && typeof userId === 'string') {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
@@ -570,7 +570,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
       if (identity.homeUserId && identity.homeInstance) {
         // Federated user — resolve via homeUserId, creating a replicated stub if needed
-        localUser = resolveOrCreateReplicatedUser(identity.homeUserId, identity.homeInstance, db);
+        localUser = resolveOrCreateReplicatedUser(identity.homeUserId, identity.homeInstance, db) ?? undefined;
       } else {
         // Local user — direct ID lookup
         localUser = db.select().from(schema.users).where(
@@ -865,7 +865,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     if (homeUserId && homeInstance) {
       // Federated identity: resolve or create a replicated user stub
-      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db);
+      targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db) ?? undefined;
     } else if (targetUserIdRaw && typeof targetUserIdRaw === 'string') {
       // Local ID: direct lookup (existing behavior)
       targetUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserIdRaw)).get();

@@ -1397,9 +1397,22 @@ export function resolveOrCreateReplicatedUser(
   homeInstance: string,
   db: ReturnType<typeof getDb>,
   hints?: { username?: string | null },
-): typeof schema.users.$inferSelect {
+): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
+
+  // Check if this identity was previously deleted — don't resurrect a tombstoned
+  // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
+  // already hides the deleted row, so we must query without that filter here.
+  const deletedMatch = db
+    .select({ id: schema.users.id, isDeleted: schema.users.isDeleted })
+    .from(schema.users)
+    .where(eq(schema.users.homeUserId, homeUserId))
+    .get();
+  if (deletedMatch?.isDeleted) {
+    console.log(`[federation] Skipping stub creation for deleted identity homeUserId=${homeUserId} (tombstoned)`);
+    return null;
+  }
 
   // Normalize homeInstance to bare domain for consistent storage
   const domain = extractDomain(homeInstance);
@@ -1612,6 +1625,8 @@ function processCreateEvent(
 
   for (const p of event.participants) {
     let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username });
+    // Skip deleted identities — don't include tombstoned users in the DM
+    if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
     if (p.profile) {
       localUser = hydrateReplicatedUserProfile(localUser, p.profile, db);
@@ -2175,7 +2190,7 @@ function processMemberAddEvent(
     let ownerId: string | null = null;
     if (event.group.owner) {
       const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username });
-      ownerId = ownerLocal.id;
+      ownerId = ownerLocal?.id ?? null;
     }
 
     db.insert(schema.dmChannels)
@@ -2193,6 +2208,8 @@ function processMemberAddEvent(
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
       const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
+      // Skip deleted identities — tombstoned users can't be added to a DM
+      if (!localUser) continue;
       const existing = db.select().from(schema.dmMembers)
         .where(and(
           eq(schema.dmMembers.dmChannelId, channelId),
@@ -2281,6 +2298,11 @@ function processMemberAddEvent(
     db,
     { username: event.membership.user.profile?.username },
   );
+  if (!localUser) {
+    // The user's identity has been deleted — don't add a tombstoned user to the DM
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   // Enforce max 10 members
   const memberCount = db.select()
@@ -2516,15 +2538,19 @@ function processOwnershipTransferEvent(
     return;
   }
 
-  // Resolve new owner to local user — use resolveOrCreateReplicatedUser to
-  // guarantee we always get a valid user ID. Never fall back to null, as that
-  // would convert the group DM into a 1-on-1 and destroy its type identity.
+  // Resolve new owner to local user. If the new owner's identity has been
+  // deleted, we cannot complete the transfer — reject so the event can be
+  // retried or dropped by the sender.
   const newOwnerLocal = resolveOrCreateReplicatedUser(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
     { username: event.ownership.newOwner.profile?.username },
   );
+  if (!newOwnerLocal) {
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   db.update(schema.dmChannels)
     .set({
@@ -2654,8 +2680,13 @@ function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
-  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  if (!fromUserResolved) {
+    // Sender's identity has been deleted — silently accept to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
+  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
 
   // Resolve the recipient — must be a local user on this instance
   const toUser = resolveLocalUser(to.homeUserId, db);
@@ -2759,6 +2790,11 @@ function processFriendRequestUpdateEvent(
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
   const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  if (!toUser) {
+    // Recipient's identity has been deleted — accept idempotently to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
 
   // Find the pending request
   const pendingRequest = db
@@ -2893,10 +2929,19 @@ function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  let fromUser = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
-  fromUser = hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile, db);
-  let toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
-  toUser = hydrateReplicatedUserProfile(toUser, event.friendship.toProfile, db);
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  if (!fromUserResolved) {
+    // One party's identity is deleted — accept idempotently to drop the event
+    accepted.push(event.messageId);
+    return;
+  }
+  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  if (!toUserResolved) {
+    accepted.push(event.messageId);
+    return;
+  }
+  let toUser = hydrateReplicatedUserProfile(toUserResolved, event.friendship.toProfile, db);
 
   // Idempotency: if friendship already exists, accept as no-op
   const existingFriend = db
@@ -3171,6 +3216,11 @@ function processDmCallStartEvent(
     db,
     { username: event.call.caller.displayName },
   );
+  if (!callerStub) {
+    // Caller's identity has been deleted — can't initiate a call as a tombstoned user
+    rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
+    return;
+  }
 
   // Create federated call entry in registry
   const entry: FederatedCallEntry = {
