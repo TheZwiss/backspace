@@ -64,6 +64,7 @@ interface ChatState {
   onMarkUnread: (channelId: string, messageId: string) => void;
   removeChannelStates: (channelIds: Set<string>) => void;
   updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
+  clearTypingForUser: (userId: string) => void;
 }
 
 /** Find which channel a message belongs to by scanning the message cache. */
@@ -725,6 +726,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         if (channelChanged) { newMessages.set(channelId, updated); changed = true; }
       }
       return changed ? { messages: newMessages } : {};
+    });
+  },
+
+  clearTypingForUser: (userId: string) => {
+    set((state) => {
+      const newTyping = new Map(state.typingUsers);
+      let changed = false;
+      for (const [channelId, users] of newTyping) {
+        const filtered = users.filter(t => t.userId !== userId);
+        if (filtered.length !== users.length) {
+          newTyping.set(channelId, filtered);
+          changed = true;
+        }
+      }
+      return changed ? { typingUsers: newTyping } : state;
     });
   },
 }));

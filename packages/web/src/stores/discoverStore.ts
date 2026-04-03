@@ -20,6 +20,7 @@ interface DiscoverState {
   fetchUsers: (query?: string) => Promise<void>;
   setSearchQuery: (q: string) => void;
   updateRelationship: (userId: string, origin: string, relationship: DiscoverUser['relationship'], requestId?: string) => void;
+  removeUser: (userId: string) => void;
   reset: () => void;
 }
 
@@ -108,6 +109,13 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
           ? { ...u, relationship, ...(requestId !== undefined ? { requestId } : {}) }
           : u
       ),
+    }));
+  },
+
+  removeUser: (userId: string) => {
+    set((state) => ({
+      users: state.users.filter(u => u.id !== userId),
+      total: Math.max(0, state.total - state.users.filter(u => u.id === userId).length),
     }));
   },
 

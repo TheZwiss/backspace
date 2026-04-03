@@ -56,6 +56,7 @@ interface SocialState {
   updateFriendProfile: (user: User) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
   removeRequestById: (requestId: string, origin: string) => void;
+  removeRequestsForUser: (userId: string) => void;
   reset: () => void;
 }
 
@@ -323,6 +324,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   removeRequestById: (requestId: string, origin: string) => {
     set((state) => ({
       requests: state.requests.filter(r => !(r.id === requestId && r._instanceOrigin === origin)),
+    }));
+  },
+
+  // Called when a user is deleted — remove all pending requests involving them
+  removeRequestsForUser: (userId: string) => {
+    set((state) => ({
+      requests: state.requests.filter(r => r.fromId !== userId && r.toId !== userId),
     }));
   },
 
