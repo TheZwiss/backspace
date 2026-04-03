@@ -10,7 +10,7 @@ import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { tombstoneUser } from '../utils/userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest } from '@backspace/shared';
@@ -740,12 +740,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(409).send({ error: 'owns_spaces', ownedSpaces, statusCode: 409 });
       }
 
-      // 6. Collect spaces for broadcast BEFORE deletion removes memberships
-      const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
-        .from(schema.spaceMembers)
-        .where(eq(schema.spaceMembers.userId, user.id))
-        .all()
-        .map(m => m.spaceId);
+      // 6. Collect broadcast targets BEFORE deletion removes memberships
+      const { memberSpaceIds, targetUserIds } = collectDeletionBroadcastTargets(user.id);
 
       // 7. Execute deletion
       const filesToDelete = tombstoneUser(user.id, { purgeContent: mode === 'full' });
@@ -753,10 +749,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       // 8. Clean up files from disk
       deleteAttachmentFiles(filesToDelete.map(f => ({ filename: f })));
 
-      // 9. Force-disconnect WS if somehow still connected (unlikely but safe)
-      connectionManager.forceDisconnectUser(user.id);
-
-      // 10. Broadcast member_left to other connected clients for each space
+      // 9. Broadcast member_left to other connected clients for each space
       for (const spaceId of memberSpaceIds) {
         connectionManager.sendToSpace(spaceId, {
           type: 'member_left',
@@ -764,6 +757,19 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           userId: user.id,
         });
       }
+
+      // 10. Broadcast user_updated with sanitized deleted user data
+      const deletedRow = db.select().from(schema.users).where(eq(schema.users.id, user.id)).get();
+      if (deletedRow) {
+        const deletedUser = sanitizeUser(deletedRow);
+        const userUpdatedEvent = { type: 'user_updated' as const, user: deletedUser };
+        for (const uid of targetUserIds) {
+          connectionManager.sendToUser(uid, userUpdatedEvent);
+        }
+      }
+
+      // 11. Force-disconnect WS if somehow still connected (unlikely but safe)
+      connectionManager.forceDisconnectUser(user.id);
 
       console.log(`[federation] Identity deleted for user ${user.id} (${user.username}) via S2S from ${fedHeaders.origin}, mode=${mode}`);
 
