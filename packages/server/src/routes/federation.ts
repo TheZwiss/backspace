@@ -1404,18 +1404,16 @@ export function resolveOrCreateReplicatedUser(
   // Check if this identity was previously deleted — don't resurrect a tombstoned
   // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
   // already hides the deleted row, so we must query without that filter here.
+  const domain = extractDomain(homeInstance);
   const deletedMatch = db
     .select({ id: schema.users.id, isDeleted: schema.users.isDeleted })
     .from(schema.users)
-    .where(eq(schema.users.homeUserId, homeUserId))
+    .where(and(eq(schema.users.homeUserId, homeUserId), eq(schema.users.homeInstance, domain)))
     .get();
   if (deletedMatch?.isDeleted) {
     console.log(`[federation] Skipping stub creation for deleted identity homeUserId=${homeUserId} (tombstoned)`);
     return null;
   }
-
-  // Normalize homeInstance to bare domain for consistent storage
-  const domain = extractDomain(homeInstance);
 
   // Use the snowflake-style homeUserId as the local part; append the
   // domain so the username is globally unique and human-readable.
