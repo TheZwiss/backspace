@@ -10,9 +10,10 @@ import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { tombstoneUser } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -664,6 +665,105 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           statusCode: 502,
         });
       }
+    },
+  );
+
+  // ─── DELETE /api/federation/identity ──────────────────────────────────────
+  // S2S endpoint: delete a federated user's identity on this instance.
+  // Called by the user's home instance via HMAC-signed request.
+  app.delete<{ Body: FederationIdentityDeleteS2SRequest }>(
+    '/api/federation/identity',
+    async (request, reply) => {
+      const db = getDb();
+
+      // 1. Verify HMAC signature (same pattern as relay endpoint)
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // Nonce-based replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      } else {
+        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce)`);
+      }
+
+      // 2. Validate body
+      const { homeUserId, homeInstance, mode } = request.body;
+      if (!homeUserId || !homeInstance || !['soft', 'full'].includes(mode)) {
+        return reply.code(400).send({ error: 'Invalid request: homeUserId, homeInstance, and mode (soft|full) required', statusCode: 400 });
+      }
+
+      // 3. Resolve federated user — query directly (not resolveLocalUser which filters isDeleted)
+      const user = db.select().from(schema.users).where(eq(schema.users.homeUserId, homeUserId)).get();
+
+      // Idempotent: already deleted or never existed
+      if (!user || user.isDeleted) {
+        return reply.code(200).send({ success: true });
+      }
+
+      // 4. Attribution guard: only the user's home instance can delete them
+      if (!user.homeInstance || extractDomain(user.homeInstance) !== extractDomain(fedHeaders.origin)) {
+        return reply.code(403).send({ error: 'Attribution mismatch: you can only delete users from your own instance', statusCode: 403 });
+      }
+
+      // 5. Check for owned spaces
+      const ownedSpaces = db.select({ id: schema.spaces.id, name: schema.spaces.name })
+        .from(schema.spaces)
+        .where(eq(schema.spaces.ownerId, user.id))
+        .all();
+      if (ownedSpaces.length > 0) {
+        return reply.code(409).send({ error: 'owns_spaces', ownedSpaces, statusCode: 409 });
+      }
+
+      // 6. Collect spaces for broadcast BEFORE deletion removes memberships
+      const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
+        .from(schema.spaceMembers)
+        .where(eq(schema.spaceMembers.userId, user.id))
+        .all()
+        .map(m => m.spaceId);
+
+      // 7. Execute deletion
+      const filesToDelete = tombstoneUser(user.id, { purgeContent: mode === 'full' });
+
+      // 8. Clean up files from disk
+      deleteAttachmentFiles(filesToDelete.map(f => ({ filename: f })));
+
+      // 9. Force-disconnect WS if somehow still connected (unlikely but safe)
+      connectionManager.forceDisconnectUser(user.id);
+
+      // 10. Broadcast member_left to other connected clients for each space
+      for (const spaceId of memberSpaceIds) {
+        connectionManager.sendToSpace(spaceId, {
+          type: 'member_left',
+          spaceId,
+          userId: user.id,
+        });
+      }
+
+      console.log(`[federation] Identity deleted for user ${user.id} (${user.username}) via S2S from ${fedHeaders.origin}, mode=${mode}`);
+
+      return reply.code(200).send({ success: true });
     },
   );
 
