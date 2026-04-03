@@ -113,10 +113,13 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
   },
 
   removeUser: (userId: string) => {
-    set((state) => ({
-      users: state.users.filter(u => u.id !== userId),
-      total: Math.max(0, state.total - state.users.filter(u => u.id === userId).length),
-    }));
+    set((state) => {
+      const filtered = state.users.filter(u => u.id !== userId);
+      return {
+        users: filtered,
+        total: Math.max(0, state.total - (state.users.length - filtered.length)),
+      };
+    });
   },
 
   reset: () => set({
