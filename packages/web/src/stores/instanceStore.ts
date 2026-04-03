@@ -157,7 +157,7 @@ interface InstanceState {
   registry: Map<string, FederationRegistryEntry>;
   registryUpdatedAt: number;
   syncRegistry: () => Promise<void>;
-  deleteIdentity: (origin: string) => void;
+  deleteIdentity: (origins: string[], mode?: 'leave' | 'soft' | 'full') => Promise<Record<string, { success: boolean; error?: string; ownedSpaces?: { id: string; name: string }[] }>>;
   forceRemoveEntry: (origin: string) => void;
 
   probeInstance: (url: string) => Promise<InstanceInfoResponse & { origin: string }>;
@@ -703,8 +703,31 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     await Promise.all([homePromise, ...remotePromises]);
   },
 
-  deleteIdentity: (_origin: string) => {
-    useUIStore.getState().addToast('Identity deletion is not yet implemented', 'info', 3000);
+  deleteIdentity: async (origins: string[], mode: 'leave' | 'soft' | 'full' = 'leave') => {
+    // Leave mode: client-only cleanup, no server call
+    if (mode === 'leave') {
+      for (const origin of origins) {
+        get().forceRemoveEntry(origin);
+      }
+      return Object.fromEntries(origins.map(o => [o, { success: true as const }]));
+    }
+
+    // Soft/full mode: S2S relay via home instance
+    try {
+      const { results } = await api.users.deleteFederationIdentity({ origins, mode });
+
+      // Clean up client-side state for successful deletions
+      for (const [origin, result] of Object.entries(results)) {
+        if (result.success) {
+          get().forceRemoveEntry(origin);
+        }
+      }
+
+      return results;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Unknown error';
+      return Object.fromEntries(origins.map(o => [o, { success: false as const, error }]));
+    }
   },
 
   forceRemoveEntry: (origin: string) => {

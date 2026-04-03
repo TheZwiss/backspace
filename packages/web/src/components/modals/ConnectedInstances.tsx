@@ -427,7 +427,7 @@ function DeleteIdentityDialog({
   const [scope, setScope] = useState<DeletionScope>('this');
 
   const handleConfirm = () => {
-    deleteIdentity(origin);
+    deleteIdentity([origin]);
     onClose();
   };
 
