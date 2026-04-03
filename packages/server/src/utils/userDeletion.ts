@@ -3,7 +3,7 @@ import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 
 export interface TombstoneOptions {
-  /** When false, skip reaction deletion and orphaned DM purge (soft-delete mode). Default: true */
+  /** When false, skip space message/reaction deletion (soft-delete mode). Orphaned DM cleanup always runs. Default: true */
   purgeContent?: boolean;
 }
 
@@ -85,39 +85,61 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       }
     }
 
-    if (purge) {
-      // Clean up orphaned DM channels (zero members after our removal)
-      const orphanedDmIds = tx.select({ id: schema.dmChannels.id })
-        .from(schema.dmChannels)
-        .all()
-        .filter(dc => {
-          const memberCount = tx.select({ id: schema.dmMembers.dmChannelId })
-            .from(schema.dmMembers)
-            .where(eq(schema.dmMembers.dmChannelId, dc.id))
-            .all()
-            .length;
-          return memberCount === 0;
-        })
-        .map(dc => dc.id);
-
-      for (const dmId of orphanedDmIds) {
-        const msgIds = tx.select({ id: schema.dmMessages.id })
-          .from(schema.dmMessages)
-          .where(eq(schema.dmMessages.dmChannelId, dmId))
+    // Clean up orphaned DM channels (zero members after our removal) — always runs,
+    // orphaned channels are unreachable garbage regardless of purge mode
+    const orphanedDmIds = tx.select({ id: schema.dmChannels.id })
+      .from(schema.dmChannels)
+      .all()
+      .filter(dc => {
+        const memberCount = tx.select({ id: schema.dmMembers.dmChannelId })
+          .from(schema.dmMembers)
+          .where(eq(schema.dmMembers.dmChannelId, dc.id))
           .all()
-          .map(m => m.id);
+          .length;
+        return memberCount === 0;
+      })
+      .map(dc => dc.id);
 
-        if (msgIds.length > 0) {
-          const dmAttachments = tx.select({ filename: schema.attachments.filename })
-            .from(schema.attachments)
-            .where(inArray(schema.attachments.dmMessageId, msgIds))
-            .all();
-          for (const att of dmAttachments) filesToDelete.push(att.filename);
+    for (const dmId of orphanedDmIds) {
+      const msgIds = tx.select({ id: schema.dmMessages.id })
+        .from(schema.dmMessages)
+        .where(eq(schema.dmMessages.dmChannelId, dmId))
+        .all()
+        .map(m => m.id);
 
-          tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
-          tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
-        }
-        tx.delete(schema.dmChannels).where(eq(schema.dmChannels.id, dmId)).run();
+      if (msgIds.length > 0) {
+        const dmAttachments = tx.select({ filename: schema.attachments.filename })
+          .from(schema.attachments)
+          .where(inArray(schema.attachments.dmMessageId, msgIds))
+          .all();
+        for (const att of dmAttachments) filesToDelete.push(att.filename);
+
+        tx.delete(schema.attachments).where(inArray(schema.attachments.dmMessageId, msgIds)).run();
+        tx.delete(schema.dmReactions).where(inArray(schema.dmReactions.dmMessageId, msgIds)).run();
+      }
+      tx.delete(schema.dmChannels).where(eq(schema.dmChannels.id, dmId)).run();
+    }
+
+    // Purge mode: delete the user's space messages and their attachments
+    if (purge) {
+      const userMessageIds = tx.select({ id: schema.messages.id })
+        .from(schema.messages)
+        .where(eq(schema.messages.userId, uid))
+        .all()
+        .map(m => m.id);
+
+      if (userMessageIds.length > 0) {
+        // Collect attachment files for disk cleanup
+        const msgAttachments = tx.select({ filename: schema.attachments.filename })
+          .from(schema.attachments)
+          .where(inArray(schema.attachments.messageId, userMessageIds))
+          .all();
+        for (const att of msgAttachments) filesToDelete.push(att.filename);
+
+        // Delete attachments, embeds, then messages (FK order)
+        tx.delete(schema.attachments).where(inArray(schema.attachments.messageId, userMessageIds)).run();
+        tx.delete(schema.embeds).where(inArray(schema.embeds.messageId, userMessageIds)).run();
+        tx.delete(schema.messages).where(eq(schema.messages.userId, uid)).run();
       }
     }
 
