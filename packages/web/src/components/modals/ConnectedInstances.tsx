@@ -534,7 +534,7 @@ function DeleteIdentityDialog({
           >
             <div className="text-sm font-medium text-txt-primary">Delete User</div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account. Your messages stay visible as &lsquo;Deleted User&rsquo;.
+              Delete your account but keep your messages. You appear as &lsquo;Deleted User&rsquo;.
             </div>
           </button>
 
@@ -553,7 +553,7 @@ function DeleteIdentityDialog({
               Nuke everything
             </div>
             <div className="text-[11px] text-txt-tertiary mt-0.5">
-              Delete your account and purge all private data (DMs, reactions). Space messages remain as &lsquo;Deleted User&rsquo;.
+              Delete your account and all your messages, DMs, reactions, and files. Nothing remains.
             </div>
           </button>
         </div>
