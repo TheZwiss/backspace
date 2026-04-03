@@ -364,6 +364,38 @@ isAdmin:      0
 - Delete files from disk via `deleteUploadFile()`
 - `connectionManager.forceDisconnectUser()` -- closes all WS connections, leaves voice rooms, broadcasts presence
 
+### `tombstoneUser()` Options
+
+`tombstoneUser` accepts an optional second argument:
+
+```typescript
+interface TombstoneOptions { purgeContent?: boolean }
+function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
+```
+
+- **`purgeContent: true`** (default / omitted): full tombstone — existing behavior including reaction deletion and orphaned DM cleanup.
+- **`purgeContent: false`**: soft tombstone — skips `reactions`, `dmReactions` deletion and orphaned DM channel purge. Used by the federation identity soft-delete endpoint so remote message history is retained.
+
+### `resolveOrCreateReplicatedUser` and Deleted Users
+
+`resolveOrCreateReplicatedUser` checks whether a user matching `homeUserId + homeInstance` already exists and has `isDeleted = 1`. If so, it returns `null` rather than returning or re-creating the deleted stub. This prevents zombie identities from reappearing after a federation identity deletion.
+
+### Federation Identity Deletion (Home-Side Trigger)
+
+**Endpoint:** `POST /api/users/@me/federation-identity/delete`
+**Rate limit:** 5 requests / 15 minutes
+**Auth:** JWT (`authenticate` preHandler)
+
+**Request body:** `{ origins: string[], mode: 'soft' | 'full' }`
+
+Fans out HMAC-signed `DELETE /api/federation/identity` requests to each listed remote in parallel. Returns a per-origin results map:
+
+```json
+{ "results": { "<origin>": { "success": true } } }
+```
+
+On failure for a given origin the entry contains `{ "success": false, "error": "<message>", "ownedSpaces"?: [...] }`. A `409` from a remote means the user owns spaces there that must be resolved before deletion can proceed.
+
 ### `sanitizeUser()` for Deleted Users
 
 When `isDeleted === 1`, returns an anonymized profile:

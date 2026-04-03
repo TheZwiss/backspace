@@ -245,6 +245,20 @@ The **Connections** panel (in user settings) allows managing remote instance con
 - **Remote Instances** — each shows status (connected/disconnected/error), hostname, username. Actions: Reconnect, Re-authenticate, Sync Password, Disconnect.
 - **Add Instance** — multi-step form: enter hostname → verify password → register/login → connected.
 
+### Identity Deletion
+
+Each remote instance row exposes an identity deletion flow with three modes:
+
+| Mode | Label | Behavior |
+|------|-------|----------|
+| `leave` | Leave quietly | Client-only disconnect; no server call. Registry entry removed locally. |
+| `soft` | Delete User | S2S soft delete — anonymizes the remote account and removes memberships; message history is retained. |
+| `full` | Nuke everything | S2S full tombstone — soft delete plus purge of DM data and reactions. |
+
+A scope selector controls which remotes are targeted: **This instance** (single remote) or **All remote instances** (fans out to every connected remote). A "Select instances" option is planned for future multi-select.
+
+Deletion is triggered via `POST /api/users/@me/federation-identity/delete` on the home instance (rate-limited 5/15 min). The home instance fans out HMAC-signed `DELETE /api/federation/identity` requests to each target remote in parallel and returns a per-origin results map `{ [origin]: { success, error?, ownedSpaces? } }`. If a remote reports owned spaces (`409`), the UI surfaces the space list so the user can resolve ownership before retrying.
+
 ---
 
 ## 7. Federation Registry
