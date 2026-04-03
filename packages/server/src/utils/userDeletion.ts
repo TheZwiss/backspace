@@ -2,6 +2,69 @@ import crypto from 'crypto';
 import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 
+export interface DeletionBroadcastTargets {
+  /** Space IDs the user is a member of (for member_left broadcasts) */
+  memberSpaceIds: string[];
+  /** All user IDs who may have cached data for this user (for user_updated broadcast) */
+  targetUserIds: Set<string>;
+}
+
+/**
+ * Collect broadcast targets for a user deletion. Must be called BEFORE
+ * tombstoneUser() since that transaction deletes the membership/friend/DM rows.
+ *
+ * Collects: space co-members, DM co-members, and friends.
+ * sendToUser() no-ops for offline users, so no online-filtering needed.
+ */
+export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastTargets {
+  const db = getDb();
+
+  // 1. Spaces the user is a member of
+  const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
+    .from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.userId, uid))
+    .all()
+    .map(m => m.spaceId);
+
+  const targetUserIds = new Set<string>();
+
+  // 2. All users who share a space with this user
+  if (memberSpaceIds.length > 0) {
+    const coMembers = db.select({ userId: schema.spaceMembers.userId })
+      .from(schema.spaceMembers)
+      .where(inArray(schema.spaceMembers.spaceId, memberSpaceIds))
+      .all();
+    for (const m of coMembers) targetUserIds.add(m.userId);
+  }
+
+  // 3. All DM co-members
+  const dmMemberships = db.select({ dmChannelId: schema.dmMembers.dmChannelId })
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.userId, uid))
+    .all();
+  if (dmMemberships.length > 0) {
+    const dmChannelIds = dmMemberships.map(d => d.dmChannelId);
+    const dmCoMembers = db.select({ userId: schema.dmMembers.userId })
+      .from(schema.dmMembers)
+      .where(inArray(schema.dmMembers.dmChannelId, dmChannelIds))
+      .all();
+    for (const m of dmCoMembers) targetUserIds.add(m.userId);
+  }
+
+  // 4. All friends
+  const friendRows = db.select().from(schema.friends)
+    .where(or(eq(schema.friends.userId, uid), eq(schema.friends.friendId, uid)))
+    .all();
+  for (const fr of friendRows) {
+    targetUserIds.add(fr.userId === uid ? fr.friendId : fr.userId);
+  }
+
+  // Remove the deleted user themselves (their WS gets force-closed anyway)
+  targetUserIds.delete(uid);
+
+  return { memberSpaceIds, targetUserIds };
+}
+
 export interface TombstoneOptions {
   /** When false, skip space message/reaction deletion (soft-delete mode). Orphaned DM cleanup always runs. Default: true */
   purgeContent?: boolean;
