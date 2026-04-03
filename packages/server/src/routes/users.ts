@@ -361,7 +361,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (profileUpdatedAt !== undefined && typeof profileUpdatedAt === 'number') {
         const currentUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
         if (currentUser) {
-          const storedTs = currentUser.profileUpdatedAt ?? currentUser.createdAt;
+          const storedTs = currentUser.profileUpdatedAt ?? 0;
           if (profileUpdatedAt < storedTs) {
             // Incoming data is older — return current state without updating
             return reply.code(200).send(sanitizeUser(currentUser, true));

@@ -49,7 +49,7 @@ export function sanitizeUser(row: typeof schema.users.$inferSelect, isSelf = fal
     customStatus: row.customStatus,
     isAdmin: row.isAdmin === 1,
     discoverable: row.discoverable !== 0,
-    profileUpdatedAt: row.profileUpdatedAt ?? row.createdAt,
+    profileUpdatedAt: row.profileUpdatedAt ?? 0,
     createdAt: row.createdAt,
     homeInstance: row.homeInstance ?? null,
     homeUserId: row.homeUserId ?? null,
