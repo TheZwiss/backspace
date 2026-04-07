@@ -164,7 +164,7 @@ This ensures closed DMs resurface automatically when new activity occurs.
 Close and reopen are relayed to all peer instances that hold a copy of the DM:
 
 - **Close relay:** After setting `closed = 1` locally, `queueDmCloseRelay(channelId, userId, 'dm_close')` queues a `dm_close` outbox event. The receiving instance finds the channel by `federatedId`, resolves the acting user via `resolveLocalUser`, sets `closed = 1` on the local `dm_members` row, and broadcasts `dm_channel_closed`.
-- **Reopen relay:** Explicit reopens (`POST /api/dm/:id/reopen`) queue a `dm_reopen` event. The receiving instance sets `closed = 0` and broadcasts `dm_channel_created` with a full channel payload.
+- **Reopen relay:** Explicit reopens (`POST /api/dm` when reopening a closed 1-on-1 DM) queue a `dm_reopen` event. The receiving instance sets `closed = 0` and broadcasts `dm_channel_created` with a full channel payload.
 - **Relayed-message reopen:** `processCreateEvent` (inbound message relay) also checks each recipient's `closed` flag and performs the same resurface sequence (`dm_channel_created` → `dm_message_created`) — mirroring `broadcastDmMessage`. This ensures messages relayed from a remote instance properly reopen closed DMs on the receiving instance.
 - Only fires for DMs with a `federatedId`. Legacy local-only DMs (no `federatedId`) are unaffected.
 

@@ -688,7 +688,7 @@ Only DMs with a `federatedId` are eligible. Legacy local-only DMs (created befor
 | Event | Trigger |
 |-------|---------|
 | `dm_close` | User calls `DELETE /api/dm/:id` (soft-close) |
-| `dm_reopen` | User calls `POST /api/dm/:id/reopen` (explicit reopen) |
+| `dm_reopen` | User calls `POST /api/dm` and reopens a closed 1-on-1 DM |
 
 ### Payload
 
@@ -697,7 +697,7 @@ Only DMs with a `federatedId` are eligible. Legacy local-only DMs (created befor
   eventType: 'dm_close' | 'dm_reopen',
   dmChannelId: string,          // local channel ID (context only)
   federatedId: string,          // cross-instance channel lookup key
-  messageId: string,            // unique event ID: 'dm_close:{userId}:{ts}' or 'dm_reopen:{userId}:{ts}'
+  messageId: string,            // unique event ID: 'dm_close:{federatedId}:{userId}:{ts}'
   encryptionVersion: 0,
   timestamp: number,
   dmCloseReopen: {
