@@ -10,25 +10,21 @@ export interface DeletionBroadcastTargets {
 }
 
 /**
- * Collect broadcast targets for a user deletion. Must be called BEFORE
- * tombstoneUser() since that transaction deletes the membership/friend/DM rows.
- *
- * Collects: space co-members, DM co-members, and friends.
- * sendToUser() no-ops for offline users, so no online-filtering needed.
+ * Collect the set of user IDs who should receive a user_updated broadcast
+ * for a given user. Includes: space co-members, DM co-members, and friends.
+ * Does NOT include the user themselves — callers add self if needed.
  */
-export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastTargets {
+export function collectProfileBroadcastTargetIds(uid: string): Set<string> {
   const db = getDb();
+  const targetUserIds = new Set<string>();
 
-  // 1. Spaces the user is a member of
+  // 1. All users who share a space with this user
   const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
     .from(schema.spaceMembers)
     .where(eq(schema.spaceMembers.userId, uid))
     .all()
     .map(m => m.spaceId);
 
-  const targetUserIds = new Set<string>();
-
-  // 2. All users who share a space with this user
   if (memberSpaceIds.length > 0) {
     const coMembers = db.select({ userId: schema.spaceMembers.userId })
       .from(schema.spaceMembers)
@@ -37,7 +33,7 @@ export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastT
     for (const m of coMembers) targetUserIds.add(m.userId);
   }
 
-  // 3. All DM co-members
+  // 2. All DM co-members
   const dmMemberships = db.select({ dmChannelId: schema.dmMembers.dmChannelId })
     .from(schema.dmMembers)
     .where(eq(schema.dmMembers.userId, uid))
@@ -51,7 +47,7 @@ export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastT
     for (const m of dmCoMembers) targetUserIds.add(m.userId);
   }
 
-  // 4. All friends
+  // 3. All friends
   const friendRows = db.select().from(schema.friends)
     .where(or(eq(schema.friends.userId, uid), eq(schema.friends.friendId, uid)))
     .all();
@@ -59,8 +55,30 @@ export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastT
     targetUserIds.add(fr.userId === uid ? fr.friendId : fr.userId);
   }
 
-  // Remove the deleted user themselves (their WS gets force-closed anyway)
+  // Remove the target user themselves — callers decide whether to include self
   targetUserIds.delete(uid);
+
+  return targetUserIds;
+}
+
+/**
+ * Collect broadcast targets for a user deletion. Must be called BEFORE
+ * tombstoneUser() since that transaction deletes the membership/friend/DM rows.
+ *
+ * Collects: space co-members, DM co-members, and friends.
+ * sendToUser() no-ops for offline users, so no online-filtering needed.
+ */
+export function collectDeletionBroadcastTargets(uid: string): DeletionBroadcastTargets {
+  const db = getDb();
+
+  // Collect space IDs (needed for member_left broadcasts — not part of the shared helper)
+  const memberSpaceIds = db.select({ spaceId: schema.spaceMembers.spaceId })
+    .from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.userId, uid))
+    .all()
+    .map(m => m.spaceId);
+
+  const targetUserIds = collectProfileBroadcastTargetIds(uid);
 
   return { memberSpaceIds, targetUserIds };
 }
