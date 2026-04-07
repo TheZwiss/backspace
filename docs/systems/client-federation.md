@@ -151,7 +151,7 @@ getChannelOrigin(channelId): string    // Returns '' for home, origin URL for re
 
 Built during `populateFromReady()` when WS ready events arrive from each instance.
 
-> **DM channels** are always mapped to `''` (home origin). `channelOriginMap` is only relevant for Space channels. DM operations always route to the home instance; S2S relay handles cross-instance distribution.
+> **DM channels** are mapped to the origin of the instance that delivered them in the `ready` event. For 1-on-1 DMs created locally this is typically `''` (home), but federated DMs may arrive from any connected instance. DM read/write operations are routed to the channel's origin via `getApiForOrigin(getChannelOrigin(channelId))`. S2S relay then propagates changes to all other instances that have the same channel.
 
 ### API Client Resolution
 
@@ -201,7 +201,7 @@ When a WS connection opens and authenticates, the server sends a `ready` event c
 2. Merge into the unified space list (replacing stale data from same origin)
 3. Build/update `channelOriginMap`, `channelToSpaceMap`
 4. Normalize remote asset URLs to absolute paths
-5. Skip DM channels from remote origins — DMs are managed exclusively by the home instance
+5. Merge DM channels from all origins — DMs are accepted regardless of which instance sends the `ready` event. Channels are deduplicated by `federatedId`: if a DM channel with the same `federatedId` is already loaded (from a previous `ready` event on another connection), the second copy is skipped (first-loaded copy wins). Channels without a `federatedId` are always accepted.
 6. Last-write-wins layout merge for sidebar order
 
 ---
@@ -306,7 +306,7 @@ Client-side and S2S federation serve different purposes:
 | Aspect | Client-Side Federation | S2S Federation |
 |---|---|---|
 | **Purpose** | User interacts with multiple instances | Instances exchange data automatically |
-| **Scope** | Spaces, friend discovery | DM relay, friend relay, file replication |
+| **Scope** | Spaces, DM access, friend discovery | DM relay, friend relay, file replication, read state sync |
 | **Authentication** | Per-user JWT on each instance | Per-peer HMAC shared secret |
 | **Initiated by** | User (Connections settings) | Admin (peer handshake) |
 | **Connection** | Client → each server directly | Server → server via outbox |
@@ -315,5 +315,5 @@ Client-side and S2S federation serve different purposes:
 1. User adds a remote instance via Connections (client-side)
 2. The client triggers S2S peering between the two servers (automatic)
 3. User joins Spaces on the remote instance (client-side — API calls go directly to remote)
-4. User sends DMs — all DM writes go to the home instance. S2S relay distributes messages, reactions, and membership changes to peer instances.
+4. User sends DMs — DM writes go to whichever instance delivered the channel (determined by `channelOriginMap`). S2S relay distributes messages, reactions, read states, and membership changes to all peer instances. DM calls remain home-only (gated for federated users).
 5. Friend requests and discovery work across instances (client loads friends from all connected instances, S2S relays friend events)

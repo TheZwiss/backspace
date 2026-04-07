@@ -460,6 +460,7 @@ Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per 
 | `member_add` | `processMemberAddEvent` | dm |
 | `member_remove` | `processMemberRemoveEvent` | dm |
 | `ownership_transfer` | `processOwnershipTransferEvent` | dm |
+| `read_state_update` | `processReadStateUpdateEvent` | dm |
 | `friend_request_create` | `processFriendRequestCreateEvent` | friend |
 | `friend_request_update` | `processFriendRequestUpdateEvent` | friend |
 | `friend_request_cancel` | `processFriendRequestCancelEvent` | friend |
@@ -489,7 +490,7 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 5. Sets `bootstrapped = true` to skip redundant system messages and member_add broadcasts below
 
 **Incremental path** (channel already exists):
-1. Validates authority: `sourceInstance === channel.ownerHomeInstance` (only owner's instance can add)
+1. Validates authority: any HMAC-verified peer is accepted (relaxed — the `sourceInstance === channel.ownerHomeInstance` check was removed to support cross-instance access). The per-user attribution check (`verifyAttribution`) still applies.
 2. Cancels soft-delete if channel was pending GC
 3. Resolves added user via `resolveOrCreateReplicatedUser`
 4. Enforces max 10 members
@@ -628,7 +629,45 @@ Uses the same backoff schedule as outbox delivery. Max attempts: 10 (`MAX_FILE_A
 
 ---
 
-## 8. Friend Relay
+## 8. Read State Relay
+
+### `read_state_update` Event
+
+When a user marks a DM channel as read (via `channel_ack` WS event), the read state is relayed to all peer instances so cross-instance sessions stay in sync.
+
+**Outbound (`events.ts:handleChannelAck`):**
+- Fires after writing `read_states` locally
+- Only triggers for DM channels (channel ID found in `dm_members`)
+- Calls `sendReadStateRelay(dmChannelId, userId, messageId)` in `federationOutbox.ts`
+- Fire-and-forget — not queued via outbox, sent directly to all active peers (same pattern as typing relay)
+
+**Event payload:**
+```typescript
+{
+  eventType: 'read_state_update',
+  contextType: 'dm',
+  federatedId: string,       // DM channel's federatedId (cross-instance channel lookup)
+  readState: {
+    user: { homeUserId: string, homeInstance: string },
+    messageRef: { messageId: string, sourceInstance: string | null }
+  }
+}
+```
+
+`messageRef.sourceInstance` is non-null when the acknowledged message was relayed from another instance (i.e., it has a `source_instance` in `dm_messages`). The receiving instance uses this to locate the correct local message row.
+
+**Inbound (`processReadStateUpdateEvent`):**
+1. Resolve channel by `federatedId` — reject if not found
+2. Resolve user via `resolveLocalUser` — skip if not found (no-op, fire-and-forget)
+3. Resolve the message by `messageRef` (local ID if `sourceInstance` is null, otherwise by `source_instance + source_message_id`)
+4. Upsert `read_states` row for the resolved local user and message
+5. Broadcast `channel_ack` to all of the user's local WebSocket connections (multi-tab/multi-device sync)
+
+**Not persisted in outbox or mutation log** — read state relay is ephemeral; missed deliveries are not retried.
+
+---
+
+## 9. Friend Relay
 
 ### Event Flow (social.ts)
 
@@ -694,7 +733,7 @@ The full event payload is stored in both `appendMutationLog` (for sync) and `que
 
 ---
 
-## 9. Profile Sync
+## 10. Profile Sync
 
 Profile sync uses **two mechanisms** that operate independently:
 
@@ -733,7 +772,7 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 ---
 
-## 10. Reaction Relay
+## 11. Reaction Relay
 
 ### Outbound
 
@@ -761,7 +800,7 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
 
 ---
 
-## 11. Initial Sync
+## 12. Initial Sync
 
 ### `runInitialSyncForNewPeers()` (`federationWorker.ts:739`)
 
@@ -806,7 +845,7 @@ The event processing logic is extracted into `processRelayEvents()` (exported fr
 
 ---
 
-## 12. DM Calls over Federation
+## 13. DM Calls over Federation
 
 DM calls work across federated instances. The caller's instance hosts the LiveKit room. Remote clients connect directly to the caller's LiveKit server using a token passed through S2S relay — no media is routed through the federation layer.
 
@@ -888,7 +927,7 @@ This registry ensures tokens and `livekitUrl` survive browser refreshes via the 
 
 ---
 
-## 13. Background Workers
+## 14. Background Workers
 
 All workers are started by `startFederationWorkers()` on server boot and stopped by `stopFederationWorkers()` on shutdown. Each worker uses `setTimeout` chains (not `setInterval`) with abort controllers for graceful shutdown.
 
@@ -914,7 +953,7 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 
 ---
 
-## 14. Settings Cache
+## 15. Settings Cache
 
 `federationOutbox.ts` caches `federationRelayEnabled` and `federationRelayTtlDays` from `instance_settings` for 30 seconds (`CACHE_TTL_MS`). This prevents repeated DB reads on every message send. The cache is invalidated by TTL only -- there is no explicit cache bust on settings change.
 
@@ -928,7 +967,7 @@ Relevant settings in `instance_settings`:
 
 ---
 
-## 15. Client-Side Identity Helpers (`identity.ts`)
+## 16. Client-Side Identity Helpers (`identity.ts`)
 
 The frontend needs to resolve federated identities for display purposes:
 
@@ -944,7 +983,7 @@ The frontend needs to resolve federated identities for display purposes:
 
 ---
 
-## 16. Self-Healing Migrations (`migrate.ts`)
+## 17. Self-Healing Migrations (`migrate.ts`)
 
 The migration system includes several data integrity checks that run on every server startup:
 

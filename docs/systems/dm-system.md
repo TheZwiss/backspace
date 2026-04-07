@@ -275,6 +275,8 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 **Request:** `{ content?: string, attachments?: string[], replyToId?: string }`
 
+**Cross-instance access:** Federated users (those with `homeInstance` set) can send messages on any DM channel where they are a member, regardless of which instance serves the request. The `requireLocalUser` gate that previously blocked federated users from DM write endpoints has been removed. DM calls (`dm_call_*` WS events) remain gated — only local (non-replicated) users can initiate or receive calls.
+
 **Validation:**
 - Caller must be a member (`isDmMember`)
 - Must have content or attachments (not both empty)
@@ -401,6 +403,20 @@ The full event includes `participants` (all channel members with their federated
 2. Delete attachments, reactions, and message atomically
 3. Clean up attachment files from disk
 4. Broadcast `dm_message_deleted` to all local members
+
+### Inbound: Read State Update
+
+**Function:** `federation.ts:processReadStateUpdateEvent()`
+
+Triggered by a `read_state_update` relay event sent when a user on another instance acknowledges a DM channel.
+
+1. Resolve channel by `federatedId` — reject if not found
+2. Resolve user via `resolveLocalUser` — skip silently if not found
+3. Resolve message by `messageRef` (local ID or `source_instance + source_message_id`)
+4. Upsert `read_states` row for the resolved user and message
+5. Broadcast `channel_ack` to the user's local WebSocket connections for multi-tab sync
+
+Not stored in the outbox or mutation log — fire-and-forget, missed deliveries are not retried.
 
 ### Inbound: Reaction Add/Remove
 

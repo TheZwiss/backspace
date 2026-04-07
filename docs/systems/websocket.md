@@ -192,6 +192,10 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 |------|--------|-------|
 | `federation_file_rejected` | messageId, dmChannelId, attachmentId, affectedUsers[] | DM members |
 
+**S2S relay-only event (not a direct client WS event):**
+
+`read_state_update` — sent peer-to-peer via the federation relay when a user acknowledges a DM channel on one instance. The receiving instance processes it, upserts the `read_states` row, and then emits a standard `channel_ack` event to the user's local WebSocket connections. The relay event itself is never forwarded to clients directly.
+
 ---
 
 ## Ready Payload
