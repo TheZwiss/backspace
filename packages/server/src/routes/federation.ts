@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
-import { eq, and, or, isNull, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, inArray, sql, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -13,7 +13,7 @@ import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -1335,6 +1335,12 @@ export function processRelayEvents(
         case 'read_state_update':
           processReadStateUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'dm_close':
+          processDmCloseEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'dm_reopen':
+          processDmReopenEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         default:
           rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
           break;
@@ -1347,6 +1353,59 @@ export function processRelayEvents(
   }
 
   return { accepted, rejected };
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Build the full DM channel payload used by `dm_channel_created` events.
+ * Hydrates members, fetches the last message, and returns a `DmChannel`-shaped
+ * object — or `null` when the channel row doesn't exist / is deleted.
+ *
+ * An optional `lastMessageOverride` lets callers supply the message object
+ * directly (e.g. the just-relayed message) instead of querying the DB.
+ */
+function buildDmChannelPayload(
+  channelId: string,
+  db: ReturnType<typeof getDb>,
+  lastMessageOverride?: DmMessageWithUser | null,
+): DmChannel | null {
+  const dmChannel = db.select()
+    .from(schema.dmChannels)
+    .where(and(eq(schema.dmChannels.id, channelId), isNull(schema.dmChannels.deletedAt)))
+    .get();
+  if (!dmChannel) return null;
+
+  const allMemberRows = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channelId))
+    .all();
+  const memberUserIds = allMemberRows.map(m => m.userId);
+  const users = memberUserIds.length > 0
+    ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
+    : [];
+
+  let lastMessage: DmMessageWithUser | null = lastMessageOverride ?? null;
+  if (!lastMessageOverride) {
+    const lastMsgRow = db.select({ id: schema.dmMessages.id })
+      .from(schema.dmMessages)
+      .where(eq(schema.dmMessages.dmChannelId, channelId))
+      .orderBy(desc(schema.dmMessages.createdAt))
+      .limit(1)
+      .get();
+    if (lastMsgRow) {
+      lastMessage = getDmMessageWithUser(lastMsgRow.id);
+    }
+  }
+
+  return {
+    id: dmChannel.id,
+    ownerId: dmChannel.ownerId ?? null,
+    federatedId: dmChannel.federatedId ?? null,
+    createdAt: dmChannel.createdAt,
+    members: users.map(u => sanitizeUser(u)),
+    lastMessage,
+  };
 }
 
 // ─── Relay Event Processors ──────────────────────────────────────────────────
@@ -1889,6 +1948,26 @@ function processCreateEvent(
       // Skip members whose home instance is the source — they already have this message
       const memberHome = memberUser?.homeInstance?.startsWith('http') ? memberUser.homeInstance : `https://${memberUser?.homeInstance}`;
       if (memberHome === sourceInstance) continue;
+
+      // If the member closed this DM, reopen it and send dm_channel_created
+      // so the sidebar resurfaces before the message arrives.
+      if (member.closed === 1) {
+        db.update(schema.dmMembers)
+          .set({ closed: 0 })
+          .where(and(
+            eq(schema.dmMembers.dmChannelId, localDmChannelId),
+            eq(schema.dmMembers.userId, member.userId),
+          ))
+          .run();
+
+        const payload = buildDmChannelPayload(localDmChannelId, db, fullMessage);
+        if (payload) {
+          connectionManager.sendToUser(member.userId, {
+            type: 'dm_channel_created',
+            dmChannel: payload,
+          });
+        }
+      }
 
       connectionManager.sendToUser(member.userId, {
         type: 'dm_message_created',
@@ -3862,6 +3941,145 @@ function processReadStateUpdateEvent(
     channelId: channel.id,
     messageId: localMessageId,
   });
+
+  accepted.push(event.messageId);
+}
+
+function processDmCloseEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.dmCloseReopen) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_dm_close_payload' });
+    return;
+  }
+
+  // Find the local DM channel by federatedId
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(and(
+      eq(schema.dmChannels.federatedId, event.federatedId),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .get();
+
+  if (!channel) {
+    // Channel doesn't exist locally — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Resolve the user locally
+  const localUser = resolveLocalUser(event.dmCloseReopen.homeUserId, db);
+  if (!localUser) {
+    // User not found locally — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Verify user is a DM member
+  const membership = db.select()
+    .from(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    ))
+    .get();
+
+  if (!membership) {
+    // Not a member — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Set closed = 1
+  db.update(schema.dmMembers)
+    .set({ closed: 1 })
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    ))
+    .run();
+
+  // Broadcast dm_channel_closed to local connections of this user
+  connectionManager.sendToUser(localUser.id, {
+    type: 'dm_channel_closed',
+    dmChannelId: channel.id,
+  });
+
+  accepted.push(event.messageId);
+}
+
+function processDmReopenEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.dmCloseReopen) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_dm_reopen_payload' });
+    return;
+  }
+
+  // Find the local DM channel by federatedId
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(and(
+      eq(schema.dmChannels.federatedId, event.federatedId),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .get();
+
+  if (!channel) {
+    // Channel doesn't exist locally — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Resolve the user locally
+  const localUser = resolveLocalUser(event.dmCloseReopen.homeUserId, db);
+  if (!localUser) {
+    // User not found locally — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Verify user is a DM member
+  const membership = db.select()
+    .from(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    ))
+    .get();
+
+  if (!membership) {
+    // Not a member — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Set closed = 0
+  db.update(schema.dmMembers)
+    .set({ closed: 0 })
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channel.id),
+      eq(schema.dmMembers.userId, localUser.id),
+    ))
+    .run();
+
+  // Build full DM channel payload and broadcast dm_channel_created
+  const payload = buildDmChannelPayload(channel.id, db);
+  if (payload) {
+    connectionManager.sendToUser(localUser.id, {
+      type: 'dm_channel_created',
+      dmChannel: payload,
+    });
+  }
 
   accepted.push(event.messageId);
 }
