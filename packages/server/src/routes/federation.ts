@@ -931,7 +931,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const dmChannelIdFilter = body.dmChannelId && typeof body.dmChannelId === 'string' ? body.dmChannelId : null;
       const federatedIdFilter = body.federatedId && typeof body.federatedId === 'string' ? body.federatedId : null;
       const contextTypeFilter = body.contextType && typeof body.contextType === 'string'
-        ? body.contextType as 'dm' | 'friend'
+        ? body.contextType as 'dm' | 'friend' | 'profile'
         : null;
 
       // Clamp limit: min 1, max 500, default 100
@@ -1103,7 +1103,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           const payload = mutation.payload ? JSON.parse(mutation.payload) : {};
           events.push({
             eventType: mutationType as FederationRelayEvent['eventType'],
-            contextType: (mutation.context_type ?? 'dm') as 'dm' | 'friend',
+            contextType: (mutation.context_type ?? 'dm') as 'dm' | 'friend' | 'profile',
             ...(mutation.context_type === 'dm' || !mutation.context_type ? { dmChannelId: mutation.context_id } : {}),
             messageId: mutation.entity_id,
             encryptionVersion: 0,

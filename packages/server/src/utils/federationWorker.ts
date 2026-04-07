@@ -170,7 +170,7 @@ async function processOutboxTick(): Promise<void> {
       const isDm = entry.contextType === 'dm' || !entry.contextType;
       const evt: FederationRelayEvent = {
         eventType: entry.eventType as FederationRelayEvent['eventType'],
-        contextType: (entry.contextType ?? 'dm') as 'dm' | 'friend',
+        contextType: (entry.contextType ?? 'dm') as 'dm' | 'friend' | 'profile',
         messageId: entry.entityId ?? '',
         encryptionVersion: (entry.encryptionVersion ?? 0) as 0,
         timestamp: entry.createdAt,
