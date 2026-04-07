@@ -1940,15 +1940,6 @@ function processCreateEvent(
       .all();
 
     for (const member of dmMembers) {
-      const memberUser = db.select()
-        .from(schema.users)
-        .where(eq(schema.users.id, member.userId))
-        .get();
-
-      // Skip members whose home instance is the source — they already have this message
-      const memberHome = memberUser?.homeInstance?.startsWith('http') ? memberUser.homeInstance : `https://${memberUser?.homeInstance}`;
-      if (memberHome === sourceInstance) continue;
-
       // If the member closed this DM, reopen it and send dm_channel_created
       // so the sidebar resurfaces before the message arrives.
       if (member.closed === 1) {
