@@ -2357,6 +2357,7 @@ function processMemberAddEvent(
 
     const bootstrapResult = {
       id: channelId,
+      federatedId: event.federatedId,
       ownerId,
       createdAt: now,
       members: memberUsers.map(u => sanitizeUser(u)),
