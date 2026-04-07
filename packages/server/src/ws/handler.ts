@@ -1108,8 +1108,8 @@ function buildReadyPayload(userId: string): {
   // Store user's space IDs for broadcasting
   connectionManager.setUserSpaces(userId, spaceIds);
 
-  // Get DM channels — skip entirely for federated users (they get DMs from their home instance)
-  const dmMemberships = isFederated ? [] : db.select()
+  // Get DM channels
+  const dmMemberships = db.select()
     .from(schema.dmMembers)
     .where(and(
       eq(schema.dmMembers.userId, userId),
@@ -1198,6 +1198,7 @@ function buildReadyPayload(userId: string): {
 
       dmChannels.push({
         id: dmChannel.id,
+        federatedId: dmChannel.federatedId ?? null,
         ownerId: dmChannel.ownerId ?? null,
         createdAt: dmChannel.createdAt,
         members,
@@ -1212,6 +1213,11 @@ function buildReadyPayload(userId: string): {
       });
     }
 
+  }
+
+  // Include DM channel IDs in the visible set for read state filtering
+  for (const dm of dmChannels) {
+    visibleChannelIdSet.add(dm.id);
   }
 
   // Get Space Folders

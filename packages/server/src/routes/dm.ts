@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
-import { authenticate, requireLocalUser } from '../utils/auth.js';
+import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { isDmMember } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
@@ -243,9 +243,8 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
 }
 
 export async function dmRoutes(app: FastifyInstance): Promise<void> {
-  // Centralized auth + federation gating for all DM routes
+  // Centralized auth for all DM routes
   app.addHook('preHandler', authenticate);
-  app.addHook('preHandler', requireLocalUser);
 
   // GET /api/dm - List user's DM channels
   app.get('/api/dm', async (request, reply) => {
