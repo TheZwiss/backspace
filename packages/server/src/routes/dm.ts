@@ -227,6 +227,7 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
           dmChannel: {
             id: dmChannel.id,
             ownerId: dmChannel.ownerId ?? null,
+            federatedId: dmChannel.federatedId ?? null,
             createdAt: dmChannel.createdAt,
             members: users.map(u => sanitizeUser(u)),
             lastMessage: message,
@@ -528,6 +529,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const result: DmChannel = {
       id: dmChannelId,
       ownerId: null,
+      federatedId: federatedId ?? null,
       createdAt: now,
       members,
       lastMessage: null,
@@ -694,6 +696,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const result: DmChannel = {
       id: dmChannelId,
       ownerId: request.userId,
+      federatedId: federatedId ?? null,
       createdAt: now,
       members: allMembers,
       lastMessage: null,
@@ -986,6 +989,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const result: DmChannel = {
       id: dmChannel.id,
       ownerId: dmChannel.ownerId ?? null,
+      federatedId: dmChannel.federatedId ?? null,
       createdAt: dmChannel.createdAt,
       members: users.map(u => sanitizeUser(u)),
       lastMessage: lastMsg ? {
