@@ -644,11 +644,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    // S2S DM Unification: DMs are managed exclusively by the home instance.
-    // Skip DM channels from remote origins — they're replicas served by S2S relay.
-    const incomingDms = origin === '' ? (dmChannels ?? []) : [];
+    // Accept DMs from all origins. Each instance serves its own DM data.
+    const incomingDms = dmChannels ?? [];
 
-    // Normalize asset URLs for DMs (only relevant for home origin in practice)
+    // Normalize asset URLs for remote-origin DMs
     if (origin !== '') {
       for (const dm of incomingDms) {
         for (const member of dm.members) {
@@ -657,7 +656,28 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
+    // Build a set of existing federatedIds for dedup
+    const existingFederatedIds = new Map<string, string>(); // federatedId → dmChannelId
+    for (const dm of get().dmChannels) {
+      if (dm.federatedId) {
+        existingFederatedIds.set(dm.federatedId, dm.id);
+      }
+    }
+
+    // Filter incoming DMs: skip duplicates (same federatedId already loaded from another origin)
+    const filteredDms: typeof incomingDms = [];
     for (const dm of incomingDms) {
+      if (dm.federatedId && existingFederatedIds.has(dm.federatedId)) {
+        // Duplicate cross-instance DM — keep the existing copy
+        continue;
+      }
+      filteredDms.push(dm);
+      if (dm.federatedId) {
+        existingFederatedIds.set(dm.federatedId, dm.id);
+      }
+    }
+
+    for (const dm of filteredDms) {
       channelOriginMap.set(dm.id, origin);
       if (dm.lastMessage?.id) {
         channelLastMessageIds.set(dm.id, dm.lastMessage.id);
@@ -669,7 +689,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       const dmOrigin = get().channelOriginMap.get(dm.id);
       return dmOrigin !== origin;
     });
-    const mergedDms = [...existingDmsFromOtherOrigins, ...incomingDms];
+    const mergedDms = [...existingDmsFromOtherOrigins, ...filteredDms];
 
     // Sort DMs using unread-first ordering. On initial load, unreadChannels may
     // still be empty (read states are processed after populateFromReady); the
