@@ -10,10 +10,10 @@ import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
-import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -1328,6 +1328,9 @@ export function processRelayEvents(
           break;
         case 'dm_typing_stop':
           processDmTypingStopEvent(event, sourceInstance, db, accepted, rejected);
+          break;
+        case 'profile_update':
+          processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
         default:
           rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
@@ -3674,6 +3677,90 @@ function processDmTypingStopEvent(
         dmChannelId: channel.id,
         userId: typingUser.id,
       });
+    }
+  }
+
+  accepted.push(event.messageId);
+}
+
+function processProfileUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  const payload = event.profileUpdate;
+  if (!payload) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_profile_update_payload' });
+    return;
+  }
+
+  // Strict attribution: profile updates MUST originate from the home instance.
+  // No homeward relay exception — unlike DMs, profile updates always come from home.
+  const payloadDomain = extractDomain(payload.homeInstance);
+  const sourceDomain = extractDomain(sourceInstance);
+  if (payloadDomain !== sourceDomain) {
+    console.warn(`[federation] Attribution mismatch in profile_update: homeInstance=${payloadDomain} source=${sourceDomain}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  // Look up the local replicated user by canonical identity
+  const localUser = db
+    .select()
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.homeUserId, payload.homeUserId),
+        eq(schema.users.isDeleted, 0),
+      ),
+    )
+    .get();
+
+  if (!localUser) {
+    // This peer has no replica of this user — silently accept
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Verify the homeInstance domain matches (guard against homeUserId collisions)
+  if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Version check: reject stale/duplicate events
+  const storedTs = localUser.profileUpdatedAt ?? 0;
+  const incomingTs = payload.profileUpdatedAt ?? 0;
+  if (incomingTs <= storedTs) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Authoritative overwrite — home instance is always right
+  db.update(schema.users)
+    .set({
+      displayName: payload.displayName,
+      avatar: payload.avatar,
+      banner: payload.banner,
+      accentColor: payload.accentColor,
+      avatarColor: payload.avatarColor,
+      bio: payload.bio,
+      profileUpdatedAt: payload.profileUpdatedAt,
+    })
+    .where(eq(schema.users.id, localUser.id))
+    .run();
+
+  // Broadcast user_updated to local clients
+  const updatedUser = db.select().from(schema.users).where(eq(schema.users.id, localUser.id)).get();
+  if (updatedUser) {
+    const sanitized = sanitizeUser(updatedUser, false);
+    const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
+    targetUserIds.add(localUser.id); // Include self (other tabs/connections)
+    const userUpdatedEvent = { type: 'user_updated' as const, user: sanitized };
+    for (const uid of targetUserIds) {
+      connectionManager.sendToUser(uid, userUpdatedEvent);
     }
   }
 
