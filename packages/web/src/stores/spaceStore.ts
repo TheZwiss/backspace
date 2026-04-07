@@ -656,11 +656,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
-    // Build a set of existing federatedIds for dedup
+    // Build a set of existing federatedIds for dedup (only from OTHER origins —
+    // DMs from the reconnecting origin will be replaced, not deduplicated)
     const existingFederatedIds = new Map<string, string>(); // federatedId → dmChannelId
     for (const dm of get().dmChannels) {
       if (dm.federatedId) {
-        existingFederatedIds.set(dm.federatedId, dm.id);
+        const dmOrigin = get().channelOriginMap.get(dm.id);
+        if (dmOrigin !== origin) {
+          existingFederatedIds.set(dm.federatedId, dm.id);
+        }
       }
     }
 
