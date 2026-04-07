@@ -808,7 +808,8 @@ export interface FederationRelayEvent {
     | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
     | 'dm_typing_start' | 'dm_typing_stop'
     | 'profile_update'
-    | 'read_state_update';
+    | 'read_state_update'
+    | 'dm_close' | 'dm_reopen';
   contextType?: 'dm' | 'friend' | 'profile';
   dmChannelId?: string;
   messageId: string;
@@ -848,6 +849,10 @@ export interface FederationRelayEvent {
   readState?: {
     user: { homeUserId: string; homeInstance: string };
     messageRef: { sourceInstance: string; sourceMessageId: string };
+  };
+  dmCloseReopen?: {
+    homeUserId: string;
+    homeInstance: string;
   };
 }
 
