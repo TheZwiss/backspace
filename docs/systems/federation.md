@@ -469,6 +469,8 @@ Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per 
 | `file_rejected` | `processFileRejectedEvent` | dm |
 | `dm_typing_start` | `processDmTypingStartEvent` | dm (fire-and-forget, no outbox) |
 | `dm_typing_stop` | `processDmTypingStopEvent` | dm (fire-and-forget, no outbox) |
+| `dm_close` | `processDmCloseEvent` | dm |
+| `dm_reopen` | `processDmReopenEvent` | dm |
 
 After processing all events, the relay endpoint updates the peer's `lastSeenAt` and resets `consecutiveFailures`, then returns accepted/rejected arrays plus `maxUploadSize`.
 
@@ -670,6 +672,78 @@ When a user marks a DM channel as read (`channel_ack`) or marks it unread (`mark
 4. If no local message found (relay hasn't arrived yet): silently accept (no-op)
 5. Upsert `read_states` using timestamp-only LWW (`event.timestamp > existing.updatedAt`)
 6. Echo `channel_ack` to the user's local WebSocket connections (multi-tab sync)
+
+---
+
+## 8b. DM Close/Reopen Relay
+
+### Overview
+
+When a user closes or reopens a DM on their home instance, the action is relayed to all peer instances that hold a copy of the channel. This keeps the visibility state of a DM consistent across all instances that participate in it.
+
+Only DMs with a `federatedId` are eligible. Legacy local-only DMs (created before federation was added, with no `federatedId`) are silently skipped.
+
+### Event Types
+
+| Event | Trigger |
+|-------|---------|
+| `dm_close` | User calls `DELETE /api/dm/:id` (soft-close) |
+| `dm_reopen` | User calls `POST /api/dm/:id/reopen` (explicit reopen) |
+
+### Payload
+
+```typescript
+{
+  eventType: 'dm_close' | 'dm_reopen',
+  dmChannelId: string,          // local channel ID (context only)
+  federatedId: string,          // cross-instance channel lookup key
+  messageId: string,            // unique event ID: 'dm_close:{userId}:{ts}' or 'dm_reopen:{userId}:{ts}'
+  encryptionVersion: 0,
+  timestamp: number,
+  dmCloseReopen: {
+    homeUserId: string,         // acting user's home user ID
+    homeInstance: string,       // acting user's home instance (full URL)
+  }
+}
+```
+
+### Outbound (`federationOutbox.ts:queueDmCloseRelay`)
+
+Called from `dm.ts` after the local close or reopen is committed.
+
+1. Fetch the channel's `federatedId` — if null (local-only DM), return silently
+2. Fetch the acting user's `(homeUserId, homeInstance)` federation identity
+3. Build `FederationRelayEvent` with `eventType` and `dmCloseReopen` payload
+4. `getGroupDmTargetOrigins(dmChannelId)` resolves the delivery targets:
+   - 1-on-1 DMs (`ownerId = NULL`): returns `undefined` → broadcast to ALL active peers
+   - Group DMs: returns the set of peer origins that have at least one participant
+5. Enqueue via `appendMutationLog` + `queueOutboxEvent`
+
+### Inbound
+
+**`processDmCloseEvent` (`federation.ts`):**
+1. Look up channel by `federatedId` — if not found, accept silently (idempotent)
+2. Resolve acting user via `resolveLocalUser` (lookup-only; no stub creation for close/reopen) — if not found, accept silently
+3. If the user has no `dm_members` row in this channel, accept silently
+4. Set `dm_members.closed = 1` for the resolved local user
+5. Broadcast `dm_channel_closed` to the user's local WebSocket connections
+
+**`processDmReopenEvent` (`federation.ts`):**
+1. Look up channel by `federatedId` — if not found, accept silently
+2. Resolve acting user via `resolveLocalUser` — if not found, accept silently
+3. If the user has no `dm_members` row, accept silently
+4. Set `dm_members.closed = 0`
+5. Build full `DmChannel` payload and broadcast `dm_channel_created` to the user's local WebSocket connections (mirrors the automatic reopen path in `broadcastDmMessage`)
+
+### Closed-State Reopen on Message Relay (Bug Fix)
+
+`processCreateEvent` (inbound message relay) now mirrors the local `broadcastDmMessage` logic: before broadcasting `dm_message_created`, it checks each recipient's `dm_members.closed` flag. For any recipient with `closed = 1`:
+
+1. Set `closed = 0`
+2. Broadcast `dm_channel_created` (with the new message as `lastMessage`) to resurface the DM in the recipient's sidebar
+3. Then broadcast `dm_message_created`
+
+This fixes a gap where relayed messages bypassed the closed-state reopen logic, leaving the DM hidden for recipients whose `closed` flag was set on the receiving instance.
 
 ---
 
