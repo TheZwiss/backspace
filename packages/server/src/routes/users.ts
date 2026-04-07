@@ -3,11 +3,12 @@ import { eq, or, and, inArray } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate, verifyPassword, hashPassword, signJwt } from '../utils/auth.js';
 import { connectionManager } from '../ws/handler.js';
-import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult } from '@backspace/shared';
+import type { UpdateUserRequest, VerifyPasswordRequest, VerifyPasswordResponse, ChangePasswordRequest, ChangePasswordResponse, DeleteAccountRequest, ReplicatedInstance, SpaceLayoutItem, SpaceFolder, Activity, FederationIdentityDeleteRequest, FederationIdentityDeleteResponse, FederationIdentityDeleteResult, FederationProfileUpdatePayload } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
-import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
+import { queueOutboxEvent, isFederationRelayEnabled } from '../utils/federationOutbox.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
@@ -185,6 +186,24 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     const updateData: Record<string, string | null | undefined> = {};
 
+    // Fetch the current user row upfront — used for:
+    // 1. Write-protection guard (replicated users can't update durable fields)
+    // 2. Change detection (only relay if values actually differ)
+    const DURABLE_PROFILE_FIELDS = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio'] as const;
+    const preUpdateUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!preUpdateUser) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    // Write-protection: replicated users cannot update durable profile fields.
+    // These are managed by the home instance via S2S relay.
+    if (preUpdateUser.homeInstance) {
+      const hasDurableField = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
+      if (hasDurableField) {
+        return reply.code(403).send({ error: 'Profile fields are managed by your home instance', statusCode: 403 });
+      }
+    }
+
     if (displayName !== undefined) {
       if (displayName !== null && typeof displayName === 'string') {
         const trimmed = displayName.trim();
@@ -324,6 +343,49 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         }
       }
       updateData.replicatedInstances = JSON.stringify(replicatedInstances);
+
+      // Bootstrap: if new remote origins appeared, push a profile_update to each new peer.
+      // preUpdateUser already has the full row including replicatedInstances and all profile fields.
+      if (isFederationRelayEnabled() && !preUpdateUser.homeInstance) {
+        const existingOrigins = new Set<string>(
+          preUpdateUser.replicatedInstances
+            ? (JSON.parse(preUpdateUser.replicatedInstances) as ReplicatedInstance[]).map(ri => ri.origin)
+            : [],
+        );
+        const newOrigins = replicatedInstances
+          .filter(ri => ri.origin && !existingOrigins.has(ri.origin))
+          .map(ri => ri.origin);
+
+        if (newOrigins.length > 0) {
+          const origin = getOurOrigin();
+          const profilePayload: FederationProfileUpdatePayload = {
+            homeUserId: preUpdateUser.id,
+            homeInstance: origin,
+            profileUpdatedAt: preUpdateUser.profileUpdatedAt ?? Date.now(),
+            displayName: preUpdateUser.displayName,
+            avatar: preUpdateUser.avatar && !preUpdateUser.avatar.startsWith('http')
+              ? `${origin}/api/uploads/${preUpdateUser.avatar}`
+              : preUpdateUser.avatar,
+            banner: preUpdateUser.banner && !preUpdateUser.banner.startsWith('http')
+              ? `${origin}/api/uploads/${preUpdateUser.banner}`
+              : preUpdateUser.banner,
+            accentColor: preUpdateUser.accentColor,
+            avatarColor: preUpdateUser.avatarColor,
+            bio: preUpdateUser.bio,
+          };
+
+          for (const targetOrigin of newOrigins) {
+            queueOutboxEvent(
+              preUpdateUser.id,
+              preUpdateUser.id,
+              'profile_update',
+              JSON.stringify({ profileUpdate: profilePayload }),
+              [targetOrigin],
+              'profile',
+            );
+          }
+        }
+      }
     }
 
     if (homeUserId !== undefined) {
@@ -352,26 +414,11 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'No fields to update', statusCode: 400 });
     }
 
-    // LWW guard: if the caller provided a profileUpdatedAt and profile fields changed,
-    // reject stale writes by comparing timestamps
-    const profileFields = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio', 'customStatus'];
-    const hasProfileChange = profileFields.some(f => f in updateData);
-
-    if (hasProfileChange) {
-      if (profileUpdatedAt !== undefined && typeof profileUpdatedAt === 'number') {
-        const currentUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-        if (currentUser) {
-          const storedTs = currentUser.profileUpdatedAt ?? 0;
-          if (profileUpdatedAt < storedTs) {
-            // Incoming data is older — return current state without updating
-            return reply.code(200).send(sanitizeUser(currentUser, true));
-          }
-        }
-        (updateData as Record<string, unknown>).profileUpdatedAt = profileUpdatedAt;
-      } else {
-        // No explicit timestamp — stamp with server time (local edits)
-        (updateData as Record<string, unknown>).profileUpdatedAt = Date.now();
-      }
+    // Detect profile changes and stamp timestamp
+    const hasProfileChange = ['displayName', 'avatar', 'banner', 'accentColor', 'avatarColor', 'bio', 'customStatus'].some(f => f in updateData);
+    const hasDurableChange = DURABLE_PROFILE_FIELDS.some(f => f in updateData);
+    if (hasDurableChange) {
+      (updateData as Record<string, unknown>).profileUpdatedAt = Date.now();
     }
 
     db.update(schema.users).set(updateData).where(eq(schema.users.id, request.userId)).run();
@@ -447,44 +494,49 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
-    // Broadcast user_updated for profile field changes (reuse hasProfileChange from LWW guard above)
+    // Broadcast user_updated for profile field changes
     if (hasProfileChange) {
       const userUpdatedEvent = { type: 'user_updated' as const, user: sanitized };
-      const targetUserIds = new Set<string>();
-
-      // 1. Collect online users who share a space
-      const userSpaces = connectionManager.getUserSpaces(sanitized.id);
-      for (const [uid, spaceIds] of connectionManager.getUserSpaceEntries()) {
-        for (const spaceId of userSpaces) {
-          if (spaceIds.has(spaceId)) { targetUserIds.add(uid); break; }
-        }
-      }
-
-      // 2. Collect DM channel co-members
-      const dmMemberships = db.select().from(schema.dmMembers)
-        .where(eq(schema.dmMembers.userId, sanitized.id)).all();
-      for (const dm of dmMemberships) {
-        const coMembers = db.select().from(schema.dmMembers)
-          .where(eq(schema.dmMembers.dmChannelId, dm.dmChannelId)).all();
-        for (const m of coMembers) targetUserIds.add(m.userId);
-      }
-
-      // 3. Collect friends
-      const friendRows = db.select().from(schema.friends)
-        .where(or(
-          eq(schema.friends.userId, sanitized.id),
-          eq(schema.friends.friendId, sanitized.id),
-        )).all();
-      for (const fr of friendRows) {
-        targetUserIds.add(fr.userId === sanitized.id ? fr.friendId : fr.userId);
-      }
-
-      // 4. Include self (for other tabs/connections)
-      targetUserIds.add(sanitized.id);
-
-      // Send deduplicated — each user gets the event exactly once
+      const targetUserIds = collectProfileBroadcastTargetIds(sanitized.id);
+      targetUserIds.add(sanitized.id); // Include self (for other tabs/connections)
       for (const uid of targetUserIds) {
         connectionManager.sendToUser(uid, userUpdatedEvent);
+      }
+    }
+
+    // S2S profile relay: queue profile_update to all peers when durable fields actually changed
+    if (hasDurableChange && !preUpdateUser.homeInstance && isFederationRelayEnabled()) {
+      // Compare pre-update row against post-update to detect actual value changes
+      const durableActuallyChanged = DURABLE_PROFILE_FIELDS.some(f =>
+        f in updateData && (updateData[f] ?? null) !== (preUpdateUser[f] ?? null)
+      );
+
+      if (durableActuallyChanged) {
+        const origin = getOurOrigin();
+        const profilePayload: FederationProfileUpdatePayload = {
+          homeUserId: updatedUser!.id,
+          homeInstance: origin,
+          profileUpdatedAt: updatedUser!.profileUpdatedAt ?? Date.now(),
+          displayName: updatedUser!.displayName,
+          avatar: updatedUser!.avatar && !updatedUser!.avatar.startsWith('http')
+            ? `${origin}/api/uploads/${updatedUser!.avatar}`
+            : updatedUser!.avatar,
+          banner: updatedUser!.banner && !updatedUser!.banner.startsWith('http')
+            ? `${origin}/api/uploads/${updatedUser!.banner}`
+            : updatedUser!.banner,
+          accentColor: updatedUser!.accentColor,
+          avatarColor: updatedUser!.avatarColor,
+          bio: updatedUser!.bio,
+        };
+
+        queueOutboxEvent(
+          updatedUser!.id,    // entityId — user's ID (coalesces rapid edits)
+          updatedUser!.id,    // contextId — user-scoped
+          'profile_update',
+          JSON.stringify({ profileUpdate: profilePayload }),
+          undefined,          // targetPeerOrigins — broadcast to all active peers
+          'profile',          // contextType
+        );
       }
     }
 
