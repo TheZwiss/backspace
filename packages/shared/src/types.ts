@@ -805,8 +805,9 @@ export interface FederationRelayEvent {
     | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
     | 'friend_add' | 'friend_remove' | 'file_rejected'
     | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
-    | 'dm_typing_start' | 'dm_typing_stop';
-  contextType?: 'dm' | 'friend';
+    | 'dm_typing_start' | 'dm_typing_stop'
+    | 'profile_update';
+  contextType?: 'dm' | 'friend' | 'profile';
   dmChannelId?: string;
   messageId: string;
   federatedId?: string;
@@ -841,6 +842,7 @@ export interface FederationRelayEvent {
     homeInstance: string;
     username: string;
   };
+  profileUpdate?: FederationProfileUpdatePayload;
 }
 
 export interface FederationCallPayload {
@@ -876,6 +878,18 @@ export interface FederationRelayProfileSnapshot {
   avatarColor?: string | null;
   banner?: string | null;
   bio?: string | null;
+}
+
+export interface FederationProfileUpdatePayload {
+  homeUserId: string;
+  homeInstance: string;
+  profileUpdatedAt: number;
+  displayName: string | null;
+  avatar: string | null;
+  banner: string | null;
+  accentColor: string | null;
+  avatarColor: string | null;
+  bio: string | null;
 }
 
 export interface FederationFriendshipPayload {
