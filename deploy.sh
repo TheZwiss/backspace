@@ -41,11 +41,16 @@ EXCLUDES=(
   --exclude='livekit.yaml'
   --exclude='.DS_Store'
   --exclude='.superpowers'
-  --exclude='Gemini Starter.rtf'
-  --exclude='System Prompt.rtf'
+  --exclude='.claude'
+  --exclude='.worktrees'
+  --exclude='.playwright-mcp'
+  --exclude='Artworks-Backspace'
   --exclude='Old Designs'
   --exclude='outdated trash'
+  --exclude='docs/superpowers'
   --exclude='*.rtf'
+  --exclude='ARCHITECTURE_AUDIT.md'
+  --exclude='Backspace-design-prototype.html'
 )
 
 # ── Deploy function ─────────────────────────────────────────
