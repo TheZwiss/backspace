@@ -544,6 +544,61 @@ export function queueReadStateRelay(
 }
 
 /**
+ * Queue a dm_close or dm_reopen event for federation relay.
+ * Sends to all peer instances that have a copy of the DM.
+ */
+export function queueDmCloseRelay(
+  dmChannelId: string,
+  userId: string,
+  eventType: 'dm_close' | 'dm_reopen',
+): void {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const ourOrigin = getOurOrigin();
+
+  // Channel must have a federatedId for cross-instance sync
+  const channel = db.select({ federatedId: schema.dmChannels.federatedId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, dmChannelId))
+    .get();
+  if (!channel?.federatedId) return;
+
+  // Resolve the user's federated identity
+  const user = db.select({ homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .get();
+  if (!user) return;
+
+  const homeUserId = user.homeUserId || userId;
+  const homeInstance = user.homeInstance || ourOrigin;
+
+  const now = Date.now();
+  const payload: FederationRelayEvent = {
+    eventType,
+    dmChannelId,
+    messageId: `${eventType}:${channel.federatedId}:${userId}:${now}`,
+    federatedId: channel.federatedId,
+    encryptionVersion: 0,
+    timestamp: now,
+    dmCloseReopen: {
+      homeUserId,
+      homeInstance,
+    },
+  };
+
+  const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
+  queueOutboxEvent(
+    `${eventType}:${channel.federatedId}:${userId}`,
+    dmChannelId,
+    eventType,
+    JSON.stringify(payload),
+    targetOrigins,
+  );
+}
+
+/**
  * Send typing indicator events directly to remote peers (bypasses outbox).
  * Fire-and-forget — typing is ephemeral, lost packets are acceptable.
  */
