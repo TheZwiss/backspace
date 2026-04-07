@@ -116,6 +116,15 @@ function normalizeOrigin(url: string): string {
   }
 }
 
+/** Check whether an origin string refers to the current (home) instance. */
+export function isSelfOrigin(origin: string): boolean {
+  try {
+    return normalizeOrigin(origin) === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 // ─── API client resolution ───────────────────────────────────────────────────
 
 // ─── Registry helpers ────────────────────────────────────────────────────────
@@ -187,8 +196,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const origin = normalizeOrigin(url);
 
     // Reject self-connection
-    if (origin === window.location.origin) {
-      throw new Error('Cannot add your home instance as a remote instance');
+    if (isSelfOrigin(url)) {
+      throw new Error("You're already logged into this instance");
     }
 
     // Reject duplicates
@@ -791,7 +800,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     for (const ri of currentUser.replicatedInstances) {
       const origin = ri.origin || `https://${ri.domain}`;
       // Never connect to ourselves — home WS is managed separately
-      if (origin === window.location.origin) continue;
+      if (isSelfOrigin(origin)) continue;
       if (get().instances.some(i => i.origin === origin)) continue; // already loaded
       const cachedEntry = cached[origin];
       const regEntry = registry.get(origin);

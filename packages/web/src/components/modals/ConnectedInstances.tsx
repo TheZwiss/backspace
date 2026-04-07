@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import type { InstanceInfoResponse, FederationRegistryEntry } from '@backspace/shared';
-import { useInstanceStore, DifferentPasswordError } from '../../stores/instanceStore';
+import { useInstanceStore, DifferentPasswordError, isSelfOrigin } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { isElectron } from '../../platform/platform';
@@ -991,8 +991,9 @@ export function ConnectedInstances() {
     });
   };
 
-  // Convert registry Map to array
-  const registryEntries = Array.from(registry.values());
+  // Convert registry Map to array (hide self-referencing entry — shown as Home Instance above)
+  const registryEntries = Array.from(registry.values())
+    .filter(entry => !isSelfOrigin(entry.origin));
 
   // Compute filter counts
   const counts = {
