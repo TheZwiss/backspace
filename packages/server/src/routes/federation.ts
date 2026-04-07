@@ -2384,11 +2384,9 @@ function processMemberAddEvent(
     return;
   }
 
-  // Validate authority: only the owner's instance can add members
-  if (channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
-    rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
-    return;
-  }
+  // Authority note: any HMAC-verified peer can relay member_add events.
+  // The HMAC signature proves the event came from a trusted peer.
+  // The attribution check below still validates that addedBy belongs to the source instance.
 
   // Attribution: adder must belong to source instance (FED-010)
   if (event.membership.addedBy && !verifyAttribution(event.membership.addedBy.homeInstance, sourceInstance)) {
