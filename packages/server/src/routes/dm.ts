@@ -26,6 +26,7 @@ import {
   appendMutationLog,
   queueOutboxEvent,
   queueDmRelay,
+  queueDmCloseRelay,
   getDmParticipants,
   getGroupDmTargetOrigins,
   isFederationRelayEnabled,
@@ -445,6 +446,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
               eq(schema.dmMembers.userId, request.userId),
             ))
             .run();
+
+          // Relay reopen to federated peers
+          queueDmCloseRelay(myDm.dmChannelId, request.userId, 'dm_reopen');
         }
 
         const dmMemberRows = db.select()
@@ -853,6 +857,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       type: 'dm_channel_closed',
       dmChannelId: id,
     });
+
+    // Relay close to federated peers
+    queueDmCloseRelay(id, request.userId, 'dm_close');
 
     return reply.code(200).send({ success: true });
   });
