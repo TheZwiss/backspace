@@ -789,19 +789,9 @@ export function runMigrations(db: Database.Database): void {
 
         let reason: string | null = null;
 
-        // Criterion 1: shared 1-on-1 DM membership
-        if (!reason) {
-          const shared = db.prepare(`
-            SELECT m1.dm_channel_id
-            FROM dm_members m1
-            JOIN dm_members m2 ON m1.dm_channel_id = m2.dm_channel_id
-            JOIN dm_channels c ON c.id = m1.dm_channel_id
-            WHERE m1.user_id = ? AND m2.user_id = ?
-              AND c.owner_id IS NULL
-            LIMIT 1
-          `).get(a.id, b.id) as { dm_channel_id: string } | undefined;
-          if (shared) reason = `shared 1-on-1 DM channel ${shared.dm_channel_id}`;
-        }
+        // Criterion 1 removed: "shared 1-on-1 DM membership" was wrong —
+        // two users from the same domain sharing a DM channel doesn't mean
+        // they're duplicates, it means they're having a conversation.
 
         // Criterion 2: username cross-reference
         if (!reason) {

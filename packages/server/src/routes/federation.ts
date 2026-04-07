@@ -1208,8 +1208,17 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           sourceUrl: `${localOrigin}/api/uploads/${a.filename}`,
         }));
 
+        // Include federatedId for group DMs so the peer uses the correct
+        // channel lookup path instead of computing a 1-on-1 pair hash.
+        const syncChannel = db
+          .select({ federatedId: schema.dmChannels.federatedId, ownerId: schema.dmChannels.ownerId })
+          .from(schema.dmChannels)
+          .where(eq(schema.dmChannels.id, mutation.context_id))
+          .get();
+
         events.push({
           eventType: mutationType,
+          ...(syncChannel?.federatedId && syncChannel.ownerId ? { federatedId: syncChannel.federatedId } : {}),
           dmChannelId: mutation.context_id,
           messageId: message.id,
           encryptionVersion: 0,
@@ -1550,6 +1559,13 @@ function backfillHomeUserId(
   db: ReturnType<typeof getDb>,
 ): typeof schema.users.$inferSelect {
   if (user.homeUserId === homeUserId) return user;
+  // Only backfill if the user has no homeUserId yet. If they already have a
+  // DIFFERENT non-null homeUserId, this means the wrong user was matched —
+  // overwriting would corrupt their identity.
+  if (user.homeUserId) {
+    console.warn(`[federation] Refusing to overwrite homeUserId on user ${user.id} (${user.username}): existing=${user.homeUserId}, incoming=${homeUserId}`);
+    return user;
+  }
   db.update(schema.users)
     .set({ homeUserId })
     .where(eq(schema.users.id, user.id))
