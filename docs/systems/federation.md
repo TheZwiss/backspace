@@ -706,15 +706,30 @@ When relay events carry `FederationRelayProfileSnapshot` data:
 
 `hydrateReplicatedUserProfile` only fills null/empty fields. Avatar/banner are overwritten only if the current value is not an absolute URL (catches stale bare filenames).
 
-### Client-side LWW Sync (`profileSync.ts`)
+#### Profile Sync (S2S)
 
-Operates via the web client, not S2S relay:
-- On connect to a remote instance, compares `profileUpdatedAt` timestamps
-- If home is newer: pushes profile to remote (re-uploads avatar/banner)
-- If remote is newer: pulls from remote to home, then relays to all other remotes
-- Incremental: `syncProfileUpdateToRemotes` pushes partial updates after local profile edits
+Profile data is synced server-to-server. The home instance is authoritative — when a user updates their profile, the home server queues a `profile_update` relay event to all active peers via the outbox.
 
-This is a **client-driven** mechanism -- it only runs when a user is actively connected to multiple instances. It does not use the relay pipeline or outbox.
+**Event:** `profile_update` (contextType: `profile`)
+
+**Payload:** `FederationProfileUpdatePayload` — full snapshot of 6 durable fields:
+- `homeUserId`, `homeInstance`, `profileUpdatedAt` (monotonic version)
+- `displayName`, `avatar` (absolute URL or null), `banner` (absolute URL or null)
+- `accentColor`, `avatarColor`, `bio`
+
+**Targeting:** Broadcast to all active peers. Peers silently accept if they have no replica.
+
+**Coalescing:** `entityId = homeUserId`. Rapid successive edits coalesce to one delivery per peer.
+
+**Processing:** Remote overwrites all 6 fields unconditionally. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
+
+**Write protection:** Remote instances reject PATCH /users/@me profile field updates for replicated users (homeInstance set). Profile data is read-only on remote — only updated via S2S relay.
+
+**Bootstrap:** When a new origin appears in a user's `replicatedInstances`, the home server queues a targeted `profile_update` to that peer.
+
+**File handling:** Avatar/banner stored as absolute URLs pointing to the home instance's `/api/uploads/`. Browser caching (immutable, 1-year) ensures performance.
+
+**Replaces:** Client-driven `profileSync.ts` (deleted). `hydrateReplicatedUserProfile` still bootstraps null fields during DM/friend relay — it is not replaced.
 
 ---
 

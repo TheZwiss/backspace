@@ -28,6 +28,8 @@ GET    /users/:id                                        → { user }
 GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], mutualSpaces[] }
 ```
 
+**Write protection:** If the authenticated user is a replicated user (`homeInstance` is set), the following fields are rejected with 403: `displayName`, `avatar`, `banner`, `accentColor`, `avatarColor`, `bio`. These fields are managed by the home instance via S2S relay.
+
 ## Spaces (`routes/spaces.ts`) — auth required
 ```
 GET    /spaces                                                                 → { spaces[] }
