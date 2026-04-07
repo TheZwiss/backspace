@@ -519,13 +519,14 @@ export function queueReadStateRelay(
     messageRef = { sourceInstance: ourOrigin, sourceMessageId: messageId };
   }
 
+  const now = Date.now();
   const payload: FederationRelayEvent = {
     eventType: 'read_state_update',
     dmChannelId: channelId,
-    messageId: `read_state:${userId}:${Date.now()}`,
+    messageId: `read_state:${userId}:${now}`,
     federatedId: channel.federatedId,
     encryptionVersion: 0,
-    timestamp: Date.now(),
+    timestamp: now,
     readState: {
       user: { homeUserId, homeInstance },
       messageRef,

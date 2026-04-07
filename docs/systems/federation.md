@@ -633,37 +633,43 @@ Uses the same backoff schedule as outbox delivery. Max attempts: 10 (`MAX_FILE_A
 
 ### `read_state_update` Event
 
-When a user marks a DM channel as read (via `channel_ack` WS event), the read state is relayed to all peer instances so cross-instance sessions stay in sync.
+When a user marks a DM channel as read (`channel_ack`) or marks it unread (`mark_unread`), the read state is relayed to all peer instances so cross-instance sessions stay in sync.
 
-**Outbound (`events.ts:handleChannelAck`):**
+**Outbound (`events.ts:handleChannelAck` / `handleMarkUnread`):**
 - Fires after writing `read_states` locally
-- Only triggers for DM channels (channel ID found in `dm_members`)
-- Calls `sendReadStateRelay(dmChannelId, userId, messageId)` in `federationOutbox.ts`
-- Fire-and-forget — not queued via outbox, sent directly to all active peers (same pattern as typing relay)
+- Only triggers for DM channels with a `federatedId` (cross-instance DMs)
+- Calls `queueReadStateRelay(channelId, messageId, userId)` in `federationOutbox.ts`
+- Queued via the standard outbox pipeline — durable, retried by the background worker
+- Entity key `read_state:{federatedId}:{userId}` enables coalescing (rapid acks collapse to latest)
+- `mark_unread` with the `'0'` sentinel (delete read state entirely) is NOT relayed — it cannot be mapped to a message
 
 **Event payload:**
 ```typescript
 {
   eventType: 'read_state_update',
-  contextType: 'dm',
-  federatedId: string,       // DM channel's federatedId (cross-instance channel lookup)
+  dmChannelId: string,
+  messageId: string,            // unique event ID: 'read_state:{userId}:{timestamp}'
+  federatedId: string,          // DM channel's federatedId (cross-instance channel lookup)
+  encryptionVersion: 0,
+  timestamp: number,            // LWW tiebreaker
   readState: {
-    user: { homeUserId: string, homeInstance: string },
-    messageRef: { messageId: string, sourceInstance: string | null }
+    user: { homeUserId: string; homeInstance: string },
+    messageRef: { sourceInstance: string; sourceMessageId: string }
   }
 }
 ```
 
-`messageRef.sourceInstance` is non-null when the acknowledged message was relayed from another instance (i.e., it has a `source_instance` in `dm_messages`). The receiving instance uses this to locate the correct local message row.
+`messageRef` identifies the acked message in federation coordinates. If the message originated on this instance, `sourceInstance` is our own origin and `sourceMessageId` is the local message ID. If the message was relayed here, `sourceInstance` and `sourceMessageId` come from the `dm_messages` row's `source_instance`/`source_message_id` columns.
 
 **Inbound (`processReadStateUpdateEvent`):**
 1. Resolve channel by `federatedId` — reject if not found
-2. Resolve user via `resolveLocalUser` — skip if not found (no-op, fire-and-forget)
-3. Resolve the message by `messageRef` (local ID if `sourceInstance` is null, otherwise by `source_instance + source_message_id`)
-4. Upsert `read_states` row for the resolved local user and message
-5. Broadcast `channel_ack` to all of the user's local WebSocket connections (multi-tab/multi-device sync)
-
-**Not persisted in outbox or mutation log** — read state relay is ephemeral; missed deliveries are not retried.
+2. Resolve user via `resolveLocalUser` — reject if not found
+3. Translate `messageRef` to local message ID:
+   - If `sourceInstance` matches our origin: `sourceMessageId` IS our local ID
+   - Otherwise: look up `dm_messages` by `source_instance + source_message_id`
+4. If no local message found (relay hasn't arrived yet): silently accept (no-op)
+5. Upsert `read_states` using timestamp-only LWW (`event.timestamp > existing.updatedAt`)
+6. Echo `channel_ack` to the user's local WebSocket connections (multi-tab sync)
 
 ---
 

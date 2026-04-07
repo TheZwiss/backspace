@@ -1384,6 +1384,12 @@ function handleMarkUnread(event: Record<string, unknown>, userId: string, isFede
     channelId,
     messageId,
   });
+
+  // Relay mark-unread to federated peers for cross-instance sync
+  // (skip the '0' sentinel — it deletes the read state and can't be mapped to a message)
+  if (messageId !== '0') {
+    queueReadStateRelay(channelId, messageId, userId);
+  }
 }
 
 // ─── DM Call Handlers (Unified Room API) ───────────────────────────────────
