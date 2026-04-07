@@ -1220,6 +1220,33 @@ function buildReadyPayload(userId: string): {
     visibleChannelIdSet.add(dm.id);
   }
 
+  // Seed read states for federated users' DM channels that have no existing read state.
+  // This handles the bootstrap: DMs existed before cross-instance access was enabled,
+  // so the remote instance has no read state history. Mark as read (latest message).
+  // Going forward, the S2S read_state_update relay keeps things in sync.
+  if (isFederated && dmChannels.length > 0) {
+    const dmIds = dmChannels.map(dm => dm.id);
+    const existingDmReadStates = batchInArray(
+      dmIds,
+      ids => db.select({ channelId: schema.readStates.channelId })
+        .from(schema.readStates)
+        .where(and(eq(schema.readStates.userId, userId), inArray(schema.readStates.channelId, ids)))
+        .all(),
+    );
+    const hasReadState = new Set(existingDmReadStates.map(rs => rs.channelId));
+    const now = Date.now();
+    for (const dm of dmChannels) {
+      if (!hasReadState.has(dm.id) && dm.lastMessage) {
+        db.insert(schema.readStates).values({
+          userId,
+          channelId: dm.id,
+          lastReadMessageId: dm.lastMessage.id,
+          updatedAt: now,
+        }).run();
+      }
+    }
+  }
+
   // Get Space Folders
   const folderRows = db.select()
     .from(schema.spaceFolders)
