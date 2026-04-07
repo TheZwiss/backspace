@@ -4,7 +4,6 @@ import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
 import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
-import { syncProfileToRemote } from '../utils/profileSync';
 // Circular dependency: federationOps imports useInstanceStore, instanceStore imports this.
 // Safe because both modules access each other lazily (at call time, not import time).
 // clearPasswordSyncTimers itself does not reference useInstanceStore.
@@ -331,14 +330,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
-      // Sync home profile to new remote (fire-and-forget).
-      // Skip when target is home — home is the source of truth for profile data.
-      if (!targetIsHome) {
-        syncProfileToRemote(instance).catch((err) => {
-          console.warn(`[ProfileSync] Initial sync to ${origin} failed:`, err);
-        });
-      }
-
       // Initiate server-to-server peering for DM relay (non-fatal)
       try {
         await api.federation.initiatePeering({ remoteOrigin: origin });
@@ -401,11 +392,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
-
-      // Sync full home profile to remote (fire-and-forget)
-      syncProfileToRemote(instance).catch((err) => {
-        console.warn(`[ProfileSync] Login sync to ${origin} failed:`, err);
-      });
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});
@@ -935,11 +921,6 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
             // Open WebSocket connection now that we've verified the token
             connectInstance(origin, cachedEntry.token);
-
-            // Sync home profile to reconnected remote (fire-and-forget)
-            syncProfileToRemote(connectedInstance).catch((err) => {
-              console.warn(`[ProfileSync] Reconnect sync to ${origin} failed:`, err);
-            });
 
             // Initiate server-to-server peering for DM relay (non-fatal, idempotent)
             api.federation.initiatePeering({ remoteOrigin: origin }).catch(() => {});

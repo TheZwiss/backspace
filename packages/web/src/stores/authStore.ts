@@ -7,7 +7,6 @@ import { useSocialStore } from './socialStore';
 import { useVoiceStore } from './voiceStore';
 import { useInstanceStore } from './instanceStore';
 import { useActivityStore } from './activityStore';
-import { syncProfileUpdateToRemotes } from '../utils/profileSync';
 import { changePasswordOnRemotes, deleteAccountOnRemotes, type FederationOpResult } from '../utils/federationOps';
 import { clearSelfIds } from '../utils/identity';
 
@@ -100,10 +99,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const user = await api.users.update(data);
       set({ user });
-      // Push profile changes to all connected remote instances
-      syncProfileUpdateToRemotes(data).catch((err) => {
-        console.warn('[ProfileSync] Failed to sync to remotes:', err);
-      });
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Update failed' });
       throw err;
