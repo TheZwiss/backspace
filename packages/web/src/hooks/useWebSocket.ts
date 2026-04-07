@@ -544,7 +544,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    // ─── DM events (home-only) ──────────────────────────────────────────────
+    // ─── DM events (all origins) ────────────────────────────────────────────
 
     case 'dm_message_created': {
       if (!isHome) {
@@ -817,16 +817,23 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
-    // ─── DM channel events (home-only) ──────────────────────────────────────
+    // ─── DM channel events (all origins) ────────────────────────────────────
 
-    case 'dm_channel_created':
+    case 'dm_channel_created': {
       if (!isHome) {
         for (const m of event.dmChannel.members) {
           normalizeUserAssets(m, origin);
         }
       }
+      // Dedup: skip if a channel with the same federatedId already exists
+      const fid = event.dmChannel.federatedId;
+      if (fid) {
+        const existing = useSpaceStore.getState().dmChannels.find(dm => dm.federatedId === fid);
+        if (existing) break;
+      }
       addDmChannel(event.dmChannel, origin);
       break;
+    }
 
     case 'dm_channel_closed':
       removeDmChannel(event.dmChannelId);
