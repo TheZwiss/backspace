@@ -1332,6 +1332,9 @@ export function processRelayEvents(
         case 'profile_update':
           processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'read_state_update':
+          processReadStateUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         default:
           rejected.push({ messageId: event.messageId, reason: 'unknown_event_type' });
           break;
@@ -3763,6 +3766,103 @@ function processProfileUpdateEvent(
       connectionManager.sendToUser(uid, userUpdatedEvent);
     }
   }
+
+  accepted.push(event.messageId);
+}
+
+function processReadStateUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  if (!event.federatedId || !event.readState) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_read_state_payload' });
+    return;
+  }
+
+  // Find the local DM channel by federatedId
+  const channel = db.select({ id: schema.dmChannels.id })
+    .from(schema.dmChannels)
+    .where(and(
+      eq(schema.dmChannels.federatedId, event.federatedId),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .get();
+
+  if (!channel) {
+    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+    return;
+  }
+
+  // Resolve the user locally
+  const localUser = resolveLocalUser(event.readState.user.homeUserId, db);
+  if (!localUser) {
+    rejected.push({ messageId: event.messageId, reason: 'user_not_found' });
+    return;
+  }
+
+  // Translate messageRef to a local message ID
+  const { sourceInstance: refSource, sourceMessageId: refId } = event.readState.messageRef;
+  let localMessageId: string;
+
+  const ourOrigin = getOurOrigin();
+  if (extractDomain(refSource) === extractDomain(ourOrigin)) {
+    // The message originated on this instance — refId IS our local ID
+    localMessageId = refId;
+  } else {
+    // Look up the relayed copy by source coordinates
+    const localMsg = db.select({ id: schema.dmMessages.id })
+      .from(schema.dmMessages)
+      .where(and(
+        eq(schema.dmMessages.sourceInstance, refSource),
+        eq(schema.dmMessages.sourceMessageId, refId),
+      ))
+      .get();
+
+    if (!localMsg) {
+      // Message relay hasn't arrived yet — silently discard
+      accepted.push(event.messageId);
+      return;
+    }
+    localMessageId = localMsg.id;
+  }
+
+  // Write/update read state using timestamp-only LWW
+  const existing = db.select()
+    .from(schema.readStates)
+    .where(and(
+      eq(schema.readStates.userId, localUser.id),
+      eq(schema.readStates.channelId, channel.id),
+    ))
+    .get();
+
+  if (existing) {
+    if (event.timestamp > existing.updatedAt) {
+      db.update(schema.readStates)
+        .set({ lastReadMessageId: localMessageId, updatedAt: event.timestamp })
+        .where(and(
+          eq(schema.readStates.userId, localUser.id),
+          eq(schema.readStates.channelId, channel.id),
+        ))
+        .run();
+    }
+  } else {
+    db.insert(schema.readStates).values({
+      userId: localUser.id,
+      channelId: channel.id,
+      lastReadMessageId: localMessageId,
+      updatedAt: event.timestamp,
+    }).run();
+  }
+
+  // Echo channel_ack to the user's local WebSocket connections (multi-tab sync)
+  connectionManager.sendToUser(localUser.id, {
+    type: 'channel_ack',
+    channelId: channel.id,
+    messageId: localMessageId,
+  });
 
   accepted.push(event.messageId);
 }
