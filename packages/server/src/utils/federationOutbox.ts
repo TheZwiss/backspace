@@ -473,6 +473,76 @@ export async function sendCallRelay(
 }
 
 /**
+ * Queue a read_state_update relay event for cross-instance read state sync.
+ * Translates a local channel ack into federation coordinates using the
+ * message's sourceInstance/sourceMessageId mapping.
+ */
+export function queueReadStateRelay(
+  channelId: string,
+  messageId: string,
+  userId: string,
+): void {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const ourOrigin = getOurOrigin();
+
+  // Channel must have a federatedId for cross-instance sync
+  const channel = db.select({ federatedId: schema.dmChannels.federatedId, ownerId: schema.dmChannels.ownerId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, channelId))
+    .get();
+  if (!channel?.federatedId) return;
+
+  // Resolve the user's federated identity
+  const user = db.select({ homeUserId: schema.users.homeUserId, homeInstance: schema.users.homeInstance })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .get();
+  if (!user) return;
+
+  const homeUserId = user.homeUserId || userId;
+  const homeInstance = user.homeInstance || ourOrigin;
+
+  // Determine the acked message's federation coordinates
+  const msg = db.select({ sourceInstance: schema.dmMessages.sourceInstance, sourceMessageId: schema.dmMessages.sourceMessageId })
+    .from(schema.dmMessages)
+    .where(eq(schema.dmMessages.id, messageId))
+    .get();
+
+  let messageRef: { sourceInstance: string; sourceMessageId: string };
+  if (msg?.sourceInstance && msg?.sourceMessageId) {
+    // Message was relayed here — use its original coordinates
+    messageRef = { sourceInstance: msg.sourceInstance, sourceMessageId: msg.sourceMessageId };
+  } else {
+    // Message originated on this instance
+    messageRef = { sourceInstance: ourOrigin, sourceMessageId: messageId };
+  }
+
+  const payload: FederationRelayEvent = {
+    eventType: 'read_state_update',
+    dmChannelId: channelId,
+    messageId: `read_state:${userId}:${Date.now()}`,
+    federatedId: channel.federatedId,
+    encryptionVersion: 0,
+    timestamp: Date.now(),
+    readState: {
+      user: { homeUserId, homeInstance },
+      messageRef,
+    },
+  };
+
+  const targetOrigins = getGroupDmTargetOrigins(channelId);
+  queueOutboxEvent(
+    `read_state:${channel.federatedId}:${userId}`,
+    channelId,
+    'read_state_update',
+    JSON.stringify(payload),
+    targetOrigins,
+  );
+}
+
+/**
  * Send typing indicator events directly to remote peers (bypasses outbox).
  * Fire-and-forget — typing is ephemeral, lost packets are acceptable.
  */
