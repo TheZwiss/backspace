@@ -754,16 +754,15 @@ class ConnectionManager {
     }
   }
 
-  /** Send event to users involved in a federated call. Works for both Path A (DM exists) and Path B (no local DM). */
+  /** Send event to users who were ringed for a federated call.
+   *  ALWAYS uses ringedUserIds, never sendToDmMembers — sendToDmMembers would
+   *  also reach the caller's replicated stub, causing cross-instance event contamination
+   *  (the caller's multi-instance WS gets dm_call_accepted with the wrong dmChannelId). */
   sendToFederatedCallUsers(federatedId: string, event: ServerEvent): void {
     const call = this.federatedCalls.get(federatedId);
     if (!call) return;
-    if (call.dmChannelId) {
-      this.sendToDmMembers(call.dmChannelId, event);
-    } else {
-      for (const uid of call.ringedUserIds) {
-        this.sendToUser(uid, event);
-      }
+    for (const uid of call.ringedUserIds) {
+      this.sendToUser(uid, event);
     }
   }
 

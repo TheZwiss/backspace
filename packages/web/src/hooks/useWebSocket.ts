@@ -802,15 +802,19 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'dm_call_accepted': {
       const { setIncomingCall, setOutgoingCall, outgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
-      // Track whether WE are the caller before clearing state
       const wasOutgoingCall = !!outgoingCall;
       setIncomingCall(null);
       setOutgoingCall(null);
+
+      // Only enter active call state if:
+      // - We're the caller (wasOutgoingCall) → will connect via connectFn below
+      // - We already connected to LiveKit (clicked accept in handleAccept)
+      // Other instances of the same user must NOT enter call state — they'd show
+      // "Connecting..." forever with no actual LiveKit connection.
       const callDmId = event.dmChannelId || event.federatedCallId || '';
-      setActiveDmCall({ dmChannelId: callDmId });
-      // Only auto-connect if we're the CALLER waiting for acceptance.
-      // The callee who accepted connects in the click handler (handleAccept).
-      // Other instances of the same user should NOT auto-connect.
+      if (wasOutgoingCall || isLiveKitConnected) {
+        setActiveDmCall({ dmChannelId: callDmId });
+      }
       if (connectFn && !isLiveKitConnected && wasOutgoingCall && callDmId) {
         connectFn(callDmId, true).catch((err: unknown) => {
           console.error('[WS] DM call connect failed:', err);
