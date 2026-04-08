@@ -1444,6 +1444,7 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
 function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
   let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
+  console.log(`[DM_CALL_ACCEPT] userId=${userId} dmChannelId=${dmChannelId} federatedCallId=${federatedCallId}`);
 
   if (!dmChannelId && !federatedCallId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId or federatedCallId is required' });
@@ -1459,17 +1460,24 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       .from(schema.dmChannels)
       .where(eq(schema.dmChannels.federatedId, federatedCallId))
       .get();
-    if (ch) dmChannelId = ch.id;
+    if (ch) {
+      dmChannelId = ch.id;
+      console.log(`[DM_CALL_ACCEPT] Resolved federatedId → dmChannelId=${ch.id}`);
+    } else {
+      console.log(`[DM_CALL_ACCEPT] No channel found for federatedId=${federatedCallId}`);
+    }
   }
 
   // Path 1: Local room (we're the host) — only possible with dmChannelId
   if (dmChannelId) {
     if (!isDmMember(dmChannelId, userId)) {
+      console.log(`[DM_CALL_ACCEPT] NOT a member of dmChannelId=${dmChannelId}`);
       connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
       return;
     }
 
     const room = connectionManager.getRoom(dmChannelId);
+    console.log(`[DM_CALL_ACCEPT] Path1: getRoom(${dmChannelId}) → ${room ? `found (type=${room.roomType}, state=${(room.metadata as any).state})` : 'NOT FOUND'}`);
     if (room && room.roomType === 'dm') {
       const meta = room.metadata as DmRoomMeta;
 
@@ -1497,6 +1505,7 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
         userId,
         action: 'join',
       });
+      console.log(`[DM_CALL_ACCEPT] Path1 HOST SUCCESS: room activated, dm_call_accepted broadcast`);
       sendFederatedCallAccept(dmChannelId, userId)
         .catch(err => console.error('[federation] sendFederatedCallAccept error:', err));
       return;
@@ -1510,6 +1519,7 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       ? connectionManager.getFederatedCallByDmChannel(dmChannelId)
       : undefined;
 
+  console.log(`[DM_CALL_ACCEPT] Path2: fedCall=${fedCall ? `found (host=${fedCall.federatedCallHost})` : 'NOT FOUND'}`);
   if (fedCall) {
     connectionManager.activateFederatedCall(fedCall.federatedId);
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
@@ -1525,6 +1535,7 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       .get();
     const homeUserId = user?.homeUserId || userId;
 
+    console.log(`[DM_CALL_ACCEPT] Path2 RELAY to host ${fedCall.federatedCallHost}`);
     sendCallRelay(fedCall.federatedCallHost, [{
       eventType: 'dm_call_accept',
       messageId: generateSnowflake(),
@@ -1534,10 +1545,13 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       call: {
         acceptor: { homeUserId, homeInstance: getOurOrigin() },
       },
-    }]).catch(err => console.error('[federation] Failed to send dm_call_accept:', err));
+    }]).then(result => {
+      console.log(`[DM_CALL_ACCEPT] Relay result: ${JSON.stringify(result)}`);
+    }).catch(err => console.error('[federation] Failed to send dm_call_accept:', err));
     return;
   }
 
+  console.log(`[DM_CALL_ACCEPT] FALLTHROUGH — no call found for userId=${userId}`);
   connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
 }
 

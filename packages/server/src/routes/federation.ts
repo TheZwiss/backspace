@@ -3561,6 +3561,7 @@ function processDmCallAcceptEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
+  console.log(`[S2S_CALL_ACCEPT] from=${sourceInstance} federatedId=${event.federatedId} acceptor=${JSON.stringify(event.call?.acceptor)}`);
   if (!event.call?.acceptor || !event.federatedId) {
     rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
     return;
