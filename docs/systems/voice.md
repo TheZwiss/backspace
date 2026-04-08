@@ -85,7 +85,7 @@ When `findOrCreateDmChannel` creates a local DM channel during an active federat
 
 **Token generation:** `generateFederatedCallToken(federatedId, homeUserId, displayName)` in `routes/livekit.ts` issues 5-minute tokens scoped to the `federatedId` room (not the local `dmChannelId`). Grants full DM permissions (mic, camera, screen share, subscribe, data channel).
 
-**Public URL:** `https://${DOMAIN}/livekit` — the Caddy-proxied address. Never the internal `LIVEKIT_URL`. Instances without LiveKit can still receive federated calls by forwarding the host's URL and token to the client.
+**LiveKit URL:** The relay sends `config.livekit.url` (e.g., `wss://nova.ddns.net/livekit`). Must be `wss://`, not `https://` — the LiveKit SDK requires a WebSocket URL.
 
 **Token endpoint:** `POST /api/livekit/token` uses `federatedId` as the room name when the DM channel has a `federatedId` set, ensuring both instances join the same LiveKit room.
 
@@ -94,6 +94,20 @@ When `findOrCreateDmChannel` creates a local DM channel during an active federat
 - Local calls: `${userId}:${username}` — unchanged
 
 **Client identity resolution:** For federated calls, the client splits the LiveKit participant identity on `:` and matches `homeUserId` against the DM member list (which stores `homeUserId` for all members). This resolves the correct display name and avatar regardless of which instance the participant is on.
+
+### Client-Side Call Routing
+
+**`callOrigin`:** Set to the WS origin that delivered the `dm_call_incoming` event (the home instance), NOT the call host URL. Accept/reject/end route through this WS. The home instance's server finds the `FederatedCallEntry` and relays to the host via S2S HTTP. This is reliable regardless of whether the client has a multi-instance WS to the host.
+
+**`handleAccept`:** Sets `activeDmCall` and clears `incomingCall` directly in the click handler — does not wait for the server's `dm_call_accepted` response (races with `connectFn`'s async AudioContext resume).
+
+**Passive ready handler:** On page refresh/restart, the ready payload includes active calls but the client does NOT auto-connect to LiveKit. Users must re-accept. This prevents identity slot wars when the same user has multiple sessions.
+
+### SoundController Federation Awareness
+
+The `SoundController` uses `isSelf(id)` which checks against BOTH `currentUser.id` (local snowflake) and `currentUser.homeUserId` (federated home ID). In federated calls, `updateParticipants` resolves identity to the local snowflake when `activeDmCall` is set, but reverts to raw `homeUserId` when it's cleared during disconnect. Both formats must be recognized as "self" to prevent phantom join/leave sounds.
+
+**Disconnect teardown:** `roomRef` is set to `null` before calling `destroyRoom()`. This prevents `ParticipantDisconnected` events (fired during teardown) from triggering `updateParticipants`, which would cause `user_leave` sounds for departing participants alongside the disconnect sound.
 
 ---
 
