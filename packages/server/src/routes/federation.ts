@@ -13,7 +13,7 @@ import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
-import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload } from '@backspace/shared';
+import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent } from '@backspace/shared';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -3568,56 +3568,51 @@ function processDmCallAcceptEvent(
     .from(schema.dmChannels)
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
-
-  if (!channel) {
-    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
-    return;
-  }
-
-  const dmChannelId = channel.id;
+  const dmChannelId = channel?.id;
 
   // Check if we're the HOST (have a VoiceRoom)
-  const room = connectionManager.getRoom(dmChannelId);
+  const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
 
     if (meta.state === 'ringing') {
-      connectionManager.activateDmRoom(dmChannelId);
+      connectionManager.activateDmRoom(dmChannelId!);
 
       // Join caller to room
       connectionManager.leaveCurrentRoom(meta.callerId);
-      connectionManager.joinRoom(dmChannelId, meta.callerId);
+      connectionManager.joinRoom(dmChannelId!, meta.callerId);
 
-      connectionManager.sendToDmMembers(dmChannelId, {
+      connectionManager.sendToDmMembers(dmChannelId!, {
         type: 'voice_state_update',
-        channelId: dmChannelId,
+        channelId: dmChannelId!,
         userId: meta.callerId,
         action: 'join',
       });
     }
 
     // Broadcast accepted locally
-    connectionManager.sendToDmMembers(dmChannelId, {
+    connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_accepted',
-      dmChannelId,
+      dmChannelId: dmChannelId!,
     });
 
     // Fan out to ALL other remote instances (exclude the one that sent the accept)
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_accept', {
+    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_accept', {
       call: { acceptor: event.call.acceptor },
     }, normalizedSource, db).catch(err =>
       console.error('[federation] Fan-out dm_call_accept failed:', err)
     );
   } else {
     // We're a REMOTE instance receiving fan-out — transition local state
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    const fedCall = connectionManager.getFederatedCall(event.federatedId);
     if (fedCall) {
-      connectionManager.activateFederatedCall(dmChannelId);
-      connectionManager.sendToDmMembers(dmChannelId, {
+      connectionManager.activateFederatedCall(event.federatedId);
+      connectionManager.sendToFederatedCallUsers(event.federatedId, {
         type: 'dm_call_accepted',
-        dmChannelId,
-      });
+        dmChannelId: fedCall.dmChannelId,
+        federatedCallId: event.federatedId,
+      } as ServerEvent);
     }
   }
 
@@ -3645,39 +3640,34 @@ function processDmCallRejectEvent(
     .from(schema.dmChannels)
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
+  const dmChannelId = channel?.id;
 
-  if (!channel) {
-    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
-    return;
-  }
-
-  const dmChannelId = channel.id;
-
-  const room = connectionManager.getRoom(dmChannelId);
+  const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
     connectionManager.clearVoiceWs(meta.callerId);
-    connectionManager.destroyRoom(dmChannelId);
+    connectionManager.destroyRoom(dmChannelId!);
 
-    connectionManager.sendToDmMembers(dmChannelId, {
+    connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_rejected',
-      dmChannelId,
+      dmChannelId: dmChannelId!,
     });
 
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_end', {
+    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.rejector },
     }, normalizedSource, db).catch(err =>
       console.error('[federation] Fan-out dm_call_end (reject) failed:', err)
     );
   } else {
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    const fedCall = connectionManager.getFederatedCall(event.federatedId);
     if (fedCall) {
-      connectionManager.clearFederatedCall(dmChannelId);
-      connectionManager.sendToDmMembers(dmChannelId, {
+      connectionManager.sendToFederatedCallUsers(event.federatedId, {
         type: 'dm_call_rejected',
-        dmChannelId,
-      });
+        dmChannelId: fedCall.dmChannelId,
+        federatedCallId: event.federatedId,
+      } as ServerEvent);
+      connectionManager.clearFederatedCall(event.federatedId);
     }
   }
 
@@ -3705,15 +3695,9 @@ function processDmCallEndEvent(
     .from(schema.dmChannels)
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
+  const dmChannelId = channel?.id;
 
-  if (!channel) {
-    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
-    return;
-  }
-
-  const dmChannelId = channel.id;
-
-  const room = connectionManager.getRoom(dmChannelId);
+  const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
     connectionManager.clearVoiceWs(meta.callerId);
@@ -3721,27 +3705,28 @@ function processDmCallEndEvent(
       connectionManager.clearVoiceUserStatus(pid);
       connectionManager.clearVoiceWs(pid);
     }
-    connectionManager.destroyRoom(dmChannelId);
+    connectionManager.destroyRoom(dmChannelId!);
 
-    connectionManager.sendToDmMembers(dmChannelId, {
+    connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_ended',
-      dmChannelId,
+      dmChannelId: dmChannelId!,
     });
 
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId, event.federatedId, 'dm_call_end', {
+    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.endedBy },
     }, normalizedSource, db).catch(err =>
       console.error('[federation] Fan-out dm_call_end failed:', err)
     );
   } else {
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
+    const fedCall = connectionManager.getFederatedCall(event.federatedId);
     if (fedCall) {
-      connectionManager.clearFederatedCall(dmChannelId);
-      connectionManager.sendToDmMembers(dmChannelId, {
+      connectionManager.sendToFederatedCallUsers(event.federatedId, {
         type: 'dm_call_ended',
-        dmChannelId,
-      });
+        dmChannelId: fedCall.dmChannelId,
+        federatedCallId: event.federatedId,
+      } as ServerEvent);
+      connectionManager.clearFederatedCall(event.federatedId);
     }
   }
 

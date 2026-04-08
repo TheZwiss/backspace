@@ -6,7 +6,7 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent } from '@backspace/shared';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -1442,247 +1442,209 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
 }
 
 function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
-  const dmChannelId = event.dmChannelId as string;
-  if (!dmChannelId || typeof dmChannelId !== 'string') {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
+  const dmChannelId = (event.dmChannelId as string) || null;
+  const federatedCallId = (event.federatedCallId as string) || null;
+
+  if (!dmChannelId && !federatedCallId) {
+    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId or federatedCallId is required' });
     return;
   }
 
-  if (!isDmMember(dmChannelId, userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
-    return;
-  }
-
-  const room = connectionManager.getRoom(dmChannelId);
-  if (!room || room.roomType !== 'dm') {
-    // Check if this is a federated call (this instance is not the host)
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
-    if (fedCall) {
-      // Transition local state
-      connectionManager.activateFederatedCall(dmChannelId);
-
-      // Broadcast locally
-      connectionManager.sendToDmMembers(dmChannelId, {
-        type: 'dm_call_accepted',
-        dmChannelId,
-      });
-
-      // Send accept to host (fire-and-forget)
-      const db = getDb();
-      const user = db.select({ homeUserId: schema.users.homeUserId })
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .get();
-      const homeUserId = user?.homeUserId || userId;
-
-      sendCallRelay(fedCall.federatedCallHost, [{
-        eventType: 'dm_call_accept',
-        messageId: generateSnowflake(),
-        encryptionVersion: 0,
-        timestamp: Date.now(),
-        federatedId: fedCall.federatedId,
-        call: {
-          acceptor: { homeUserId, homeInstance: getOurOrigin() },
-        },
-      }]).catch(err => console.error('[federation] Failed to send dm_call_accept:', err));
-
+  // Path 1: Local room (we're the host) — only possible with dmChannelId
+  if (dmChannelId) {
+    if (!isDmMember(dmChannelId, userId)) {
+      connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
       return;
     }
 
-    connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
+    const room = connectionManager.getRoom(dmChannelId);
+    if (room && room.roomType === 'dm') {
+      const meta = room.metadata as DmRoomMeta;
+
+      if (meta.state === 'ringing') {
+        connectionManager.activateDmRoom(dmChannelId);
+        const callerLeft = connectionManager.leaveCurrentRoom(meta.callerId);
+        if (callerLeft) broadcastRoomLeave(callerLeft.roomId, callerLeft.room, meta.callerId);
+        connectionManager.joinRoom(dmChannelId, meta.callerId);
+        connectionManager.sendToDmMembers(dmChannelId, {
+          type: 'voice_state_update',
+          channelId: dmChannelId,
+          userId: meta.callerId,
+          action: 'join',
+        });
+      }
+
+      const acceptorLeft = connectionManager.leaveCurrentRoom(userId);
+      if (acceptorLeft) broadcastRoomLeave(acceptorLeft.roomId, acceptorLeft.room, userId);
+      connectionManager.joinRoom(dmChannelId, userId);
+      connectionManager.setVoiceWs(userId, ws);
+      connectionManager.sendToDmMembers(dmChannelId, { type: 'dm_call_accepted', dmChannelId });
+      connectionManager.sendToDmMembers(dmChannelId, {
+        type: 'voice_state_update',
+        channelId: dmChannelId,
+        userId,
+        action: 'join',
+      });
+      sendFederatedCallAccept(dmChannelId, userId)
+        .catch(err => console.error('[federation] sendFederatedCallAccept error:', err));
+      return;
+    }
+  }
+
+  // Path 2: Federated call (we're a remote instance)
+  const fedCall = federatedCallId
+    ? connectionManager.getFederatedCall(federatedCallId)
+    : dmChannelId
+      ? connectionManager.getFederatedCallByDmChannel(dmChannelId)
+      : undefined;
+
+  if (fedCall) {
+    connectionManager.activateFederatedCall(fedCall.federatedId);
+    connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
+      type: 'dm_call_accepted',
+      dmChannelId: fedCall.dmChannelId,
+      federatedCallId: fedCall.federatedId,
+    } as ServerEvent);
+
+    const db = getDb();
+    const user = db.select({ homeUserId: schema.users.homeUserId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .get();
+    const homeUserId = user?.homeUserId || userId;
+
+    sendCallRelay(fedCall.federatedCallHost, [{
+      eventType: 'dm_call_accept',
+      messageId: generateSnowflake(),
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: fedCall.federatedId,
+      call: {
+        acceptor: { homeUserId, homeInstance: getOurOrigin() },
+      },
+    }]).catch(err => console.error('[federation] Failed to send dm_call_accept:', err));
     return;
   }
 
-  const meta = room.metadata as DmRoomMeta;
-
-  if (meta.state === 'ringing') {
-    // First accept — transition ringing→active and join the caller
-    connectionManager.activateDmRoom(dmChannelId);
-
-    // Leave caller's current room if in one
-    const callerLeft = connectionManager.leaveCurrentRoom(meta.callerId);
-    if (callerLeft) {
-      broadcastRoomLeave(callerLeft.roomId, callerLeft.room, meta.callerId);
-    }
-
-    // Join caller into the DM room
-    connectionManager.joinRoom(dmChannelId, meta.callerId);
-
-    // Broadcast voice_state_update join for caller
-    connectionManager.sendToDmMembers(dmChannelId, {
-      type: 'voice_state_update',
-      channelId: dmChannelId,
-      userId: meta.callerId,
-      action: 'join',
-    });
-  }
-  // If already active, this is a late-join (e.g. 3rd member joining group call).
-  // Skip the ringing→active transition and caller join — just join the acceptor below.
-
-  // Leave acceptor's current room if in one
-  const acceptorLeft = connectionManager.leaveCurrentRoom(userId);
-  if (acceptorLeft) {
-    broadcastRoomLeave(acceptorLeft.roomId, acceptorLeft.room, userId);
-  }
-
-  // Join acceptor into the DM room
-  connectionManager.joinRoom(dmChannelId, userId);
-
-  // Bind voice session to this socket for the acceptor
-  connectionManager.setVoiceWs(userId, ws);
-
-  // Notify all DM members that the call was accepted
-  connectionManager.sendToDmMembers(dmChannelId, {
-    type: 'dm_call_accepted',
-    dmChannelId,
-  });
-
-  // Broadcast voice_state_update join for acceptor
-  connectionManager.sendToDmMembers(dmChannelId, {
-    type: 'voice_state_update',
-    channelId: dmChannelId,
-    userId,
-    action: 'join',
-  });
-
-  // Federation: notify remote instances that the call was accepted
-  sendFederatedCallAccept(dmChannelId, userId)
-    .catch(err => console.error('[federation] sendFederatedCallAccept error:', err));
+  connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
 }
 
 function handleDmCallReject(event: Record<string, unknown>, userId: string): void {
-  const dmChannelId = event.dmChannelId as string;
-  if (!dmChannelId || typeof dmChannelId !== 'string') {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
-    return;
-  }
+  const dmChannelId = (event.dmChannelId as string) || null;
+  const federatedCallId = (event.federatedCallId as string) || null;
 
-  if (!isDmMember(dmChannelId, userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
-    return;
-  }
+  if (!dmChannelId && !federatedCallId) return;
 
-  const room = connectionManager.getRoom(dmChannelId);
-  if (!room) {
-    // Check federated call registry
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
-    if (fedCall) {
-      connectionManager.clearFederatedCall(dmChannelId);
-      connectionManager.sendToDmMembers(dmChannelId, {
-        type: 'dm_call_rejected',
-        dmChannelId,
-      });
+  // Path 1: Local room (we're the host)
+  if (dmChannelId) {
+    if (!isDmMember(dmChannelId, userId)) return;
 
-      const db = getDb();
-      const user = db.select({ homeUserId: schema.users.homeUserId })
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .get();
-      const homeUserId = user?.homeUserId || userId;
-
-      sendCallRelay(fedCall.federatedCallHost, [{
-        eventType: 'dm_call_reject',
-        messageId: generateSnowflake(),
-        encryptionVersion: 0,
-        timestamp: Date.now(),
-        federatedId: fedCall.federatedId,
-        call: {
-          rejector: { homeUserId, homeInstance: getOurOrigin() },
-        },
-      }]).catch(err => console.error('[federation] Failed to send dm_call_reject:', err));
-
+    const room = connectionManager.getRoom(dmChannelId);
+    if (room) {
+      const meta = room.metadata as DmRoomMeta;
+      connectionManager.clearVoiceWs(meta.callerId);
+      connectionManager.destroyRoom(dmChannelId);
+      connectionManager.sendToDmMembers(dmChannelId, { type: 'dm_call_rejected', dmChannelId });
+      sendFederatedCallEnd(dmChannelId, userId)
+        .catch(err => console.error('[federation] sendFederatedCallEnd error:', err));
       return;
     }
-    return; // No active call, silently ignore
   }
 
-  // Extract caller ID before destroying the room
-  const meta = room.metadata as DmRoomMeta;
+  // Path 2: Federated call
+  const fedCall = federatedCallId
+    ? connectionManager.getFederatedCall(federatedCallId)
+    : dmChannelId
+      ? connectionManager.getFederatedCallByDmChannel(dmChannelId)
+      : undefined;
 
-  // Clear caller's voice ws binding (set during handleDmCallStart)
-  connectionManager.clearVoiceWs(meta.callerId);
+  if (fedCall) {
+    connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
+      type: 'dm_call_rejected',
+      dmChannelId: fedCall.dmChannelId,
+      federatedCallId: fedCall.federatedId,
+    } as ServerEvent);
+    connectionManager.clearFederatedCall(fedCall.federatedId);
 
-  // Destroy room
-  connectionManager.destroyRoom(dmChannelId);
+    const db = getDb();
+    const user = db.select({ homeUserId: schema.users.homeUserId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .get();
+    const homeUserId = user?.homeUserId || userId;
 
-  // Notify all DM members that the call was rejected
-  connectionManager.sendToDmMembers(dmChannelId, {
-    type: 'dm_call_rejected',
-    dmChannelId,
-  });
-
-  // Federation: notify remote instances the call was rejected (= ended for 1-on-1)
-  sendFederatedCallEnd(dmChannelId, userId)
-    .catch(err => console.error('[federation] sendFederatedCallEnd error:', err));
+    sendCallRelay(fedCall.federatedCallHost, [{
+      eventType: 'dm_call_reject',
+      messageId: generateSnowflake(),
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: fedCall.federatedId,
+      call: {
+        rejector: { homeUserId, homeInstance: getOurOrigin() },
+      },
+    }]).catch(err => console.error('[federation] Failed to send dm_call_reject:', err));
+  }
 }
 
 function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
-  const dmChannelId = event.dmChannelId as string;
-  if (!dmChannelId || typeof dmChannelId !== 'string') {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId is required' });
-    return;
-  }
+  const dmChannelId = (event.dmChannelId as string) || null;
+  const federatedCallId = (event.federatedCallId as string) || null;
 
-  if (!isDmMember(dmChannelId, userId)) {
-    connectionManager.sendToUser(userId, { type: 'error', message: 'You are not a member of this DM channel' });
-    return;
-  }
+  if (!dmChannelId && !federatedCallId) return;
 
-  const room = connectionManager.getRoom(dmChannelId);
-  if (!room) {
-    const fedCall = connectionManager.getFederatedCall(dmChannelId);
-    if (fedCall) {
-      connectionManager.clearFederatedCall(dmChannelId);
-      connectionManager.sendToDmMembers(dmChannelId, {
-        type: 'dm_call_ended',
-        dmChannelId,
-      });
+  // Path 1: Local room (we're the host)
+  if (dmChannelId) {
+    if (!isDmMember(dmChannelId, userId)) return;
 
-      const db = getDb();
-      const user = db.select({ homeUserId: schema.users.homeUserId })
-        .from(schema.users)
-        .where(eq(schema.users.id, userId))
-        .get();
-      const homeUserId = user?.homeUserId || userId;
-
-      sendCallRelay(fedCall.federatedCallHost, [{
-        eventType: 'dm_call_end',
-        messageId: generateSnowflake(),
-        encryptionVersion: 0,
-        timestamp: Date.now(),
-        federatedId: fedCall.federatedId,
-        call: {
-          endedBy: { homeUserId, homeInstance: getOurOrigin() },
-        },
-      }]).catch(err => console.error('[federation] Failed to send dm_call_end:', err));
-
+    const room = connectionManager.getRoom(dmChannelId);
+    if (room) {
+      const meta = room.metadata as DmRoomMeta;
+      connectionManager.clearVoiceWs(meta.callerId);
+      for (const participantId of room.participants) {
+        connectionManager.clearVoiceUserStatus(participantId);
+        connectionManager.clearVoiceWs(participantId);
+      }
+      connectionManager.destroyRoom(dmChannelId);
+      connectionManager.sendToDmMembers(dmChannelId, { type: 'dm_call_ended', dmChannelId });
+      sendFederatedCallEnd(dmChannelId, userId)
+        .catch(err => console.error('[federation] sendFederatedCallEnd error:', err));
       return;
     }
-    return; // No active call, silently ignore
   }
 
-  // Clear voice ws binding for the caller (may not be in participants if still ringing)
-  const meta = room.metadata as DmRoomMeta;
-  connectionManager.clearVoiceWs(meta.callerId);
+  // Path 2: Federated call
+  const fedCall = federatedCallId
+    ? connectionManager.getFederatedCall(federatedCallId)
+    : dmChannelId
+      ? connectionManager.getFederatedCallByDmChannel(dmChannelId)
+      : undefined;
 
-  // Clear voice user states and voice ws for all participants
-  for (const participantId of room.participants) {
-    connectionManager.clearVoiceUserStatus(participantId);
-    connectionManager.clearVoiceWs(participantId);
+  if (fedCall) {
+    connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
+      type: 'dm_call_ended',
+      dmChannelId: fedCall.dmChannelId,
+      federatedCallId: fedCall.federatedId,
+    } as ServerEvent);
+    connectionManager.clearFederatedCall(fedCall.federatedId);
+
+    const db = getDb();
+    const user = db.select({ homeUserId: schema.users.homeUserId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .get();
+    const homeUserId = user?.homeUserId || userId;
+
+    sendCallRelay(fedCall.federatedCallHost, [{
+      eventType: 'dm_call_end',
+      messageId: generateSnowflake(),
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      federatedId: fedCall.federatedId,
+      call: {
+        endedBy: { homeUserId, homeInstance: getOurOrigin() },
+      },
+    }]).catch(err => console.error('[federation] Failed to send dm_call_end:', err));
   }
-
-  // Destroy room (removes all participants from userToRoom)
-  connectionManager.destroyRoom(dmChannelId);
-
-  // Notify all DM members that the call ended
-  connectionManager.sendToDmMembers(dmChannelId, {
-    type: 'dm_call_ended',
-    dmChannelId,
-  });
-
-  // Federation: notify remote instances the call ended
-  sendFederatedCallEnd(dmChannelId, userId)
-    .catch(err => console.error('[federation] sendFederatedCallEnd error:', err));
 }
 
 /**
