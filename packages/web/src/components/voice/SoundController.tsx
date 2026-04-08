@@ -24,7 +24,9 @@ export function SoundController() {
   const prevScreenShareUserIds = useRef<Set<string>>(new Set(useVoiceStore.getState().participants.filter(p => p.isScreenSharing).map(p => p.userId)));
 
   const incomingCallLoop = useRef<AudioBufferSourceNode | null>(null);
+  const incomingCallLoading = useRef(false);  // sync guard for async playSound
   const outgoingCallLoop = useRef<AudioBufferSourceNode | null>(null);
+  const outgoingCallLoading = useRef(false);
 
   useEffect(() => {
     // Set initial mount flag to false after first run
@@ -109,24 +111,43 @@ export function SoundController() {
       prevParticipantIds.current = currentParticipantIds;
       prevScreenShareUserIds.current = currentScreenShareUserIds;
 
-      // Incoming Call (Ringing)
-      if (state.incomingCall && !incomingCallLoop.current) {
+      // Incoming Call (Ringing) — sync guard prevents multiple playSound during async load
+      if (state.incomingCall && !incomingCallLoop.current && !incomingCallLoading.current) {
+        incomingCallLoading.current = true;
         audioManager.playSound('call_ringing', { loop: true, volume: getSfxVolume() }).then(source => {
-          incomingCallLoop.current = source;
+          // If call was cancelled while sound was loading, stop immediately
+          if (!useVoiceStore.getState().incomingCall) {
+            source?.stop();
+          } else {
+            incomingCallLoop.current = source;
+          }
+          incomingCallLoading.current = false;
         });
-      } else if (!state.incomingCall && incomingCallLoop.current) {
-        incomingCallLoop.current.stop();
-        incomingCallLoop.current = null;
+      } else if (!state.incomingCall) {
+        if (incomingCallLoop.current) {
+          incomingCallLoop.current.stop();
+          incomingCallLoop.current = null;
+        }
+        incomingCallLoading.current = false;
       }
 
-      // Outgoing Call (Calling)
-      if (state.outgoingCall && !outgoingCallLoop.current) {
+      // Outgoing Call (Calling) — same sync guard pattern
+      if (state.outgoingCall && !outgoingCallLoop.current && !outgoingCallLoading.current) {
+        outgoingCallLoading.current = true;
         audioManager.playSound('call_calling', { loop: true, volume: getSfxVolume() }).then(source => {
-          outgoingCallLoop.current = source;
+          if (!useVoiceStore.getState().outgoingCall) {
+            source?.stop();
+          } else {
+            outgoingCallLoop.current = source;
+          }
+          outgoingCallLoading.current = false;
         });
-      } else if (!state.outgoingCall && outgoingCallLoop.current) {
-        outgoingCallLoop.current.stop();
-        outgoingCallLoop.current = null;
+      } else if (!state.outgoingCall) {
+        if (outgoingCallLoop.current) {
+          outgoingCallLoop.current.stop();
+          outgoingCallLoop.current = null;
+        }
+        outgoingCallLoading.current = false;
       }
     });
 

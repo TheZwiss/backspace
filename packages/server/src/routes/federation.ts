@@ -3561,7 +3561,6 @@ function processDmCallAcceptEvent(
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
 ): void {
-  console.log(`[S2S_CALL_ACCEPT] from=${sourceInstance} federatedId=${event.federatedId} acceptor=${JSON.stringify(event.call?.acceptor)}`);
   if (!event.call?.acceptor || !event.federatedId) {
     rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
     return;
@@ -3577,11 +3576,9 @@ function processDmCallAcceptEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
   const dmChannelId = channel?.id;
-  console.log(`[S2S_CALL_ACCEPT] channel lookup: federatedId=${event.federatedId} → dmChannelId=${dmChannelId ?? 'NOT FOUND'}`);
 
   // Check if we're the HOST (have a VoiceRoom)
   const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
-  console.log(`[S2S_CALL_ACCEPT] room lookup: ${room ? `found (type=${room.roomType}, state=${(room.metadata as any).state})` : 'NOT FOUND'}`);
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
 
@@ -3600,12 +3597,12 @@ function processDmCallAcceptEvent(
       });
     }
 
-    // Broadcast accepted locally
-    console.log(`[S2S_CALL_ACCEPT] HOST path: broadcasting dm_call_accepted to dmChannelId=${dmChannelId}`);
+    // Broadcast accepted locally — include federatedCallId so all clients can match
     connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_accepted',
       dmChannelId: dmChannelId!,
-    });
+      federatedCallId: event.federatedId,
+    } as ServerEvent);
 
     // Fan out to ALL other remote instances (exclude the one that sent the accept)
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;

@@ -332,11 +332,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
               if (call.federatedCallId) {
                 setFederatedCallId(call.federatedCallId);
               }
-              if (connectFn && callDmId) {
-                connectFn(callDmId, true).catch((err) => {
-                  console.error('[WS] DM call reconnect failed:', err);
-                });
-              }
+              // PASSIVE: do NOT auto-connect to LiveKit on ready.
+              // The user must click "Join" or re-accept. Auto-connecting causes
+              // identity conflicts when the same user has multiple sessions —
+              // both sessions fight for the same LiveKit identity slot.
               break;
             } else if (call.state === 'ringing' && call.callerId !== myId) {
               const dmCh = event.dmChannels?.find((d: any) => d.id === call.dmChannelId);
