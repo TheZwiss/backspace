@@ -200,8 +200,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       throw new Error("You're already logged into this instance");
     }
 
-    // Reject duplicates
-    if (get().instances.some(i => i.origin === origin)) {
+    // Reject duplicates — but only if already connected/connecting.
+    // Allow re-adding instances that are in error/disconnected state.
+    const existing = get().instances.find(i => i.origin === origin);
+    if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
       throw new Error('This instance is already connected');
     }
 
@@ -783,8 +785,51 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       }
     }
 
+    // If logged in as a federated user, include the home instance as a
+    // connection target. It won't be in replicatedInstances (you don't
+    // "federate to" your own home), but the client needs it for friends,
+    // DMs, and profile data.
+    const instancesToConnect = [...currentUser.replicatedInstances];
+    if (currentUser.homeInstance) {
+      const homeOrigin = `https://${currentUser.homeInstance}`;
+      if (!isSelfOrigin(homeOrigin)) {
+        // Compute bare username (strip @domain suffix if present)
+        const bareUsername = currentUser.username.includes('@')
+          ? currentUser.username.split('@')[0]!
+          : currentUser.username;
+
+        const alreadyIncluded = instancesToConnect.some(ri =>
+          (ri.origin || `https://${ri.domain}`) === homeOrigin
+        );
+        if (!alreadyIncluded) {
+          instancesToConnect.push({
+            origin: homeOrigin,
+            username: bareUsername,
+            domain: currentUser.homeInstance,
+          });
+        }
+
+        // Ensure the home instance has a registry entry so it appears
+        // in the Connections UI (the registry is the source of truth for
+        // the Connections panel, not the instances array).
+        if (!registry.has(homeOrigin)) {
+          registry.set(homeOrigin, {
+            origin: homeOrigin,
+            label: currentUser.homeInstance,
+            username: bareUsername,
+            remoteUserId: currentUser.homeUserId ?? '',
+            status: 'auth_expired',
+            addedAt: Date.now(),
+            lastConnectedAt: null,
+            disconnectedAt: null,
+            errorMessage: 'Authenticate to connect to your home instance',
+          });
+        }
+      }
+    }
+
     // Early return if there's nothing to connect
-    if (currentUser.replicatedInstances.length === 0 && registry.size === 0) {
+    if (instancesToConnect.length === 0 && registry.size === 0) {
       set({ _autoConnectDone: true });
       return;
     }
@@ -793,11 +838,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // - withToken: have a cached token and should auto-connect
     // - withoutToken: no cached token → add as error placeholder
     // - userDisconnected: user explicitly disconnected → add as disconnected placeholder (no auto-connect)
-    const withToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0]; entry: CachedInstanceToken }> = [];
-    const withoutToken: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0] }> = [];
-    const userDisconnected: Array<{ origin: string; ri: (typeof currentUser.replicatedInstances)[0]; entry: CachedInstanceToken }> = [];
+    const withToken: Array<{ origin: string; ri: (typeof instancesToConnect)[0]; entry: CachedInstanceToken }> = [];
+    const withoutToken: Array<{ origin: string; ri: (typeof instancesToConnect)[0] }> = [];
+    const userDisconnected: Array<{ origin: string; ri: (typeof instancesToConnect)[0]; entry: CachedInstanceToken }> = [];
 
-    for (const ri of currentUser.replicatedInstances) {
+    for (const ri of instancesToConnect) {
       const origin = ri.origin || `https://${ri.domain}`;
       // Never connect to ourselves — home WS is managed separately
       if (isSelfOrigin(origin)) continue;

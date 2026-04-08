@@ -26,6 +26,7 @@ export interface FederatedMutuals {
  * Load mutual friends and mutual spaces across all connected instances.
  * Follows the same Promise.allSettled fan-out pattern as socialStore.loadFriends().
  *
+ * - Waits for auto-connect to finish before fanning out (same guard as socialStore)
  * - Deduplicates friends by canonical identity (homeUserId ?? id)
  * - Concatenates spaces (spaces on different instances are distinct)
  * - Normalizes assets for remote-origin results
@@ -34,6 +35,23 @@ export async function loadFederatedMutuals(
   targetUserId: string,
   targetHomeUserId?: string | null,
 ): Promise<FederatedMutuals> {
+  // Wait for all remote connections to establish before fanning out
+  if (!useInstanceStore.getState()._autoConnectDone) {
+    await new Promise<void>((resolve) => {
+      const unsub = useInstanceStore.subscribe((state) => {
+        if (state._autoConnectDone) {
+          unsub();
+          resolve();
+        }
+      });
+      // Double-check (race condition guard)
+      if (useInstanceStore.getState()._autoConnectDone) {
+        unsub();
+        resolve();
+      }
+    });
+  }
+
   const instances = useInstanceStore.getState().instances;
   const connectedInstances = instances.filter(i => i.status === 'connected');
 

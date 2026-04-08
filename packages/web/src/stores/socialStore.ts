@@ -36,6 +36,30 @@ function getApiForOrigin(origin: string) {
   return instance?.api ?? api;
 }
 
+// ─── Concurrency guards (module-level, not in store state) ──────────────────
+
+let _friendsLoadInFlight = false;
+let _requestsLoadInFlight = false;
+
+// ─── Auto-connect wait (same pattern as discoverStore) ──────────────────────
+
+async function waitForAutoConnect(): Promise<void> {
+  if (useInstanceStore.getState()._autoConnectDone) return;
+  return new Promise<void>((resolve) => {
+    const unsub = useInstanceStore.subscribe((state) => {
+      if (state._autoConnectDone) {
+        unsub();
+        resolve();
+      }
+    });
+    // Double-check (race condition guard)
+    if (useInstanceStore.getState()._autoConnectDone) {
+      unsub();
+      resolve();
+    }
+  });
+}
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 interface SocialState {
@@ -67,8 +91,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   error: null,
 
   loadFriends: async () => {
+    if (_friendsLoadInFlight) return;
+    _friendsLoadInFlight = true;
     set({ isLoading: true, error: null });
     try {
+      // Wait for all remote connections to establish before fanning out
+      await waitForAutoConnect();
+
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
 
@@ -80,15 +109,28 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       ]);
 
       const allFriends: TaggedFriend[] = [];
-      const seen = new Set<string>();
+      // Deduplicate by canonical identity — a user who exists on multiple
+      // instances (native + replicated stub) should appear once.
+      // Native profiles (homeUserId is null) replace stubs when found.
+      const seen = new Map<string, number>(); // canonicalId → index in allFriends
 
       for (const result of results) {
         if (result.status !== 'fulfilled') continue;
         const { friends, origin } = result.value;
         for (const friend of friends) {
-          const key = `${friend.id}:${origin}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+          const canonicalId = friend.homeUserId ?? friend.id;
+          const isNative = !friend.homeUserId;
+          const existingIdx = seen.get(canonicalId);
+
+          if (existingIdx !== undefined) {
+            // Replace replicated stub with native profile when found
+            if (isNative) {
+              allFriends[existingIdx] = { ...friend, _instanceOrigin: origin };
+            }
+            continue;
+          }
+
+          seen.set(canonicalId, allFriends.length);
           if (origin) normalizeUserAssets(friend, origin);
           allFriends.push({ ...friend, _instanceOrigin: origin });
         }
@@ -97,12 +139,19 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       set({ friends: allFriends, isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
+    } finally {
+      _friendsLoadInFlight = false;
     }
   },
 
   loadRequests: async () => {
+    if (_requestsLoadInFlight) return;
+    _requestsLoadInFlight = true;
     set({ isLoading: true, error: null });
     try {
+      // Wait for all remote connections to establish before fanning out
+      await waitForAutoConnect();
+
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
 
@@ -114,15 +163,20 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       ]);
 
       const allRequests: TaggedFriendRequest[] = [];
+      // Deduplicate by the canonical identity of the other party —
+      // there can only be one pending request between any two users.
       const seen = new Set<string>();
 
       for (const result of results) {
         if (result.status !== 'fulfilled') continue;
         const { requests, origin } = result.value;
         for (const request of requests) {
-          const key = `${request.id}:${origin}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
+          // Use the other party's canonical identity for dedup
+          const otherCanonicalId = request.user?.homeUserId ?? request.user?.id;
+          if (otherCanonicalId) {
+            if (seen.has(otherCanonicalId)) continue;
+            seen.add(otherCanonicalId);
+          }
           if (origin && request.user) normalizeUserAssets(request.user, origin);
           allRequests.push({ ...request, _instanceOrigin: origin });
         }
@@ -131,6 +185,8 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       set({ requests: allRequests, isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
+    } finally {
+      _requestsLoadInFlight = false;
     }
   },
 
