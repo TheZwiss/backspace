@@ -1749,7 +1749,10 @@ async function sendFederatedCallStart(
     return;
   }
 
-  const livekitUrl = `https://${config.domain}/livekit`;
+  // Use the configured LiveKit URL (wss://domain/livekit from .env).
+  // Previously this was `https://${config.domain}/livekit` which fails because
+  // the LiveKit SDK requires a wss:// WebSocket URL, not https://.
+  const livekitUrl = config.livekit.url ?? `wss://${config.domain}/livekit`;
 
   // Build participants array (all member identities for Path B)
   const participants = members.map(m => ({
