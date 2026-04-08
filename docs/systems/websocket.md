@@ -71,10 +71,10 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### DM Calls
 | type | fields | notes |
 |------|--------|-------|
-| `dm_call_start` | dmChannelId | 60s auto-timeout if not accepted |
-| `dm_call_accept` | dmChannelId | ringing→active |
-| `dm_call_reject` | dmChannelId | |
-| `dm_call_end` | dmChannelId | |
+| `dm_call_start` | dmChannelId?, federatedCallId? | `dmChannelId` can be null when `federatedCallId` is provided. 60s auto-timeout if not accepted |
+| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active |
+| `dm_call_reject` | dmChannelId?, federatedCallId? | |
+| `dm_call_end` | dmChannelId?, federatedCallId? | |
 
 ### System
 | type | fields |
@@ -166,10 +166,10 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 ### DM Calls
 | type | fields | scope |
 |------|--------|-------|
-| `dm_call_incoming` | dmChannelId, callerId, callerName, livekitUrl?, livekitToken? | DM members (excludes caller). Federation fields present for cross-instance calls. |
-| `dm_call_accepted` | dmChannelId | DM members |
-| `dm_call_rejected` | dmChannelId | DM members |
-| `dm_call_ended` | dmChannelId | DM members |
+| `dm_call_incoming` | dmChannelId?, federatedCallId, callerId, callerName, callOrigin?, livekitUrl?, livekitToken? | DM members (excludes caller). `dmChannelId` can be null for Path B federated calls (no local DM channel). `callOrigin` identifies the hosting instance for cross-instance calls. |
+| `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_ended` | dmChannelId?, federatedCallId? | DM members |
 
 ### Social
 | type | fields | scope |

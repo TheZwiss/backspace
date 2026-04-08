@@ -52,7 +52,36 @@ States: `ringing` → `active` → destroyed
 
 ## Federated DM Calls
 
-DM calls work across federated instances. The caller's instance hosts the LiveKit room; remote clients connect to it directly.
+DM calls work across federated instances. The caller's instance hosts the LiveKit room; remote clients connect to it directly. Call signaling is relayed to ALL active federation peers via synchronous HTTP POST (not the outbox worker). This ensures calls ring on every instance where a participant is connected, even if the DM is local-only on the caller's instance.
+
+### Universal Relay
+
+All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relayed to every active federation peer in parallel via `Promise.all`. Each `sendCallRelay` call has a 10-second timeout. This is a synchronous HTTP POST to the peer's federation endpoint — it bypasses the outbox worker entirely because call signaling is latency-sensitive and must not be queued.
+
+### Dual-Path Processing
+
+When a peer instance receives a call relay, it uses one of two delivery paths:
+
+| Path | Condition | Delivery |
+|------|-----------|----------|
+| **A** | DM exists on the receiving instance | Look up `dm_members` for the local `dmChannelId` and deliver to connected members |
+| **B** | DM does not exist on the receiving instance | Match participants by `homeUserId + homeInstance` identity against connected WebSocket users |
+
+Path B enables calls to ring for federated users even when no local DM channel has been created yet (e.g., first contact via a federated call).
+
+### FederatedCallEntry
+
+The in-memory call state (`FederatedCallEntry`) is keyed by `federatedId` (not `dmChannelId`):
+
+- `dmChannelId` is **nullable** — null for Path B scenarios where no local DM channel exists
+- `ringedUserIds` tracks all users who were notified of the incoming call, used for end-call cleanup
+- `callerId`, `callerHomeUserId`, `callerHomeInstance` identify the caller across instances
+
+### Late-Bind dmChannelId
+
+When `findOrCreateDmChannel` creates a local DM channel during an active federated call (e.g., the first message arrives while a call is ringing), it binds the `dmChannelId` on the existing `FederatedCallEntry`. This transitions the call from Path B to Path A delivery without interrupting the call.
+
+### Token Generation & Room Identity
 
 **Token generation:** `generateFederatedCallToken(federatedId, homeUserId, displayName)` in `routes/livekit.ts` issues 5-minute tokens scoped to the `federatedId` room (not the local `dmChannelId`). Grants full DM permissions (mic, camera, screen share, subscribe, data channel).
 
