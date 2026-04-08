@@ -145,16 +145,6 @@ export function handleClientEvent(
 ): void {
   const type = event.type as string;
 
-  // Federation gating: DM calls remain blocked for federated users (separate scope)
-  const DM_CALL_EVENTS = ['dm_call_start', 'dm_call_accept', 'dm_call_reject', 'dm_call_end'];
-  if (isFederated && DM_CALL_EVENTS.includes(type)) {
-    connectionManager.sendToUser(userId, {
-      type: 'error',
-      message: 'Federated users cannot use DM calls on remote instances',
-    });
-    return;
-  }
-
   switch (type) {
     case 'message_create':
       handleMessageCreate(event, userId);
