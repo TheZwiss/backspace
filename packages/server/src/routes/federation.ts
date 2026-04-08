@@ -3401,13 +3401,6 @@ function processDmCallStartEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
 
-  if (!channel) {
-    rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
-    return;
-  }
-
-  const localDmChannelId = channel.id;
-
   // Resolve caller to local stub
   const callerStub = resolveOrCreateReplicatedUser(
     event.call.caller.homeUserId,
@@ -3416,48 +3409,139 @@ function processDmCallStartEvent(
     { username: event.call.caller.displayName },
   );
   if (!callerStub) {
-    // Caller's identity has been deleted — can't initiate a call as a tombstoned user
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
     return;
   }
 
-  // Create federated call entry in registry
-  const entry: FederatedCallEntry = {
-    dmChannelId: localDmChannelId,
-    federatedId: event.federatedId,
-    callerId: callerStub.id,
-    callerHomeUserId: event.call.caller.homeUserId,
-    federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
-    livekitUrl: event.call.livekitUrl,
-    tokens: new Map(Object.entries(event.call.tokens)),
-    state: 'ringing',
-    startedAt: Date.now(),
-  };
+  const ringedUserIds: string[] = [];
 
-  connectionManager.createFederatedCall(entry);
+  if (channel) {
+    // ── Path A: DM exists locally ──
+    const localDmChannelId = channel.id;
 
-  // Send dm_call_incoming to each local member
-  const localMembers = db.select({
-    userId: schema.dmMembers.userId,
-    homeUserId: schema.users.homeUserId,
-  })
-    .from(schema.dmMembers)
-    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
-    .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
-    .all();
+    const localMembers = db.select({
+      userId: schema.dmMembers.userId,
+      homeUserId: schema.users.homeUserId,
+      homeInstance: schema.users.homeInstance,
+    })
+      .from(schema.dmMembers)
+      .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+      .where(eq(schema.dmMembers.dmChannelId, localDmChannelId))
+      .all();
 
-  for (const member of localMembers) {
-    const homeUserId = member.homeUserId || member.userId;
-    const token = event.call!.tokens![homeUserId];
+    for (const member of localMembers) {
+      const homeUserId = member.homeUserId || member.userId;
+      // Bug 1 fix: don't ring the caller on this instance
+      if (homeUserId === event.call.caller.homeUserId) continue;
 
-    connectionManager.sendToUser(member.userId, {
-      type: 'dm_call_incoming',
+      const token = event.call!.tokens![homeUserId];
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_call_incoming',
+        dmChannelId: localDmChannelId,
+        federatedCallId: event.federatedId,
+        callerId: callerStub.id,
+        callerName: callerStub.displayName ?? callerStub.username,
+        livekitUrl: event.call!.livekitUrl,
+        livekitToken: token,
+        callOrigin: event.call!.caller.homeInstance,
+      });
+      ringedUserIds.push(member.userId);
+    }
+
+    const entry: FederatedCallEntry = {
       dmChannelId: localDmChannelId,
+      federatedId: event.federatedId,
       callerId: callerStub.id,
-      callerName: callerStub.displayName ?? callerStub.username,
-      livekitUrl: event.call!.livekitUrl,
-      livekitToken: token,
-    });
+      callerHomeUserId: event.call.caller.homeUserId,
+      federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
+      livekitUrl: event.call.livekitUrl,
+      tokens: new Map(Object.entries(event.call.tokens)),
+      ringedUserIds,
+      state: 'ringing',
+      startedAt: Date.now(),
+    };
+    connectionManager.createFederatedCall(entry);
+
+  } else {
+    // ── Path B: DM doesn't exist locally — match by participant identity ──
+    if (!event.call.participants || !Array.isArray(event.call.participants)) {
+      // Old-format relay without participants — backwards-compatible rejection
+      rejected.push({ messageId: event.messageId, reason: 'channel_not_found' });
+      return;
+    }
+
+    const ourDomain = extractDomain(getOurOrigin());
+
+    for (const p of event.call.participants) {
+      const participantDomain = extractDomain(p.homeInstance);
+      // Skip the caller — strict match on BOTH homeUserId AND homeInstance
+      if (p.homeUserId === event.call.caller.homeUserId
+          && participantDomain === extractDomain(event.call.caller.homeInstance)) {
+        continue;
+      }
+
+      // Strict identity resolution: homeUserId is only unique within its homeInstance
+      const localUser = db.select({ id: schema.users.id, homeUserId: schema.users.homeUserId })
+        .from(schema.users)
+        .where(
+          or(
+            // Replicated stub or federated account from the participant's home instance
+            and(
+              eq(schema.users.homeUserId, p.homeUserId),
+              sql`replace(replace(coalesce(${schema.users.homeInstance}, ''), 'https://', ''), 'http://', '') = ${participantDomain}`,
+            ),
+            // Native user whose ID matches and participant's home matches our domain
+            and(
+              eq(schema.users.id, p.homeUserId),
+              isNull(schema.users.homeInstance),
+              sql`${participantDomain} = ${ourDomain}`,
+            ),
+          ),
+        )
+        .get();
+
+      if (!localUser) continue;
+
+      // Check if user has an active WS connection
+      const connections = connectionManager.getUserConnections(localUser.id);
+      if (connections.size === 0) continue;
+
+      const homeUserId = localUser.homeUserId || localUser.id;
+      const token = event.call!.tokens![homeUserId];
+      if (!token) continue;
+
+      connectionManager.sendToUser(localUser.id, {
+        type: 'dm_call_incoming',
+        dmChannelId: null,
+        federatedCallId: event.federatedId,
+        callerId: callerStub.id,
+        callerName: callerStub.displayName ?? callerStub.username,
+        livekitUrl: event.call!.livekitUrl,
+        livekitToken: token,
+        callOrigin: event.call!.caller.homeInstance,
+      });
+      ringedUserIds.push(localUser.id);
+    }
+
+    if (ringedUserIds.length === 0) {
+      // No connected users found — silently accept (not an error)
+      accepted.push(event.messageId);
+      return;
+    }
+
+    const entry: FederatedCallEntry = {
+      dmChannelId: null,
+      federatedId: event.federatedId,
+      callerId: callerStub.id,
+      callerHomeUserId: event.call.caller.homeUserId,
+      federatedCallHost: sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`,
+      livekitUrl: event.call.livekitUrl,
+      tokens: new Map(Object.entries(event.call.tokens)),
+      ringedUserIds,
+      state: 'ringing',
+      startedAt: Date.now(),
+    };
+    connectionManager.createFederatedCall(entry);
   }
 
   accepted.push(event.messageId);
