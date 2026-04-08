@@ -12,10 +12,14 @@ function getSfxVolume(): number {
 export function SoundController() {
   const audioManager = AudioManager.getInstance();
   const currentUser = useAuthStore((s) => s.user);
-  // Federation-aware self-ID: in federated calls, LiveKit participant identity
-  // uses homeUserId (from the home instance), not the local snowflake ID.
-  // Without this, the SoundController thinks our own presence is a stranger.
-  const myId = currentUser?.homeUserId || currentUser?.id;
+  // Federation-aware self-check: in federated calls, the participant userId
+  // can flip between localSnowflake (when activeDmCall resolves identity) and
+  // homeUserId (when activeDmCall is cleared during disconnect). We must
+  // recognize BOTH as "self" to prevent phantom join/leave sounds.
+  const myIds = new Set<string>();
+  if (currentUser?.id) myIds.add(currentUser.id);
+  if (currentUser?.homeUserId) myIds.add(currentUser.homeUserId);
+  const isSelf = (id: string) => myIds.has(id);
 
   // Refs to track previous states
   const isInitialMount = useRef(true);
@@ -90,28 +94,28 @@ export function SoundController() {
       if (state.isLiveKitConnected && !justDisconnected) {
         // Someone joined voice (Others only)
         state.participants.forEach(p => {
-          if (!prevParticipantIds.current.has(p.userId) && p.userId !== myId) {
+          if (!prevParticipantIds.current.has(p.userId) && !isSelf(p.userId)) {
             audioManager.playSound('user_join', sfxOpts);
           }
         });
 
         // Someone left voice (Others only)
         prevParticipantIds.current.forEach(userId => {
-          if (!currentParticipantIds.has(userId) && userId !== myId) {
+          if (!currentParticipantIds.has(userId) && !isSelf(userId)) {
             audioManager.playSound('user_leave', sfxOpts);
           }
         });
 
         // Someone started screen sharing (Others only)
         state.participants.forEach(p => {
-          if (p.isScreenSharing && !prevScreenShareUserIds.current.has(p.userId) && p.userId !== myId) {
+          if (p.isScreenSharing && !prevScreenShareUserIds.current.has(p.userId) && !isSelf(p.userId)) {
             audioManager.playSound('stream_user_joined', sfxOpts);
           }
         });
 
         // Someone stopped screen sharing (Others only)
         prevScreenShareUserIds.current.forEach(userId => {
-          if (!currentScreenShareUserIds.has(userId) && userId !== myId) {
+          if (!currentScreenShareUserIds.has(userId) && !isSelf(userId)) {
             audioManager.playSound('stream_user_left', sfxOpts);
           }
         });
@@ -183,7 +187,7 @@ export function SoundController() {
       if (incomingCallLoop.current) incomingCallLoop.current.stop();
       if (outgoingCallLoop.current) outgoingCallLoop.current.stop();
     };
-  }, [audioManager, myId]);
+  }, [audioManager, currentUser?.id, currentUser?.homeUserId]);
 
   return null;
 }
