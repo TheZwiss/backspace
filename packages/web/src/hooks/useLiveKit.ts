@@ -561,9 +561,11 @@ export function useLiveKit() {
         setConnectionState(ConnectionState.Disconnected);
         setConnectedChannelId(null);
         roomRef.current = null; _activeRoom = null; setIsConnected(false); setRoom(null);
-        useVoiceStore.getState().setParticipants([]);
+        // Batch participants + connected into one setState to prevent SoundController
+        // from seeing intermediate states (e.g., participants empty but still "connected"
+        // → triggers user_leave sound before the disconnect sound).
         useVoiceStore.getState().setSpeakingParticipants(new Set());
-        useVoiceStore.getState().setIsLiveKitConnected(false);
+        useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
 
         // Non-client disconnect (identity collision, server shutdown, kicked, etc.)
         // → clear voice intent so AppLayout doesn't auto-retry into an infinite loop.
@@ -626,9 +628,8 @@ export function useLiveKit() {
       setIsConnected(false);
       setIsConnecting(false);
       setConnectionState(ConnectionState.Disconnected);
-      useVoiceStore.getState().setParticipants([]);
       useVoiceStore.getState().setSpeakingParticipants(new Set());
-      useVoiceStore.getState().setIsLiveKitConnected(false);
+      useVoiceStore.setState({ participants: [], isLiveKitConnected: false });
     }
   }, []);
 
