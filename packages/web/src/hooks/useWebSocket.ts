@@ -321,21 +321,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
             // For federated calls, check membership via token presence (participants may be empty)
             const isParticipant = call.participants.includes(myId) || !!call.livekitToken;
             if (call.state === 'active' && isParticipant) {
-              const callDmId = call.dmChannelId || call.federatedCallId || '';
               // Clear any stuck ringing UI from a ringing→active transition during refresh
               setIncomingCall(null);
-              setActiveDmCall({ dmChannelId: callDmId });
-              // Store federated call data if present (server already filtered to this user's token)
-              if (call.livekitUrl && call.livekitToken) {
-                setFederatedCallData(call.livekitToken, call.livekitUrl);
-              }
-              if (call.federatedCallId) {
-                setFederatedCallId(call.federatedCallId);
-              }
-              // PASSIVE: do NOT auto-connect to LiveKit on ready.
-              // The user must click "Join" or re-accept. Auto-connecting causes
-              // identity conflicts when the same user has multiple sessions —
-              // both sessions fight for the same LiveKit identity slot.
+              // Do NOT set activeDmCall or auto-connect. On refresh/restart, the user
+              // is no longer in LiveKit — showing "Connecting..." with no connection
+              // is broken UX. The call exists on the server but this client session
+              // has no active LiveKit connection. The user can re-initiate if needed.
               break;
             } else if (call.state === 'ringing' && call.callerId !== myId) {
               const dmCh = event.dmChannels?.find((d: any) => d.id === call.dmChannelId);

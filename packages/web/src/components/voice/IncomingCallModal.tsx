@@ -42,12 +42,19 @@ export function IncomingCallModal() {
   const handleAccept = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const dmChannelId = incomingCall.dmChannelId;
-    const { callOrigin, federatedCallId } = useVoiceStore.getState();
+    const { callOrigin, federatedCallId, setActiveDmCall, connectFn } = useVoiceStore.getState();
     const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
+    const callDmId = dmChannelId || federatedCallId!;
+
+    // Immediately transition to active call state — don't wait for server response.
+    // The dm_call_accepted event races with connectFn's async AudioContext resume,
+    // causing isLiveKitConnected to be false when it arrives → activeDmCall never set.
+    setIncomingCall(null);
+    setActiveDmCall({ dmChannelId: callDmId });
+
     wsSend({ type: 'dm_call_accept', dmChannelId, federatedCallId }, origin);
     // Connect directly within gesture context (required for iOS audio permission)
-    const connectFn = useVoiceStore.getState().connectFn;
-    if (connectFn) connectFn(dmChannelId || federatedCallId!, true);
+    if (connectFn) connectFn(callDmId, true);
   };
 
   const handleDecline = () => {
