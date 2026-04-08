@@ -142,7 +142,7 @@ export const dmChannels = sqliteTable('dm_channels', {
 }, (table) => ({
   federatedIdx: uniqueIndex('idx_dm_federated')
     .on(table.federatedId)
-    .where(sql`${table.federatedId} IS NOT NULL`),
+    .where(sql`federated_id IS NOT NULL`),
 }));
 
 export const dmMembers = sqliteTable('dm_members', {
@@ -175,7 +175,7 @@ export const dmMessages = sqliteTable('dm_messages', {
   userIdx: index('idx_dm_messages_user_id').on(table.userId),
   sourceUniqueIdx: uniqueIndex('idx_dm_messages_source_unique')
     .on(table.sourceInstance, table.sourceMessageId)
-    .where(sql`${table.sourceInstance} IS NOT NULL`),
+    .where(sql`source_instance IS NOT NULL`),
 }));
 
 export const friends = sqliteTable('friends', {
