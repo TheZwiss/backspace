@@ -3577,9 +3577,11 @@ function processDmCallAcceptEvent(
     .where(eq(schema.dmChannels.federatedId, event.federatedId))
     .get();
   const dmChannelId = channel?.id;
+  console.log(`[S2S_CALL_ACCEPT] channel lookup: federatedId=${event.federatedId} → dmChannelId=${dmChannelId ?? 'NOT FOUND'}`);
 
   // Check if we're the HOST (have a VoiceRoom)
   const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
+  console.log(`[S2S_CALL_ACCEPT] room lookup: ${room ? `found (type=${room.roomType}, state=${(room.metadata as any).state})` : 'NOT FOUND'}`);
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
 
@@ -3599,6 +3601,7 @@ function processDmCallAcceptEvent(
     }
 
     // Broadcast accepted locally
+    console.log(`[S2S_CALL_ACCEPT] HOST path: broadcasting dm_call_accepted to dmChannelId=${dmChannelId}`);
     connectionManager.sendToDmMembers(dmChannelId!, {
       type: 'dm_call_accepted',
       dmChannelId: dmChannelId!,
