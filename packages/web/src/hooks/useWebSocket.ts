@@ -779,22 +779,20 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {
-      const { setIncomingCall, setFederatedCallData, setFederatedCallId, setCallOrigin } = useVoiceStore.getState();
-      setIncomingCall({
-        dmChannelId: event.dmChannelId ?? null,
-        callerId: event.callerId,
-        callerName: event.callerName,
+      // Batch ALL call state into a single set() to prevent:
+      // 1. Ringtone multiplication (multiple subscription triggers from separate set() calls)
+      // 2. Stale callOrigin/federatedCallId from previous calls (always overwritten)
+      useVoiceStore.setState({
+        incomingCall: {
+          dmChannelId: event.dmChannelId ?? null,
+          callerId: event.callerId,
+          callerName: event.callerName,
+        },
+        federatedCallToken: event.livekitToken ?? null,
+        federatedCallUrl: event.livekitUrl ?? null,
+        federatedCallId: event.federatedCallId ?? null,
+        callOrigin: event.callOrigin ?? null,
       });
-      // Store federated call data if present (remote LiveKit URL + token)
-      if (event.livekitUrl && event.livekitToken) {
-        setFederatedCallData(event.livekitToken, event.livekitUrl);
-      }
-      if (event.federatedCallId) {
-        setFederatedCallId(event.federatedCallId);
-      }
-      if (event.callOrigin) {
-        setCallOrigin(event.callOrigin);
-      }
       break;
     }
 

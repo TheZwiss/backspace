@@ -1442,12 +1442,24 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
 }
 
 function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
-  const dmChannelId = (event.dmChannelId as string) || null;
+  let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
 
   if (!dmChannelId && !federatedCallId) {
     connectionManager.sendToUser(userId, { type: 'error', message: 'dmChannelId or federatedCallId is required' });
     return;
+  }
+
+  // Resolve federatedCallId → dmChannelId when only federatedCallId is provided.
+  // This happens when a remote instance accepts via callOrigin and the DM doesn't
+  // exist there (Path B), but the HOST has the VoiceRoom keyed by dmChannelId.
+  if (!dmChannelId && federatedCallId) {
+    const db = getDb();
+    const ch = db.select({ id: schema.dmChannels.id })
+      .from(schema.dmChannels)
+      .where(eq(schema.dmChannels.federatedId, federatedCallId))
+      .get();
+    if (ch) dmChannelId = ch.id;
   }
 
   // Path 1: Local room (we're the host) — only possible with dmChannelId
@@ -1530,10 +1542,20 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
 }
 
 function handleDmCallReject(event: Record<string, unknown>, userId: string): void {
-  const dmChannelId = (event.dmChannelId as string) || null;
+  let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
 
   if (!dmChannelId && !federatedCallId) return;
+
+  // Resolve federatedCallId → dmChannelId for host VoiceRoom lookup
+  if (!dmChannelId && federatedCallId) {
+    const db = getDb();
+    const ch = db.select({ id: schema.dmChannels.id })
+      .from(schema.dmChannels)
+      .where(eq(schema.dmChannels.federatedId, federatedCallId))
+      .get();
+    if (ch) dmChannelId = ch.id;
+  }
 
   // Path 1: Local room (we're the host)
   if (dmChannelId) {
@@ -1587,10 +1609,20 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
 }
 
 function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
-  const dmChannelId = (event.dmChannelId as string) || null;
+  let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
 
   if (!dmChannelId && !federatedCallId) return;
+
+  // Resolve federatedCallId → dmChannelId for host VoiceRoom lookup
+  if (!dmChannelId && federatedCallId) {
+    const db = getDb();
+    const ch = db.select({ id: schema.dmChannels.id })
+      .from(schema.dmChannels)
+      .where(eq(schema.dmChannels.federatedId, federatedCallId))
+      .get();
+    if (ch) dmChannelId = ch.id;
+  }
 
   // Path 1: Local room (we're the host)
   if (dmChannelId) {
