@@ -314,20 +314,24 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
       // Restore DM call state from server (all origins — federated DMs live on remote instances)
       {
-        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, connectFn, disconnectFn, setFederatedCallData } = useVoiceStore.getState();
+        const { activeDmCall, setActiveDmCall, setIncomingCall, incomingCall, connectFn, disconnectFn, setFederatedCallData, setFederatedCallId } = useVoiceStore.getState();
         const myId = event.user.id;
         if (event.activeCalls && event.activeCalls.length > 0) {
           for (const call of event.activeCalls) {
             // For federated calls, check membership via token presence (participants may be empty)
             const isParticipant = call.participants.includes(myId) || !!call.livekitToken;
             if (call.state === 'active' && isParticipant) {
-              setActiveDmCall({ dmChannelId: call.dmChannelId });
+              const callDmId = call.dmChannelId || call.federatedCallId || '';
+              setActiveDmCall({ dmChannelId: callDmId });
               // Store federated call data if present (server already filtered to this user's token)
               if (call.livekitUrl && call.livekitToken) {
                 setFederatedCallData(call.livekitToken, call.livekitUrl);
               }
-              if (connectFn) {
-                connectFn(call.dmChannelId, true).catch((err) => {
+              if (call.federatedCallId) {
+                setFederatedCallId(call.federatedCallId);
+              }
+              if (connectFn && callDmId) {
+                connectFn(callDmId, true).catch((err) => {
                   console.error('[WS] DM call reconnect failed:', err);
                 });
               }
@@ -343,6 +347,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
               // Store federated call data for ringing calls too
               if (call.livekitUrl && call.livekitToken) {
                 setFederatedCallData(call.livekitToken, call.livekitUrl);
+              }
+              if (call.federatedCallId) {
+                setFederatedCallId(call.federatedCallId);
               }
             }
           }
@@ -770,15 +777,21 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {
-      const { setIncomingCall, setFederatedCallData } = useVoiceStore.getState();
+      const { setIncomingCall, setFederatedCallData, setFederatedCallId, setCallOrigin } = useVoiceStore.getState();
       setIncomingCall({
-        dmChannelId: event.dmChannelId,
+        dmChannelId: event.dmChannelId ?? null,
         callerId: event.callerId,
         callerName: event.callerName,
       });
       // Store federated call data if present (remote LiveKit URL + token)
       if (event.livekitUrl && event.livekitToken) {
         setFederatedCallData(event.livekitToken, event.livekitUrl);
+      }
+      if (event.federatedCallId) {
+        setFederatedCallId(event.federatedCallId);
+      }
+      if (event.callOrigin) {
+        setCallOrigin(event.callOrigin);
       }
       break;
     }
@@ -787,10 +800,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
       const { setIncomingCall, setOutgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
-      setActiveDmCall({ dmChannelId: event.dmChannelId });
+      const callDmId = event.dmChannelId || event.federatedCallId || '';
+      setActiveDmCall({ dmChannelId: callDmId });
       // Only connect if not already connected (federated acceptor connects immediately in handleAccept)
-      if (connectFn && !isLiveKitConnected) {
-        connectFn(event.dmChannelId, true).catch((err) => {
+      if (connectFn && !isLiveKitConnected && callDmId) {
+        connectFn(callDmId, true).catch((err: unknown) => {
           console.error('[WS] DM call connect failed:', err);
         });
       }

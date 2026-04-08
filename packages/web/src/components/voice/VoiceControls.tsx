@@ -75,9 +75,10 @@ export function VoiceControls() {
   };
 
   const handleDisconnect = () => {
-    const { activeDmCall, disconnectFn } = useVoiceStore.getState();
+    const { activeDmCall, disconnectFn, federatedCallId, callOrigin } = useVoiceStore.getState();
     if (activeDmCall) {
-      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId }, getChannelOrigin(activeDmCall.dmChannelId));
+      const origin = callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
+      wsSend({ type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId, federatedCallId }, origin);
       useVoiceStore.getState().setActiveDmCall(null);
     } else {
       wsSend({ type: 'voice_leave' }, voiceOrigin);

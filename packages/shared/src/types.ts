@@ -377,9 +377,9 @@ export type ClientEvent =
   | { type: 'channel_ack'; channelId: string; messageId: string }
   | { type: 'mark_unread'; channelId: string; messageId: string }
   | { type: 'dm_call_start'; dmChannelId: string }
-  | { type: 'dm_call_accept'; dmChannelId: string }
-  | { type: 'dm_call_reject'; dmChannelId: string }
-  | { type: 'dm_call_end'; dmChannelId: string }
+  | { type: 'dm_call_accept'; dmChannelId: string | null; federatedCallId?: string | null }
+  | { type: 'dm_call_reject'; dmChannelId: string | null; federatedCallId?: string | null }
+  | { type: 'dm_call_end'; dmChannelId: string | null; federatedCallId?: string | null }
   | { type: 'voice_status'; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
   | { type: 'voice_space_mute'; userId: string; muted: boolean }
   | { type: 'voice_space_deafen'; userId: string; deafened: boolean }
@@ -410,7 +410,7 @@ export type ServerEvent =
   | { type: 'friend_request_received'; request: FriendRequest }
   | { type: 'friend_request_accepted'; friend: Friend; requestId: string }
   | { type: 'dm_call_incoming'; dmChannelId: string | null; federatedCallId?: string; callerId: string; callerName: string; livekitUrl?: string; livekitToken?: string; callOrigin?: string }
-  | { type: 'dm_call_accepted'; dmChannelId: string }
+  | { type: 'dm_call_accepted'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_rejected'; dmChannelId: string }
   | { type: 'dm_call_ended'; dmChannelId: string }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }

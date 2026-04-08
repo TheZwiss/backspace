@@ -86,7 +86,7 @@ export function NotificationController() {
 
   // DM call notification
   useEffect(() => {
-    let prevIncoming: { dmChannelId: string; callerId: string; callerName: string } | null = null;
+    let prevIncoming: { dmChannelId: string | null; callerId: string; callerName: string } | null = null;
 
     const unsubscribe = useVoiceStore.subscribe((state) => {
       if (state.incomingCall && !prevIncoming && !windowFocused.current) {

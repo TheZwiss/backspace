@@ -15,7 +15,9 @@ export function IncomingCallModal() {
     if (incomingCall) {
       timerRef.current = setTimeout(() => {
         // Auto-reject after timeout
-        wsSend({ type: 'dm_call_reject', dmChannelId: incomingCall.dmChannelId }, getChannelOrigin(incomingCall.dmChannelId));
+        const { callOrigin, federatedCallId } = useVoiceStore.getState();
+        const origin = callOrigin || (incomingCall.dmChannelId ? getChannelOrigin(incomingCall.dmChannelId) : undefined);
+        wsSend({ type: 'dm_call_reject', dmChannelId: incomingCall.dmChannelId, federatedCallId }, origin);
         setIncomingCall(null);
       }, 30000);
     }
@@ -40,16 +42,20 @@ export function IncomingCallModal() {
   const handleAccept = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     const dmChannelId = incomingCall.dmChannelId;
-    const origin = getChannelOrigin(dmChannelId);
-    wsSend({ type: 'dm_call_accept', dmChannelId }, origin);
+    const { callOrigin, federatedCallId } = useVoiceStore.getState();
+    const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
+    wsSend({ type: 'dm_call_accept', dmChannelId, federatedCallId }, origin);
     // Connect directly within gesture context (required for iOS audio permission)
     const connectFn = useVoiceStore.getState().connectFn;
-    if (connectFn) connectFn(dmChannelId, true);
+    if (connectFn) connectFn(dmChannelId || federatedCallId!, true);
   };
 
   const handleDecline = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
-    wsSend({ type: 'dm_call_reject', dmChannelId: incomingCall.dmChannelId }, getChannelOrigin(incomingCall.dmChannelId));
+    const { callOrigin, federatedCallId } = useVoiceStore.getState();
+    const dmChannelId = incomingCall.dmChannelId;
+    const origin = callOrigin || (dmChannelId ? getChannelOrigin(dmChannelId) : undefined);
+    wsSend({ type: 'dm_call_reject', dmChannelId, federatedCallId }, origin);
     setIncomingCall(null);
   };
 

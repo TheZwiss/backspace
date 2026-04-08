@@ -61,16 +61,20 @@ interface VoiceState {
   setStreamAttenuationEnabled: (enabled: boolean) => void;
   setStreamAttenuationStrength: (strength: number) => void;
   // DM call state
-  incomingCall: { dmChannelId: string; callerId: string; callerName: string } | null;
+  incomingCall: { dmChannelId: string | null; callerId: string; callerName: string } | null;
   outgoingCall: { dmChannelId: string } | null;
   activeDmCall: { dmChannelId: string } | null;
-  setIncomingCall: (call: { dmChannelId: string; callerId: string; callerName: string } | null) => void;
+  setIncomingCall: (call: { dmChannelId: string | null; callerId: string; callerName: string } | null) => void;
   setOutgoingCall: (call: { dmChannelId: string } | null) => void;
   setActiveDmCall: (call: { dmChannelId: string } | null) => void;
   federatedCallToken: string | null;
   federatedCallUrl: string | null;
+  federatedCallId: string | null;
+  callOrigin: string | null;
   setFederatedCallData: (token: string, url: string) => void;
   clearFederatedCallData: () => void;
+  setFederatedCallId: (id: string | null) => void;
+  setCallOrigin: (origin: string | null) => void;
   setVoiceUsers: (channelId: string, userIds: string[]) => void;
   addVoiceUser: (channelId: string, userId: string) => void;
   removeVoiceUser: (channelId: string, userId: string) => void;
@@ -246,12 +250,16 @@ export const useVoiceStore = create<VoiceState>()(
       activeDmCall: null,
       federatedCallToken: null,
       federatedCallUrl: null,
+      federatedCallId: null,
+      callOrigin: null,
 
       setIncomingCall: (call) => set({ incomingCall: call }),
       setOutgoingCall: (call) => set({ outgoingCall: call }),
       setActiveDmCall: (call) => set({ activeDmCall: call }),
       setFederatedCallData: (token, url) => set({ federatedCallToken: token, federatedCallUrl: url }),
-      clearFederatedCallData: () => set({ federatedCallToken: null, federatedCallUrl: null }),
+      clearFederatedCallData: () => set({ federatedCallToken: null, federatedCallUrl: null, federatedCallId: null, callOrigin: null }),
+      setFederatedCallId: (id) => set({ federatedCallId: id }),
+      setCallOrigin: (origin) => set({ callOrigin: origin }),
 
       setVoiceUsers: (channelId, userIds) => {
         set((state) => {
@@ -426,6 +434,8 @@ export const useVoiceStore = create<VoiceState>()(
         activeDmCall: null,
         federatedCallToken: null,
         federatedCallUrl: null,
+        federatedCallId: null,
+        callOrigin: null,
         // Per-session media state
         isCameraOn: false,
         isScreenSharing: false,
@@ -484,6 +494,8 @@ export const useVoiceStore = create<VoiceState>()(
             outgoingCall: null,
             federatedCallToken: null,
             federatedCallUrl: null,
+            federatedCallId: null,
+            callOrigin: null,
             deafenedUserIds: new Set(),
             participantMutes: new Map(),
             streamVolumes: new Map(),
@@ -521,6 +533,8 @@ export const useVoiceStore = create<VoiceState>()(
           outgoingCall: null,
           federatedCallToken: null,
           federatedCallUrl: null,
+          federatedCallId: null,
+          callOrigin: null,
           deafenedUserIds: new Set(),
           participantMutes: new Map(),
           streamVolumes: new Map(),
@@ -555,6 +569,8 @@ export const useVoiceStore = create<VoiceState>()(
         activeDmCall: null,
         federatedCallToken: null,
         federatedCallUrl: null,
+        federatedCallId: null,
+        callOrigin: null,
         deafenedUserIds: new Set(),
         voiceUserStates: new Map(),
         streamVolumes: new Map(),

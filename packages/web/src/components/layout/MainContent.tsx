@@ -102,7 +102,9 @@ export function MainContent() {
     const handleCancelCall = () => {
       if (!currentChannelId) return;
       useVoiceStore.getState().setOutgoingCall(null);
-      wsSend({ type: 'dm_call_end', dmChannelId: currentChannelId }, getChannelOrigin(currentChannelId));
+      const { federatedCallId, callOrigin } = useVoiceStore.getState();
+      const origin = callOrigin || getChannelOrigin(currentChannelId);
+      wsSend({ type: 'dm_call_end', dmChannelId: currentChannelId, federatedCallId }, origin);
     };
 
     if (isInDmCall) {

@@ -88,9 +88,10 @@ export function handleDisconnectAction(): void {
   const { activeDmCall, currentVoiceChannelId, disconnectFn } = voice;
 
   if (activeDmCall) {
+    const origin = voice.callOrigin || getChannelOrigin(activeDmCall.dmChannelId);
     wsSend(
-      { type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId },
-      getChannelOrigin(activeDmCall.dmChannelId)
+      { type: 'dm_call_end', dmChannelId: activeDmCall.dmChannelId, federatedCallId: voice.federatedCallId },
+      origin
     );
     voice.setActiveDmCall(null);
   } else if (currentVoiceChannelId) {
