@@ -736,7 +736,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'friend_request_cancelled': {
       const { removeRequestById } = useSocialStore.getState();
-      removeRequestById(event.requestId, origin);
+      removeRequestById(event.requestId, origin, event.userId);
       import('../stores/discoverStore').then(({ useDiscoverStore }) => {
         useDiscoverStore.getState().updateRelationship(event.userId, origin, 'none');
       });
@@ -745,7 +745,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'friend_request_declined': {
       const { removeRequestById } = useSocialStore.getState();
-      removeRequestById(event.requestId, origin);
+      removeRequestById(event.requestId, origin, event.userId);
       import('../stores/discoverStore').then(({ useDiscoverStore }) => {
         useDiscoverStore.getState().updateRelationship(event.userId, origin, 'none');
       });

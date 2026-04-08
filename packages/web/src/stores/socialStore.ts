@@ -79,7 +79,7 @@ interface SocialState {
   updateFriendPresence: (userId: string, status: string) => void;
   updateFriendProfile: (user: User) => void;
   removeFriendLocally: (userId: string, origin: string) => void;
-  removeRequestById: (requestId: string, origin: string) => void;
+  removeRequestById: (requestId: string, origin: string, userId?: string) => void;
   removeRequestsForUser: (userId: string) => void;
   reset: () => void;
 }
@@ -248,7 +248,18 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const client = getApiForOrigin(origin);
 
       await client.social.updateRequest(id, status);
-      await get().loadRequests();
+
+      // Optimistically remove all requests from the same canonical user —
+      // the S2S relay will eventually clean up the other instance, but
+      // re-fetching immediately would race with relay propagation.
+      const canonicalId = request?.user?.homeUserId ?? request?.user?.id;
+      set((state) => ({
+        requests: canonicalId
+          ? state.requests.filter(r => (r.user?.homeUserId ?? r.user?.id) !== canonicalId)
+          : state.requests.filter(r => r.id !== id),
+        isLoading: false,
+      }));
+
       if (status === 'accepted') {
         await get().loadFriends();
       }
@@ -266,8 +277,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const client = getApiForOrigin(origin);
 
       await client.social.cancelRequest(id);
+      const canonicalId = request?.user?.homeUserId ?? request?.user?.id;
       set((state) => ({
-        requests: state.requests.filter(r => r.id !== id),
+        requests: canonicalId
+          ? state.requests.filter(r => (r.user?.homeUserId ?? r.user?.id) !== canonicalId)
+          : state.requests.filter(r => r.id !== id),
         isLoading: false,
       }));
     } catch (err) {
@@ -351,8 +365,10 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   // Called from WS handler when another user sends you a friend request
   addIncomingRequest: (request: FriendRequest, origin: string) => {
     set((state) => {
-      const key = `${request.id}:${origin}`;
-      if (state.requests.find(r => `${r.id}:${r._instanceOrigin}` === key)) return state;
+      const canonicalId = request.user?.homeUserId ?? request.user?.id;
+      if (canonicalId && state.requests.some(r => (r.user?.homeUserId ?? r.user?.id) === canonicalId)) {
+        return state;
+      }
       return { requests: [...state.requests, { ...request, _instanceOrigin: origin }] };
     });
   },
@@ -360,8 +376,8 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   // Called from WS handler when someone accepts your friend request
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => {
     set((state) => {
-      const key = `${friend.id}:${origin}`;
-      const alreadyExists = state.friends.some(f => `${f.id}:${f._instanceOrigin}` === key);
+      const canonicalId = friend.homeUserId ?? friend.id;
+      const alreadyExists = state.friends.some(f => (f.homeUserId ?? f.id) === canonicalId);
       return {
         friends: alreadyExists ? state.friends : [...state.friends, { ...friend, _instanceOrigin: origin }],
         requests: state.requests.filter(r => !(r.id === requestId && r._instanceOrigin === origin)),
@@ -370,16 +386,25 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   },
 
   // Called from WS handler when the other user removes us as a friend
-  removeFriendLocally: (userId: string, origin: string) => {
+  removeFriendLocally: (userId: string, _origin: string) => {
     set((state) => ({
-      friends: state.friends.filter(f => !(f.id === userId && f._instanceOrigin === origin)),
+      friends: state.friends.filter(f => f.id !== userId && f.homeUserId !== userId),
     }));
   },
 
   // Called from WS handler when a friend request is cancelled or declined
-  removeRequestById: (requestId: string, origin: string) => {
+  removeRequestById: (requestId: string, _origin: string, userId?: string) => {
     set((state) => ({
-      requests: state.requests.filter(r => !(r.id === requestId && r._instanceOrigin === origin)),
+      requests: state.requests.filter(r => {
+        if (r.id === requestId) return false;
+        // Also match by canonical identity — the WS event may carry a different
+        // request ID than the one stored (different instance's copy)
+        if (userId) {
+          const canonical = r.user?.homeUserId ?? r.user?.id;
+          if (canonical === userId || r.user?.id === userId || r.user?.homeUserId === userId) return false;
+        }
+        return true;
+      }),
     }));
   },
 
@@ -394,7 +419,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   updateFriendPresence: (userId: string, status: string) => {
     set((state) => ({
       friends: state.friends.map(f =>
-        f.id === userId ? { ...f, status: status as Friend['status'] } : f
+        (f.id === userId || f.homeUserId === userId) ? { ...f, status: status as Friend['status'] } : f
       ),
     }));
   },
