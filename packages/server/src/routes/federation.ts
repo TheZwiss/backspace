@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Readable } from 'node:stream';
 import { eq, and, or, isNull, inArray, sql, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
 import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders } from '../utils/federationAuth.js';
@@ -9,7 +13,7 @@ import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { getDmMessageWithUser } from './dm.js';
@@ -3852,6 +3856,70 @@ function processDmTypingStopEvent(
   }
 
   accepted.push(event.messageId);
+}
+
+/**
+ * Download a profile image (avatar or banner) from a remote instance.
+ * Returns the local filename on success, or null on failure.
+ * On failure, the caller stores the absolute URL as a display fallback.
+ */
+async function downloadProfileAsset(
+  url: string,
+  sourceInstance: string,
+): Promise<string | null> {
+  // SSRF: hostname must match the authenticated source instance
+  try {
+    const urlHostname = new URL(url).hostname;
+    const sourceHostname = new URL(sourceInstance).hostname;
+    if (urlHostname !== sourceHostname) {
+      console.warn(`[federation] Profile asset SSRF blocked: URL hostname "${urlHostname}" != source "${sourceHostname}"`);
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  const ext = path.extname(new URL(url).pathname) || '.webp';
+  const localId = generateSnowflake();
+  const finalFilename = `${localId}${ext}`;
+  const tempFilename = `temp_${localId}${ext}`;
+  const tempPath = path.join(config.uploadDir, tempFilename);
+  const finalPath = path.join(config.uploadDir, finalFilename);
+
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok || !response.body) {
+      return null;
+    }
+
+    // Content-type must be an image
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.startsWith('image/')) {
+      console.warn(`[federation] Profile asset rejected: non-image content-type "${contentType}" from ${url}`);
+      return null;
+    }
+
+    // Ensure upload directory exists
+    fs.mkdirSync(config.uploadDir, { recursive: true });
+
+    // Stream to temp file
+    const nodeStream = Readable.fromWeb(response.body as ReadableStream);
+    const writeStream = fs.createWriteStream(tempPath);
+    await pipeline(nodeStream, writeStream);
+
+    // Atomic rename
+    fs.renameSync(tempPath, finalPath);
+
+    return finalFilename;
+  } catch (err) {
+    // Clean up temp file on any failure
+    try { fs.unlinkSync(tempPath); } catch { /* may not exist */ }
+    console.warn(`[federation] Profile asset download failed for ${url}:`, (err as Error).message);
+    return null;
+  }
 }
 
 function processProfileUpdateEvent(
