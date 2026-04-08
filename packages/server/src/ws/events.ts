@@ -1695,6 +1695,7 @@ async function sendFederatedCallStart(
   callerName: string,
 ): Promise<void> {
   const db = getDb();
+  const ourOrigin = getOurOrigin();
 
   // Look up DM channel for federatedId
   const channel = db.select({
@@ -1720,22 +1721,10 @@ async function sendFederatedCallStart(
     .where(eq(schema.dmMembers.dmChannelId, dmChannelId))
     .all();
 
-  const ourOrigin = getOurOrigin();
-
-  // Filter to remote members
-  const remoteMembers = members.filter(m => {
-    if (!m.homeInstance) return false;
-    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
-    return normalized !== ourOrigin;
-  });
-
-  if (remoteMembers.length === 0) return;
-
   // Compute or reuse federatedId
   let federatedId = channel.federatedId;
   if (!federatedId) {
     if (!channel.ownerId) {
-      // 1-on-1: compute from homeUserId pair
       const callerMember = members.find(m => m.userId === callerId);
       const otherMember = members.find(m => m.userId !== callerId);
       if (!callerMember || !otherMember) return;
@@ -1746,7 +1735,6 @@ async function sendFederatedCallStart(
     } else {
       federatedId = crypto.randomUUID();
     }
-    // Persist for future use
     db.update(schema.dmChannels)
       .set({ federatedId })
       .where(eq(schema.dmChannels.id, dmChannelId))
@@ -1759,46 +1747,93 @@ async function sendFederatedCallStart(
     return;
   }
 
-  // Group remote members by home instance
-  const peerGroups = new Map<string, typeof remoteMembers>();
-  for (const m of remoteMembers) {
-    const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
-    if (!peerGroups.has(origin)) peerGroups.set(origin, []);
-    peerGroups.get(origin)!.push(m);
-  }
-
   const livekitUrl = `https://${config.domain}/livekit`;
 
-  for (const [peerOrigin, peerMembers] of peerGroups) {
-    // Generate per-user tokens for this peer's members
-    const tokens: Record<string, string> = {};
-    for (const m of peerMembers) {
-      const homeUserId = m.homeUserId || m.userId;
-      const name = m.displayName || m.username;
-      tokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
-    }
+  // Build participants array (all member identities for Path B)
+  const participants = members.map(m => ({
+    homeUserId: m.homeUserId || m.userId,
+    homeInstance: m.homeInstance || ourOrigin,
+    displayName: m.displayName || m.username,
+  }));
 
-    const result = await sendCallRelay(peerOrigin, [{
-      eventType: 'dm_call_start',
-      messageId: generateSnowflake(),
-      encryptionVersion: 0,
-      timestamp: Date.now(),
-      federatedId,
-      call: {
-        livekitUrl,
-        tokens,
-        caller: {
-          homeUserId: members.find(m => m.userId === callerId)?.homeUserId || callerId,
-          homeInstance: ourOrigin,
-          displayName: callerName,
-        },
-      },
-    }]);
-
-    if (!result.ok) {
-      console.error(`[federation] Failed to send dm_call_start to ${peerOrigin}: ${result.error}`);
-    }
+  // Generate tokens for ALL members upfront
+  const allTokens: Record<string, string> = {};
+  for (const m of members) {
+    const homeUserId = m.homeUserId || m.userId;
+    const name = m.displayName || m.username;
+    allTokens[homeUserId] = await generateFederatedCallToken(federatedId, homeUserId, name);
   }
+
+  const callerHomeUserId = members.find(m => m.userId === callerId)?.homeUserId || callerId;
+
+  // Build the relay event template (reused for all peers)
+  const buildRelayEvent = () => ({
+    eventType: 'dm_call_start' as const,
+    messageId: generateSnowflake(),
+    encryptionVersion: 0 as const,
+    timestamp: Date.now(),
+    federatedId,
+    call: {
+      livekitUrl,
+      tokens: allTokens,
+      caller: {
+        homeUserId: callerHomeUserId,
+        homeInstance: ourOrigin,
+        displayName: callerName,
+      },
+      participants,
+    },
+  });
+
+  // Identify remote members for targeted relay
+  const remoteMembers = members.filter(m => {
+    if (!m.homeInstance) return false;
+    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
+    return normalized !== ourOrigin;
+  });
+
+  // Group remote members by home instance (targeted peers)
+  const targetedPeers = new Set<string>();
+  for (const m of remoteMembers) {
+    const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
+    targetedPeers.add(origin);
+  }
+
+  // Query ALL active federation peers for broadcast
+  const allPeers = db.select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'active'))
+    .all();
+
+  // Build parallel relay promises
+  const relayPromises: Promise<void>[] = [];
+
+  // Targeted relay: peers with known remote DM members
+  for (const peerOrigin of targetedPeers) {
+    relayPromises.push(
+      sendCallRelay(peerOrigin, [buildRelayEvent()]).then(result => {
+        if (!result.ok) {
+          console.error(`[federation] Failed to send dm_call_start to ${peerOrigin}: ${result.error}`);
+        }
+      })
+    );
+  }
+
+  // All-peers broadcast: every other active peer
+  for (const peer of allPeers) {
+    if (targetedPeers.has(peer.origin)) continue;
+    if (peer.origin === ourOrigin) continue;
+    relayPromises.push(
+      sendCallRelay(peer.origin, [buildRelayEvent()]).then(result => {
+        if (!result.ok) {
+          console.debug(`[federation] All-peers dm_call_start to ${peer.origin}: ${result.error || 'failed'}`);
+        }
+      })
+    );
+  }
+
+  // Fire all relays in parallel — each has its own 10s timeout
+  await Promise.all(relayPromises);
 }
 
 async function sendFederatedCallAccept(dmChannelId: string, acceptorUserId: string): Promise<void> {
