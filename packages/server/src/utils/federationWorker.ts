@@ -876,7 +876,7 @@ async function runInitialSyncForNewPeers(): Promise<void> {
         if (data.events.length === 0) break;
 
         // Process events directly — no HTTP round-trip (FED-005)
-        processRelayEvents(data.events, peer.origin, peer.origin, db);
+        await processRelayEvents(data.events, peer.origin, peer.origin, db);
 
         totalEvents += data.events.length;
         sinceTimestamp = data.checkpoint;
@@ -907,7 +907,7 @@ async function runInitialSyncForNewPeers(): Promise<void> {
         if (friendData.events.length === 0) break;
 
         // Process events directly — no HTTP round-trip (FED-005)
-        processRelayEvents(friendData.events, peer.origin, peer.origin, db);
+        await processRelayEvents(friendData.events, peer.origin, peer.origin, db);
 
         totalEvents += friendData.events.length;
         friendSinceTimestamp = friendData.checkpoint;

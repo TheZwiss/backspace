@@ -845,7 +845,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // 3. Process each event
-      const { accepted, rejected } = processRelayEvents(body.events, sourceInstance, peer.origin, db);
+      const { accepted, rejected } = await processRelayEvents(body.events, sourceInstance, peer.origin, db);
 
       // 4. Update peer status
       db.update(schema.federationPeers)
@@ -1270,12 +1270,12 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
  * Process an array of federation relay events. Used by the HTTP relay endpoint
  * and directly by the initial-sync worker (which skips the HTTP round-trip).
  */
-export function processRelayEvents(
+export async function processRelayEvents(
   events: FederationRelayEvent[],
   sourceInstance: string,
   peerOrigin: string,
   db: ReturnType<typeof getDb>,
-): { accepted: string[]; rejected: Array<{ messageId: string; reason: string }> } {
+): Promise<{ accepted: string[]; rejected: Array<{ messageId: string; reason: string }> }> {
   const accepted: string[] = [];
   const rejected: Array<{ messageId: string; reason: string }> = [];
 
@@ -1343,7 +1343,7 @@ export function processRelayEvents(
           processDmTypingStopEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'profile_update':
-          processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          await processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'read_state_update':
           processReadStateUpdateEvent(event, sourceInstance, db, accepted, rejected);
@@ -3922,13 +3922,13 @@ async function downloadProfileAsset(
   }
 }
 
-function processProfileUpdateEvent(
+async function processProfileUpdateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
-): void {
+): Promise<void> {
   const payload = event.profileUpdate;
   if (!payload) {
     rejected.push({ messageId: event.messageId, reason: 'missing_profile_update_payload' });
@@ -3977,12 +3977,49 @@ function processProfileUpdateEvent(
     return;
   }
 
+  // ── Resolve avatar/banner: download locally, fall back to absolute URL ──
+  let resolvedAvatar: string | null = payload.avatar ?? null;
+  let resolvedBanner: string | null = payload.banner ?? null;
+
+  // Download avatar
+  if (resolvedAvatar && resolvedAvatar.startsWith('http')) {
+    const localFile = await downloadProfileAsset(resolvedAvatar, sourceInstance);
+    resolvedAvatar = localFile ?? resolvedAvatar; // local filename or absolute URL fallback
+  } else if (resolvedAvatar && !resolvedAvatar.startsWith('http')) {
+    // Bare filename (shouldn't happen) — resolve to absolute URL
+    const baseUrl = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    const absoluteUrl = `${baseUrl}/api/uploads/${resolvedAvatar}`;
+    const localFile = await downloadProfileAsset(absoluteUrl, sourceInstance);
+    resolvedAvatar = localFile ?? absoluteUrl;
+  }
+
+  // Download banner
+  if (resolvedBanner && resolvedBanner.startsWith('http')) {
+    const localFile = await downloadProfileAsset(resolvedBanner, sourceInstance);
+    resolvedBanner = localFile ?? resolvedBanner;
+  } else if (resolvedBanner && !resolvedBanner.startsWith('http')) {
+    const baseUrl = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
+    const absoluteUrl = `${baseUrl}/api/uploads/${resolvedBanner}`;
+    const localFile = await downloadProfileAsset(absoluteUrl, sourceInstance);
+    resolvedBanner = localFile ?? absoluteUrl;
+  }
+
+  // Clean up old local files being replaced
+  const oldAvatar = localUser.avatar;
+  const oldBanner = localUser.banner;
+  if (oldAvatar && !oldAvatar.startsWith('http') && oldAvatar !== resolvedAvatar) {
+    deleteUploadFile(oldAvatar);
+  }
+  if (oldBanner && !oldBanner.startsWith('http') && oldBanner !== resolvedBanner) {
+    deleteUploadFile(oldBanner);
+  }
+
   // Authoritative overwrite — home instance is always right
   db.update(schema.users)
     .set({
       displayName: payload.displayName,
-      avatar: payload.avatar,
-      banner: payload.banner,
+      avatar: resolvedAvatar,
+      banner: resolvedBanner,
       accentColor: payload.accentColor,
       avatarColor: payload.avatarColor,
       bio: payload.bio,
