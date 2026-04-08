@@ -9,7 +9,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@backspace/shared": "workspace:*",
