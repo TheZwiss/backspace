@@ -7,7 +7,6 @@ import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { getDb, getRawDb } from './db/index.js';
 import { seedDatabase } from './db/seed.js';
-import { backfillThumbnails, backfillMediaDimensions } from './db/migrate.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -122,18 +121,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Fire-and-forget: backfill thumbnails for existing images (runs once)
-  backfillThumbnails(getRawDb(), config.uploadDir).catch(err => {
-    console.error('Thumbnail backfill failed (non-fatal):', err);
-  });
-
   // Log ffmpeg availability at startup (so admins see the warning immediately)
   checkFfmpeg();
-
-  // Fire-and-forget: backfill dimensions for existing media (runs once)
-  backfillMediaDimensions(getRawDb(), config.uploadDir).catch(err => {
-    console.error('Media dimensions backfill failed (non-fatal):', err);
-  });
 
   // Start federation background workers (outbox delivery, file download, health check)
   startFederationWorkers();
