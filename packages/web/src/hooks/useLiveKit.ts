@@ -621,9 +621,15 @@ export function useLiveKit() {
     connectedChannelRef.current = null;
     setConnectedChannelId(null);
     if (roomRef.current) {
-      await destroyRoom(roomRef.current);
+      // Null out roomRef BEFORE destroying so that guardedUpdate() skips
+      // during teardown. Without this, ParticipantDisconnected events fire
+      // before RoomEvent.Disconnected, calling updateParticipants while
+      // isLiveKitConnected is still true — SoundController plays user_leave
+      // for departing participants alongside the disconnect sound.
+      const roomToDestroy = roomRef.current;
       roomRef.current = null;
       _activeRoom = null;
+      await destroyRoom(roomToDestroy);
       setRoom(null);
       setIsConnected(false);
       setIsConnecting(false);
