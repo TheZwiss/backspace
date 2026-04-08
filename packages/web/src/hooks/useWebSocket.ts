@@ -322,6 +322,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
             const isParticipant = call.participants.includes(myId) || !!call.livekitToken;
             if (call.state === 'active' && isParticipant) {
               const callDmId = call.dmChannelId || call.federatedCallId || '';
+              // Clear any stuck ringing UI from a ringing→active transition during refresh
+              setIncomingCall(null);
               setActiveDmCall({ dmChannelId: callDmId });
               // Store federated call data if present (server already filtered to this user's token)
               if (call.livekitUrl && call.livekitToken) {
@@ -797,13 +799,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_accepted': {
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
+      const { setIncomingCall, setOutgoingCall, outgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
+      // Track whether WE are the caller before clearing state
+      const wasOutgoingCall = !!outgoingCall;
       setIncomingCall(null);
       setOutgoingCall(null);
       const callDmId = event.dmChannelId || event.federatedCallId || '';
       setActiveDmCall({ dmChannelId: callDmId });
-      // Only connect if not already connected (federated acceptor connects immediately in handleAccept)
-      if (connectFn && !isLiveKitConnected && callDmId) {
+      // Only auto-connect if we're the CALLER waiting for acceptance.
+      // The callee who accepted connects in the click handler (handleAccept).
+      // Other instances of the same user should NOT auto-connect.
+      if (connectFn && !isLiveKitConnected && wasOutgoingCall && callDmId) {
         connectFn(callDmId, true).catch((err: unknown) => {
           console.error('[WS] DM call connect failed:', err);
         });

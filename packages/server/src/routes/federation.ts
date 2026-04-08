@@ -3614,12 +3614,18 @@ function processDmCallAcceptEvent(
     // We're a REMOTE instance receiving fan-out — transition local state
     const fedCall = connectionManager.getFederatedCall(event.federatedId);
     if (fedCall) {
+      // Only broadcast if transitioning from ringing → active.
+      // If already active (e.g., we initiated the accept and the host is fanning out back),
+      // skip the duplicate broadcast to avoid state conflicts on the client.
+      const wasRinging = fedCall.state === 'ringing';
       connectionManager.activateFederatedCall(event.federatedId);
-      connectionManager.sendToFederatedCallUsers(event.federatedId, {
-        type: 'dm_call_accepted',
-        dmChannelId: fedCall.dmChannelId,
-        federatedCallId: event.federatedId,
-      } as ServerEvent);
+      if (wasRinging) {
+        connectionManager.sendToFederatedCallUsers(event.federatedId, {
+          type: 'dm_call_accepted',
+          dmChannelId: fedCall.dmChannelId,
+          federatedCallId: event.federatedId,
+        } as ServerEvent);
+      }
     }
   }
 
