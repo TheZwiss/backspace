@@ -842,11 +842,28 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 **Processing:** Remote overwrites all 6 fields unconditionally. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
 
+#### Profile Image File Replication
+
+When a `profile_update` relay carries avatar or banner absolute URLs, the receiving instance downloads the image files locally rather than storing remote URLs. This eliminates cross-origin dependencies — avatars render from the local `/api/uploads/` endpoint.
+
+**Flow:** `processProfileUpdateEvent` calls `downloadProfileAsset(url, sourceInstance)` for each of avatar/banner:
+1. SSRF check (URL hostname must match authenticated source instance)
+2. `fetch` with 10s timeout
+3. Content-type validation (`image/*` only)
+4. Stream to temp file (`temp_{snowflake}{ext}`), atomic rename to `{snowflake}{ext}`
+5. Store local bare filename in user row
+
+**Fallback:** On any download failure (timeout, HTTP error, non-image content, SSRF mismatch), the absolute URL is stored instead. This degrades to the pre-replication behavior — the avatar loads cross-origin from the home instance.
+
+**File cleanup:** When avatar/banner changes, the old local file is deleted via `deleteUploadFile()`. The check `!oldValue.startsWith('http')` ensures only locally-downloaded files are deleted, not absolute URL strings.
+
+**No migration:** Existing absolute URLs self-heal — the next profile change on the home instance triggers a relay and download.
+
 **Write protection:** Remote instances reject PATCH /users/@me profile field updates for replicated users (homeInstance set). Profile data is read-only on remote — only updated via S2S relay.
 
 **Bootstrap:** When a new origin appears in a user's `replicatedInstances`, the home server queues a targeted `profile_update` to that peer.
 
-**File handling:** Avatar/banner stored as absolute URLs pointing to the home instance's `/api/uploads/`. Browser caching (immutable, 1-year) ensures performance.
+**File handling:** Profile images are downloaded locally on relay receipt (see "Profile Image File Replication" above).
 
 **Replaces:** Client-driven `profileSync.ts` (deleted). `hydrateReplicatedUserProfile` still bootstraps null fields during DM/friend relay — it is not replaced.
 
