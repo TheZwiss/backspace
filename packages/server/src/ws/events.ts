@@ -1589,11 +1589,12 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
       : undefined;
 
   if (fedCall) {
+    // Exclude the rejecting user — they already handled their own state
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_rejected',
       dmChannelId: fedCall.dmChannelId,
       federatedCallId: fedCall.federatedId,
-    } as ServerEvent);
+    } as ServerEvent, userId);
     connectionManager.clearFederatedCall(fedCall.federatedId);
 
     const db = getDb();
@@ -1660,11 +1661,13 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
       : undefined;
 
   if (fedCall) {
+    // Exclude the user who ended the call — they already disconnected in their click handler.
+    // Sending dm_call_ended back to them causes redundant disconnectFn() and double sounds.
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_ended',
       dmChannelId: fedCall.dmChannelId,
       federatedCallId: fedCall.federatedId,
-    } as ServerEvent);
+    } as ServerEvent, userId);
     connectionManager.clearFederatedCall(fedCall.federatedId);
 
     const db = getDb();

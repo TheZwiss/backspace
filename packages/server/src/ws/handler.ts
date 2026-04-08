@@ -758,11 +758,13 @@ class ConnectionManager {
    *  ALWAYS uses ringedUserIds, never sendToDmMembers — sendToDmMembers would
    *  also reach the caller's replicated stub, causing cross-instance event contamination
    *  (the caller's multi-instance WS gets dm_call_accepted with the wrong dmChannelId). */
-  sendToFederatedCallUsers(federatedId: string, event: ServerEvent): void {
+  sendToFederatedCallUsers(federatedId: string, event: ServerEvent, excludeUserId?: string): void {
     const call = this.federatedCalls.get(federatedId);
     if (!call) return;
     for (const uid of call.ringedUserIds) {
-      this.sendToUser(uid, event);
+      if (uid !== excludeUserId) {
+        this.sendToUser(uid, event);
+      }
     }
   }
 
