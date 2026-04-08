@@ -48,6 +48,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { channelId, dmChannelId } = request.body as { channelId?: string; dmChannelId?: string };
+    console.log(`[LIVEKIT_TOKEN] userId=${request.userId} username=${request.username} channelId=${channelId} dmChannelId=${dmChannelId}`);
 
     // Determine room name based on channel type
     let roomName: string;
@@ -118,6 +119,7 @@ export async function livekitRoutes(app: FastifyInstance): Promise<void> {
     const jwt = await token.toJwt();
 
     const livekitUrl = config.livekit.url ?? '';
+    console.log(`[LIVEKIT_TOKEN] ISSUED room=${roomName} identity=${identity} url=${livekitUrl}`);
 
     const response: LiveKitTokenResponse = {
       token: jwt,
