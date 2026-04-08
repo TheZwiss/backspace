@@ -64,21 +64,26 @@ export function SoundController() {
         prevIsScreenSharing.current = state.isScreenSharing;
       }
 
-      // Disconnect (Self)
-      if (prevIsConnected.current && !state.isLiveKitConnected) {
+      // Self-disconnect detection — check BEFORE participant sounds
+      const justDisconnected = prevIsConnected.current && !state.isLiveKitConnected;
+      const justConnected = !prevIsConnected.current && state.isLiveKitConnected;
+
+      if (justDisconnected) {
         audioManager.playSound('disconnect', sfxOpts);
       }
-      // Connect (Self)
-      if (!prevIsConnected.current && state.isLiveKitConnected) {
+      if (justConnected) {
         audioManager.playSound('user_join', sfxOpts);
       }
       prevIsConnected.current = state.isLiveKitConnected;
 
       // Participant Joins/Leaves & Screen Sharing
+      // CRITICAL: Skip entirely if we just disconnected or are not connected.
+      // Without this guard, hanging up plays "user_leave" for every participant
+      // (they "left" from our perspective) simultaneously with the disconnect sound.
       const currentParticipantIds = new Set(state.participants.map(p => p.userId));
       const currentScreenShareUserIds = new Set(state.participants.filter(p => p.isScreenSharing).map(p => p.userId));
-      
-      if (state.isLiveKitConnected) {
+
+      if (state.isLiveKitConnected && !justDisconnected) {
         // Someone joined voice (Others only)
         state.participants.forEach(p => {
           if (!prevParticipantIds.current.has(p.userId) && p.userId !== currentUser?.id) {
@@ -107,7 +112,7 @@ export function SoundController() {
           }
         });
       }
-      
+
       prevParticipantIds.current = currentParticipantIds;
       prevScreenShareUserIds.current = currentScreenShareUserIds;
 
