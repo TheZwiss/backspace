@@ -782,6 +782,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // Batch ALL call state into a single set() to prevent:
       // 1. Ringtone multiplication (multiple subscription triggers from separate set() calls)
       // 2. Stale callOrigin/federatedCallId from previous calls (always overwritten)
+      // callOrigin = the WS origin that delivered this event, NOT event.callOrigin (the host).
+      // Routing accept/reject through this WS ensures the message reaches a connected server,
+      // which then relays to the host via S2S HTTP. Using event.callOrigin (the host URL)
+      // would route through the multi-instance WS, which may not be connected.
       useVoiceStore.setState({
         incomingCall: {
           dmChannelId: event.dmChannelId ?? null,
@@ -791,7 +795,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         federatedCallToken: event.livekitToken ?? null,
         federatedCallUrl: event.livekitUrl ?? null,
         federatedCallId: event.federatedCallId ?? null,
-        callOrigin: event.callOrigin ?? null,
+        callOrigin: origin,
       });
       break;
     }
