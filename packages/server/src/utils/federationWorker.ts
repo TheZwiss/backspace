@@ -192,6 +192,8 @@ async function processOutboxTick(): Promise<void> {
       if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
       if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
       if (parsed.profileUpdate) evt.profileUpdate = parsed.profileUpdate;
+      if (parsed.readState) evt.readState = parsed.readState;
+      if (parsed.dmCloseReopen) evt.dmCloseReopen = parsed.dmCloseReopen;
       return evt;
     });
 
