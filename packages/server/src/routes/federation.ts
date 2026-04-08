@@ -1690,6 +1690,9 @@ function findOrCreateDmChannel(
           .run();
       }
     }
+    // Late-bind: if a FederatedCallEntry exists for this federatedId with null dmChannelId,
+    // update it now that we have a local channel
+    connectionManager.lateBindFederatedCall(federatedId, existing.id);
     return existing.id;
   }
 
@@ -1714,6 +1717,10 @@ function findOrCreateDmChannel(
       })
       .run();
   }
+
+  // Late-bind: if a FederatedCallEntry exists for this federatedId with null dmChannelId,
+  // update it now that we have a local channel
+  connectionManager.lateBindFederatedCall(federatedId, channelId);
 
   return channelId;
 }
