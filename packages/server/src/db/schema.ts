@@ -1,4 +1,5 @@
-import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, primaryKey, foreignKey, real, unique, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -45,6 +46,7 @@ export const spaceMembers = sqliteTable('space_members', {
   joinedAt: integer('joined_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId] }),
+  userIdx: index('idx_space_members_user_id').on(table.userId),
 }));
 
 export const channelCategories = sqliteTable('channel_categories', {
@@ -53,7 +55,9 @@ export const channelCategories = sqliteTable('channel_categories', {
   name: text('name').notNull(),
   position: integer('position').default(0),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  spaceIdx: index('idx_channel_categories_space_id').on(table.spaceId),
+}));
 
 export const channels = sqliteTable('channels', {
   id: text('id').primaryKey(),
@@ -64,7 +68,9 @@ export const channels = sqliteTable('channels', {
   position: integer('position').default(0),
   categoryId: text('category_id'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  spaceIdx: index('idx_channels_space_id').on(table.spaceId),
+}));
 
 export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
@@ -79,6 +85,8 @@ export const messages = sqliteTable('messages', {
     columns: [table.replyToId],
     foreignColumns: [table.id],
   }).onDelete('set null'),
+  channelIdx: index('idx_messages_channel_id').on(table.channelId),
+  userIdx: index('idx_messages_user_id').on(table.userId),
 }));
 
 export const attachments = sqliteTable('attachments', {
@@ -98,7 +106,10 @@ export const attachments = sqliteTable('attachments', {
   federationStatus: text('federation_status'),
   federationMeta: text('federation_meta'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  messageIdx: index('idx_attachments_message_id').on(table.messageId),
+  dmMessageIdx: index('idx_attachments_dm_message_id').on(table.dmMessageId),
+}));
 
 export const embeds = sqliteTable('embeds', {
   id: text('id').primaryKey(),
@@ -115,7 +126,10 @@ export const embeds = sqliteTable('embeds', {
   height: integer('height'),
   color: text('color'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  messageIdx: index('idx_embeds_message_id').on(table.messageId),
+  dmMessageIdx: index('idx_embeds_dm_message_id').on(table.dmMessageId),
+}));
 
 export const dmChannels = sqliteTable('dm_channels', {
   id: text('id').primaryKey(),
@@ -125,7 +139,11 @@ export const dmChannels = sqliteTable('dm_channels', {
   ownerHomeInstance: text('owner_home_instance'),
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  federatedIdx: uniqueIndex('idx_dm_federated')
+    .on(table.federatedId)
+    .where(sql`${table.federatedId} IS NOT NULL`),
+}));
 
 export const dmMembers = sqliteTable('dm_members', {
   dmChannelId: text('dm_channel_id').notNull().references(() => dmChannels.id, { onDelete: 'cascade' }),
@@ -133,6 +151,7 @@ export const dmMembers = sqliteTable('dm_members', {
   closed: integer('closed').default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.dmChannelId, table.userId] }),
+  userIdx: index('idx_dm_members_user_id').on(table.userId),
 }));
 
 export const dmMessages = sqliteTable('dm_messages', {
@@ -152,6 +171,11 @@ export const dmMessages = sqliteTable('dm_messages', {
     columns: [table.replyToId],
     foreignColumns: [table.id],
   }).onDelete('set null'),
+  channelIdx: index('idx_dm_messages_dm_channel_id').on(table.dmChannelId),
+  userIdx: index('idx_dm_messages_user_id').on(table.userId),
+  sourceUniqueIdx: uniqueIndex('idx_dm_messages_source_unique')
+    .on(table.sourceInstance, table.sourceMessageId)
+    .where(sql`${table.sourceInstance} IS NOT NULL`),
 }));
 
 export const friends = sqliteTable('friends', {
@@ -160,6 +184,8 @@ export const friends = sqliteTable('friends', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.friendId] }),
+  userIdx: index('idx_friends_user_id').on(table.userId),
+  friendIdx: index('idx_friends_friend_id').on(table.friendId),
 }));
 
 export const friendRequests = sqliteTable('friend_requests', {
@@ -168,7 +194,10 @@ export const friendRequests = sqliteTable('friend_requests', {
   toId: text('to_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   status: text('status').default('pending'), // 'pending', 'accepted', 'declined'
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  toIdx: index('idx_friend_requests_to_id').on(table.toId),
+  fromIdx: index('idx_friend_requests_from_id').on(table.fromId),
+}));
 
 export const reactions = sqliteTable('reactions', {
   id: text('id').primaryKey(),
@@ -176,7 +205,9 @@ export const reactions = sqliteTable('reactions', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  messageIdx: index('idx_reactions_message_id').on(table.messageId),
+}));
 
 export const dmReactions = sqliteTable('dm_reactions', {
   id: text('id').primaryKey(),
@@ -184,7 +215,9 @@ export const dmReactions = sqliteTable('dm_reactions', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   emoji: text('emoji').notNull(),
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  dmMessageIdx: index('idx_dm_reactions_dm_message_id').on(table.dmMessageId),
+}));
 
 export const roles = sqliteTable('roles', {
   id: text('id').primaryKey(),
@@ -194,7 +227,9 @@ export const roles = sqliteTable('roles', {
   position: integer('position').default(0),
   permissions: text('permissions'), // JSON string of permission keys
   createdAt: integer('created_at').notNull(),
-});
+}, (table) => ({
+  spaceIdx: index('idx_roles_space_id').on(table.spaceId),
+}));
 
 export const memberRoles = sqliteTable('member_roles', {
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
@@ -202,6 +237,7 @@ export const memberRoles = sqliteTable('member_roles', {
   roleId: text('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId, table.roleId] }),
+  userSpaceIdx: index('idx_member_roles_user_id_space_id').on(table.userId, table.spaceId),
 }));
 
 export const channelOverrides = sqliteTable('channel_overrides', {
@@ -212,6 +248,7 @@ export const channelOverrides = sqliteTable('channel_overrides', {
   deny: text('deny').notNull().default('0'), // BigInt decimal string
 }, (table) => ({
   pk: primaryKey({ columns: [table.channelId, table.targetType, table.targetId] }),
+  channelIdx: index('idx_channel_overrides_channel_id').on(table.channelId),
 }));
 
 export const categoryOverrides = sqliteTable('category_overrides', {
@@ -222,6 +259,7 @@ export const categoryOverrides = sqliteTable('category_overrides', {
   deny: text('deny').notNull().default('0'),
 }, (table) => ({
   pk: primaryKey({ columns: [table.categoryId, table.targetType, table.targetId] }),
+  categoryIdx: index('idx_category_overrides_category_id').on(table.categoryId),
 }));
 
 export const readStates = sqliteTable('read_states', {
@@ -231,6 +269,7 @@ export const readStates = sqliteTable('read_states', {
   updatedAt: integer('updated_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.channelId] }),
+  userIdx: index('idx_read_states_user_id').on(table.userId),
 }));
 
 export const spaceFolders = sqliteTable('space_folders', {
@@ -287,6 +326,7 @@ export const bans = sqliteTable('bans', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId] }),
+  spaceIdx: index('idx_bans_space_id').on(table.spaceId),
 }));
 
 export const joinRequests = sqliteTable('join_requests', {
@@ -298,7 +338,9 @@ export const joinRequests = sqliteTable('join_requests', {
   decidedBy: text('decided_by').references(() => users.id),
   createdAt: integer('created_at').notNull(),
   decidedAt: integer('decided_at'),
-});
+}, (table) => ({
+  spaceStatusIdx: index('idx_join_requests_space_id_status').on(table.spaceId, table.status),
+}));
 
 export const voiceRestrictions = sqliteTable('voice_restrictions', {
   spaceId: text('space_id').notNull().references(() => spaces.id, { onDelete: 'cascade' }),
@@ -308,6 +350,7 @@ export const voiceRestrictions = sqliteTable('voice_restrictions', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   pk: primaryKey({ columns: [table.spaceId, table.userId, table.restrictionType] }),
+  spaceIdx: index('idx_voice_restrictions_space_id').on(table.spaceId),
 }));
 
 export const federationPeers = sqliteTable('federation_peers', {
@@ -344,6 +387,7 @@ export const federationOutbox = sqliteTable('federation_outbox', {
   createdAt: integer('created_at').notNull(),
 }, (table) => ({
   uniquePerPeerMessage: unique().on(table.peerId, table.entityId),
+  retryIdx: index('idx_outbox_retry').on(table.nextRetryAt),
 }));
 
 export const federationFileQueue = sqliteTable('federation_file_queue', {
@@ -371,7 +415,9 @@ export const federationMutationLog = sqliteTable('federation_mutation_log', {
   mutationType: text('mutation_type').notNull(),
   mutatedAt: integer('mutated_at').notNull(),
   payload: text('payload'),
-});
+}, (table) => ({
+  timeIdx: index('idx_mutation_log_time').on(table.mutatedAt),
+}));
 
 export const userFederationRegistry = sqliteTable('user_federation_registry', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
