@@ -274,7 +274,8 @@ export interface Embed {
 // ─── Active Call Types ───────────────────────────────────────────────────────
 
 export interface ActiveCallInfo {
-  dmChannelId: string;
+  dmChannelId: string | null;
+  federatedCallId?: string;
   callerId: string;
   participants: string[];
   startedAt: number;

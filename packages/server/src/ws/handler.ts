@@ -60,13 +60,14 @@ export interface DmRoomMeta {
 
 /** In-memory registry for federated calls on REMOTE instances. */
 export interface FederatedCallEntry {
-  dmChannelId: string;
-  federatedId: string;
-  callerId: string;             // local stub userId of the caller
+  dmChannelId: string | null;     // null for Path B (no local DM), late-bound when DM created mid-call
+  federatedId: string;            // primary key — cross-instance stable
+  callerId: string;               // local stub userId of the caller
   callerHomeUserId: string;
-  federatedCallHost: string;    // peer origin of the host instance
+  federatedCallHost: string;      // peer origin of the host instance
   livekitUrl: string;
-  tokens: Map<string, string>;  // homeUserId → LiveKit token
+  tokens: Map<string, string>;    // homeUserId → LiveKit token
+  ringedUserIds: string[];        // local userIds that received dm_call_incoming
   state: 'ringing' | 'active';
   startedAt: number;
 }
@@ -98,7 +99,7 @@ class ConnectionManager {
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
-  /** Federated calls where this instance is NOT the host. Keyed by local dmChannelId. */
+  /** Federated calls where this instance is NOT the host. Keyed by federatedId. */
   private federatedCalls: Map<string, FederatedCallEntry> = new Map();
   private federatedCallTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // Space-muted/deafened users (moderator action)
@@ -445,51 +446,74 @@ class ConnectionManager {
 
   /** Register a federated call received via S2S. Adds 60s ringing timeout. */
   createFederatedCall(entry: FederatedCallEntry): void {
-    // Clear any existing entry + timeout to avoid leaked timers
-    this.clearFederatedCall(entry.dmChannelId);
-    this.federatedCalls.set(entry.dmChannelId, entry);
+    this.clearFederatedCall(entry.federatedId);
+    this.federatedCalls.set(entry.federatedId, entry);
 
-    // 60s ringing timeout — mirrors host behavior
     const timeout = setTimeout(() => {
-      this.federatedCallTimeouts.delete(entry.dmChannelId);
-      const call = this.federatedCalls.get(entry.dmChannelId);
+      this.federatedCallTimeouts.delete(entry.federatedId);
+      const call = this.federatedCalls.get(entry.federatedId);
       if (call && call.state === 'ringing') {
-        this.federatedCalls.delete(entry.dmChannelId);
-        this.sendToDmMembers(entry.dmChannelId, {
+        this.federatedCalls.delete(entry.federatedId);
+        const endEvent = {
           type: 'dm_call_ended',
-          dmChannelId: entry.dmChannelId,
-        });
+          dmChannelId: call.dmChannelId,
+          federatedCallId: call.federatedId,
+        };
+        for (const uid of call.ringedUserIds) {
+          this.sendToUser(uid, endEvent as ServerEvent);
+        }
       }
     }, 60_000);
-    this.federatedCallTimeouts.set(entry.dmChannelId, timeout);
+    this.federatedCallTimeouts.set(entry.federatedId, timeout);
   }
 
-  /** Get a federated call entry by local dmChannelId. */
-  getFederatedCall(dmChannelId: string): FederatedCallEntry | undefined {
-    return this.federatedCalls.get(dmChannelId);
+  /** Get a federated call entry by federatedId (primary lookup). */
+  getFederatedCall(federatedId: string): FederatedCallEntry | undefined {
+    return this.federatedCalls.get(federatedId);
+  }
+
+  /** Get a federated call entry by local dmChannelId (convenience reverse lookup). */
+  getFederatedCallByDmChannel(dmChannelId: string): FederatedCallEntry | undefined {
+    for (const entry of this.federatedCalls.values()) {
+      if (entry.dmChannelId === dmChannelId) return entry;
+    }
+    return undefined;
   }
 
   /** Transition a federated call from ringing → active. */
-  activateFederatedCall(dmChannelId: string): boolean {
-    const call = this.federatedCalls.get(dmChannelId);
+  activateFederatedCall(federatedId: string): boolean {
+    const call = this.federatedCalls.get(federatedId);
     if (!call || call.state !== 'ringing') return false;
     call.state = 'active';
-    const timeout = this.federatedCallTimeouts.get(dmChannelId);
+    const timeout = this.federatedCallTimeouts.get(federatedId);
     if (timeout) {
       clearTimeout(timeout);
-      this.federatedCallTimeouts.delete(dmChannelId);
+      this.federatedCallTimeouts.delete(federatedId);
     }
     return true;
   }
 
   /** Remove a federated call entry and clear its timeout. */
-  clearFederatedCall(dmChannelId: string): void {
-    this.federatedCalls.delete(dmChannelId);
-    const timeout = this.federatedCallTimeouts.get(dmChannelId);
+  clearFederatedCall(federatedId: string): void {
+    this.federatedCalls.delete(federatedId);
+    const timeout = this.federatedCallTimeouts.get(federatedId);
     if (timeout) {
       clearTimeout(timeout);
-      this.federatedCallTimeouts.delete(dmChannelId);
+      this.federatedCallTimeouts.delete(federatedId);
     }
+  }
+
+  /** Late-bind a dmChannelId onto a Path B FederatedCallEntry. */
+  lateBindFederatedCall(federatedId: string, dmChannelId: string): void {
+    const call = this.federatedCalls.get(federatedId);
+    if (call && call.dmChannelId === null) {
+      call.dmChannelId = dmChannelId;
+    }
+  }
+
+  /** Expose federated calls for ready payload assembly. */
+  getAllFederatedCalls(): Map<string, FederatedCallEntry> {
+    return this.federatedCalls;
   }
 
   /** Add a user to a room. Enforces one-room-per-user invariant. Returns the room or null if room doesn't exist. */
@@ -726,6 +750,19 @@ class ConnectionManager {
     for (const member of dmMembers) {
       if (member.userId !== excludeUserId) {
         this.sendToUser(member.userId, event);
+      }
+    }
+  }
+
+  /** Send event to users involved in a federated call. Works for both Path A (DM exists) and Path B (no local DM). */
+  sendToFederatedCallUsers(federatedId: string, event: ServerEvent): void {
+    const call = this.federatedCalls.get(federatedId);
+    if (!call) return;
+    if (call.dmChannelId) {
+      this.sendToDmMembers(call.dmChannelId, event);
+    } else {
+      for (const uid of call.ringedUserIds) {
+        this.sendToUser(uid, event);
       }
     }
   }
@@ -1321,18 +1358,20 @@ function buildReadyPayload(userId: string): {
   const myHomeUserId = readyUser?.homeUserId || userId;
 
   // Also include federated calls (this instance is NOT the host)
-  for (const dm of dmMemberships) {
-    const fedCall = connectionManager.getFederatedCall(dm.dmChannelId);
-    if (fedCall) {
+  for (const [_fedId, fedCall] of connectionManager.getAllFederatedCalls()) {
+    const isParticipant = fedCall.ringedUserIds.includes(userId);
+    const isDmMember = fedCall.dmChannelId && dmMemberships.some(dm => dm.dmChannelId === fedCall.dmChannelId);
+    if (isParticipant || isDmMember) {
       activeCalls.push({
-        dmChannelId: dm.dmChannelId,
+        dmChannelId: fedCall.dmChannelId,
+        federatedCallId: fedCall.federatedId,
         callerId: fedCall.callerId,
         participants: [],
         startedAt: fedCall.startedAt,
         state: fedCall.state,
         federatedCallHost: fedCall.federatedCallHost,
         livekitUrl: fedCall.livekitUrl,
-        livekitToken: fedCall.tokens.get(myHomeUserId),  // only this user's token
+        livekitToken: fedCall.tokens.get(myHomeUserId),
       });
     }
   }
