@@ -935,6 +935,7 @@ function buildReadyPayload(userId: string): {
   readStates: ReadState[];
   activeCalls: ActiveCallInfo[];
   userActivities: Record<string, Activity[]>;
+  rejectedPeerOrigins: string[];
 } {
   const db = getDb();
 
@@ -1463,7 +1464,15 @@ function buildReadyPayload(userId: string): {
     }
   }
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities };
+  // Rejected peer origins for unreachable member indicators
+  const rejectedPeers = db
+    .select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'rejected'))
+    .all();
+  const rejectedPeerOrigins = rejectedPeers.map(p => p.origin);
+
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

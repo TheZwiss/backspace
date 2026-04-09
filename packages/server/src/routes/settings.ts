@@ -192,6 +192,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       federationRelayEnabled: row.federationRelayEnabled === 1,
       federationRelayTtlDays: row.federationRelayTtlDays,
       defaultAutoRotateIntervalDays: row.defaultAutoRotateIntervalDays,
+      autoAcceptPeering: row.autoAcceptPeering === 1,
     };
 
     return reply.code(200).send(response);
@@ -258,6 +259,10 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       updateData.defaultAutoRotateIntervalDays = interval;
     }
 
+    if (body.autoAcceptPeering !== undefined) {
+      updateData.autoAcceptPeering = body.autoAcceptPeering ? 1 : 0;
+    }
+
     db.update(schema.instanceSettings).set(updateData).where(eq(schema.instanceSettings.id, 1)).run();
 
     const updatedRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
@@ -277,6 +282,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       federationRelayEnabled: updatedRow.federationRelayEnabled === 1,
       federationRelayTtlDays: updatedRow.federationRelayTtlDays,
       defaultAutoRotateIntervalDays: updatedRow.defaultAutoRotateIntervalDays,
+      autoAcceptPeering: updatedRow.autoAcceptPeering === 1,
     };
 
     return reply.code(200).send(response);
