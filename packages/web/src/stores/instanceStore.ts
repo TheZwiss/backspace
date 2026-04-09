@@ -341,11 +341,25 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
-      // Initiate server-to-server peering for DM relay (non-fatal)
+      // Ensure server-to-server peering for DM relay (non-fatal)
       try {
-        await api.federation.initiatePeering({ remoteOrigin: origin });
+        const peerResult = await api.federation.ensurePeered({ remoteOrigin: origin });
+        if (peerResult.peeringStatus === 'rejected') {
+          const { addToast } = useUIStore.getState();
+          addToast(
+            `Cross-instance messaging unavailable — ${instance.label} requires manual peering approval`,
+            'warning',
+            10000,
+          );
+        } else if (peerResult.peeringStatus === 'pending') {
+          const { addToast } = useUIStore.getState();
+          addToast(
+            `Peering with ${instance.label} in progress — cross-instance messaging will be available shortly`,
+            'info',
+          );
+        }
       } catch (err) {
-        console.warn('[federation] Peering initiation failed (non-fatal):', err);
+        console.warn('[federation] Peering attempt failed (non-fatal):', err);
       }
 
       // Sync instance list to all instances (fire-and-forget)
@@ -977,7 +991,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             connectInstance(origin, cachedEntry.token);
 
             // Initiate server-to-server peering for DM relay (non-fatal, idempotent)
-            api.federation.initiatePeering({ remoteOrigin: origin }).catch(() => {});
+            api.federation.ensurePeered({ remoteOrigin: origin }).catch(() => {});
           } catch (err) {
             if (isNetworkError(err)) {
               // Instance unreachable (NAT hairpinning, DNS, server down) — token may still be valid

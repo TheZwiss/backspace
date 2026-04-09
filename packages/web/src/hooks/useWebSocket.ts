@@ -15,6 +15,13 @@ import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
 import { useDiscoverStore } from '../stores/discoverStore';
 
+// ─── Rejected peer origins (for unreachable member indicators) ───────────────
+const rejectedPeerOrigins = new Set<string>();
+
+export function getRejectedPeerOrigins(): Set<string> {
+  return rejectedPeerOrigins;
+}
+
 // ─── Connection state ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
@@ -364,6 +371,16 @@ function handleEvent(origin: string, event: ServerEvent): void {
         loadFriends();
         loadRequests();
       }
+
+      // Populate rejected peer origins for DM member indicators
+      if (isHome) {
+        rejectedPeerOrigins.clear();
+        if (Array.isArray(event.rejectedPeerOrigins)) {
+          for (const o of event.rejectedPeerOrigins) {
+            rejectedPeerOrigins.add(o);
+          }
+        }
+      }
       break;
 
     case 'message_created':
@@ -635,6 +652,23 @@ function handleEvent(origin: string, event: ServerEvent): void {
         const msg = `File couldn't be cached on ${parts.join(' and ')}. They can still view it from yours.`;
         addToast(msg, 'warning', 7000);
       }
+      break;
+    }
+
+    case 'federation_peer_rejected': {
+      const { addToast } = useUIStore.getState();
+      rejectedPeerOrigins.add(event.peerOrigin);
+      const label = event.peerLabel || event.peerOrigin;
+      addToast(
+        `Cannot relay messages to ${label} — their server requires manual peering approval. Contact their admin to set up peering.`,
+        'warning',
+        10000,
+      );
+      break;
+    }
+
+    case 'federation_peer_active': {
+      rejectedPeerOrigins.delete(event.peerOrigin);
       break;
     }
 
