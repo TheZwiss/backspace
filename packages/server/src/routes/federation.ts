@@ -133,6 +133,42 @@ function isRelayRateLimited(peerOrigin: string): boolean {
   return false;
 }
 
+// ─── In-memory rate limiter for the ensure endpoint (per-user) ─────────────
+const ensureRateBuckets = new Map<string, number[]>();
+const ENSURE_RATE_WINDOW_MS = 15 * 60_000; // 15 minutes
+const ENSURE_RATE_MAX = 3;
+
+function isEnsureRateLimited(userId: string): boolean {
+  const now = Date.now();
+  let timestamps = ensureRateBuckets.get(userId);
+  if (!timestamps) {
+    timestamps = [];
+    ensureRateBuckets.set(userId, timestamps);
+  }
+  const cutoff = now - ENSURE_RATE_WINDOW_MS;
+  while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < cutoff) {
+    timestamps.shift();
+  }
+  if (timestamps.length >= ENSURE_RATE_MAX) {
+    return true;
+  }
+  timestamps.push(now);
+  return false;
+}
+
+// Clean up stale ensure rate limit buckets every 15 minutes
+setInterval(() => {
+  const cutoff = Date.now() - ENSURE_RATE_WINDOW_MS;
+  for (const [userId, timestamps] of ensureRateBuckets) {
+    while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < cutoff) {
+      timestamps.shift();
+    }
+    if (timestamps.length === 0) {
+      ensureRateBuckets.delete(userId);
+    }
+  }
+}, ENSURE_RATE_WINDOW_MS).unref();
+
 // ─── In-memory nonce store for replay protection (per-peer) ──────────────────
 // Maps peerOrigin → (nonce → insertion timestamp). Nonces are evicted after
 // NONCE_MAX_AGE_MS (15 min) to match the HMAC timestamp window.
@@ -345,6 +381,38 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       const db = getDb();
 
+      // ── autoAcceptPeering gate ──────────────────────────────────────────
+      // When auto-accept is disabled, only allow incoming accept requests
+      // that correspond to a local pending peer (i.e., a local admin
+      // initiated the handshake). Unsolicited requests are rejected.
+      const settings = db
+        .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
+        .from(schema.instanceSettings)
+        .where(eq(schema.instanceSettings.id, 1))
+        .get();
+      const autoAccept = settings?.autoAcceptPeering ?? 1;
+
+      if (autoAccept === 0) {
+        const localPending = db
+          .select({ id: schema.federationPeers.id })
+          .from(schema.federationPeers)
+          .where(
+            and(
+              eq(schema.federationPeers.origin, sourceOrigin),
+              eq(schema.federationPeers.status, 'pending'),
+            ),
+          )
+          .get();
+
+        if (!localPending) {
+          return reply.code(403).send({
+            error: 'This instance requires manual peering approval',
+            code: 'PEERING_REQUIRES_APPROVAL',
+            statusCode: 403,
+          });
+        }
+      }
+
       // Check if peer already exists
       const existing = db
         .select()
@@ -362,6 +430,28 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             error: 'Peering with this instance has been revoked',
             statusCode: 403,
           });
+        }
+        if (existing.status === 'rejected') {
+          // A remote admin manually initiated peering with us after we
+          // previously auto-rejected them. Override rejected → active.
+          db.update(schema.federationPeers)
+            .set({
+              hmacSecret,
+              status: 'active',
+              lastSeenAt: Date.now(),
+            })
+            .where(eq(schema.federationPeers.id, existing.id))
+            .run();
+
+          // Broadcast activation to all connected local users
+          for (const uid of connectionManager.getAllOnlineUserIds()) {
+            connectionManager.sendToUser(uid, {
+              type: 'federation_peer_active' as const,
+              peerOrigin: sourceOrigin,
+            });
+          }
+
+          return reply.code(200).send({ accepted: true });
         }
         // Pending — update with new secret and activate
         db.update(schema.federationPeers)
@@ -388,6 +478,43 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }).run();
 
       return reply.code(200).send({ accepted: true });
+    },
+  );
+
+  // ─── POST /api/federation/peer/ensure ──────────────────────────────────────
+  // JWT-authenticated (any user): trigger auto-peering with a remote instance.
+  // Rate-limited per user (3 requests per 15 minutes).
+  app.post<{ Body: { remoteOrigin: string } }>(
+    '/api/federation/peer/ensure',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const { remoteOrigin: rawOrigin } = request.body ?? {};
+      if (!rawOrigin || typeof rawOrigin !== 'string') {
+        return reply.code(200).send({ peeringStatus: 'failed', error: 'remoteOrigin is required' });
+      }
+
+      const remoteOrigin = validateOrigin(rawOrigin);
+      if (!remoteOrigin) {
+        return reply.code(200).send({ peeringStatus: 'failed', error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)' });
+      }
+
+      if (isEnsureRateLimited(request.userId)) {
+        return reply.code(200).send({ peeringStatus: 'failed', error: 'Too many peering requests — try again later' });
+      }
+
+      const { ensurePeered } = await import('../utils/federationPeering.js');
+      const result = await ensurePeered(remoteOrigin);
+
+      switch (result.status) {
+        case 'active':
+          return reply.code(200).send({ peeringStatus: 'active', peerId: result.peerId });
+        case 'rejected':
+          return reply.code(200).send({ peeringStatus: 'rejected', error: result.error });
+        case 'failed':
+          return reply.code(200).send({ peeringStatus: 'failed', error: result.error });
+        default:
+          return reply.code(200).send({ peeringStatus: 'failed', error: 'Unknown peering result' });
+      }
     },
   );
 
