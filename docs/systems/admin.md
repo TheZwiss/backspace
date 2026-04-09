@@ -59,6 +59,7 @@ Settings are split into two API surfaces:
 | maxUploadSizeMb | number | maxUploadSizeBytes | 1-5120 MB | Stored as bytes; converted on read/write. DB null = use env `MAX_UPLOAD_SIZE` (default 100MB) |
 | federationRelayEnabled | boolean | federationRelayEnabled | boolean | Default: 1 (enabled) |
 | federationRelayTtlDays | number | federationRelayTtlDays | integer 1-365 | Default: 30 days |
+| autoAcceptPeering | boolean | autoAcceptPeering | boolean | Default: true. When false, `peer/accept` rejects unsolicited requests (403 PEERING_REQUIRES_APPROVAL); only requests where a local `pending` record already exists are accepted |
 
 ### Streaming Settings Schema (InstanceStreamingLimits)
 

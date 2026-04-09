@@ -341,6 +341,7 @@ PK: (spaceId, userId, restrictionType)
 | maxUploadSizeBytes | integer | | null = use env |
 | federationRelayEnabled | integer NOT NULL | 1 | |
 | federationRelayTtlDays | integer NOT NULL | 30 | |
+| autoAcceptPeering | integer NOT NULL | 1 | When 0, `peer/accept` rejects unsolicited requests with 403 |
 | updatedAt | integer NOT NULL | | |
 
 Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`, `thumbnails_backfilled`, `media_dimensions_backfilled`, `legacy_dm_sync_done`
@@ -356,7 +357,7 @@ Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`,
 | origin | text NOT NULL UNIQUE | | `https://domain.tld` |
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
-| status | text NOT NULL | `'active'` | active/pending/unreachable/revoked |
+| status | text NOT NULL | `'active'` | active/pending/unreachable/revoked/rejected |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer | 0 | >=10 → unreachable |

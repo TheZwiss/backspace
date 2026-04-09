@@ -74,18 +74,19 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 ```
                      initiate
   (none) ──────────► pending ──────────► active
-                                           │
-                    10+ consecutive         │ delivery failures
-                    failures               ▼
-                                       unreachable
-                                           │
-                    health check OK        │
-                                           ▼
-                                        active
-                                           │
-                    admin revoke           │
-                                           ▼
-                                        revoked ──► (delete) ──► re-initiate
+      ▲                                    │
+      │              10+ consecutive        │ delivery failures
+      │              failures              ▼
+      │                               unreachable
+      │              health check OK        │
+      │                                    ▼
+      │                                 active
+      │              admin revoke           │
+      │                                    ▼
+      │                                 revoked ──► (delete) ──► re-initiate
+      │
+      │  auto-peer rejected (403 PEERING_REQUIRES_APPROVAL)
+      └──────────────────────────── rejected
 ```
 
 | Status | Outbox delivery | Health check | Relay accepts | Re-initiation |
@@ -94,10 +95,23 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 | `pending` | No | No | No | No (returns 409) |
 | `unreachable` | No (entries wait) | Yes (1h interval) | Yes (resets to active) | No |
 | `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) |
+| `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) |
 
 ### PEER_UNREACHABLE_THRESHOLD
 
 Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failures for a peer, the worker sets `status = 'unreachable'`. The health check worker (1h interval) pings `GET /api/instance/info` on unreachable peers and reverts to `active` on success.
+
+### Auto-Peering
+
+When the server needs to relay events to an instance it has not yet peered with, `ensurePeered()` in `federationPeering.ts` automatically initiates the handshake. This removes the requirement for an admin to manually initiate every peering relationship.
+
+**Integration points:**
+- **Outbox worker** (`federationWorker.ts`) — after delivering active peers, calls `ensurePeered()` for any pending-placeholder entries whose peer has not yet been activated.
+- **Connection flow** (`POST /api/federation/peer/ensure`) — called by the client when establishing a cross-instance connection, ensuring the two instances are peered before any relay traffic is sent.
+
+**`rejected` status** — Added to the peer lifecycle. Set when a remote instance explicitly rejects auto-peering with `403 PEERING_REQUIRES_APPROVAL`. This status is sticky: no automatic retry occurs. An admin can clear it by deleting the peer record (then re-initiating), or by manually initiating via `peer/initiate`. An incoming `peer/accept` from a remote admin can also override `rejected` → `active` (treated the same as a `pending` record).
+
+**`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, the endpoint returns `403 PEERING_REQUIRES_APPROVAL` for requests where no local `pending` record exists (i.e., a request the local admin did not initiate). The determination is made by checking the local peer table — not a client-provided flag.
 
 ### Admin Endpoints
 
@@ -105,11 +119,14 @@ Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failu
 |----------|--------|------|---------|
 | `/api/federation/peer/initiate` | POST | JWT + admin | Start peering handshake |
 | `/api/federation/peer/accept` | POST | None (rate-limited) | Accept incoming handshake |
+| `/api/federation/peer/ensure` | POST | JWT (any user), rate-limited 3/15min/user | Trigger auto-peering to a remote instance |
 | `/api/federation/peers` | GET | JWT + admin | List all peers (secret excluded) |
 | `/api/federation/peers/:id` | PATCH | JWT + admin | Update peer settings (auto-rotation interval) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
 | `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
+
+**`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `rejected`, `unreachable`, or `revoked`.
 
 ### S2S Endpoints
 
@@ -135,6 +152,15 @@ Allows a home instance to remove a user's replicated identity from a remote inst
 - **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes memberships, but skips reaction deletion and orphaned DM purge.
 - **Mode `"full"`:** Calls `tombstoneUser(uid, { purgeContent: true })` — full tombstone including reactions and orphaned DM cleanup.
 - **Post-deletion:** Broadcasts `member_left` WS events for all spaces the user belonged to before removal.
+
+### WebSocket Events (Peering)
+
+These S→C events are pushed to the acting user's connected clients by the federation subsystem.
+
+| Event | Pushed when | Payload |
+|-------|-------------|---------|
+| `federation_peer_rejected` | Outbox worker receives `403 PEERING_REQUIRES_APPROVAL` from a remote instance during auto-peering | `{ peerId: string, origin: string }` |
+| `federation_peer_active` | A previously `rejected` peer transitions to `active` (e.g., via manual `peer/initiate` or incoming `peer/accept`) | `{ peerId: string, origin: string }` |
 
 ---
 
