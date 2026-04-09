@@ -490,16 +490,22 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { remoteOrigin: rawOrigin } = request.body ?? {};
       if (!rawOrigin || typeof rawOrigin !== 'string') {
-        return reply.code(200).send({ peeringStatus: 'failed', error: 'remoteOrigin is required' });
+        return reply.code(400).send({ error: 'remoteOrigin is required', statusCode: 400 });
       }
 
       const remoteOrigin = validateOrigin(rawOrigin);
       if (!remoteOrigin) {
-        return reply.code(200).send({ peeringStatus: 'failed', error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)' });
+        return reply.code(400).send({
+          error: 'remoteOrigin must be a valid HTTPS URL (HTTP is only allowed for localhost)',
+          statusCode: 400,
+        });
       }
 
       if (isEnsureRateLimited(request.userId)) {
-        return reply.code(200).send({ peeringStatus: 'failed', error: 'Too many peering requests — try again later' });
+        return reply.code(429).send({
+          error: 'Too many peering requests — try again later',
+          statusCode: 429,
+        });
       }
 
       const { ensurePeered } = await import('../utils/federationPeering.js');
