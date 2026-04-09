@@ -14,7 +14,7 @@ function FederationGlobalSettings() {
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
   const addToast = useUIStore((s) => s.addToast);
 
-  const [draft, setDraft] = useState<Pick<InstanceAdminSettings, 'federationRelayEnabled' | 'federationRelayTtlDays' | 'defaultAutoRotateIntervalDays'> | null>(null);
+  const [draft, setDraft] = useState<Pick<InstanceAdminSettings, 'federationRelayEnabled' | 'federationRelayTtlDays' | 'defaultAutoRotateIntervalDays' | 'autoAcceptPeering'> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
@@ -24,6 +24,7 @@ function FederationGlobalSettings() {
         federationRelayEnabled: instanceSettings.federationRelayEnabled,
         federationRelayTtlDays: instanceSettings.federationRelayTtlDays,
         defaultAutoRotateIntervalDays: instanceSettings.defaultAutoRotateIntervalDays,
+        autoAcceptPeering: instanceSettings.autoAcceptPeering,
       });
     }
   }, [instanceSettings]);
@@ -33,7 +34,8 @@ function FederationGlobalSettings() {
   const hasChanges = instanceSettings
     ? draft.federationRelayEnabled !== instanceSettings.federationRelayEnabled ||
       draft.federationRelayTtlDays !== instanceSettings.federationRelayTtlDays ||
-      draft.defaultAutoRotateIntervalDays !== instanceSettings.defaultAutoRotateIntervalDays
+      draft.defaultAutoRotateIntervalDays !== instanceSettings.defaultAutoRotateIntervalDays ||
+      draft.autoAcceptPeering !== instanceSettings.autoAcceptPeering
     : false;
 
   const handleSave = async () => {
@@ -55,6 +57,7 @@ function FederationGlobalSettings() {
         federationRelayEnabled: instanceSettings.federationRelayEnabled,
         federationRelayTtlDays: instanceSettings.federationRelayTtlDays,
         defaultAutoRotateIntervalDays: instanceSettings.defaultAutoRotateIntervalDays,
+        autoAcceptPeering: instanceSettings.autoAcceptPeering,
       });
     }
     setSaveError('');
@@ -73,6 +76,14 @@ function FederationGlobalSettings() {
             <div className="text-xs text-txt-tertiary mt-0.5">Relay direct messages to and from peer instances</div>
           </div>
           <Toggle enabled={draft.federationRelayEnabled} onChange={(v) => setDraft({ ...draft, federationRelayEnabled: v })} />
+        </label>
+
+        <label className="flex items-center justify-between cursor-pointer">
+          <div>
+            <div className="text-sm font-medium text-txt-primary">Auto-accept peering</div>
+            <div className="text-xs text-txt-tertiary mt-0.5">Automatically accept peering requests from other instances. When disabled, only manually initiated peering is allowed.</div>
+          </div>
+          <Toggle enabled={draft.autoAcceptPeering} onChange={(v) => setDraft({ ...draft, autoAcceptPeering: v })} />
         </label>
 
         <div>
@@ -161,6 +172,7 @@ function peerStatusColor(status: string): string {
     case 'active': return 'bg-status-online/15 text-status-online';
     case 'pending': return 'bg-accent-lavender/15 text-accent-lavender';
     case 'unreachable': return 'bg-accent-amber/15 text-accent-amber';
+    case 'rejected': return 'bg-accent-rose/15 text-accent-rose';
     case 'revoked': return 'bg-white/5 text-txt-tertiary';
     default: return 'bg-white/5 text-txt-tertiary';
   }
@@ -171,7 +183,19 @@ function peerStatusDotColor(status: string): string {
     case 'active': return 'bg-status-online';
     case 'pending': return 'bg-accent-lavender';
     case 'unreachable': return 'bg-accent-amber';
+    case 'rejected': return 'bg-accent-rose';
     default: return 'bg-txt-tertiary';
+  }
+}
+
+function peerStatusLabel(status: string): string {
+  switch (status) {
+    case 'active': return 'Active';
+    case 'pending': return 'Pending';
+    case 'unreachable': return 'Unreachable';
+    case 'rejected': return 'Rejected (auto-peering denied)';
+    case 'revoked': return 'Revoked';
+    default: return status;
   }
 }
 
@@ -418,7 +442,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
           <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${peerStatusColor(peer.status)}`}>
-            {peer.status}
+            {peerStatusLabel(peer.status)}
           </span>
           <span className="text-txt-tertiary text-xs">{expanded ? '▾' : '▸'}</span>
         </div>
