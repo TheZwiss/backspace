@@ -201,7 +201,7 @@ function peerStatusLabel(status: string): string {
 
 type PeerView = 'active' | 'revoked';
 type SortBy = 'name' | 'lastSeen' | 'dateAdded' | 'failures';
-type StatusFilter = 'active' | 'unreachable' | 'pending';
+type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected';
 
 // ─── Filter Dropdown ─────────────────────────────────────────────────────────
 
@@ -263,7 +263,7 @@ function FilterDropdown({
             {view === 'active' && (
               <>
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Status</div>
-                {(['active', 'unreachable', 'pending'] as StatusFilter[]).map((s) => (
+                {(['active', 'unreachable', 'pending', 'rejected'] as StatusFilter[]).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -392,7 +392,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
   const addToast = useUIStore((s) => s.addToast);
 
   const name = peer.instanceName || new URL(peer.origin).host;
-  const isRevoked = view === 'revoked';
+  const isRevoked = view === 'revoked' || peer.status === 'rejected';
   const isDefault = peer.autoRotateIntervalDays === defaultAutoRotateIntervalDays;
 
   const handleSaveInterval = async () => {
@@ -588,7 +588,7 @@ export function FederationPanel() {
   const [peersLoading, setPeersLoading] = useState(false);
   const [peersError, setPeersError] = useState('');
   const [view, setView] = useState<PeerView>('active');
-  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(new Set(['active', 'unreachable', 'pending']));
+  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(new Set(['active', 'unreachable', 'pending', 'rejected']));
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
 

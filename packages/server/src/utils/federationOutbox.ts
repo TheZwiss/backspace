@@ -138,7 +138,7 @@ export function queueOutboxEvent(
       .select()
       .from(schema.federationPeers)
       .where(
-        inArray(schema.federationPeers.status, ['active', 'pending']),
+        inArray(schema.federationPeers.status, ['active', 'pending', 'unreachable']),
       )
       .all();
 

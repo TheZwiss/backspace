@@ -517,9 +517,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         case 'rejected':
           return reply.code(200).send({ peeringStatus: 'rejected', error: result.error });
         case 'failed':
-          return reply.code(200).send({ peeringStatus: 'failed', error: result.error });
+          return reply.code(200).send({ peeringStatus: 'pending', error: result.error });
         default:
-          return reply.code(200).send({ peeringStatus: 'failed', error: 'Unknown peering result' });
+          return reply.code(200).send({ peeringStatus: 'pending', error: 'Unknown peering result' });
       }
     },
   );
