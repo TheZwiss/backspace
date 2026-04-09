@@ -24,7 +24,7 @@ Related specs: `docs/systems/federation.md` (wire protocol, outbox worker, peer 
 |----------|-----------|----------|
 | `ownerId` | `NULL` | Creator's local user ID (never NULL) |
 | `federatedId` format | 32-char hex (SHA-256 hash) | 36-char UUID (random) |
-| Mutable membership | No (immutable pair) | Yes (owner adds, anyone leaves) |
+| Mutable membership | No (immutable pair) | Yes (any member adds, anyone leaves) |
 | Max members | 2 | 10 |
 | Friendship required | No | Yes (for new adds; exempt for existing DM members during 1-on-1 upgrade) |
 | Soft-close | Yes (`closed=1` on dm_members) | Yes (same) |
@@ -184,11 +184,10 @@ Close and reopen are relayed to all peer instances that hold a copy of the DM:
 **Validation:**
 1. Caller must be a member of the channel
 2. Channel must be a group DM (`ownerId` is not NULL)
-3. Caller must be the group owner (`dmChannel.ownerId === request.userId`)
-4. Target user must exist
-5. Caller and target must be friends
-6. Target must not already be a member
-7. Current member count must be < 10
+3. Target user must exist
+4. Caller and target must be friends
+5. Target must not already be a member
+6. Current member count must be < 10
 
 **Lazy federation setup:**
 - If the channel lacks a `federatedId` and the new member (or any existing member) is remote:
@@ -633,7 +632,7 @@ const normalized = homeInstance.startsWith('http')
 | `POST` | `/api/dm` | JWT | Create or get existing 1-on-1 DM. Accepts `{ userId }` (local) or `{ homeUserId, homeInstance }` (federated) |
 | `POST` | `/api/dm/group` | JWT | Create group DM with multiple members |
 | `DELETE` | `/api/dm/:id` | JWT | Soft-close DM for caller |
-| `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (owner only). Accepts `{ userId }` or `{ homeUserId, homeInstance }` |
+| `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (any member). Accepts `{ userId }` or `{ homeUserId, homeInstance }` |
 | `DELETE` | `/api/dm/:id/members` | JWT | Leave group DM |
 | `GET` | `/api/dm/:id/messages` | JWT | Get messages with cursor pagination |
 | `POST` | `/api/dm/:id/messages` | JWT | Send message (rate-limited: 5/5s) |

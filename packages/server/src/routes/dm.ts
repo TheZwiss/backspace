@@ -902,9 +902,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     if (!dmChannel.ownerId) {
       return reply.code(400).send({ error: 'Cannot add members to a 1-on-1 DM. Use POST /api/dm/group to create a group.', statusCode: 400 });
     }
-    if (dmChannel.ownerId !== request.userId) {
-      return reply.code(403).send({ error: 'Only the group owner can add members', statusCode: 403 });
-    }
+    // Any group DM member can add friends (not just the owner)
 
     // Validate the adder and target are friends
     const friendship = db.select().from(schema.friends).where(
