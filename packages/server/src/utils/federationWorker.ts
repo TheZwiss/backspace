@@ -279,6 +279,9 @@ async function processOutboxTick(): Promise<void> {
       handleOutboxDeliveryFailure(db, peerId, peerEntries, now);
     }
   }
+
+  // ─── Resolve pending peers with queued outbox entries ────────────────────
+  await resolvePendingPeers();
 }
 
 function handleOutboxDeliveryFailure(
@@ -325,6 +328,166 @@ function handleOutboxDeliveryFailure(
     .set(updates)
     .where(eq(schema.federationPeers.id, peerId))
     .run();
+}
+
+// ─── Pending Peer Resolution ───────────────────────────────────────────────
+
+/**
+ * Find pending peers that have outbox entries waiting, and attempt to
+ * establish peering via ensurePeered(). Runs after active delivery to
+ * avoid blocking it with handshake I/O.
+ */
+async function resolvePendingPeers(): Promise<void> {
+  const db = getDb();
+
+  // Find distinct pending peer origins with queued outbox entries
+  const pendingWithEntries = db
+    .selectDistinct({
+      peerId: schema.federationPeers.id,
+      peerOrigin: schema.federationPeers.origin,
+    })
+    .from(schema.federationPeers)
+    .innerJoin(
+      schema.federationOutbox,
+      eq(schema.federationOutbox.peerId, schema.federationPeers.id),
+    )
+    .where(eq(schema.federationPeers.status, 'pending'))
+    .all();
+
+  if (pendingWithEntries.length === 0) return;
+
+  const { ensurePeered } = await import('./federationPeering.js');
+
+  for (const { peerId, peerOrigin } of pendingWithEntries) {
+    console.log(`[federation-worker] Attempting auto-peer with ${peerOrigin}...`);
+
+    const result = await ensurePeered(peerOrigin);
+
+    switch (result.status) {
+      case 'active':
+        console.log(`[federation-worker] Auto-peered with ${peerOrigin} — entries will deliver next tick`);
+        break;
+
+      case 'rejected': {
+        console.warn(`[federation-worker] Auto-peering rejected by ${peerOrigin}: ${result.error}`);
+
+        // Collect affected contexts before purging
+        const entries = db
+          .select({
+            contextId: schema.federationOutbox.contextId,
+            contextType: schema.federationOutbox.contextType,
+          })
+          .from(schema.federationOutbox)
+          .where(eq(schema.federationOutbox.peerId, peerId))
+          .all();
+
+        const contextMap = new Map<string, string>();
+        for (const e of entries) {
+          if (!contextMap.has(e.contextId)) {
+            contextMap.set(e.contextId, e.contextType);
+          }
+        }
+
+        // Purge outbox entries (NOT mutation log)
+        db.delete(schema.federationOutbox)
+          .where(eq(schema.federationOutbox.peerId, peerId))
+          .run();
+
+        // Push federation_peer_rejected WS event to affected users
+        pushPeerRejectedEvent(peerOrigin, contextMap);
+        break;
+      }
+
+      case 'failed':
+        console.warn(`[federation-worker] Auto-peer with ${peerOrigin} failed (transient): ${result.error}`);
+        // Leave entries — will retry next tick
+        break;
+    }
+  }
+}
+
+/**
+ * Push a federation_peer_rejected WS event to all local users affected by
+ * the rejection. Resolves contextLabel from the database for each context.
+ */
+function pushPeerRejectedEvent(
+  peerOrigin: string,
+  contextMap: Map<string, string>,
+): void {
+  const db = getDb();
+
+  // Build affected contexts with human-readable labels
+  const affectedContexts: Array<{
+    contextType: 'dm' | 'friend';
+    contextId: string;
+    contextLabel: string;
+  }> = [];
+
+  const affectedUserIds = new Set<string>();
+
+  for (const [contextId, contextType] of contextMap) {
+    if (contextType === 'dm') {
+      // Resolve DM member names for the label
+      const members = db
+        .select({
+          userId: schema.dmMembers.userId,
+          username: schema.users.username,
+          displayName: schema.users.displayName,
+          homeInstance: schema.users.homeInstance,
+        })
+        .from(schema.dmMembers)
+        .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+        .where(eq(schema.dmMembers.dmChannelId, contextId))
+        .all();
+
+      const names = members
+        .map(m => m.displayName || m.username || 'Unknown')
+        .slice(0, 4)
+        .join(', ');
+
+      affectedContexts.push({
+        contextType: 'dm',
+        contextId,
+        contextLabel: names,
+      });
+
+      // Track local users to notify (non-federated members)
+      for (const m of members) {
+        if (!m.homeInstance) {
+          affectedUserIds.add(m.userId);
+        }
+      }
+    } else if (contextType === 'friend') {
+      affectedContexts.push({
+        contextType: 'friend',
+        contextId,
+        contextLabel: contextId, // friend context IDs include usernames
+      });
+    }
+  }
+
+  // Try to get the instance name for a better label
+  let peerLabel: string | undefined;
+  const peerRow = db
+    .select({ instanceName: schema.federationPeers.instanceName })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.origin, peerOrigin))
+    .get();
+  if (peerRow?.instanceName) {
+    peerLabel = peerRow.instanceName;
+  }
+
+  const event = {
+    type: 'federation_peer_rejected' as const,
+    peerOrigin,
+    peerLabel,
+    reason: 'Remote instance requires manual peering approval',
+    affectedContexts,
+  };
+
+  for (const userId of affectedUserIds) {
+    connectionManager.sendToUser(userId, event);
+  }
 }
 
 // ─── File Queue Download Worker ─────────────────────────────────────────────
