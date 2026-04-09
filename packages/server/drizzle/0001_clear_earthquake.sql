@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `auto_accept_peering` integer DEFAULT 1 NOT NULL;

@@ -315,6 +315,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   federationRelayEnabled: integer('federation_relay_enabled').notNull().default(1),
   federationRelayTtlDays: integer('federation_relay_ttl_days').notNull().default(30),
   defaultAutoRotateIntervalDays: integer('default_auto_rotate_interval_days').notNull().default(90),
+  autoAcceptPeering: integer('auto_accept_peering').notNull().default(1),
   updatedAt: integer('updated_at').notNull(),
 });
 
