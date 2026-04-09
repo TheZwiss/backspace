@@ -1,10 +1,10 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest } from '@backspace/shared';
-import { getOurOrigin, buildFederationHeaders } from './federationAuth.js';
+import { getOurOrigin, buildFederationHeaders, generateHmacSecret } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
@@ -134,25 +134,69 @@ export function queueOutboxEvent(
 
     const db = getDb();
 
-    const activePeers = db
+    const peers = db
       .select()
       .from(schema.federationPeers)
-      .where(eq(schema.federationPeers.status, 'active'))
+      .where(
+        inArray(schema.federationPeers.status, ['active', 'pending']),
+      )
       .all();
 
-    if (activePeers.length === 0) {
+    if (peers.length === 0 && !targetPeerOrigins) {
       return;
     }
 
     // If targetPeerOrigins specified, only queue to those peers
-    const peers = targetPeerOrigins
-      ? activePeers.filter(p => targetPeerOrigins.includes(p.origin))
-      : activePeers;
+    let matchedPeers = targetPeerOrigins
+      ? peers.filter(p => targetPeerOrigins.includes(p.origin))
+      : peers;
 
-    if (peers.length === 0) {
-      if (targetPeerOrigins) {
-        console.warn(`[federation] queueOutboxEvent: zero peers matched targets ${JSON.stringify(targetPeerOrigins)}. Active peer origins: ${JSON.stringify(activePeers.map(p => p.origin))}`);
+    // For targeted origins with no existing peer record, create pending placeholders
+    if (targetPeerOrigins) {
+      const matchedOrigins = new Set(matchedPeers.map(p => p.origin));
+
+      for (const origin of targetPeerOrigins) {
+        if (matchedOrigins.has(origin)) continue;
+
+        // Check if there's a rejected/revoked peer we should skip
+        const existingPeer = db
+          .select({ status: schema.federationPeers.status })
+          .from(schema.federationPeers)
+          .where(eq(schema.federationPeers.origin, origin))
+          .get();
+
+        if (existingPeer && (existingPeer.status === 'rejected' || existingPeer.status === 'revoked')) {
+          console.warn(`[federation] queueOutboxEvent: skipping ${existingPeer.status} peer ${origin}`);
+          continue;
+        }
+
+        // No peer record at all — create a pending placeholder
+        const peerId = generateSnowflake();
+        const now = Date.now();
+        db.insert(schema.federationPeers)
+          .values({
+            id: peerId,
+            origin,
+            hmacSecret: generateHmacSecret(),
+            status: 'pending',
+            createdAt: now,
+          })
+          .run();
+
+        const newPeer = db
+          .select()
+          .from(schema.federationPeers)
+          .where(eq(schema.federationPeers.id, peerId))
+          .get();
+
+        if (newPeer) {
+          matchedPeers = [...matchedPeers, newPeer];
+          console.log(`[federation] queueOutboxEvent: created pending placeholder for ${origin}`);
+        }
       }
+    }
+
+    if (matchedPeers.length === 0) {
       return;
     }
 
@@ -160,7 +204,7 @@ export function queueOutboxEvent(
     const now = Date.now();
     const expiresAt = now + (ttlDays * 86_400_000);
 
-    for (const peer of peers) {
+    for (const peer of matchedPeers) {
       db.transaction((tx) => {
         const existing = tx
           .select()
