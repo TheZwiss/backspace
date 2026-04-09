@@ -73,7 +73,7 @@ function resolveLocalOrigin(request: { headers: Record<string, string | string[]
  * Validate that a string is a well-formed HTTP(S) URL origin.
  * Returns the normalized origin (no trailing slash) or null if invalid.
  */
-function validateOrigin(raw: string): string | null {
+export function validateOrigin(raw: string): string | null {
   try {
     const url = new URL(raw);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
