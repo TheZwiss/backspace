@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useMem
 export interface SettingsSection {
   id: string;
   label: string;
+  badgeCount?: number;
 }
 
 interface SettingsSectionsContextValue {
