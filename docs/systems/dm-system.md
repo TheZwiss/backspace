@@ -514,6 +514,18 @@ System messages are NOT relayed via federation. Each instance creates its own in
 
 This avoids duplicate system messages for users connected to multiple instances.
 
+### Receiving-Side Idempotency
+
+Membership event processors (`processMemberAddEvent`, `processMemberRemoveEvent`, `processOwnershipTransferEvent`) persist the federation event's `(sourceInstance, event.messageId)` on the system-message row they insert (`dm_messages.source_instance`, `dm_messages.source_message_id`). The unique index `idx_dm_messages_source_unique` enforces that this pair occurs at most once per receiving instance.
+
+Each processor's first step is to `SELECT` for a matching row and `accepted.push(event.messageId); return` if found. This makes the entire event handler a no-op on repeat delivery. The guarantee covers:
+
+- **Outbox retries** after transient network failures.
+- **Initial sync replays** when a peer's `lastSyncedAt` resets (e.g. after an admin re-approves a peering request, which recreates the peer row with the default `lastSyncedAt = 0`).
+- **Bootstrap vs incremental races** — `processMemberAddEvent` emits the system message in both paths so bootstrap deliveries that later re-arrive as incremental events short-circuit at the dedup check instead of inserting a second message.
+
+The bootstrap path includes the persisted system message as `lastMessage` in its `dm_channel_created` broadcast, so sidebar preview and unread anchors use the same message ID across all instances.
+
 ---
 
 ## Local-Only Broadcast Principle
@@ -686,3 +698,4 @@ For full wire formats, see `docs/systems/websocket.md`.
 | Missing federatedId in outbox | All membership events rejected by peer | Outbox worker reconstruction omitted `federatedId` | Copy `parsed.federatedId` during reconstruction |
 | Cross-instance duplicate channels | Duplicate sidebar entries | `dm_channel_created` broadcast to ALL members including remote | Local-only broadcast principle |
 | Bootstrap vs incremental confusion | N/A (design note) | `bootstrapped` flag is function-local; batch events work correctly because bootstrap adds ALL roster members | No fix needed -- documented as correct behavior |
+| Duplicated membership system messages across restarts | 4× "Jannis added youruser" in group DM, channel keeps flipping to unread after each deploy | Membership event processors inserted system messages unconditionally. Each approval-flow re-peering reset peer `last_synced_at = 0`, so initial sync replayed every historical `member_add` / `member_remove` / `ownership_transfer` on next boot. Each replay's new snowflake ID exceeded the user's `read_states.last_read_message_id`, flipping unread. | Dedup by `(sourceInstance, event.messageId)` on the inserted system message. Both bootstrap and incremental paths in `processMemberAddEvent` now persist these fields so replay is a no-op. |

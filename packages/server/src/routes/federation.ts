@@ -2961,6 +2961,24 @@ function processMemberAddEvent(
     return;
   }
 
+  // Idempotency: a prior delivery of this exact event has already been processed.
+  // The system message we persist below carries `(source_instance, source_message_id)`
+  // and is guarded by `idx_dm_messages_source_unique`, so presence of a row here is
+  // proof the event's side-effects are already in place. Accept silently to prevent
+  // outbox retries and initial-sync replay from creating duplicate system messages.
+  const existingSysMsg = db
+    .select({ id: schema.dmMessages.id })
+    .from(schema.dmMessages)
+    .where(and(
+      eq(schema.dmMessages.sourceInstance, sourceInstance),
+      eq(schema.dmMessages.sourceMessageId, event.messageId),
+    ))
+    .get();
+  if (existingSysMsg) {
+    accepted.push(event.messageId);
+    return;
+  }
+
   // Look up local channel by federated_id
   let channel = db
     .select()
@@ -3003,18 +3021,18 @@ function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const localUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
       // Skip deleted identities — tombstoned users can't be added to a DM
-      if (!localUser) continue;
+      if (!rosterUser) continue;
       const existing = db.select().from(schema.dmMembers)
         .where(and(
           eq(schema.dmMembers.dmChannelId, channelId),
-          eq(schema.dmMembers.userId, localUser.id),
+          eq(schema.dmMembers.userId, rosterUser.id),
         )).get();
       if (!existing) {
         db.insert(schema.dmMembers).values({
           dmChannelId: channelId,
-          userId: localUser.id,
+          userId: rosterUser.id,
           closed: 0,
         }).run();
       }
@@ -3026,40 +3044,6 @@ function processMemberAddEvent(
     console.log(`[federation] Bootstrapped group DM channel ${channelId} (federated_id: ${event.federatedId})`);
 
     bootstrapped = true;
-
-    // Build full DmChannel response for dm_channel_created
-    const memberRows = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, channelId))
-      .all();
-    const memberUserIds = memberRows.map(m => m.userId);
-    const memberUsers = memberUserIds.length > 0
-      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
-      : [];
-
-    const bootstrapResult = {
-      id: channelId,
-      federatedId: event.federatedId,
-      ownerId,
-      createdAt: now,
-      members: memberUsers.map(u => sanitizeUser(u)),
-      lastMessage: null,
-    };
-
-    // Send dm_channel_created only to members whose home is THIS instance.
-    // Remote replicas will get the channel from their own home instance's
-    // federation bootstrap — prevents duplicate channels in their sidebar.
-    const bootstrapOrigin = getOurOrigin();
-    for (const mu of memberUsers) {
-      const muHome = mu.homeInstance
-        ? (mu.homeInstance.startsWith('http') ? mu.homeInstance : `https://${mu.homeInstance}`)
-        : bootstrapOrigin;  // null homeInstance = native local user
-      if (muHome !== bootstrapOrigin) continue;
-      connectionManager.sendToUser(mu.id, {
-        type: 'dm_channel_created',
-        dmChannel: bootstrapResult,
-      });
-    }
   }
 
   if (!channel) {
@@ -3124,49 +3108,93 @@ function processMemberAddEvent(
     }).run();
   }
 
-  if (!bootstrapped) {
-    // Insert system message for member addition
-    const actorUser = event.membership.addedBy
-      ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username })
-      : null;
-    const actorId = actorUser?.id ?? localUser.id;
+  // Insert system message for member addition — tagged with (sourceInstance, sourceMessageId)
+  // so subsequent deliveries of the same event are deduplicated at the top of this function.
+  // The tag is applied in both the bootstrap and incremental paths, because bootstrap replays
+  // would otherwise find the channel already present and fall through to the incremental path,
+  // creating spurious system messages (the exact bug this fixes).
+  const actorUser = event.membership.addedBy
+    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username })
+    : null;
+  const actorId = actorUser?.id ?? localUser.id;
+  const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
+  const addSysMsgId = generateSnowflake();
+  const addSysCreatedAt = Date.now();
+  const addSysContent = JSON.stringify({
+    event: 'member_added',
+    targetUserId: localUser.id,
+    targetDisplayName: localUser.displayName ?? addBaseName,
+  });
 
-    const addSysMsgId = generateSnowflake();
-    const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
-    db.insert(schema.dmMessages).values({
-      id: addSysMsgId,
-      dmChannelId: channel.id,
-      userId: actorId,
-      content: JSON.stringify({
-        event: 'member_added',
-        targetUserId: localUser.id,
-        targetDisplayName: localUser.displayName ?? addBaseName,
-      }),
-      type: 'system',
-      createdAt: Date.now(),
-    }).run();
+  db.insert(schema.dmMessages).values({
+    id: addSysMsgId,
+    dmChannelId: channel.id,
+    userId: actorId,
+    content: addSysContent,
+    type: 'system',
+    createdAt: addSysCreatedAt,
+    sourceInstance,
+    sourceMessageId: event.messageId,
+  }).run();
 
+  const systemMessagePayload = {
+    id: addSysMsgId,
+    dmChannelId: channel.id,
+    userId: actorId,
+    content: addSysContent,
+    type: 'system' as const,
+    createdAt: addSysCreatedAt,
+    sourceInstance,
+    sourceMessageId: event.messageId,
+    editedAt: null,
+    replyToId: null,
+    user: actorUser ? sanitizeUser(actorUser) : sanitizeUser(localUser),
+    attachments: [],
+    embeds: [],
+    reactions: [],
+  };
+
+  if (bootstrapped) {
+    // Bootstrap: send dm_channel_created to home-local members only (prevents
+    // duplicate sidebar entries for users connected to multiple instances).
+    // Include the system message we just persisted as lastMessage so the sidebar
+    // preview and unread calculation use the same anchor as future messages.
+    const memberRows = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, channel.id))
+      .all();
+    const memberUserIds = memberRows.map(m => m.userId);
+    const memberUsers = memberUserIds.length > 0
+      ? db.select().from(schema.users).where(inArray(schema.users.id, memberUserIds)).all()
+      : [];
+
+    const bootstrapResult = {
+      id: channel.id,
+      federatedId: channel.federatedId,
+      ownerId: channel.ownerId,
+      createdAt: channel.createdAt,
+      members: memberUsers.map(u => sanitizeUser(u)),
+      lastMessage: systemMessagePayload,
+    };
+
+    const bootstrapOrigin = getOurOrigin();
+    for (const mu of memberUsers) {
+      const muHome = mu.homeInstance
+        ? (mu.homeInstance.startsWith('http') ? mu.homeInstance : `https://${mu.homeInstance}`)
+        : bootstrapOrigin;  // null homeInstance = native local user
+      if (muHome !== bootstrapOrigin) continue;
+      connectionManager.sendToUser(mu.id, {
+        type: 'dm_channel_created',
+        dmChannel: bootstrapResult as unknown as DmChannel,
+      });
+    }
+  } else {
+    // Incremental: channel already exists for local members, so broadcast the
+    // structural change (dm_member_added) and the chat message.
     connectionManager.sendToDmMembers(channel.id, {
       type: 'dm_message_created',
-      message: {
-        id: addSysMsgId,
-        dmChannelId: channel.id,
-        userId: actorId,
-        content: JSON.stringify({
-          event: 'member_added',
-          targetUserId: localUser.id,
-          targetDisplayName: localUser.displayName ?? addBaseName,
-        }),
-        type: 'system',
-        createdAt: Date.now(),
-        user: actorUser ? sanitizeUser(actorUser) : sanitizeUser(localUser),
-        attachments: [],
-        embeds: [],
-        reactions: [],
-      } as any,
+      message: systemMessagePayload as unknown as DmMessageWithUser,
     });
-
-    // Broadcast to local WebSocket clients
     connectionManager.sendToDmMembers(channel.id, {
       type: 'dm_member_added',
       dmChannelId: channel.id,
@@ -3196,6 +3224,23 @@ function processMemberRemoveEvent(
     return;
   }
 
+  // Idempotency: skip if this exact event has already been processed.
+  // See `processMemberAddEvent` for the rationale — deduplicates retries and
+  // initial-sync replay so we don't insert duplicate leave/kick system messages
+  // or re-trigger broadcast and soft-delete side-effects.
+  const existingSysMsg = db
+    .select({ id: schema.dmMessages.id })
+    .from(schema.dmMessages)
+    .where(and(
+      eq(schema.dmMessages.sourceInstance, sourceInstance),
+      eq(schema.dmMessages.sourceMessageId, event.messageId),
+    ))
+    .get();
+  if (existingSysMsg) {
+    accepted.push(event.messageId);
+    return;
+  }
+
   const channel = db
     .select()
     .from(schema.dmChannels)
@@ -3219,21 +3264,26 @@ function processMemberRemoveEvent(
     return;
   }
 
-  // Insert system message for member leaving (before deletion)
+  // Insert system message for member leaving (before deletion so the broadcast
+  // still reaches the departing user's connections). Tagged with source for dedup.
   const leaveBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
   const leaveSysMsgId = generateSnowflake();
+  const leaveSysCreatedAt = Date.now();
+  const leaveSysContent = JSON.stringify({
+    event: 'member_removed',
+    targetUserId: localUser.id,
+    targetDisplayName: localUser.displayName ?? leaveBaseName,
+    reason: event.membership?.reason ?? 'leave',
+  });
   db.insert(schema.dmMessages).values({
     id: leaveSysMsgId,
     dmChannelId: channel.id,
     userId: localUser.id,
-    content: JSON.stringify({
-      event: 'member_removed',
-      targetUserId: localUser.id,
-      targetDisplayName: localUser.displayName ?? leaveBaseName,
-      reason: event.membership?.reason ?? 'leave',
-    }),
+    content: leaveSysContent,
     type: 'system',
-    createdAt: Date.now(),
+    createdAt: leaveSysCreatedAt,
+    sourceInstance,
+    sourceMessageId: event.messageId,
   }).run();
 
   connectionManager.sendToDmMembers(channel.id, {
@@ -3242,19 +3292,18 @@ function processMemberRemoveEvent(
       id: leaveSysMsgId,
       dmChannelId: channel.id,
       userId: localUser.id,
-      content: JSON.stringify({
-        event: 'member_removed',
-        targetUserId: localUser.id,
-        targetDisplayName: localUser.displayName ?? leaveBaseName,
-        reason: event.membership?.reason ?? 'leave',
-      }),
+      content: leaveSysContent,
       type: 'system',
-      createdAt: Date.now(),
+      createdAt: leaveSysCreatedAt,
+      sourceInstance,
+      sourceMessageId: event.messageId,
+      editedAt: null,
+      replyToId: null,
       user: sanitizeUser(localUser),
       attachments: [],
       embeds: [],
       reactions: [],
-    } as any,
+    } as unknown as DmMessageWithUser,
   });
 
   // Remove member (idempotent)
@@ -3316,6 +3365,22 @@ function processOwnershipTransferEvent(
     return;
   }
 
+  // Idempotency: reject replay of a transfer we've already processed. Critical here
+  // because a stale replay could otherwise overwrite a newer owner (e.g. A->B then
+  // B->A, then A->B arrives again and clobbers). See `processMemberAddEvent`.
+  const existingSysMsg = db
+    .select({ id: schema.dmMessages.id })
+    .from(schema.dmMessages)
+    .where(and(
+      eq(schema.dmMessages.sourceInstance, sourceInstance),
+      eq(schema.dmMessages.sourceMessageId, event.messageId),
+    ))
+    .get();
+  if (existingSysMsg) {
+    accepted.push(event.messageId);
+    return;
+  }
+
   const channel = db
     .select()
     .from(schema.dmChannels)
@@ -3366,20 +3431,24 @@ function processOwnershipTransferEvent(
     ? resolveLocalUser(event.ownership.previousOwner.homeUserId, db)
     : null;
   const ownerSysMsgId = generateSnowflake();
+  const ownerSysCreatedAt = Date.now();
   const newOwnerBaseName = newOwnerLocal?.username?.includes('@') ? newOwnerLocal.username.split('@')[0] : (newOwnerLocal?.username ?? 'Unknown');
   const prevOwnerId = prevOwnerLocal?.id ?? channel.ownerId ?? 'system';
+  const ownerSysContent = JSON.stringify({
+    event: 'owner_changed',
+    newOwnerId: newOwnerLocal.id,
+    newOwnerDisplayName: newOwnerLocal.displayName ?? newOwnerBaseName,
+  });
 
   db.insert(schema.dmMessages).values({
     id: ownerSysMsgId,
     dmChannelId: channel.id,
     userId: prevOwnerId,
-    content: JSON.stringify({
-      event: 'owner_changed',
-      newOwnerId: newOwnerLocal.id,
-      newOwnerDisplayName: newOwnerLocal.displayName ?? newOwnerBaseName,
-    }),
+    content: ownerSysContent,
     type: 'system',
-    createdAt: Date.now(),
+    createdAt: ownerSysCreatedAt,
+    sourceInstance,
+    sourceMessageId: event.messageId,
   }).run();
 
   connectionManager.sendToDmMembers(channel.id, {
@@ -3388,18 +3457,18 @@ function processOwnershipTransferEvent(
       id: ownerSysMsgId,
       dmChannelId: channel.id,
       userId: prevOwnerId,
-      content: JSON.stringify({
-        event: 'owner_changed',
-        newOwnerId: newOwnerLocal?.id ?? event.ownership.newOwner.homeUserId,
-        newOwnerDisplayName: newOwnerLocal?.displayName ?? newOwnerBaseName,
-      }),
+      content: ownerSysContent,
       type: 'system',
-      createdAt: Date.now(),
+      createdAt: ownerSysCreatedAt,
+      sourceInstance,
+      sourceMessageId: event.messageId,
+      editedAt: null,
+      replyToId: null,
       user: prevOwnerLocal ? sanitizeUser(prevOwnerLocal) : undefined,
       attachments: [],
       embeds: [],
       reactions: [],
-    } as any,
+    } as unknown as DmMessageWithUser,
   });
 
   accepted.push(event.messageId);
