@@ -936,6 +936,8 @@ function buildReadyPayload(userId: string): {
   activeCalls: ActiveCallInfo[];
   userActivities: Record<string, Activity[]>;
   rejectedPeerOrigins: string[];
+  awaitingApprovalPeerOrigins: string[];
+  pendingApprovalCount: number;
 } {
   const db = getDb();
 
@@ -1472,7 +1474,25 @@ function buildReadyPayload(userId: string): {
     .all();
   const rejectedPeerOrigins = rejectedPeers.map(p => p.origin);
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins };
+  // Awaiting-approval peer origins for softer unreachable indicators
+  const awaitingApprovalPeers = db
+    .select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'awaiting_approval'))
+    .all();
+  const awaitingApprovalPeerOrigins = awaitingApprovalPeers.map(p => p.origin);
+
+  // Pending approval count for admin notification
+  let pendingApprovalCount = 0;
+  if (userRow?.isAdmin === 1) {
+    const countResult = db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.peerApprovalRequests)
+      .get();
+    pendingApprovalCount = countResult?.count ?? 0;
+  }
+
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, pendingApprovalCount };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {
