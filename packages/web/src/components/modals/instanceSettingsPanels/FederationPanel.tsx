@@ -5,7 +5,7 @@ import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { api } from '../../../api/client';
 import type { InstanceAdminSettings } from '@backspace/shared';
-import type { FederationPeer } from '../../../api/client';
+import type { FederationPeer, ApprovalRequest } from '../../../api/client';
 
 // ─── Global Settings ─────────────────────────────────────────────────────────
 
@@ -578,10 +578,156 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
   );
 }
 
+// ─── Pending Approvals ──────────────────────────────────────────────────────
+
+function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) => void }) {
+  const addToast = useUIStore((s) => s.addToast);
+  const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'approve' | 'deny';
+    request: ApprovalRequest;
+  } | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await api.federation.approvalRequests();
+      setRequests(result.requests);
+      onCountChange?.(result.requests.length);
+    } catch {
+      // Silently fail — empty list shown
+    } finally {
+      setLoading(false);
+    }
+  }, [onCountChange]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
+
+  const handleConfirm = async () => {
+    if (!confirmAction) return;
+    const { type, request: req } = confirmAction;
+    setActionLoading(req.id);
+    setErrors((prev) => { const next = { ...prev }; delete next[req.id]; return next; });
+
+    try {
+      if (type === 'approve') {
+        await api.federation.approveRequest(req.id);
+        setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        onCountChange?.(requests.length - 1);
+        addToast(`Peering established with ${req.instanceName || req.origin}`, 'success', 3000);
+      } else {
+        await api.federation.denyRequest(req.id);
+        setRequests((prev) => prev.filter((r) => r.id !== req.id));
+        onCountChange?.(requests.length - 1);
+        addToast(`Denied peering request from ${req.instanceName || req.origin}`, 'success', 3000);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Action failed';
+      setErrors((prev) => ({ ...prev, [req.id]: msg }));
+    } finally {
+      setActionLoading(null);
+      setConfirmAction(null);
+    }
+  };
+
+  if (requests.length === 0 && !loading) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Pending Approval Requests</div>
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-amber/15 text-accent-amber">
+          {requests.length}
+        </span>
+      </div>
+      <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-2 mb-5">
+        {loading && requests.length === 0 && (
+          <div className="text-xs text-txt-tertiary py-2">Loading...</div>
+        )}
+        {requests.map((req) => {
+          const name = req.instanceName || new URL(req.origin).host;
+          return (
+            <div key={req.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-txt-primary truncate">{name}</div>
+                  <div className="text-[11px] text-txt-tertiary truncate">{req.origin}</div>
+                  <div className="text-[11px] text-txt-tertiary mt-0.5">
+                    Requested {formatRelativeTime(req.requestedAt)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAction({ type: 'approve', request: req })}
+                    disabled={actionLoading === req.id}
+                    className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmAction({ type: 'deny', request: req })}
+                    disabled={actionLoading === req.id}
+                    className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </div>
+              {errors[req.id] && (
+                <div className="mt-2 p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-[11px]">
+                  {errors[req.id]}
+                  <button
+                    type="button"
+                    onClick={() => setErrors((prev) => { const next = { ...prev }; delete next[req.id]; return next; })}
+                    className="ml-2 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {confirmAction && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => { if (!actionLoading) setConfirmAction(null); }}
+          onConfirm={handleConfirm}
+          title={confirmAction.type === 'approve' ? 'Approve Peering Request' : 'Deny Peering Request'}
+          description={
+            confirmAction.type === 'approve'
+              ? `This will initiate a peering handshake with ${confirmAction.request.instanceName || confirmAction.request.origin}. The remote instance must be reachable.`
+              : `This will deny the request and block future auto-peering requests from ${confirmAction.request.instanceName || confirmAction.request.origin}. You can unblock them later from the rejected peers list.`
+          }
+          confirmLabel={confirmAction.type === 'approve' ? 'Approve' : 'Deny'}
+          variant={confirmAction.type === 'approve' ? 'warning' : 'danger'}
+          loading={!!actionLoading}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Panel ──────────────────────────────────────────────────────────────
 
-export function FederationPanel() {
+export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChange?: (count: number) => void }) {
   const addToast = useUIStore((s) => s.addToast);
+
+  const [, setApprovalCount] = useState(0);
+
+  const handleApprovalCountChange = useCallback((count: number) => {
+    setApprovalCount(count);
+    onApprovalCountChange?.(count);
+  }, [onApprovalCountChange]);
 
   // Peer list state
   const [peers, setPeers] = useState<FederationPeer[]>([]);
@@ -728,6 +874,8 @@ export function FederationPanel() {
       </div>
 
       <FederationGlobalSettings />
+
+      <PendingApprovals onCountChange={handleApprovalCountChange} />
 
       {/* Peered Instances */}
       <div>
