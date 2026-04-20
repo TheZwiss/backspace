@@ -22,6 +22,12 @@ export function getRejectedPeerOrigins(): Set<string> {
   return rejectedPeerOrigins;
 }
 
+const awaitingApprovalPeerOrigins = new Set<string>();
+
+export function getAwaitingApprovalPeerOrigins(): Set<string> {
+  return awaitingApprovalPeerOrigins;
+}
+
 // ─── Connection state ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
@@ -381,6 +387,27 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+
+      // Populate awaiting-approval peer origins
+      if (isHome) {
+        awaitingApprovalPeerOrigins.clear();
+        if (Array.isArray(event.awaitingApprovalPeerOrigins)) {
+          for (const o of event.awaitingApprovalPeerOrigins) {
+            awaitingApprovalPeerOrigins.add(o);
+          }
+        }
+
+        // Admin toast for pending approval requests
+        if (event.pendingApprovalCount && event.pendingApprovalCount > 0) {
+          const { addToast } = useUIStore.getState();
+          const count = event.pendingApprovalCount;
+          addToast(
+            `You have ${count} pending peering request${count === 1 ? '' : 's'}`,
+            'info',
+            5000,
+          );
+        }
+      }
       break;
 
     case 'message_created':
@@ -658,9 +685,10 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'federation_peer_rejected': {
       const { addToast } = useUIStore.getState();
       rejectedPeerOrigins.add(event.peerOrigin);
+      awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       const label = event.peerLabel || event.peerOrigin;
       addToast(
-        `Cannot relay messages to ${label} — their server requires manual peering approval. Contact their admin to set up peering.`,
+        `Cannot relay messages to ${label} — ${event.reason}`,
         'warning',
         10000,
       );
@@ -669,6 +697,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'federation_peer_active': {
       rejectedPeerOrigins.delete(event.peerOrigin);
+      awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       break;
     }
 
