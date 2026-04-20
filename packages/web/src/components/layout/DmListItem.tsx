@@ -3,12 +3,18 @@ import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
 import { formatDmTimestamp, formatDmPreview } from '../../utils/dmFormatters';
-import { getRejectedPeerOrigins } from '../../hooks/useWebSocket';
+import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
   if (!homeInstance) return false;
   const normalized = homeInstance.startsWith('http') ? homeInstance : `https://${homeInstance}`;
   return getRejectedPeerOrigins().has(normalized);
+}
+
+function isMemberAwaitingApproval(homeInstance: string | null | undefined): boolean {
+  if (!homeInstance) return false;
+  const normalized = homeInstance.startsWith('http') ? homeInstance : `https://${homeInstance}`;
+  return getAwaitingApprovalPeerOrigins().has(normalized);
 }
 
 interface DmListItemProps {
@@ -160,9 +166,16 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
             </Tooltip>
           )}
           {firstOther && isMemberUnreachable(firstOther.homeInstance) && (
-            <Tooltip content="Messages may not reach this user — their instance requires manual peering approval" position="top">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber opacity-70 flex-shrink-0">
+            <Tooltip content="Cannot relay messages — their server denied peering. Contact their admin." position="top">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-accent-rose opacity-70 flex-shrink-0">
                 <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+              </svg>
+            </Tooltip>
+          )}
+          {firstOther && !isMemberUnreachable(firstOther.homeInstance) && isMemberAwaitingApproval(firstOther.homeInstance) && (
+            <Tooltip content="Messages will be delivered once their admin approves the peering request." position="top">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-accent-amber opacity-70 flex-shrink-0">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
               </svg>
             </Tooltip>
           )}
