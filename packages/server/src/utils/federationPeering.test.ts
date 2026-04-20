@@ -31,4 +31,15 @@ describe('EnsurePeeredResult type', () => {
     };
     expect(result.status).toBe('failed');
   });
+
+  it('pending result has error', () => {
+    const result: EnsurePeeredResult = {
+      status: 'pending',
+      error: 'Awaiting admin approval on remote instance',
+    };
+    expect(result.status).toBe('pending');
+    if (result.status === 'pending') {
+      expect(result.error).toContain('admin approval');
+    }
+  });
 });

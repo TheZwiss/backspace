@@ -10,7 +10,20 @@ import { validateOrigin } from '../routes/federation.js';
 export type EnsurePeeredResult =
   | { status: 'active'; peerId: string }
   | { status: 'rejected'; error: string }
-  | { status: 'failed'; error: string };
+  | { status: 'failed'; error: string }
+  | { status: 'pending'; error: string };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getInstanceName(): string | undefined {
+  const db = getDb();
+  const row = db
+    .select({ name: schema.instanceSettings.instanceName })
+    .from(schema.instanceSettings)
+    .where(eq(schema.instanceSettings.id, 1))
+    .get();
+  return row?.name ?? undefined;
+}
 
 // ─── In-flight deduplication ─────────────────────────────────────────────────
 
@@ -59,6 +72,8 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
         // Unreachable peers were previously active — treat as active for peering
         // (the health check will restore them; don't re-handshake)
         return { status: 'active', peerId: existing.id };
+      case 'awaiting_approval':
+        return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
       case 'pending':
         // Fall through to dedup logic below
         break;
@@ -119,6 +134,7 @@ async function performHandshake(
       body: JSON.stringify({
         sourceOrigin: ourOrigin,
         hmacSecret,
+        instanceName: getInstanceName(),
       }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -130,6 +146,15 @@ async function performHandshake(
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       return { status: 'active', peerId };
+    }
+
+    if (response.status === 202) {
+      // Request queued for admin approval on the remote side
+      db.update(schema.federationPeers)
+        .set({ status: 'awaiting_approval' })
+        .where(eq(schema.federationPeers.id, peerId))
+        .run();
+      return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
     }
 
     // Check for explicit rejection (autoAcceptPeering = 0)
