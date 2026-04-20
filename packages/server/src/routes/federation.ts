@@ -996,6 +996,24 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           signal: AbortSignal.timeout(10_000),
         });
 
+        if (response.status === 202) {
+          // Remote instance also has autoAcceptPeering off — they queued our request.
+          // Don't activate our peer. Set to awaiting_approval until their admin also approves.
+          db.update(schema.federationPeers)
+            .set({ status: 'awaiting_approval' })
+            .where(eq(schema.federationPeers.id, peerId))
+            .run();
+          // Delete the approval request since we already acted on it
+          db.delete(schema.peerApprovalRequests)
+            .where(eq(schema.peerApprovalRequests.id, id))
+            .run();
+          return reply.code(200).send({
+            success: true,
+            awaitingRemoteApproval: true,
+            message: 'Remote instance also requires admin approval. Your request has been queued on their side.',
+          });
+        }
+
         if (!response.ok) {
           let errorMessage = `Remote instance rejected handshake (HTTP ${response.status})`;
           try {

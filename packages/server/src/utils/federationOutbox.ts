@@ -152,11 +152,22 @@ export function queueOutboxEvent(
       : peers;
 
     // For targeted origins with no existing peer record, create pending placeholders
+    // (only when autoAcceptPeering is enabled — otherwise the admin controls all peering)
     if (targetPeerOrigins) {
+      const autoAcceptSettings = db
+        .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
+        .from(schema.instanceSettings)
+        .where(eq(schema.instanceSettings.id, 1))
+        .get();
+      const autoAcceptPeering = (autoAcceptSettings?.autoAcceptPeering ?? 1) === 1;
+
       const matchedOrigins = new Set(matchedPeers.map(p => p.origin));
 
       for (const origin of targetPeerOrigins) {
         if (matchedOrigins.has(origin)) continue;
+
+        // Don't auto-create placeholders when autoAcceptPeering is off
+        if (!autoAcceptPeering) continue;
 
         // Check if there's a rejected/revoked peer we should skip
         const existingPeer = db

@@ -173,6 +173,7 @@ function peerStatusColor(status: string): string {
     case 'pending': return 'bg-accent-lavender/15 text-accent-lavender';
     case 'unreachable': return 'bg-accent-amber/15 text-accent-amber';
     case 'rejected': return 'bg-accent-rose/15 text-accent-rose';
+    case 'awaiting_approval': return 'bg-accent-amber/15 text-accent-amber';
     case 'revoked': return 'bg-white/5 text-txt-tertiary';
     default: return 'bg-white/5 text-txt-tertiary';
   }
@@ -184,6 +185,7 @@ function peerStatusDotColor(status: string): string {
     case 'pending': return 'bg-accent-lavender';
     case 'unreachable': return 'bg-accent-amber';
     case 'rejected': return 'bg-accent-rose';
+    case 'awaiting_approval': return 'bg-accent-amber';
     default: return 'bg-txt-tertiary';
   }
 }
@@ -195,13 +197,14 @@ function peerStatusLabel(status: string): string {
     case 'unreachable': return 'Unreachable';
     case 'rejected': return 'Rejected (auto-peering denied)';
     case 'revoked': return 'Revoked';
+    case 'awaiting_approval': return 'Awaiting Approval';
     default: return status;
   }
 }
 
 type PeerView = 'active' | 'revoked';
 type SortBy = 'name' | 'lastSeen' | 'dateAdded' | 'failures';
-type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected';
+type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected' | 'awaiting_approval';
 
 // ─── Filter Dropdown ─────────────────────────────────────────────────────────
 
@@ -263,7 +266,7 @@ function FilterDropdown({
             {view === 'active' && (
               <>
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Status</div>
-                {(['active', 'unreachable', 'pending', 'rejected'] as StatusFilter[]).map((s) => (
+                {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval'] as StatusFilter[]).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -273,7 +276,7 @@ function FilterDropdown({
                     } hover:bg-white/[0.06] transition-colors`}
                   >
                     <div className={`w-2 h-2 rounded-full ${peerStatusDotColor(s)}`} />
-                    <span className="capitalize">{s}</span>
+                    <span className="capitalize">{s === 'awaiting_approval' ? 'Awaiting Approval' : s}</span>
                   </button>
                 ))}
                 <div className="h-px bg-white/[0.06] my-1" />
@@ -734,7 +737,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
   const [peersLoading, setPeersLoading] = useState(false);
   const [peersError, setPeersError] = useState('');
   const [view, setView] = useState<PeerView>('active');
-  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(new Set(['active', 'unreachable', 'pending', 'rejected']));
+  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(new Set(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval']));
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
 
