@@ -80,22 +80,6 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
     }
   }
 
-  // When autoAcceptPeering is disabled, don't auto-initiate new peering.
-  // The admin's intent is "I control all peering" — both incoming (gated by
-  // peer/accept) and outgoing auto-initiation (gated here). Only the admin
-  // peer/initiate endpoint and the approval-request approve endpoint bypass
-  // this check because those represent explicit admin action.
-  if (!existing) {
-    const settings = db
-      .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
-      .from(schema.instanceSettings)
-      .where(eq(schema.instanceSettings.id, 1))
-      .get();
-    if ((settings?.autoAcceptPeering ?? 1) === 0) {
-      return { status: 'failed', error: 'Auto-peering is disabled on this instance — an admin must initiate peering manually' };
-    }
-  }
-
   // Deduplicate: if a handshake is already in flight, share the promise
   const inflight = inFlightPeering.get(normalized);
   if (inflight) {
