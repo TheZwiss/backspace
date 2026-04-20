@@ -398,13 +398,18 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const autoAccept = settings?.autoAcceptPeering ?? 1;
 
       if (autoAccept === 0) {
+        // Check if the local admin already initiated or approved peering with this origin.
+        // 'pending' = admin used peer/initiate (handshake in progress)
+        // 'awaiting_approval' = admin approved an earlier request, handshake was sent,
+        //   remote queued it (202). Now the remote admin approved too and is handshaking
+        //   back to us. We should accept — both admins have approved.
         const localPending = db
           .select({ id: schema.federationPeers.id })
           .from(schema.federationPeers)
           .where(
             and(
               eq(schema.federationPeers.origin, sourceOrigin),
-              eq(schema.federationPeers.status, 'pending'),
+              inArray(schema.federationPeers.status, ['pending', 'awaiting_approval']),
             ),
           )
           .get();
