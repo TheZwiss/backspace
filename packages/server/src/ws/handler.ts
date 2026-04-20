@@ -937,6 +937,7 @@ function buildReadyPayload(userId: string): {
   userActivities: Record<string, Activity[]>;
   rejectedPeerOrigins: string[];
   awaitingApprovalPeerOrigins: string[];
+  activePeerOrigins: string[];
   pendingApprovalCount: number;
 } {
   const db = getDb();
@@ -1482,6 +1483,14 @@ function buildReadyPayload(userId: string): {
     .all();
   const awaitingApprovalPeerOrigins = awaitingApprovalPeers.map(p => p.origin);
 
+  // Active peer origins — client uses this allowlist to gate DM events from remote instances
+  const activePeers = db
+    .select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'active'))
+    .all();
+  const activePeerOrigins = activePeers.map(p => p.origin);
+
   // Pending approval count for admin notification
   let pendingApprovalCount = 0;
   if (userRow?.isAdmin === 1) {
@@ -1492,7 +1501,7 @@ function buildReadyPayload(userId: string): {
     pendingApprovalCount = countResult?.count ?? 0;
   }
 
-  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, pendingApprovalCount };
+  return { user, spaces, dmChannels, folders, spaceLayout, layoutUpdatedAt, voiceStates, voiceUserStates, spaceVoiceStates, readStates, activeCalls, userActivities, rejectedPeerOrigins, awaitingApprovalPeerOrigins, activePeerOrigins, pendingApprovalCount };
 }
 
 export async function registerWebSocket(app: FastifyInstance): Promise<void> {

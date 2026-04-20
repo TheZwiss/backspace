@@ -28,6 +28,14 @@ export function getAwaitingApprovalPeerOrigins(): Set<string> {
   return awaitingApprovalPeerOrigins;
 }
 
+// Active peer origins — allowlist for processing DM events from remote instances.
+// Only DMs from peered origins (or the home instance) are processed.
+const activePeerOrigins = new Set<string>();
+
+export function getActivePeerOrigins(): Set<string> {
+  return activePeerOrigins;
+}
+
 // ─── Connection state ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
@@ -397,6 +405,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
 
+        // Populate active peer origins (allowlist for remote DM events)
+        activePeerOrigins.clear();
+        if (Array.isArray(event.activePeerOrigins)) {
+          for (const o of event.activePeerOrigins) {
+            activePeerOrigins.add(o);
+          }
+        }
+
         // Admin toast for pending approval requests
         if (event.pendingApprovalCount && event.pendingApprovalCount > 0) {
           const { addToast } = useUIStore.getState();
@@ -590,6 +606,13 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM events (all origins) ────────────────────────────────────────────
 
     case 'dm_message_created': {
+      // Gate: only process DM events from the home instance or actively peered origins.
+      // This prevents notifications/previews from remote instances where S2S peering
+      // was revoked, deleted, or never established — even if the client still has a
+      // direct WS connection to that instance via Connections.
+      if (!isHome && !activePeerOrigins.has(origin)) {
+        break;
+      }
       if (!isHome) {
         normalizeMessageAssets(event.message as any, origin);
         if ((event.message as any).embeds) {
@@ -655,6 +678,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_message_updated':
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       if (!isHome) {
         normalizeMessageAssets(event.message as any, origin);
         if ((event.message as any).embeds) {
@@ -686,6 +710,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
       const { addToast } = useUIStore.getState();
       rejectedPeerOrigins.add(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
+      activePeerOrigins.delete(event.peerOrigin);
       const label = event.peerLabel || event.peerOrigin;
       addToast(
         `Cannot relay messages to ${label} — ${event.reason}`,
@@ -698,10 +723,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'federation_peer_active': {
       rejectedPeerOrigins.delete(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
+      activePeerOrigins.add(event.peerOrigin);
       break;
     }
 
     case 'dm_message_deleted':
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       removeMessage(event.messageId, event.dmChannelId);
       break;
 
@@ -726,6 +753,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_embeds_resolved': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       if (!isHome) {
         for (const embed of event.embeds) {
           if (embed.image && !embed.image.startsWith('http')) {
@@ -746,6 +774,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_typing': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       let dmTypingUsername = event.username as string;
       if (!isHome && dmTypingUsername && !dmTypingUsername.includes('@')) {
         try { dmTypingUsername = `${dmTypingUsername}@${new URL(origin).host}`; } catch {}
@@ -755,6 +784,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_typing_stop': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       clearTyping(event.dmChannelId as string, event.userId as string);
       break;
     }
@@ -832,6 +862,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM call events (all origins) ──────────────────────────────────────
 
     case 'dm_call_incoming': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       // Batch ALL call state into a single set() to prevent:
       // 1. Ringtone multiplication (multiple subscription triggers from separate set() calls)
       // 2. Stale callOrigin/federatedCallId from previous calls (always overwritten)
@@ -854,6 +885,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_accepted': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       const { setIncomingCall, setOutgoingCall, outgoingCall, setActiveDmCall, connectFn, isLiveKitConnected } = useVoiceStore.getState();
       const wasOutgoingCall = !!outgoingCall;
       setIncomingCall(null);
@@ -877,6 +909,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_rejected': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -887,6 +920,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_call_ended': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
       setIncomingCall(null);
       setOutgoingCall(null);
@@ -899,6 +933,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── DM channel events (all origins) ────────────────────────────────────
 
     case 'dm_channel_created': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       if (!isHome) {
         for (const m of event.dmChannel.members) {
           normalizeUserAssets(m, origin);
@@ -915,10 +950,12 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_channel_closed':
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       removeDmChannel(event.dmChannelId);
       break;
 
     case 'dm_member_added': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       if (!isHome) normalizeUserAssets(event.user, origin);
       const { addDmMember } = useSpaceStore.getState();
       addDmMember(event.dmChannelId, event.user);
@@ -926,12 +963,14 @@ function handleEvent(origin: string, event: ServerEvent): void {
     }
 
     case 'dm_member_removed': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       const { removeDmMember } = useSpaceStore.getState();
       removeDmMember(event.dmChannelId, event.userId);
       break;
     }
 
     case 'dm_owner_updated': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
       const { updateDmOwner } = useSpaceStore.getState();
       updateDmOwner(event.dmChannelId, event.newOwnerId);
       break;
