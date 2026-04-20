@@ -78,6 +78,14 @@ export interface FederationPeer {
   autoRotateIntervalDays: number;
 }
 
+export interface ApprovalRequest {
+  id: string;
+  origin: string;
+  instanceName: string | null;
+  requestedAt: number;
+  expiresAt: number;
+}
+
 export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
@@ -230,6 +238,9 @@ export class BackspaceApiClient {
     rotatePeerSecret: (id: string) => Promise<{ success: boolean; gracePeriodMs: number }>;
     updatePeer: (id: string, data: { autoRotateIntervalDays: number }) => Promise<{ peer: FederationPeer }>;
     deletePeerPermanently: (id: string) => Promise<{ success: boolean }>;
+    approvalRequests: () => Promise<{ requests: ApprovalRequest[] }>;
+    approveRequest: (id: string) => Promise<{ success: boolean; peer?: FederationPeer }>;
+    denyRequest: (id: string) => Promise<{ success: boolean }>;
   };
 
   readonly admin: {
@@ -683,6 +694,18 @@ export class BackspaceApiClient {
         request<{ peer: FederationPeer }>('PATCH', `/federation/peers/${id}`, data),
       deletePeerPermanently: (id: string) =>
         request<{ success: boolean }>('DELETE', `/federation/peers/${id}/permanent`),
+      approvalRequests: () =>
+        request<{ requests: ApprovalRequest[] }>(
+          'GET', '/federation/approval-requests'
+        ),
+      approveRequest: (id: string) =>
+        request<{ success: boolean; peer?: FederationPeer }>(
+          'POST', `/federation/approval-requests/${id}/approve`
+        ),
+      denyRequest: (id: string) =>
+        request<{ success: boolean }>(
+          'POST', `/federation/approval-requests/${id}/deny`
+        ),
     };
 
     this.admin = {
