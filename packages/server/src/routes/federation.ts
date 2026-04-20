@@ -672,6 +672,98 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/peer/denied ─────────────────────────────────────
+  // Server-to-server: receive a denial notification from a remote instance.
+  // Authenticated via HMAC-SHA256 signature (the secret we sent in our original
+  // peer/accept request, which the remote stored in their approval queue).
+  app.post<{ Body: { origin: string; reason: 'denied_by_admin' | 'expired'; message?: string } }>(
+    '/api/federation/peer/denied',
+    async (request, reply) => {
+      const db = getDb();
+
+      // Verify HMAC signature
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const { origin: senderOrigin, signature, timestamp, nonce } = fedHeaders;
+
+      // Find the local peer for this origin
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, senderOrigin))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'No peer record for this origin', statusCode: 404 });
+      }
+
+      // Only accept denial for awaiting_approval peers
+      if (peer.status !== 'awaiting_approval') {
+        return reply.code(409).send({
+          error: `Peer is in '${peer.status}' state, not awaiting_approval`,
+          statusCode: 409,
+        });
+      }
+
+      // Verify signature using our stored hmacSecret (the one we sent in the original request)
+      const rawBody = JSON.stringify(request.body);
+      const isValid = verifyPeerSignature(rawBody, signature, timestamp, nonce, {
+        hmacSecret: peer.hmacSecret,
+        pendingHmacSecret: null,
+        secretRotationAt: null,
+      });
+
+      if (!isValid) {
+        return reply.code(401).send({ error: 'Invalid HMAC signature', statusCode: 401 });
+      }
+
+      const { reason, message } = request.body;
+
+      // Transition to rejected
+      db.update(schema.federationPeers)
+        .set({ status: 'rejected' })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      // Push federation_peer_rejected WS event to affected users
+      const entries = db
+        .select({
+          contextId: schema.federationOutbox.contextId,
+          contextType: schema.federationOutbox.contextType,
+        })
+        .from(schema.federationOutbox)
+        .where(eq(schema.federationOutbox.peerId, peer.id))
+        .all();
+
+      const contextMap = new Map<string, string>();
+      for (const entry of entries) {
+        contextMap.set(entry.contextId, entry.contextType);
+      }
+
+      // Purge outbox entries
+      db.delete(schema.federationOutbox)
+        .where(eq(schema.federationOutbox.peerId, peer.id))
+        .run();
+
+      // Build and send WS event
+      if (contextMap.size > 0) {
+        const { pushPeerRejectedEvent } = await import('../utils/federationWorker.js');
+        pushPeerRejectedEvent(
+          senderOrigin,
+          contextMap,
+          message || (reason === 'expired'
+            ? 'Request expired — no response from admin within 30 days'
+            : 'Request denied by admin'),
+        );
+      }
+
+      return reply.code(200).send({ acknowledged: true });
+    },
+  );
+
   // ─── GET /api/federation/peers ─────────────────────────────────────────────
   // Admin-only: list all federation peers (hmacSecret excluded).
   app.get(

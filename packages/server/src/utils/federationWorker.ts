@@ -410,9 +410,10 @@ async function resolvePendingPeers(): Promise<void> {
  * Push a federation_peer_rejected WS event to all local users affected by
  * the rejection. Resolves contextLabel from the database for each context.
  */
-function pushPeerRejectedEvent(
+export function pushPeerRejectedEvent(
   peerOrigin: string,
   contextMap: Map<string, string>,
+  reasonOverride?: string,
 ): void {
   const db = getDb();
 
@@ -481,7 +482,7 @@ function pushPeerRejectedEvent(
     type: 'federation_peer_rejected' as const,
     peerOrigin,
     peerLabel,
-    reason: 'Remote instance requires manual peering approval',
+    reason: reasonOverride || 'Remote instance requires manual peering approval',
     affectedContexts,
   };
 
