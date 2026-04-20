@@ -330,20 +330,22 @@ export function getGroupDmTargetOrigins(dmChannelId: string): string[] | undefin
     .where(eq(schema.dmChannels.id, dmChannelId))
     .get();
 
-  // Not a group DM (no owner) — broadcast to all
-  if (!channel?.ownerId) return undefined;
-
+  // Always compute target origins from participants — both 1-on-1 and group DMs.
+  // Returning undefined (broadcast to all) would skip the pending-placeholder creation
+  // in queueOutboxEvent(), preventing relay when no peer exists yet.
   const participants = getDmParticipants(dmChannelId);
   const ourOrigin = getOurOrigin();
 
   const origins = new Set<string>();
   for (const p of participants) {
-    // Normalize homeInstance to full URL format to match federation_peers.origin
     const normalized = p.homeInstance.startsWith('http') ? p.homeInstance : `https://${p.homeInstance}`;
     if (normalized !== ourOrigin) {
       origins.add(normalized);
     }
   }
+
+  // No remote participants — no relay needed
+  if (origins.size === 0) return undefined;
 
   return Array.from(origins);
 }
