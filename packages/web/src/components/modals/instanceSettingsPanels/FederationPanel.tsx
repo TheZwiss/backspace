@@ -4,6 +4,7 @@ import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { api } from '../../../api/client';
+import { onFederationPeersChanged } from '../../../hooks/useWebSocket';
 import type { InstanceAdminSettings } from '@backspace/shared';
 import type { FederationPeer, ApprovalRequest } from '../../../api/client';
 
@@ -611,6 +612,18 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
     fetchRequests();
   }, [fetchRequests]);
 
+  // Real-time updates: re-fetch approval requests on federation changes
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const unsub = onFederationPeersChanged(() => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        fetchRequests();
+      }, 500);
+    });
+    return () => { unsub(); clearTimeout(timeout); };
+  }, [fetchRequests]);
+
   const handleConfirm = async () => {
     if (!confirmAction) return;
     const { type, request: req } = confirmAction;
@@ -763,6 +776,18 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
 
   useEffect(() => {
     fetchPeers();
+  }, [fetchPeers]);
+
+  // Real-time updates: re-fetch peers and approval requests on any federation change
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const unsub = onFederationPeersChanged(() => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        fetchPeers();
+      }, 500);
+    });
+    return () => { unsub(); clearTimeout(timeout); };
   }, [fetchPeers]);
 
   // Derived peer lists

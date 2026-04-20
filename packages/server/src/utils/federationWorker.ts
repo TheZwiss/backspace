@@ -283,6 +283,7 @@ async function processOutboxTick(): Promise<void> {
           })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
       } else {
         console.warn(
           `[federation-worker] Peer ${peerOrigin} returned HTTP ${response.status}`,
@@ -388,6 +389,8 @@ async function resolvePendingPeers(): Promise<void> {
     switch (result.status) {
       case 'active':
         console.log(`[federation-worker] Auto-peered with ${peerOrigin} — entries will deliver next tick`);
+        // Notify admins of peer state change
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
         break;
 
       case 'rejected': {
@@ -417,6 +420,8 @@ async function resolvePendingPeers(): Promise<void> {
 
         // Push federation_peer_rejected WS event to affected users
         pushPeerRejectedEvent(peerOrigin, contextMap);
+        // Notify admins of peer state change
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
         break;
       }
 

@@ -36,6 +36,18 @@ export function getActivePeerOrigins(): Set<string> {
   return activePeerOrigins;
 }
 
+// ─── Federation change listeners (for real-time panel updates) ───────────────
+const federationChangeListeners = new Set<() => void>();
+
+export function onFederationPeersChanged(cb: () => void): () => void {
+  federationChangeListeners.add(cb);
+  return () => { federationChangeListeners.delete(cb); };
+}
+
+function notifyFederationChangeListeners(): void {
+  for (const cb of federationChangeListeners) cb();
+}
+
 // ─── Connection state ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
@@ -717,6 +729,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         'warning',
         10000,
       );
+      notifyFederationChangeListeners();
       break;
     }
 
@@ -724,6 +737,17 @@ function handleEvent(origin: string, event: ServerEvent): void {
       rejectedPeerOrigins.delete(event.peerOrigin);
       awaitingApprovalPeerOrigins.delete(event.peerOrigin);
       activePeerOrigins.add(event.peerOrigin);
+      notifyFederationChangeListeners();
+      break;
+    }
+
+    case 'federation_peers_changed': {
+      notifyFederationChangeListeners();
+      break;
+    }
+
+    case 'federation_approval_request_received': {
+      notifyFederationChangeListeners();
       break;
     }
 

@@ -446,6 +446,8 @@ export type ServerEvent =
   | { type: 'federation_file_rejected'; messageId: string; dmChannelId: string; attachmentId: string; affectedUsers: Array<{ userId: string; username: string; limit: number }> }
   | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
   | { type: 'federation_peer_active'; peerOrigin: string }
+  | { type: 'federation_peers_changed' }
+  | { type: 'federation_approval_request_received'; origin: string; instanceName?: string }
   | { type: 'dm_owner_updated'; dmChannelId: string; newOwnerId: string }
   | { type: 'pong' }
   | { type: 'error'; message: string };

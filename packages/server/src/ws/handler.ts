@@ -876,6 +876,18 @@ class ConnectionManager {
     return this.connections;
   }
 
+  /** Send an event to all connected admin users. */
+  sendToAdmins(event: ServerEvent): void {
+    const db = getDb();
+    for (const userId of this.connections.keys()) {
+      const user = db.select({ isAdmin: schema.users.isAdmin })
+        .from(schema.users).where(eq(schema.users.id, userId)).get();
+      if (user?.isAdmin === 1) {
+        this.sendToUser(userId, event);
+      }
+    }
+  }
+
   /** Push a fresh ready payload to a specific user, forcing full store re-sync. */
   pushReadyPayload(userId: string): void {
     const connections = this.getUserConnections(userId);

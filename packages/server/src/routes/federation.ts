@@ -469,6 +469,13 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
               .run();
           }
 
+          // Notify admin users that a new approval request arrived
+          connectionManager.sendToAdmins({
+            type: 'federation_approval_request_received' as const,
+            origin: sourceOrigin,
+            instanceName: reqInstanceName ?? undefined,
+          });
+
           return reply.code(202).send({
             queued: true,
             message: 'Request queued for admin approval',
@@ -514,6 +521,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             });
           }
 
+          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+
           return reply.code(200).send({ accepted: true });
         }
         if (existing.status === 'awaiting_approval') {
@@ -535,6 +544,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             });
           }
 
+          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+
           return reply.code(200).send({ accepted: true });
         }
         // Pending — update with new secret and activate
@@ -546,6 +557,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           })
           .where(eq(schema.federationPeers.id, existing.id))
           .run();
+
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
         return reply.code(200).send({ accepted: true });
       }
@@ -560,6 +573,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         lastSeenAt: Date.now(),
         createdAt: Date.now(),
       }).run();
+
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
       return reply.code(200).send({ accepted: true });
     },
@@ -732,6 +747,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .set({ status: 'rejected' })
         .where(eq(schema.federationPeers.id, peer.id))
         .run();
+
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
       // Push federation_peer_rejected WS event to affected users
       const entries = db
@@ -1041,6 +1058,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.peerApprovalRequests.id, id))
           .run();
 
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+
         const peer = db
           .select()
           .from(schema.federationPeers)
@@ -1136,6 +1155,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.federationPeers.id, existingPeer.id))
           .run();
       }
+
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
       db.delete(schema.peerApprovalRequests)
         .where(eq(schema.peerApprovalRequests.id, id))

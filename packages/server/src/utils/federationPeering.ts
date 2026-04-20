@@ -145,6 +145,8 @@ async function performHandshake(
         .set({ status: 'awaiting_approval' })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
+      const { connectionManager } = await import('../ws/handler.js');
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
       return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
     }
 
@@ -154,6 +156,8 @@ async function performHandshake(
         .set({ status: 'active', lastSeenAt: Date.now() })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
+      const { connectionManager } = await import('../ws/handler.js');
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
       return { status: 'active', peerId };
     }
 
@@ -174,6 +178,8 @@ async function performHandshake(
         .set({ status: 'rejected' })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
+      const { connectionManager } = await import('../ws/handler.js');
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
       return { status: 'rejected', error: errorMessage };
     }
 
