@@ -139,15 +139,6 @@ async function performHandshake(
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (response.ok) {
-      // Activate the peer
-      db.update(schema.federationPeers)
-        .set({ status: 'active', lastSeenAt: Date.now() })
-        .where(eq(schema.federationPeers.id, peerId))
-        .run();
-      return { status: 'active', peerId };
-    }
-
     if (response.status === 202) {
       // Request queued for admin approval on the remote side
       db.update(schema.federationPeers)
@@ -155,6 +146,15 @@ async function performHandshake(
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
+    }
+
+    if (response.ok) {
+      // 200 = peer accepted and activated
+      db.update(schema.federationPeers)
+        .set({ status: 'active', lastSeenAt: Date.now() })
+        .where(eq(schema.federationPeers.id, peerId))
+        .run();
+      return { status: 'active', peerId };
     }
 
     // Check for explicit rejection (autoAcceptPeering = 0)
