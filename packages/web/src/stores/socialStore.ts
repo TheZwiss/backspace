@@ -111,7 +111,10 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const allFriends: TaggedFriend[] = [];
       // Deduplicate by canonical identity — a user who exists on multiple
       // instances (native + replicated stub) should appear once.
-      // Native profiles (homeUserId is null) replace stubs when found.
+      // Native profiles (homeInstance is null) replace stubs when found.
+      // Note: homeUserId alone is NOT a native indicator — the server backfills
+      // native users' homeUserId to their own id so federation tier-1 lookups
+      // can find them. Only homeInstance distinguishes native from replicated.
       const seen = new Map<string, number>(); // canonicalId → index in allFriends
 
       for (const result of results) {
@@ -119,12 +122,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         const { friends, origin } = result.value;
         for (const friend of friends) {
           const canonicalId = friend.homeUserId ?? friend.id;
-          const isNative = !friend.homeUserId;
+          const isNative = !friend.homeInstance;
           const existingIdx = seen.get(canonicalId);
 
           if (existingIdx !== undefined) {
             // Replace replicated stub with native profile when found
             if (isNative) {
+              if (origin) normalizeUserAssets(friend, origin);
               allFriends[existingIdx] = { ...friend, _instanceOrigin: origin };
             }
             continue;
@@ -165,18 +169,31 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       const allRequests: TaggedFriendRequest[] = [];
       // Deduplicate by the canonical identity of the other party —
       // there can only be one pending request between any two users.
-      const seen = new Set<string>();
+      // Prefer the record from the instance where the other party is native
+      // (homeInstance is null), because that record's ids and _instanceOrigin
+      // line up with the discover/search cards and the UserProfileModal —
+      // this is what lets buttons like "Request Pending" match correctly.
+      // Note: homeUserId alone is NOT a native indicator — see loadFriends.
+      const seen = new Map<string, number>();
 
       for (const result of results) {
         if (result.status !== 'fulfilled') continue;
         const { requests, origin } = result.value;
         for (const request of requests) {
-          // Use the other party's canonical identity for dedup
           const otherCanonicalId = request.user?.homeUserId ?? request.user?.id;
-          if (otherCanonicalId) {
-            if (seen.has(otherCanonicalId)) continue;
-            seen.add(otherCanonicalId);
+          const otherIsNativeHere = !request.user?.homeInstance;
+          const existingIdx = otherCanonicalId ? seen.get(otherCanonicalId) : undefined;
+
+          if (existingIdx !== undefined) {
+            // Replace prior stub-origin record with native one
+            if (otherIsNativeHere) {
+              if (origin && request.user) normalizeUserAssets(request.user, origin);
+              allRequests[existingIdx] = { ...request, _instanceOrigin: origin };
+            }
+            continue;
           }
+
+          if (otherCanonicalId) seen.set(otherCanonicalId, allRequests.length);
           if (origin && request.user) normalizeUserAssets(request.user, origin);
           allRequests.push({ ...request, _instanceOrigin: origin });
         }
@@ -335,9 +352,13 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         for (const user of result.value) {
           // Deduplicate by canonical identity: replicated profiles share
           // the same homeUserId as the native profile's id, so collapse them.
-          // Prefer native profiles (homeUserId is null) over replicated ones.
+          // Prefer native profiles (homeInstance is null) over replicated ones.
+          // Note: homeUserId alone is NOT a native indicator — the server
+          // backfills native users' homeUserId to their own id so federation
+          // tier-1 lookups can find them. Only homeInstance distinguishes
+          // native from replicated.
           const canonicalId = user.homeUserId ?? user.id;
-          const isNative = !user.homeUserId;
+          const isNative = !user.homeInstance;
           const existingIdx = seen.get(canonicalId);
 
           if (existingIdx !== undefined) {

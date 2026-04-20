@@ -401,13 +401,13 @@ type TaggedUser = User & { _instanceOrigin: string };
 2. Fires `Promise.allSettled()` with:
    - Home instance: `api.social.friends()`
    - Each connected remote instance: `inst.api.social.friends()`
-3. **Deduplication:** Uses a `Set<string>` keyed by `${friend.id}:${origin}` -- prevents duplicates within the same instance
+3. **Deduplication by canonical identity:** Uses `Map<string, number>` keyed by `friend.homeUserId ?? friend.id`. First occurrence wins, but **native profiles replace replicated stubs**: a native profile (`homeInstance` is null) found for a canonical ID that was previously seen as a stub replaces the entry. Critically, the "native" check is `!homeInstance`, **not** `!homeUserId` -- the server backfills native users' `homeUserId` to their own id so federation tier-1 lookups succeed (see `federation.ts:backfillHomeUserId`), so `homeUserId` is set on natives too.
 4. **Asset normalization:** For remote-origin friends, calls `normalizeUserAssets(friend, origin)` to resolve relative avatar/banner URLs to absolute remote URLs
 5. Stores the merged, tagged array as `friends`
 
 ### Cross-Instance Request Loading (`loadRequests`)
 
-Same `Promise.allSettled()` fan-out pattern as `loadFriends`, with same dedup key: `${request.id}:${origin}`. Normalizes assets for remote request user profiles.
+Same `Promise.allSettled()` fan-out pattern as `loadFriends`. **Dedup by the other party's canonical identity** (`request.user.homeUserId ?? request.user.id`), preferring the record from the instance where the other party is native (`!request.user.homeInstance`). This is critical: a cross-instance request exists as two rows -- one on each instance -- and both sides return it, but only the record from the target's home instance has the canonical (non-stub) user ids and the correct `_instanceOrigin` tag. Matching those is what lets the Add Friend search card flip to "Request Pending" after sending. Normalizes assets for remote request user profiles.
 
 ### Sending Friend Requests (Federation Routing)
 
@@ -426,8 +426,9 @@ Same `Promise.allSettled()` fan-out pattern as `loadFriends`, with same dedup ke
 
 1. Fires parallel searches to home + all connected instances
 2. **Deduplication by canonical identity:** Uses `Map<string, number>` keyed by `user.homeUserId ?? user.id`
-   - First occurrence wins, but **native profiles replace replicated stubs**: if a native profile (`homeUserId` is null) is found for a canonical ID that was previously seen as a replicated stub, it replaces the entry
-   - This ensures the user sees the "real" profile rather than a replicated copy
+   - First occurrence wins, but **native profiles replace replicated stubs**: if a native profile (`homeInstance` is null) is found for a canonical ID that was previously seen as a replicated stub, it replaces the entry
+   - The "native" check is `!homeInstance`, **not** `!homeUserId`. Native users have `homeUserId` backfilled to their own id by the server so federation tier-1 lookups succeed (`federation.ts:backfillHomeUserId`). `homeInstance` is the only field that reliably distinguishes native users (null) from replicated stubs (set to domain).
+   - This ensures the user sees the "real" profile (including the correct `_instanceOrigin` tag) rather than a replicated stub whose origin would be the caller's home instance
 
 ### Instance API Resolution (`getApiForOrigin`)
 
