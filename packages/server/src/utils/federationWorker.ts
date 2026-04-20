@@ -139,6 +139,9 @@ async function processOutboxTick(): Promise<void> {
     .all();
 
   if (entries.length === 0) {
+    // No active-peer entries to deliver, but pending peers may still need
+    // handshake resolution. Always run resolvePendingPeers() before returning.
+    await resolvePendingPeers();
     return;
   }
 
