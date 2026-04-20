@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { and, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
@@ -432,6 +432,62 @@ export function cleanupFederationFileQueue(): number {
 }
 
 /**
+ * Expire peer approval requests older than their expiresAt timestamp.
+ * For each expired request, attempt to send a signed denial notification
+ * to the requesting instance before deleting. If notification fails,
+ * leave the record for the next janitor cycle.
+ */
+export async function cleanupExpiredApprovalRequests(): Promise<number> {
+  const db = getDb();
+  const expired = db
+    .select()
+    .from(schema.peerApprovalRequests)
+    .where(lte(schema.peerApprovalRequests.expiresAt, Date.now()))
+    .all();
+
+  if (expired.length === 0) return 0;
+
+  const { getOurOrigin, buildFederationHeaders } = await import('./federationAuth.js');
+  const ourOrigin = getOurOrigin();
+  let cleaned = 0;
+
+  for (const req of expired) {
+    const denialBody = JSON.stringify({
+      origin: ourOrigin,
+      reason: 'expired' as const,
+      message: 'Request expired — no response from admin within 30 days',
+    });
+
+    const headers = buildFederationHeaders(denialBody, req.hmacSecret, ourOrigin);
+
+    let sent = false;
+    try {
+      const response = await fetch(`${req.origin}/api/federation/peer/denied`, {
+        method: 'POST',
+        headers,
+        body: denialBody,
+        signal: AbortSignal.timeout(10_000),
+      });
+      sent = response.ok;
+    } catch {
+      // Network error — will retry next cycle
+    }
+
+    if (sent) {
+      // No rejected peer record for expiry — origin can re-request
+      db.delete(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, req.id))
+        .run();
+      cleaned++;
+    } else {
+      console.warn(`[storage-janitor] Failed to send expiry denial to ${req.origin} — will retry next cycle`);
+    }
+  }
+
+  return cleaned;
+}
+
+/**
  * Hard-delete DM channels that were soft-deleted more than 24 hours ago.
  * Cascades: reactions, embeds, attachments (files + DB rows), messages,
  * members, outbox entries, mutation log entries, file queue entries, then the channel.
@@ -565,6 +621,15 @@ export function runFederationJanitor(): void {
         `[storage-janitor] Federation GC sweep: outbox=${outbox} mutationLog=${mutLog} fileQueue=${fileQ} dmChannels=${dmGc}`,
       );
     }
+
+    // Async: expire approval requests (sends network notifications)
+    cleanupExpiredApprovalRequests().then((approvalExpired) => {
+      if (approvalExpired > 0) {
+        console.log(`[storage-janitor] Expired ${approvalExpired} peer approval request(s)`);
+      }
+    }).catch((err) => {
+      console.error('[storage-janitor] Approval request expiry error:', err);
+    });
   } catch (err) {
     console.error('[storage-janitor] Federation GC sweep error:', err);
   }
