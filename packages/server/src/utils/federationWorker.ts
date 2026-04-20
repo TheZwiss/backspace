@@ -261,14 +261,15 @@ async function processOutboxTick(): Promise<void> {
           })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
-      } else if (response.status === 401) {
-        // 401 = HMAC verification failed on the remote side.
-        // This means the remote deleted/revoked our peer record — our local
-        // peer is stale. Reset to 'pending' so resolvePendingPeers() triggers
-        // a fresh handshake via ensurePeered() on the next tick.
+      } else if (response.status === 401 || response.status === 403) {
+        // 401 = HMAC verification failed (remote deleted our peer record entirely)
+        // 403 = Peer exists but is not active (remote revoked/rejected us)
+        // Both mean the peer relationship is broken on the remote side. Reset to
+        // 'pending' so resolvePendingPeers() triggers a fresh handshake via
+        // ensurePeered() on the next tick.
         // Outbox entries are preserved (same peer ID) and will deliver after re-peering.
         console.warn(
-          `[federation-worker] Peer ${peerOrigin} returned 401 (HMAC rejected) — resetting to pending for re-handshake`,
+          `[federation-worker] Peer ${peerOrigin} returned ${response.status} (peer stale) — resetting to pending for re-handshake`,
         );
         db.update(schema.federationPeers)
           .set({
