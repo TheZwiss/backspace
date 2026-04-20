@@ -722,7 +722,7 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChange?: (count: number) => void }) {
   const addToast = useUIStore((s) => s.addToast);
 
-  const [, setApprovalCount] = useState(0);
+  const [approvalCount, setApprovalCount] = useState(0);
 
   const handleApprovalCountChange = useCallback((count: number) => {
     setApprovalCount(count);
