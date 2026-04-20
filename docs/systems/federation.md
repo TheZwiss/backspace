@@ -72,30 +72,33 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 ### Peer Status Lifecycle
 
 ```
-                     initiate
+                     ensurePeered
   (none) ──────────► pending ──────────► active
-      ▲                                    │
-      │              10+ consecutive        │ delivery failures
-      │              failures              ▼
-      │                               unreachable
-      │              health check OK        │
-      │                                    ▼
-      │                                 active
-      │              admin revoke           │
-      │                                    ▼
-      │                                 revoked ──► (delete) ──► re-initiate
+      ▲                │                   │
+      │                │  remote 202       │ delivery failures
+      │                ▼                   ▼
+      │          awaiting_approval     unreachable
+      │                │                   │
+      │    ┌───────────┼──────────┐        │ health check OK
+      │    │           │          │        ▼
+      │  accept     denied     expired   active
+      │  (fresh)    (admin)   (janitor)    │
+      │    │           │          │        │ admin revoke
+      │    ▼           ▼          ▼        ▼
+      │  active    rejected   rejected  revoked
       │
       │  auto-peer rejected (403 PEERING_REQUIRES_APPROVAL)
       └──────────────────────────── rejected
 ```
 
-| Status | Outbox delivery | Health check | Relay accepts | Re-initiation |
-|--------|----------------|--------------|---------------|---------------|
-| `active` | Yes | No | Yes | No (returns existing) |
-| `pending` | No | No | No | No (returns 409) |
-| `unreachable` | No (entries wait) | Yes (1h interval) | Yes (resets to active) | No |
-| `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) |
-| `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) |
+| Status | Outbox delivery | Health check | Relay accepts | Re-initiation | Admin clear |
+|--------|----------------|--------------|---------------|---------------|-------------|
+| `active` | Yes | No | Yes | No (returns existing) | N/A |
+| `pending` | No | No | No | No (returns 409) | N/A |
+| `awaiting_approval` | No | No | No | Returns pending; no re-handshake | Yes (admin deletes) |
+| `unreachable` | No (entries wait) | Yes (1h interval) | Yes (resets to active) | No | N/A |
+| `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) | N/A |
+| `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) | N/A |
 
 ### PEER_UNREACHABLE_THRESHOLD
 
@@ -113,6 +116,30 @@ When the server needs to relay events to an instance it has not yet peered with,
 
 **`autoAcceptPeering` instance setting** — Controls whether `POST /api/federation/peer/accept` accepts unsolicited peering requests. Default: `true`. When `false`, the endpoint returns `403 PEERING_REQUIRES_APPROVAL` for requests where no local `pending` record exists (i.e., a request the local admin did not initiate). The determination is made by checking the local peer table — not a client-provided flag.
 
+### Peer Approval Queue
+
+When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/peer/accept` without a matching local `pending` record, the endpoint returns `202 Accepted` and creates a row in `peer_approval_requests` instead of immediately peering. The requesting instance receives `202` (not an error), so it enters `awaiting_approval` status rather than `rejected`.
+
+**`peer_approval_requests` table** — Holds incoming peering requests pending admin review:
+- `id` — Snowflake PK
+- `origin` — Requesting instance's origin URL (UNIQUE; only one pending request per origin)
+- `instance_name` — Instance name sent by requester
+- `hmac_secret` — Requester's HMAC secret; used to sign the denial notification
+- `requested_at` / `expires_at` — Epoch ms; expiry is `requested_at + 30 days`
+
+**Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`:
+1. A fresh `federationPeer` record is created (or existing `rejected`/`awaiting_approval` record is upserted) with status `pending`
+2. A standard `peer/accept` handshake is sent to the requesting origin
+3. On success the local peer becomes `active`; the `peer_approval_requests` row is deleted
+
+**Denial flow** — Admin denies via `POST /api/federation/approval-requests/:id/deny`:
+1. Server sends `POST {origin}/api/federation/peer/denied` signed with the requester's `hmac_secret` (from the approval request row)
+2. Receiving instance transitions its local peer record from `awaiting_approval` → `rejected`
+3. A local `federationPeer` record is upserted with status `rejected` to block future unsolicited requests from the same origin
+4. The `peer_approval_requests` row is deleted
+
+**Expiry** — The janitor (`federationJanitor.ts`) runs on its scheduled interval and deletes rows where `expires_at < now`. Expired requests do NOT create a `rejected` peer — the requesting instance can re-submit. Admin denial, by contrast, does create a `rejected` peer record, blocking re-requests until an admin clears it.
+
 ### Admin Endpoints
 
 | Endpoint | Method | Auth | Purpose |
@@ -125,14 +152,18 @@ When the server needs to relay events to an instance it has not yet peered with,
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
 | `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
+| `/api/federation/approval-requests` | GET | JWT + admin | List pending peering approval requests |
+| `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request, initiate handshake |
+| `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request, notify requester |
 
-**`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `rejected`, `unreachable`, or `revoked`.
+**`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `awaiting_approval`, `rejected`, `unreachable`, or `revoked`.
 
 ### S2S Endpoints
 
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/api/federation/peer/rotate` | POST | HMAC | Accept secret rotation from peer |
+| `/api/federation/peer/denied` | POST | HMAC | Receive denial notification for awaiting_approval peer |
 | `/api/federation/identity` | DELETE | HMAC | Delete federated user identity (soft/full mode) |
 
 ### S2S Identity Deletion (`DELETE /api/federation/identity`)

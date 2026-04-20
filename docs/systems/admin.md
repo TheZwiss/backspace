@@ -358,6 +358,29 @@ The temporary password is shown exactly once in the admin UI -- the UsersPanel d
 3. Force-disconnect all WebSocket sessions
 4. Return `{ success: true }`
 
+### Peering Approval Requests
+
+All admin-only. Only present when `autoAcceptPeering` is `false` and incoming peering requests are queued.
+
+```
+GET  /api/federation/approval-requests              → PeerApprovalRequest[]
+POST /api/federation/approval-requests/:id/approve  → { success: boolean }
+POST /api/federation/approval-requests/:id/deny     → { success: boolean }
+```
+
+`PeerApprovalRequest` shape:
+```typescript
+{
+  id: string;           // Snowflake
+  origin: string;       // Requesting instance URL
+  instanceName: string | null;
+  requestedAt: number;  // Epoch ms
+  expiresAt: number;    // Epoch ms (requestedAt + 30 days)
+}
+```
+
+See [federation.md](federation.md) — Peer Approval Queue section for the full approval/denial/expiry flow.
+
 ---
 
 ## Frontend Architecture
@@ -399,11 +422,12 @@ All panels live under `packages/web/src/components/modals/instanceSettingsPanels
 
 #### GeneralPanel
 
-Manages: instance name, registration toggle, discovery toggle, GIF API key, federation relay toggle/TTL, peered instances list.
+Manages: instance name, registration toggle, discovery toggle, GIF API key, federation relay toggle/TTL, pending approval requests, peered instances list.
 
 - Instance name input: max 32 chars, enforced client-side via `slice(0, 32)`
 - GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
-- Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable), last-seen/synced times, revoke button
+- **Pending Approvals section:** Visible only when `pendingApprovalCount > 0` (from ready payload). Positioned above the peer list. Each row shows the requesting instance name and origin with Approve and Deny buttons. Approve calls `api.federation.approveApprovalRequest(id)` and Deny calls `api.federation.denyApprovalRequest(id)`; both remove the row from the local list on success.
+- Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable/awaiting_approval), last-seen/synced times, revoke button
 - Peers with status `'revoked'` are filtered out of the visible list
 - Revoke calls `api.federation.revokePeer(peerId)` and removes from local list
 

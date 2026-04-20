@@ -357,13 +357,25 @@ Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`,
 | origin | text NOT NULL UNIQUE | | `https://domain.tld` |
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
-| status | text NOT NULL | `'active'` | active/pending/unreachable/revoked/rejected |
+| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer | 0 | >=10 → unreachable |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
+
+### peer_approval_requests
+Holds incoming peering requests queued for admin review when `autoAcceptPeering` is `false`. One row per requesting origin (UNIQUE constraint). Rows expire after 30 days via janitor cleanup.
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | Snowflake |
+| origin | text NOT NULL UNIQUE | | Requesting instance's origin URL |
+| instanceName | text | | Instance name sent by requester |
+| hmacSecret | text NOT NULL | | Requester's HMAC secret; used to sign denial notification |
+| requestedAt | integer NOT NULL | | Epoch ms |
+| expiresAt | integer NOT NULL | | Epoch ms; requestedAt + 30 days |
 
 ### federation_outbox
 UNIQUE: (peerId, entityId)

@@ -214,7 +214,10 @@ reason: `'displaced'` (new tab) | `'session_closed'`
   spaceVoiceStates?: Record<string, { spaceMuted, spaceDeafened, permissionMuted }>,
   readStates?: ReadState[],
   activeCalls?: ActiveCallInfo[],  // includes federatedCallHost?, livekitUrl?, livekitToken? for federated calls
-  userActivities?: Record<userId, Activity[]>
+  userActivities?: Record<userId, Activity[]>,
+  rejectedPeerOrigins: string[],         // origins with status 'rejected'; used for DM unreachable indicators
+  awaitingApprovalPeerOrigins: string[], // origins with status 'awaiting_approval'
+  pendingApprovalCount: number           // count of peer_approval_requests rows; only non-zero for admins
 }
 ```
 
