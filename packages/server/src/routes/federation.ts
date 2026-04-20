@@ -896,6 +896,232 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── GET /api/federation/approval-requests ─────────────────────────────────
+  app.get(
+    '/api/federation/approval-requests',
+    { preHandler: [authenticate, requireAdmin] },
+    async (_request, reply) => {
+      const db = getDb();
+      const requests = db
+        .select({
+          id: schema.peerApprovalRequests.id,
+          origin: schema.peerApprovalRequests.origin,
+          instanceName: schema.peerApprovalRequests.instanceName,
+          requestedAt: schema.peerApprovalRequests.requestedAt,
+          expiresAt: schema.peerApprovalRequests.expiresAt,
+        })
+        .from(schema.peerApprovalRequests)
+        .orderBy(desc(schema.peerApprovalRequests.requestedAt))
+        .all();
+
+      return reply.code(200).send({ requests });
+    },
+  );
+
+  // ─── POST /api/federation/approval-requests/:id/approve ───────────────────
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/approval-requests/:id/approve',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const db = getDb();
+      const { id } = request.params;
+
+      const approvalReq = db
+        .select()
+        .from(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, id))
+        .get();
+
+      if (!approvalReq) {
+        return reply.code(404).send({ error: 'Approval request not found', statusCode: 404 });
+      }
+
+      let localOrigin: string;
+      try {
+        localOrigin = resolveLocalOrigin(request);
+      } catch {
+        return reply.code(500).send({
+          error: 'Cannot determine local instance origin. Set the DOMAIN environment variable.',
+          statusCode: 500,
+        });
+      }
+
+      const existingPeer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, approvalReq.origin))
+        .get();
+
+      if (existingPeer && existingPeer.status === 'active') {
+        db.delete(schema.peerApprovalRequests)
+          .where(eq(schema.peerApprovalRequests.id, id))
+          .run();
+        return reply.code(200).send({ success: true, peer: sanitizePeer(existingPeer) });
+      }
+
+      if (existingPeer) {
+        db.delete(schema.federationPeers)
+          .where(eq(schema.federationPeers.id, existingPeer.id))
+          .run();
+      }
+
+      const hmacSecret = generateHmacSecret();
+      const peerId = generateSnowflake();
+      const now = Date.now();
+
+      db.insert(schema.federationPeers).values({
+        id: peerId,
+        origin: approvalReq.origin,
+        instanceName: approvalReq.instanceName,
+        hmacSecret,
+        status: 'pending',
+        createdAt: now,
+      }).run();
+
+      try {
+        const instanceName = db
+          .select({ name: schema.instanceSettings.instanceName })
+          .from(schema.instanceSettings)
+          .where(eq(schema.instanceSettings.id, 1))
+          .get()?.name ?? undefined;
+
+        const response = await fetch(`${approvalReq.origin}/api/federation/peer/accept`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sourceOrigin: localOrigin,
+            hmacSecret,
+            instanceName,
+          }),
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (!response.ok) {
+          let errorMessage = `Remote instance rejected handshake (HTTP ${response.status})`;
+          try {
+            const body = await response.json() as { error?: string };
+            if (body.error) errorMessage = body.error;
+          } catch { /* ignore */ }
+
+          db.delete(schema.federationPeers)
+            .where(eq(schema.federationPeers.id, peerId))
+            .run();
+          return reply.code(502).send({ error: errorMessage, statusCode: 502 });
+        }
+
+        db.update(schema.federationPeers)
+          .set({ status: 'active', lastSeenAt: now })
+          .where(eq(schema.federationPeers.id, peerId))
+          .run();
+
+        db.delete(schema.peerApprovalRequests)
+          .where(eq(schema.peerApprovalRequests.id, id))
+          .run();
+
+        const peer = db
+          .select()
+          .from(schema.federationPeers)
+          .where(eq(schema.federationPeers.id, peerId))
+          .get();
+
+        return reply.code(200).send({ success: true, peer: peer ? sanitizePeer(peer) : undefined });
+      } catch (err: unknown) {
+        db.delete(schema.federationPeers)
+          .where(eq(schema.federationPeers.id, peerId))
+          .run();
+
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        if (err instanceof DOMException && err.name === 'TimeoutError') {
+          return reply.code(504).send({
+            error: 'Remote instance did not respond within 10 seconds',
+            statusCode: 504,
+          });
+        }
+        return reply.code(502).send({
+          error: `Failed to reach remote instance: ${message}`,
+          statusCode: 502,
+        });
+      }
+    },
+  );
+
+  // ─── POST /api/federation/approval-requests/:id/deny ───────────────────────
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/approval-requests/:id/deny',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const db = getDb();
+      const { id } = request.params;
+
+      const approvalReq = db
+        .select()
+        .from(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, id))
+        .get();
+
+      if (!approvalReq) {
+        return reply.code(404).send({ error: 'Approval request not found', statusCode: 404 });
+      }
+
+      const ourOrigin = getOurOrigin();
+      const denialBody = JSON.stringify({
+        origin: ourOrigin,
+        reason: 'denied_by_admin' as const,
+        message: 'Request denied by admin',
+      });
+
+      const headers = buildFederationHeaders(denialBody, approvalReq.hmacSecret, ourOrigin);
+
+      let notificationSent = false;
+      try {
+        const response = await fetch(`${approvalReq.origin}/api/federation/peer/denied`, {
+          method: 'POST',
+          headers,
+          body: denialBody,
+          signal: AbortSignal.timeout(10_000),
+        });
+        notificationSent = response.ok;
+      } catch {
+        // Network error
+      }
+
+      if (!notificationSent) {
+        return reply.code(502).send({
+          error: 'Denial notification could not be delivered to the remote instance. The request is still pending — you can retry or wait for it to expire.',
+          statusCode: 502,
+        });
+      }
+
+      const existingPeer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, approvalReq.origin))
+        .get();
+
+      if (!existingPeer) {
+        db.insert(schema.federationPeers).values({
+          id: generateSnowflake(),
+          origin: approvalReq.origin,
+          instanceName: approvalReq.instanceName,
+          hmacSecret: approvalReq.hmacSecret,
+          status: 'rejected',
+          createdAt: Date.now(),
+        }).run();
+      } else if (existingPeer.status !== 'active') {
+        db.update(schema.federationPeers)
+          .set({ status: 'rejected' })
+          .where(eq(schema.federationPeers.id, existingPeer.id))
+          .run();
+      }
+
+      db.delete(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, id))
+        .run();
+
+      return reply.code(200).send({ success: true });
+    },
+  );
+
   // ─── POST /api/federation/peers/:id/rotate ──────────────────────────────────
   // Admin-only: trigger immediate secret rotation for a peer.
   app.post<{ Params: { id: string } }>(
