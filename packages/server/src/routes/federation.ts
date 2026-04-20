@@ -295,6 +295,11 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           body: JSON.stringify({
             sourceOrigin: localOrigin,
             hmacSecret,
+            instanceName: db
+              .select({ name: schema.instanceSettings.instanceName })
+              .from(schema.instanceSettings)
+              .where(eq(schema.instanceSettings.id, 1))
+              .get()?.name ?? undefined,
           }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -405,10 +410,63 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .get();
 
         if (!localPending) {
-          return reply.code(403).send({
-            error: 'This instance requires manual peering approval',
-            code: 'PEERING_REQUIRES_APPROVAL',
-            statusCode: 403,
+          // Check if this origin is blocked (previously denied)
+          const blockedPeer = db
+            .select({ id: schema.federationPeers.id })
+            .from(schema.federationPeers)
+            .where(
+              and(
+                eq(schema.federationPeers.origin, sourceOrigin),
+                eq(schema.federationPeers.status, 'rejected'),
+              ),
+            )
+            .get();
+
+          if (blockedPeer) {
+            return reply.code(403).send({
+              error: 'This instance requires manual peering approval',
+              code: 'PEERING_REQUIRES_APPROVAL',
+              statusCode: 403,
+            });
+          }
+
+          // Queue for admin approval — upsert into peer_approval_requests
+          const { instanceName: reqInstanceName } = request.body as { instanceName?: string };
+          const now = Date.now();
+          const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+          const existingRequest = db
+            .select({ id: schema.peerApprovalRequests.id })
+            .from(schema.peerApprovalRequests)
+            .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
+            .get();
+
+          if (existingRequest) {
+            db.update(schema.peerApprovalRequests)
+              .set({
+                instanceName: reqInstanceName ?? null,
+                hmacSecret,
+                requestedAt: now,
+                expiresAt: now + THIRTY_DAYS_MS,
+              })
+              .where(eq(schema.peerApprovalRequests.id, existingRequest.id))
+              .run();
+          } else {
+            db.insert(schema.peerApprovalRequests)
+              .values({
+                id: generateSnowflake(),
+                origin: sourceOrigin,
+                instanceName: reqInstanceName ?? null,
+                hmacSecret,
+                requestedAt: now,
+                expiresAt: now + THIRTY_DAYS_MS,
+              })
+              .run();
+          }
+
+          return reply.code(202).send({
+            queued: true,
+            message: 'Request queued for admin approval',
           });
         }
       }
@@ -444,6 +502,27 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             .run();
 
           // Broadcast activation to all connected local users
+          for (const uid of connectionManager.getAllOnlineUserIds()) {
+            connectionManager.sendToUser(uid, {
+              type: 'federation_peer_active' as const,
+              peerOrigin: sourceOrigin,
+            });
+          }
+
+          return reply.code(200).send({ accepted: true });
+        }
+        if (existing.status === 'awaiting_approval') {
+          // Remote admin approved — this is a fresh handshake from them.
+          db.update(schema.federationPeers)
+            .set({
+              hmacSecret,
+              status: 'active',
+              lastSeenAt: Date.now(),
+            })
+            .where(eq(schema.federationPeers.id, existing.id))
+            .run();
+
+          // Broadcast activation
           for (const uid of connectionManager.getAllOnlineUserIds()) {
             connectionManager.sendToUser(uid, {
               type: 'federation_peer_active' as const,
@@ -511,11 +590,22 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const { ensurePeered } = await import('../utils/federationPeering.js');
       const result = await ensurePeered(remoteOrigin);
 
+      // NOTE: The internal EnsurePeeredResult status names differ from the client-facing
+      // peeringStatus values. The mapping:
+      //   'active'   → 'active'            (peer is live)
+      //   'rejected' → 'rejected'          (permanently blocked)
+      //   'pending'  → 'awaiting_approval' (queued on remote, waiting for admin)
+      //   'failed'   → 'pending'           (transient error, will retry automatically)
+      // The internal 'pending' means "we got a 202 from the remote — admin hasn't acted yet",
+      // while 'failed' means "network/timeout — the outbox worker will retry next tick".
+      // The client sees 'awaiting_approval' (actionable info) vs 'pending' (transient, will resolve).
       switch (result.status) {
         case 'active':
           return reply.code(200).send({ peeringStatus: 'active', peerId: result.peerId });
         case 'rejected':
           return reply.code(200).send({ peeringStatus: 'rejected', error: result.error });
+        case 'pending':
+          return reply.code(200).send({ peeringStatus: 'awaiting_approval', error: result.error });
         case 'failed':
           return reply.code(200).send({ peeringStatus: 'pending', error: result.error });
         default:
