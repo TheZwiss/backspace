@@ -373,6 +373,15 @@ export const federationPeers = sqliteTable('federation_peers', {
   createdAt: integer('created_at').notNull(),
 });
 
+export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
+  id: text('id').primaryKey(),
+  origin: text('origin').notNull().unique(),
+  instanceName: text('instance_name'),
+  hmacSecret: text('hmac_secret').notNull(),
+  requestedAt: integer('requested_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+});
+
 export const federationOutbox = sqliteTable('federation_outbox', {
   id: text('id').primaryKey(),
   peerId: text('peer_id').notNull().references(() => federationPeers.id, { onDelete: 'cascade' }),
