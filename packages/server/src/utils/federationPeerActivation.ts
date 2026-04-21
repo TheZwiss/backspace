@@ -108,6 +108,7 @@ export async function syncPeerMutationLog(
   console.log(`[federation] Sync-pull from ${activePeer.origin} (reason=${reason}, since=${activePeer.lastSyncedAt ?? 0})`);
 
   let totalEvents = 0;
+  let skippedEvents = 0;
 
   type SyncRequestBody = {
     sinceTimestamp: number;
@@ -133,8 +134,20 @@ export async function syncPeerMutationLog(
       const data = await resp.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
       if (data.events.length === 0) return true;
       const { processRelayEvents } = await import('../routes/federation.js');
-      await processRelayEvents(data.events, activePeer.origin, activePeer.origin, db);
-      totalEvents += data.events.length;
+      for (const event of data.events) {
+        try {
+          await processRelayEvents([event], activePeer.origin, activePeer.origin, db);
+          totalEvents += 1;
+        } catch (err) {
+          skippedEvents += 1;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[federation] Skipping poison-pill event during sync-pull from ${activePeer.origin}: ` +
+            `eventType=${event.eventType} messageId=${event.messageId} timestamp=${event.timestamp} ` +
+            `error=${errMsg}`,
+          );
+        }
+      }
       since = data.checkpoint;
       if (!data.hasMore) return true;
     }
@@ -150,8 +163,9 @@ export async function syncPeerMutationLog(
       .where(eq(schema.federationPeers.id, activePeer.id))
       .run();
 
-    if (totalEvents > 0) {
-      console.log(`[federation] Sync-pull from ${activePeer.origin} replayed ${totalEvents} events`);
+    if (totalEvents > 0 || skippedEvents > 0) {
+      const skipSuffix = skippedEvents > 0 ? ` (${skippedEvents} skipped due to errors)` : '';
+      console.log(`[federation] Sync-pull from ${activePeer.origin} replayed ${totalEvents} events${skipSuffix}`);
     }
   } catch (err) {
     console.error(`[federation] Sync-pull from ${activePeer.origin} failed:`, err);
