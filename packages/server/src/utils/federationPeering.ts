@@ -73,6 +73,9 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
         // Unreachable peers were previously active — treat as active for peering
         // (the health check will restore them; don't re-handshake)
         return { status: 'active', peerId: existing.id };
+      case 'needs_attention':
+        // Admin intervention required — do not auto-heal via performHandshake
+        return { status: 'rejected', error: 'Peer in needs_attention — admin Reset required' };
       case 'awaiting_approval':
         return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
       case 'pending':

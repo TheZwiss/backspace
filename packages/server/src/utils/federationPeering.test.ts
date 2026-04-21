@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { EnsurePeeredResult } from './federationPeering.js';
 import { racePeering } from './federationPeering.js';
 
@@ -110,5 +110,61 @@ describe('racePeering', () => {
     await Promise.resolve();
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+describe('ensurePeered needs_attention handling', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('returns rejected without calling performHandshake when peer is in needs_attention', async () => {
+    const fakeDbGet = vi.fn().mockReturnValue({
+      id: 'peer-na',
+      origin: 'https://remote.example',
+      status: 'needs_attention',
+      hmacSecret: 'secret',
+      createdAt: Date.now(),
+      lastSyncedAt: 0,
+    });
+
+    vi.doMock('../db/index.js', () => ({
+      getDb: () => ({
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: fakeDbGet,
+            }),
+          }),
+        }),
+      }),
+    }));
+
+    vi.doMock('../utils/federationAuth.js', () => ({
+      getOurOrigin: () => 'https://local.example',
+      generateHmacSecret: () => 'new-secret',
+    }));
+
+    vi.doMock('../routes/federation.js', () => ({
+      validateOrigin: (o: string) => o,
+    }));
+
+    vi.doMock('../utils/federationPeerActivation.js', () => ({
+      onPeerActivated: vi.fn(),
+    }));
+
+    const { ensurePeered } = await import('./federationPeering.js');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const result = await ensurePeered('https://remote.example');
+
+    expect(result.status).toBe('rejected');
+    if (result.status === 'rejected') {
+      expect(result.error).toContain('needs_attention');
+    }
+    // performHandshake must not have fired — no POST to /peer/accept
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    vi.restoreAllMocks();
   });
 });
