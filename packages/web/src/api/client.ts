@@ -235,6 +235,7 @@ export class BackspaceApiClient {
     ensurePeered: (data: { remoteOrigin: string }) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
     peers: () => Promise<{ peers: FederationPeer[] }>;
     revokePeer: (id: string) => Promise<{ success: boolean }>;
+    resetPeer: (id: string) => Promise<{ success: boolean }>;
     rotatePeerSecret: (id: string) => Promise<{ success: boolean; gracePeriodMs: number }>;
     updatePeer: (id: string, data: { autoRotateIntervalDays: number }) => Promise<{ peer: FederationPeer }>;
     deletePeerPermanently: (id: string) => Promise<{ success: boolean }>;
@@ -688,6 +689,8 @@ export class BackspaceApiClient {
         ),
       revokePeer: (id: string) =>
         request<{ success: boolean }>('DELETE', `/federation/peers/${id}`),
+      resetPeer: (id: string) =>
+        request<{ success: boolean }>('POST', `/federation/peers/${id}/reset`),
       rotatePeerSecret: (id: string) =>
         request<{ success: boolean; gracePeriodMs: number }>('POST', `/federation/peers/${id}/rotate`),
       updatePeer: (id: string, data: { autoRotateIntervalDays: number }) =>
