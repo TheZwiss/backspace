@@ -1820,44 +1820,40 @@ async function sendFederatedCallStart(
   });
 
   // Group remote members by home instance (targeted peers)
-  const targetedPeers = new Map<string, Array<{ userId: string; displayName: string | null; username: string }>>();
+  const targetedPeers = new Map<string, string[]>();
   for (const m of remoteMembers) {
     const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
     const bucket = targetedPeers.get(origin) ?? [];
-    bucket.push({ userId: m.userId, displayName: m.displayName, username: m.username });
+    bucket.push(m.userId);
     targetedPeers.set(origin, bucket);
   }
 
-  // All active federation peers for broadcast
-  const allPeers = db.select({ origin: schema.federationPeers.origin })
-    .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.status, 'active'))
-    .all();
-
-  // Peer label resolution (instanceName if known)
+  // Single query for all peers — derives both active-peer list and label map
   const peerRows = db.select({
     origin: schema.federationPeers.origin,
     instanceName: schema.federationPeers.instanceName,
+    status: schema.federationPeers.status,
   })
     .from(schema.federationPeers)
     .all();
+
+  const allPeers = peerRows.filter(r => r.status === 'active');
+
   const peerLabelByOrigin = new Map<string, string>();
   for (const row of peerRows) {
     if (row.instanceName) peerLabelByOrigin.set(row.origin, row.instanceName);
   }
 
   // ─── Targeted relay: fan out in parallel, await results ────────────────────
-  const targetedResults: Array<{ origin: string; ok: boolean; reason?: DmCallUndeliverableReason; error?: string }> = [];
-  await Promise.all(
+  const targetedResults = await Promise.all(
     Array.from(targetedPeers.keys()).map(async peerOrigin => {
       const result = await sendCallRelay(peerOrigin, [buildRelayEvent()]);
       if (result.ok) {
-        targetedResults.push({ origin: peerOrigin, ok: true });
-      } else {
-        const reason = mapCallReasonToEventReason(result.reason);
-        console.error(`[federation] dm_call_start to ${peerOrigin} failed (${result.reason}): ${result.error}`);
-        targetedResults.push({ origin: peerOrigin, ok: false, reason, error: result.error });
+        return { origin: peerOrigin, ok: true as const };
       }
+      const reason = mapCallReasonToEventReason(result.reason);
+      console.error(`[federation] dm_call_start to ${peerOrigin} failed (${result.reason}): ${result.error}`);
+      return { origin: peerOrigin, ok: false as const, reason, error: result.error };
     }),
   );
 
@@ -1873,19 +1869,21 @@ async function sendFederatedCallStart(
   }
 
   // ─── Aggregate failures → dm_call_undeliverable ───────────────────────────
-  const failedTargeted = targetedResults.filter(r => !r.ok);
+  const failedTargeted = targetedResults.filter(
+    (r): r is Extract<typeof r, { ok: false }> => !r.ok,
+  );
   if (failedTargeted.length === 0) return;
 
   const anyTargetedSuccess = targetedResults.some(r => r.ok);
   const plausibleRecipientRemains = anyTargetedSuccess || hasConnectedLocalRingee;
 
   const failures: DmCallUndeliverableFailure[] = failedTargeted.map(r => {
-    const affected = targetedPeers.get(r.origin) ?? [];
+    const affectedUserIds = targetedPeers.get(r.origin) ?? [];
     return {
-      reason: r.reason!,
+      reason: r.reason,
       peerOrigin: r.origin,
       peerLabel: peerLabelByOrigin.get(r.origin),
-      affectedUserIds: affected.map(m => m.userId),
+      affectedUserIds,
     };
   });
 
