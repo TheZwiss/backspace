@@ -56,7 +56,13 @@ DM calls work across federated instances. The caller's instance hosts the LiveKi
 
 ### Universal Relay
 
-All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relayed to every active federation peer in parallel via `Promise.all`. Each `sendCallRelay` call has a 10-second timeout. This is a synchronous HTTP POST to the peer's federation endpoint — it bypasses the outbox worker entirely because call signaling is latency-sensitive and must not be queued.
+All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relayed to every active federation peer in parallel. Each `sendCallRelay` call has a 10-second HTTP timeout. This bypasses the outbox worker — call signaling is latency-sensitive.
+
+**Auto-peering at send time.** If the target origin has no active peer record, `sendCallRelay` races an `ensurePeered` handshake against a 3 s deadline (`CALL_PEERING_TIMEOUT_MS`). On success the relay POSTs normally; on timeout it returns `peer_transient_failure` without aborting the background handshake, so a subsequent attempt typically succeeds. Typing (`sendTypingRelay`) passes `peeringTimeoutMs: 0` — the POST is skipped for non-active peers and a warm-up `ensurePeered` runs in the background.
+
+**Call-start failure surface.** `sendFederatedCallStart` aggregates results from its targeted-peer relays (peers whose origin matches a DM member's `homeInstance`) and emits a single `dm_call_undeliverable` event to the caller when any targeted peer fails. `terminal: true` (no successful targeted relay AND no connected local non-caller member) also destroys the local ring room so the caller's UI clears immediately; `terminal: false` leaves the call ringing for reachable recipients. The all-peers broadcast (Path-B fallback to non-member-hosting peers) logs failures only — they are not surfaced.
+
+Accept and end relay failures are NOT surfaced today; see the federation doc's "Known issues" section for the deferred accept-failure dead-end.
 
 ### Dual-Path Processing
 

@@ -170,6 +170,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 | `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members |
 | `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members |
 | `dm_call_ended` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_undeliverable` | Sent to caller when a call-start relay to one or more targeted peers fails. `failures[]` enumerates each failed peer with a `reason` (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `livekit_unavailable`). `terminal: true` means the local ring was destroyed; `false` means the call continues for reachable recipients. | caller only |
 
 ### Social
 | type | fields | scope |
