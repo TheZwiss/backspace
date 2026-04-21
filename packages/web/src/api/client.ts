@@ -52,7 +52,10 @@ import type {
   FederationRegistryEntry,
   FederationIdentityDeleteRequest,
   FederationIdentityDeleteResponse,
+  FederationPeer,
 } from '@backspace/shared';
+
+export type { FederationPeer };
 
 export class RateLimitError extends Error {
   readonly retryAfter: number;
@@ -61,22 +64,6 @@ export class RateLimitError extends Error {
     this.name = 'RateLimitError';
     this.retryAfter = retryAfter;
   }
-}
-
-export interface FederationPeer {
-  id: string;
-  origin: string;
-  instanceName: string | null;
-  status: string;
-  lastSeenAt: number | null;
-  lastFailureAt: number | null;
-  consecutiveFailures: number | null;
-  consecutiveAuthFailures: number;
-  lastSyncedAt: number | null;
-  createdAt: number;
-  secretRotatedAt: number | null;
-  rotationInProgress: boolean;
-  autoRotateIntervalDays: number;
 }
 
 export interface ApprovalRequest {
