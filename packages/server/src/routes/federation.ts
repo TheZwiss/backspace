@@ -491,8 +491,17 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .get();
 
       if (existing) {
-        if (existing.status === 'active') {
-          // Idempotent — already peered
+        if (existing.status === 'active' || existing.status === 'needs_attention') {
+          // Idempotent — already peered (or peering is in needs_attention state).
+          // In both cases we refuse to overwrite hmac_secret via this
+          // unauthenticated endpoint. An unauthenticated caller cannot
+          // prove prior trust, and needs_attention means "we don't know
+          // why this broke" — letting an unauthenticated request flip it
+          // to active with a new secret defeats the purpose.
+          //
+          // Legitimate recovery path: local admin clicks "Reset peering" →
+          // row is deleted → remote's /peer/accept then lands on a
+          // non-existent row and the normal handshake path runs.
           return reply.code(200).send({ accepted: true });
         }
         if (existing.status === 'revoked') {
