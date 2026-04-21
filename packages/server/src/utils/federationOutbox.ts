@@ -163,40 +163,84 @@ export function queueOutboxEvent(
       for (const origin of targetPeerOrigins) {
         if (matchedOrigins.has(origin)) continue;
 
-        // Check if there's a rejected/revoked peer we should skip
         const existingPeer = db
           .select({ status: schema.federationPeers.status })
           .from(schema.federationPeers)
           .where(eq(schema.federationPeers.origin, origin))
           .get();
 
-        if (existingPeer && (existingPeer.status === 'rejected' || existingPeer.status === 'revoked')) {
-          console.warn(`[federation] queueOutboxEvent: skipping ${existingPeer.status} peer ${origin}`);
-          continue;
-        }
-
-        // No peer record at all — create a pending placeholder
-        const peerId = generateSnowflake();
-        const now = Date.now();
-        db.insert(schema.federationPeers)
-          .values({
+        if (!existingPeer) {
+          // No peer row — create pending placeholder, handshake fires on next tick
+          const peerId = generateSnowflake();
+          const now = Date.now();
+          db.insert(schema.federationPeers).values({
             id: peerId,
             origin,
             hmacSecret: generateHmacSecret(),
             status: 'pending',
             createdAt: now,
-          })
-          .run();
+          }).run();
+          const newPeer = db.select().from(schema.federationPeers)
+            .where(eq(schema.federationPeers.id, peerId)).get();
+          if (newPeer) {
+            matchedPeers = [...matchedPeers, newPeer];
+            console.log(`[federation] queueOutboxEvent: created pending placeholder for ${origin}`);
+          }
+          continue;
+        }
 
-        const newPeer = db
-          .select()
-          .from(schema.federationPeers)
-          .where(eq(schema.federationPeers.id, peerId))
-          .get();
+        // schema.federationPeers.status is plain text — narrow to known union for
+        // compile-time exhaustiveness check without widening to `string`.
+        const status = existingPeer.status as
+          | 'active'
+          | 'pending'
+          | 'unreachable'
+          | 'awaiting_approval'
+          | 'needs_attention'
+          | 'rejected'
+          | 'revoked';
 
-        if (newPeer) {
-          matchedPeers = [...matchedPeers, newPeer];
-          console.log(`[federation] queueOutboxEvent: created pending placeholder for ${origin}`);
+        switch (status) {
+          case 'active':
+          case 'pending':
+          case 'unreachable': {
+            // Race: peer transitioned to a deliverable status between the initial
+            // peers SELECT and this point in the loop. Re-fetch the full row and
+            // add to matchedPeers so the outer enqueue loop includes this peer.
+            // Do NOT silently drop — symmetric onPeerActivated on the peer's side
+            // is not guaranteed to cover asymmetric-failure cases (lost /peer/accept
+            // 200, health-check-only transition on one side).
+            const raced = db
+              .select()
+              .from(schema.federationPeers)
+              .where(eq(schema.federationPeers.origin, origin))
+              .get();
+            if (raced) {
+              matchedPeers = [...matchedPeers, raced];
+              console.log(`[federation] queueOutboxEvent: race-caught ${origin} (now ${status}); enqueueing`);
+            }
+            break;
+          }
+          case 'awaiting_approval':
+            console.debug(`[federation] queueOutboxEvent: skipping ${origin} (awaiting_approval); mutation log will replay on activation`);
+            break;
+          case 'needs_attention':
+            console.debug(`[federation] queueOutboxEvent: skipping ${origin} (needs_attention; admin Reset required); mutation log will replay after Reset + re-peer`);
+            break;
+          case 'rejected':
+            console.debug(`[federation] queueOutboxEvent: skipping ${origin} (rejected peering)`);
+            break;
+          case 'revoked':
+            console.debug(`[federation] queueOutboxEvent: skipping ${origin} (revoked by admin)`);
+            break;
+          default: {
+            // Exhaustiveness check — no `as never` cast. TypeScript enforces
+            // that every status value is handled; adding a new value to the
+            // union without a case here fails typecheck.
+            const _exhaustive: never = status;
+            console.error(`[federation] queueOutboxEvent: unknown peer status for ${origin}: ${String(_exhaustive)}`);
+            break;
+          }
         }
       }
     }
