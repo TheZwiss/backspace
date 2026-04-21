@@ -164,5 +164,16 @@ export async function syncPeerMutationLog(
  * Invoked from startFederationWorkers.
  */
 export async function startupBootstrapSync(): Promise<void> {
-  // Stub — implemented in Task 5.
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const peers = db.select().from(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.status, 'active'),
+      eq(schema.federationPeers.lastSyncedAt, 0),
+    )).all();
+
+  for (const peer of peers) {
+    await onPeerActivated(peer.id, 'startup_bootstrap');
+  }
 }
