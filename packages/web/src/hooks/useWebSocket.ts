@@ -114,6 +114,43 @@ function buildWsUrl(origin: string): string {
   return `${protocol}//${url.host}/ws`;
 }
 
+// ─── Call relay helpers ───────────────────────────────────────────────────────
+
+function buildCallUndeliverableToast(
+  failures: Array<{ reason: string; peerOrigin?: string; peerLabel?: string }>,
+  terminal: boolean,
+): string {
+  const primary = failures[0];
+  const labelFor = (f: { peerLabel?: string; peerOrigin?: string }) =>
+    f.peerLabel ?? f.peerOrigin?.replace(/^https?:\/\//, '') ?? 'the remote instance';
+
+  if (!terminal) {
+    const labels = failures.map(labelFor).join(', ');
+    return `Some participants could not be reached: ${labels}.`;
+  }
+
+  if (failures.length > 1) {
+    const labels = failures.map(labelFor).join(', ');
+    return `Could not reach ${failures.length} instances: ${labels}.`;
+  }
+
+  if (!primary) return 'Call could not be placed.';
+
+  const label = labelFor(primary);
+  switch (primary.reason) {
+    case 'peer_rejected':
+      return `Cannot reach ${label} — this instance requires manual peering approval.`;
+    case 'peer_awaiting_approval':
+      return `Waiting for ${label} admin to approve your instance. Calls will work once approved.`;
+    case 'peer_transient_failure':
+      return `Could not reach ${label}. Try again in a moment.`;
+    case 'livekit_unavailable':
+      return 'Voice is not configured on this instance.';
+    default:
+      return `Call to ${label} could not be placed.`;
+  }
+}
+
 // ─── Event handling ───────────────────────────────────────────────────────────
 
 const HOME_ORIGIN = '';
@@ -951,6 +988,26 @@ function handleEvent(origin: string, event: ServerEvent): void {
       setActiveDmCall(null);
       clearFederatedCallData();
       if (disconnectFn) disconnectFn();
+      break;
+    }
+
+    case 'dm_call_undeliverable': {
+      if (!isHome && !activePeerOrigins.has(origin)) break;
+
+      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
+      const { addToast } = useUIStore.getState();
+
+      if (event.terminal) {
+        // Tear down local outbound call state — mirrors dm_call_ended.
+        setIncomingCall(null);
+        setOutgoingCall(null);
+        setActiveDmCall(null);
+        clearFederatedCallData();
+        if (disconnectFn) disconnectFn();
+      }
+
+      const msg = buildCallUndeliverableToast(event.failures, event.terminal);
+      addToast(msg, event.terminal ? 'warning' : 'info', 8_000);
       break;
     }
 
