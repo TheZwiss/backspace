@@ -43,8 +43,10 @@ Backspace federation is peer-to-peer with no central authority. Each instance ma
 - Creates local peer record with `status='pending'`
 - POSTs to `{remoteOrigin}/api/federation/peer/accept` with `{ sourceOrigin, challenge, hmacSecret }`
 - Timeout: 10 seconds (`AbortSignal.timeout`)
-- On remote acceptance: updates local peer to `status='active'`, sets `lastSeenAt`
-- On failure: deletes pending peer, returns 502 (network error) or 504 (timeout)
+- On remote 200 (accepted): updates local peer to `status='active'`, sets `lastSeenAt`, broadcasts `federation_peers_changed` to admin WS subscribers, returns 200 with `{ peer }`
+- On remote 202 (queued for remote admin approval): transitions local peer to `status='awaiting_approval'` (does **not** activate), broadcasts `federation_peers_changed`, returns 202 with `{ peer }`. Without this branch `response.ok` would be true and the local peer would flip to `active` while the remote had us pending — a transient local-active / remote-pending split that only self-healed when the remote admin approved. Mirrors the auto-peer 202 branch in `federationPeering.ts:performHandshake`.
+- On remote 403 / other non-2xx: deletes pending peer, returns 502 with the remote's error message
+- On network error / timeout: deletes pending peer, returns 502 (network) or 504 (timeout)
 
 **Phase 2 -- Accept** (`POST /api/federation/peer/accept`)
 - Auth: **none** (first contact -- no JWT, no HMAC)

@@ -304,6 +304,34 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           signal: AbortSignal.timeout(10_000),
         });
 
+        if (response.status === 202) {
+          // Remote instance queued our request for admin approval
+          // (autoAcceptPeering is off on their side). Do NOT activate the
+          // local peer — mirror the auto-peer flow in federationPeering.ts
+          // by transitioning the pending record to awaiting_approval.
+          // Without this branch the local peer would flip to `active`
+          // (because response.ok is true for 202) while the remote had us
+          // pending, producing a local-active / remote-pending split that
+          // only self-heals when the remote admin approves.
+          db.update(schema.federationPeers)
+            .set({ status: 'awaiting_approval' })
+            .where(eq(schema.federationPeers.id, peerId))
+            .run();
+          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+
+          const peer = db
+            .select()
+            .from(schema.federationPeers)
+            .where(eq(schema.federationPeers.id, peerId))
+            .get();
+
+          if (!peer) {
+            return reply.code(500).send({ error: 'Failed to read peer after queuing', statusCode: 500 });
+          }
+
+          return reply.code(202).send({ peer: sanitizePeer(peer) });
+        }
+
         if (!response.ok) {
           let errorMessage = `Remote instance rejected peering (HTTP ${response.status})`;
           try {
@@ -325,6 +353,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .set({ status: 'active', lastSeenAt: Date.now() })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
         const peer = db
           .select()
