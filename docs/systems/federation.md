@@ -403,7 +403,7 @@ The `(source_instance, source_message_id)` pair is checked before insertion. Dup
 **`sendTypingRelay()` (`federationOutbox.ts`):**
 - Fetches channel's `federatedId` and `getDmParticipants()` for target resolution
 - Builds `FederationRelayEvent` with `typing: { homeUserId, homeInstance, username }`
-- Reuses `sendCallRelay()` for the actual POST to each remote peer origin
+- Calls `sendCallRelay(origin, [event], { peeringTimeoutMs: 0 })` for each remote peer origin — non-active peers are skipped and a background `ensurePeered` warm-up is kicked off instead
 
 **Inbound (`federation.ts`):**
 - `processDmTypingStartEvent` → look up channel by `federatedId`, resolve user via `resolveLocalUser()` (no stub creation for ephemeral events), broadcast `dm_typing` to local members
@@ -1024,7 +1024,20 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 
 ### Direct Delivery (No Outbox)
 
-Call signaling is time-critical and bypasses the outbox entirely. `sendCallRelay()` sends a synchronous HTTP POST to the peer's `/api/federation/relay` endpoint using existing HMAC signing (`buildFederationHeaders`). If delivery fails, the call operation fails — there is no retry.
+**`sendCallRelay(targetPeerOrigin, events, opts?)`** (`federationOutbox.ts`):
+
+- Latency-sensitive: returns `CallRelayResult = { ok: true } | { ok: false; reason: CallRelayFailureReason; error: string }`.
+- Peering resolution:
+  1. If the peer row is `active` or `unreachable`, POST directly (the health check restores `unreachable` peers; re-handshaking is wasteful).
+  2. Otherwise race `ensurePeered` against `opts.peeringTimeoutMs` (default `CALL_PEERING_TIMEOUT_MS = 3_000` ms). The background handshake is **not** aborted on race loss — a warn-logged catch is attached so a late-rejecting background promise does not emit `unhandledRejection`.
+- Peer-state → reason mapping is exhaustive over the `EnsurePeeredResult` union (`active` / `rejected` / `pending` / `failed`) plus the external `timeout` branch. TypeScript `never` check in the switch default catches future additions. Note: the `livekit_unavailable` reason in `DmCallUndeliverableReason` is emitted separately from `sendFederatedCallStart`'s LiveKit pre-flight in `ws/events.ts`, not from this switch — `sendCallRelay` only produces `CallRelayFailureReason` values (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `post_failed`).
+- Non-blocking mode: `peeringTimeoutMs: 0` (used by typing) skips the POST for non-active peers, kicks off `ensurePeered` as a background warm-up, returns `peer_transient_failure` silently.
+
+**`sendTypingRelay(dmChannelId, eventType, userId)`**:
+
+- Fire-and-forget to each remote DM participant's home instance via `sendCallRelay(origin, [event], { peeringTimeoutMs: 0 })`. Typing is an ephemeral hint — lost packets are acceptable and there is no user-facing failure surface.
+
+**Call-start failure surfacing.** `sendFederatedCallStart` aggregates targeted-peer results and emits `dm_call_undeliverable` to the caller for failed targeted peers. See `docs/systems/voice.md` and `docs/systems/websocket.md` for the event contract.
 
 ### Call Flows
 
@@ -1157,4 +1170,8 @@ If the `federation_mutation_log` table exists but is empty, populates it with `c
 
 ## Known Issues
 
-No critical known issues. See `docs/federation-production-roadmap.md` for open items (FED-001 through FED-013).
+See `docs/federation-production-roadmap.md` for open items (FED-001 through FED-013).
+
+- **Accept-relay failure dead end.** If Bob on B accepts a call from Alice on A and the `dm_call_accept` S2S relay back to A fails, Alice's client does not exit the `outgoingCall` state until the 60 s ring timeout fires `dm_call_ended`. The client clears `outgoingCall` only on `dm_call_accepted | rejected | ended` (`useWebSocket.ts`), with no LiveKit participant-join fallback. Surfacing this requires a B-side event and call-state rollback; deferred.
+- **End-relay failure dead end.** Similar mechanism, lower severity because LiveKit `ParticipantDisconnected` typically unwinds the voice UI on the host side; local DM call state still lingers to the 60 s timeout. Deferred.
+- **Path-B reject-relay failure dead end.** Third-instance user (Carol on C) rings for a call hosted on A via Path B; if her `dm_call_reject` C→A relay fails, A never deducts her from the pending ringees, so her name persists in the caller's "still ringing" set until the 60 s timeout. Same class as accept-failure; deferred.

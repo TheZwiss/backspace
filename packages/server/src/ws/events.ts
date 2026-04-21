@@ -6,7 +6,8 @@ import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
-import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent } from '@backspace/shared';
+import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
+import type { CallRelayFailureReason } from '../utils/federationOutbox.js';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -1692,7 +1693,8 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
 
 /**
  * Send S2S dm_call_start to all remote instances with DM members.
- * Fire-and-forget — if delivery fails, the call still works locally.
+ * Fire-and-forget per relay, but aggregates per-peer results to surface
+ * undeliverable calls via `dm_call_undeliverable` to the caller.
  */
 async function sendFederatedCallStart(
   dmChannelId: string,
@@ -1746,9 +1748,33 @@ async function sendFederatedCallStart(
       .run();
   }
 
-  // Check LiveKit configuration
-  if (!config.livekit.apiKey || !config.livekit.apiSecret) {
+  // Classify members relative to this instance.
+  const remoteMembers = members.filter(m => {
+    if (!m.homeInstance) return false;
+    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
+    return normalized !== ourOrigin;
+  });
+  const localNonCallerMembers = members.filter(m => {
+    if (m.userId === callerId) return false;
+    const home = m.homeInstance
+      ? (m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`)
+      : ourOrigin;
+    return home === ourOrigin;
+  });
+  const hasConnectedLocalRingee = localNonCallerMembers.some(m =>
+    connectionManager.isUserOnline(m.userId),
+  );
+
+  // ─── LiveKit pre-flight ────────────────────────────────────────────────────
+  if ((!config.livekit.apiKey || !config.livekit.apiSecret) && remoteMembers.length > 0) {
     console.warn('[federation] Cannot start federated call: LiveKit not configured');
+    emitUndeliverableAndMaybeDestroy({
+      callerId,
+      dmChannelId,
+      federatedId,
+      terminal: !hasConnectedLocalRingee,
+      failures: [{ reason: 'livekit_unavailable' }],
+    });
     return;
   }
 
@@ -1793,55 +1819,133 @@ async function sendFederatedCallStart(
     },
   });
 
-  // Identify remote members for targeted relay
-  const remoteMembers = members.filter(m => {
-    if (!m.homeInstance) return false;
-    const normalized = m.homeInstance.startsWith('http') ? m.homeInstance : `https://${m.homeInstance}`;
-    return normalized !== ourOrigin;
-  });
-
   // Group remote members by home instance (targeted peers)
-  const targetedPeers = new Set<string>();
+  const targetedPeers = new Map<string, string[]>();
   for (const m of remoteMembers) {
     const origin = m.homeInstance!.startsWith('http') ? m.homeInstance! : `https://${m.homeInstance!}`;
-    targetedPeers.add(origin);
+    const bucket = targetedPeers.get(origin) ?? [];
+    bucket.push(m.userId);
+    targetedPeers.set(origin, bucket);
   }
 
-  // Query ALL active federation peers for broadcast
-  const allPeers = db.select({ origin: schema.federationPeers.origin })
+  // Single query for all peers — derives both active-peer list and label map
+  const peerRows = db.select({
+    origin: schema.federationPeers.origin,
+    instanceName: schema.federationPeers.instanceName,
+    status: schema.federationPeers.status,
+  })
     .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.status, 'active'))
     .all();
 
-  // Build parallel relay promises
-  const relayPromises: Promise<void>[] = [];
+  const allPeers = peerRows.filter(r => r.status === 'active');
 
-  // Targeted relay: peers with known remote DM members
-  for (const peerOrigin of targetedPeers) {
-    relayPromises.push(
-      sendCallRelay(peerOrigin, [buildRelayEvent()]).then(result => {
-        if (!result.ok) {
-          console.error(`[federation] Failed to send dm_call_start to ${peerOrigin}: ${result.error}`);
-        }
-      })
-    );
+  const peerLabelByOrigin = new Map<string, string>();
+  for (const row of peerRows) {
+    if (row.instanceName) peerLabelByOrigin.set(row.origin, row.instanceName);
   }
 
-  // All-peers broadcast: every other active peer
+  // ─── Targeted relay: fan out in parallel, await results ────────────────────
+  const targetedResults = await Promise.all(
+    Array.from(targetedPeers.keys()).map(async peerOrigin => {
+      const result = await sendCallRelay(peerOrigin, [buildRelayEvent()]);
+      if (result.ok) {
+        return { origin: peerOrigin, ok: true as const };
+      }
+      const reason = mapCallReasonToEventReason(result.reason);
+      console.error(`[federation] dm_call_start to ${peerOrigin} failed (${result.reason}): ${result.error}`);
+      return { origin: peerOrigin, ok: false as const, reason, error: result.error };
+    }),
+  );
+
+  // ─── All-peers broadcast: fire-and-forget; failures NOT surfaced ───────────
   for (const peer of allPeers) {
     if (targetedPeers.has(peer.origin)) continue;
     if (peer.origin === ourOrigin) continue;
-    relayPromises.push(
-      sendCallRelay(peer.origin, [buildRelayEvent()]).then(result => {
-        if (!result.ok) {
-          console.debug(`[federation] All-peers dm_call_start to ${peer.origin}: ${result.error || 'failed'}`);
-        }
-      })
-    );
+    sendCallRelay(peer.origin, [buildRelayEvent()]).then(result => {
+      if (!result.ok) {
+        console.debug(`[federation] All-peers dm_call_start to ${peer.origin}: ${result.reason} ${result.error}`);
+      }
+    }).catch(err => console.warn('[federation] all-peers broadcast threw:', err));
   }
 
-  // Fire all relays in parallel — each has its own 10s timeout
-  await Promise.all(relayPromises);
+  // ─── Aggregate failures → dm_call_undeliverable ───────────────────────────
+  const failedTargeted = targetedResults.filter(
+    (r): r is Extract<typeof r, { ok: false }> => !r.ok,
+  );
+  if (failedTargeted.length === 0) return;
+
+  const anyTargetedSuccess = targetedResults.some(r => r.ok);
+  const plausibleRecipientRemains = anyTargetedSuccess || hasConnectedLocalRingee;
+
+  const failures: DmCallUndeliverableFailure[] = failedTargeted.map(r => {
+    const affectedUserIds = targetedPeers.get(r.origin) ?? [];
+    return {
+      reason: r.reason,
+      peerOrigin: r.origin,
+      peerLabel: peerLabelByOrigin.get(r.origin),
+      affectedUserIds,
+    };
+  });
+
+  emitUndeliverableAndMaybeDestroy({
+    callerId,
+    dmChannelId,
+    federatedId,
+    terminal: !plausibleRecipientRemains,
+    failures,
+  });
+}
+
+/** Map a sendCallRelay reason to the event-surface reason. */
+function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndeliverableReason {
+  switch (reason) {
+    case 'peer_rejected': return 'peer_rejected';
+    case 'peer_awaiting_approval': return 'peer_awaiting_approval';
+    case 'peer_transient_failure': return 'peer_transient_failure';
+    case 'post_failed': return 'peer_transient_failure'; // 4xx looks transient to users
+  }
+}
+
+/**
+ * Emit dm_call_undeliverable to the caller. If terminal, also destroy the
+ * local ring room (which clears the ringing timer and voice WS binding)
+ * and broadcast dm_call_ended to non-caller DM members, mirroring the
+ * 60s auto-timeout's cleanup semantics (handler.ts:414-424) so any
+ * ringing client (e.g., a Connection WS from another instance) exits
+ * the ring state instead of hanging.
+ *
+ * Guard: if the caller already cancelled mid-race, the room is already
+ * gone — do NOT emit a phantom "could not reach" toast.
+ */
+function emitUndeliverableAndMaybeDestroy(args: {
+  callerId: string;
+  dmChannelId: string;
+  federatedId: string;
+  terminal: boolean;
+  failures: DmCallUndeliverableFailure[];
+}): void {
+  const { callerId, dmChannelId, federatedId, terminal, failures } = args;
+
+  // Caller may have cancelled mid-race. If the room is gone, move on silently.
+  const room = connectionManager.getRoom(dmChannelId);
+  if (!room) return;
+
+  if (terminal) {
+    connectionManager.clearVoiceWs(callerId);
+    connectionManager.destroyRoom(dmChannelId);
+    connectionManager.sendToDmMembers(dmChannelId, {
+      type: 'dm_call_ended',
+      dmChannelId,
+    }, callerId);
+  }
+
+  connectionManager.sendToUser(callerId, {
+    type: 'dm_call_undeliverable',
+    dmChannelId,
+    federatedCallId: federatedId,
+    terminal,
+    failures,
+  });
 }
 
 async function sendFederatedCallAccept(dmChannelId: string, acceptorUserId: string): Promise<void> {

@@ -358,6 +358,19 @@ export interface Activity {
 
 // ─── WebSocket Event Types ──────────────────────────────────────────────────
 
+export type DmCallUndeliverableReason =
+  | 'peer_rejected'
+  | 'peer_awaiting_approval'
+  | 'peer_transient_failure'
+  | 'livekit_unavailable';
+
+export interface DmCallUndeliverableFailure {
+  reason: DmCallUndeliverableReason;
+  peerOrigin?: string;
+  peerLabel?: string;
+  affectedUserIds?: string[];
+}
+
 // Client → Server Events
 export type ClientEvent =
   | { type: 'auth'; token: string }
@@ -413,6 +426,7 @@ export type ServerEvent =
   | { type: 'dm_call_accepted'; dmChannelId: string | null; federatedCallId?: string }
   | { type: 'dm_call_rejected'; dmChannelId: string }
   | { type: 'dm_call_ended'; dmChannelId: string }
+  | { type: 'dm_call_undeliverable'; dmChannelId: string | null; federatedCallId: string; terminal: boolean; failures: DmCallUndeliverableFailure[] }
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
   | { type: 'dm_channel_created'; dmChannel: DmChannel }
   | { type: 'dm_channel_closed'; dmChannelId: string }
