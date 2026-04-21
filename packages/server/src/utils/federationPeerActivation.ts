@@ -52,8 +52,16 @@ export async function onPeerActivated(
  * Unconditional across all entries of the peer — see spec §Invariant 1.
  */
 export function resetOutboxBackoff(peerId: string): void {
-  // Stub — implemented in Task 2.
-  void peerId;
+  const db = getDb();
+  const now = Date.now();
+  const result = db
+    .update(schema.federationOutbox)
+    .set({ nextRetryAt: now, attempts: 0 })
+    .where(eq(schema.federationOutbox.peerId, peerId))
+    .run();
+  if (result.changes > 0) {
+    console.log(`[federation] Reset backoff on ${result.changes} outbox entries for peer ${peerId}`);
+  }
 }
 
 /**
