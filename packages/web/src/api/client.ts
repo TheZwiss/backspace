@@ -71,6 +71,7 @@ export interface FederationPeer {
   lastSeenAt: number | null;
   lastFailureAt: number | null;
   consecutiveFailures: number | null;
+  consecutiveAuthFailures: number;
   lastSyncedAt: number | null;
   createdAt: number;
   secretRotatedAt: number | null;

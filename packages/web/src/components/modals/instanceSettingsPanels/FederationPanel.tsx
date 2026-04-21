@@ -175,6 +175,7 @@ function peerStatusColor(status: string): string {
     case 'unreachable': return 'bg-accent-amber/15 text-accent-amber';
     case 'rejected': return 'bg-accent-rose/15 text-accent-rose';
     case 'awaiting_approval': return 'bg-accent-amber/15 text-accent-amber';
+    case 'needs_attention': return 'bg-accent-rose/15 text-accent-rose';
     case 'revoked': return 'bg-white/5 text-txt-tertiary';
     default: return 'bg-white/5 text-txt-tertiary';
   }
@@ -187,6 +188,7 @@ function peerStatusDotColor(status: string): string {
     case 'unreachable': return 'bg-accent-amber';
     case 'rejected': return 'bg-accent-rose';
     case 'awaiting_approval': return 'bg-accent-amber';
+    case 'needs_attention': return 'bg-accent-rose';
     default: return 'bg-txt-tertiary';
   }
 }
@@ -199,13 +201,14 @@ function peerStatusLabel(status: string): string {
     case 'rejected': return 'Rejected (auto-peering denied)';
     case 'revoked': return 'Revoked';
     case 'awaiting_approval': return 'Awaiting Approval';
+    case 'needs_attention': return 'Needs Attention';
     default: return status;
   }
 }
 
 type PeerView = 'active' | 'revoked';
 type SortBy = 'name' | 'lastSeen' | 'dateAdded' | 'failures';
-type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected' | 'awaiting_approval';
+type StatusFilter = 'active' | 'unreachable' | 'pending' | 'rejected' | 'awaiting_approval' | 'needs_attention';
 
 // ─── Filter Dropdown ─────────────────────────────────────────────────────────
 
@@ -267,7 +270,7 @@ function FilterDropdown({
             {view === 'active' && (
               <>
                 <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">Status</div>
-                {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval'] as StatusFilter[]).map((s) => (
+                {(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention'] as StatusFilter[]).map((s) => (
                   <button
                     key={s}
                     type="button"
@@ -277,7 +280,11 @@ function FilterDropdown({
                     } hover:bg-white/[0.06] transition-colors`}
                   >
                     <div className={`w-2 h-2 rounded-full ${peerStatusDotColor(s)}`} />
-                    <span className="capitalize">{s === 'awaiting_approval' ? 'Awaiting Approval' : s}</span>
+                    <span className="capitalize">
+                      {s === 'awaiting_approval' ? 'Awaiting Approval'
+                        : s === 'needs_attention' ? 'Needs Attention'
+                        : s}
+                    </span>
                   </button>
                 ))}
                 <div className="h-px bg-white/[0.06] my-1" />
@@ -386,7 +393,7 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
   view: PeerView;
   expanded: boolean;
   onToggleExpand: () => void;
-  onAction: (type: 'rotate' | 'revoke' | 'reinitiate' | 'delete') => void;
+  onAction: (type: 'rotate' | 'revoke' | 'reinitiate' | 'delete' | 'reset') => void;
   defaultAutoRotateIntervalDays: number;
 }) {
   const [editingInterval, setEditingInterval] = useState(false);
@@ -484,6 +491,14 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
                       {peer.consecutiveFailures ?? 0}
                     </div>
                   </div>
+                  {peer.status === 'needs_attention' && (
+                    <div>
+                      <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Auth Failures</div>
+                      <div className="text-xs text-accent-rose font-medium">
+                        {peer.consecutiveAuthFailures}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last Failure</div>
                     <div className="text-xs text-txt-secondary">{formatRelativeTime(peer.lastFailureAt)}</div>
@@ -547,30 +562,42 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
-                    disabled={peer.rotationInProgress}
-                    className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors disabled:opacity-50"
-                    title={peer.rotationInProgress ? 'Rotation already in progress' : undefined}
-                  >
-                    Rotate Secret
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
-                    className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
-                  >
-                    Revoke
-                  </button>
-                  {!editingInterval && (
+                  {peer.status === 'needs_attention' ? (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
-                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                      onClick={(e) => { e.stopPropagation(); onAction('reset'); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
                     >
-                      Edit rotation interval
+                      Reset Peering
                     </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onAction('rotate'); }}
+                        disabled={peer.rotationInProgress}
+                        className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors disabled:opacity-50"
+                        title={peer.rotationInProgress ? 'Rotation already in progress' : undefined}
+                      >
+                        Rotate Secret
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onAction('revoke'); }}
+                        className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
+                      >
+                        Revoke
+                      </button>
+                      {!editingInterval && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditingInterval(true); setIntervalDraft(peer.autoRotateIntervalDays); }}
+                          className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                        >
+                          Edit rotation interval
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </>
@@ -750,13 +777,15 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
   const [peersLoading, setPeersLoading] = useState(false);
   const [peersError, setPeersError] = useState('');
   const [view, setView] = useState<PeerView>('active');
-  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(new Set(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval']));
+  const [statusFilter, setStatusFilter] = useState<Set<StatusFilter>>(
+    new Set(['active', 'unreachable', 'pending', 'rejected', 'awaiting_approval', 'needs_attention']),
+  );
   const [sortBy, setSortBy] = useState<SortBy>('name');
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
 
   // Confirm dialog state (used in Task 10)
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'rotate' | 'revoke' | 'reinitiate' | 'delete';
+    type: 'rotate' | 'revoke' | 'reinitiate' | 'delete' | 'reset';
     peer: FederationPeer;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -855,6 +884,12 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
           addToast('Peer permanently deleted', 'success', 2000);
           break;
         }
+        case 'reset': {
+          await api.federation.resetPeer(peer.id);
+          setPeers((prev) => prev.filter((p) => p.id !== peer.id));
+          addToast(`Peering reset for ${peer.instanceName || peer.origin}`, 'success', 3000);
+          break;
+        }
       }
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Action failed', 'warning', 3000);
@@ -889,6 +924,12 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
         title: 'Delete Peer Record',
         description: `This will permanently delete the peer record for ${name}. This cannot be undone.`,
         confirmLabel: 'Delete',
+        variant: 'danger' as const,
+      };
+      case 'reset': return {
+        title: 'Reset Peering',
+        description: `Reset peering with ${name}? This deletes the local peer record and all pending outbox entries. You must re-initiate peering with the remote admin out of band after reset. This cannot be undone.`,
+        confirmLabel: 'Reset',
         variant: 'danger' as const,
       };
     }
