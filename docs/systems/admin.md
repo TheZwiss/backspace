@@ -9,6 +9,7 @@ Source files:
 - `packages/server/src/utils/storageJanitor.ts` -- Storage stats, orphan detection, cleanup
 - `packages/web/src/stores/settingsStore.ts` -- Zustand store for instance/streaming settings
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` -- General settings UI
+- `packages/web/src/components/modals/instanceSettingsPanels/FederationPanel.tsx` -- Federation peers panel (peering, approval queue, peer status, rotation, reset)
 - `packages/web/src/components/modals/instanceSettingsPanels/StoragePanel.tsx` -- Storage management UI
 - `packages/web/src/components/modals/instanceSettingsPanels/StreamingPanel.tsx` -- Streaming config UI
 - `packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx` -- User management UI
@@ -422,14 +423,21 @@ All panels live under `packages/web/src/components/modals/instanceSettingsPanels
 
 #### GeneralPanel
 
-Manages: instance name, registration toggle, discovery toggle, GIF API key, federation relay toggle/TTL, pending approval requests, peered instances list.
+Manages: instance name, registration toggle, discovery toggle, GIF API key, federation relay toggle/TTL.
 
 - Instance name input: max 32 chars, enforced client-side via `slice(0, 32)`
 - GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
+- Federation relay toggle and TTL input: drive `federationRelayEnabled` and `federationRelayTtlDays` instance settings.
+
+#### FederationPanel
+
+Manages: federation peers list, pending approval requests, manual peering initiation, secret rotation, peer reset.
+
 - **Pending Approvals section:** Visible only when `pendingApprovalCount > 0` (from ready payload). Positioned above the peer list. Each row shows the requesting instance name and origin with Approve and Deny buttons. Approve calls `api.federation.approveApprovalRequest(id)` and Deny calls `api.federation.denyApprovalRequest(id)`; both remove the row from the local list on success.
-- Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable/awaiting_approval), last-seen/synced times, revoke button
-- Peers with status `'revoked'` are filtered out of the visible list
-- Revoke calls `api.federation.revokePeer(peerId)` and removes from local list
+- Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable/awaiting_approval/rejected/needs_attention), last-seen/synced times, and per-peer actions.
+- Peers with status `'revoked'` are filtered out of the visible list.
+- Revoke calls `api.federation.revokePeer(peerId)` and removes from local list.
+- Peers in `needs_attention` status render with a rose "Needs Attention" pill and a single "Reset Peering" action. The action opens a danger-variant ConfirmDialog explaining that reset deletes the local peer record (cascade-removes outbox entries) and requires out-of-band re-peering with the remote admin.
 
 #### StoragePanel
 
