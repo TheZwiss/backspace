@@ -22,7 +22,10 @@ import { Readable } from 'node:stream';
 
 const OUTBOX_INTERVAL_MS = 1_000;         // 1 second (idle polls are no-ops)
 const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
-const HEALTH_CHECK_INTERVAL_MS = 3_600_000; // 1 hour
+// Matches ROTATION_GRACE_PERIOD_MS: guarantees a finalization tick fires within
+// one grace window on each side, so rotation desync can't outlast the window
+// and trip spurious auth failures on the other peer.
+const HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const JANITOR_INTERVAL_MS = 3_600_000;     // 1 hour
 
 const OUTBOX_BATCH_LIMIT = 50;
