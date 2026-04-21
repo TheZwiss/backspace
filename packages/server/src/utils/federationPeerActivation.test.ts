@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import * as federationRouteMock from '../routes/federation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -244,6 +245,59 @@ describe('syncPeerMutationLog', () => {
     expect(bodies[2]?.contextType).toBe('friend');
     expect(bodies[3]?.sinceTimestamp).toBe(100);   // profile pass re-seeds from peer.lastSyncedAt
     expect(bodies[3]?.contextType).toBe('profile');
+  });
+
+  it('skips a poison-pill event, logs it, and advances past it to process subsequent events', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-poison', origin: 'https://peer-poison.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 100, createdAt: Date.now(),
+    }).run();
+
+    // Return a single batch of 3 events on the DM pass, then empty on friend + profile passes.
+    let fetchCall = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCall++;
+      if (fetchCall === 1) {
+        return new Response(JSON.stringify({
+          events: [
+            { eventType: 'create', messageId: 'good-1', timestamp: 200, encryptionVersion: 0 },
+            { eventType: 'create', messageId: 'poison', timestamp: 300, encryptionVersion: 0 },
+            { eventType: 'create', messageId: 'good-2', timestamp: 400, encryptionVersion: 0 },
+          ],
+          hasMore: false,
+          checkpoint: 400,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: 100 }), { status: 200 });
+    });
+
+    // Grab the top-level mock and override implementation per-call:
+    // good-1: resolves, poison: throws, good-2: resolves.
+    const processMock = vi.mocked(federationRouteMock.processRelayEvents);
+    processMock.mockClear();
+    processMock.mockResolvedValueOnce(undefined as never);  // good-1
+    processMock.mockRejectedValueOnce(new Error('simulated processor failure'));  // poison
+    processMock.mockResolvedValueOnce(undefined as never);  // good-2
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const before = Date.now();
+    await syncPeerMutationLog('peer-poison', 'health_check_recovery');
+
+    // Verify processRelayEvents was called per-event: 3 calls for the 3 DM events.
+    expect(processMock).toHaveBeenCalledTimes(3);
+
+    // Verify error logged for the poison event.
+    expect(errorSpy).toHaveBeenCalled();
+    const errorMessages = errorSpy.mock.calls.map(c => String(c[0] ?? ''));
+    expect(errorMessages.some(m => m.includes('poison'))).toBe(true);
+    expect(errorMessages.some(m => m.includes('simulated processor failure'))).toBe(true);
+
+    // Verify lastSyncedAt advanced despite the poison event (the critical property).
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-poison')).get();
+    expect(row?.lastSyncedAt).toBeGreaterThanOrEqual(before);
   });
 });
 

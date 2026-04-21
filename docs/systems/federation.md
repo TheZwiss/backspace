@@ -1047,9 +1047,13 @@ Ephemeral events (`dm_typing_*`, `dm_call_*`) are fire-and-forget by design and 
 | `'friend'` | Friend events |
 | `'profile'` | Profile update events |
 
-#### Known Issues
+#### Poison-Pill Event Handling
 
-- **Poison-pill event in peer's mutation log.** If a peer's mutation log contains a row whose inbound processor throws (e.g., a UNIQUE conflict from a malformed relay payload), `syncPeerMutationLog` catches the error and declines to advance `lastSyncedAt`. Subsequent activations retry the same window and hit the same failure, effectively blocking catch-up for that peer. No automatic poison-pill skip is implemented — recovery requires either: (a) fixing the mutation log on the peer side, or (b) manually advancing `lastSyncedAt` past the offending row via DB admin. Flagged as a follow-up backlog item.
+`syncPeerMutationLog` replays incoming events one at a time. If an event's inbound processor throws (e.g., UNIQUE conflict from a malformed payload, unexpected schema drift, a processor bug), the error is caught per-event, logged via `console.error` with the event's `eventType`, `messageId`, `timestamp`, peer origin, and error message, and the loop continues with the next event. `lastSyncedAt` is advanced past the failed event (using the event's own `timestamp`), so subsequent activations do not retry the poison pill.
+
+The final `Sync-pull from <origin> replayed <N> events` log line is suffixed with `(<K> skipped due to errors)` when `K > 0`, surfacing the count to operators watching logs. Individual event failures are in the same logs under `Skipping poison-pill event` — grep `console.error` / `stderr` to recover them.
+
+Trade-off: this policy prioritizes forward progress of the sync pipeline over strict at-least-once delivery of every mutation. An event that fails to process is silently lost to the receiving instance unless operators manually replay it (e.g., by resetting `lastSyncedAt` on the peer row or by reissuing the originating mutation on the sender). The alternative — refusing to advance on any error — caused the "stuck forever" state described in the pre-fix version of this section.
 
 ### Sync Endpoint (`POST /api/federation/sync`)
 
