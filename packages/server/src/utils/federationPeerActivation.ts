@@ -42,9 +42,26 @@ export async function onPeerActivated(
   peerId: string,
   reason: PeerActivationReason,
 ): Promise<void> {
-  // Stub — implemented in Task 4.
-  void peerId;
-  void reason;
+  const existing = inFlightActivation.get(peerId);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      resetOutboxBackoff(peerId);
+      await syncPeerMutationLog(peerId, reason);
+      const { connectionManager } = await import('../ws/handler.js');
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+    } catch (err) {
+      console.error(`[federation] onPeerActivated(${peerId}, ${reason}) failed:`, err);
+    }
+  })();
+
+  inFlightActivation.set(peerId, promise);
+  try {
+    await promise;
+  } finally {
+    inFlightActivation.delete(peerId);
+  }
 }
 
 /**

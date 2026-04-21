@@ -34,6 +34,15 @@ vi.mock('../routes/federation.js', () => ({
   processRelayEvents: vi.fn().mockResolvedValue({ accepted: [], rejected: [] }),
 }));
 
+vi.mock('../ws/handler.js', () => ({
+  connectionManager: {
+    sendToAdmins: vi.fn(),
+    getAllOnlineUserIds: () => [],
+    sendToUser: vi.fn(),
+    sendToDmMembers: vi.fn(),
+  },
+}));
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -235,5 +244,53 @@ describe('syncPeerMutationLog', () => {
     expect(bodies[2]?.contextType).toBe('friend');
     expect(bodies[3]?.sinceTimestamp).toBe(100);   // profile pass re-seeds from peer.lastSyncedAt
     expect(bodies[3]?.contextType).toBe('profile');
+  });
+});
+
+describe('onPeerActivated', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.restoreAllMocks();
+  });
+
+  it('runs resetOutboxBackoff and syncPeerMutationLog once, even under concurrent calls', async () => {
+    const { onPeerActivated } = await import('./federationPeerActivation.js');
+
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-x', origin: 'https://peer-x.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 0, createdAt: Date.now(),
+    }).run();
+
+    let fetchCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount++;
+      // Deliberately slow to let the second concurrent call share the in-flight promise.
+      await new Promise(r => setTimeout(r, 20));
+      return new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: 0 }), { status: 200 });
+    });
+
+    const p1 = onPeerActivated('peer-x', 'health_check_recovery');
+    const p2 = onPeerActivated('peer-x', 'accept_new');
+    await Promise.all([p1, p2]);
+
+    // Three fetch calls for the three sync passes (dm, friend, profile) — not six.
+    expect(fetchCount).toBe(3);
+  });
+
+  it('swallows errors from syncPeerMutationLog so the handler does not throw', async () => {
+    const { onPeerActivated } = await import('./federationPeerActivation.js');
+
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-err', origin: 'https://peer-err.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 0, createdAt: Date.now(),
+    }).run();
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('network down');
+    });
+
+    await expect(onPeerActivated('peer-err', 'ensure_peered')).resolves.toBeUndefined();
   });
 });
