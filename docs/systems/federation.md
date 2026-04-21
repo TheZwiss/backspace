@@ -977,16 +977,79 @@ The mutation log entry for reactions stores a simpler payload (no `messageId`/`m
 
 ## 12. Initial Sync
 
-### `runInitialSyncForNewPeers()` (`federationWorker.ts:739`)
+### `startupBootstrapSync()` (`federationWorker.ts`)
 
-Triggered once at server startup (async, non-blocking). Finds peers with `status = 'active'` and `lastSyncedAt = 0`.
+Triggered once at server startup (async, non-blocking). Finds peers with `status = 'active'` and `lastSyncedAt = 0` and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each. This preserves the original startup-sync semantics while unifying the code path with all other activation sites (see "Peer Activation Recovery" below).
 
-**For each unsynced peer:**
-1. **DM sync pass:** Paginate through `POST {peerOrigin}/api/federation/sync` with `sinceTimestamp = 0`, `limit = 100`
-2. **Direct processing:** Call `processRelayEvents()` to process received events in-process (no HTTP round-trip)
-3. **Friend sync pass:** Same pagination with `contextType: 'friend'`, also processed via `processRelayEvents()`
-4. Update `lastSyncedAt = Date.now()` after completion
-5. On failure: don't update `lastSyncedAt` -- retried on next startup
+### Peer Activation Recovery
+
+Every transition of `federation_peers.status` to `active` invokes `onPeerActivated(peerId, reason)` — one handler wired at all transition sites. Two independent invariants, both unconditional:
+
+1. **`resetOutboxBackoff`** — sets `nextRetryAt = now` and `attempts = 0` for every outbox entry belonging to the peer. Entries that accumulated exponential backoff before the peer went unreachable are immediately eligible again. Attempts counter is also reset so a freshly-healthy peer's next failure starts at `BACKOFF_SCHEDULE_MS[0]` (30s), not wherever the counter left off.
+2. **`syncPeerMutationLog`** — pulls missed events from the peer's `/api/federation/sync` endpoint since `peer.lastSyncedAt`. Three passes: DM, friend, profile (in that order, each paginated). `lastSyncedAt` advances to `Date.now()` on full success; stays put on transient failure so the next activation retries the same window.
+
+#### Call sites (must remain exhaustive)
+
+| File | Context | Reason |
+|---|---|---|
+| `routes/federation.ts` | `/peer/initiate` 200 activation | `initiate_accepted` |
+| `routes/federation.ts` | `/peer/accept` existing-rejected override | `accept_rejected_override` |
+| `routes/federation.ts` | `/peer/accept` existing-awaiting_approval | `accept_awaiting_approval` |
+| `routes/federation.ts` | `/peer/accept` existing-pending | `accept_pending` |
+| `routes/federation.ts` | `/peer/accept` new-peer | `accept_new` |
+| `routes/federation.ts` | `/approval-requests/:id/approve` success | `approval_handshake` |
+| `utils/federationWorker.ts` | Health check unreachable → active | `health_check_recovery` |
+| `utils/federationPeering.ts` | `ensurePeered/performHandshake` 200 | `ensure_peered` |
+| `utils/federationWorker.ts` | Startup scan (status=active, lastSyncedAt=0) | `startup_bootstrap` |
+
+HTTP handler sites dispatch fire-and-forget (`.catch(log)`) so the response is not blocked by sync-pull pagination. Worker-internal sites `await` since the worker tick is already async.
+
+Concurrent activations for the same peer are deduplicated via an in-flight promise map keyed by `peerId`.
+
+#### Peer-state × outbox-enqueue × recovery matrix
+
+| Status | `queueOutboxEvent` enqueue | Mutation log captures | Recovery on transition to `active` |
+|---|---|---|---|
+| `active` | Queue | Yes (for covered event types — see below) | N/A |
+| `pending` | Queue | Yes | `onPeerActivated` |
+| `unreachable` | Queue | Yes | `onPeerActivated` |
+| `awaiting_approval` | **Drop, debug-log** | Yes | `onPeerActivated` |
+| `needs_attention` | **Drop, debug-log** | Yes | `onPeerActivated` (fires when the row is re-created via admin Reset + re-peer) |
+| `rejected` | Drop, debug-log | Yes | `onPeerActivated` |
+| `revoked` | Drop, debug-log | Yes | `onPeerActivated` (fires when the row is re-created via hard-delete + re-initiate) |
+
+`queueOutboxEvent` uses an exhaustive TypeScript `switch` on the narrowed peer-status union — adding a new status value without handling it fails compile-time typecheck (`const _exhaustive: never = status;`).
+
+**Mid-call race catch:** when the initial peers SELECT filters out a peer because its status is non-deliverable, but the fallback loop observes the status has since flipped to `active`/`pending`/`unreachable`, the code re-fetches the peer row and appends it to `matchedPeers` so the outer enqueue loop includes it. Silent drops would lose real-time delivery under asymmetric failure (e.g., `/peer/accept` 200 response lost on the wire, health-check transition firing on only one side).
+
+#### Mutation log coverage
+
+Event types covered by `appendMutationLog` (replayed on sync-pull):
+
+| Event type | `contextType` | Source |
+|---|---|---|
+| DM `create` / `update` / `delete` | `dm` | `federationOutbox.queueDmRelay`, `dm.ts` delete handler |
+| `reaction_add` / `reaction_remove` | `dm` | `ws/events.ts` |
+| `member_add` / `member_remove` / `ownership_transfer` | `dm` | `dm.ts` |
+| `dm_close` / `dm_reopen` | `dm` | `federationOutbox.queueDmCloseRelay` |
+| `read_state_update` | `dm` | `federationOutbox.queueReadStateRelay` |
+| `file_rejected` | `dm` | `federationWorker.handleSizeRejection` |
+| `friend_request_*` / `friend_add` / `friend_remove` | `friend` | `social.ts` |
+| `profile_update` | `profile` | `routes/users.ts` (PATCH `/api/users/@me`) |
+
+Ephemeral events (`dm_typing_*`, `dm_call_*`) are fire-and-forget by design and are NOT captured — missed typing/call-signaling packets are acceptable and carry no durable state.
+
+#### `/api/federation/sync` contextType filter values
+
+| Filter | Returns |
+|---|---|
+| (none) / omitted | DM events (including `dm_close`, `dm_reopen`, `read_state_update`, `file_rejected`) |
+| `'friend'` | Friend events |
+| `'profile'` | Profile update events |
+
+#### Known Issues
+
+- **Poison-pill event in peer's mutation log.** If a peer's mutation log contains a row whose inbound processor throws (e.g., a UNIQUE conflict from a malformed relay payload), `syncPeerMutationLog` catches the error and declines to advance `lastSyncedAt`. Subsequent activations retry the same window and hit the same failure, effectively blocking catch-up for that peer. No automatic poison-pill skip is implemented — recovery requires either: (a) fixing the mutation log on the peer side, or (b) manually advancing `lastSyncedAt` past the offending row via DB admin. Flagged as a follow-up backlog item.
 
 ### Sync Endpoint (`POST /api/federation/sync`)
 
@@ -994,7 +1057,7 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 
 **Request:**
 ```typescript
-{ sinceTimestamp: number, dmChannelId?: string, federatedId?: string, contextType?: 'dm'|'friend', limit?: 1-500 }
+{ sinceTimestamp: number, dmChannelId?: string, federatedId?: string, contextType?: 'dm'|'friend'|'profile', limit?: 1-500 }
 ```
 
 **Response:**
@@ -1125,7 +1188,7 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | File download | 30s | 5 | 60s | `processFileQueueTick` |
 | Health check | 15min | all unreachable | 10s | `processHealthCheckTick` |
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
-| Initial sync | Once at startup | -- | 30s per page | `runInitialSyncForNewPeers` |
+| Startup bootstrap sync | Once at startup | -- | 30s per page | `startupBootstrapSync` → `onPeerActivated` |
 
 ### Janitor Cleanup (`storageJanitor.ts:runFederationJanitor`)
 

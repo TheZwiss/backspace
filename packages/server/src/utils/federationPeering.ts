@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
+import { onPeerActivated } from './federationPeerActivation.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,9 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
         // Unreachable peers were previously active — treat as active for peering
         // (the health check will restore them; don't re-handshake)
         return { status: 'active', peerId: existing.id };
+      case 'needs_attention':
+        // Admin intervention required — do not auto-heal via performHandshake
+        return { status: 'rejected', error: 'Peer in needs_attention — admin Reset required' };
       case 'awaiting_approval':
         return { status: 'pending', error: 'Awaiting admin approval on remote instance' };
       case 'pending':
@@ -158,6 +162,9 @@ async function performHandshake(
         .run();
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      onPeerActivated(peerId, 'ensure_peered').catch(err =>
+        console.error('[federation] onPeerActivated from ensurePeered failed:', err)
+      );
       return { status: 'active', peerId };
     }
 

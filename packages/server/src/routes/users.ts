@@ -8,7 +8,7 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
-import { queueOutboxEvent, isFederationRelayEnabled } from '../utils/federationOutbox.js';
+import { queueOutboxEvent, isFederationRelayEnabled, appendMutationLog } from '../utils/federationOutbox.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { resizeProfileImage } from '../utils/thumbnail.js';
 import { config } from '../config.js';
@@ -374,6 +374,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             bio: preUpdateUser.bio,
           };
 
+          appendMutationLog(
+            preUpdateUser.id,
+            preUpdateUser.id,
+            'profile_update',
+            JSON.stringify({ profileUpdate: profilePayload }),
+            'profile',
+          );
           for (const targetOrigin of newOrigins) {
             queueOutboxEvent(
               preUpdateUser.id,
@@ -529,6 +536,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           bio: updatedUser!.bio,
         };
 
+        appendMutationLog(
+          updatedUser!.id,
+          updatedUser!.id,
+          'profile_update',
+          JSON.stringify({ profileUpdate: profilePayload }),
+          'profile',
+        );
         queueOutboxEvent(
           updatedUser!.id,    // entityId — user's ID (coalesces rapid edits)
           updatedUser!.id,    // contextId — user-scoped
