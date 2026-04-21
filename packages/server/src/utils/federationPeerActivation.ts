@@ -74,9 +74,63 @@ export async function syncPeerMutationLog(
   peerId: string,
   reason: PeerActivationReason,
 ): Promise<void> {
-  // Stub — implemented in Task 3.
-  void peerId;
-  void reason;
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+  const peer = db.select().from(schema.federationPeers)
+    .where(eq(schema.federationPeers.id, peerId)).get();
+  if (!peer || peer.status !== 'active') return;
+
+  const ourOrigin = getOurOrigin();
+  const signingSecret = (peer.pendingHmacSecret && peer.secretRotationAt)
+    ? peer.pendingHmacSecret
+    : peer.hmacSecret;
+
+  console.log(`[federation] Sync-pull from ${peer.origin} (reason=${reason}, since=${peer.lastSyncedAt ?? 0})`);
+
+  let totalEvents = 0;
+
+  async function runPass(contextType?: 'friend' | 'profile'): Promise<boolean> {
+    let since = peer!.lastSyncedAt ?? 0;
+    while (true) {
+      const bodyObj: Record<string, unknown> = { sinceTimestamp: since, limit: 100 };
+      if (contextType) bodyObj.contextType = contextType;
+      const body = JSON.stringify(bodyObj);
+      const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
+      const resp = await fetch(`${peer!.origin}/api/federation/sync`, {
+        method: 'POST', headers, body,
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!resp.ok) {
+        console.warn(`[federation] Sync-pull ${contextType ?? 'dm'} pass HTTP ${resp.status} for ${peer!.origin}`);
+        return false;
+      }
+      const data = await resp.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
+      if (data.events.length === 0) return true;
+      const { processRelayEvents } = await import('../routes/federation.js');
+      await processRelayEvents(data.events, peer!.origin, peer!.origin, db);
+      totalEvents += data.events.length;
+      since = data.checkpoint;
+      if (!data.hasMore) return true;
+    }
+  }
+
+  try {
+    if (!(await runPass())) return;
+    if (!(await runPass('friend'))) return;
+    if (!(await runPass('profile'))) return;
+
+    db.update(schema.federationPeers)
+      .set({ lastSyncedAt: Date.now() })
+      .where(eq(schema.federationPeers.id, peer.id))
+      .run();
+
+    if (totalEvents > 0) {
+      console.log(`[federation] Sync-pull from ${peer.origin} replayed ${totalEvents} events`);
+    }
+  } catch (err) {
+    console.error(`[federation] Sync-pull from ${peer.origin} failed:`, err);
+  }
 }
 
 /**

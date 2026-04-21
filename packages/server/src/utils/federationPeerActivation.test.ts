@@ -18,6 +18,22 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
+vi.mock('../utils/federationOutbox.js', () => ({
+  isFederationRelayEnabled: () => true,
+}));
+
+vi.mock('../utils/federationAuth.js', () => ({
+  getOurOrigin: () => 'https://local.example',
+  buildFederationHeaders: (_body: string, _secret: string, _origin: string) => ({
+    'Content-Type': 'application/json',
+    'X-Federation-Origin': _origin,
+  }),
+}));
+
+vi.mock('../routes/federation.js', () => ({
+  processRelayEvents: vi.fn().mockResolvedValue({ accepted: [], rejected: [] }),
+}));
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -91,5 +107,95 @@ describe('resetOutboxBackoff', () => {
     const { resetOutboxBackoff } = await import('./federationPeerActivation.js');
     seedPeer('peer-empty', 'active');
     expect(() => resetOutboxBackoff('peer-empty')).not.toThrow();
+  });
+});
+
+describe('syncPeerMutationLog', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    // Instance settings row is created by the baseline migration; defaults have
+    // federation_relay_enabled = 1, so no explicit update is needed. Confirm:
+    testDb.update(schema.instanceSettings)
+      .set({ federationRelayEnabled: 1 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    vi.restoreAllMocks();
+  });
+
+  it('seeds sinceTimestamp from peer.lastSyncedAt for each pass', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-1', origin: 'https://peer-1.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 5000, createdAt: Date.now(),
+    }).run();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: 5000 }), { status: 200 })
+    );
+
+    await syncPeerMutationLog('peer-1', 'health_check_recovery');
+
+    // Three passes: dm (no contextType), friend, profile
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    for (const call of fetchSpy.mock.calls) {
+      const body = JSON.parse(call[1]?.body as string) as { sinceTimestamp: number };
+      expect(body.sinceTimestamp).toBe(5000);
+    }
+    const calls = fetchSpy.mock.calls.map(c => JSON.parse(c[1]?.body as string) as { contextType?: string });
+    expect(calls[0]!.contextType).toBeUndefined();       // DM pass (no contextType filter)
+    expect(calls[1]!.contextType).toBe('friend');
+    expect(calls[2]!.contextType).toBe('profile');
+  });
+
+  it('advances lastSyncedAt on success', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-2', origin: 'https://peer-2.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 0, createdAt: Date.now(),
+    }).run();
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: 1000 }), { status: 200 })
+    );
+
+    const before = Date.now();
+    await syncPeerMutationLog('peer-2', 'startup_bootstrap');
+    const after = Date.now();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-2')).get();
+    expect(row?.lastSyncedAt).toBeGreaterThanOrEqual(before);
+    expect(row?.lastSyncedAt).toBeLessThanOrEqual(after);
+  });
+
+  it('does NOT update lastSyncedAt on transient failure', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-3', origin: 'https://peer-3.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 42_000, createdAt: Date.now(),
+    }).run();
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response('internal error', { status: 500 })
+    );
+
+    await syncPeerMutationLog('peer-3', 'ensure_peered');
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-3')).get();
+    expect(row?.lastSyncedAt).toBe(42_000);
+  });
+
+  it('does nothing when peer is not active', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-4', origin: 'https://peer-4.example', hmacSecret: 'secret',
+      status: 'pending', lastSyncedAt: 0, createdAt: Date.now(),
+    }).run();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    await syncPeerMutationLog('peer-4', 'health_check_recovery');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
