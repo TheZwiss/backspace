@@ -16,8 +16,10 @@ let currentUserId = 'admin-user';
 let currentUserIsAdmin = true;
 
 // Mock getDb BEFORE importing the route module so the module reads our test DB.
+// Must also re-export `schema` because federation.ts imports it from '../db/index.js'.
 vi.mock('../db/index.js', () => ({
   getDb: () => testDb,
+  schema,
 }));
 
 // Mock the auth middleware to honour test-controlled currentUserId / currentUserIsAdmin.

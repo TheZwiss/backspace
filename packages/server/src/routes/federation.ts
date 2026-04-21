@@ -845,6 +845,45 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/peers/:id/reset ──────────────────────────────────
+  // Admin-only: reset a peer that has transitioned to needs_attention.
+  // Deletes the local peer row (cascade-deletes outbox entries via FK).
+  // Admin must re-initiate peering out of band after reset.
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/peers/:id/reset',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const db = getDb();
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
+      }
+
+      if (peer.status !== 'needs_attention') {
+        return reply.code(400).send({
+          error: 'Reset is only available for peers in the needs_attention state. Use revoke for active peers.',
+          statusCode: 400,
+        });
+      }
+
+      // Cascade-delete handles federation_outbox entries (FK onDelete: 'cascade').
+      db.delete(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .run();
+
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+
+      return reply.code(200).send({ success: true });
+    },
+  );
+
   // ─── PATCH /api/federation/peers/:id ────────────────────────────────────────
   // Admin-only: update peer settings (e.g. auto-rotation interval).
   app.patch<{ Params: { id: string }; Body: { autoRotateIntervalDays?: number } }>(
