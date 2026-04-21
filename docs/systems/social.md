@@ -368,14 +368,16 @@ The sorted join ensures the same pair always produces the same prefix regardless
 
 ## 7. Initial Sync: Friend Backfill
 
-When a new peer is established (`federation_peers.lastSyncedAt = 0`), the federation worker runs `runInitialSyncForNewPeers()` on startup. This includes a dedicated friend sync pass.
+When a peer transitions to `active` (including at startup for peers with `lastSyncedAt = 0`), the federation worker calls `onPeerActivated(peerId, reason)`. One of its two unconditional invariants is `syncPeerMutationLog`, which pulls missed events from the peer's `/api/federation/sync` endpoint — including a dedicated friend sync pass.
 
-**Flow (`federationWorker.ts:runInitialSyncForNewPeers`):**
+**Flow (`federationPeerActivation.ts:syncPeerMutationLog`):**
 
-1. Query all active peers with `lastSyncedAt = 0`
-2. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), processing each batch via `processRelayEvents()` directly
-3. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same direct processing
-4. After both passes complete, updates `lastSyncedAt = Date.now()` so the sync doesn't repeat
+1. **First pass (DM events):** Paginates through `POST /federation/sync` with no `contextType` filter (defaults to DM events), processing each batch via `processRelayEvents()` directly
+2. **Second pass (friend events):** Paginates through `POST /federation/sync` with `contextType: 'friend'`, same direct processing
+3. **Third pass (profile events):** Paginates through `POST /federation/sync` with `contextType: 'profile'`, same direct processing
+4. After all three passes complete, updates `lastSyncedAt = Date.now()` so the window advances on the next activation
+
+At startup, `startupBootstrapSync()` scans for `status = 'active' AND lastSyncedAt = 0` peers and calls `onPeerActivated(peerId, 'startup_bootstrap')` for each, preserving the original startup-sync semantics while using the unified path.
 
 The sync endpoint (`POST /api/federation/sync`) returns events from the `federation_mutation_log` table, which retains entries for 90 days. This means friend relationships established within the last 90 days are backfilled when a new peer connection is created.
 
