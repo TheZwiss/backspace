@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import { isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
 import { runFederationJanitor } from './storageJanitor.js';
 import { buildFederationHeaders, getOurOrigin, generateHmacSecret, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
-import { evaluateAuthFailure } from './federationAuthFailure.js';
+import { evaluateAuthFailure, AUTH_FAILURE_THRESHOLD } from './federationAuthFailure.js';
 import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
@@ -303,7 +303,14 @@ async function processOutboxTick(): Promise<void> {
           }
           connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
         } else {
-          // Below threshold — preserve state, apply backoff to outbox entries
+          // Below threshold — preserve state, apply backoff to outbox entries.
+          // Do NOT call handleOutboxDeliveryFailure here: per spec, auth failures
+          // must NOT increment consecutive_failures (that counter drives the
+          // 'unreachable' transition, which is a network-layer signal, not an
+          // auth-layer one).
+          console.warn(
+            `[federation-worker] Peer ${peerOrigin} returned ${response.status} (auth failure ${decision.newAuthFailures}/${AUTH_FAILURE_THRESHOLD})`,
+          );
           db.update(schema.federationPeers)
             .set({
               consecutiveAuthFailures: decision.newAuthFailures,
@@ -311,7 +318,7 @@ async function processOutboxTick(): Promise<void> {
             })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
-          handleOutboxDeliveryFailure(db, peerId, peerEntries, now);
+          applyOutboxEntryBackoff(db, peerEntries, now);
         }
       } else {
         console.warn(
@@ -336,13 +343,11 @@ async function processOutboxTick(): Promise<void> {
   await resolvePendingPeers();
 }
 
-function handleOutboxDeliveryFailure(
+function applyOutboxEntryBackoff(
   db: ReturnType<typeof getDb>,
-  peerId: string,
   entries: Array<{ outboxId: string; attempts: number | null }>,
   now: number,
 ): void {
-  // Increment attempts and compute next retry for each entry
   for (const entry of entries) {
     const newAttempts = (entry.attempts ?? 0) + 1;
     const backoffMs = getBackoffMs(newAttempts);
@@ -355,8 +360,18 @@ function handleOutboxDeliveryFailure(
       .where(eq(schema.federationOutbox.id, entry.outboxId))
       .run();
   }
+}
 
-  // Update peer failure tracking
+function handleOutboxDeliveryFailure(
+  db: ReturnType<typeof getDb>,
+  peerId: string,
+  entries: Array<{ outboxId: string; attempts: number | null }>,
+  now: number,
+): void {
+  applyOutboxEntryBackoff(db, entries, now);
+
+  // Update peer failure tracking (network/generic-error path only — auth failures
+  // use consecutive_auth_failures instead).
   const peer = db
     .select({ consecutiveFailures: schema.federationPeers.consecutiveFailures })
     .from(schema.federationPeers)
