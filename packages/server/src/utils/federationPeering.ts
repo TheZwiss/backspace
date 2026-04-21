@@ -210,3 +210,38 @@ async function performHandshake(
 export function _clearInFlightPeering(): void {
   inFlightPeering.clear();
 }
+
+/**
+ * Race ensurePeered() against a deadline. On timeout, the background
+ * handshake is NOT aborted — it continues so the next attempt finds
+ * the peer active. A warn-logged catch is attached so a late-rejecting
+ * background promise does not emit an unhandledRejection.
+ *
+ * The ensurePeered implementation is injectable for testing; the default
+ * is the real function.
+ */
+export async function racePeering(
+  origin: string,
+  timeoutMs: number,
+  ensurePeeredFn: (origin: string) => Promise<EnsurePeeredResult> = ensurePeered,
+): Promise<EnsurePeeredResult | { status: 'timeout' }> {
+  const handshake = ensurePeeredFn(origin);
+
+  // Attach a warn-logged catch so a background arm that rejects AFTER the
+  // race loses does not trigger unhandledRejection. This runs regardless
+  // of which arm wins.
+  handshake.catch(err => {
+    console.warn('[federation] background handshake after call-relay race:', origin, err);
+  });
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<{ status: 'timeout' }>(resolve => {
+    timeoutHandle = setTimeout(() => resolve({ status: 'timeout' }), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([handshake, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
