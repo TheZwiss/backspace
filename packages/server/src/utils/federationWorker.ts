@@ -262,6 +262,7 @@ async function processOutboxTick(): Promise<void> {
           .set({
             lastSeenAt: now,
             consecutiveFailures: 0,
+            consecutiveAuthFailures: 0,
           })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
