@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders, generateHmacSecret } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
+import { racePeering, ensurePeered } from './federationPeering.js';
 
 // ─── Settings Cache ──────────────────────────────────────────────────────────
 
@@ -469,28 +470,87 @@ export function buildRelayPayload(
   };
 }
 
+/** 3s budget for the on-demand handshake before a call relay POST. */
+export const CALL_PEERING_TIMEOUT_MS = 3_000;
+
+export type CallRelayFailureReason =
+  | 'peer_rejected'
+  | 'peer_awaiting_approval'
+  | 'peer_transient_failure'
+  | 'post_failed';
+
+export type CallRelayResult =
+  | { ok: true }
+  | { ok: false; reason: CallRelayFailureReason; error: string };
+
 /**
  * Send call signaling events directly to a remote peer (bypasses outbox).
- * Used for time-critical call events where latency matters.
- * If the HTTP POST fails, the call operation fails — no retry.
+ * Latency-sensitive: if no active peer exists, race an ensurePeered handshake
+ * against `opts.peeringTimeoutMs` (default CALL_PEERING_TIMEOUT_MS).
+ *
+ * `peeringTimeoutMs: 0` = non-blocking mode (used by sendTypingRelay):
+ *   - If the peer is currently active, POST. Otherwise skip the POST, kick off
+ *     ensurePeered() in the background as a warm-up, and return
+ *     { ok:false, reason:'peer_transient_failure' }.
  */
 export async function sendCallRelay(
   targetPeerOrigin: string,
   events: FederationRelayEvent[],
-): Promise<{ ok: boolean; error?: string }> {
+  opts: { peeringTimeoutMs?: number } = {},
+): Promise<CallRelayResult> {
+  const timeoutMs = opts.peeringTimeoutMs ?? CALL_PEERING_TIMEOUT_MS;
   const db = getDb();
-  const peer = db.select()
+
+  // ─── Fast path: peer already active or unreachable (health check handles) ──
+  const existing = db.select()
     .from(schema.federationPeers)
-    .where(and(
-      eq(schema.federationPeers.origin, targetPeerOrigin),
-      eq(schema.federationPeers.status, 'active'),
-    ))
+    .where(eq(schema.federationPeers.origin, targetPeerOrigin))
     .get();
 
+  let peer = existing && (existing.status === 'active' || existing.status === 'unreachable')
+    ? existing
+    : null;
+
   if (!peer) {
-    return { ok: false, error: `No active peer for origin ${targetPeerOrigin}` };
+    // ─── Non-blocking mode (typing): warm up in background, do not POST ──
+    if (timeoutMs === 0) {
+      ensurePeered(targetPeerOrigin).catch(err => {
+        console.warn('[federation] typing-triggered background handshake:', targetPeerOrigin, err);
+      });
+      return { ok: false, reason: 'peer_transient_failure', error: 'peer not active' };
+    }
+
+    // ─── Race ensurePeered against the deadline ──
+    const raced = await racePeering(targetPeerOrigin, timeoutMs);
+
+    switch (raced.status) {
+      case 'active':
+        // Re-fetch the now-active peer row for HMAC secret.
+        peer = db.select()
+          .from(schema.federationPeers)
+          .where(eq(schema.federationPeers.origin, targetPeerOrigin))
+          .get() ?? null;
+        if (!peer) {
+          return { ok: false, reason: 'peer_transient_failure', error: 'peer row missing after handshake' };
+        }
+        break;
+      case 'rejected':
+        return { ok: false, reason: 'peer_rejected', error: raced.error };
+      case 'pending':
+        return { ok: false, reason: 'peer_awaiting_approval', error: raced.error };
+      case 'failed':
+        return { ok: false, reason: 'peer_transient_failure', error: raced.error };
+      case 'timeout':
+        return { ok: false, reason: 'peer_transient_failure', error: `handshake did not complete in ${timeoutMs}ms` };
+      default: {
+        // Exhaustiveness check — catches any future additions to EnsurePeeredResult.
+        const _exhaustive: never = raced;
+        return { ok: false, reason: 'peer_transient_failure', error: `unexpected peering result: ${JSON.stringify(_exhaustive)}` };
+      }
+    }
   }
 
+  // ─── POST ──────────────────────────────────────────────────────────────────
   const ourOrigin = getOurOrigin();
   const body: FederationRelayRequest = {
     version: 1,
@@ -499,7 +559,6 @@ export async function sendCallRelay(
   };
   const bodyStr = JSON.stringify(body);
 
-  // Use pending secret during rotation (FED-011), otherwise current
   const signingSecret = peer.pendingHmacSecret ?? peer.hmacSecret;
   const headers = buildFederationHeaders(bodyStr, signingSecret, ourOrigin);
 
@@ -511,14 +570,27 @@ export async function sendCallRelay(
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      return { ok: false, error: `HTTP ${res.status}: ${text}` };
-    }
+    if (res.ok) return { ok: true };
 
-    return { ok: true };
+    const text = await res.text().catch(() => '');
+    if (res.status >= 400 && res.status < 500) {
+      return {
+        ok: false,
+        reason: 'post_failed',
+        error: `HTTP ${res.status}: ${text}`,
+      };
+    }
+    return {
+      ok: false,
+      reason: 'peer_transient_failure',
+      error: `HTTP ${res.status}: ${text}`,
+    };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'fetch_failed' };
+    return {
+      ok: false,
+      reason: 'peer_transient_failure',
+      error: err instanceof Error ? err.message : 'fetch_failed',
+    };
   }
 }
 
@@ -700,9 +772,9 @@ export async function sendTypingRelay(
     },
   };
 
-  // Fire-and-forget to each remote peer
+  // Fire-and-forget to each remote peer; 0ms peering timeout = non-blocking warm-up.
   for (const peerOrigin of remoteOrigins) {
-    sendCallRelay(peerOrigin, [event]).catch(err => {
+    sendCallRelay(peerOrigin, [event], { peeringTimeoutMs: 0 }).catch(err => {
       console.warn(`[federation] Typing relay to ${peerOrigin} failed:`, err);
     });
   }
