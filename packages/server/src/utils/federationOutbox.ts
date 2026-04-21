@@ -541,7 +541,7 @@ export async function sendCallRelay(
       case 'failed':
         return { ok: false, reason: 'peer_transient_failure', error: raced.error };
       case 'timeout':
-        return { ok: false, reason: 'peer_transient_failure', error: `handshake did not complete in ${timeoutMs}ms` };
+        return { ok: false, reason: 'peer_transient_failure', error: `Peering handshake did not complete within ${(timeoutMs / 1000).toFixed(1)}s` };
       default: {
         // Exhaustiveness check — catches any future additions to EnsurePeeredResult.
         const _exhaustive: never = raced;
@@ -774,8 +774,14 @@ export async function sendTypingRelay(
 
   // Fire-and-forget to each remote peer; 0ms peering timeout = non-blocking warm-up.
   for (const peerOrigin of remoteOrigins) {
-    sendCallRelay(peerOrigin, [event], { peeringTimeoutMs: 0 }).catch(err => {
-      console.warn(`[federation] Typing relay to ${peerOrigin} failed:`, err);
-    });
+    sendCallRelay(peerOrigin, [event], { peeringTimeoutMs: 0 })
+      .then(result => {
+        if (!result.ok) {
+          console.debug(`[federation] Typing relay to ${peerOrigin}: ${result.reason} ${result.error}`);
+        }
+      })
+      .catch(err => {
+        console.warn(`[federation] Typing relay to ${peerOrigin} threw unexpectedly:`, err);
+      });
   }
 }
