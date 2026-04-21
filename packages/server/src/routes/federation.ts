@@ -16,6 +16,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
+import { onPeerActivated } from '../utils/federationPeerActivation.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent } from '@backspace/shared';
 
@@ -354,6 +355,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+        onPeerActivated(peerId, 'initiate_accepted').catch(err =>
+          console.error('[federation] onPeerActivated from /peer/initiate failed:', err)
+        );
 
         const peer = db
           .select()
@@ -560,6 +564,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           }
 
           connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+          onPeerActivated(existing.id, 'accept_rejected_override').catch(err =>
+            console.error('[federation] onPeerActivated from /peer/accept (rejected override) failed:', err)
+          );
 
           return reply.code(200).send({ accepted: true });
         }
@@ -583,6 +590,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           }
 
           connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+          onPeerActivated(existing.id, 'accept_awaiting_approval').catch(err =>
+            console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
+          );
 
           return reply.code(200).send({ accepted: true });
         }
@@ -597,6 +607,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .run();
 
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+        onPeerActivated(existing.id, 'accept_pending').catch(err =>
+          console.error('[federation] onPeerActivated from /peer/accept (pending) failed:', err)
+        );
 
         return reply.code(200).send({ accepted: true });
       }
@@ -613,6 +626,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }).run();
 
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      onPeerActivated(peerId, 'accept_new').catch(err =>
+        console.error('[federation] onPeerActivated from /peer/accept (new) failed:', err)
+      );
 
       return reply.code(200).send({ accepted: true });
     },
@@ -1136,6 +1152,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           .run();
 
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+        onPeerActivated(peerId, 'approval_handshake').catch(err =>
+          console.error('[federation] onPeerActivated from /approval-requests/:id/approve failed:', err)
+        );
 
         const peer = db
           .select()

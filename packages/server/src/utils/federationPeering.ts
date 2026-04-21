@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
+import { onPeerActivated } from './federationPeerActivation.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,9 @@ async function performHandshake(
         .run();
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      onPeerActivated(peerId, 'ensure_peered').catch(err =>
+        console.error('[federation] onPeerActivated from ensurePeered failed:', err)
+      );
       return { status: 'active', peerId };
     }
 

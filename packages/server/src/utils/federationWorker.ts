@@ -11,7 +11,7 @@ import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
-import { startupBootstrapSync } from './federationPeerActivation.js';
+import { onPeerActivated, startupBootstrapSync } from './federationPeerActivation.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -1054,6 +1054,8 @@ async function processHealthCheckTick(): Promise<void> {
         console.log(
           `[federation-worker] Peer ${peer.origin} recovered — marked active`,
         );
+
+        await onPeerActivated(peer.id, 'health_check_recovery');
       }
       // If not ok, leave as unreachable — will check again next cycle
     } catch (err) {
