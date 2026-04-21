@@ -986,10 +986,14 @@ export interface FederationPeer {
   id: string;
   origin: string;
   instanceName: string | null;
-  status: 'pending' | 'active' | 'unreachable' | 'revoked';
+  status: 'pending' | 'active' | 'unreachable' | 'revoked' | 'rejected' | 'awaiting_approval' | 'needs_attention';
   lastSeenAt: number | null;
   lastFailureAt: number | null;
   consecutiveFailures: number;
+  consecutiveAuthFailures: number;
   lastSyncedAt: number;
+  autoRotateIntervalDays: number;
+  secretRotatedAt: number | null;
+  rotationInProgress: boolean;
   createdAt: number;
 }
