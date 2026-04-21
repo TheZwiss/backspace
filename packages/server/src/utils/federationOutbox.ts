@@ -700,6 +700,12 @@ export function queueReadStateRelay(
   };
 
   const targetOrigins = getGroupDmTargetOrigins(channelId);
+  appendMutationLog(
+    `read_state:${channel.federatedId}:${userId}`,
+    channelId,
+    'read_state_update',
+    JSON.stringify({ user: { homeUserId, homeInstance }, messageRef }),
+  );
   queueOutboxEvent(
     `read_state:${channel.federatedId}:${userId}`,
     channelId,
@@ -755,6 +761,12 @@ export function queueDmCloseRelay(
   };
 
   const targetOrigins = getGroupDmTargetOrigins(dmChannelId);
+  appendMutationLog(
+    `${eventType}:${channel.federatedId}:${userId}`,
+    dmChannelId,
+    eventType,
+    JSON.stringify({ homeUserId, homeInstance }),
+  );
   queueOutboxEvent(
     `${eventType}:${channel.federatedId}:${userId}`,
     dmChannelId,

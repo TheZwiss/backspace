@@ -2,7 +2,7 @@ import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
 import { eq, and, lte, asc, inArray, sql } from 'drizzle-orm';
 import { config } from '../config.js';
-import { isFederationRelayEnabled, queueOutboxEvent } from './federationOutbox.js';
+import { isFederationRelayEnabled, queueOutboxEvent, appendMutationLog } from './federationOutbox.js';
 import { runFederationJanitor } from './storageJanitor.js';
 import { buildFederationHeaders, getOurOrigin, generateHmacSecret, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
 import { evaluateAuthFailure, AUTH_FAILURE_THRESHOLD } from './federationAuthFailure.js';
@@ -703,6 +703,18 @@ function handleSizeRejection(
     affectedUserIds,
   };
 
+  appendMutationLog(
+    localMsg.sourceMessageId,
+    localMsg.dmChannelId,
+    'file_rejected',
+    JSON.stringify({
+      attachmentId: att?.id ?? entry.sourceUrl,
+      sourceFilename,
+      rejectionReason: 'size_limit_exceeded',
+      rejectionLimit: maxUploadSize,
+      affectedUserIds,
+    }),
+  );
   queueOutboxEvent(
     localMsg.sourceMessageId,
     localMsg.dmChannelId,
