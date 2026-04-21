@@ -1030,7 +1030,7 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 - Peering resolution:
   1. If the peer row is `active` or `unreachable`, POST directly (the health check restores `unreachable` peers; re-handshaking is wasteful).
   2. Otherwise race `ensurePeered` against `opts.peeringTimeoutMs` (default `CALL_PEERING_TIMEOUT_MS = 3_000` ms). The background handshake is **not** aborted on race loss — a warn-logged catch is attached so a late-rejecting background promise does not emit `unhandledRejection`.
-- Peer-state → reason mapping is exhaustive over the `EnsurePeeredResult` union (`active` / `rejected` / `pending` / `failed`) plus the external `timeout` branch. TypeScript `never` check in the switch default catches future additions.
+- Peer-state → reason mapping is exhaustive over the `EnsurePeeredResult` union (`active` / `rejected` / `pending` / `failed`) plus the external `timeout` branch. TypeScript `never` check in the switch default catches future additions. Note: the `livekit_unavailable` reason in `DmCallUndeliverableReason` is emitted separately from `sendFederatedCallStart`'s LiveKit pre-flight in `ws/events.ts`, not from this switch — `sendCallRelay` only produces `CallRelayFailureReason` values (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `post_failed`).
 - Non-blocking mode: `peeringTimeoutMs: 0` (used by typing) skips the POST for non-active peers, kicks off `ensurePeered` as a background warm-up, returns `peer_transient_failure` silently.
 
 **`sendTypingRelay(dmChannelId, eventType, userId)`**:
