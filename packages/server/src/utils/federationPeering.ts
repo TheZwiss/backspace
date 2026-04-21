@@ -227,21 +227,29 @@ export async function racePeering(
 ): Promise<EnsurePeeredResult | { status: 'timeout' }> {
   const handshake = ensurePeeredFn(origin);
 
-  // Attach a warn-logged catch so a background arm that rejects AFTER the
-  // race loses does not trigger unhandledRejection. This runs regardless
-  // of which arm wins.
-  handshake.catch(err => {
-    console.warn('[federation] background handshake after call-relay race:', origin, err);
-  });
-
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<{ status: 'timeout' }>(resolve => {
     timeoutHandle = setTimeout(() => resolve({ status: 'timeout' }), timeoutMs);
   });
 
+  let raceResult: EnsurePeeredResult | { status: 'timeout' };
   try {
-    return await Promise.race([handshake, timeoutPromise]);
-  } finally {
+    raceResult = await Promise.race([handshake, timeoutPromise]);
+  } catch (err) {
+    // ensurePeeredFn rejected as the race winner. Normalize to failed.
     if (timeoutHandle) clearTimeout(timeoutHandle);
+    const message = err instanceof Error ? err.message : 'Unknown handshake error';
+    return { status: 'failed', error: message };
   }
+  if (timeoutHandle) clearTimeout(timeoutHandle);
+
+  // Only when the timeout arm won is the background handshake still running.
+  // Guard its eventual rejection so we don't emit unhandledRejection.
+  if (raceResult.status === 'timeout') {
+    handshake.catch(err => {
+      console.warn('[federation] background handshake after call-relay race:', origin, err);
+    });
+  }
+
+  return raceResult;
 }

@@ -57,11 +57,15 @@ describe('racePeering', () => {
   });
 
   it('returns timeout when ensurePeered takes longer than the deadline', async () => {
+    vi.useFakeTimers();
     const stub = vi.fn((): Promise<EnsurePeeredResult> => new Promise(() => {
       // Never resolves — simulates a slow handshake.
     }));
-    const result = await racePeering('https://example.com', 50, stub);
+    const racePromise = racePeering('https://example.com', 50, stub);
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await racePromise;
     expect(result).toEqual({ status: 'timeout' });
+    vi.useRealTimers();
   });
 
   it('returns rejected result verbatim when ensurePeered resolves with rejection', async () => {
@@ -73,20 +77,38 @@ describe('racePeering', () => {
     expect(result).toEqual({ status: 'rejected', error: 'peer denied' });
   });
 
-  it('attaches a warn-logged catch to the background promise so race-losing rejections do not emit unhandledRejection', async () => {
+  it('attaches a warn-logged catch to the background handshake when the timeout wins', async () => {
+    vi.useFakeTimers();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stub = vi.fn(() => new Promise<EnsurePeeredResult>((_, reject) => {
       setTimeout(() => reject(new Error('late failure')), 30);
     }));
-    const result = await racePeering('https://example.com', 10, stub);
+    const racePromise = racePeering('https://example.com', 10, stub);
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await racePromise;
     expect(result).toEqual({ status: 'timeout' });
-    // Give the background promise time to reject.
-    await new Promise(r => setTimeout(r, 50));
+    await vi.advanceTimersByTimeAsync(30);
+    // Let microtasks flush so the .catch handler runs.
+    await Promise.resolve();
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('background handshake'),
       'https://example.com',
       expect.any(Error),
     );
+    vi.useRealTimers();
+    warnSpy.mockRestore();
+  });
+
+  it('normalizes a thrown handshake error into { status: failed } without emitting the background warn', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const stub = vi.fn(async (): Promise<EnsurePeeredResult> => {
+      throw new Error('immediate handshake failure');
+    });
+    const result = await racePeering('https://example.com', 1_000, stub);
+    expect(result).toEqual({ status: 'failed', error: 'immediate handshake failure' });
+    // The handshake rejection was the race winner — no background warn should fire.
+    await Promise.resolve();
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 });
