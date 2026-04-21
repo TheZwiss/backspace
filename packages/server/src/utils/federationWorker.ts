@@ -10,7 +10,6 @@ import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
-import { processRelayEvents } from '../routes/federation.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync } from './federationPeerActivation.js';
 import fs from 'node:fs';
