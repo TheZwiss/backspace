@@ -115,12 +115,6 @@ describe('syncPeerMutationLog', () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
-    // Instance settings row is created by the baseline migration; defaults have
-    // federation_relay_enabled = 1, so no explicit update is needed. Confirm:
-    testDb.update(schema.instanceSettings)
-      .set({ federationRelayEnabled: 1 })
-      .where(eq(schema.instanceSettings.id, 1))
-      .run();
     vi.restoreAllMocks();
   });
 
@@ -197,5 +191,49 @@ describe('syncPeerMutationLog', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     await syncPeerMutationLog('peer-4', 'health_check_recovery');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('advances sinceTimestamp within a pass using data.checkpoint when hasMore is true', async () => {
+    const { syncPeerMutationLog } = await import('./federationPeerActivation.js');
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-5', origin: 'https://peer-5.example', hmacSecret: 'secret',
+      status: 'active', lastSyncedAt: 100, createdAt: Date.now(),
+    }).run();
+
+    let call = 0;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      call++;
+      // First DM call: one event, hasMore=true, checkpoint advances to 2500
+      // Second DM call: empty, hasMore=false, ends the DM pass
+      // Remaining calls (friend, profile): empty/done immediately
+      if (call === 1) {
+        return new Response(
+          JSON.stringify({
+            events: [{ eventType: 'create', messageId: 'm1', timestamp: 200, encryptionVersion: 0 }],
+            hasMore: true,
+            checkpoint: 2500,
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ events: [], hasMore: false, checkpoint: call === 2 ? 2500 : 100 }), { status: 200 });
+    });
+
+    await syncPeerMutationLog('peer-5', 'health_check_recovery');
+
+    // Call 1: DM pass, since=100 (peer.lastSyncedAt)
+    // Call 2: DM pass continuation, since=2500 (advanced by previous checkpoint)
+    // Call 3: friend pass, since=100 (re-seeded from peer.lastSyncedAt)
+    // Call 4: profile pass, since=100 (re-seeded from peer.lastSyncedAt)
+    expect(fetchSpy).toHaveBeenCalledTimes(4);
+    const bodies = fetchSpy.mock.calls.map(c => JSON.parse(c[1]?.body as string) as { sinceTimestamp: number; contextType?: string });
+    expect(bodies[0]?.sinceTimestamp).toBe(100);
+    expect(bodies[0]?.contextType).toBeUndefined();
+    expect(bodies[1]?.sinceTimestamp).toBe(2500);  // advanced by checkpoint from call 1
+    expect(bodies[1]?.contextType).toBeUndefined();
+    expect(bodies[2]?.sinceTimestamp).toBe(100);   // friend pass re-seeds from peer.lastSyncedAt
+    expect(bodies[2]?.contextType).toBe('friend');
+    expect(bodies[3]?.sinceTimestamp).toBe(100);   // profile pass re-seeds from peer.lastSyncedAt
+    expect(bodies[3]?.contextType).toBe('profile');
   });
 });

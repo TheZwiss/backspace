@@ -81,34 +81,42 @@ export async function syncPeerMutationLog(
     .where(eq(schema.federationPeers.id, peerId)).get();
   if (!peer || peer.status !== 'active') return;
 
-  const ourOrigin = getOurOrigin();
-  const signingSecret = (peer.pendingHmacSecret && peer.secretRotationAt)
-    ? peer.pendingHmacSecret
-    : peer.hmacSecret;
+  const activePeer = peer;  // narrowed by the guard above
 
-  console.log(`[federation] Sync-pull from ${peer.origin} (reason=${reason}, since=${peer.lastSyncedAt ?? 0})`);
+  const ourOrigin = getOurOrigin();
+  const signingSecret = (activePeer.pendingHmacSecret && activePeer.secretRotationAt)
+    ? activePeer.pendingHmacSecret
+    : activePeer.hmacSecret;
+
+  console.log(`[federation] Sync-pull from ${activePeer.origin} (reason=${reason}, since=${activePeer.lastSyncedAt ?? 0})`);
 
   let totalEvents = 0;
 
+  type SyncRequestBody = {
+    sinceTimestamp: number;
+    limit: number;
+    contextType?: 'friend' | 'profile';
+  };
+
   async function runPass(contextType?: 'friend' | 'profile'): Promise<boolean> {
-    let since = peer!.lastSyncedAt ?? 0;
+    let since = activePeer.lastSyncedAt ?? 0;
     while (true) {
-      const bodyObj: Record<string, unknown> = { sinceTimestamp: since, limit: 100 };
+      const bodyObj: SyncRequestBody = { sinceTimestamp: since, limit: 100 };
       if (contextType) bodyObj.contextType = contextType;
       const body = JSON.stringify(bodyObj);
       const headers = buildFederationHeaders(body, signingSecret, ourOrigin);
-      const resp = await fetch(`${peer!.origin}/api/federation/sync`, {
+      const resp = await fetch(`${activePeer.origin}/api/federation/sync`, {
         method: 'POST', headers, body,
         signal: AbortSignal.timeout(30_000),
       });
       if (!resp.ok) {
-        console.warn(`[federation] Sync-pull ${contextType ?? 'dm'} pass HTTP ${resp.status} for ${peer!.origin}`);
+        console.warn(`[federation] Sync-pull ${contextType ?? 'dm'} pass HTTP ${resp.status} for ${activePeer.origin}`);
         return false;
       }
       const data = await resp.json() as { events: FederationRelayEvent[]; hasMore: boolean; checkpoint: number };
       if (data.events.length === 0) return true;
       const { processRelayEvents } = await import('../routes/federation.js');
-      await processRelayEvents(data.events, peer!.origin, peer!.origin, db);
+      await processRelayEvents(data.events, activePeer.origin, activePeer.origin, db);
       totalEvents += data.events.length;
       since = data.checkpoint;
       if (!data.hasMore) return true;
@@ -122,14 +130,14 @@ export async function syncPeerMutationLog(
 
     db.update(schema.federationPeers)
       .set({ lastSyncedAt: Date.now() })
-      .where(eq(schema.federationPeers.id, peer.id))
+      .where(eq(schema.federationPeers.id, activePeer.id))
       .run();
 
     if (totalEvents > 0) {
-      console.log(`[federation] Sync-pull from ${peer.origin} replayed ${totalEvents} events`);
+      console.log(`[federation] Sync-pull from ${activePeer.origin} replayed ${totalEvents} events`);
     }
   } catch (err) {
-    console.error(`[federation] Sync-pull from ${peer.origin} failed:`, err);
+    console.error(`[federation] Sync-pull from ${activePeer.origin} failed:`, err);
   }
 }
 
