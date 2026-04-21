@@ -396,22 +396,7 @@ async function resolvePendingPeers(): Promise<void> {
       case 'rejected': {
         console.warn(`[federation-worker] Auto-peering rejected by ${peerOrigin}: ${result.error}`);
 
-        // Collect affected contexts before purging
-        const entries = db
-          .select({
-            contextId: schema.federationOutbox.contextId,
-            contextType: schema.federationOutbox.contextType,
-          })
-          .from(schema.federationOutbox)
-          .where(eq(schema.federationOutbox.peerId, peerId))
-          .all();
-
-        const contextMap = new Map<string, string>();
-        for (const e of entries) {
-          if (!contextMap.has(e.contextId)) {
-            contextMap.set(e.contextId, e.contextType);
-          }
-        }
+        const contextMap = buildContextMapForPeer(db, peerId);
 
         // Purge outbox entries (NOT mutation log)
         db.delete(schema.federationOutbox)
@@ -431,6 +416,34 @@ async function resolvePendingPeers(): Promise<void> {
         break;
     }
   }
+}
+
+/**
+ * Build a map of contextId → contextType for all outbox entries targeting
+ * a specific peer. Used for surfacing "delivery impossible" via
+ * pushPeerRejectedEvent when a peer is rejected or transitioned to
+ * needs_attention.
+ */
+function buildContextMapForPeer(
+  db: ReturnType<typeof getDb>,
+  peerId: string,
+): Map<string, string> {
+  const entries = db
+    .select({
+      contextId: schema.federationOutbox.contextId,
+      contextType: schema.federationOutbox.contextType,
+    })
+    .from(schema.federationOutbox)
+    .where(eq(schema.federationOutbox.peerId, peerId))
+    .all();
+
+  const contextMap = new Map<string, string>();
+  for (const e of entries) {
+    if (!contextMap.has(e.contextId)) {
+      contextMap.set(e.contextId, e.contextType);
+    }
+  }
+  return contextMap;
 }
 
 /**
