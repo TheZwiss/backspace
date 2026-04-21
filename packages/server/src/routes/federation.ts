@@ -27,7 +27,7 @@ interface SanitizedPeer {
   status: string;
   lastSeenAt: number | null;
   lastFailureAt: number | null;
-  consecutiveFailures: number | null;
+  consecutiveFailures: number;
   lastSyncedAt: number | null;
   createdAt: number;
   rotationInProgress: boolean;

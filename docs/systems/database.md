@@ -360,7 +360,7 @@ Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`,
 | status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
-| consecutiveFailures | integer | 0 | >=10 → unreachable (network/5xx failures) |
+| consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |
 | consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |

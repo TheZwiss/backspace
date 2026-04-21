@@ -107,7 +107,7 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 
 ### PEER_UNREACHABLE_THRESHOLD
 
-Defined in `federationWorker.ts:45` as `10`. After 10 consecutive delivery failures for a peer, the worker sets `status = 'unreachable'`. The health check worker (1h interval) pings `GET /api/instance/info` on unreachable peers and reverts to `active` on success.
+Defined in `federationWorker.ts:47` as `10`. After 10 consecutive delivery failures for a peer, the worker sets `status = 'unreachable'`. The health check worker (15-minute interval, matching `ROTATION_GRACE_PERIOD_MS`) pings `GET /api/instance/info` on unreachable peers and reverts to `active` on success.
 
 ### Auto-Peering
 
@@ -1121,7 +1121,7 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 |--------|----------|-------|---------|--------|
 | Outbox delivery | 10s | 50 | 30s | `processOutboxTick` |
 | File download | 30s | 5 | 60s | `processFileQueueTick` |
-| Health check | 1h | all unreachable | 10s | `processHealthCheckTick` |
+| Health check | 15min | all unreachable | 10s | `processHealthCheckTick` |
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
 | Initial sync | Once at startup | -- | 30s per page | `runInitialSyncForNewPeers` |
 

@@ -29,6 +29,13 @@
       "when": 1776789567488,
       "tag": "0003_classy_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776802580650,
+      "tag": "0004_cooing_black_knight",
+      "breakpoints": true
     }
   ]
 }

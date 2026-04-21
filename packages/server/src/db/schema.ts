@@ -362,7 +362,7 @@ export const federationPeers = sqliteTable('federation_peers', {
   status: text('status').notNull().default('active'),
   lastSeenAt: integer('last_seen_at'),
   lastFailureAt: integer('last_failure_at'),
-  consecutiveFailures: integer('consecutive_failures').default(0),
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
   consecutiveAuthFailures: integer('consecutive_auth_failures').notNull().default(0),
   lastSyncedAt: integer('last_synced_at').default(0),
   remoteMaxUploadSize: integer('remote_max_upload_size'),
