@@ -357,10 +357,11 @@ Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`,
 | origin | text NOT NULL UNIQUE | | `https://domain.tld` |
 | instanceName | text | | |
 | hmacSecret | text NOT NULL | | 256-bit hex |
-| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected |
+| status | text NOT NULL | `'active'` | active/pending/awaiting_approval/unreachable/revoked/rejected/needs_attention |
 | lastSeenAt | integer | | |
 | lastFailureAt | integer | | |
-| consecutiveFailures | integer | 0 | >=10 → unreachable |
+| consecutiveFailures | integer | 0 | >=10 → unreachable (network/5xx failures) |
+| consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |

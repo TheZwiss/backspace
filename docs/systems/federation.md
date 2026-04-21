@@ -73,22 +73,26 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 
 ```
                      ensurePeered
-  (none) ──────────► pending ──────────► active
-      ▲                │                   │
-      │                │  remote 202       │ delivery failures
-      │                ▼                   ▼
-      │          awaiting_approval     unreachable
-      │                │                   │
-      │    ┌───────────┼──────────┐        │ health check OK
-      │    │           │          │        ▼
-      │  accept     denied     expired   active
-      │  (fresh)    (admin)   (janitor)    │
-      │    │           │          │        │ admin revoke
-      │    ▼           ▼          ▼        ▼
-      │  active    rejected   rejected  revoked
-      │
-      │  auto-peer rejected (403 PEERING_REQUIRES_APPROVAL)
+  (none) ──────────► pending ──────────► active ──────► needs_attention
+      ▲                │                   │ ▲              │
+      │                │  remote 202       │ │              │ admin Reset
+      │                ▼                   │ │              ▼
+      │          awaiting_approval         │ │           (deleted)
+      │                │                   │ │
+      │    ┌───────────┼──────────┐        │ │ N consecutive
+      │    │           │          │        │ │ auth failures (401/403)
+      │  accept     denied     expired     │ │
+      │  (fresh)    (admin)   (janitor)    │ │ delivery failures
+      │    │           │          │        ▼ │
+      │    ▼           ▼          ▼     unreachable
+      │  active    rejected   rejected     │
+      │                                    │ health check OK
+      │  auto-peer rejected                ▼
+      │  (403 PEERING_REQUIRES_APPROVAL) active
       └──────────────────────────── rejected
+                                      │ admin revoke (active)
+                                      ▼
+                                   revoked
 ```
 
 | Status | Outbox delivery | Health check | Relay accepts | Re-initiation | Admin clear |
@@ -97,6 +101,7 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 | `pending` | No | No | No | No (returns 409) | N/A |
 | `awaiting_approval` | No | No | No | Returns pending; no re-handshake | Yes (admin deletes) |
 | `unreachable` | No (entries wait) | Yes (1h interval) | Yes (resets to active) | No | N/A |
+| `needs_attention` | No (entries bounded by TTL) | No | Yes (200 no-update, same as active) | No (admin must Reset first) | Yes (admin Reset deletes record) |
 | `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) | N/A |
 | `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) | N/A |
 
@@ -151,6 +156,7 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 | `/api/federation/peers/:id` | PATCH | JWT + admin | Update peer settings (auto-rotation interval) |
 | `/api/federation/peers/:id` | DELETE | JWT + admin | Revoke peer, purge outbox |
 | `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
+| `/api/federation/peers/:id/reset` | POST | JWT + admin | Delete peer record (cascade-deletes outbox). Only admissible in `needs_attention` state. |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
 | `/api/federation/approval-requests` | GET | JWT + admin | List pending peering approval requests |
 | `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request, initiate handshake |
@@ -479,6 +485,19 @@ Trigger (API/WS handler)
 | 5 | 1 hour |
 | 6 | 6 hours |
 | 7+ | 24 hours (cap) |
+
+### Authentication-failure handling (401 / 403)
+
+When a relay response is 401 (HMAC rejected) or 403 (remote's peer row is non-active or missing), the worker increments `consecutive_auth_failures` on the peer row, applies backoff to the queued outbox entries via the existing `BACKOFF_SCHEDULE_MS`, and preserves `hmac_secret`. After `AUTH_FAILURE_THRESHOLD = 5` consecutive auth failures (~21.5 min with the existing schedule), the peer transitions to `needs_attention`:
+
+- Outbox delivery halts (the existing `status = 'active'` filter on the delivery query excludes `needs_attention`).
+- `hmac_secret` is preserved (admin can inspect; no silent rotation).
+- Affected local users receive `federation_peer_rejected` WS events with reason "Federation trust broken — admin must reset peering".
+- Admins receive `federation_peers_changed`.
+
+The worker NEVER re-handshakes via unauthenticated `/peer/accept` in response to a 401/403. The safeguard at `/peer/accept` (idempotent-200-no-update on `active` OR `needs_attention` peers) is what prevents silent HMAC rotation; the worker's job is to respect that signal and surface it to admins rather than loop. Recovery is via the admin "Reset peering" action, which deletes the local peer row and requires out-of-band re-peering.
+
+Network failures (timeouts, non-401/403 non-2xx responses) are tracked separately via `consecutive_failures` and lead to `unreachable` at `PEER_UNREACHABLE_THRESHOLD = 10`. A successful delivery resets both counters.
 
 ### Relay Request/Response Format
 
