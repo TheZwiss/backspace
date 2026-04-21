@@ -1634,12 +1634,25 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         payload: string | null;
       }>;
 
+      // Maps local DM channel ID → federatedId for O(1) lookup in serializers.
+      // Only populated in the DM branch (friend/profile branches don't need it).
+      let channelFederatedIdMap = new Map<string, string>();
+
       if (contextTypeFilter === 'friend') {
         // ── Friend event sync: no DM channel logic needed ──
         mutationRows = rawDb.prepare(`
           SELECT id, entity_id, context_id, context_type, mutation_type, mutated_at, payload
           FROM federation_mutation_log
           WHERE context_type = 'friend' AND mutated_at > ?
+          ORDER BY mutated_at ASC
+          LIMIT ?
+        `).all(sinceTimestamp, limit) as typeof mutationRows;
+      } else if (contextTypeFilter === 'profile') {
+        // ── Profile event sync: no DM channel logic needed ──
+        mutationRows = rawDb.prepare(`
+          SELECT id, entity_id, context_id, context_type, mutation_type, mutated_at, payload
+          FROM federation_mutation_log
+          WHERE context_type = 'profile' AND mutated_at > ?
           ORDER BY mutated_at ASC
           LIMIT ?
         `).all(sinceTimestamp, limit) as typeof mutationRows;
@@ -1650,11 +1663,14 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         // that should be synced. The peer's relay endpoint will create the channel
         // if it doesn't exist, or match by federated_id if it does.
         const sharedChannelRows = rawDb.prepare(`
-          SELECT id as dm_channel_id FROM dm_channels
+          SELECT id as dm_channel_id, federated_id FROM dm_channels
           WHERE federated_id IS NOT NULL AND deleted_at IS NULL
-        `).all() as Array<{ dm_channel_id: string }>;
+        `).all() as Array<{ dm_channel_id: string; federated_id: string }>;
 
         const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
+        channelFederatedIdMap = new Map<string, string>(
+          sharedChannelRows.map(r => [r.dm_channel_id, r.federated_id])
+        );
 
         // If filtering by federatedId, resolve to local channel ID
         let effectiveChannelFilter = dmChannelIdFilter;
@@ -1698,7 +1714,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             WHERE ml.context_id = ?
               AND ml.context_type = 'dm'
               AND ml.mutated_at > ?
-              AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
+              AND (dm.id IS NOT NULL OR ml.mutation_type IN (
+                'delete', 'member_add', 'member_remove', 'ownership_transfer',
+                'dm_close', 'dm_reopen', 'read_state_update', 'file_rejected'
+              ))
             ORDER BY ml.mutated_at ASC
             LIMIT ?
           `).all(effectiveChannelFilter, sinceTimestamp, limit) as typeof mutationRows;
@@ -1739,7 +1758,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             WHERE ml.context_id IN (${placeholders})
               AND ml.context_type = 'dm'
               AND ml.mutated_at > ?
-              AND (dm.id IS NOT NULL OR ml.mutation_type IN ('delete', 'member_add', 'member_remove', 'ownership_transfer'))
+              AND (dm.id IS NOT NULL OR ml.mutation_type IN (
+                'delete', 'member_add', 'member_remove', 'ownership_transfer',
+                'dm_close', 'dm_reopen', 'read_state_update', 'file_rejected'
+              ))
             ORDER BY ml.mutated_at ASC
             LIMIT ?
           `).all(...sharedChannelIds, sinceTimestamp, limit) as typeof mutationRows;
@@ -1779,7 +1801,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         const mutationType = mutation.mutation_type as 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
           | 'member_add' | 'member_remove' | 'ownership_transfer'
           | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
-          | 'friend_add' | 'friend_remove';
+          | 'friend_add' | 'friend_remove'
+          | 'dm_close' | 'dm_reopen' | 'read_state_update' | 'file_rejected'
+          | 'profile_update';
 
         if (['member_add', 'member_remove', 'ownership_transfer',
              'friend_request_create', 'friend_request_update', 'friend_request_cancel',
@@ -1836,6 +1860,86 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
               },
             });
           }
+          continue;
+        }
+
+        if (mutationType === 'dm_close' || mutationType === 'dm_reopen') {
+          if (!mutation.payload) continue;
+          let dmCloseReopenPayload: { homeUserId: string; homeInstance: string } | null = null;
+          try { dmCloseReopenPayload = JSON.parse(mutation.payload); } catch { continue; }
+          if (!dmCloseReopenPayload) continue;
+          const fedIdCloseReopen = channelFederatedIdMap.get(mutation.context_id);
+          if (!fedIdCloseReopen) continue;
+          events.push({
+            eventType: mutationType,
+            dmChannelId: mutation.context_id,
+            messageId: mutation.entity_id,
+            federatedId: fedIdCloseReopen,
+            encryptionVersion: 0,
+            timestamp: mutation.mutated_at,
+            dmCloseReopen: dmCloseReopenPayload,
+          });
+          continue;
+        }
+
+        if (mutationType === 'read_state_update') {
+          if (!mutation.payload) continue;
+          let readState: NonNullable<FederationRelayEvent['readState']> | null = null;
+          try { readState = JSON.parse(mutation.payload) as NonNullable<FederationRelayEvent['readState']>; } catch { continue; }
+          if (!readState) continue;
+          const fedIdReadState = channelFederatedIdMap.get(mutation.context_id);
+          if (!fedIdReadState) continue;
+          events.push({
+            eventType: 'read_state_update',
+            dmChannelId: mutation.context_id,
+            messageId: mutation.entity_id,
+            federatedId: fedIdReadState,
+            encryptionVersion: 0,
+            timestamp: mutation.mutated_at,
+            readState,
+          });
+          continue;
+        }
+
+        if (mutationType === 'file_rejected') {
+          if (!mutation.payload) continue;
+          let fileRejectedPayload: {
+            attachmentId: string;
+            sourceFilename: string;
+            rejectionReason: string;
+            rejectionLimit: number;
+            affectedUserIds: string[];
+          } | null = null;
+          try { fileRejectedPayload = JSON.parse(mutation.payload); } catch { continue; }
+          if (!fileRejectedPayload) continue;
+          events.push({
+            eventType: 'file_rejected',
+            dmChannelId: mutation.context_id,
+            messageId: mutation.entity_id,
+            encryptionVersion: 0,
+            timestamp: mutation.mutated_at,
+            attachmentId: fileRejectedPayload.attachmentId,
+            sourceFilename: fileRejectedPayload.sourceFilename,
+            rejectionReason: fileRejectedPayload.rejectionReason,
+            rejectionLimit: fileRejectedPayload.rejectionLimit,
+            affectedUserIds: fileRejectedPayload.affectedUserIds,
+          });
+          continue;
+        }
+
+        if (mutationType === 'profile_update') {
+          if (!mutation.payload) continue;
+          let profileOuter: { profileUpdate?: NonNullable<FederationRelayEvent['profileUpdate']> } | null = null;
+          try { profileOuter = JSON.parse(mutation.payload); } catch { continue; }
+          if (!profileOuter?.profileUpdate) continue;
+          events.push({
+            eventType: 'profile_update',
+            contextType: 'profile',
+            messageId: mutation.entity_id,
+            encryptionVersion: 0,
+            timestamp: mutation.mutated_at,
+            profileUpdate: profileOuter.profileUpdate,
+          });
           continue;
         }
 
