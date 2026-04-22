@@ -870,6 +870,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
+      // Prune dmAlternatives: drop this origin from every inner map.
+      const dmAlternatives = new Map<string, Map<string, string>>();
+      for (const [fid, byOrigin] of state.dmAlternatives) {
+        const nextInner = new Map(byOrigin);
+        nextInner.delete(origin);
+        if (nextInner.size > 0) dmAlternatives.set(fid, nextInner);
+      }
+
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -877,6 +885,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelPermissions,
         channelOriginMap,
         spacePermissions,
+        dmAlternatives,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
           : null,

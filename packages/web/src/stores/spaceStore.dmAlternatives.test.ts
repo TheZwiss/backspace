@@ -113,4 +113,46 @@ describe('spaceStore.dmAlternatives', () => {
     expect(byOrigin?.get('https://remote.example')).toBe('remote-new');
     expect(byOrigin?.size).toBe(1);
   });
+
+  it('removeInstanceSpaces drops the origin from every inner map', () => {
+    useSpaceStore.getState().populateFromReady(
+      '',
+      [],
+      [],
+      [makeDm('home-1', 'fed-aaa'), makeDm('home-2', 'fed-bbb')],
+      null,
+      0,
+    );
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-1', 'fed-aaa'), makeDm('remote-2', 'fed-bbb')],
+      null,
+      0,
+    );
+
+    useSpaceStore.getState().removeInstanceSpaces('https://remote.example');
+
+    const alts = useSpaceStore.getState().dmAlternatives;
+    expect(alts.get('fed-aaa')?.has('https://remote.example')).toBe(false);
+    expect(alts.get('fed-aaa')?.get('')).toBe('home-1');
+    expect(alts.get('fed-bbb')?.has('https://remote.example')).toBe(false);
+    expect(alts.get('fed-bbb')?.get('')).toBe('home-2');
+  });
+
+  it('removeInstanceSpaces deletes federatedId entry if its inner map becomes empty', () => {
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-only', 'fed-solo')],
+      null,
+      0,
+    );
+
+    useSpaceStore.getState().removeInstanceSpaces('https://remote.example');
+
+    expect(useSpaceStore.getState().dmAlternatives.has('fed-solo')).toBe(false);
+  });
 });
