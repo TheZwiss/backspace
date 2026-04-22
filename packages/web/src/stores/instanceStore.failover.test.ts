@@ -39,16 +39,16 @@ beforeEach(() => {
 });
 
 describe('instanceStore failover triggers', () => {
-  it('fires failover on connected → disconnected transition', async () => {
+  it('fires failover on connected → disconnected transition', () => {
     useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
     useInstanceStore.getState().setInstanceStatus('https://b.example', 'disconnected');
-    await vi.waitFor(() => expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example'));
+    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example');
   });
 
-  it('fires failover on connected → error transition', async () => {
+  it('fires failover on connected → error transition', () => {
     useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
     useInstanceStore.getState().setInstanceStatus('https://b.example', 'error');
-    await vi.waitFor(() => expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example'));
+    expect(mockFailover).toHaveBeenCalledExactlyOnceWith('https://b.example');
   });
 
   it('does not fire on connecting → connected', () => {
@@ -66,5 +66,37 @@ describe('instanceStore failover triggers', () => {
   it('does not fire when instance is not in the list', () => {
     useInstanceStore.getState().setInstanceStatus('https://unknown.example', 'disconnected');
     expect(mockFailover).not.toHaveBeenCalled();
+  });
+
+  it('disconnectInstance runs failover before removeInstanceSpaces', async () => {
+    // Seed a DM pinned to b.example with home as alternative — removeInstanceSpaces
+    // uses spaceStore, which we let run; we just check failover ran first (call order).
+    const spaceModule = await import('./spaceStore');
+    const spaceSpy = vi.spyOn(spaceModule.useSpaceStore.getState(), 'removeInstanceSpaces');
+    const callOrder: string[] = [];
+    mockFailover.mockImplementation(() => { callOrder.push('failover'); });
+    spaceSpy.mockImplementation(() => { callOrder.push('removeInstanceSpaces'); });
+
+    useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
+    useInstanceStore.getState().disconnectInstance('https://b.example');
+    await Promise.resolve();
+
+    expect(callOrder).toEqual(['failover', 'removeInstanceSpaces']);
+    spaceSpy.mockRestore();
+  });
+
+  it('forceRemoveEntry runs failover before removeInstanceSpaces', async () => {
+    const spaceModule = await import('./spaceStore');
+    const spaceSpy = vi.spyOn(spaceModule.useSpaceStore.getState(), 'removeInstanceSpaces');
+    const callOrder: string[] = [];
+    mockFailover.mockImplementation(() => { callOrder.push('failover'); });
+    spaceSpy.mockImplementation(() => { callOrder.push('removeInstanceSpaces'); });
+
+    useInstanceStore.setState({ instances: [inst('https://b.example', 'connected')] });
+    useInstanceStore.getState().forceRemoveEntry('https://b.example');
+    await Promise.resolve();
+
+    expect(callOrder).toEqual(['failover', 'removeInstanceSpaces']);
+    spaceSpy.mockRestore();
   });
 });

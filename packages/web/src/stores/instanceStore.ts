@@ -8,6 +8,9 @@ import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemot
 // Safe because both modules access each other lazily (at call time, not import time).
 // clearPasswordSyncTimers itself does not reference useInstanceStore.
 import { clearPasswordSyncTimers } from '../utils/federationOps';
+// dmOriginFailover lazily reads useInstanceStore/useSpaceStore/useChatStore at call time,
+// so a static import here does not create an import-time cycle.
+import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -435,11 +438,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       ),
     }));
     if (prev === 'connected' && (status === 'disconnected' || status === 'error')) {
-      // Dynamic import keeps the circular-dep-safe resolver pattern used elsewhere
-      // in this file. Fire-and-forget: failover reads state at call time.
-      import('../utils/dmOriginFailover').then(({ failoverDmOriginsFromDisconnected }) => {
-        failoverDmOriginsFromDisconnected(origin);
-      });
+      failoverDmOriginsFromDisconnected(origin);
     }
   },
 
@@ -467,7 +466,10 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return { instances: updated, registry, registryUpdatedAt };
     });
 
-    // Remove spaces from this instance from the space store
+    // Failover DMs to a connected sibling BEFORE removeInstanceSpaces wipes
+    // this origin's pins. DMs with a connected alternative survive via rekey;
+    // DMs without one are removed alongside the rest of the instance's content.
+    failoverDmOriginsFromDisconnected(origin);
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
     // Sync updated lists to remaining instances (fire-and-forget)
@@ -757,7 +759,8 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       return { instances: updated, registry, registryUpdatedAt };
     });
 
-    // Clean up spaces belonging to this instance
+    // Same rationale as disconnectInstance — preserve DMs with connected alts.
+    failoverDmOriginsFromDisconnected(origin);
     useSpaceStore.getState().removeInstanceSpaces(origin);
 
     get().syncRegistry().catch(() => {});
