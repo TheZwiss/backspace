@@ -153,6 +153,29 @@ Built during `populateFromReady()` when WS ready events arrive from each instanc
 
 > **DM channels** are mapped to the origin of the instance that delivered them in the `ready` event. For 1-on-1 DMs created locally this is typically `''` (home), but federated DMs may arrive from any connected instance. DM read/write operations are routed to the channel's origin via `getApiForOrigin(getChannelOrigin(channelId))`. S2S relay then propagates changes to all other instances that have the same channel.
 
+### DM Origin Failover
+
+When a remote instance's WebSocket drops mid-session, every DM pinned to that origin is re-keyed to a connected sibling that mirrors the same federated DM (via S2S replication). This keeps DM operations working through a transient disconnect, at the cost of a brief message-cache flush on the rekeyed DMs.
+
+**Mechanism:**
+
+- `dmAlternatives: Map<federatedId, Map<origin, localChannelId>>` on `spaceStore` records every origin's local channel ID observed in any `ready` payload, regardless of whether the dedup pass kept that copy in `dmChannels`.
+- `failoverDmOriginsFromDisconnected(origin)` in `utils/dmOriginFailover.ts` walks DMs pinned to the disconnected origin, looks up a connected alternate in `dmAlternatives` (preference: home first, then any connected remote in insertion order), and calls `rekeyDmChannel` to atomically rename the DM across `spaceStore`, `chatStore`, and the URL.
+- `chatStore.rekeyChannelState(oldId, newId)` deletes all channel-keyed entries for `oldId` (messages, hasMore, scrollPositions, channelAccessTimes, typingUsers, readStates) without seeding `newId` — subscribers re-fetch from the new origin. `unreadChannels` membership transfers only if `oldId` was already unread. `currentChannelId` updates when it matches `oldId`.
+- URL: `history.replaceState` swaps the path segment in place when the user is viewing the rekeyed DM — no router navigation.
+
+**Triggers:** `instanceStore.setInstanceStatus` on `connected → disconnected|error`; `disconnectInstance` and `forceRemoveEntry` call failover before `removeInstanceSpaces` so DMs with connected alternatives survive user-initiated disconnect.
+
+**Intentional UX trade-off:** on failover, the active DM's message cache is flushed (origin-local message IDs don't match the new origin's responses). A brief "loading" state appears while the chat view re-fetches. Documented intentionally — failover is a recovery path, not the hot path.
+
+**Voice is out of scope.** LiveKit rooms are bound to the hosting origin and cannot migrate. `voiceStore.activeDmCall` / `outgoingCall` / `incomingCall` are not rewritten by failover; voice state clears through existing LiveKit disconnect paths.
+
+**No re-home on reconnect:** when the originally pinned origin comes back, its `ready` re-adds its local id to `dmAlternatives` but leaves the new primary in place. Avoids flapping.
+
+**WS event routing contract:** every DM WS event handler either routes via the primary `dmChannels` id (using `resolveDmChannelId(rawId)`) or silently no-ops on unknown ids. Only `dm_channel_created` creates new `dmChannels` entries — and it dedups by `federatedId` first.
+
+Source: `utils/dmOriginFailover.ts` + extensions in `stores/spaceStore.ts`, `stores/chatStore.ts`, `stores/instanceStore.ts`, `hooks/useWebSocket.ts`. Design spec: `docs/superpowers/specs/2026-04-23-dm-origin-failover-design.md`.
+
 ### API Client Resolution
 
 ```typescript
