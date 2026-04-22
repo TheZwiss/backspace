@@ -1,0 +1,116 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// Stub AudioManager to avoid AudioWorkletNode reference error in jsdom
+// (spaceStore → authStore → voiceStore → AudioManager → AudioWorkletNode)
+vi.mock('../audio/AudioManager', () => ({
+  AudioManager: {
+    getInstance: vi.fn().mockReturnValue({
+      setOutputDevice: vi.fn(),
+      setVolume: vi.fn(),
+    }),
+  },
+}));
+
+// Stub instanceStore to avoid initialization ordering issues
+// (spaceStore → authStore → socialStore → instanceStore → setApiForOriginResolver)
+vi.mock('./instanceStore', () => ({
+  useInstanceStore: Object.assign(
+    (selector: (s: unknown) => unknown) => selector({ instances: [], _autoConnectDone: true }),
+    {
+      getState: () => ({ instances: [], _autoConnectDone: true }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+// Stub authStore to avoid localStorage access during module init
+vi.mock('./authStore', () => ({
+  useAuthStore: Object.assign(
+    (selector: (s: unknown) => unknown) => selector({ user: null, token: null }),
+    {
+      getState: () => ({ user: null, token: null }),
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    }
+  ),
+}));
+
+import { useSpaceStore } from './spaceStore';
+import type { DmChannel } from '@backspace/shared';
+
+function makeDm(id: string, federatedId: string | null, extras: Partial<DmChannel> = {}): DmChannel {
+  return {
+    id,
+    federatedId,
+    createdAt: 1000,
+    members: [],
+    ...extras,
+  };
+}
+
+beforeEach(() => {
+  useSpaceStore.getState().reset();
+});
+
+describe('spaceStore.dmAlternatives', () => {
+  it('records origin + local channel id for each DM with federatedId on populateFromReady', () => {
+    const dmsFromHome: DmChannel[] = [
+      makeDm('home-1', 'fed-aaa'),
+      makeDm('home-2', 'fed-bbb'),
+      makeDm('home-3', null), // no federatedId — not indexed
+    ];
+    useSpaceStore.getState().populateFromReady('', [], [], dmsFromHome, null, 0);
+
+    const alts = useSpaceStore.getState().dmAlternatives;
+    expect(alts.get('fed-aaa')?.get('')).toBe('home-1');
+    expect(alts.get('fed-bbb')?.get('')).toBe('home-2');
+    expect(alts.has(null as any)).toBe(false);
+  });
+
+  it('accumulates entries across multiple origins for the same federatedId', () => {
+    useSpaceStore.getState().populateFromReady(
+      '',
+      [],
+      [],
+      [makeDm('home-1', 'fed-aaa')],
+      null,
+      0,
+    );
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-1', 'fed-aaa')],
+      null,
+      0,
+    );
+
+    const byOrigin = useSpaceStore.getState().dmAlternatives.get('fed-aaa');
+    expect(byOrigin?.get('')).toBe('home-1');
+    expect(byOrigin?.get('https://remote.example')).toBe('remote-1');
+  });
+
+  it('updates the local id if the same origin reports a different id for a federatedId', () => {
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-old', 'fed-aaa')],
+      null,
+      0,
+    );
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-new', 'fed-aaa')],
+      null,
+      0,
+    );
+
+    const byOrigin = useSpaceStore.getState().dmAlternatives.get('fed-aaa');
+    expect(byOrigin?.get('https://remote.example')).toBe('remote-new');
+    expect(byOrigin?.size).toBe(1);
+  });
+});
