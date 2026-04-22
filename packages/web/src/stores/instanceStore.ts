@@ -428,11 +428,19 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   },
 
   setInstanceStatus: (origin, status, error) => {
+    const prev = get().instances.find(i => i.origin === origin)?.status;
     set((state) => ({
       instances: state.instances.map(i =>
         i.origin === origin ? { ...i, status, error } : i
       ),
     }));
+    if (prev === 'connected' && (status === 'disconnected' || status === 'error')) {
+      // Dynamic import keeps the circular-dep-safe resolver pattern used elsewhere
+      // in this file. Fire-and-forget: failover reads state at call time.
+      import('../utils/dmOriginFailover').then(({ failoverDmOriginsFromDisconnected }) => {
+        failoverDmOriginsFromDisconnected(origin);
+      });
+    }
   },
 
   disconnectInstance: (origin: string) => {
