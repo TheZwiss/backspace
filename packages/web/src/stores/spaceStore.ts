@@ -924,6 +924,33 @@ export function getChannelOrigin(channelId: string): string {
   return useSpaceStore.getState().channelOriginMap.get(channelId) ?? '';
 }
 
+/**
+ * Resolves a raw DM channel ID to its primary `dmChannels` entry ID.
+ *
+ * - If `rawId` is already a primary entry: returns `rawId` unchanged.
+ * - If `rawId` is recorded in `dmAlternatives` as an alternate-origin local ID
+ *   for a DM whose primary is present in `dmChannels`: returns the primary's ID.
+ * - Otherwise: returns `null` (unknown ID — caller should no-op).
+ *
+ * Used by:
+ *  - `dm_message_created` WS handler to route messages arriving from alternate
+ *    origins to the primary entry (§3.11 of the failover spec).
+ *  - Future DM WS handlers that need to dedup alternate-origin deliveries.
+ */
+export function resolveDmChannelId(rawId: string): string | null {
+  const { dmChannels, dmAlternatives } = useSpaceStore.getState();
+  if (dmChannels.some(dm => dm.id === rawId)) return rawId;
+
+  for (const [federatedId, byOrigin] of dmAlternatives) {
+    for (const localId of byOrigin.values()) {
+      if (localId !== rawId) continue;
+      const primary = dmChannels.find(dm => dm.federatedId === federatedId);
+      return primary ? primary.id : null;
+    }
+  }
+  return null;
+}
+
 // ─── API client resolution ────────────────────────────────────────────────────
 // The actual resolver is registered by instanceStore on import, avoiding a
 // circular dependency (instanceStore → useWebSocket → chatStore → spaceStore).

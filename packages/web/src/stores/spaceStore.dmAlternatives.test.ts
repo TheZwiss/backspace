@@ -155,4 +155,61 @@ describe('spaceStore.dmAlternatives', () => {
 
     expect(useSpaceStore.getState().dmAlternatives.has('fed-solo')).toBe(false);
   });
+
+  it('resolveDmChannelId returns the id itself if it is already a primary dmChannels entry', async () => {
+    const { resolveDmChannelId } = await import('./spaceStore');
+    useSpaceStore.getState().populateFromReady(
+      '',
+      [],
+      [],
+      [makeDm('home-1', 'fed-aaa')],
+      null,
+      0,
+    );
+    expect(resolveDmChannelId('home-1')).toBe('home-1');
+  });
+
+  it('resolveDmChannelId resolves an alternative id to the primary via federatedId', async () => {
+    const { resolveDmChannelId } = await import('./spaceStore');
+    // Home loads first → home-1 becomes the primary in dmChannels.
+    useSpaceStore.getState().populateFromReady(
+      '',
+      [],
+      [],
+      [makeDm('home-1', 'fed-aaa')],
+      null,
+      0,
+    );
+    // Remote ready later → remote-1 recorded in dmAlternatives but deduped out of dmChannels.
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-1', 'fed-aaa')],
+      null,
+      0,
+    );
+    expect(resolveDmChannelId('remote-1')).toBe('home-1');
+  });
+
+  it('resolveDmChannelId returns null if the id is unknown everywhere', async () => {
+    const { resolveDmChannelId } = await import('./spaceStore');
+    expect(resolveDmChannelId('nonexistent')).toBeNull();
+  });
+
+  it('resolveDmChannelId returns null if the alternative points to a federatedId no longer in dmChannels', async () => {
+    const { resolveDmChannelId } = await import('./spaceStore');
+    useSpaceStore.getState().populateFromReady(
+      'https://remote.example',
+      [],
+      [],
+      [makeDm('remote-1', 'fed-aaa')],
+      null,
+      0,
+    );
+    // Simulate the dmChannels entry getting removed without clearing dmAlternatives —
+    // resolveDmChannelId should gracefully return null rather than a stale pointer.
+    useSpaceStore.setState({ dmChannels: [] });
+    expect(resolveDmChannelId('remote-1')).toBeNull();
+  });
 });
