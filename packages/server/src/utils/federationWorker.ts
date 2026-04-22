@@ -100,7 +100,7 @@ function scheduleOutboxTick(): void {
   }, OUTBOX_INTERVAL_MS);
 }
 
-async function processOutboxTick(): Promise<void> {
+export async function processOutboxTick(): Promise<void> {
   if (!isFederationRelayEnabled()) {
     return;
   }
@@ -230,26 +230,43 @@ async function processOutboxTick(): Promise<void> {
       if (response.ok) {
         const result = await response.json() as FederationRelayResponse;
 
-        // Delete accepted entries
-        if (result.accepted.length > 0) {
-          // Map accepted messageIds to outbox IDs
-          const acceptedSet = new Set(result.accepted);
-          const acceptedOutboxIds = peerEntries
-            .filter((e) => acceptedSet.has(e.entityId))
+        // Terminal outcomes = accepted + duplicate-rejected.
+        // `duplicate` means the peer already has the message (e.g., delivered
+        // earlier via outbox or pulled via sync). Retrying will fail with
+        // `duplicate` forever until TTL expires — treat it as effectively-
+        // accepted and remove the outbox entry.
+        const terminalEntityIds = new Set<string>(result.accepted);
+        for (const rejection of result.rejected) {
+          if (rejection.reason === 'duplicate') {
+            terminalEntityIds.add(rejection.messageId);
+          }
+        }
+
+        if (terminalEntityIds.size > 0) {
+          const terminalOutboxIds = peerEntries
+            .filter((e) => terminalEntityIds.has(e.entityId))
             .map((e) => e.outboxId);
 
-          if (acceptedOutboxIds.length > 0) {
+          if (terminalOutboxIds.length > 0) {
             db.delete(schema.federationOutbox)
-              .where(inArray(schema.federationOutbox.id, acceptedOutboxIds))
+              .where(inArray(schema.federationOutbox.id, terminalOutboxIds))
               .run();
           }
         }
 
-        // Log rejected entries (they remain in outbox for retry)
+        // Log rejected entries. Duplicate is terminal (outbox entry already
+        // removed above) — log at info level. Other reasons are transient /
+        // retained for retry — log at warn level.
         for (const rejection of result.rejected) {
-          console.warn(
-            `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId}: ${rejection.reason}`,
-          );
+          if (rejection.reason === 'duplicate') {
+            console.log(
+              `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId} as duplicate — outbox entry removed (terminal)`,
+            );
+          } else {
+            console.warn(
+              `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId}: ${rejection.reason}`,
+            );
+          }
         }
 
         // Store the peer's max upload size for informational display

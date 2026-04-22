@@ -466,8 +466,9 @@ Trigger (API/WS handler)
 5. Sign with `buildFederationHeaders(body, peerHmacSecret, ourOrigin)`
 6. POST to `{peerOrigin}/api/federation/relay`
 7. On success (200):
-   - Delete accepted entries from outbox (matched by `entityId` -> `outboxId`)
-   - Log rejected entries (remain in outbox for retry)
+   - Compute the **terminal entity set** = accepted entries ∪ duplicate-rejected entries
+   - Delete all terminal entries from outbox (matched by `entityId` -> `outboxId`)
+   - Log remaining (non-duplicate) rejected entries at `console.warn` (they stay in outbox for retry)
    - Store `result.maxUploadSize` on peer record
    - Update peer: `lastSeenAt = now`, `consecutiveFailures = 0`
 8. On failure (non-200 or network error):
@@ -475,6 +476,14 @@ Trigger (API/WS handler)
      - Increment `attempts` per entry, compute `nextRetryAt = now + backoff`
      - Increment peer `consecutiveFailures`, set `lastFailureAt`
      - If `consecutiveFailures >= PEER_UNREACHABLE_THRESHOLD (10)` -> mark peer `unreachable`
+
+#### Terminal rejection: `duplicate`
+
+The outbox delivery worker treats a relay response of `{ rejected: [{ reason: 'duplicate', ... }] }` as effectively-accepted — the outbox entry is deleted rather than retained for retry. The `duplicate` reason is emitted by the receiving instance's inbound processors when a row with the same `(sourceInstance, sourceMessageId)` already exists; retrying will fail identically until TTL (30 days). Since the peer already has the message, terminal removal is the correct outcome.
+
+Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from retained-for-retry `console.warn` messages.
+
+Other rejection reasons (`attribution_mismatch`, `missing_*_payload`, `unknown_event_type`, `unauthorized_source`, `channel_not_found`, `participant_not_found`, `processing_error`, …) remain on the retry path. Some are arguably terminal too; treating them as such is deferred until they are observed accumulating in practice.
 
 ### Retry Backoff Schedule
 
