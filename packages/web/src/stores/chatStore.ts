@@ -63,6 +63,7 @@ interface ChatState {
   onChannelAck: (channelId: string, messageId: string) => void;
   onMarkUnread: (channelId: string, messageId: string) => void;
   removeChannelStates: (channelIds: Set<string>) => void;
+  rekeyChannelState: (oldId: string, newId: string) => void;
   updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
   clearTypingForUser: (userId: string) => void;
 }
@@ -705,6 +706,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
         newHasMore.delete(channelId);
       }
       return { unreadChannels: newUnread, readStates: newReadStates, messages: newMessages, hasMore: newHasMore };
+    });
+  },
+
+  rekeyChannelState: (oldId: string, newId: string) => {
+    set((state) => {
+      const copyDelete = <V,>(src: Map<string, V>): Map<string, V> => {
+        if (!src.has(oldId)) return src;
+        const next = new Map(src);
+        next.delete(oldId);
+        return next;
+      };
+
+      const messages = copyDelete(state.messages);
+      const typingUsers = copyDelete(state.typingUsers);
+      const hasMore = copyDelete(state.hasMore);
+      const readStates = copyDelete(state.readStates);
+      const channelAccessTimes = copyDelete(state.channelAccessTimes);
+      const scrollPositions = copyDelete(state.scrollPositions);
+
+      let unreadChannels = state.unreadChannels;
+      if (state.unreadChannels.has(oldId)) {
+        unreadChannels = new Set(state.unreadChannels);
+        unreadChannels.delete(oldId);
+        unreadChannels.add(newId);
+      }
+
+      const currentChannelId = state.currentChannelId === oldId ? newId : state.currentChannelId;
+
+      return {
+        messages,
+        typingUsers,
+        hasMore,
+        readStates,
+        channelAccessTimes,
+        scrollPositions,
+        unreadChannels,
+        currentChannelId,
+      };
     });
   },
 
