@@ -364,7 +364,7 @@ export type DmCallUndeliverableReason =
   | 'peer_transient_failure'
   | 'livekit_unavailable';
 
-export type DmCallPhase = 'start' | 'accept' | 'reject' | 'end';
+export type DmCallPhase = 'start' | 'accept' | 'reject' | 'end' | 'host_unreachable';
 
 export interface DmCallUndeliverableFailure {
   reason: DmCallUndeliverableReason;
