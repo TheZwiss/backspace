@@ -79,7 +79,7 @@ The format difference (32-char hex vs 36-char UUID with dashes) allows detecting
 
 **No federation event queued at creation time.** The `federatedId` for 1-on-1 DMs is computed on demand when the first message is relayed via `queueDmRelay()`. The receiving instance uses `findOrCreateDmChannel()` which computes the deterministic hash and creates the channel if needed.
 
-**Client routing:** DM creation always goes to the home instance. For federated users, the client passes `{ homeUserId, homeInstance }` and the server resolves the target via `resolveOrCreateReplicatedUser()`. The `federatedId` is computed at creation time when either participant has `homeInstance` set.
+**Client routing:** DM creation always goes to the home instance. For federated users, the client passes `{ homeUserId, homeInstance }` and the server resolves the target via `resolveOrCreateReplicatedUser()`. The `federatedId` is computed at creation time when either participant has `homeInstance` set. Post-creation, every DM operation (message send/edit/delete, close/leave, typing, reactions, read-state acks) routes through `getChannelOrigin(channelId)` → `getApiForOrigin(origin)`. If the pinned origin drops mid-session, client-side failover re-keys the DM to a connected sibling that mirrors the same `federatedId` — see `docs/systems/client-federation.md` "DM Origin Failover".
 
 ---
 

@@ -41,6 +41,8 @@ interface SpaceState {
   channelOriginMap: Map<string, string>; // channelId → instance origin ('' = home)
   voiceChannelIds: Set<string>; // channelIds that are voice channels (excluded from unread)
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
+  /** federatedId → (origin → localChannelId). Every DM from every origin's ready payload is recorded here regardless of dedup outcome, so failover can re-point to an alternate origin's local channel ID. */
+  dmAlternatives: Map<string, Map<string, string>>;
   loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
@@ -132,6 +134,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   channelOriginMap: new Map(),
   voiceChannelIds: new Set(),
   categoryOriginMap: new Map(),
+  dmAlternatives: new Map(),
   loadingSpaceId: null,
   _layoutUpdatedAt: 0,
 
@@ -154,6 +157,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       channelOriginMap: new Map(),
       voiceChannelIds: new Set(),
       categoryOriginMap: new Map(),
+      dmAlternatives: new Map(),
       loadingSpaceId: null,
       _layoutUpdatedAt: 0,
     });
@@ -584,6 +588,10 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const channelOriginMap = new Map(get().channelOriginMap);
     const voiceChannelIds = new Set(get().voiceChannelIds);
     const categoryOriginMap = new Map(get().categoryOriginMap);
+    const dmAlternatives = new Map<string, Map<string, string>>();
+    for (const [fid, byOrigin] of get().dmAlternatives) {
+      dmAlternatives.set(fid, new Map(byOrigin));
+    }
 
     // If home, clear home-origin entries first to avoid stale data
     if (isHome) {
@@ -688,6 +696,18 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
     }
 
+    // Record every DM's (origin → localChannelId) for failover lookup,
+    // regardless of whether the dedup pass kept this copy in dmChannels.
+    for (const dm of incomingDms) {
+      if (!dm.federatedId) continue;
+      let byOrigin = dmAlternatives.get(dm.federatedId);
+      if (!byOrigin) {
+        byOrigin = new Map();
+        dmAlternatives.set(dm.federatedId, byOrigin);
+      }
+      byOrigin.set(origin, dm.id);
+    }
+
     // Merge: remove DMs belonging to this origin from existing state, then append incoming
     const existingDmsFromOtherOrigins = get().dmChannels.filter(dm => {
       const dmOrigin = get().channelOriginMap.get(dm.id);
@@ -711,6 +731,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       channelOriginMap,
       voiceChannelIds,
       categoryOriginMap,
+      dmAlternatives,
     };
 
     // LWW layout merge: accept incoming layout only if its timestamp is >= ours
@@ -849,6 +870,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
+      // Prune dmAlternatives: drop this origin from every inner map.
+      const dmAlternatives = new Map<string, Map<string, string>>();
+      for (const [fid, byOrigin] of state.dmAlternatives) {
+        const nextInner = new Map(byOrigin);
+        nextInner.delete(origin);
+        if (nextInner.size > 0) dmAlternatives.set(fid, nextInner);
+      }
+
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -856,6 +885,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelPermissions,
         channelOriginMap,
         spacePermissions,
+        dmAlternatives,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
           : null,
@@ -892,6 +922,33 @@ export function isDmChannel(channelId: string): boolean {
  */
 export function getChannelOrigin(channelId: string): string {
   return useSpaceStore.getState().channelOriginMap.get(channelId) ?? '';
+}
+
+/**
+ * Resolves a raw DM channel ID to its primary `dmChannels` entry ID.
+ *
+ * - If `rawId` is already a primary entry: returns `rawId` unchanged.
+ * - If `rawId` is recorded in `dmAlternatives` as an alternate-origin local ID
+ *   for a DM whose primary is present in `dmChannels`: returns the primary's ID.
+ * - Otherwise: returns `null` (unknown ID — caller should no-op).
+ *
+ * Used by:
+ *  - `dm_message_created` WS handler to route messages arriving from alternate
+ *    origins to the primary entry (§3.11 of the failover spec).
+ *  - Future DM WS handlers that need to dedup alternate-origin deliveries.
+ */
+export function resolveDmChannelId(rawId: string): string | null {
+  const { dmChannels, dmAlternatives } = useSpaceStore.getState();
+  if (dmChannels.some(dm => dm.id === rawId)) return rawId;
+
+  for (const [federatedId, byOrigin] of dmAlternatives) {
+    for (const localId of byOrigin.values()) {
+      if (localId !== rawId) continue;
+      const primary = dmChannels.find(dm => dm.federatedId === federatedId);
+      return primary ? primary.id : null;
+    }
+  }
+  return null;
 }
 
 // ─── API client resolution ────────────────────────────────────────────────────

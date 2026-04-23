@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin } from '../stores/spaceStore';
+import { useSpaceStore, getChannelOrigin, getMyUserIdForOrigin, setMyUserIdForOrigin, resolveDmChannelId } from '../stores/spaceStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
@@ -679,6 +679,30 @@ function handleEvent(origin: string, event: ServerEvent): void {
       // (same conversation, different channel ID). If so, skip adding a new sidebar entry
       // and route the message to the existing channel instead.
       if (!knownDm) {
+        // dmAlternatives-based resolution: if this channelId is an alternate-origin
+        // local id for a DM whose primary is in dmChannels, reroute to the primary.
+        // Covers 1-on-1 AND group DMs uniformly; also the post-failover path where
+        // the reconnected original origin's WS still uses its old local id.
+        const primaryId = resolveDmChannelId(event.message.dmChannelId);
+        if (primaryId && primaryId !== event.message.dmChannelId) {
+          addRealtimeMessage(primaryId, { ...event.message, dmChannelId: primaryId } as any);
+          const updatedDms = currentDmChannels.map(dm =>
+            dm.id === primaryId ? { ...dm, lastMessage: event.message } : dm,
+          );
+          const { unreadChannels: u1, currentChannelId: c1 } = useChatStore.getState();
+          setDms(sortDmChannels(updatedDms, u1, c1));
+          {
+            const { currentChannelId: u1cc, markChannelUnread: u1mu } = useChatStore.getState();
+            const myId = isHome ? useAuthStore.getState().user?.id : getMyUserIdForOrigin(origin);
+            if (primaryId !== u1cc && event.message.userId !== myId) {
+              u1mu(primaryId);
+            }
+          }
+          break;
+        }
+
+        // Legacy 2-member-identity fallback: covers DMs without a federatedId
+        // (pre-federation or never-federated 1-on-1 DMs).
         const msgUser = event.message.user;
         const msgHomeUserId = msgUser?.homeUserId || msgUser?.id;
         if (msgHomeUserId) {
