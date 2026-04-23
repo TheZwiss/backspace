@@ -65,6 +65,82 @@ export function baselineExistingInstall(db: Database.Database): void {
 }
 
 /**
+ * Heal column drift between an existing install and the 0000_initial
+ * schema baseline.
+ *
+ * The baseline in `baselineExistingInstall` assumes that any existing
+ * install's schema already matches 0000_initial.sql. That assumption is
+ * usually fine for installs created through the old pre-drizzle manual
+ * migration system — but a DB can fall behind if it skipped one of those
+ * manual ALTERs (e.g. a dev-env that was paused before the
+ * `remote_max_upload_size` migration in 1e4e71a landed). On such DBs,
+ * baseline marks 0000 as applied without the columns actually being
+ * there, and a later migration that recreates the table (e.g.
+ * 0004_cooing_black_knight) crashes trying to SELECT them.
+ *
+ * Walks every table defined in 0000_snapshot.json; for each that already
+ * exists in the DB, ADDs any columns the snapshot declares but the table
+ * is missing. Idempotent: on a correctly-migrated DB every column is
+ * already present and the loop is a no-op. Columns that SQLite's
+ * ALTER TABLE ADD COLUMN cannot express (PRIMARY KEY; NOT NULL without a
+ * default) are skipped with a warning rather than corrupting data.
+ *
+ * Only reconciles against the 0000 baseline — later migrations add their
+ * own columns through normal migration SQL and are handled by
+ * Drizzle's migrator.
+ */
+export function healInitialSchemaDrift(db: Database.Database): void {
+  const migrationsFolder = path.resolve(__dirname, '../../drizzle');
+  const snapshotPath = path.join(migrationsFolder, 'meta', '0000_snapshot.json');
+  const snapshot = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8')) as {
+    tables: Record<string, {
+      name: string;
+      columns: Record<string, {
+        name: string;
+        type: string;
+        primaryKey: boolean;
+        notNull: boolean;
+        autoincrement: boolean;
+        default?: string | number;
+      }>;
+    }>;
+  };
+
+  for (const table of Object.values(snapshot.tables)) {
+    const exists = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+    ).get(table.name);
+    if (!exists) continue;
+
+    const existingCols = new Set(
+      (db.prepare(`PRAGMA table_info("${table.name}")`).all() as { name: string }[])
+        .map(c => c.name)
+    );
+
+    for (const col of Object.values(table.columns)) {
+      if (existingCols.has(col.name)) continue;
+
+      if (col.primaryKey) {
+        console.warn(`[migrate] Skipping drift heal for ${table.name}.${col.name}: PRIMARY KEY cannot be added via ALTER TABLE`);
+        continue;
+      }
+      if (col.notNull && col.default === undefined) {
+        console.warn(`[migrate] Skipping drift heal for ${table.name}.${col.name}: NOT NULL with no default (would violate existing rows)`);
+        continue;
+      }
+
+      const parts = [`"${col.name}"`, col.type];
+      if (col.notNull) parts.push('NOT NULL');
+      if (col.default !== undefined) parts.push(`DEFAULT ${col.default}`);
+
+      const sql = `ALTER TABLE "${table.name}" ADD COLUMN ${parts.join(' ')}`;
+      console.log(`[migrate] Healing schema drift: ${sql}`);
+      db.exec(sql);
+    }
+  }
+}
+
+/**
  * Ensure data invariants after schema migration. Idempotent — safe to run
  * on every boot. Uses raw better-sqlite3 handle (not Drizzle ORM).
  */
