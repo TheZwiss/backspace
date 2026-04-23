@@ -18,7 +18,7 @@ import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
-import { onPeerActivated } from '../utils/federationPeerActivation.js';
+import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent } from '@backspace/shared';
 
@@ -882,6 +882,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .set({ status: 'revoked' })
         .where(eq(schema.federationPeers.id, id))
         .run();
+
+      onPeerDeactivated(id, 'admin_revoked').catch(err =>
+        console.error('[federation] onPeerDeactivated from admin revoke failed:', err),
+      );
 
       // Delete all outbox entries for this peer
       db.delete(schema.federationOutbox)
