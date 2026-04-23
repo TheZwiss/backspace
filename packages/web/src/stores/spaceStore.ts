@@ -4,6 +4,13 @@ import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
 import { isSelf } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
+import {
+  getApiForOrigin,
+  resolveOriginFromHostname,
+  resolveUserIdFromInstances,
+  getCachedUserIdForOrigin,
+  clearMyUserIdCache,
+} from '../utils/crossStoreResolvers';
 import { useAuthStore } from './authStore';
 import { useChatStore } from './chatStore';
 
@@ -139,7 +146,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   _layoutUpdatedAt: 0,
 
   reset: () => {
-    _myUserIdByOrigin.clear();
+    clearMyUserIdCache();
     set({
       spaces: [],
       currentSpaceId: null,
@@ -951,36 +958,20 @@ export function resolveDmChannelId(rawId: string): string | null {
   return null;
 }
 
-// ─── API client resolution ────────────────────────────────────────────────────
-// The actual resolver is registered by instanceStore on import, avoiding a
-// circular dependency (instanceStore → useWebSocket → chatStore → spaceStore).
-
-let _getApiForOrigin: ((origin: string) => BackspaceApiClient) | null = null;
-
-export function setApiForOriginResolver(resolver: (origin: string) => BackspaceApiClient): void {
-  _getApiForOrigin = resolver;
-}
-
-/**
- * Returns the correct API client for a given instance origin.
- * '' or falsy = home instance, 'https://...' = remote instance.
- * The resolver is registered by instanceStore on import.
- */
-export function getApiForOrigin(origin: string): BackspaceApiClient {
-  if (!origin || !_getApiForOrigin) return api;
-  return _getApiForOrigin(origin);
-}
-
-// ─── Hostname → origin resolution (federation) ────────────────────────────────
-// Converts a user's `homeInstance` hostname (e.g. "remote.example.com") to a
-// full origin URL (e.g. "https://remote.example.com") by looking up connected
-// instances.  Registered by instanceStore on import.
-
-let _resolveOriginFromHostname: ((hostname: string) => string) | null = null;
-
-export function setOriginFromHostnameResolver(resolver: (hostname: string) => string): void {
-  _resolveOriginFromHostname = resolver;
-}
+// ─── Cross-store resolvers (federation) ───────────────────────────────────────
+// The resolver/setter pairs and the WS-populated user-ID cache live in
+// `utils/crossStoreResolvers.ts` — a neutral module with no store imports —
+// to break a TDZ cycle: instanceStore registers these at top-level load, but
+// a spaceStore-rooted import chain leaves spaceStore mid-load when that code
+// runs. Re-exported here for backward compatibility with existing import
+// sites. See the header comment in crossStoreResolvers.ts for details.
+export {
+  setApiForOriginResolver,
+  getApiForOrigin,
+  setOriginFromHostnameResolver,
+  setUserIdForOriginResolver,
+  setMyUserIdForOrigin,
+} from '../utils/crossStoreResolvers';
 
 /**
  * Returns the instance origin for a federated user based on their homeInstance.
@@ -989,7 +980,7 @@ export function setOriginFromHostnameResolver(resolver: (hostname: string) => st
 export function resolveUserOrigin(user: { homeInstance?: string | null }): string {
   const host = user.homeInstance;
   if (!host || host === window.location.host) return '';
-  return _resolveOriginFromHostname?.(host) ?? '';
+  return resolveOriginFromHostname(host);
 }
 
 /**
@@ -1000,25 +991,7 @@ export function resolveUserOrigin(user: { homeInstance?: string | null }): strin
 export function getLayoutHomeOrigin(): string {
   const user = useAuthStore.getState().user;
   if (!user?.homeInstance) return '';
-  return _resolveOriginFromHostname?.(user.homeInstance) ?? '';
-}
-
-// ─── User ID resolution (federation) ──────────────────────────────────────────
-// Same resolver pattern as getApiForOrigin — registered by instanceStore on
-// import to break the circular dependency chain.
-
-let _getUserIdForOrigin: ((origin: string) => string | undefined) | null = null;
-
-export function setUserIdForOriginResolver(resolver: (origin: string) => string | undefined): void {
-  _getUserIdForOrigin = resolver;
-}
-
-// Direct identity cache populated from WS ready events.
-// Bypasses the instanceStore resolver for reliable federation support.
-const _myUserIdByOrigin = new Map<string, string>();
-
-export function setMyUserIdForOrigin(origin: string, userId: string): void {
-  _myUserIdByOrigin.set(origin, userId);
+  return resolveOriginFromHostname(user.homeInstance);
 }
 
 /**
@@ -1029,8 +1002,8 @@ export function setMyUserIdForOrigin(origin: string, userId: string): void {
 export function getMyUserIdForOrigin(origin: string): string | undefined {
   if (!origin) return useAuthStore.getState().user?.id;
   // Direct cache (populated from WS ready) takes priority — always correct
-  const cached = _myUserIdByOrigin.get(origin);
+  const cached = getCachedUserIdForOrigin(origin);
   if (cached) return cached;
   // Fallback to instanceStore resolver (may have placeholder user during connection)
-  return _getUserIdForOrigin?.(origin);
+  return resolveUserIdFromInstances(origin);
 }
