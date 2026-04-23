@@ -196,8 +196,7 @@ export type PeerDeactivationReason =
   | 'network_threshold'        // outbox worker hit PEER_UNREACHABLE_THRESHOLD
   | 'auth_threshold'           // outbox worker hit AUTH_FAILURE_THRESHOLD
   | 'remote_rejected'          // auto-peer handshake got 403 PEERING_REQUIRES_APPROVAL
-  | 'admin_revoked'            // admin revoked peering from this side
-  | 'admin_reset';             // admin reset peer clearing to non-active status
+  | 'admin_revoked';           // admin revoked peering from this side
 
 // Dedup: concurrent deactivations for the same peerId share one promise.
 // SEPARATE from inFlightActivation — a flapping peer's activate-then-deactivate
