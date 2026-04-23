@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import fs from 'node:fs';
@@ -23,6 +23,8 @@ vi.mock('../ws/handler.js', () => ({
     getAllOnlineUserIds: () => [],
     sendToUser: vi.fn(),
     sendToDmMembers: vi.fn(),
+    evictFederatedCallsForHost: vi.fn().mockReturnValue(0),
+    getAllFederatedCalls: vi.fn(() => new Map()),
   },
 }));
 
@@ -41,6 +43,7 @@ vi.mock('../utils/federationOutbox.js', () => ({
 
 vi.mock('../utils/federationPeerActivation.js', () => ({
   onPeerActivated: vi.fn(),
+  onPeerDeactivated: vi.fn().mockResolvedValue(undefined),
   startupBootstrapSync: vi.fn(),
 }));
 
@@ -155,5 +158,133 @@ describe('outbox worker — duplicate rejection is terminal', () => {
     // responses; a 200 with a rejection means the peer processed the batch but
     // declined this particular message — the entry stays for the next tick.)
     expect(remaining).toBeDefined();
+  });
+});
+
+// ─── Sentinel test helpers ───────────────────────────────────────────────────
+
+function seedSentinelPeer(
+  id: string,
+  origin: string,
+  status: string,
+  instanceName?: string,
+): void {
+  testDb.insert(schema.federationPeers).values({
+    id,
+    origin,
+    hmacSecret: 'secret',
+    status,
+    instanceName: instanceName ?? null,
+    lastSyncedAt: 0,
+    createdAt: Date.now(),
+  }).run();
+}
+
+type FedCallEntry = import('../ws/handler.js').FederatedCallEntry;
+
+function makeFedCall(partial: Partial<FedCallEntry>): FedCallEntry {
+  return {
+    dmChannelId: null,
+    federatedId: `fed-${Math.random().toString(36).slice(2, 8)}`,
+    callerId: 'caller',
+    callerHomeUserId: 'caller-home',
+    federatedCallHost: 'https://hostA.example',
+    livekitUrl: 'wss://lk.example',
+    tokens: new Map(),
+    ringedUserIds: [],
+    state: 'active',
+    startedAt: Date.now(),
+    ...partial,
+  };
+}
+
+// ─── Sentinel describe block ─────────────────────────────────────────────────
+
+describe('federatedCallSentinel', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  it('early-exits when there are no federated calls (no DB work, no eviction calls)', async () => {
+    const { connectionManager } = await import('../ws/handler.js');
+    vi.mocked(connectionManager.getAllFederatedCalls).mockReturnValue(new Map());
+    vi.mocked(connectionManager.evictFederatedCallsForHost).mockClear();
+
+    const { runFederatedCallSentinelTick } = await import('./federationWorker.js');
+    await runFederatedCallSentinelTick();
+
+    expect(connectionManager.evictFederatedCallsForHost).not.toHaveBeenCalled();
+  });
+
+  it('evicts entries whose host peer is non-active', async () => {
+    seedSentinelPeer('p-A', 'https://hostA.example', 'unreachable', 'HostA');
+    seedSentinelPeer('p-B', 'https://hostB.example', 'active', 'HostB');
+
+    const calls = new Map<string, FedCallEntry>([
+      ['fed-1', makeFedCall({ federatedId: 'fed-1', federatedCallHost: 'https://hostA.example' })],
+      ['fed-2', makeFedCall({ federatedId: 'fed-2', federatedCallHost: 'https://hostB.example' })],
+    ]);
+
+    const { connectionManager } = await import('../ws/handler.js');
+    vi.mocked(connectionManager.getAllFederatedCalls).mockReturnValue(calls);
+    vi.mocked(connectionManager.evictFederatedCallsForHost).mockClear();
+
+    const { runFederatedCallSentinelTick } = await import('./federationWorker.js');
+    await runFederatedCallSentinelTick();
+
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledTimes(1);
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://hostA.example',
+      { reason: 'peer_transient_failure', peerLabel: 'HostA' },
+    );
+  });
+
+  it('maps rejected/revoked to peer_rejected', async () => {
+    seedSentinelPeer('p-rej', 'https://hostRej.example', 'rejected', 'Rej');
+    seedSentinelPeer('p-rev', 'https://hostRev.example', 'revoked', 'Rev');
+
+    const calls = new Map<string, FedCallEntry>([
+      ['fed-rej', makeFedCall({ federatedId: 'fed-rej', federatedCallHost: 'https://hostRej.example' })],
+      ['fed-rev', makeFedCall({ federatedId: 'fed-rev', federatedCallHost: 'https://hostRev.example' })],
+    ]);
+
+    const { connectionManager } = await import('../ws/handler.js');
+    vi.mocked(connectionManager.getAllFederatedCalls).mockReturnValue(calls);
+    vi.mocked(connectionManager.evictFederatedCallsForHost).mockClear();
+
+    const { runFederatedCallSentinelTick } = await import('./federationWorker.js');
+    await runFederatedCallSentinelTick();
+
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://hostRej.example',
+      { reason: 'peer_rejected', peerLabel: 'Rej' },
+    );
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://hostRev.example',
+      { reason: 'peer_rejected', peerLabel: 'Rev' },
+    );
+  });
+
+  it('treats a missing peer row as transient failure', async () => {
+    const calls = new Map<string, FedCallEntry>([
+      ['fed-missing', makeFedCall({ federatedId: 'fed-missing', federatedCallHost: 'https://ghost.example' })],
+    ]);
+    const { connectionManager } = await import('../ws/handler.js');
+    vi.mocked(connectionManager.getAllFederatedCalls).mockReturnValue(calls);
+    vi.mocked(connectionManager.evictFederatedCallsForHost).mockClear();
+
+    const { runFederatedCallSentinelTick } = await import('./federationWorker.js');
+    await runFederatedCallSentinelTick();
+
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://ghost.example',
+      { reason: 'peer_transient_failure', peerLabel: undefined },
+    );
   });
 });
