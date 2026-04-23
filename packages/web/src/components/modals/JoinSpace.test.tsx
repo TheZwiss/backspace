@@ -55,19 +55,20 @@ describe('JoinSpaceModal', () => {
     useUIStore.setState({ activeModal: 'joinSpace' });
     renderModal();
     expect(screen.getByText('Join a Space')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. abc123')).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123')
+    ).toBeInTheDocument();
     expect(screen.getByText('Join Space')).toBeInTheDocument();
   });
 
-  it('shows validation error when submitting empty code', async () => {
-    const user = userEvent.setup();
+  it('disables the Join Space button while the input is empty', () => {
     useUIStore.setState({ activeModal: 'joinSpace' });
     renderModal();
 
-    const submitButton = screen.getByText('Join Space');
-    await user.click(submitButton);
-
-    expect(screen.getByText('Invite code is required')).toBeInTheDocument();
+    // The submit button is the validation gate in this UI — there is no
+    // click-to-show-error path. parseInviteInput's 'Invite code is required'
+    // branch is defensive only and unreachable from the rendered form.
+    expect(screen.getByText('Join Space')).toBeDisabled();
   });
 
   it('calls joinByCode with the entered invite code and navigates on success', async () => {
@@ -79,16 +80,17 @@ describe('JoinSpaceModal', () => {
     renderModal();
 
     // Type invite code
-    const input = screen.getByPlaceholderText('e.g. abc123');
+    const input = screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123');
     await user.type(input, 'my-invite-code');
 
     // Click join
     const submitButton = screen.getByText('Join Space');
     await user.click(submitButton);
 
-    // joinByCode should be called with the code
+    // joinByCode(code, origin) — bare code has no origin, so second arg is
+    // undefined (parseInviteInput returns { code, origin: undefined }).
     await waitFor(() => {
-      expect(mockJoinByCode).toHaveBeenCalledWith('my-invite-code');
+      expect(mockJoinByCode).toHaveBeenCalledWith('my-invite-code', undefined);
     });
 
     // Should navigate to the new space
@@ -108,7 +110,7 @@ describe('JoinSpaceModal', () => {
 
     renderModal();
 
-    const input = screen.getByPlaceholderText('e.g. abc123');
+    const input = screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123');
     await user.type(input, 'bad-code');
 
     const submitButton = screen.getByText('Join Space');
