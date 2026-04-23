@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
-import { onPeerActivated } from './federationPeerActivation.js';
+import { onPeerActivated, onPeerDeactivated } from './federationPeerActivation.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +187,9 @@ async function performHandshake(
         .run();
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
+        console.error('[federation] onPeerDeactivated from performHandshake rejected failed:', err)
+      );
       return { status: 'rejected', error: errorMessage };
     }
 
