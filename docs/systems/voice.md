@@ -70,6 +70,7 @@ All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relaye
 | `accept` | false | Host → peer fan-out of accept failed; local host call continues. | No state change; info toast. |
 | `reject` | false | Rejector's relay to host failed OR host's fan-out after a local reject failed; state already cleared. | No state change; info toast. |
 | `end` | false | Ender's relay to host failed OR host's fan-out after a local end failed; state already cleared. | No state change; info toast. |
+| `host_unreachable` | true | A FederatedCallEntry's `federatedCallHost` peer transitions out of `active`, OR the 30s sentinel detects a non-active host for an existing entry. | Clear `activeDmCall` + `incomingCall`, disconnect LK, warning toast (*"Call ended — {label} became unreachable."*). |
 
 **Accept-rollback semantics.** `handleDmCallAccept` Path 2 transitions the `FederatedCallEntry` to active and broadcasts `dm_call_accepted` optimistically so the acceptor's UI flips immediately. If the B→host relay fails, the server clears the entry, fans `dm_call_undeliverable { phase: 'accept', terminal: true }` out to all ringed users on B (via `sendToFederatedCallUsers`), and the client tears its call state back down.
 
@@ -77,7 +78,18 @@ All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relaye
 
 **Ring-timeout fan-out.** When the host's 60 s ringing timeout fires without an accept, `dm_call_end` is fanned out to all remote peers so stranded Path-A/B ringees on other instances exit their ring state instead of lingering. Registered via `connectionManager.setRingTimeoutFanoutHook` from the WS events module.
 
-**Remaining edge.** When a non-host participant (Bob on B) ends an active call and the relay to the host (Alice on A) fails, Alice's `activeDmCall` marker lingers until she manually ends — LK `ParticipantDisconnected` tears down her voice UI but does not clear the DM-call marker. This is a host-side cleanup concern, tracked separately.
+**Remaining edge.** When a non-host participant ends an active call and the relay to the host fails, the host's `activeDmCall` marker lingers until manual end — LK `ParticipantDisconnected` tears down the voice UI but does not clear the DM-call marker on the host side. This is the caller-side mirror of the remote-participant problem and is not covered by the Remote-Participant Host Unreachable Eviction mechanism above (which only reasons about FederatedCallEntry state). Tracked separately.
+
+### Remote-Participant Host Unreachable Eviction
+
+When a FederatedCallEntry's `federatedCallHost` becomes unreachable (peer status transitions to `unreachable`, `needs_attention`, `rejected`, or `revoked`), the entry owner evicts the stranded state and notifies its local ringed users with `dm_call_undeliverable { phase: 'host_unreachable', terminal: true }`. Two signals drive the eviction:
+
+1. **Fast path (`onPeerDeactivated` hook):** every peer-status transition out of `active` invokes `ConnectionManager.evictFederatedCallsForHost(peerOrigin, ...)`. Call sites are listed in the `onPeerDeactivated` docstring (audit via `grep onPeerDeactivated(`).
+2. **Backstop (30s sentinel):** `runFederatedCallSentinelTick` in `federationWorker.ts` iterates active entries, looks up each distinct `federatedCallHost`'s current peer status, and evicts non-active matches.
+
+Typical eviction latency is ~90s (time for outbox traffic to fail the unreachable threshold + one sentinel tick). Worst case on an idle instance with no outbox traffic is ~15.5min (health-check cadence + sentinel).
+
+Covers the ringing and active states on the remote-participant side. The caller-side mirror — host's own `activeDmCall` lingering when its LK room empties silently — is a separate, documented out-of-scope edge.
 
 ### Dual-Path Processing
 
