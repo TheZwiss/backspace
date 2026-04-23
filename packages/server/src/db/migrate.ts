@@ -141,6 +141,215 @@ export function healInitialSchemaDrift(db: Database.Database): void {
 }
 
 /**
+ * Second-pass heal for pre-drizzle dev DBs whose column drift is not a
+ * pure add-column problem.
+ *
+ * `healInitialSchemaDrift` handles tables that are missing columns — it
+ * ALTERs them in. But a pre-drizzle dev DB can also carry *renamed*
+ * columns: e.g. `federation_outbox` on some old installs retains the
+ * pre-rename `message_id` / `dm_channel_id` columns instead of the
+ * current `entity_id` / `context_id`. The missing columns are NOT NULL
+ * without a default, so the earlier heal correctly skips them, and the
+ * outbox worker then fails every tick with `no such column:
+ * federation_outbox.context_id`.
+ *
+ * For tables whose physical column set is *missing* columns declared by
+ * the current-migration-state snapshot (the one matching the highest
+ * `__drizzle_migrations` entry — NOT the latest snapshot on disk) *and*
+ * which hold zero rows, this pass DROPs the table and rebuilds it from
+ * the snapshot's JSON (columns, defaults, foreign keys, composite PKs,
+ * unique constraints, indexes). Targeting the current-state snapshot
+ * — rather than the latest — is critical: rebuilding to a future
+ * snapshot would introduce columns that drizzle's migrator is about
+ * to add via ALTER TABLE ADD COLUMN, causing duplicate-column errors.
+ * Extra-only drift (leftover columns from pre-drizzle manual migrations
+ * that no current code reads) is left alone — the trigger is missing
+ * columns, because that's what breaks runtime queries.
+ *
+ * Non-empty tables are skipped with a warning — data preservation wins
+ * over heal, and this path should only ever be hit by a pre-drizzle dev
+ * DB that never exercised the affected tables in the first place.
+ *
+ * Idempotent: on correctly-migrated DBs the column sets already match,
+ * so the mismatch check short-circuits for every table and nothing is
+ * dropped. Production Pi+VM instances are unaffected.
+ */
+type SnapshotColumn = {
+  name: string;
+  type: string;
+  primaryKey: boolean;
+  notNull: boolean;
+  autoincrement: boolean;
+  default?: string | number;
+};
+
+type SnapshotTable = {
+  name: string;
+  columns: Record<string, SnapshotColumn>;
+  indexes: Record<string, { name: string; columns: string[]; isUnique: boolean }>;
+  foreignKeys: Record<string, {
+    name: string;
+    tableFrom: string;
+    tableTo: string;
+    columnsFrom: string[];
+    columnsTo: string[];
+    onDelete?: string;
+    onUpdate?: string;
+  }>;
+  compositePrimaryKeys: Record<string, { name?: string; columns: string[] }>;
+  uniqueConstraints: Record<string, { name?: string; columns: string[] }>;
+};
+
+type DrizzleSnapshot = { tables: Record<string, SnapshotTable> };
+
+function loadSnapshotForCurrentMigrationState(
+  db: Database.Database,
+  migrationsFolder: string
+): DrizzleSnapshot {
+  // The rebuild target must be the snapshot that reflects what drizzle
+  // has already applied — NOT the latest snapshot on disk. Rebuilding
+  // to a future snapshot would introduce columns that pending ALTER
+  // TABLE ADD COLUMN migrations are about to add, causing duplicate-
+  // column errors when drizzle's migrator runs right after.
+  //
+  // __drizzle_migrations rows store `created_at` = the journal entry's
+  // `when` timestamp. Pick the row with the highest id (most recently
+  // applied), match it to a journal entry by that timestamp, then walk
+  // backward to find the nearest existing snapshot (some idx values
+  // may lack a snapshot if the migration was hand-written outside of
+  // `drizzle-kit generate`, e.g. 0002 in this codebase).
+  const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+  const journal = JSON.parse(fs.readFileSync(journalPath, 'utf-8')) as {
+    entries: { idx: number; tag: string; when: number }[];
+  };
+
+  const hasJournal = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'"
+  ).get();
+  if (!hasJournal) {
+    // No migrations recorded at all — caller is about to run them all
+    // from scratch via drizzle's migrate(). Nothing to rebuild against;
+    // return an empty snapshot so the heal loop is a no-op.
+    return { tables: {} };
+  }
+
+  const latest = db.prepare(
+    'SELECT created_at FROM __drizzle_migrations ORDER BY id DESC LIMIT 1'
+  ).get() as { created_at: number } | undefined;
+  if (!latest) return { tables: {} };
+
+  const entry = journal.entries.find(e => e.when === latest.created_at);
+  if (!entry) {
+    throw new Error(
+      `__drizzle_migrations.created_at=${latest.created_at} has no matching journal entry`
+    );
+  }
+
+  const candidates = journal.entries
+    .filter(e => e.idx <= entry.idx)
+    .sort((a, b) => b.idx - a.idx);
+  for (const candidate of candidates) {
+    const idxPadded = String(candidate.idx).padStart(4, '0');
+    const snapshotPath = path.join(migrationsFolder, 'meta', `${idxPadded}_snapshot.json`);
+    if (fs.existsSync(snapshotPath)) {
+      return JSON.parse(fs.readFileSync(snapshotPath, 'utf-8')) as DrizzleSnapshot;
+    }
+  }
+  // No snapshot at or below current migration state — shouldn't happen
+  // in practice because 0000_snapshot.json always exists, but fall
+  // through to a no-op rather than guessing.
+  return { tables: {} };
+}
+
+function buildCreateTableStatement(table: SnapshotTable): string {
+  const lines: string[] = [];
+  for (const col of Object.values(table.columns)) {
+    const parts = [`\`${col.name}\``, col.type];
+    if (col.primaryKey) parts.push('PRIMARY KEY');
+    if (col.notNull) parts.push('NOT NULL');
+    if (col.default !== undefined) parts.push(`DEFAULT ${col.default}`);
+    lines.push('\t' + parts.join(' '));
+  }
+  for (const cpk of Object.values(table.compositePrimaryKeys)) {
+    lines.push('\tPRIMARY KEY(' + cpk.columns.map(c => `\`${c}\``).join(', ') + ')');
+  }
+  for (const uc of Object.values(table.uniqueConstraints)) {
+    lines.push('\tUNIQUE(' + uc.columns.map(c => `\`${c}\``).join(', ') + ')');
+  }
+  for (const fk of Object.values(table.foreignKeys)) {
+    const from = fk.columnsFrom.map(c => `\`${c}\``).join(', ');
+    const to = fk.columnsTo.map(c => `\`${c}\``).join(', ');
+    const onUpdate = fk.onUpdate ? ` ON UPDATE ${fk.onUpdate}` : '';
+    const onDelete = fk.onDelete ? ` ON DELETE ${fk.onDelete}` : '';
+    lines.push(`\tFOREIGN KEY (${from}) REFERENCES \`${fk.tableTo}\`(${to})${onUpdate}${onDelete}`);
+  }
+  return `CREATE TABLE \`${table.name}\` (\n${lines.join(',\n')}\n)`;
+}
+
+function buildIndexStatements(table: SnapshotTable): string[] {
+  return Object.values(table.indexes).map(idx => {
+    const unique = idx.isUnique ? 'UNIQUE ' : '';
+    const cols = idx.columns.map(c => `\`${c}\``).join(', ');
+    return `CREATE ${unique}INDEX \`${idx.name}\` ON \`${table.name}\` (${cols})`;
+  });
+}
+
+export function healRenamedColumns(db: Database.Database): void {
+  const migrationsFolder = path.resolve(__dirname, '../../drizzle');
+  const snapshot = loadSnapshotForCurrentMigrationState(db, migrationsFolder);
+
+  for (const table of Object.values(snapshot.tables)) {
+    const exists = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+    ).get(table.name);
+    if (!exists) continue;
+
+    const snapshotCols = new Set(Object.keys(table.columns));
+    const physicalCols = new Set(
+      (db.prepare(`PRAGMA table_info("${table.name}")`).all() as { name: string }[])
+        .map(c => c.name)
+    );
+
+    const missingFromPhysical = [...snapshotCols].filter(c => !physicalCols.has(c));
+    const extraInPhysical = [...physicalCols].filter(c => !snapshotCols.has(c));
+
+    // Trigger the rebuild only when the physical table is *missing*
+    // columns the snapshot declares — that's the runtime-breaking
+    // case the app code relies on. Extra-only drift (leftover columns
+    // from pre-drizzle manual migrations that no current code reads)
+    // is left alone: dropping those would risk losing data the app
+    // doesn't care about but the operator might.
+    if (missingFromPhysical.length === 0) continue;
+
+    const rowCount = (db.prepare(
+      `SELECT COUNT(*) AS c FROM "${table.name}"`
+    ).get() as { c: number }).c;
+
+    if (rowCount > 0) {
+      console.warn(
+        `[migrate] Column drift on ${table.name} (missing: [${missingFromPhysical.join(', ')}], extra: [${extraInPhysical.join(', ')}]) — skipping rebuild: table has ${rowCount} rows, manual data migration required`
+      );
+      continue;
+    }
+
+    console.log(
+      `[migrate] Rebuilding empty table ${table.name} to match current-migration-state snapshot (missing: [${missingFromPhysical.join(', ')}], extra: [${extraInPhysical.join(', ')}])`
+    );
+
+    const createStmt = buildCreateTableStatement(table);
+    const indexStmts = buildIndexStatements(table);
+
+    // Wrap in a transaction so a partial rebuild rolls back cleanly.
+    const rebuild = db.transaction(() => {
+      db.exec(`DROP TABLE "${table.name}"`);
+      db.exec(createStmt);
+      for (const stmt of indexStmts) db.exec(stmt);
+    });
+    rebuild();
+  }
+}
+
+/**
  * Ensure data invariants after schema migration. Idempotent — safe to run
  * on every boot. Uses raw better-sqlite3 handle (not Drizzle ORM).
  */
