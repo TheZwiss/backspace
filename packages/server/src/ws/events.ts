@@ -1972,7 +1972,7 @@ async function sendFederatedCallStart(
 }
 
 /** Map a sendCallRelay reason to the event-surface reason. */
-function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndeliverableReason {
+export function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndeliverableReason {
   switch (reason) {
     case 'peer_rejected': return 'peer_rejected';
     case 'peer_awaiting_approval': return 'peer_awaiting_approval';
