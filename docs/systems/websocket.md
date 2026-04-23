@@ -170,7 +170,7 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 | `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members |
 | `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members |
 | `dm_call_ended` | dmChannelId?, federatedCallId? | DM members |
-| `dm_call_undeliverable` | Sent to caller when a call-start relay to one or more targeted peers fails. `failures[]` enumerates each failed peer with a `reason` (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `livekit_unavailable`). `terminal: true` means the local ring was destroyed; `false` means the call continues for reachable recipients. | caller only |
+| `dm_call_undeliverable` | Sent to the originator when a call relay (start / accept / reject / end) to one or more peers fails. Includes `phase: 'start' \| 'accept' \| 'reject' \| 'end'` identifying the action; `failures[]` enumerates failed peers with a `reason` (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `livekit_unavailable`). `terminal: true` means local call state should be (or has been) torn down; `terminal: false` is informational. See `docs/systems/voice.md` for the full phase × terminal matrix. | originator (caller / acceptor / rejector / ender) |
 
 ### Social
 | type | fields | scope |
