@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { config } from '../config.js';
 import * as schema from './schema.js';
-import { baselineExistingInstall, ensureDefaults } from './migrate.js';
+import { baselineExistingInstall, healInitialSchemaDrift, ensureDefaults } from './migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -28,6 +28,12 @@ export function initDatabase() {
   // marks the initial migration as applied so it doesn't try to
   // CREATE TABLE on a database that already has tables.
   baselineExistingInstall(sqlite);
+
+  // Reconcile any columns present in the 0000 baseline but missing
+  // from the physical schema. Fixes drift between the pre-drizzle
+  // manual migration system and drizzle-kit's assumed baseline —
+  // a no-op on fresh installs and correctly-migrated DBs.
+  healInitialSchemaDrift(sqlite);
 
   // Apply any pending Drizzle migrations
   const migrationsFolder = resolve(__dirname, '../../drizzle');
