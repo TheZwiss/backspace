@@ -2,7 +2,12 @@ import { create } from 'zustand';
 import type { User, InstanceInfoResponse, ReplicatedInstance, AuthResponse, FederationRegistryEntry } from '@backspace/shared';
 import { BackspaceApiClient, createApiClient, api } from '../api/client';
 import { useAuthStore } from './authStore';
-import { setApiForOriginResolver, setUserIdForOriginResolver, setOriginFromHostnameResolver, useSpaceStore } from './spaceStore';
+import {
+  setApiForOriginResolver,
+  setUserIdForOriginResolver,
+  setOriginFromHostnameResolver,
+} from '../utils/crossStoreResolvers';
+import { useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
 // Circular dependency: federationOps imports useInstanceStore, instanceStore imports this.
 // Safe because both modules access each other lazily (at call time, not import time).

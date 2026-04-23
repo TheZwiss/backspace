@@ -5,7 +5,8 @@
 Source files:
 - `packages/web/src/stores/instanceStore.ts` — Core multi-instance connection management, token caching, topology sync
 - `packages/web/src/hooks/useWebSocket.ts` — WebSocket multiplexing (one connection per instance), origin-aware event routing
-- `packages/web/src/stores/spaceStore.ts` — Origin-aware space/channel store, `channelOriginMap`, `getChannelOrigin()`, `getApiForOrigin()`, DM deduplication
+- `packages/web/src/stores/spaceStore.ts` — Origin-aware space/channel store, `channelOriginMap`, `getChannelOrigin()`, `resolveUserOrigin()`, `getLayoutHomeOrigin()`, `getMyUserIdForOrigin()`, DM deduplication
+- `packages/web/src/utils/crossStoreResolvers.ts` — Neutral module holding the cross-store resolver bindings (`_getApiForOrigin`, `_resolveOriginFromHostname`, `_getUserIdForOrigin`) + the WS-populated user-ID cache. Breaks a TDZ cycle between spaceStore and instanceStore; see "API Client Resolution" below
 - `packages/web/src/utils/identity.ts` — Cross-instance user identity resolution (`isSelf`, `canonicalUserMatch`, self-ID registry)
 - `packages/web/src/hooks/useInstanceConnect.ts` — Connection flow hook for the Connections UI
 - `packages/web/src/components/modals/ConnectedInstances.tsx` — Connections settings panel
@@ -184,9 +185,14 @@ getApiForOrigin(origin: string): BackspaceApiClient
 
 Returns the correct API client for the given origin. Uses a resolver pattern to break circular dependencies between stores:
 
-- `instanceStore` registers the resolver at module init
-- `spaceStore` exposes `getApiForOrigin()` which calls the registered resolver
+- The resolver backing, its setter (`setApiForOriginResolver`), and the getter (`getApiForOrigin`) live in `packages/web/src/utils/crossStoreResolvers.ts` — a neutral module with no store imports
+- `instanceStore` imports the setter from the utility directly (not from `spaceStore`) and registers the resolver at module init
+- `spaceStore` re-exports `getApiForOrigin` (and its sibling setters) from the utility for backward compatibility with existing import sites
 - Consumers call `getApiForOrigin(getChannelOrigin(channelId))` to get the right client
+
+The same pattern covers `resolveOriginFromHostname` (for `resolveUserOrigin`), the user-ID resolver (`resolveUserIdFromInstances`), and the WS-populated user-ID cache (`setMyUserIdForOrigin` / `getCachedUserIdForOrigin` / `clearMyUserIdCache`).
+
+**Why the utility exists:** `instanceStore` runs top-level `setXResolver` calls at module load. If spaceStore holds the backing `let _getApiForOrigin` declaration AND the import chain reaches instanceStore while spaceStore is mid-load (e.g. via `JoinSpaceModal` importing `useInstanceStore` directly), the setter crashes with TDZ: `Cannot access '_getApiForOrigin' before initialization`. Hoisting the mutable bindings into a module that has no back-edges into the stores eliminates the cycle. Do NOT add imports from `./stores/*` into `crossStoreResolvers.ts` — doing so re-creates the exact cycle that module was carved out to break.
 
 ### User Origin Resolution
 
