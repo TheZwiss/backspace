@@ -206,7 +206,9 @@ export function handleClientEvent(
       );
       break;
     case 'dm_call_end':
-      handleDmCallEnd(event, userId);
+      handleDmCallEnd(event, userId).catch(err =>
+        console.error('[ws] handleDmCallEnd error:', err),
+      );
       break;
     case 'voice_status':
       handleVoiceStatus(event, userId);
@@ -1654,7 +1656,7 @@ async function handleDmCallReject(event: Record<string, unknown>, userId: string
   }
 }
 
-function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
+async function handleDmCallEnd(event: Record<string, unknown>, userId: string): Promise<void> {
   let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
 
@@ -1698,14 +1700,16 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
       : undefined;
 
   if (fedCall) {
-    // Exclude the user who ended the call — they already disconnected in their click handler.
-    // Sending dm_call_ended back to them causes redundant disconnectFn() and double sounds.
+    // Exclude the user who ended the call — they already disconnected client-side.
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_ended',
       dmChannelId: fedCall.dmChannelId,
       federatedCallId: fedCall.federatedId,
     } as ServerEvent, userId);
-    connectionManager.clearFederatedCall(fedCall.federatedId);
+    const host = fedCall.federatedCallHost;
+    const fedId = fedCall.federatedId;
+    const dmId = fedCall.dmChannelId;
+    connectionManager.clearFederatedCall(fedId);
 
     const db = getDb();
     const user = db.select({ homeUserId: schema.users.homeUserId })
@@ -1714,16 +1718,29 @@ function handleDmCallEnd(event: Record<string, unknown>, userId: string): void {
       .get();
     const homeUserId = user?.homeUserId || userId;
 
-    sendCallRelay(fedCall.federatedCallHost, [{
+    const result = await sendCallRelay(host, [{
       eventType: 'dm_call_end',
       messageId: generateSnowflake(),
       encryptionVersion: 0,
       timestamp: Date.now(),
-      federatedId: fedCall.federatedId,
+      federatedId: fedId,
       call: {
         endedBy: { homeUserId, homeInstance: getOurOrigin() },
       },
-    }]).catch(err => console.error('[federation] Failed to send dm_call_end:', err));
+    }]);
+
+    if (!result.ok) {
+      console.error(`[federation] dm_call_end relay to ${host} failed (${result.reason}): ${result.error}`);
+      const failure = buildFailureFromResult(result, host, db);
+      connectionManager.sendToUser(userId, {
+        type: 'dm_call_undeliverable',
+        dmChannelId: dmId,
+        federatedCallId: fedId,
+        terminal: false,
+        phase: 'end',
+        failures: [failure],
+      });
+    }
   }
 }
 
@@ -2374,3 +2391,4 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
 /** Direct export for unit tests — do not use in production code paths. */
 export const handleDmCallAcceptForTest = handleDmCallAccept;
 export const handleDmCallRejectForTest = handleDmCallReject;
+export const handleDmCallEndForTest = handleDmCallEnd;

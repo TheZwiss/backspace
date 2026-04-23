@@ -113,6 +113,51 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('handleDmCallEnd Path-2 relay failure', () => {
+  it('emits dm_call_undeliverable { phase:"end", terminal:false } when the relay fails', async () => {
+    const { handleDmCallEndForTest } = await importSUT();
+    const connectionManager = await importManager();
+
+    const fedCall = makeFedCall({ state: 'active' });
+    connectionManager.createFederatedCall(fedCall);
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
+    sendCallRelayMock.mockResolvedValue({ ok: false, reason: 'peer_transient_failure', error: 'timeout' });
+
+    await handleDmCallEndForTest(
+      { federatedCallId: fedCall.federatedId },
+      fedCall.ringedUserIds[0]!,
+    );
+
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
+      (ev as { type: string }).type === 'dm_call_undeliverable',
+    );
+    expect(undelivCalls).toHaveLength(1);
+    const ev = undelivCalls[0]![1] as { phase: string; terminal: boolean };
+    expect(ev.phase).toBe('end');
+    expect(ev.terminal).toBe(false);
+  });
+
+  it('does not emit undeliverable on relay success', async () => {
+    const { handleDmCallEndForTest } = await importSUT();
+    const connectionManager = await importManager();
+
+    const fedCall = makeFedCall({ state: 'active' });
+    connectionManager.createFederatedCall(fedCall);
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
+    sendCallRelayMock.mockResolvedValue({ ok: true });
+
+    await handleDmCallEndForTest(
+      { federatedCallId: fedCall.federatedId },
+      fedCall.ringedUserIds[0]!,
+    );
+
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
+      (ev as { type: string }).type === 'dm_call_undeliverable',
+    );
+    expect(undelivCalls).toHaveLength(0);
+  });
+});
+
 describe('handleDmCallReject Path-2 relay failure', () => {
   it('emits dm_call_undeliverable { phase:"reject", terminal:false } to the rejector when the relay fails', async () => {
     const { handleDmCallRejectForTest } = await importSUT();
