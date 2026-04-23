@@ -196,7 +196,9 @@ export function handleClientEvent(
       handleDmCallStart(event, userId, username, ws);
       break;
     case 'dm_call_accept':
-      handleDmCallAccept(event, userId, ws);
+      handleDmCallAccept(event, userId, ws).catch(err =>
+        console.error('[ws] handleDmCallAccept error:', err),
+      );
       break;
     case 'dm_call_reject':
       handleDmCallReject(event, userId);
@@ -1442,7 +1444,7 @@ function handleDmCallStart(event: Record<string, unknown>, userId: string, usern
     .catch(err => console.error('[federation] sendFederatedCallStart error:', err));
 }
 
-function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): void {
+async function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: WebSocket): Promise<void> {
   let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
   if (!dmChannelId && !federatedCallId) {
@@ -1520,6 +1522,8 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       : undefined;
 
   if (fedCall) {
+    // Optimistic transition so the acceptor's client flips to active immediately.
+    // Rolled back below if the relay to host fails.
     connectionManager.activateFederatedCall(fedCall.federatedId);
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_accepted',
@@ -1534,7 +1538,7 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       .get();
     const homeUserId = user?.homeUserId || userId;
 
-    sendCallRelay(fedCall.federatedCallHost, [{
+    const result = await sendCallRelay(fedCall.federatedCallHost, [{
       eventType: 'dm_call_accept',
       messageId: generateSnowflake(),
       encryptionVersion: 0,
@@ -1543,7 +1547,21 @@ function handleDmCallAccept(event: Record<string, unknown>, userId: string, ws: 
       call: {
         acceptor: { homeUserId, homeInstance: getOurOrigin() },
       },
-    }]).catch(err => console.error('[federation] Failed to send dm_call_accept:', err));
+    }]);
+
+    if (!result.ok) {
+      console.error(`[federation] dm_call_accept relay to ${fedCall.federatedCallHost} failed (${result.reason}): ${result.error}`);
+      const failure = buildFailureFromResult(result, fedCall.federatedCallHost, db);
+      connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
+        type: 'dm_call_undeliverable',
+        dmChannelId: fedCall.dmChannelId,
+        federatedCallId: fedCall.federatedId,
+        terminal: true,
+        phase: 'accept',
+        failures: [failure],
+      });
+      connectionManager.clearFederatedCall(fedCall.federatedId);
+    }
     return;
   }
 
@@ -2333,3 +2351,7 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
     channelId,
   });
 }
+
+// ─── Test-only exports ──────────────────────────────────────────────────────
+/** Direct export for unit tests — do not use in production code paths. */
+export const handleDmCallAcceptForTest = handleDmCallAccept;
