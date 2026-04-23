@@ -116,40 +116,9 @@ function buildWsUrl(origin: string): string {
 
 // ─── Call relay helpers ───────────────────────────────────────────────────────
 
-function buildCallUndeliverableToast(
-  failures: Array<{ reason: string; peerOrigin?: string; peerLabel?: string }>,
-  terminal: boolean,
-): string {
-  const primary = failures[0];
-  const labelFor = (f: { peerLabel?: string; peerOrigin?: string }) =>
-    f.peerLabel ?? f.peerOrigin?.replace(/^https?:\/\//, '') ?? 'the remote instance';
+import { buildCallUndeliverableToast } from '../utils/callUndeliverableToast';
 
-  if (!terminal) {
-    const labels = failures.map(labelFor).join(', ');
-    return `Some participants could not be reached: ${labels}.`;
-  }
-
-  if (failures.length > 1) {
-    const labels = failures.map(labelFor).join(', ');
-    return `Could not reach ${failures.length} instances: ${labels}.`;
-  }
-
-  if (!primary) return 'Call could not be placed.';
-
-  const label = labelFor(primary);
-  switch (primary.reason) {
-    case 'peer_rejected':
-      return `Cannot reach ${label} — this instance requires manual peering approval.`;
-    case 'peer_awaiting_approval':
-      return `Waiting for ${label} admin to approve your instance. Calls will work once approved.`;
-    case 'peer_transient_failure':
-      return `Could not reach ${label}. Try again in a moment.`;
-    case 'livekit_unavailable':
-      return 'Voice is not configured on this instance.';
-    default:
-      return `Call to ${label} could not be placed.`;
-  }
-}
+export { buildCallUndeliverableToast };
 
 // ─── Event handling ───────────────────────────────────────────────────────────
 
@@ -1030,7 +999,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
         if (disconnectFn) disconnectFn();
       }
 
-      const msg = buildCallUndeliverableToast(event.failures, event.terminal);
+      const msg = buildCallUndeliverableToast(event.failures, event.terminal, event.phase);
       addToast(msg, event.terminal ? 'warning' : 'info', 8_000);
       break;
     }
