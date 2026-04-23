@@ -191,3 +191,88 @@ export async function startupBootstrapSync(): Promise<void> {
     await onPeerActivated(peer.id, 'startup_bootstrap');
   }
 }
+
+export type PeerDeactivationReason =
+  | 'network_threshold'        // outbox worker hit PEER_UNREACHABLE_THRESHOLD
+  | 'auth_threshold'           // outbox worker hit AUTH_FAILURE_THRESHOLD
+  | 'remote_rejected'          // auto-peer handshake got 403 PEERING_REQUIRES_APPROVAL
+  | 'admin_revoked'            // admin revoked peering from this side
+  | 'admin_reset';             // admin reset peer clearing to non-active status
+
+// Dedup: concurrent deactivations for the same peerId share one promise.
+// SEPARATE from inFlightActivation — a flapping peer's activate-then-deactivate
+// sequence must not collapse into one slot.
+const inFlightDeactivation = new Map<string, Promise<void>>();
+
+/**
+ * Called whenever federation_peers.status transitions OUT OF 'active' for any reason.
+ * Sweeps connectionManager.federatedCalls for entries whose federatedCallHost matches
+ * the peer origin, emitting dm_call_undeliverable { phase: 'host_unreachable', terminal: true }
+ * to stranded ringed users and clearing the entries.
+ *
+ * Call sites (must remain exhaustive — grep `onPeerDeactivated(` to audit):
+ *   - utils/federationWorker.ts handleOutboxDeliveryFailure when status flips to 'unreachable'
+ *   - utils/federationWorker.ts auth-failure path when status flips to 'needs_attention'
+ *   - utils/federationWorker.ts resolvePendingPeers case 'rejected'
+ *   - routes/federation.ts admin revoke endpoint
+ *   - routes/federation.ts admin reset endpoint (when it transitions to a non-active status)
+ *   - utils/federationPeering.ts performHandshake 403 PEERING_REQUIRES_APPROVAL path
+ *
+ * Deduplicated by peerId — concurrent calls share one promise. Separate map from
+ * onPeerActivated so flapping peers don't collapse transitions.
+ */
+export async function onPeerDeactivated(
+  peerId: string,
+  reason: PeerDeactivationReason,
+): Promise<void> {
+  const existing = inFlightDeactivation.get(peerId);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const db = getDb();
+      const peer = db.select({
+        origin: schema.federationPeers.origin,
+        status: schema.federationPeers.status,
+        instanceName: schema.federationPeers.instanceName,
+      })
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, peerId))
+        .get();
+
+      if (!peer) {
+        // Peer row gone — nothing to sweep against.
+        return;
+      }
+
+      const { connectionManager } = await import('../ws/handler.js');
+
+      // Map status to user-facing reason.
+      const isRejectedLike = peer.status === 'rejected' || peer.status === 'revoked';
+      const mappedReason: 'peer_rejected' | 'peer_transient_failure' =
+        isRejectedLike ? 'peer_rejected' : 'peer_transient_failure';
+
+      const evicted = connectionManager.evictFederatedCallsForHost(peer.origin, {
+        reason: mappedReason,
+        peerLabel: peer.instanceName ?? undefined,
+      });
+
+      if (evicted > 0) {
+        console.log(
+          `[federation] onPeerDeactivated(${peerId}, ${reason}) evicted ${evicted} FederatedCallEntry object${evicted === 1 ? '' : 's'} for ${peer.origin}`,
+        );
+      }
+
+      connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+    } catch (err) {
+      console.error(`[federation] onPeerDeactivated(${peerId}, ${reason}) failed:`, err);
+    }
+  })();
+
+  inFlightDeactivation.set(peerId, promise);
+  try {
+    await promise;
+  } finally {
+    inFlightDeactivation.delete(peerId);
+  }
+}
