@@ -7,7 +7,7 @@ import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
-import type { CallRelayFailureReason } from '../utils/federationOutbox.js';
+import type { CallRelayFailureReason, CallRelayResult } from '../utils/federationOutbox.js';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -1906,6 +1906,30 @@ function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndel
   }
 }
 
+/** Build a DmCallUndeliverableFailure from a failed CallRelayResult, enriching with peer label. */
+function buildFailureFromResult(
+  result: Extract<CallRelayResult, { ok: false }>,
+  peerOrigin: string,
+  db: ReturnType<typeof getDb>,
+): DmCallUndeliverableFailure {
+  const label = db.select({ instanceName: schema.federationPeers.instanceName })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.origin, peerOrigin))
+    .get()?.instanceName;
+  return {
+    reason: mapCallReasonToEventReason(result.reason),
+    peerOrigin,
+    peerLabel: label ?? undefined,
+  };
+}
+
+/** Per-peer failure record returned by Path-1 fan-out helpers. */
+export interface CallFanoutFailure {
+  origin: string;
+  peerLabel?: string;
+  reason: DmCallUndeliverableReason;
+}
+
 /**
  * Emit dm_call_undeliverable to the caller. If terminal, also destroy the
  * local ring room (which clears the ringing timer and voice WS binding)
@@ -1944,6 +1968,7 @@ function emitUndeliverableAndMaybeDestroy(args: {
     dmChannelId,
     federatedCallId: federatedId,
     terminal,
+    phase: 'start',
     failures,
   });
 }
