@@ -519,6 +519,56 @@ class ConnectionManager {
     }
   }
 
+  /**
+   * Evict all FederatedCallEntry objects whose federatedCallHost matches the given peer origin.
+   * Emits dm_call_undeliverable { phase: 'host_unreachable', terminal: true } to each entry's
+   * ringedUserIds, then clears the entry (and its 60s ring timer if still armed).
+   *
+   * Idempotent: re-invocation with an already-evicted host returns 0.
+   * Called from onPeerDeactivated (signal 1) and the 30s sentinel (signal 2 / backstop).
+   */
+  evictFederatedCallsForHost(
+    peerOrigin: string,
+    ctx: {
+      reason: 'peer_transient_failure' | 'peer_rejected';
+      peerLabel?: string;
+    },
+  ): number {
+    const matches: FederatedCallEntry[] = [];
+    for (const entry of this.federatedCalls.values()) {
+      if (entry.federatedCallHost === peerOrigin) matches.push(entry);
+    }
+    if (matches.length === 0) return 0;
+
+    let evicted = 0;
+    for (const entry of matches) {
+      // Re-check — concurrent teardown may have removed it between collect and broadcast.
+      if (!this.federatedCalls.has(entry.federatedId)) continue;
+
+      const event: ServerEvent = {
+        type: 'dm_call_undeliverable',
+        dmChannelId: entry.dmChannelId,
+        federatedCallId: entry.federatedId,
+        terminal: true,
+        phase: 'host_unreachable',
+        failures: [{
+          reason: ctx.reason,
+          peerOrigin,
+          peerLabel: ctx.peerLabel,
+        }],
+      };
+
+      for (const uid of entry.ringedUserIds) {
+        this.sendToUser(uid, event);
+      }
+
+      this.clearFederatedCall(entry.federatedId);
+      evicted += 1;
+    }
+
+    return evicted;
+  }
+
   /** Late-bind a dmChannelId onto a Path B FederatedCallEntry. */
   lateBindFederatedCall(federatedId: string, dmChannelId: string): void {
     const call = this.federatedCalls.get(federatedId);
