@@ -1,5 +1,40 @@
 import '@testing-library/jest-dom/vitest';
 
+// Node 20+ ships a built-in `localStorage`/`sessionStorage` stub on globalThis
+// that has no methods unless `--localstorage-file=PATH` is provided. Vitest's
+// jsdom env only overwrites globals it knows about, and neither storage is in
+// that list — so Node's broken stub shadows jsdom's working implementation,
+// breaking anything that persists via zustand's `persist` middleware.
+// Replace both with an in-memory Storage-compatible polyfill.
+class InMemoryStorage implements Storage {
+  private store = new Map<string, string>();
+  get length(): number {
+    return this.store.size;
+  }
+  clear(): void {
+    this.store.clear();
+  }
+  getItem(key: string): string | null {
+    return this.store.has(key) ? this.store.get(key)! : null;
+  }
+  key(index: number): string | null {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.store.delete(key);
+  }
+  setItem(key: string, value: string): void {
+    this.store.set(key, String(value));
+  }
+}
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  Object.defineProperty(globalThis, name, {
+    value: new InMemoryStorage(),
+    configurable: true,
+    writable: true,
+  });
+}
+
 // Polyfill ClipboardItem for jsdom (not included in jsdom)
 if (typeof ClipboardItem === 'undefined') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

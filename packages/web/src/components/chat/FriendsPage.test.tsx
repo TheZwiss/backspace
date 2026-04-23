@@ -322,7 +322,7 @@ describe('FriendsPage', () => {
       });
 
       await waitFor(() => {
-        expect(mockAddDmChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'dm-channel-99' }), '');
+        expect(mockAddDmChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'dm-channel-99' }));
       });
 
       await waitFor(() => {
