@@ -26,6 +26,7 @@ import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
+import { registerCallRelayHooks } from './ws/events.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -123,6 +124,9 @@ async function main(): Promise<void> {
 
   // Log ffmpeg availability at startup (so admins see the warning immediately)
   checkFfmpeg();
+
+  // Register WS-layer call relay hooks (ring-timeout fan-out).
+  registerCallRelayHooks();
 
   // Start federation background workers (outbox delivery, file download, health check)
   startFederationWorkers();

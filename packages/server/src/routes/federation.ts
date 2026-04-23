@@ -12,6 +12,8 @@ import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
+import { mapCallReasonToEventReason, type CallFanoutFailure } from '../utils/federationOutbox.js';
+import type { DmCallUndeliverableFailure } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
@@ -4464,10 +4466,14 @@ function processDmCallAcceptEvent(
 
     // Fan out to ALL other remote instances (exclude the one that sent the accept)
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_accept', {
+    const hostCallerId = (room.metadata as DmRoomMeta).callerId;
+    const localDmId = dmChannelId!;
+    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_accept', {
       call: { acceptor: event.call.acceptor },
-    }, normalizedSource, db).catch(err =>
-      console.error('[federation] Fan-out dm_call_accept failed:', err)
+    }, normalizedSource, db).then(failures => {
+      emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'accept', failures);
+    }).catch(err =>
+      console.error('[federation] Fan-out dm_call_accept threw:', err),
     );
   } else {
     // We're a REMOTE instance receiving fan-out — transition local state
@@ -4517,19 +4523,23 @@ function processDmCallRejectEvent(
   const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
+    const hostCallerId = meta.callerId;
+    const localDmId = dmChannelId!;
     connectionManager.clearVoiceWs(meta.callerId);
-    connectionManager.destroyRoom(dmChannelId!);
+    connectionManager.destroyRoom(localDmId);
 
-    connectionManager.sendToDmMembers(dmChannelId!, {
+    connectionManager.sendToDmMembers(localDmId, {
       type: 'dm_call_rejected',
-      dmChannelId: dmChannelId!,
+      dmChannelId: localDmId,
     });
 
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_end', {
+    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.rejector },
-    }, normalizedSource, db).catch(err =>
-      console.error('[federation] Fan-out dm_call_end (reject) failed:', err)
+    }, normalizedSource, db).then(failures => {
+      emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'reject', failures);
+    }).catch(err =>
+      console.error('[federation] Fan-out dm_call_end (reject) threw:', err),
     );
   } else {
     const fedCall = connectionManager.getFederatedCall(event.federatedId);
@@ -4572,23 +4582,27 @@ function processDmCallEndEvent(
   const room = dmChannelId ? connectionManager.getRoom(dmChannelId) : undefined;
   if (room && room.roomType === 'dm') {
     const meta = room.metadata as DmRoomMeta;
+    const hostCallerId = meta.callerId;
+    const localDmId = dmChannelId!;
     connectionManager.clearVoiceWs(meta.callerId);
     for (const pid of room.participants) {
       connectionManager.clearVoiceUserStatus(pid);
       connectionManager.clearVoiceWs(pid);
     }
-    connectionManager.destroyRoom(dmChannelId!);
+    connectionManager.destroyRoom(localDmId);
 
-    connectionManager.sendToDmMembers(dmChannelId!, {
+    connectionManager.sendToDmMembers(localDmId, {
       type: 'dm_call_ended',
-      dmChannelId: dmChannelId!,
+      dmChannelId: localDmId,
     });
 
     const normalizedSource = sourceInstance.startsWith('http') ? sourceInstance : `https://${sourceInstance}`;
-    fanOutCallEvent(dmChannelId!, event.federatedId, 'dm_call_end', {
+    void fanOutCallEvent(localDmId, event.federatedId, 'dm_call_end', {
       call: { endedBy: event.call.endedBy },
-    }, normalizedSource, db).catch(err =>
-      console.error('[federation] Fan-out dm_call_end failed:', err)
+    }, normalizedSource, db).then(failures => {
+      emitHostFanoutUndeliverable(hostCallerId, localDmId, event.federatedId!, 'end', failures);
+    }).catch(err =>
+      console.error('[federation] Fan-out dm_call_end threw:', err),
     );
   } else {
     const fedCall = connectionManager.getFederatedCall(event.federatedId);
@@ -5144,7 +5158,7 @@ async function fanOutCallEvent(
   extraFields: Partial<FederationRelayEvent>,
   excludeOrigin: string | undefined,
   db: ReturnType<typeof getDb>,
-): Promise<void> {
+): Promise<CallFanoutFailure[]> {
   const members = db.select({ homeInstance: schema.users.homeInstance })
     .from(schema.dmMembers)
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
@@ -5161,7 +5175,7 @@ async function fanOutCallEvent(
       }
     }
   }
-  if (targets.size === 0) return;
+  if (targets.size === 0) return [];
 
   const relayEvent: FederationRelayEvent = {
     eventType,
@@ -5172,11 +5186,51 @@ async function fanOutCallEvent(
     ...extraFields,
   } as FederationRelayEvent;
 
-  await Promise.all(
-    Array.from(targets).map(origin =>
-      sendCallRelay(origin, [relayEvent]).catch(err =>
-        console.error(`[federation] Fan-out ${eventType} to ${origin} failed:`, err)
-      )
-    )
+  const labelByOrigin = new Map<string, string | null>();
+  for (const r of db.select({ origin: schema.federationPeers.origin, instanceName: schema.federationPeers.instanceName })
+    .from(schema.federationPeers)
+    .all()) {
+    labelByOrigin.set(r.origin, r.instanceName ?? null);
+  }
+
+  const results = await Promise.all(
+    Array.from(targets).map(async origin => ({ origin, result: await sendCallRelay(origin, [relayEvent]) })),
   );
+
+  const failures: CallFanoutFailure[] = [];
+  for (const { origin, result } of results) {
+    if (!result.ok) {
+      console.error(`[federation] Fan-out ${eventType} to ${origin} failed (${result.reason}): ${result.error}`);
+      failures.push({
+        origin,
+        peerLabel: labelByOrigin.get(origin) ?? undefined,
+        reason: mapCallReasonToEventReason(result.reason),
+      });
+    }
+  }
+  return failures;
+}
+
+/** Emit a non-terminal dm_call_undeliverable for a host-side fan-out failure. */
+function emitHostFanoutUndeliverable(
+  userId: string,
+  dmChannelId: string,
+  federatedId: string,
+  phase: 'accept' | 'reject' | 'end',
+  fanoutFailures: CallFanoutFailure[],
+): void {
+  if (fanoutFailures.length === 0) return;
+  const failures: DmCallUndeliverableFailure[] = fanoutFailures.map(f => ({
+    reason: f.reason,
+    peerOrigin: f.origin,
+    peerLabel: f.peerLabel,
+  }));
+  connectionManager.sendToUser(userId, {
+    type: 'dm_call_undeliverable',
+    dmChannelId,
+    federatedCallId: federatedId,
+    terminal: false,
+    phase,
+    failures,
+  });
 }

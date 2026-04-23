@@ -1134,7 +1134,11 @@ All events carry standard relay fields: `eventType`, `messageId`, `encryptionVer
 
 - Fire-and-forget to each remote DM participant's home instance via `sendCallRelay(origin, [event], { peeringTimeoutMs: 0 })`. Typing is an ephemeral hint — lost packets are acceptable and there is no user-facing failure surface.
 
-**Call-start failure surfacing.** `sendFederatedCallStart` aggregates targeted-peer results and emits `dm_call_undeliverable` to the caller for failed targeted peers. See `docs/systems/voice.md` and `docs/systems/websocket.md` for the event contract.
+**Call-start failure surfacing.** `sendFederatedCallStart` aggregates targeted-peer results and emits `dm_call_undeliverable { phase: 'start' }` to the caller for failed targeted peers. See `docs/systems/voice.md` and `docs/systems/websocket.md` for the event contract.
+
+**Accept / reject / end relay discipline.** Every `handleDmCall{Accept,Reject,End}` Path-2 branch awaits `sendCallRelay` and emits `dm_call_undeliverable { phase, terminal, failures }` to the originator on failure. Accept is pessimistic-rollback (terminal: true — local `FederatedCallEntry` cleared, optimistic `dm_call_accepted` walked back via `sendToFederatedCallUsers`); reject and end are optimistic (terminal: false — state already cleared, informational toast only). Path-1 fan-outs via `sendFederatedCallAccept` / `sendFederatedCallEnd` / `fanOutCallEvent` return `CallFanoutFailure[]` and the host-side caller receives `dm_call_undeliverable { terminal: false }` listing peers that were not reached.
+
+**Ring-timeout fan-out.** `ConnectionManager.createDmRoom`'s 60 s ringing auto-clean now invokes a registered hook (`setRingTimeoutFanoutHook`, registered from `ws/events.ts:registerCallRelayHooks`) that fans `dm_call_end` out to remote peers, so stranded Path-A/B ringees on other instances exit their ring state instead of lingering until their own 60 s cleanup fires.
 
 ### Call Flows
 
@@ -1269,6 +1273,4 @@ If the `federation_mutation_log` table exists but is empty, populates it with `c
 
 See `docs/federation-production-roadmap.md` for open items (FED-001 through FED-013).
 
-- **Accept-relay failure dead end.** If Bob on B accepts a call from Alice on A and the `dm_call_accept` S2S relay back to A fails, Alice's client does not exit the `outgoingCall` state until the 60 s ring timeout fires `dm_call_ended`. The client clears `outgoingCall` only on `dm_call_accepted | rejected | ended` (`useWebSocket.ts`), with no LiveKit participant-join fallback. Surfacing this requires a B-side event and call-state rollback; deferred.
-- **End-relay failure dead end.** Similar mechanism, lower severity because LiveKit `ParticipantDisconnected` typically unwinds the voice UI on the host side; local DM call state still lingers to the 60 s timeout. Deferred.
-- **Path-B reject-relay failure dead end.** Third-instance user (Carol on C) rings for a call hosted on A via Path B; if her `dm_call_reject` C→A relay fails, A never deducts her from the pending ringees, so her name persists in the caller's "still ringing" set until the 60 s timeout. Same class as accept-failure; deferred.
+- **Accept/reject/end relay failures now surfaced.** All three federated call-state transitions emit `dm_call_undeliverable { phase, terminal, failures }` to the originator on relay failure — accept rolls back optimistic state (terminal: true), reject/end keep the optimistic clear and emit an informational toast (terminal: false). See `docs/systems/voice.md` "Call relay failure surface" for the full contract. The host-side ring timeout also fans `dm_call_end` out to peers so stranded Path-A/B ringees exit the ring. One remaining edge documented in voice.md: non-host end-relay failure leaves the host's local `activeDmCall` marker until manual cleanup.

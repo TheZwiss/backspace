@@ -283,7 +283,7 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 **Request:** `{ content?: string, attachments?: string[], replyToId?: string }`
 
-**Cross-instance access:** Federated users (those with `homeInstance` set) can send messages on any DM channel where they are a member, regardless of which instance serves the request. The `requireLocalUser` gate that previously blocked federated users from DM write endpoints has been removed. DM calls work across federated instances. The caller's instance hosts the LiveKit room; remote clients connect directly. Call signaling is relayed to all active federation peers via synchronous HTTP POST (not the outbox worker). See `docs/systems/voice.md` for the full federated call architecture.
+**Cross-instance access:** Federated users (those with `homeInstance` set) can send messages on any DM channel where they are a member, regardless of which instance serves the request. The `requireLocalUser` gate that previously blocked federated users from DM write endpoints has been removed. DM calls work across federated instances. The caller's instance hosts the LiveKit room; remote clients connect directly. Call signaling is relayed to all active federation peers via synchronous HTTP POST (not the outbox worker). Relay failures at any call state transition emit `dm_call_undeliverable { phase, terminal, failures }` to the originator — see `docs/systems/voice.md` for the full call state machine and failure surface.
 
 **Validation:**
 - Caller must be a member (`isDmMember`)

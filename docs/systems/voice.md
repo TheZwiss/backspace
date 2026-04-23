@@ -60,9 +60,24 @@ All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relaye
 
 **Auto-peering at send time.** If the target origin has no active peer record, `sendCallRelay` races an `ensurePeered` handshake against a 3 s deadline (`CALL_PEERING_TIMEOUT_MS`). On success the relay POSTs normally; on timeout it returns `peer_transient_failure` without aborting the background handshake, so a subsequent attempt typically succeeds. Typing (`sendTypingRelay`) passes `peeringTimeoutMs: 0` — the POST is skipped for non-active peers and a warm-up `ensurePeered` runs in the background.
 
-**Call-start failure surface.** `sendFederatedCallStart` aggregates results from its targeted-peer relays (peers whose origin matches a DM member's `homeInstance`) and emits a single `dm_call_undeliverable` event to the caller when any targeted peer fails. `terminal: true` (no successful targeted relay AND no connected local non-caller member) also destroys the local ring room so the caller's UI clears immediately; `terminal: false` leaves the call ringing for reachable recipients. The all-peers broadcast (Path-B fallback to non-member-hosting peers) logs failures only — they are not surfaced.
+**Call relay failure surface.** Every `dm_call_{start,accept,reject,end}` relay is failure-aware. On failure the originating server emits a `dm_call_undeliverable` event with a `phase` discriminator identifying which action failed. Client copy is phase-specific; state rollback depends on the phase.
 
-Accept and end relay failures are NOT surfaced today; see the federation doc's "Known issues" section for the deferred accept-failure dead-end.
+| `phase` | `terminal` | Emitted when | Client action |
+|---------|------------|--------------|---------------|
+| `start` | true | No plausible recipient after targeted-peer fan-out; ring room destroyed. | Clear `outgoingCall`, disconnect LK, warning toast. |
+| `start` | false | Some targeted peers failed but reachable recipients remain; ring continues. | Keep state; info toast. |
+| `accept` | true | Acceptor's B→host relay failed; optimistic state is rolled back on B. | Clear `activeDmCall` + `incomingCall`, disconnect LK, warning toast. |
+| `accept` | false | Host → peer fan-out of accept failed; local host call continues. | No state change; info toast. |
+| `reject` | false | Rejector's relay to host failed OR host's fan-out after a local reject failed; state already cleared. | No state change; info toast. |
+| `end` | false | Ender's relay to host failed OR host's fan-out after a local end failed; state already cleared. | No state change; info toast. |
+
+**Accept-rollback semantics.** `handleDmCallAccept` Path 2 transitions the `FederatedCallEntry` to active and broadcasts `dm_call_accepted` optimistically so the acceptor's UI flips immediately. If the B→host relay fails, the server clears the entry, fans `dm_call_undeliverable { phase: 'accept', terminal: true }` out to all ringed users on B (via `sendToFederatedCallUsers`), and the client tears its call state back down.
+
+**Reject / end are optimistic.** Local state is cleared before the relay is awaited because the user's intent is to terminate. If the relay fails, the originator receives an informational `dm_call_undeliverable { terminal: false }` so they know remote peers may briefly display stale state; no local rollback.
+
+**Ring-timeout fan-out.** When the host's 60 s ringing timeout fires without an accept, `dm_call_end` is fanned out to all remote peers so stranded Path-A/B ringees on other instances exit their ring state instead of lingering. Registered via `connectionManager.setRingTimeoutFanoutHook` from the WS events module.
+
+**Remaining edge.** When a non-host participant (Bob on B) ends an active call and the relay to the host (Alice on A) fails, Alice's `activeDmCall` marker lingers until she manually ends — LK `ParticipantDisconnected` tears down her voice UI but does not clear the DM-call marker. This is a host-side cleanup concern, tracked separately.
 
 ### Dual-Path Processing
 
