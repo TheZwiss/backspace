@@ -41,6 +41,7 @@ vi.mock('../ws/handler.js', () => ({
     getAllOnlineUserIds: () => [],
     sendToUser: vi.fn(),
     sendToDmMembers: vi.fn(),
+    evictFederatedCallsForHost: vi.fn().mockReturnValue(0),
   },
 }));
 
@@ -346,5 +347,108 @@ describe('onPeerActivated', () => {
     });
 
     await expect(onPeerActivated('peer-err', 'ensure_peered')).resolves.toBeUndefined();
+  });
+});
+
+describe('onPeerDeactivated', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.clearAllMocks();
+  });
+
+  it('evicts federated calls for the peer origin with peer_transient_failure on network_threshold', async () => {
+    seedPeer('peer-net', 'unreachable');
+    testDb.update(schema.federationPeers)
+      .set({ instanceName: 'NetPeer' })
+      .where(eq(schema.federationPeers.id, 'peer-net'))
+      .run();
+
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    await onPeerDeactivated('peer-net', 'network_threshold');
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://peer-net.example',
+      { reason: 'peer_transient_failure', peerLabel: 'NetPeer' },
+    );
+  });
+
+  it('maps rejected status to peer_rejected reason', async () => {
+    seedPeer('peer-rej', 'rejected');
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    await onPeerDeactivated('peer-rej', 'remote_rejected');
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://peer-rej.example',
+      { reason: 'peer_rejected', peerLabel: undefined },
+    );
+  });
+
+  it('maps revoked status to peer_rejected reason', async () => {
+    seedPeer('peer-rev', 'revoked');
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    await onPeerDeactivated('peer-rev', 'admin_revoked');
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledWith(
+      'https://peer-rev.example',
+      { reason: 'peer_rejected', peerLabel: undefined },
+    );
+  });
+
+  it('broadcasts federation_peers_changed to admins', async () => {
+    seedPeer('peer-broad', 'unreachable');
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    await onPeerDeactivated('peer-broad', 'network_threshold');
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.sendToAdmins).toHaveBeenCalledWith({ type: 'federation_peers_changed' });
+  });
+
+  it('aborts silently when the peer row is missing', async () => {
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    await expect(onPeerDeactivated('peer-missing', 'network_threshold')).resolves.toBeUndefined();
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.evictFederatedCallsForHost).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates concurrent calls for the same peerId', async () => {
+    seedPeer('peer-x', 'unreachable');
+    const { onPeerDeactivated } = await import('./federationPeerActivation.js');
+    const { connectionManager } = await import('../ws/handler.js');
+
+    const p1 = onPeerDeactivated('peer-x', 'network_threshold');
+    const p2 = onPeerDeactivated('peer-x', 'network_threshold');
+    await Promise.all([p1, p2]);
+
+    // Exactly one eviction call, not two
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a dedup map SEPARATE from onPeerActivated', async () => {
+    seedPeer('peer-flap', 'active');
+    const { onPeerActivated, onPeerDeactivated } = await import('./federationPeerActivation.js');
+
+    // Simulate an activation already in flight — spawn onPeerActivated then
+    // immediately kick off a deactivation for the same peer id. The latter
+    // must NOT be swallowed as a dedup hit against the activation.
+    const actPromise = onPeerActivated('peer-flap', 'ensure_peered');
+
+    // Mark peer non-active now — otherwise the deactivation utility's
+    // own status guard would skip it.
+    testDb.update(schema.federationPeers)
+      .set({ status: 'unreachable' })
+      .where(eq(schema.federationPeers.id, 'peer-flap'))
+      .run();
+
+    const deactPromise = onPeerDeactivated('peer-flap', 'network_threshold');
+    await Promise.all([actPromise, deactPromise]);
+
+    const { connectionManager } = await import('../ws/handler.js');
+    expect(connectionManager.evictFederatedCallsForHost).toHaveBeenCalled();
   });
 });

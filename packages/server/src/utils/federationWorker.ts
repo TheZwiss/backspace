@@ -11,7 +11,7 @@ import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
-import { onPeerActivated, startupBootstrapSync } from './federationPeerActivation.js';
+import { onPeerActivated, startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -310,6 +310,9 @@ export async function processOutboxTick(): Promise<void> {
             })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
+          onPeerDeactivated(peerId, 'auth_threshold').catch(err =>
+            console.error('[federation-worker] onPeerDeactivated from auth threshold failed:', err)
+          );
           console.warn(
             `[federation-worker] Peer ${peerOrigin} transitioned to needs_attention after ${decision.newAuthFailures} consecutive ${response.status} responses`,
           );
@@ -416,6 +419,12 @@ function handleOutboxDeliveryFailure(
     .set(updates)
     .where(eq(schema.federationPeers.id, peerId))
     .run();
+
+  if (newFailures >= PEER_UNREACHABLE_THRESHOLD) {
+    onPeerDeactivated(peerId, 'network_threshold').catch(err =>
+      console.error('[federation-worker] onPeerDeactivated from unreachable threshold failed:', err)
+    );
+  }
 }
 
 // ─── Pending Peer Resolution ───────────────────────────────────────────────
@@ -467,6 +476,10 @@ async function resolvePendingPeers(): Promise<void> {
         db.delete(schema.federationOutbox)
           .where(eq(schema.federationOutbox.peerId, peerId))
           .run();
+
+        onPeerDeactivated(peerId, 'remote_rejected').catch(err =>
+          console.error('[federation-worker] onPeerDeactivated from resolvePendingPeers rejected failed:', err)
+        );
 
         // Push federation_peer_rejected WS event to affected users
         pushPeerRejectedEvent(peerOrigin, contextMap);
@@ -1096,6 +1109,54 @@ async function processHealthCheckTick(): Promise<void> {
   }
 }
 
+// ─── Federated Call Health Sweep ────────────────────────────────────────────
+//
+// Periodic backstop: iterate active FederatedCallEntry objects, look up each
+// distinct host's peer status, and evict entries whose host is non-active.
+// Covers the gap where a peer transitioned to non-active outside of any hook
+// site, or was already non-active when the entry was created.
+//
+// Latency note: real eviction = peer-status-update-lag + tick-period (≤30s).
+// Worst case 15.5min for idle instances with no outbox traffic (health-check
+// worker is the only status source). Documented in the design spec.
+
+export const FEDERATED_CALL_SENTINEL_MS = 30_000;
+
+export async function runFederatedCallSentinelTick(): Promise<void> {
+  const calls = connectionManager.getAllFederatedCalls();
+  if (calls.size === 0) return;
+
+  const distinctHosts = new Set<string>();
+  for (const entry of calls.values()) {
+    distinctHosts.add(entry.federatedCallHost);
+  }
+
+  const db = getDb();
+  for (const host of distinctHosts) {
+    const row = db
+      .select({
+        status: schema.federationPeers.status,
+        instanceName: schema.federationPeers.instanceName,
+      })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, host))
+      .get();
+
+    if (row && row.status === 'active') continue;
+
+    const isRejectedLike = row?.status === 'rejected' || row?.status === 'revoked';
+    const reason: 'peer_rejected' | 'peer_transient_failure' =
+      isRejectedLike ? 'peer_rejected' : 'peer_transient_failure';
+
+    connectionManager.evictFederatedCallsForHost(host, {
+      reason,
+      peerLabel: row?.instanceName ?? undefined,
+    });
+  }
+}
+
+let federatedCallSentinelTimer: ReturnType<typeof setInterval> | null = null;
+
 // ─── Janitor Worker ──────────────────────────────────────────────────────────
 
 function scheduleJanitorTick(): void {
@@ -1113,6 +1174,11 @@ export function startFederationWorkers(): void {
   scheduleFileQueueTick();
   scheduleHealthCheckTick();
   scheduleJanitorTick();
+  federatedCallSentinelTimer = setInterval(() => {
+    runFederatedCallSentinelTick().catch(err =>
+      console.error('[federation-worker] federatedCallSentinel tick failed:', err)
+    );
+  }, FEDERATED_CALL_SENTINEL_MS);
   // Bootstrap sync for freshly-peered rows (async, non-blocking)
   startupBootstrapSync().catch((err) => {
     console.error('[federation-worker] Startup bootstrap sync error:', err);
@@ -1136,6 +1202,11 @@ export function stopFederationWorkers(): void {
   if (janitorTimer) {
     clearTimeout(janitorTimer);
     janitorTimer = null;
+  }
+
+  if (federatedCallSentinelTimer) {
+    clearInterval(federatedCallSentinelTimer);
+    federatedCallSentinelTimer = null;
   }
 
   outboxAbortController?.abort();

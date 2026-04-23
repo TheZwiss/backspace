@@ -1015,6 +1015,21 @@ HTTP handler sites dispatch fire-and-forget (`.catch(log)`) so the response is n
 
 Concurrent activations for the same peer are deduplicated via an in-flight promise map keyed by `peerId`.
 
+### onPeerDeactivated
+
+Mirror of `onPeerActivated` for the transition *out* of `active`. Invoked wherever `federation_peers.status` is written to `unreachable`, `needs_attention`, `rejected`, or `revoked`. Responsibility: sweep `ConnectionManager.federatedCalls` for entries whose `federatedCallHost` matches the deactivated peer and evict them — emitting `dm_call_undeliverable { phase: 'host_unreachable', terminal: true }` to each entry's `ringedUserIds`. See `docs/systems/voice.md` for the client teardown contract.
+
+**Call sites (exhaustive — grep `onPeerDeactivated(` to audit):**
+- `utils/federationWorker.ts` handleOutboxDeliveryFailure when status flips to `unreachable`
+- `utils/federationWorker.ts` auth-failure path when status flips to `needs_attention`
+- `utils/federationWorker.ts` resolvePendingPeers case `'rejected'`
+- `routes/federation.ts` admin revoke endpoint
+- `utils/federationPeering.ts` performHandshake 403 `PEERING_REQUIRES_APPROVAL` path
+
+Deduplicated by peerId using a **separate** `inFlightDeactivation` map (not shared with activation) so flapping peers retain clean activate-then-deactivate ordering.
+
+A 30s periodic sentinel in `federationWorker.ts` (`runFederatedCallSentinelTick`) is the backstop — it scans active FederatedCallEntries, compares each host's current peer status against reality, and catches transitions missed by the hook sites.
+
 #### Peer-state × outbox-enqueue × recovery matrix
 
 | Status | `queueOutboxEvent` enqueue | Mutation log captures | Recovery on transition to `active` |
