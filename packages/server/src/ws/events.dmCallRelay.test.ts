@@ -234,13 +234,19 @@ describe('ring-timeout fan-out hook', () => {
 });
 
 describe('handleDmCallAccept Path-2 relay failure', () => {
-  it('emits dm_call_undeliverable { phase:"accept", terminal:true } and clears the fedCall when the relay fails', async () => {
+  it('emits dm_call_undeliverable { phase:"accept", terminal:true } to the acceptor ONLY and clears the fedCall when the relay fails', async () => {
     const { handleDmCallAcceptForTest } = await importSUT();
     const connectionManager = await importManager();
 
-    const fedCall = makeFedCall();
+    const fedCall = makeFedCall({
+      // Two ringed users — a group DM where only one accepts. Only the acceptor
+      // should receive the terminal undeliverable; the other ringee must stay
+      // in ring state so their own timeout/reject path governs teardown.
+      ringedUserIds: ['acceptor-user', 'other-ringee'],
+    });
     connectionManager.createFederatedCall(fedCall);
-    const sendToUsersSpy = vi.spyOn(connectionManager, 'sendToFederatedCallUsers');
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
+    const sendToCallUsersSpy = vi.spyOn(connectionManager, 'sendToFederatedCallUsers');
     sendCallRelayMock.mockResolvedValue({ ok: false, reason: 'peer_transient_failure', error: 'timeout' });
 
     await handleDmCallAcceptForTest(
@@ -250,14 +256,23 @@ describe('handleDmCallAccept Path-2 relay failure', () => {
     );
 
     expect(connectionManager.getFederatedCall(fedCall.federatedId)).toBeUndefined();
-    const calls = sendToUsersSpy.mock.calls.filter(([, ev]) =>
+
+    // Terminal undeliverable went to the acceptor only.
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
       (ev as { type: string }).type === 'dm_call_undeliverable',
     );
-    expect(calls).toHaveLength(1);
-    const undeliverable = calls[0]![1] as { phase: string; terminal: boolean; failures: unknown[] };
+    expect(undelivCalls).toHaveLength(1);
+    expect(undelivCalls[0]![0]).toBe('acceptor-user');
+    const undeliverable = undelivCalls[0]![1] as { phase: string; terminal: boolean; failures: unknown[] };
     expect(undeliverable.phase).toBe('accept');
     expect(undeliverable.terminal).toBe(true);
     expect(undeliverable.failures).toHaveLength(1);
+
+    // No undeliverable broadcast to all ringed users.
+    const callUsersCalls = sendToCallUsersSpy.mock.calls.filter(([, ev]) =>
+      (ev as { type: string }).type === 'dm_call_undeliverable',
+    );
+    expect(callUsersCalls).toHaveLength(0);
   });
 
   it('does not emit undeliverable on relay success', async () => {
@@ -266,7 +281,7 @@ describe('handleDmCallAccept Path-2 relay failure', () => {
 
     const fedCall = makeFedCall();
     connectionManager.createFederatedCall(fedCall);
-    const sendToUsersSpy = vi.spyOn(connectionManager, 'sendToFederatedCallUsers');
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
     sendCallRelayMock.mockResolvedValue({ ok: true });
 
     await handleDmCallAcceptForTest(
@@ -275,7 +290,7 @@ describe('handleDmCallAccept Path-2 relay failure', () => {
       {} as never,
     );
 
-    const undelivCalls = sendToUsersSpy.mock.calls.filter(([, ev]) =>
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
       (ev as { type: string }).type === 'dm_call_undeliverable',
     );
     expect(undelivCalls).toHaveLength(0);

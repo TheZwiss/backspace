@@ -1563,7 +1563,12 @@ async function handleDmCallAccept(event: Record<string, unknown>, userId: string
     if (!result.ok) {
       console.error(`[federation] dm_call_accept relay to ${fedCall.federatedCallHost} failed (${result.reason}): ${result.error}`);
       const failure = buildFailureFromResult(result, fedCall.federatedCallHost, db);
-      connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
+      // Clear first so a concurrent end-handler sees a cleared entry (idempotent).
+      connectionManager.clearFederatedCall(fedCall.federatedId);
+      // Terminal targets ONLY the acceptor — other ringed users (group DM) didn't
+      // accept and should stay in their ring state; their own dm_call_end / timeout
+      // paths govern their teardown.
+      connectionManager.sendToUser(userId, {
         type: 'dm_call_undeliverable',
         dmChannelId: fedCall.dmChannelId,
         federatedCallId: fedCall.federatedId,
@@ -1571,7 +1576,6 @@ async function handleDmCallAccept(event: Record<string, unknown>, userId: string
         phase: 'accept',
         failures: [failure],
       });
-      connectionManager.clearFederatedCall(fedCall.federatedId);
     }
     return;
   }
