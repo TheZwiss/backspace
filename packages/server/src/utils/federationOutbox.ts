@@ -3,7 +3,7 @@ import * as schema from '../db/schema.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import crypto from 'node:crypto';
-import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest } from '@backspace/shared';
+import type { FederationRelayEvent, FederationRelayParticipant, FederationRelayAttachment, DmMessageWithUser, FederationRelayRequest, DmCallUndeliverableReason } from '@backspace/shared';
 import { getOurOrigin, buildFederationHeaders, generateHmacSecret } from './federationAuth.js';
 import { extractDomain } from '../routes/federation.js';
 import { racePeering, ensurePeered } from './federationPeering.js';
@@ -526,6 +526,23 @@ export type CallRelayFailureReason =
 export type CallRelayResult =
   | { ok: true }
   | { ok: false; reason: CallRelayFailureReason; error: string };
+
+/** Per-peer failure record returned by Path-1 call fan-out helpers. */
+export interface CallFanoutFailure {
+  origin: string;
+  peerLabel?: string;
+  reason: DmCallUndeliverableReason;
+}
+
+/** Map a sendCallRelay reason to the dm_call_undeliverable event-surface reason. */
+export function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndeliverableReason {
+  switch (reason) {
+    case 'peer_rejected': return 'peer_rejected';
+    case 'peer_awaiting_approval': return 'peer_awaiting_approval';
+    case 'peer_transient_failure': return 'peer_transient_failure';
+    case 'post_failed': return 'peer_transient_failure'; // 4xx looks transient to users
+  }
+}
 
 /**
  * Send call signaling events directly to a remote peer (bypasses outbox).

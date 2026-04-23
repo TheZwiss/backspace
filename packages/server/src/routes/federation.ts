@@ -12,7 +12,7 @@ import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
 import { connectionManager } from '../ws/handler.js';
 import type { FederatedCallEntry, DmRoomMeta } from '../ws/handler.js';
-import { mapCallReasonToEventReason, type CallFanoutFailure } from '../ws/events.js';
+import { mapCallReasonToEventReason, type CallFanoutFailure } from '../utils/federationOutbox.js';
 import type { DmCallUndeliverableFailure } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js';

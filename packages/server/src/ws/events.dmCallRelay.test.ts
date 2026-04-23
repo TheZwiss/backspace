@@ -205,6 +205,34 @@ describe('handleDmCallReject Path-2 relay failure', () => {
   });
 });
 
+describe('ring-timeout fan-out hook', () => {
+  it('invokes the fan-out hook when the ring timer fires', async () => {
+    const connectionManager = await importManager();
+
+    const hook = vi.fn(async () => {});
+    connectionManager.setRingTimeoutFanoutHook(hook);
+
+    vi.useFakeTimers();
+    try {
+      connectionManager.createDmRoom('dm-ringout-test', 'caller-ringout');
+      vi.advanceTimersByTime(60_000 + 10);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(hook).toHaveBeenCalledWith('dm-ringout-test', 'caller-ringout');
+  });
+
+  it('registerCallRelayHooks wires up the hook', async () => {
+    const connectionManager = await importManager();
+    const { registerCallRelayHooks } = await importSUT();
+
+    const setSpy = vi.spyOn(connectionManager, 'setRingTimeoutFanoutHook');
+    registerCallRelayHooks();
+    expect(setSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('handleDmCallAccept Path-2 relay failure', () => {
   it('emits dm_call_undeliverable { phase:"accept", terminal:true } and clears the fedCall when the relay fails', async () => {
     const { handleDmCallAcceptForTest } = await importSUT();

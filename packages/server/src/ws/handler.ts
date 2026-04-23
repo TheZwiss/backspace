@@ -99,6 +99,9 @@ class ConnectionManager {
   private pendingOfflineTimeouts: Map<string, NodeJS.Timeout> = new Map();
   // roomId → Timeout for ringing DM rooms (60s auto-cleanup)
   private ringingTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  // Callback registered by events.ts to fan dm_call_end out to peers on ring timeout.
+  // Null during startup — ring timeouts that fire before registration simply no-op (there are no peers to notify before boot completes).
+  private ringTimeoutFanoutHook: ((dmChannelId: string, callerId: string) => Promise<void>) | null = null;
   /** Federated calls where this instance is NOT the host. Keyed by federatedId. */
   private federatedCalls: Map<string, FederatedCallEntry> = new Map();
   private federatedCallTimeouts: Map<string, NodeJS.Timeout> = new Map();
@@ -401,6 +404,11 @@ class ConnectionManager {
     return true;
   }
 
+  /** Register a fan-out callback invoked when a ringing DM room hits its 60s timeout. */
+  setRingTimeoutFanoutHook(fn: (dmChannelId: string, callerId: string) => Promise<void>): void {
+    this.ringTimeoutFanoutHook = fn;
+  }
+
   /** Create a DM room in ringing state with 60s auto-cleanup. */
   createDmRoom(dmChannelId: string, callerId: string): boolean {
     const created = this.createRoom(dmChannelId, 'dm', {
@@ -415,11 +423,19 @@ class ConnectionManager {
       this.ringingTimeouts.delete(dmChannelId);
       const room = this.voiceRooms.get(dmChannelId);
       if (room && room.roomType === 'dm' && (room.metadata as DmRoomMeta).state === 'ringing') {
+        const ringedCallerId = (room.metadata as DmRoomMeta).callerId;
         this.destroyRoom(dmChannelId);
         this.sendToDmMembers(dmChannelId, {
           type: 'dm_call_ended',
           dmChannelId,
         });
+        // Fan dm_call_end out to remote peers so stranded Path-A/B ringees exit the ring.
+        // Without this, an accept-relay failure → Alice's 60s auto-clean leaves Bob's FederatedCallEntry lingering with no terminal event.
+        if (this.ringTimeoutFanoutHook) {
+          this.ringTimeoutFanoutHook(dmChannelId, ringedCallerId).catch(err =>
+            console.error('[ws] ring-timeout fan-out error:', err),
+          );
+        }
       }
     }, 60_000);
     this.ringingTimeouts.set(dmChannelId, timeout);

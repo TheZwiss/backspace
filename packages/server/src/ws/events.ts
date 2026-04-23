@@ -7,7 +7,8 @@ import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
 import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
-import type { CallRelayFailureReason, CallRelayResult } from '../utils/federationOutbox.js';
+import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
+import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
@@ -1971,16 +1972,6 @@ async function sendFederatedCallStart(
   });
 }
 
-/** Map a sendCallRelay reason to the event-surface reason. */
-export function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCallUndeliverableReason {
-  switch (reason) {
-    case 'peer_rejected': return 'peer_rejected';
-    case 'peer_awaiting_approval': return 'peer_awaiting_approval';
-    case 'peer_transient_failure': return 'peer_transient_failure';
-    case 'post_failed': return 'peer_transient_failure'; // 4xx looks transient to users
-  }
-}
-
 /** Build a DmCallUndeliverableFailure from a failed CallRelayResult, enriching with peer label. */
 function buildFailureFromResult(
   result: Extract<CallRelayResult, { ok: false }>,
@@ -1998,12 +1989,6 @@ function buildFailureFromResult(
   };
 }
 
-/** Per-peer failure record returned by Path-1 fan-out helpers. */
-export interface CallFanoutFailure {
-  origin: string;
-  peerLabel?: string;
-  reason: DmCallUndeliverableReason;
-}
 
 /**
  * Emit dm_call_undeliverable to the caller. If terminal, also destroy the
@@ -2471,6 +2456,21 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
     type: 'voice_disconnected',
     userId: targetUserId,
     channelId,
+  });
+}
+
+/**
+ * Register the ring-timeout fan-out so a host-side 60s auto-clean notifies remote peers.
+ * Called from server startup; split from module-load to keep test isolation clean
+ * (tests that exercise ring timeouts can register their own stub via
+ * `connectionManager.setRingTimeoutFanoutHook`).
+ */
+export function registerCallRelayHooks(): void {
+  connectionManager.setRingTimeoutFanoutHook(async (dmChannelId, callerId) => {
+    const failures = await sendFederatedCallEnd(dmChannelId, callerId);
+    if (failures.length > 0) {
+      console.warn('[federation] Ring-timeout fan-out had failures:', failures);
+    }
   });
 }
 
