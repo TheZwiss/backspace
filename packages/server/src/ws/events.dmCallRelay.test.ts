@@ -113,6 +113,53 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('handleDmCallReject Path-2 relay failure', () => {
+  it('emits dm_call_undeliverable { phase:"reject", terminal:false } to the rejector when the relay fails', async () => {
+    const { handleDmCallRejectForTest } = await importSUT();
+    const connectionManager = await importManager();
+
+    const fedCall = makeFedCall();
+    connectionManager.createFederatedCall(fedCall);
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
+    sendCallRelayMock.mockResolvedValue({ ok: false, reason: 'peer_rejected', error: 'rejected' });
+
+    await handleDmCallRejectForTest(
+      { federatedCallId: fedCall.federatedId },
+      fedCall.ringedUserIds[0]!,
+    );
+
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
+      (ev as { type: string }).type === 'dm_call_undeliverable',
+    );
+    expect(undelivCalls).toHaveLength(1);
+    const ev = undelivCalls[0]![1] as { phase: string; terminal: boolean };
+    expect(ev.phase).toBe('reject');
+    expect(ev.terminal).toBe(false);
+    // Local state was cleared before the relay even fired.
+    expect(connectionManager.getFederatedCall(fedCall.federatedId)).toBeUndefined();
+  });
+
+  it('does not emit undeliverable on relay success', async () => {
+    const { handleDmCallRejectForTest } = await importSUT();
+    const connectionManager = await importManager();
+
+    const fedCall = makeFedCall();
+    connectionManager.createFederatedCall(fedCall);
+    const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
+    sendCallRelayMock.mockResolvedValue({ ok: true });
+
+    await handleDmCallRejectForTest(
+      { federatedCallId: fedCall.federatedId },
+      fedCall.ringedUserIds[0]!,
+    );
+
+    const undelivCalls = sendToUserSpy.mock.calls.filter(([, ev]) =>
+      (ev as { type: string }).type === 'dm_call_undeliverable',
+    );
+    expect(undelivCalls).toHaveLength(0);
+  });
+});
+
 describe('handleDmCallAccept Path-2 relay failure', () => {
   it('emits dm_call_undeliverable { phase:"accept", terminal:true } and clears the fedCall when the relay fails', async () => {
     const { handleDmCallAcceptForTest } = await importSUT();

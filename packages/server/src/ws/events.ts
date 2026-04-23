@@ -201,7 +201,9 @@ export function handleClientEvent(
       );
       break;
     case 'dm_call_reject':
-      handleDmCallReject(event, userId);
+      handleDmCallReject(event, userId).catch(err =>
+        console.error('[ws] handleDmCallReject error:', err),
+      );
       break;
     case 'dm_call_end':
       handleDmCallEnd(event, userId);
@@ -1568,7 +1570,7 @@ async function handleDmCallAccept(event: Record<string, unknown>, userId: string
   connectionManager.sendToUser(userId, { type: 'error', message: 'No active call in this DM channel' });
 }
 
-function handleDmCallReject(event: Record<string, unknown>, userId: string): void {
+async function handleDmCallReject(event: Record<string, unknown>, userId: string): Promise<void> {
   let dmChannelId = (event.dmChannelId as string) || null;
   const federatedCallId = (event.federatedCallId as string) || null;
 
@@ -1608,13 +1610,16 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
       : undefined;
 
   if (fedCall) {
-    // Exclude the rejecting user — they already handled their own state
+    // Optimistic local clear — user intent is to reject.
     connectionManager.sendToFederatedCallUsers(fedCall.federatedId, {
       type: 'dm_call_rejected',
       dmChannelId: fedCall.dmChannelId,
       federatedCallId: fedCall.federatedId,
     } as ServerEvent, userId);
-    connectionManager.clearFederatedCall(fedCall.federatedId);
+    const host = fedCall.federatedCallHost;
+    const fedId = fedCall.federatedId;
+    const dmId = fedCall.dmChannelId;
+    connectionManager.clearFederatedCall(fedId);
 
     const db = getDb();
     const user = db.select({ homeUserId: schema.users.homeUserId })
@@ -1623,16 +1628,29 @@ function handleDmCallReject(event: Record<string, unknown>, userId: string): voi
       .get();
     const homeUserId = user?.homeUserId || userId;
 
-    sendCallRelay(fedCall.federatedCallHost, [{
+    const result = await sendCallRelay(host, [{
       eventType: 'dm_call_reject',
       messageId: generateSnowflake(),
       encryptionVersion: 0,
       timestamp: Date.now(),
-      federatedId: fedCall.federatedId,
+      federatedId: fedId,
       call: {
         rejector: { homeUserId, homeInstance: getOurOrigin() },
       },
-    }]).catch(err => console.error('[federation] Failed to send dm_call_reject:', err));
+    }]);
+
+    if (!result.ok) {
+      console.error(`[federation] dm_call_reject relay to ${host} failed (${result.reason}): ${result.error}`);
+      const failure = buildFailureFromResult(result, host, db);
+      connectionManager.sendToUser(userId, {
+        type: 'dm_call_undeliverable',
+        dmChannelId: dmId,
+        federatedCallId: fedId,
+        terminal: false,
+        phase: 'reject',
+        failures: [failure],
+      });
+    }
   }
 }
 
@@ -2355,3 +2373,4 @@ function handleVoiceDisconnect(event: Record<string, unknown>, userId: string): 
 // ─── Test-only exports ──────────────────────────────────────────────────────
 /** Direct export for unit tests — do not use in production code paths. */
 export const handleDmCallAcceptForTest = handleDmCallAccept;
+export const handleDmCallRejectForTest = handleDmCallReject;
