@@ -524,7 +524,15 @@ export type CallRelayFailureReason =
   | 'post_failed';
 
 export type CallRelayResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * messageIds the remote reported as undeliverable (remote processed the
+       * event cleanly but had no reachable recipient). Empty array for old
+       * peers that don't set `undeliverable` on FederationRelayResponse.
+       */
+      undeliverable: string[];
+    }
   | { ok: false; reason: CallRelayFailureReason; error: string };
 
 /** Per-peer failure record returned by Path-1 call fan-out helpers. */
@@ -631,7 +639,18 @@ export async function sendCallRelay(
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (res.ok) return { ok: true };
+    if (res.ok) {
+      // Parse response body to surface the undeliverable bucket. Old peers
+      // omit the field; treat as empty. Body shape: FederationRelayResponse.
+      let undeliverable: string[] = [];
+      try {
+        const body = (await res.json()) as { undeliverable?: Array<{ messageId: string }> };
+        undeliverable = body.undeliverable?.map(u => u.messageId) ?? [];
+      } catch {
+        // Body missing or unparseable — assume old-format response.
+      }
+      return { ok: true, undeliverable };
+    }
 
     const text = await res.text().catch(() => '');
     if (res.status >= 400 && res.status < 500) {
