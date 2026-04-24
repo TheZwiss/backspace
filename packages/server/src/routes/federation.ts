@@ -4402,8 +4402,11 @@ function processDmCallStartEvent(
     }
 
     if (ringedUserIds.length === 0) {
-      // No connected users found — silently accept (not an error)
-      accepted.push(event.messageId);
+      // No recipient reachable — signal to caller via third ack bucket (#18).
+      // The remote processed the event cleanly; this is not a data error, but
+      // the caller must learn that nobody was rung so it can tear down its
+      // local ring room instead of hanging 60s waiting for an accept.
+      undeliverable.push({ messageId: event.messageId, reason: 'no_recipient' });
       return;
     }
 
