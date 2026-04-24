@@ -1925,10 +1925,24 @@ async function sendFederatedCallStart(
   }
 
   // ─── Targeted relay: fan out in parallel, await results ────────────────────
+  // Each peer's result has THREE possible classifications:
+  //   ok=true, messageId NOT in undeliverable → delivered
+  //   ok=true, messageId IN undeliverable     → new: no_recipient failure (#18)
+  //   ok=false                                → existing failure reasons
   const targetedResults = await Promise.all(
     Array.from(targetedPeers.keys()).map(async peerOrigin => {
-      const result = await sendCallRelay(peerOrigin, [buildRelayEvent()]);
+      const relayEvent = buildRelayEvent();
+      const result = await sendCallRelay(peerOrigin, [relayEvent]);
       if (result.ok) {
+        if (result.undeliverable.includes(relayEvent.messageId)) {
+          console.warn(`[federation] dm_call_start to ${peerOrigin}: remote had no recipient`);
+          return {
+            origin: peerOrigin,
+            ok: false as const,
+            reason: 'no_recipient' as const satisfies DmCallUndeliverableReason,
+            error: 'remote reported no_recipient',
+          };
+        }
         return { origin: peerOrigin, ok: true as const };
       }
       const reason = mapCallReasonToEventReason(result.reason);
@@ -2483,3 +2497,4 @@ export function registerCallRelayHooks(): void {
 export const handleDmCallAcceptForTest = handleDmCallAccept;
 export const handleDmCallRejectForTest = handleDmCallReject;
 export const handleDmCallEndForTest = handleDmCallEnd;
+export const sendFederatedCallStartForTest = sendFederatedCallStart;

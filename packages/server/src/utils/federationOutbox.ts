@@ -524,7 +524,15 @@ export type CallRelayFailureReason =
   | 'post_failed';
 
 export type CallRelayResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * messageIds the remote reported as undeliverable (remote processed the
+       * event cleanly but had no reachable recipient). Empty array for old
+       * peers that don't set `undeliverable` on FederationRelayResponse.
+       */
+      undeliverable: string[];
+    }
   | { ok: false; reason: CallRelayFailureReason; error: string };
 
 /** Per-peer failure record returned by Path-1 call fan-out helpers. */
@@ -631,7 +639,26 @@ export async function sendCallRelay(
       signal: AbortSignal.timeout(10_000),
     });
 
-    if (res.ok) return { ok: true };
+    if (res.ok) {
+      // Parse response body to surface the undeliverable bucket. Old peers
+      // omit the field; treat as empty. Body shape: FederationRelayResponse.
+      let undeliverable: string[] = [];
+      try {
+        const responseBody = (await res.json()) as { undeliverable?: unknown };
+        if (Array.isArray(responseBody.undeliverable)) {
+          undeliverable = responseBody.undeliverable
+            .filter((u): u is { messageId: string } =>
+              typeof u === 'object' && u !== null && typeof (u as { messageId?: unknown }).messageId === 'string',
+            )
+            .map(u => u.messageId);
+        } else if (responseBody.undeliverable !== undefined) {
+          console.warn('[federation] sendCallRelay: peer returned non-array undeliverable, ignoring:', targetPeerOrigin);
+        }
+      } catch (err) {
+        console.debug('[federation] sendCallRelay: response body unparseable, treating as old-format:', targetPeerOrigin, err);
+      }
+      return { ok: true, undeliverable };
+    }
 
     const text = await res.text().catch(() => '');
     if (res.status >= 400 && res.status < 500) {

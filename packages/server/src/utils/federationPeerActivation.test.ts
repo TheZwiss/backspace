@@ -32,7 +32,7 @@ vi.mock('../utils/federationAuth.js', () => ({
 }));
 
 vi.mock('../routes/federation.js', () => ({
-  processRelayEvents: vi.fn().mockResolvedValue({ accepted: [], rejected: [] }),
+  processRelayEvents: vi.fn().mockResolvedValue({ accepted: [], rejected: [], undeliverable: [] }),
 }));
 
 vi.mock('../ws/handler.js', () => ({

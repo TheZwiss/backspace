@@ -54,4 +54,40 @@ describe('buildCallUndeliverableToast', () => {
     expect(msg.toLowerCase()).toContain('orbit');
     expect(msg.toLowerCase()).toContain('peered');
   });
+
+  it('renders no_recipient single-failure terminal copy', () => {
+    const fail = (peerLabel = 'Orbit') => ({
+      reason: 'no_recipient',
+      peerOrigin: 'https://orbit.local',
+      peerLabel,
+    });
+    expect(buildCallUndeliverableToast([fail()], true, 'start'))
+      .toBe("Orbit couldn't ring anyone.");
+  });
+
+  it('no_recipient falls back to origin when peerLabel missing', () => {
+    const fail = {
+      reason: 'no_recipient',
+      peerOrigin: 'https://orbit.local',
+    };
+    expect(buildCallUndeliverableToast([fail], true, 'start'))
+      .toMatch(/orbit\.local couldn't ring anyone\./);
+  });
+
+  it('no_recipient in a multi-failure terminal falls back to multi-instance copy', () => {
+    const failures = [
+      { reason: 'no_recipient', peerOrigin: 'https://orbit.local', peerLabel: 'Orbit' },
+      { reason: 'peer_transient_failure', peerOrigin: 'https://nova.local', peerLabel: 'Nova' },
+    ];
+    expect(buildCallUndeliverableToast(failures, true, 'start'))
+      .toMatch(/Could not reach 2 instances: Orbit, Nova/);
+  });
+
+  it('no_recipient non-terminal uses the existing "Some participants" line', () => {
+    const failures = [
+      { reason: 'no_recipient', peerOrigin: 'https://orbit.local', peerLabel: 'Orbit' },
+    ];
+    expect(buildCallUndeliverableToast(failures, false, 'start'))
+      .toMatch(/Some participants could not be reached: Orbit/);
+  });
 });

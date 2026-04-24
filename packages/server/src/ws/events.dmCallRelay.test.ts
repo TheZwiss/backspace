@@ -144,7 +144,7 @@ describe('handleDmCallEnd Path-2 relay failure', () => {
     const fedCall = makeFedCall({ state: 'active' });
     connectionManager.createFederatedCall(fedCall);
     const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
-    sendCallRelayMock.mockResolvedValue({ ok: true });
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
 
     await handleDmCallEndForTest(
       { federatedCallId: fedCall.federatedId },
@@ -191,7 +191,7 @@ describe('handleDmCallReject Path-2 relay failure', () => {
     const fedCall = makeFedCall();
     connectionManager.createFederatedCall(fedCall);
     const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
-    sendCallRelayMock.mockResolvedValue({ ok: true });
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
 
     await handleDmCallRejectForTest(
       { federatedCallId: fedCall.federatedId },
@@ -282,7 +282,7 @@ describe('handleDmCallAccept Path-2 relay failure', () => {
     const fedCall = makeFedCall();
     connectionManager.createFederatedCall(fedCall);
     const sendToUserSpy = vi.spyOn(connectionManager, 'sendToUser');
-    sendCallRelayMock.mockResolvedValue({ ok: true });
+    sendCallRelayMock.mockResolvedValue({ ok: true, undeliverable: [] });
 
     await handleDmCallAcceptForTest(
       { federatedCallId: fedCall.federatedId },

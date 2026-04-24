@@ -76,6 +76,8 @@ export function buildCallUndeliverableToast(
       return `Could not reach ${label}. Try again in a moment.`;
     case 'livekit_unavailable':
       return 'Voice is not configured on this instance.';
+    case 'no_recipient':
+      return `${label} couldn't ring anyone.`;
     default:
       return `Call to ${label} could not be placed.`;
   }
