@@ -351,9 +351,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
         }
 
-        // Remote accepted — activate the peer
+        // Remote accepted — activate the peer. Parse the remote's instanceName
+        // from the response body so the federation panel renders a friendly
+        // label. Tolerate omission and non-JSON bodies.
+        let remoteInstanceName: string | null = null;
+        try {
+          const body = (await response.json()) as { instanceName?: string | null };
+          if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
+            remoteInstanceName = body.instanceName;
+          }
+        } catch {
+          // Non-JSON body — leave null.
+        }
+
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now() })
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
