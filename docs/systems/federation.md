@@ -529,9 +529,41 @@ interface FederationRelayResponse {
     messageId: string;
     reason: string;                // e.g., 'duplicate', 'unknown_message', 'missing_participants'
   }>;
+  undeliverable?: Array<{          // optional — omitted when empty; call-signaling only
+    messageId: string;
+    reason: string;                // e.g., 'no_recipient'
+  }>;
   maxUploadSize: number;           // This instance's max upload size in bytes
 }
 ```
+
+#### `undeliverable` bucket (call-signaling only)
+
+In addition to `accepted` and `rejected`, the relay response may include an
+optional `undeliverable: Array<{messageId, reason}>`. Three-way classification,
+non-overlapping: each messageId appears in exactly one of the three arrays.
+
+| Bucket | Meaning | Retry? |
+|---|---|---|
+| `accepted` | Processed cleanly, ≥1 recipient reached. | No |
+| `rejected` | Refused at data/protocol layer (schema, attribution, channel-not-found, etc.). | Terminal. |
+| `undeliverable` | Processed cleanly, zero recipients reachable. | No — call-signaling specific. |
+
+Currently used only for `dm_call_start`:
+- **Path A** (local DM exists): if no local non-caller member has an active WS
+  connection, the event is pushed to `undeliverable` with reason `no_recipient`
+  instead of being silently accepted. No `FederatedCallEntry` is created.
+- **Path B** (no local DM): the zero-participant-match early return pushes to
+  `undeliverable` rather than `accepted`.
+
+Other event types (messages, reactions, friend events, profile updates, etc.)
+keep existing semantics — a message to an offline user is still `accepted`, since
+messages persist and re-deliver on reconnect.
+
+The field is optional on the wire. Old peers omit it; new peers include it only
+when non-empty. Caller-side `sendCallRelay` parses the field (defaulting to an
+empty array when missing), so upgrade skew is a no-op until both sides are on
+new code.
 
 ### Inbound Relay Dispatch (`POST /api/federation/relay`)
 

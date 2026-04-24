@@ -71,6 +71,7 @@ All `dm_call_*` signaling events (`start`, `accept`, `reject`, `end`) are relaye
 | `reject` | false | Rejector's relay to host failed OR host's fan-out after a local reject failed; state already cleared. | No state change; info toast. |
 | `end` | false | Ender's relay to host failed OR host's fan-out after a local end failed; state already cleared. | No state change; info toast. |
 | `host_unreachable` | true | A FederatedCallEntry's `federatedCallHost` peer transitions out of `active`, OR the 30s sentinel detects a non-active host for an existing entry. | Clear `activeDmCall` + `incomingCall`, disconnect LK, warning toast (*"Call ended — {label} became unreachable."*). |
+| `no_recipient` | true | Remote returned 200 but had no reachable recipient (Path A: all members offline; Path B: zero participant matches). Caller fast-fails within the relay round-trip; ring room destroyed. | Clear `outgoingCall`, disconnect LK, warning toast (*"{peerLabel} couldn't ring anyone."*). Folds into multi-failure info copy when not the sole failure. |
 
 **Accept-rollback semantics.** `handleDmCallAccept` Path 2 transitions the `FederatedCallEntry` to active and broadcasts `dm_call_accepted` optimistically so the acceptor's UI flips immediately. If the B→host relay fails, the server clears the entry, fans `dm_call_undeliverable { phase: 'accept', terminal: true }` out to all ringed users on B (via `sendToFederatedCallUsers`), and the client tears its call state back down.
 
