@@ -227,3 +227,74 @@ describe('POST /api/federation/peer/accept — instance_name persistence', () =>
     expect(row?.instanceName).toBeNull();
   });
 });
+
+describe('POST /api/federation/peer/accept — response body carries instanceName', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings('Local Backspace');
+    app = await buildApp();
+  });
+
+  it('returns our own instanceName in the response body on new-peer accept', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      payload: {
+        sourceOrigin: 'https://remote.example',
+        hmacSecret: 'remote-secret',
+        instanceName: 'Remote Backspace',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { accepted: boolean; instanceName?: string | null };
+    expect(body.accepted).toBe(true);
+    expect(body.instanceName).toBe('Local Backspace');
+  });
+
+  it('returns our instanceName on the active idempotent path too', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active',
+      origin: 'https://remote.example',
+      hmacSecret: 'existing-secret',
+      status: 'active',
+      instanceName: 'Original Name',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      payload: {
+        sourceOrigin: 'https://remote.example',
+        hmacSecret: 'remote-secret',
+        instanceName: 'Remote Backspace',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { accepted: boolean; instanceName?: string | null };
+    expect(body.instanceName).toBe('Local Backspace');
+  });
+
+  it('returns instanceName: null when instanceSettings table is empty', async () => {
+    testDb.delete(schema.instanceSettings).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      payload: {
+        sourceOrigin: 'https://remote.example',
+        hmacSecret: 'remote-secret',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { accepted: boolean; instanceName?: string | null };
+    expect(body.instanceName).toBeNull();
+  });
+});

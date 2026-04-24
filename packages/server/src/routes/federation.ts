@@ -421,16 +421,22 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       const db = getDb();
 
+      const settings = db
+        .select({
+          instanceName: schema.instanceSettings.instanceName,
+          autoAcceptPeering: schema.instanceSettings.autoAcceptPeering,
+        })
+        .from(schema.instanceSettings)
+        .where(eq(schema.instanceSettings.id, 1))
+        .get();
+
+      const ourInstanceName = settings?.instanceName ?? null;
+      const autoAccept = settings?.autoAcceptPeering ?? 1;
+
       // ── autoAcceptPeering gate ──────────────────────────────────────────
       // When auto-accept is disabled, only allow incoming accept requests
       // that correspond to a local pending peer (i.e., a local admin
       // initiated the handshake). Unsolicited requests are rejected.
-      const settings = db
-        .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
-        .from(schema.instanceSettings)
-        .where(eq(schema.instanceSettings.id, 1))
-        .get();
-      const autoAccept = settings?.autoAcceptPeering ?? 1;
 
       if (autoAccept === 0) {
         // Check if the local admin already initiated or approved peering with this origin.
@@ -536,7 +542,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // Legitimate recovery path: local admin clicks "Reset peering" →
           // row is deleted → remote's /peer/accept then lands on a
           // non-existent row and the normal handshake path runs.
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         if (existing.status === 'revoked') {
           return reply.code(403).send({
@@ -570,7 +576,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             console.error('[federation] onPeerActivated from /peer/accept (rejected override) failed:', err)
           );
 
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         if (existing.status === 'awaiting_approval') {
           // Remote admin approved — this is a fresh handshake from them.
@@ -597,7 +603,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
           );
 
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         // Pending — update with new secret and activate
         db.update(schema.federationPeers)
@@ -615,7 +621,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           console.error('[federation] onPeerActivated from /peer/accept (pending) failed:', err)
         );
 
-        return reply.code(200).send({ accepted: true });
+        return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
       }
 
       // New peer — create and activate
@@ -635,7 +641,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         console.error('[federation] onPeerActivated from /peer/accept (new) failed:', err)
       );
 
-      return reply.code(200).send({ accepted: true });
+      return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
     },
   );
 
