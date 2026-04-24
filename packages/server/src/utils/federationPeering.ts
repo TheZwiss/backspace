@@ -155,9 +155,21 @@ async function performHandshake(
     }
 
     if (response.ok) {
-      // 200 = peer accepted and activated
+      // 200 = peer accepted and activated. Parse remote's instanceName from
+      // the response body so we can render a friendly label for the peer.
+      // Tolerate omission (older peers) and non-JSON bodies (defensive).
+      let remoteInstanceName: string | null = null;
+      try {
+        const body = (await response.json()) as { instanceName?: string | null };
+        if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
+          remoteInstanceName = body.instanceName;
+        }
+      } catch {
+        // Non-JSON or empty body — leave remoteInstanceName as null.
+      }
+
       db.update(schema.federationPeers)
-        .set({ status: 'active', lastSeenAt: Date.now() })
+        .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       const { connectionManager } = await import('../ws/handler.js');
