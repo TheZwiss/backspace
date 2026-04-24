@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { config } from '../config.js';
 import * as schema from './schema.js';
-import { baselineExistingInstall, healInitialSchemaDrift, healRenamedColumns, ensureDefaults } from './migrate.js';
+import { ensureDefaults } from './migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
@@ -23,24 +23,6 @@ export function initDatabase() {
   sqlite = new Database(config.dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
-
-  // Baseline existing installs before Drizzle migrate() runs —
-  // marks the initial migration as applied so it doesn't try to
-  // CREATE TABLE on a database that already has tables.
-  baselineExistingInstall(sqlite);
-
-  // Reconcile any columns present in the 0000 baseline but missing
-  // from the physical schema. Fixes drift between the pre-drizzle
-  // manual migration system and drizzle-kit's assumed baseline —
-  // a no-op on fresh installs and correctly-migrated DBs.
-  healInitialSchemaDrift(sqlite);
-
-  // Second-pass heal for rename/removal drift that the ADD-only pass
-  // can't resolve: for tables whose column set still doesn't match
-  // the 0000 snapshot and which are empty, DROP and rebuild from
-  // 0000_initial.sql. Non-empty tables are skipped with a warning.
-  // No-op on correctly-migrated DBs.
-  healRenamedColumns(sqlite);
 
   // Apply any pending Drizzle migrations
   const migrationsFolder = resolve(__dirname, '../../drizzle');

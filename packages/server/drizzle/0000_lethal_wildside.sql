@@ -188,7 +188,8 @@ CREATE TABLE `federation_peers` (
 	`status` text DEFAULT 'active' NOT NULL,
 	`last_seen_at` integer,
 	`last_failure_at` integer,
-	`consecutive_failures` integer DEFAULT 0,
+	`consecutive_failures` integer DEFAULT 0 NOT NULL,
+	`consecutive_auth_failures` integer DEFAULT 0 NOT NULL,
 	`last_synced_at` integer DEFAULT 0,
 	`remote_max_upload_size` integer,
 	`nonce_supported` integer DEFAULT 0 NOT NULL,
@@ -238,6 +239,7 @@ CREATE TABLE `instance_settings` (
 	`federation_relay_enabled` integer DEFAULT 1 NOT NULL,
 	`federation_relay_ttl_days` integer DEFAULT 30 NOT NULL,
 	`default_auto_rotate_interval_days` integer DEFAULT 90 NOT NULL,
+	`auto_accept_peering` integer DEFAULT 1 NOT NULL,
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
@@ -276,6 +278,15 @@ CREATE TABLE `messages` (
 	FOREIGN KEY (`channel_id`) REFERENCES `channels`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`reply_to_id`) REFERENCES `messages`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE TABLE `peer_approval_requests` (
+	`id` text PRIMARY KEY NOT NULL,
+	`origin` text NOT NULL,
+	`instance_name` text,
+	`hmac_secret` text NOT NULL,
+	`requested_at` integer NOT NULL,
+	`expires_at` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `reactions` (
@@ -436,6 +447,7 @@ CREATE INDEX `idx_join_requests_space_id_status` ON `join_requests` (`space_id`,
 CREATE INDEX `idx_member_roles_user_id_space_id` ON `member_roles` (`user_id`,`space_id`);--> statement-breakpoint
 CREATE INDEX `idx_messages_channel_id` ON `messages` (`channel_id`);--> statement-breakpoint
 CREATE INDEX `idx_messages_user_id` ON `messages` (`user_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `peer_approval_requests_origin_unique` ON `peer_approval_requests` (`origin`);--> statement-breakpoint
 CREATE INDEX `idx_reactions_message_id` ON `reactions` (`message_id`);--> statement-breakpoint
 CREATE INDEX `idx_read_states_user_id` ON `read_states` (`user_id`);--> statement-breakpoint
 CREATE INDEX `idx_roles_space_id` ON `roles` (`space_id`);--> statement-breakpoint
