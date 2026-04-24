@@ -362,7 +362,8 @@ export type DmCallUndeliverableReason =
   | 'peer_rejected'
   | 'peer_awaiting_approval'
   | 'peer_transient_failure'
-  | 'livekit_unavailable';
+  | 'livekit_unavailable'
+  | 'no_recipient';
 
 export type DmCallPhase = 'start' | 'accept' | 'reject' | 'end' | 'host_unreachable';
 
@@ -967,6 +968,14 @@ export interface FederationRelayRequest {
 export interface FederationRelayResponse {
   accepted: string[];
   rejected: Array<{ messageId: string; reason: string }>;
+  /**
+   * Third classification (additive, v1.x): events that were processed cleanly
+   * but had no reachable recipient. Distinct from `rejected` (data/protocol
+   * refusal). Currently used only for `dm_call_start` — other event types
+   * keep accepted/rejected semantics unchanged. Omitted when empty for
+   * wire-size hygiene and byte-identical responses in the typical case.
+   */
+  undeliverable?: Array<{ messageId: string; reason: string }>;
   maxUploadSize: number;
 }
 
