@@ -644,10 +644,18 @@ export async function sendCallRelay(
       // omit the field; treat as empty. Body shape: FederationRelayResponse.
       let undeliverable: string[] = [];
       try {
-        const body = (await res.json()) as { undeliverable?: Array<{ messageId: string }> };
-        undeliverable = body.undeliverable?.map(u => u.messageId) ?? [];
-      } catch {
-        // Body missing or unparseable — assume old-format response.
+        const responseBody = (await res.json()) as { undeliverable?: unknown };
+        if (Array.isArray(responseBody.undeliverable)) {
+          undeliverable = responseBody.undeliverable
+            .filter((u): u is { messageId: string } =>
+              typeof u === 'object' && u !== null && typeof (u as { messageId?: unknown }).messageId === 'string',
+            )
+            .map(u => u.messageId);
+        } else if (responseBody.undeliverable !== undefined) {
+          console.warn('[federation] sendCallRelay: peer returned non-array undeliverable, ignoring:', targetPeerOrigin);
+        }
+      } catch (err) {
+        console.debug('[federation] sendCallRelay: response body unparseable, treating as old-format:', targetPeerOrigin, err);
       }
       return { ok: true, undeliverable };
     }
