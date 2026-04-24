@@ -51,10 +51,20 @@ Backspace federation is peer-to-peer with no central authority. Each instance ma
 **Phase 2 -- Accept** (`POST /api/federation/peer/accept`)
 - Auth: **none** (first contact -- no JWT, no HMAC)
 - Rate-limited: 10 requests per minute per IP (in-memory sliding window, buckets cleaned every 60s)
-- Validates `sourceOrigin`, `challenge`, and `hmacSecret` from body
+- Validates `sourceOrigin`, `challenge`, `hmacSecret`, and (optional) `instanceName` from body
 - Handles existing peers: active -> return 200 (idempotent), revoked -> return 403, pending -> update with new secret and activate
 - New peer: creates record with provided `hmacSecret`, sets `status='active'`
-- Returns `{ accepted: true }` on success
+- Returns `{ accepted: true, instanceName: <ourName | null> }` on success — see "Instance name exchange" below
+
+### Instance name exchange
+
+The handshake is bidirectional for the `instance_name` label rendered in the federation panel and in DM-call toasts (`peerLabel`):
+
+- **Initiator → responder:** the request body to `/peer/accept` carries `{ sourceOrigin, hmacSecret, instanceName }`. The responder reads `instanceName` and persists it to `federation_peers.instance_name` on every state-mutating activation path: `pending → active`, `awaiting_approval → active`, `rejected → active` (override), and new-peer create. The idempotent early-return path for already-`active` and `needs_attention` peers does NOT overwrite — same security posture that already refuses to overwrite `hmac_secret` on these paths from an unauthenticated request.
+
+- **Responder → initiator:** the `/peer/accept` response body is `{ accepted: true, instanceName: <ourName | null> }`. The initiator (`performHandshake` in `utils/federationPeering.ts` and `/peer/initiate` in `routes/federation.ts`) parses it and persists alongside the `status='active'` write. Older peers that omit the field are tolerated — the column stays `null`. Non-JSON bodies are tolerated defensively.
+
+`instance_name` is cosmetic metadata, eventually-consistent. Anywhere `peerLabel` is rendered falls back to origin hostname when `instance_name IS NULL`. Instance renames do not currently re-broadcast — that's a separate, unimplemented feature.
 
 ### Secret Storage & Rotation
 
