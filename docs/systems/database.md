@@ -1,7 +1,7 @@
 # Database Schema Reference
 
 Source of truth: `packages/server/src/db/schema.ts` (Drizzle ORM)
-Migrations: `packages/server/src/db/migrate.ts` (runs on startup via `runMigrations()`)
+Migrations: drizzle-kit generates SQL from `schema.ts` (`pnpm db:generate` from `packages/server/`). On startup, `initDatabase()` runs `drizzle.migrate()` against `packages/server/drizzle/`, then `ensureDefaults()` (settings row, Snowflake worker ID, first-admin promotion). Migration history was squashed to a single baseline on 2026-04-24 (backlog #31 Phase 2).
 Engine: SQLite via `better-sqlite3`
 IDs: Snowflake text, permissions: bigint decimal strings
 
@@ -343,8 +343,6 @@ PK: (spaceId, userId, restrictionType)
 | federationRelayTtlDays | integer NOT NULL | 30 | |
 | autoAcceptPeering | integer NOT NULL | 1 | When 0, `peer/accept` rejects unsolicited requests with 403 |
 | updatedAt | integer NOT NULL | | |
-
-Migration flags (internal): `voice_bit_migrated`, `profile_attachments_cleaned`, `thumbnails_backfilled`, `media_dimensions_backfilled`, `legacy_dm_sync_done`
 
 ---
 
