@@ -394,7 +394,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
   // ─── POST /api/federation/peer/accept ──────────────────────────────────────
   // Server-to-server: accept a peering request from a remote instance.
   // No JWT auth — this is first contact. Rate-limited by IP.
-  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string } }>(
+  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string; instanceName?: string } }>(
     '/api/federation/peer/accept',
     async (request, reply) => {
       const clientIp = request.ip;
@@ -405,7 +405,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const { sourceOrigin: rawOrigin, hmacSecret } = request.body ?? {};
+      const { sourceOrigin: rawOrigin, hmacSecret, instanceName: reqInstanceName } = request.body ?? {};
 
       if (!rawOrigin || typeof rawOrigin !== 'string') {
         return reply.code(400).send({ error: 'sourceOrigin is required', statusCode: 400 });
@@ -471,7 +471,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           }
 
           // Queue for admin approval — upsert into peer_approval_requests
-          const { instanceName: reqInstanceName } = request.body as { instanceName?: string };
           const now = Date.now();
           const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -551,6 +550,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           db.update(schema.federationPeers)
             .set({
               hmacSecret,
+              instanceName: reqInstanceName ?? null,
               status: 'active',
               lastSeenAt: Date.now(),
             })
@@ -577,6 +577,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           db.update(schema.federationPeers)
             .set({
               hmacSecret,
+              instanceName: reqInstanceName ?? null,
               status: 'active',
               lastSeenAt: Date.now(),
             })
@@ -602,6 +603,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         db.update(schema.federationPeers)
           .set({
             hmacSecret,
+            instanceName: reqInstanceName ?? null,
             status: 'active',
             lastSeenAt: Date.now(),
           })
@@ -622,6 +624,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         id: peerId,
         origin: sourceOrigin,
         hmacSecret,
+        instanceName: reqInstanceName ?? null,
         status: 'active',
         lastSeenAt: Date.now(),
         createdAt: Date.now(),
