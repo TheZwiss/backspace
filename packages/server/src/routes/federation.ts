@@ -4312,6 +4312,11 @@ function processDmCallStartEvent(
       // Bug 1 fix: don't ring the caller on this instance
       if (homeUserId === event.call.caller.homeUserId) continue;
 
+      // #18: skip offline members. Entry-vs-no-entry decision uses the same
+      // connection-count signal Path B has always used — keeps the two paths
+      // symmetric in what counts as "ringed."
+      if (connectionManager.getUserConnections(member.userId).size === 0) continue;
+
       const token = event.call!.tokens![homeUserId];
       connectionManager.sendToUser(member.userId, {
         type: 'dm_call_incoming',
@@ -4324,6 +4329,14 @@ function processDmCallStartEvent(
         callOrigin: event.call!.caller.homeInstance,
       });
       ringedUserIds.push(member.userId);
+    }
+
+    if (ringedUserIds.length === 0) {
+      // #18: no local member was reachable. Do not create a FederatedCallEntry
+      // (it would strand with no accept/reject path); surface to the caller
+      // via undeliverable so it can tear down its ring room instead of hanging.
+      undeliverable.push({ messageId: event.messageId, reason: 'no_recipient' });
+      return;
     }
 
     const entry: FederatedCallEntry = {
