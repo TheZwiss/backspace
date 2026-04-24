@@ -1532,7 +1532,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       // 3. Process each event
-      const { accepted, rejected } = await processRelayEvents(body.events, sourceInstance, peer.origin, db);
+      const { accepted, rejected, undeliverable } = await processRelayEvents(body.events, sourceInstance, peer.origin, db);
 
       // 4. Update peer status
       db.update(schema.federationPeers)
@@ -1555,6 +1555,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         accepted,
         rejected,
         maxUploadSize: settings?.maxUploadSizeBytes ?? config.maxUploadSize,
+        ...(undeliverable.length > 0 ? { undeliverable } : {}),
       };
 
       return reply.code(200).send(response);
@@ -2066,9 +2067,14 @@ export async function processRelayEvents(
   sourceInstance: string,
   peerOrigin: string,
   db: ReturnType<typeof getDb>,
-): Promise<{ accepted: string[]; rejected: Array<{ messageId: string; reason: string }> }> {
+): Promise<{
+  accepted: string[];
+  rejected: Array<{ messageId: string; reason: string }>;
+  undeliverable: Array<{ messageId: string; reason: string }>;
+}> {
   const accepted: string[] = [];
   const rejected: Array<{ messageId: string; reason: string }> = [];
+  const undeliverable: Array<{ messageId: string; reason: string }> = [];
 
   for (const event of events) {
     try {
@@ -2116,7 +2122,7 @@ export async function processRelayEvents(
           processFileRejectedEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'dm_call_start':
-          processDmCallStartEvent(event, sourceInstance, db, accepted, rejected);
+          processDmCallStartEvent(event, sourceInstance, db, accepted, rejected, undeliverable);
           break;
         case 'dm_call_accept':
           processDmCallAcceptEvent(event, sourceInstance, db, accepted, rejected);
@@ -2156,7 +2162,7 @@ export async function processRelayEvents(
     }
   }
 
-  return { accepted, rejected };
+  return { accepted, rejected, undeliverable };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -4253,6 +4259,7 @@ function processDmCallStartEvent(
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
+  undeliverable: Array<{ messageId: string; reason: string }>,
 ): void {
   if (!event.call?.caller || !event.call.livekitUrl || !event.call.tokens || !event.federatedId) {
     rejected.push({ messageId: event.messageId, reason: 'missing_call_payload' });
