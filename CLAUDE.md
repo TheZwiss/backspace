@@ -155,6 +155,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [search.md](docs/systems/search.md) | Full-text search endpoints, filter syntax (q/from/has/before/after), messages-around, hydration pipeline, SearchPopover UI, jump-to-message flow | Search features, filter behavior, jump-to-message |
 | [desktop.md](docs/systems/desktop.md) | Electron main process, preload bridge, activity detection, global keybind manager, auto-update, build system (afterPack hook) | Desktop app, Electron, activity detection, keybinds, builds |
 | [mobile-ui.md](docs/systems/mobile-ui.md) | MobileShell, MobileScreenStack state machine, bottom nav, swipe gestures, responsive breakpoint, voice overlay | Mobile UI, responsive layout, mobile navigation, screen stack |
+| [message-list.md](docs/systems/message-list.md) | Auto-scroll model, position memory (session-only), embed renderer dimension contract, known limitations | Touching MessageList.tsx, scroll behavior, embed renderers, position restore |
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
 
 ---
