@@ -171,3 +171,125 @@ describe('POST /api/social/requests — federated branch (happy path)', () => {
     );
   });
 });
+
+describe('POST /api/social/requests — federated branch (peer status)', () => {
+  beforeEach(() => {
+    seedSelf();
+    resolveOriginFromHostnameMock.mockReturnValue('https://orbit.test');
+  });
+
+  it('returns 403 peer_rejected when ensurePeered returns rejected', async () => {
+    ensurePeeredMock.mockResolvedValue({ status: 'rejected', error: 'admin must approve' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toBe('peer_rejected');
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+  });
+
+  it('returns 503 peer_unreachable when ensurePeered returns failed', async () => {
+    ensurePeeredMock.mockResolvedValue({ status: 'failed', error: 'network' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toBe('peer_unreachable');
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+  });
+
+  it('returns 409 peer_pending_approval when peering is pending and peer row is awaiting_approval', async () => {
+    ensurePeeredMock.mockResolvedValue({ status: 'pending', error: 'awaiting' });
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-pending-1',
+      origin: 'https://orbit.test',
+      hmacSecret: 'secret',
+      status: 'awaiting_approval',
+      createdAt: Date.now(),
+    }).run();
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).error).toBe('peer_pending_approval');
+  });
+
+  it('returns 409 peer_pending when peering is pending and no peer row exists (handshake in flight)', async () => {
+    ensurePeeredMock.mockResolvedValue({ status: 'pending', error: 'in flight' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).error).toBe('peer_pending');
+  });
+});
+
+describe('POST /api/social/requests — federated branch (lookup failures)', () => {
+  beforeEach(() => {
+    seedSelf();
+    resolveOriginFromHostnameMock.mockReturnValue('https://orbit.test');
+    ensurePeeredMock.mockResolvedValue({ status: 'active', peerId: 'p1' });
+  });
+
+  it('returns 404 user_not_found when lookup returns not_found', async () => {
+    lookupRemoteUserMock.mockResolvedValue({ ok: false, reason: 'not_found' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toBe('user_not_found');
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+  });
+
+  it('returns 503 peer_unreachable when lookup returns unreachable', async () => {
+    lookupRemoteUserMock.mockResolvedValue({ ok: false, reason: 'unreachable' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toBe('peer_unreachable');
+  });
+
+  it('returns 429 lookup_rate_limited with Retry-After header when lookup returns rate_limited', async () => {
+    lookupRemoteUserMock.mockResolvedValue({ ok: false, reason: 'rate_limited', retryAfter: 30 });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(429);
+    expect(JSON.parse(res.body).error).toBe('lookup_rate_limited');
+    expect(res.headers['retry-after']).toBe('30');
+  });
+
+  it('returns 400 invalid_target_domain when resolveOriginFromHostname returns null', async () => {
+    resolveOriginFromHostnameMock.mockReturnValue(null);
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('invalid_target_domain');
+  });
+});
