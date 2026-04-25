@@ -394,9 +394,11 @@ Two modes based on whether a provider is present:
 
 ### ImageEmbed
 
-- Renders `<img>` with `max-w-[400px]`, `max-h-[300px]`, `loading="lazy"`, `referrerPolicy="no-referrer"`
-- Image source: `embed.image ?? embed.url`
-- Click opens image preview lightbox via `useUIStore.openImagePreview()`
+- When `embed.width && embed.height` are populated: wraps the `<img>` in a sized container with `style={{ aspectRatio: ${width}/${height}, maxWidth: Math.min(width, 400), maxHeight: 300 }}` (mirrors `AttachmentRenderer.tsx:81-100`). Eliminates layout shift on image load.
+- When dimensions are null: no wrapper sizing, no fallback aspect-ratio. Inner `<img>` renders within `max-w-[400px]`, `max-h-[300px]`. The absent fallback is deliberate — see the *Dimension reservation contract* section below.
+- Inner `<img>`: `object-contain`, `loading="lazy"`, `referrerPolicy="no-referrer"`.
+- Image source: `embed.image ?? embed.url`.
+- Click opens image preview lightbox via `useUIStore.openImagePreview()`.
 
 ### RichEmbed (Spotify)
 

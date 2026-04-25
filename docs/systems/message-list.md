@@ -42,7 +42,7 @@ When dimensions are not known (probe failed, no OG tags, non-image type), the re
 Renderers known to satisfy the contract today:
 - `AttachmentRenderer.tsx` — reserves from `attachment.width/height`.
 - `embeds/ImageEmbed.tsx` — reserves from `embed.width/height` when populated.
-- `embeds/VideoEmbed.tsx` — fixed 16:9 padding-bottom for the iframe area.
+- `embeds/VideoEmbed.tsx` — fixed 16:9 reservation for both branches: `aspectRatio: '16/9'` for the direct-video container, `paddingBottom: 56.25%` for the provider-iframe container.
 - `embeds/RichEmbed.tsx` — explicit `height` from `getIframeHeight()`; fixed 80×80 thumbnail in collapsed state.
 - `embeds/GenericEmbed.tsx` — fixed 80×80 thumbnail.
 
