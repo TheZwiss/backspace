@@ -194,9 +194,11 @@ export const friendRequests = sqliteTable('friend_requests', {
   toId: text('to_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   status: text('status').default('pending'), // 'pending', 'accepted', 'declined'
   createdAt: integer('created_at').notNull(),
+  relayMessageId: text('relay_message_id'),  // entityId of the originating relay event; null for local-only requests. Used by the rollback hook in federationRollback.ts to find rows for deletion when a federated friend_request_create is permanently rejected.
 }, (table) => ({
   toIdx: index('idx_friend_requests_to_id').on(table.toId),
   fromIdx: index('idx_friend_requests_from_id').on(table.fromId),
+  relayMessageIdx: index('idx_friend_requests_relay_message_id').on(table.relayMessageId),
 }));
 
 export const reactions = sqliteTable('reactions', {
