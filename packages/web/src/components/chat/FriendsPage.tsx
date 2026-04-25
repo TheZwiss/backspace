@@ -476,16 +476,12 @@ function AddFriendTab({
       addToast('Friend request sent!', 'success');
       setQuery('');
     } catch (err) {
-      const errorBody = (err as { body?: unknown })?.body;
-      let code: string | undefined;
-      let message: string | undefined;
-      if (errorBody && typeof errorBody === 'object') {
-        code = (errorBody as { error?: string }).error;
-        message = (errorBody as { message?: string }).message;
-      }
-      // Fall back to the Error message if the server didn't send a structured body.
-      const fallback = message ?? (err instanceof Error ? err.message : undefined);
-      addToast(mapServerErrorToMessage(code, fallback, query.trim()), 'warning');
+      // The shared API client throws `new Error(body.error)` for non-2xx
+      // responses (api/client.ts:298), so `err.message` carries the server's
+      // error code (e.g. 'peer_pending_approval'). It also doubles as fallback
+      // text if the code is unrecognized by mapServerErrorToMessage.
+      const code = err instanceof Error ? err.message : undefined;
+      addToast(mapServerErrorToMessage(code, code, query.trim()), 'warning');
     } finally {
       setDirectAddLoading(false);
     }
@@ -643,15 +639,9 @@ function UserDiscoverCard({
       const requestId = await sendFriendRequest(username);
       onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
     } catch (err) {
-      const errorBody = (err as { body?: unknown })?.body;
-      let code: string | undefined;
-      let message: string | undefined;
-      if (errorBody && typeof errorBody === 'object') {
-        code = (errorBody as { error?: string }).error;
-        message = (errorBody as { message?: string }).message;
-      }
-      const fallback = message ?? (err instanceof Error ? err.message : 'Failed to send request');
-      setError(mapServerErrorToMessage(code, fallback, username));
+      // See handleDirectAdd above — err.message is the server error code.
+      const code = err instanceof Error ? err.message : undefined;
+      setError(mapServerErrorToMessage(code, code ?? 'Failed to send request', username));
     } finally {
       setActionLoading(false);
     }

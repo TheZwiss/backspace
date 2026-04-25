@@ -186,15 +186,11 @@ export function UserProfileModal() {
     try {
       await sendFriendRequest(user.username);
     } catch (err) {
-      const errorBody = (err as { body?: unknown })?.body;
-      let code: string | undefined;
-      let message: string | undefined;
-      if (errorBody && typeof errorBody === 'object') {
-        code = (errorBody as { error?: string }).error;
-        message = (errorBody as { message?: string }).message;
-      }
-      const fallback = message ?? (err instanceof Error ? err.message : undefined);
-      addToast(mapServerErrorToMessage(code, fallback, user.username), 'warning');
+      // The shared API client throws `new Error(body.error)` for non-2xx
+      // responses (api/client.ts:298), so err.message carries the server's
+      // error code (e.g. 'peer_pending_approval').
+      const code = err instanceof Error ? err.message : undefined;
+      addToast(mapServerErrorToMessage(code, code, user.username), 'warning');
     } finally {
       setFriendActionLoading(false);
     }
