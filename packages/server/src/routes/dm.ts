@@ -471,6 +471,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         const result: DmChannel = {
           id: dmChannel.id,
           ownerId: dmChannel.ownerId ?? null,
+          federatedId: dmChannel.federatedId ?? null,
           createdAt: dmChannel.createdAt,
           members: users.map(u => sanitizeUser(u)),
           lastMessage: lastMsg ? {

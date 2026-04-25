@@ -351,9 +351,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
         }
 
-        // Remote accepted — activate the peer
+        // Remote accepted — activate the peer. Parse the remote's instanceName
+        // from the response body so the federation panel renders a friendly
+        // label. Tolerate omission and non-JSON bodies.
+        let remoteInstanceName: string | null = null;
+        try {
+          const body = (await response.json()) as { instanceName?: string | null };
+          if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
+            remoteInstanceName = body.instanceName;
+          }
+        } catch {
+          // Non-JSON body — leave null.
+        }
+
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now() })
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -394,7 +406,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
   // ─── POST /api/federation/peer/accept ──────────────────────────────────────
   // Server-to-server: accept a peering request from a remote instance.
   // No JWT auth — this is first contact. Rate-limited by IP.
-  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string } }>(
+  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string; instanceName?: string } }>(
     '/api/federation/peer/accept',
     async (request, reply) => {
       const clientIp = request.ip;
@@ -405,7 +417,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const { sourceOrigin: rawOrigin, hmacSecret } = request.body ?? {};
+      const { sourceOrigin: rawOrigin, hmacSecret, instanceName: reqInstanceName } = request.body ?? {};
 
       if (!rawOrigin || typeof rawOrigin !== 'string') {
         return reply.code(400).send({ error: 'sourceOrigin is required', statusCode: 400 });
@@ -421,16 +433,22 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       const db = getDb();
 
+      const settings = db
+        .select({
+          instanceName: schema.instanceSettings.instanceName,
+          autoAcceptPeering: schema.instanceSettings.autoAcceptPeering,
+        })
+        .from(schema.instanceSettings)
+        .where(eq(schema.instanceSettings.id, 1))
+        .get();
+
+      const ourInstanceName = settings?.instanceName ?? null;
+      const autoAccept = settings?.autoAcceptPeering ?? 1;
+
       // ── autoAcceptPeering gate ──────────────────────────────────────────
       // When auto-accept is disabled, only allow incoming accept requests
       // that correspond to a local pending peer (i.e., a local admin
       // initiated the handshake). Unsolicited requests are rejected.
-      const settings = db
-        .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
-        .from(schema.instanceSettings)
-        .where(eq(schema.instanceSettings.id, 1))
-        .get();
-      const autoAccept = settings?.autoAcceptPeering ?? 1;
 
       if (autoAccept === 0) {
         // Check if the local admin already initiated or approved peering with this origin.
@@ -471,7 +489,6 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           }
 
           // Queue for admin approval — upsert into peer_approval_requests
-          const { instanceName: reqInstanceName } = request.body as { instanceName?: string };
           const now = Date.now();
           const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -537,7 +554,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // Legitimate recovery path: local admin clicks "Reset peering" →
           // row is deleted → remote's /peer/accept then lands on a
           // non-existent row and the normal handshake path runs.
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         if (existing.status === 'revoked') {
           return reply.code(403).send({
@@ -551,6 +568,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           db.update(schema.federationPeers)
             .set({
               hmacSecret,
+              instanceName: reqInstanceName ?? null,
               status: 'active',
               lastSeenAt: Date.now(),
             })
@@ -570,13 +588,14 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             console.error('[federation] onPeerActivated from /peer/accept (rejected override) failed:', err)
           );
 
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         if (existing.status === 'awaiting_approval') {
           // Remote admin approved — this is a fresh handshake from them.
           db.update(schema.federationPeers)
             .set({
               hmacSecret,
+              instanceName: reqInstanceName ?? null,
               status: 'active',
               lastSeenAt: Date.now(),
             })
@@ -596,12 +615,13 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
           );
 
-          return reply.code(200).send({ accepted: true });
+          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         // Pending — update with new secret and activate
         db.update(schema.federationPeers)
           .set({
             hmacSecret,
+            instanceName: reqInstanceName ?? null,
             status: 'active',
             lastSeenAt: Date.now(),
           })
@@ -613,7 +633,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           console.error('[federation] onPeerActivated from /peer/accept (pending) failed:', err)
         );
 
-        return reply.code(200).send({ accepted: true });
+        return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
       }
 
       // New peer — create and activate
@@ -622,6 +642,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         id: peerId,
         origin: sourceOrigin,
         hmacSecret,
+        instanceName: reqInstanceName ?? null,
         status: 'active',
         lastSeenAt: Date.now(),
         createdAt: Date.now(),
@@ -632,7 +653,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         console.error('[federation] onPeerActivated from /peer/accept (new) failed:', err)
       );
 
-      return reply.code(200).send({ accepted: true });
+      return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
     },
   );
 
@@ -1148,8 +1169,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
         }
 
+        // Parse the remote's instanceName from the response body so the
+        // federation panel renders a friendly label. Tolerate omission and
+        // non-JSON bodies — same pattern as performHandshake and /peer/initiate.
+        let remoteInstanceName: string | null = null;
+        try {
+          const body = (await response.json()) as { instanceName?: string | null };
+          if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
+            remoteInstanceName = body.instanceName;
+          }
+        } catch {
+          // Non-JSON body — leave null.
+        }
+
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: now })
+          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
 
