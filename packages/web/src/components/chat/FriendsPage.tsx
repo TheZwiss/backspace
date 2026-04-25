@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
-import { ConnectInstanceModal } from '../modals/ConnectInstanceModal';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
+import { mapServerErrorToMessage } from '../../utils/friendErrors';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -398,11 +398,6 @@ function AddFriendTab({
   const [rawSearchResults, setRawSearchResults] = useState<TaggedUser[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [directAddLoading, setDirectAddLoading] = useState(false);
-  const [connectModal, setConnectModal] = useState<{
-    domain: string;
-    isReconnect: boolean;
-    username: string;
-  } | null>(null);
 
   // Fetch discover on mount
   useEffect(() => {
@@ -481,31 +476,14 @@ function AddFriendTab({
       addToast('Friend request sent!', 'success');
       setQuery('');
     } catch (err) {
-      if (err instanceof InstanceNotConnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: false, username: query.trim() });
-      } else if (err instanceof InstanceDisconnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: true, username: query.trim() });
-      } else {
-        addToast((err as Error).message, 'warning');
-      }
+      // The shared API client throws `new Error(body.error)` for non-2xx
+      // responses (api/client.ts:298), so `err.message` carries the server's
+      // error code (e.g. 'peer_pending_approval'). It also doubles as fallback
+      // text if the code is unrecognized by mapServerErrorToMessage.
+      const code = err instanceof Error ? err.message : undefined;
+      addToast(mapServerErrorToMessage(code, code, query.trim()), 'warning');
     } finally {
       setDirectAddLoading(false);
-    }
-  };
-
-  // Connect modal handler
-  const handleConnected = async (result: 'new' | 'reconnect') => {
-    const username = connectModal?.username;
-    const domain = connectModal?.domain;
-    setConnectModal(null);
-    if (!username) return;
-    try {
-      await sendFriendRequest(username);
-      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
-      addToast(`${verb} ${domain} — friend request sent!`, 'success');
-      setQuery('');
-    } catch (err) {
-      addToast((err as Error).message, 'warning');
     }
   };
 
@@ -618,15 +596,6 @@ function AddFriendTab({
         )}
       </div>
 
-      {connectModal && (
-        <ConnectInstanceModal
-          domain={connectModal.domain}
-          targetDisplayName={connectModal.username}
-          isReconnect={connectModal.isReconnect}
-          onConnected={handleConnected}
-          onCancel={() => setConnectModal(null)}
-        />
-      )}
     </div>
   );
 }
@@ -647,12 +616,6 @@ function UserDiscoverCard({
   const openModal = useUIStore((s) => s.openModal);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
-  const addToast = useUIStore((s) => s.addToast);
-  const [connectModal, setConnectModal] = useState<{
-    domain: string;
-    isReconnect: boolean;
-    username: string;
-  } | null>(null);
 
   const baseName = user.username.includes('@') ? user.username.split('@')[0]! : user.username;
   const displayName = user.displayName ?? baseName;
@@ -676,32 +639,9 @@ function UserDiscoverCard({
       const requestId = await sendFriendRequest(username);
       onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
     } catch (err) {
-      if (err instanceof InstanceNotConnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: false, username });
-      } else if (err instanceof InstanceDisconnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: true, username });
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to send request');
-      }
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDiscoverConnected = async (result: 'new' | 'reconnect') => {
-    const username = connectModal?.username;
-    const domain = connectModal?.domain;
-    setConnectModal(null);
-    if (!username) return;
-
-    setActionLoading(true);
-    try {
-      const requestId = await sendFriendRequest(username);
-      onRelationshipChange(user.id, user._instanceOrigin, 'outbound_pending', requestId);
-      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
-      addToast(`${verb} ${domain} — friend request sent!`, 'success');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send request');
+      // See handleDirectAdd above — err.message is the server error code.
+      const code = err instanceof Error ? err.message : undefined;
+      setError(mapServerErrorToMessage(code, code ?? 'Failed to send request', username));
     } finally {
       setActionLoading(false);
     }
@@ -885,15 +825,6 @@ function UserDiscoverCard({
           </button>
         )}
       </div>
-      {connectModal && (
-        <ConnectInstanceModal
-          domain={connectModal.domain}
-          targetDisplayName={user.displayName ?? baseName}
-          isReconnect={connectModal.isReconnect}
-          onConnected={handleDiscoverConnected}
-          onCancel={() => setConnectModal(null)}
-        />
-      )}
     </div>
   );
 }

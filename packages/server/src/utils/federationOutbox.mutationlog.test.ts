@@ -133,3 +133,21 @@ describe('queueReadStateRelay — mutation log capture', () => {
     expect(rows[0]?.contextType).toBe('dm');
   });
 });
+
+describe('buildFriendContextId — cross-instance determinism', () => {
+  it('produces the same value regardless of argument order', async () => {
+    const { buildFriendContextId } = await import('./federationOutbox.js');
+    expect(buildFriendContextId('alice', 'bob')).toBe(buildFriendContextId('bob', 'alice'));
+  });
+
+  it('produces the same value on home and on orbit for the same canonical pair', async () => {
+    // home computes: buildFriendContextId(myHomeUserId, theirHomeUserId)
+    // orbit computes: buildFriendContextId(theirHomeUserId, myHomeUserId)
+    // Both must equal — initial-sync backfill depends on this invariant.
+    const { buildFriendContextId } = await import('./federationOutbox.js');
+    const home = buildFriendContextId('home-id-1', 'orbit-id-2');
+    const orbit = buildFriendContextId('orbit-id-2', 'home-id-1');
+    expect(home).toBe(orbit);
+    expect(home).toBe('friend:home-id-1:orbit-id-2');
+  });
+});

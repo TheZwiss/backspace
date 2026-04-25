@@ -12,6 +12,7 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { onPeerActivated, startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
+import { invokePermanentFailureCallback } from './federationRollback.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -48,6 +49,24 @@ const BACKOFF_SCHEDULE_MS: readonly number[] = [
 
 const MAX_FILE_ATTEMPTS = 10;
 const PEER_UNREACHABLE_THRESHOLD = 10;
+
+/**
+ * Outbox rejection reasons that the receiver has acknowledged as permanently
+ * undeliverable. These cause the outbox entry to be deleted (no retry) and
+ * trigger the registered permanent-failure callback for the eventType.
+ *
+ * 'duplicate' is treated as terminal-but-no-rollback (the receiver already has
+ * the event; nothing to roll back locally).
+ *
+ * 5xx responses, network errors, and timeouts are NOT in this set — they are
+ * transient and retried via the existing backoff schedule.
+ */
+const TERMINAL_REJECTION_REASONS = new Set<string>([
+  'duplicate',            // peer already has it (existing behavior)
+  'recipient_not_found',  // receiver doesn't know the target user
+  'attribution_mismatch', // payload claims a homeInstance the source can't authoritatively speak for
+  'unknown_event_type',   // peer doesn't understand this eventType — never will
+]);
 
 // ─── Worker State ───────────────────────────────────────────────────────────
 
@@ -230,15 +249,25 @@ export async function processOutboxTick(): Promise<void> {
       if (response.ok) {
         const result = await response.json() as FederationRelayResponse;
 
-        // Terminal outcomes = accepted + duplicate-rejected.
-        // `duplicate` means the peer already has the message (e.g., delivered
-        // earlier via outbox or pulled via sync). Retrying will fail with
-        // `duplicate` forever until TTL expires — treat it as effectively-
-        // accepted and remove the outbox entry.
+        // Terminal rejection reasons: receiver acknowledged the event is permanently
+        // undeliverable. Retrying will fail forever — remove from outbox.
+        // Non-`duplicate` terminals additionally invoke any registered permanent-
+        // failure callback for the eventType so the originator can roll back local
+        // state (e.g., friend_request_create deletes the local friend_requests row).
         const terminalEntityIds = new Set<string>(result.accepted);
+        const terminalForRollback: Array<{ messageId: string; reason: string; eventType: string | null }> = [];
+
         for (const rejection of result.rejected) {
-          if (rejection.reason === 'duplicate') {
+          if (TERMINAL_REJECTION_REASONS.has(rejection.reason)) {
             terminalEntityIds.add(rejection.messageId);
+            if (rejection.reason !== 'duplicate') {
+              const entry = peerEntries.find(e => e.entityId === rejection.messageId);
+              terminalForRollback.push({
+                messageId: rejection.messageId,
+                reason: rejection.reason,
+                eventType: entry?.eventType ?? null,
+              });
+            }
           }
         }
 
@@ -254,13 +283,22 @@ export async function processOutboxTick(): Promise<void> {
           }
         }
 
-        // Log rejected entries. Duplicate is terminal (outbox entry already
-        // removed above) — log at info level. Other reasons are transient /
-        // retained for retry — log at warn level.
+        // Invoke registered rollback callbacks AFTER deleting the outbox row,
+        // so the rollback runs in a clean state. The registry catches and logs
+        // callback errors — they cannot prevent outbox cleanup.
+        for (const { messageId, reason, eventType } of terminalForRollback) {
+          if (eventType) {
+            invokePermanentFailureCallback(eventType, messageId, reason);
+          }
+        }
+
+        // Log rejected entries. Terminal reasons (incl. 'duplicate') are logged
+        // at info level — outbox entry already removed. Non-terminals stay in
+        // outbox for retry and log at warn level.
         for (const rejection of result.rejected) {
-          if (rejection.reason === 'duplicate') {
+          if (TERMINAL_REJECTION_REASONS.has(rejection.reason)) {
             console.log(
-              `[federation-worker] Peer ${peerOrigin} rejected message ${rejection.messageId} as duplicate — outbox entry removed (terminal)`,
+              `[federation-worker] Peer ${peerOrigin} terminal rejection ${rejection.messageId}: ${rejection.reason} — outbox entry removed`,
             );
           } else {
             console.warn(

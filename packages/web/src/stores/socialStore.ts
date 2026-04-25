@@ -4,24 +4,6 @@ import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
 
-// ─── Federation errors ────────────────────────────────────────────────────
-
-/** Thrown when the target domain has never been connected. */
-export class InstanceNotConnectedError extends Error {
-  constructor(public domain: string) {
-    super(`Not connected to ${domain}`);
-    this.name = 'InstanceNotConnectedError';
-  }
-}
-
-/** Thrown when the instance entry exists but the session is disconnected/errored. */
-export class InstanceDisconnectedError extends Error {
-  constructor(public domain: string) {
-    super(`Instance ${domain} is not currently connected`);
-    this.name = 'InstanceDisconnectedError';
-  }
-}
-
 // ─── Tagged types (origin tracking for federation) ───────────────────────────
 
 export type TaggedFriend = Friend & { _instanceOrigin: string };
@@ -75,6 +57,7 @@ interface SocialState {
   removeFriend: (id: string) => Promise<void>;
   searchUsers: (query: string) => Promise<TaggedUser[]>;
   addIncomingRequest: (request: FriendRequest, origin: string) => void;
+  addOutboundRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
   updateFriendProfile: (user: User) => void;
@@ -210,44 +193,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   sendFriendRequest: async (username: string) => {
     set({ isLoading: true, error: null });
     try {
-      const atIndex = username.lastIndexOf('@');
-      let res: { success: boolean; requestId?: string };
-
-      if (atIndex === -1) {
-        // No @ → local user on home instance
-        res = await api.social.sendRequest(username);
-      } else {
-        const baseName = username.slice(0, atIndex);
-        const domain = username.slice(atIndex + 1).toLowerCase();
-
-        // Check if domain matches home instance
-        if (domain === window.location.host) {
-          // Strip domain, send to home API
-          res = await api.social.sendRequest(baseName);
-        } else {
-          // Find a connected instance matching this domain
-          const instances = useInstanceStore.getState().instances;
-          const match = instances.find(inst => {
-            try {
-              return new URL(inst.origin).host === domain;
-            } catch {
-              return false;
-            }
-          });
-
-          if (!match) {
-            throw new InstanceNotConnectedError(domain);
-          }
-
-          if (match.status !== 'connected') {
-            throw new InstanceDisconnectedError(domain);
-          }
-
-          // On the remote instance, the user is just "alice", not "alice@orbit"
-          res = await match.api.social.sendRequest(baseName);
-        }
-      }
-
+      const res = await api.social.sendRequest(username.trim());
+      set({ isLoading: false });
+      // Server emits friend_request_sent over WS; useWebSocket appends the row
+      // optimistically. As a safety net for tabs that race the WS event, refresh
+      // from server too.
       await get().loadRequests();
       return res.requestId;
     } catch (err) {
@@ -385,6 +335,17 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   // Called from WS handler when another user sends you a friend request
   addIncomingRequest: (request: FriendRequest, origin: string) => {
+    set((state) => {
+      const canonicalId = request.user?.homeUserId ?? request.user?.id;
+      if (canonicalId && state.requests.some(r => (r.user?.homeUserId ?? r.user?.id) === canonicalId)) {
+        return state;
+      }
+      return { requests: [...state.requests, { ...request, _instanceOrigin: origin }] };
+    });
+  },
+
+  // Called from WS handler for multi-tab sync when this user creates an outbound request
+  addOutboundRequest: (request: FriendRequest, origin: string) => {
     set((state) => {
       const canonicalId = request.user?.homeUserId ?? request.user?.id;
       if (canonicalId && state.requests.some(r => (r.user?.homeUserId ?? r.user?.id) === canonicalId)) {

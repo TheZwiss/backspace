@@ -862,6 +862,27 @@ function handleEvent(origin: string, event: ServerEvent): void {
       break;
     }
 
+    case 'friend_request_sent': {
+      // Multi-tab sync: another tab/device of the same user just created an outbound request.
+      if (!isHome && event.request.user) normalizeUserAssets(event.request.user, origin);
+      const { addOutboundRequest } = useSocialStore.getState();
+      addOutboundRequest(event.request, origin);
+      break;
+    }
+
+    case 'friend_request_relay_failed': {
+      // Async rollback notification: the federated friend_request_create was permanently rejected.
+      // Drop the optimistic row and surface a warning toast.
+      const { removeRequestById } = useSocialStore.getState();
+      removeRequestById(event.requestId, origin);
+      const { addToast } = useUIStore.getState();
+      addToast(
+        `Friend request to ${event.targetHandle} could not be delivered: ${event.message}`,
+        'warning',
+      );
+      break;
+    }
+
     case 'friend_request_accepted': {
       if (!isHome) normalizeUserAssets(event.friend, origin);
       const { addFriendFromAccepted } = useSocialStore.getState();

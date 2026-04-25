@@ -438,6 +438,8 @@ export type ServerEvent =
   | { type: 'friend_removed'; userId: string }
   | { type: 'friend_request_cancelled'; requestId: string; userId: string }
   | { type: 'friend_request_declined'; requestId: string; userId: string }
+  | { type: 'friend_request_sent'; request: FriendRequest }
+  | { type: 'friend_request_relay_failed'; requestId: string; reason: 'user_not_found' | 'peer_rejected'; message: string; targetHandle: string }
   | { type: 'channel_created'; channel: Channel; spaceId: string }
   | { type: 'channel_updated'; channel: Channel; spaceId: string }
   | { type: 'channel_deleted'; channelId: string; spaceId: string }
@@ -992,6 +994,22 @@ export interface FederationSyncResponse {
   hasMore: boolean;
   checkpoint: number;
 }
+
+export interface FederationUserLookupRequest {
+  username: string;
+}
+
+export interface FederationUserLookupProfile {
+  displayName: string | null;
+  avatar: string | null;
+  avatarColor: AvatarColor | null;
+  banner: string | null;
+  bio: string | null;
+}
+
+export type FederationUserLookupResponse =
+  | { found: true; user: { homeUserId: string; username: string; profile: FederationUserLookupProfile } }
+  | { found: false; code: 'user_not_found' };
 
 export interface FederationPeer {
   id: string;

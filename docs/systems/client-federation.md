@@ -15,6 +15,10 @@ Source files:
 
 ## Architecture Overview
 
+**Client-side vs S2S federation by feature:**
+- **Friend & DM relay are S2S.** Sending a friend request to `alice@orbit.tld` does not require having a federated account on `orbit.tld`; the sender's home server queues the relay (see `social.md` §6 outbound flow). DM messages are similarly relayed server-to-server once the initial channel exists.
+- **Spaces are client-federated.** Joining a remote space still requires creating a federated account on that instance via the Connections UI.
+
 Backspace supports **client-side federation**: a single app session (web or desktop — both are feature-identical) can connect to multiple Backspace instances simultaneously. The user has a **home instance** (their primary identity) and zero or more **connected remote instances**.
 
 ```
@@ -50,7 +54,9 @@ Backspace supports **client-side federation**: a single app session (web or desk
 
 ## 1. Federated Account Creation
 
-When a user connects to a remote instance, the client creates (or logs into) an account on that instance. This is a **real account with a real bcrypt password** — not a replicated stub.
+When a user adds a remote instance via the Connections settings to **join a space there**, the client creates (or logs into) an account on that instance. As of 2026-04-25, this is no longer required for friending or messaging users on a remote instance — those flows are fully S2S (see `social.md` §6 and `federation.md` §4 respectively). Federated accounts remain real loginable accounts and retain all capabilities (login, space membership, password sync, deletion).
+
+This is a **real account with a real bcrypt password** — not a replicated stub.
 
 ### Username Format
 
@@ -79,6 +85,12 @@ When a user adds a remote instance via the Connections settings:
 5. **On success** — store JWT token, create API client, open WebSocket, sync profile
 
 The same password is used across all instances. Password changes on the home instance are synced to remote instances automatically.
+
+### API Client Error Contract
+
+The shared API client (`packages/web/src/api/client.ts:298`) throws `new Error(body.error)` for non-2xx responses. The server's structured error code is on `err.message`; there is **no** `err.body` or `err.code` property. Catch handlers that need to map codes to UI messages should read `err.message` and pass it as both the code and the fallback to `mapServerErrorToMessage` (see `packages/web/src/utils/friendErrors.ts`).
+
+This was documented after T19/T20 catch blocks initially read the wrong shape and surfaced raw codes as toast text — fixed in commit `d207af4`. The same pattern applies to any new client-side code that catches API errors from the home or remote instances.
 
 ---
 

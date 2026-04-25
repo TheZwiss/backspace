@@ -53,9 +53,10 @@ vi.mock('../utils/federationOutbox.js', () => ({
   getFriendEventTargets: () => [],
 }));
 
-vi.mock('../utils/federationAuth.js', () => ({
-  getOurOrigin: () => 'https://local.test',
-}));
+vi.mock('../utils/federationAuth.js', async (importActual) => {
+  const actual = await importActual<typeof import('../utils/federationAuth.js')>();
+  return { ...actual, getOurOrigin: () => 'https://local.test' };
+});
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
@@ -217,5 +218,27 @@ describe('POST /api/social/requests — case-insensitive username lookup', () =>
     const res = await sendRequest('nobody');
     expect(res.statusCode).toBe(404);
     expect(JSON.parse(res.body).error).toBe('User not found');
+  });
+
+  it('broadcasts friend_request_sent to the sender on local request creation', async () => {
+    seedUser({ id: 'u1', username: 'alice' });
+    const { connectionManager } = await import('../ws/handler.js');
+    const sendToUser = connectionManager.sendToUser as unknown as ReturnType<typeof vi.fn>;
+    sendToUser.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const sent = sendToUser.mock.calls.find(c => c[1]?.type === 'friend_request_sent');
+    expect(sent).toBeDefined();
+    expect(sent![0]).toBe(CALLER_ID);
+    // The 'user' field on the sent payload must be the TARGET (alice),
+    // not the sender — symmetric with how the federated branch builds it.
+    expect(sent![1].request.user.id).toBe('u1');
+    expect(sent![1].request.user.username).toBe('alice');
   });
 });

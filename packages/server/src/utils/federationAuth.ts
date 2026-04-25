@@ -182,3 +182,31 @@ export function getOurOrigin(): string {
   }
   return `http://localhost:${config.port}`;
 }
+
+/**
+ * Canonicalize a homeInstance / origin value for comparison.
+ *
+ * The homeInstance column is stored in two shapes depending on the code path
+ * that wrote it:
+ *   - `auth.ts` registration writes the bare host the client sent (e.g. `nova.ddns.net`).
+ *   - `resolveOrCreateReplicatedUser` writes the bare host (`extractDomain(...)`).
+ *   - `getOurOrigin()` returns the full URL (`https://nova.ddns.net`).
+ *
+ * All federation authority / self-friend comparisons must route through this
+ * helper to avoid false-fires across the dual storage convention. Returns the
+ * lowercased host (with optional :port), no scheme, no trailing slash.
+ *
+ * NOTE: A federation-wide audit + canonical-storage migration is tracked
+ * separately. This helper papers over the inconsistency at comparison sites.
+ */
+export function normalizeOriginForCompare(value: string | null | undefined): string | null {
+  if (!value) return null;
+  let s = value.trim();
+  if (!s) return null;
+  // Strip scheme if present
+  s = s.replace(/^https?:\/\//i, '');
+  // Strip trailing slashes
+  s = s.replace(/\/+$/, '');
+  if (!s) return null;
+  return s.toLowerCase();
+}

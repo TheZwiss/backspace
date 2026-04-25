@@ -26,6 +26,7 @@ import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
+import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 
 import { registerWebSocket } from './ws/handler.js';

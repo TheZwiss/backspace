@@ -64,6 +64,13 @@ vi.mock('../utils/federationAuthFailure.js', () => ({
   AUTH_FAILURE_THRESHOLD: 5,
 }));
 
+const invokeRollbackMock = vi.fn();
+vi.mock('./federationRollback.js', () => ({
+  invokePermanentFailureCallback: invokeRollbackMock,
+  registerPermanentFailureCallback: vi.fn(),
+  _resetCallbacks: vi.fn(),
+}));
+
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -84,10 +91,10 @@ function seedPeer(id: string): void {
   }).run();
 }
 
-function seedOutboxEntry(id: string, peerId: string, entityId: string): void {
+function seedOutboxEntry(id: string, peerId: string, entityId: string, eventType = 'create'): void {
   testDb.insert(schema.federationOutbox).values({
     id, peerId, contextId: 'ch-1', entityId,
-    contextType: 'dm', eventType: 'create', payload: JSON.stringify({
+    contextType: 'dm', eventType, payload: JSON.stringify({
       message: { userId: 'u', homeUserId: 'u', homeInstance: 'test.example', content: 'hi', replyToId: null, editedAt: null, createdAt: Date.now() },
     }),
     encryptionVersion: 0, attempts: 0, nextRetryAt: Date.now() - 1000,
@@ -286,5 +293,135 @@ describe('federatedCallSentinel', () => {
       'https://ghost.example',
       { reason: 'peer_transient_failure', peerLabel: undefined },
     );
+  });
+});
+
+// ─── Terminal rejection reasons + rollback invocation ────────────────────────
+
+describe('outbox worker — terminal rejection reasons + rollback invocation', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.restoreAllMocks();
+    invokeRollbackMock.mockReset();
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  it('recipient_not_found for friend_request_create is terminal AND invokes rollback', async () => {
+    seedPeer('peer-r1');
+    seedOutboxEntry('entry-r1', 'peer-r1', 'msg-1', 'friend_request_create');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'msg-1', reason: 'recipient_not_found' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const workerModule = await import('./federationWorker.js');
+    const processOutboxTick = (workerModule as { processOutboxTick?: () => Promise<void> }).processOutboxTick!;
+    await processOutboxTick();
+
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r1')).get();
+    expect(remaining).toBeUndefined();
+
+    expect(invokeRollbackMock).toHaveBeenCalledTimes(1);
+    expect(invokeRollbackMock).toHaveBeenCalledWith('friend_request_create', 'msg-1', 'recipient_not_found');
+  });
+
+  it('recipient_not_found for dm_message_create: row deleted, rollback still invoked (no-op inside registry)', async () => {
+    seedPeer('peer-r2');
+    seedOutboxEntry('entry-r2', 'peer-r2', 'msg-2', 'dm_message_create');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'msg-2', reason: 'recipient_not_found' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const workerModule = await import('./federationWorker.js');
+    const processOutboxTick = (workerModule as { processOutboxTick?: () => Promise<void> }).processOutboxTick!;
+    await processOutboxTick();
+
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r2')).get();
+    expect(remaining).toBeUndefined();
+
+    // Worker always calls invoke; whether a callback is registered is the registry's concern
+    expect(invokeRollbackMock).toHaveBeenCalledTimes(1);
+    expect(invokeRollbackMock).toHaveBeenCalledWith('dm_message_create', 'msg-2', 'recipient_not_found');
+  });
+
+  it('duplicate rejection is terminal but does NOT invoke rollback callback', async () => {
+    seedPeer('peer-r3');
+    seedOutboxEntry('entry-r3', 'peer-r3', 'msg-3', 'friend_request_create');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'msg-3', reason: 'duplicate' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const workerModule = await import('./federationWorker.js');
+    const processOutboxTick = (workerModule as { processOutboxTick?: () => Promise<void> }).processOutboxTick!;
+    await processOutboxTick();
+
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r3')).get();
+    expect(remaining).toBeUndefined();
+
+    expect(invokeRollbackMock).not.toHaveBeenCalled();
+  });
+
+  it('attribution_mismatch is terminal AND invokes rollback', async () => {
+    seedPeer('peer-r4');
+    seedOutboxEntry('entry-r4', 'peer-r4', 'msg-4', 'friend_request_create');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'msg-4', reason: 'attribution_mismatch' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const workerModule = await import('./federationWorker.js');
+    const processOutboxTick = (workerModule as { processOutboxTick?: () => Promise<void> }).processOutboxTick!;
+    await processOutboxTick();
+
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r4')).get();
+    expect(remaining).toBeUndefined();
+
+    expect(invokeRollbackMock).toHaveBeenCalledTimes(1);
+    expect(invokeRollbackMock).toHaveBeenCalledWith('friend_request_create', 'msg-4', 'attribution_mismatch');
+  });
+
+  it('non-terminal rejection (processing_error) does NOT invoke rollback and retains the outbox row', async () => {
+    seedPeer('peer-r5');
+    seedOutboxEntry('entry-r5', 'peer-r5', 'msg-5', 'friend_request_create');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({
+        accepted: [],
+        rejected: [{ messageId: 'msg-5', reason: 'processing_error' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    );
+
+    const workerModule = await import('./federationWorker.js');
+    const processOutboxTick = (workerModule as { processOutboxTick?: () => Promise<void> }).processOutboxTick!;
+    await processOutboxTick();
+
+    const remaining = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.id, 'entry-r5')).get();
+    expect(remaining).toBeDefined();
+
+    expect(invokeRollbackMock).not.toHaveBeenCalled();
   });
 });
