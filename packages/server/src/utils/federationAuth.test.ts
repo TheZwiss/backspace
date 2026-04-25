@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { verifyPeerSignature, signRequest, ROTATION_GRACE_PERIOD_MS } from './federationAuth.js';
+import { verifyPeerSignature, signRequest, ROTATION_GRACE_PERIOD_MS, normalizeOriginForCompare } from './federationAuth.js';
 
 describe('verifyPeerSignature', () => {
   const primarySecret = 'a'.repeat(64);
@@ -79,8 +79,6 @@ describe('verifyPeerSignature', () => {
   });
 });
 
-import { normalizeOriginForCompare } from './federationAuth.js';
-
 describe('normalizeOriginForCompare', () => {
   it('canonicalizes a bare host', () => {
     expect(normalizeOriginForCompare('nova.ddns.net')).toBe('nova.ddns.net');
@@ -99,6 +97,9 @@ describe('normalizeOriginForCompare', () => {
   });
   it('returns null for null input', () => {
     expect(normalizeOriginForCompare(null)).toBeNull();
+  });
+  it('returns null for undefined input', () => {
+    expect(normalizeOriginForCompare(undefined)).toBeNull();
   });
   it('returns null for empty string', () => {
     expect(normalizeOriginForCompare('')).toBeNull();
