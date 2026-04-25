@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const homeSendRequest = vi.fn(async () => ({ success: true, requestId: 'req-home' }));
-const remoteSendRequest = vi.fn(async () => ({ success: true, requestId: 'req-remote' }));
+const homeSendRequest = vi.fn(async () => ({ success: true, requestId: 'req-1' }));
 const homeRequests = vi.fn(async () => []);
-const remoteRequests = vi.fn(async () => []);
 
 vi.mock('../api/client', () => ({
   api: {
@@ -14,75 +12,52 @@ vi.mock('../api/client', () => ({
   },
 }));
 
-const remoteApi = {
-  social: {
-    sendRequest: (...args: unknown[]) => remoteSendRequest(...args),
-    requests: () => remoteRequests(),
-  },
-};
-
-vi.mock('./instanceStore', () => ({
-  useInstanceStore: {
-    getState: () => ({
-      instances: [
-        {
-          origin: 'https://orbit.ddns.net',
-          status: 'connected',
-          api: remoteApi,
-        },
-      ],
-    }),
-  },
-}));
-
 vi.mock('../utils/assetUrls', () => ({
   normalizeUserAssets: (u: unknown) => u,
 }));
 
+// instanceStore is still imported by other socialStore methods (loadFriends, loadRequests)
+// — provide an empty-instances stub so those calls don't crash.
+vi.mock('./instanceStore', () => ({
+  useInstanceStore: {
+    getState: () => ({ instances: [], _autoConnectDone: true }),
+    subscribe: () => () => {},
+  },
+}));
+
 import { useSocialStore } from './socialStore';
 
-describe('socialStore.sendFriendRequest — case-insensitive domain routing', () => {
+describe('socialStore.sendFriendRequest — server-side routing (post-S2S)', () => {
   beforeEach(() => {
     homeSendRequest.mockClear();
-    remoteSendRequest.mockClear();
     homeRequests.mockClear();
-    remoteRequests.mockClear();
-    // window.location.host in jsdom defaults to 'localhost:3000' or similar.
-    // Override it for routing tests.
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      writable: true,
-      value: { ...window.location, host: 'local.test', hostname: 'local.test' },
-    });
   });
 
-  it('sends to the home API when the typed domain matches window.location.host exactly', async () => {
+  it('sends bare handle to home API as-is', async () => {
+    const id = await useSocialStore.getState().sendFriendRequest('bob');
+    expect(homeSendRequest).toHaveBeenCalledOnce();
+    expect(homeSendRequest).toHaveBeenCalledWith('bob');
+    expect(id).toBe('req-1');
+  });
+
+  it('sends @-handle to home API verbatim (server handles routing)', async () => {
+    await useSocialStore.getState().sendFriendRequest('bob@orbit.tld');
+    expect(homeSendRequest).toHaveBeenCalledWith('bob@orbit.tld');
+  });
+
+  it('sends @-handle for own host to home API verbatim', async () => {
     await useSocialStore.getState().sendFriendRequest('bob@local.test');
+    expect(homeSendRequest).toHaveBeenCalledWith('bob@local.test');
+  });
+
+  it('trims whitespace before sending', async () => {
+    await useSocialStore.getState().sendFriendRequest('  bob  ');
     expect(homeSendRequest).toHaveBeenCalledWith('bob');
-    expect(remoteSendRequest).not.toHaveBeenCalled();
   });
 
-  it('sends to the home API when the typed domain matches with mixed case', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob@LOCAL.TEST');
-    expect(homeSendRequest).toHaveBeenCalledWith('bob');
-    expect(remoteSendRequest).not.toHaveBeenCalled();
-  });
-
-  it('routes to a connected remote instance when the typed domain matches its origin host', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob@orbit.ddns.net');
-    expect(remoteSendRequest).toHaveBeenCalledWith('bob');
-    expect(homeSendRequest).not.toHaveBeenCalled();
-  });
-
-  it('routes to a connected remote instance when the typed domain has mixed case', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob@ORBIT.ddns.net');
-    expect(remoteSendRequest).toHaveBeenCalledWith('bob');
-    expect(homeSendRequest).not.toHaveBeenCalled();
-  });
-
-  it('sends bare handle (no @) directly to the home API', async () => {
-    await useSocialStore.getState().sendFriendRequest('bob');
-    expect(homeSendRequest).toHaveBeenCalledWith('bob');
-    expect(remoteSendRequest).not.toHaveBeenCalled();
+  it('propagates server errors and sets store.error', async () => {
+    homeSendRequest.mockRejectedValueOnce(new Error('user_not_found'));
+    await expect(useSocialStore.getState().sendFriendRequest('nope')).rejects.toThrow('user_not_found');
+    expect(useSocialStore.getState().error).toBe('user_not_found');
   });
 });
