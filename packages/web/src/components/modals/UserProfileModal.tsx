@@ -7,8 +7,8 @@ import { Username } from '../ui/Username';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore, getApiForOrigin, resolveUserOrigin } from '../../stores/spaceStore';
 import { api } from '../../api/client';
-import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, InstanceNotConnectedError, InstanceDisconnectedError } from '../../stores/socialStore';
-import { ConnectInstanceModal } from './ConnectInstanceModal';
+import { useSocialStore, type TaggedFriend, type TaggedFriendRequest } from '../../stores/socialStore';
+import { mapServerErrorToMessage } from '../../utils/friendErrors';
 import { useAuthStore } from '../../stores/authStore';
 import { getAvatarGradient, getSpaceGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername, isSelf, canonicalUserMatch } from '../../utils/identity';
@@ -71,10 +71,6 @@ export function UserProfileModal() {
   const [mutualSpaces, setMutualSpaces] = useState<MutualSpace[]>([]);
   const [loadingMutuals, setLoadingMutuals] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState(false);
-  const [connectModal, setConnectModal] = useState<{
-    domain: string;
-    isReconnect: boolean;
-  } | null>(null);
 
   const isOpen = activeModal === 'userProfile';
   const userId = modalData?.userId as string | undefined;
@@ -190,29 +186,15 @@ export function UserProfileModal() {
     try {
       await sendFriendRequest(user.username);
     } catch (err) {
-      if (err instanceof InstanceNotConnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: false });
-      } else if (err instanceof InstanceDisconnectedError) {
-        setConnectModal({ domain: err.domain, isReconnect: true });
+      const errorBody = (err as { body?: unknown })?.body;
+      let code: string | undefined;
+      let message: string | undefined;
+      if (errorBody && typeof errorBody === 'object') {
+        code = (errorBody as { error?: string }).error;
+        message = (errorBody as { message?: string }).message;
       }
-      // Other errors: socialStore already sets its own error state
-    } finally {
-      setFriendActionLoading(false);
-    }
-  };
-
-  const handleConnected = async (result: 'new' | 'reconnect') => {
-    const domain = connectModal?.domain; // capture before clearing
-    setConnectModal(null);
-    // Retry the friend request now that we're connected
-    setFriendActionLoading(true);
-    try {
-      await sendFriendRequest(user.username);
-      const verb = result === 'reconnect' ? 'Reconnected to' : 'Connected to';
-      addToast(`${verb} ${domain} — friend request sent to ${user.displayName ?? parseFederatedUsername(user.username).baseName}`, 'success');
-    } catch (err) {
-      // Connection succeeded but friend request failed — still valuable
-      addToast((err as Error).message, 'warning');
+      const fallback = message ?? (err instanceof Error ? err.message : undefined);
+      addToast(mapServerErrorToMessage(code, fallback, user.username), 'warning');
     } finally {
       setFriendActionLoading(false);
     }
@@ -559,15 +541,6 @@ export function UserProfileModal() {
         </div>
       </div>
 
-      {connectModal && user && (
-        <ConnectInstanceModal
-          domain={connectModal.domain}
-          targetDisplayName={user.displayName ?? parseFederatedUsername(user.username).baseName}
-          isReconnect={connectModal.isReconnect}
-          onConnected={handleConnected}
-          onCancel={() => setConnectModal(null)}
-        />
-      )}
     </div>
   );
 }
