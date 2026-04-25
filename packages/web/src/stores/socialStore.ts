@@ -218,7 +218,6 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         res = await api.social.sendRequest(username);
       } else {
         const baseName = username.slice(0, atIndex);
-        // Hostnames are case-insensitive; comparison RHS is canonical lowercase.
         const domain = username.slice(atIndex + 1).toLowerCase();
 
         // Check if domain matches home instance

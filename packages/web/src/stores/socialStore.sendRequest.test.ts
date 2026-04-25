@@ -51,6 +51,7 @@ describe('socialStore.sendFriendRequest — case-insensitive domain routing', ()
     // Override it for routing tests.
     Object.defineProperty(window, 'location', {
       configurable: true,
+      writable: true,
       value: { ...window.location, host: 'local.test', hostname: 'local.test' },
     });
   });
