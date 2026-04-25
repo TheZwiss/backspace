@@ -1169,8 +1169,21 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
         }
 
+        // Parse the remote's instanceName from the response body so the
+        // federation panel renders a friendly label. Tolerate omission and
+        // non-JSON bodies — same pattern as performHandshake and /peer/initiate.
+        let remoteInstanceName: string | null = null;
+        try {
+          const body = (await response.json()) as { instanceName?: string | null };
+          if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
+            remoteInstanceName = body.instanceName;
+          }
+        } catch {
+          // Non-JSON body — leave null.
+        }
+
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: now })
+          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
 

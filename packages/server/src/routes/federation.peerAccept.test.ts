@@ -355,3 +355,77 @@ describe('POST /api/federation/peer/initiate — persists remote instanceName fr
     expect(row?.instanceName).toBeNull();
   });
 });
+
+describe('POST /api/federation/approval-requests/:id/approve — persists remote instanceName from handshake response', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings('Local Backspace');
+    app = await buildApp();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function seedApprovalRequest(): string {
+    const id = 'approval-1';
+    testDb.insert(schema.peerApprovalRequests).values({
+      id,
+      origin: 'https://remote.example',
+      instanceName: 'Stale Name',
+      hmacSecret: 'their-old-secret',
+      requestedAt: Date.now(),
+      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    }).run();
+    return id;
+  }
+
+  it('writes remote.instanceName when remote /peer/accept succeeds', async () => {
+    const approvalId = seedApprovalRequest();
+
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote Backspace' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/federation/approval-requests/${approvalId}/approve`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(row?.status).toBe('active');
+    expect(row?.instanceName).toBe('Remote Backspace');
+  });
+
+  it('writes null instanceName when remote response omits the field', async () => {
+    const approvalId = seedApprovalRequest();
+
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ accepted: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/federation/approval-requests/${approvalId}/approve`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(row?.instanceName).toBeNull();
+  });
+});
