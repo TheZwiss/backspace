@@ -685,16 +685,26 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
 
     const pattern = `%${q}%`;
 
-    // Search by username or display name with partial matching, excluding current user
+    const conditions = [
+      eq(schema.users.isDeleted, 0),
+      eq(schema.users.discoverable, 1),
+      ne(schema.users.id, request.userId),
+      // Exclude replicated federated stubs — federated users are surfaced
+      // via the client-side cross-instance fan-out in
+      // packages/web/src/stores/socialStore.ts (searchUsers), which dedupes
+      // by canonical identity. Returning stubs here would be a noisy
+      // duplicate source AND would leak domain-suffix substring matches
+      // (stubs are stored as <homeUserId>@<domain>).
+      sql`(${schema.users.homeInstance} IS NULL OR ${schema.users.homeInstance} = '')`,
+      or(
+        like(schema.users.username, pattern),
+        like(schema.users.displayName, pattern),
+      )!,
+    ];
+
     const users = db.select()
       .from(schema.users)
-      .where(and(
-        or(
-          like(schema.users.username, pattern),
-          like(schema.users.displayName, pattern)
-        ),
-        ne(schema.users.id, request.userId)
-      ))
+      .where(and(...conditions))
       .limit(10)
       .all();
 
