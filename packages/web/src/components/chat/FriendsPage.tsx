@@ -462,9 +462,15 @@ function AddFriendTab({
       });
   }, [rawSearchResults, friends, requests, selfIds, isSearchMode]);
 
-  // Direct Add detection (synchronous, not debounced)
-  const atIndex = query.lastIndexOf('@');
-  const showDirectAdd = atIndex > 0 && atIndex < query.length - 1;
+  const trimmedQuery = query.trim();
+  const directAt = trimmedQuery.lastIndexOf('@');
+  const showDirectAdd = trimmedQuery.length > 0
+    && (directAt === -1 || (directAt > 0 && directAt < trimmedQuery.length - 1));
+  // Bare handle gets the home host appended for display only — submission
+  // still uses the raw trimmed query.
+  const directAddDisplay = trimmedQuery.includes('@')
+    ? trimmedQuery
+    : `${trimmedQuery}@${window.location.host}`;
 
   // Direct Add handler
   const handleDirectAdd = async () => {
@@ -552,7 +558,7 @@ function AddFriendTab({
               <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
             </svg>
             <div className="flex-1 min-w-0 text-sm text-txt-secondary">
-              Send friend request to <span className="font-semibold text-txt-primary">{query.trim()}</span>
+              Send friend request to <span className="font-semibold text-txt-primary">{directAddDisplay}</span>
             </div>
             <button
               onClick={handleDirectAdd}

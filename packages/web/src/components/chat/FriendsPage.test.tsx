@@ -254,7 +254,7 @@ describe('FriendsPage', () => {
       });
     });
 
-    it('does not show Direct Add row for plain usernames', async () => {
+    it('shows Direct Add row with resolved-form display for plain usernames', async () => {
       const user = userEvent.setup();
       renderFriendsPage();
       await user.click(screen.getByText('Add Friend'));
@@ -262,6 +262,31 @@ describe('FriendsPage', () => {
       const input = screen.getByPlaceholderText(/Search or add by username/);
       await user.type(input, 'marc');
 
+      // Direct Add row appears with the resolved form `marc@<window.location.host>`.
+      // The exact host depends on jsdom (localhost:3000 by default), so match by prefix.
+      expect(screen.getByText(/Send friend request to/)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(`marc@${window.location.host.replace(/[.+?^${}()|[\]\\]/g, '\\$&')}`))).toBeInTheDocument();
+    });
+
+    it('does not show Direct Add row for malformed @ shapes', async () => {
+      const user = userEvent.setup();
+      renderFriendsPage();
+      await user.click(screen.getByText('Add Friend'));
+
+      const input = screen.getByPlaceholderText(/Search or add by username/);
+
+      // Lone @
+      await user.type(input, '@');
+      expect(screen.queryByText(/Send friend request to/)).not.toBeInTheDocument();
+      await user.clear(input);
+
+      // Leading @ — only domain, no baseName
+      await user.type(input, '@bob');
+      expect(screen.queryByText(/Send friend request to/)).not.toBeInTheDocument();
+      await user.clear(input);
+
+      // Trailing @ — only baseName, no domain
+      await user.type(input, 'bob@');
       expect(screen.queryByText(/Send friend request to/)).not.toBeInTheDocument();
     });
 
