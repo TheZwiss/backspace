@@ -183,6 +183,7 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 | `/api/federation/peer/rotate` | POST | HMAC | Accept secret rotation from peer |
 | `/api/federation/peer/denied` | POST | HMAC | Receive denial notification for awaiting_approval peer |
 | `/api/federation/identity` | DELETE | HMAC | Delete federated user identity (soft/full mode) |
+| `/api/federation/users/lookup` | POST | HMAC, rate-limited 60/min/peer | Resolve a username on this instance to (homeUserId, profile snapshot) for cross-instance friend-request originators |
 
 ### S2S Identity Deletion (`DELETE /api/federation/identity`)
 
@@ -201,6 +202,22 @@ Allows a home instance to remove a user's replicated identity from a remote inst
 - **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes memberships, but skips reaction deletion and orphaned DM purge.
 - **Mode `"full"`:** Calls `tombstoneUser(uid, { purgeContent: true })` — full tombstone including reactions and orphaned DM cleanup.
 - **Post-deletion:** Broadcasts `member_left` WS events for all spaces the user belonged to before removal.
+
+### S2S User Lookup (`POST /api/federation/users/lookup`)
+
+HMAC-authenticated. Rate-limited to 60 requests/minute per peer. Used by the cross-instance friend-add flow to resolve a username on this instance before the sender's home server queues a `friend_request_create` event (see `social.md` §6 outbound flow).
+
+**Request body:** `{ username: string }` — server trims and lowercases before lookup.
+
+**Response 200:** `{ found: true, user: { homeUserId, username, profile: { displayName, avatar, avatarColor, banner, bio } } }` — returned for native, non-deleted users regardless of their `discoverable` setting.
+
+**Response 404:** `{ found: false, code: 'user_not_found' }` — returned for tombstoned users (`isDeleted=1`), replicated stubs (`homeInstance IS NOT NULL`), or unknown usernames.
+
+**Response 400:** Malformed input (missing, non-string, or empty-after-trim `username`).
+
+**Response 429:** Per-peer rate limit (60/min) exceeded; `Retry-After` header set.
+
+**Filter invariant:** `discoverable` is NOT consulted — exact-handle resolution must work for opted-out users. This mirrors the Direct-Add invariant from social.md commits 69d430b/c60ecc5/189cac4: discovery surfaces only opted-in users, but once you have a handle you can always send a request.
 
 ### WebSocket Events (Peering)
 
@@ -487,13 +504,20 @@ Trigger (API/WS handler)
      - Increment peer `consecutiveFailures`, set `lastFailureAt`
      - If `consecutiveFailures >= PEER_UNREACHABLE_THRESHOLD (10)` -> mark peer `unreachable`
 
-#### Terminal rejection: `duplicate`
+#### Terminal rejection reasons
 
-The outbox delivery worker treats a relay response of `{ rejected: [{ reason: 'duplicate', ... }] }` as effectively-accepted — the outbox entry is deleted rather than retained for retry. The `duplicate` reason is emitted by the receiving instance's inbound processors when a row with the same `(sourceInstance, sourceMessageId)` already exists; retrying will fail identically until TTL (30 days). Since the peer already has the message, terminal removal is the correct outcome.
+As of 2026-04-25, `processOutboxTick` recognizes a configurable set of receiver-acknowledged **terminal rejection reasons** (constant `TERMINAL_REJECTION_REASONS` in `federationWorker.ts`): `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`. Outbox entries with these reasons are deleted with no retry.
+
+- `duplicate` — the receiving instance already has the row (same `(sourceInstance, sourceMessageId)`); retrying will fail identically until TTL.
+- `recipient_not_found`, `attribution_mismatch`, `unknown_event_type` — structural mismatches that cannot be resolved by retrying.
+
+For non-`duplicate` terminals, the worker invokes a registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. Currently registered: `friend_request_create` → `rollbackFriendRequestCreate` (deletes the local `friend_requests` row by `relay_message_id` and emits WS `friend_request_relay_failed` to the sender). Other event types may register their own callbacks. See `social.md` §6 "Failure Handling" for the friend-specific rollback contract.
+
+**Ghost-row failure mode.** Rollback callbacks are best-effort: the registry catches and logs callback errors but does NOT re-throw. A botched rollback (e.g., DB write fails mid-rollback due to disk full or FK violation) can leave a ghost row that no longer corresponds to any in-flight relay. Acceptable vs. retry-forever blocking the outbox, but worth knowing when debugging stuck pending states.
+
+**5xx and network failures are NOT terminal** — those use the existing exponential-backoff retry path. Pending operations stay pending indefinitely under sustained connectivity loss, matching the pre-existing DM relay behavior.
 
 Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from retained-for-retry `console.warn` messages.
-
-Other rejection reasons (`attribution_mismatch`, `missing_*_payload`, `unknown_event_type`, `unauthorized_source`, `channel_not_found`, `participant_not_found`, `processing_error`, …) remain on the retry path. Some are arguably terminal too; treating them as such is deferred until they are observed accumulating in practice.
 
 ### Retry Backoff Schedule
 

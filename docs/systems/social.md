@@ -287,13 +287,36 @@ The sorted join ensures the same pair always produces the same prefix regardless
 
 ### End-to-End Relay Flow: Friend Request Create
 
-**Outbound (origin instance -- `social.ts:POST /api/social/requests`):**
-1. Friend request created locally (DB insert + WS broadcast to local recipient)
-2. Build identity objects for sender and recipient using `homeUserId || id` / `homeInstance || getOurOrigin()`
-3. Call `getFriendEventTargets(from.homeInstance, to.homeInstance)` -- if both local, returns `[]` (no relay)
-4. Build `FederationRelayEvent` with `eventType: 'friend_request_create'`, `contextType: 'friend'`, friendship payload including both identities and profile snapshots
-5. Call `appendMutationLog()` -- records in `federation_mutation_log` for sync protocol
-6. Call `queueOutboxEvent()` -- inserts into `federation_outbox` for each target peer
+**Outbound (sender's home instance -- `social.ts:POST /api/social/requests`):**
+
+As of 2026-04-25, the sender's home server owns the entire federated friend-add flow. The client sends `{ username }` verbatim; all parsing, peering, remote lookup, and queueing happen server-side in this strict order:
+
+1. **Parse target.** If `body.username` contains no `@`, or the domain after `@` normalizes to this server's own host, fall through to the local-only path (unchanged).
+2. **resolveOriginFromHostname(targetDomain)** — resolves the target peer's full origin URL. Prefers a stored `federation_peers` row matching the typed host; falls back to mirroring `getOurOrigin()`'s scheme. Returns null → 400 `invalid_target_domain`.
+3. **Authority defense.** If the calling user's `homeInstance` is set and does not normalize to this server's own host (checked via `normalizeOriginForCompare`), return 403 `not_authoritative_for_sender`. Prevents replicated/federated users from queueing relay events the home server isn't authoritative for. Runs before peering to fail fast.
+4. **ensurePeered(peerOrigin)** — blocks on the result. Status → HTTP mapping:
+   - `'active'` → continue
+   - `'pending'` (handshake in flight) → 409 `peer_pending`
+   - `'pending'` + peer row `awaiting_approval` (re-queried after the call) → 409 `peer_pending_approval`
+   - `'rejected'` → 403 `peer_rejected`
+   - `'failed'` → 503 `peer_unreachable`
+5. **lookupRemoteUser(peerOrigin, baseName)** — POSTs HMAC-signed `{ username }` to `peerOrigin/api/federation/users/lookup`. Result mapping:
+   - `not_found` → 404 `user_not_found`
+   - `unreachable` → 503 `peer_unreachable`
+   - `rate_limited` → 429 `lookup_rate_limited` (with `Retry-After` header)
+6. **Self-friend pre-check.** If the looked-up `(homeUserId, peerOrigin)` matches the sender's canonical identity (using `normalizeOriginForCompare` for host comparison) → 400 `cannot_friend_self`.
+7. **resolveOrCreateReplicatedUser + hydrateReplicatedUserProfile** — creates or refreshes the local stub for the remote user. Tombstoned identities (resolveOrCreateReplicatedUser returns null) → 404 `user_not_found`.
+8. **Direction-aware idempotency:**
+   - Same-direction pending request exists → 200 with existing `requestId` (idempotent).
+   - Opposite-direction pending request exists → 409 `incoming_request_exists` with existing `requestId` for client deep-link.
+   - Already friends → 409 `already_friends`.
+9. **db.transaction(...)** (synchronous): inserts the `friend_requests` row with `relayMessageId = entityId`, calls `appendMutationLog`, calls `queueOutboxEvent` targeting `[peerOrigin]`.
+10. **WS broadcast** `friend_request_sent` to the sender's other tabs/devices (multi-tab sync).
+11. Returns `201 { success: true, requestId }`.
+
+The wire format of the queued event is identical to the pre-2026-04-25 flow; only the queueing instance has changed. The receiver's `processFriendRequestCreateEvent` is unchanged. Both peers' authority checks (`from.homeInstance === sourceInstance`) continue to pass because the sender's instance is now both source and queueing instance.
+
+> **Schema note:** The `friend_requests` table gained a `relayMessageId TEXT` column (added 2026-04-25, drizzle migration `0001_complex_screwball.sql`). It is `NULL` for local-only requests; for federated ones it carries the `entityId` of the originating relay event so the rollback hook can locate the row by message ID.
 
 **Delivery (federation worker -- `federationWorker.ts:processOutboxTick`):**
 1. Worker polls outbox every 10 seconds
@@ -310,6 +333,22 @@ The sorted join ensures the same pair always produces the same prefix regardless
 6. **Create request:** Insert `friend_requests` row with local IDs
 7. **WS broadcast:** `friend_request_received` sent to local recipient with sender's sanitized profile
 8. Push `event.messageId` to accepted array
+
+### Failure Handling: Async Rollback
+
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. As of 2026-04-25, a configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`.
+
+For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
+
+1. Looks up the `friend_requests` row by `relayMessageId` (the stored `entityId`).
+2. Deletes the row.
+3. Emits WS `friend_request_relay_failed` to the sender's connections, with a client-facing reason: receiver `recipient_not_found` → `user_not_found`; everything else → `peer_rejected`.
+
+The client handler in `useWebSocket.ts` removes the row from `socialStore` and shows a warning toast.
+
+**5xx responses, network errors, and retry exhaustion are NOT terminal** — the outbox retries with exponential backoff. The sender sees indefinite "pending" under sustained connectivity loss, matching DM relay's behavior under the same conditions.
+
+**Ghost-row risk.** Rollback callbacks are best-effort: the registry catches and logs callback errors but does not re-throw. A failed rollback (e.g., DB write fails mid-rollback) leaves a ghost `friend_requests` row with no corresponding in-flight relay. Acceptable vs. retry-forever blocking the outbox, but worth knowing when debugging stuck pending requests.
 
 ### End-to-End Relay Flow: Friend Request Update (Accept/Decline)
 
@@ -411,18 +450,11 @@ type TaggedUser = User & { _instanceOrigin: string };
 
 Same `Promise.allSettled()` fan-out pattern as `loadFriends`. **Dedup by the other party's canonical identity** (`request.user.homeUserId ?? request.user.id`), preferring the record from the instance where the other party is native (`!request.user.homeInstance`). This is critical: a cross-instance request exists as two rows -- one on each instance -- and both sides return it, but only the record from the target's home instance has the canonical (non-stub) user ids and the correct `_instanceOrigin` tag. Matching those is what lets the Add Friend search card flip to "Request Pending" after sending. Normalizes assets for remote request user profiles.
 
-### Sending Friend Requests (Federation Routing)
+### Sending Friend Requests
 
-`sendFriendRequest(username: string)` handles the `user@domain` routing:
+`sendFriendRequest(username: string)` sends the trimmed handle verbatim to the home instance API (`POST /api/social/requests`). As of 2026-04-25, all routing, peering, and remote lookup happen server-side — the client no longer resolves the domain to a connected instance or throws `InstanceNotConnectedError`/`InstanceDisconnectedError`. The server returns a structured error code on any failure; the catch block in `socialStore` maps it via `mapServerErrorToMessage` from `packages/web/src/utils/friendErrors.ts` and surfaces it as a toast.
 
-1. **No `@` in username:** Send to home instance API directly
-2. **`@` present:** Extract `baseName` and `domain` via `lastIndexOf('@')`
-   - If domain matches `window.location.host`: strip domain, send to home API
-   - Otherwise: find matching connected instance by comparing `new URL(inst.origin).host === domain`
-     - **Not found:** Throw `InstanceNotConnectedError(domain)` (UI prompts to connect)
-     - **Found but disconnected:** Throw `InstanceDisconnectedError(domain)` (UI prompts to reconnect)
-     - **Found and connected:** Send to remote instance API with just the `baseName` (no domain suffix)
-3. After success, reloads requests via `loadRequests()`
+After success, reloads requests via `loadRequests()`.
 
 ### Cross-Instance Search (`searchUsers`)
 
@@ -592,7 +624,9 @@ The Add Friend tab merges search and discovery into a single UI:
 
 1. **Empty query:** Shows discover grid (from `discoverStore.fetchUsers()`, loaded on mount)
 2. **Query entered:** Switches to search mode (debounced 300ms, uses `socialStore.searchUsers()`)
-3. **Direct-Add row:** Shown whenever the search input is non-empty and resolves to a well-formed handle (`trimmed.length > 0 && (no @ || @ at non-edge position)`). Displays the resolved form: when the typed query has no `@`, the row shows `<query>@<window.location.host>` so the user sees which instance the request will hit; when `@` is present, displays the typed query verbatim. The submit button calls `sendFriendRequest(query.trim())` — the resolved form is display-only; routing to the correct API client (home-only for no-`@`, federation-aware for `@host` form) happens inside `sendFriendRequest`, which lowercases the parsed `@domain` before comparison so mixed-case hostnames route correctly. Server-side `POST /api/social/requests` lowercases the lookup input before matching, so mixed-case bare handles resolve too. A 404 from the server (`"User not found"`) surfaces as a warning toast via the catch-all in `handleDirectAdd`.
+3. **Direct-Add row:** Shown whenever the search input is non-empty and resolves to a well-formed handle (`trimmed.length > 0 && (no @ || @ at non-edge position)`). Displays the resolved form: when the typed query has no `@`, the row shows `<query>@<window.location.host>` so the user sees which instance the request will hit; when `@` is present, displays the typed query verbatim. The submit button calls `sendFriendRequest(query.trim())` — the resolved form is display-only. All routing, peering, and remote lookup happen server-side on `POST /api/social/requests` (see §6 outbound flow). Server-side `POST /api/social/requests` lowercases the lookup input before matching, so mixed-case bare handles resolve too.
+
+**Error handling:** Server errors surface as toasts via `mapServerErrorToMessage` in `packages/web/src/utils/friendErrors.ts`. All structured error codes returned by the federated branch (`user_not_found`, `peer_pending`, `peer_rejected`, `incoming_request_exists`, etc.) are mapped to human-readable messages there. The `ConnectInstanceModal` component still exists in the codebase but is no longer triggered by friend-add — it is used only by the Connections settings panel and space-join flows.
 
 ### Search Result Enrichment
 
@@ -612,7 +646,7 @@ Renders a card with banner, avatar, display name, username, bio, mutual counts, 
 - `inbound_pending`: "Accept" / "Decline" buttons
 - `friends`: "Message" button
 
-When sending a request to a remote user, constructs `baseName@originHost` format for the username. Handles `InstanceNotConnectedError` / `InstanceDisconnectedError` by showing `ConnectInstanceModal`.
+When sending a request to a remote user, constructs `baseName@originHost` format for the username. Errors from the server are surfaced as toasts via `mapServerErrorToMessage` (see `packages/web/src/utils/friendErrors.ts`).
 
 ---
 
@@ -657,8 +691,7 @@ All actions route through `socialStore` methods, which handle instance routing v
 - User profile is loaded via `getApiForOrigin(origin)` to fetch from the correct instance
 - Banner/avatar URLs resolved through the correct API client for remote users
 - Mutuals loaded via `loadFederatedMutuals()` with cross-instance fan-out
-- Friend actions use `sendFriendRequest(user.username)` which handles `user@domain` routing
-- `ConnectInstanceModal` shown when trying to add a friend on an unconnected instance
+- Friend actions use `sendFriendRequest(user.username)` — all routing is server-side; errors surface as toasts via `mapServerErrorToMessage`
 
 ---
 

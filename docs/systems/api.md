@@ -118,13 +118,34 @@ DELETE /dm/messages/:id                                             → { succes
 ```
 GET    /social/friends                                    → { friends[] }
 GET    /social/requests                                   → { requests[] }
-POST   /social/requests        { username }               → { request }
+POST   /social/requests        { username }               → { success, requestId }
 PATCH  /social/requests/:id    { status: 'accepted'|'declined' } → { request }
 DELETE /social/requests/:id                               → { success } (cancel, sender-only)
 DELETE /social/friends/:id                                → { success }
 GET    /social/discover        ?q=&limit=&offset=         → { users[], total }
 GET    /social/search          ?q=                        → { users[] }
 ```
+
+### POST /api/social/requests — routing & error codes
+
+`body.username` may be `bare` (local), `bare@<own host>` (also routed local — server normalizes), or `bare@<remote host>` (federated branch). The client sends the trimmed handle verbatim; all parsing, routing, peering, and remote lookup are server-side.
+
+| HTTP | error code | When |
+|---|---|---|
+| 200 | (success, idempotent) | Same-direction pending request already exists; returns existing `requestId` |
+| 201 | (success, created) | New friend request created |
+| 400 | `username_required` | Missing/empty/non-string username |
+| 400 | `cannot_friend_self` | Looked-up identity matches sender |
+| 400 | `invalid_target_domain` | Scheme resolution failed (e.g., non-localhost HTTP target when our scheme is HTTPS) |
+| 403 | `peer_rejected` | Remote instance has rejected federation; admin must intervene |
+| 403 | `not_authoritative_for_sender` | Caller is a federated (replicated) user; should not have reached here |
+| 404 | `user_not_found` | Remote lookup returned 404 (no such user, or tombstoned) |
+| 409 | `already_friends` | Friendship row already exists |
+| 409 | `peer_pending_approval` | Remote admin needs to approve the peering relationship |
+| 409 | `peer_pending` | Peer handshake in flight |
+| 409 | `incoming_request_exists` | Opposite-direction pending request exists; response includes `requestId` for deep-link |
+| 429 | `lookup_rate_limited` | Remote `/users/lookup` returned 429; `Retry-After` header forwarded |
+| 503 | `peer_unreachable` | Remote instance unreachable (network/timeout/lookup-unreachable) |
 
 ## Search (`routes/search.ts`) — auth required
 ```
@@ -201,7 +222,10 @@ GET    /federation/peers           (admin)                                      
 DELETE /federation/peers/:id       (admin)                                          → { success } + outbox cleanup
 POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest        → { accepted[], rejected[] }
 POST   /federation/sync            (HMAC-signed S2S)  { sinceTimestamp, limit?, dmChannelId?, federatedId?, contextType? } → { events[], hasMore, checkpoint }
+POST   /federation/users/lookup    (HMAC-signed S2S, rate-limited 60/min/peer)  { username }  → { found, user? }
 ```
+
+**`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
 
 ## Utilities (`routes/utils.ts`) — auth required
 ```
