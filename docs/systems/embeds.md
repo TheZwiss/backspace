@@ -437,6 +437,24 @@ All embed cards share:
 
 ---
 
+## Dimension reservation contract
+
+Embed renderers and the embed resolver share a bidirectional contract to prevent layout shift in the message list when embeds load.
+
+**Server side.** `resolveEmbeds` in `packages/server/src/utils/embedResolver.ts` MUST attempt to populate `embeds.width` and `embeds.height` for every `image`-type embed it produces. The two paths are:
+- `og:image:width` / `og:image:height` extracted from HTML metadata when the URL points at an HTML page with an OG image (`metadataFetcher.ts`, then `embedResolver.ts:182-185`).
+- `probeRemoteImageDimensions` for direct image URLs and for HTML pages whose Content-Type is `image/*` (`embedResolver.ts:196-202`). The probe sends a `Range: bytes=0-32767` request and reads dimensions from the partial buffer via `sharp(buffer).metadata()`.
+
+YouTube uses hardcoded 480×360 for `hqdefault.jpg` (`embedResolver.ts:153-154`). Vimeo uses OG dimensions from the metadata fetch.
+
+**Client side.** Every embed renderer whose output contains an image, iframe, or video MUST reserve dimensions when they are known. The reference pattern is `packages/web/src/components/chat/AttachmentRenderer.tsx:81-100` — wrap the media in a sized container with `style={{ aspectRatio: ${width}/${height}, maxWidth: ..., maxHeight: ... }}` (inline style, not Tailwind, because `maxWidth` is a runtime value).
+
+When dimensions are not populated (probe failed, no OG tags, non-image type), the renderer must NOT apply a fallback `aspect-ratio` with a default ratio (e.g. 4/3). A fallback wrapper produces visible letterbox bars on content whose true ratio differs and was the cause of the revert in commit `0c84029`. Renderers without dimensions must use either a structurally fixed layout (iframe with hardcoded height, fixed-size thumbnail) or render unsized; the message list's `lastProgrammaticBottomScrollRef` sentinel and ResizeObserver/load defenses absorb residual shift. See `docs/systems/message-list.md` for the auto-scroll model.
+
+**Why bidirectional.** If only the server populates dims but the client ignores them, the database fills with unused data and embeds shift on load (the symptom from 2026-04-24 onward). If only the client reserves but the server doesn't populate, every embed falls into the unreserved branch and the contract has no effect. Both halves are required.
+
+---
+
 ## 11. Utility Endpoint
 
 `GET /api/utils/metadata?url=` (auth required)
