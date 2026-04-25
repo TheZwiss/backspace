@@ -53,9 +53,10 @@ vi.mock('../utils/federationOutbox.js', () => ({
   getFriendEventTargets: () => [],
 }));
 
-vi.mock('../utils/federationAuth.js', () => ({
-  getOurOrigin: () => 'https://local.test',
-}));
+vi.mock('../utils/federationAuth.js', async (importActual) => {
+  const actual = await importActual<typeof import('../utils/federationAuth.js')>();
+  return { ...actual, getOurOrigin: () => 'https://local.test' };
+});
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');

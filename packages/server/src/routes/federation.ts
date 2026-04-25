@@ -3845,7 +3845,7 @@ function processOwnershipTransferEvent(
  * Only updates fields that are currently null/empty on the local row,
  * so manually-set local values are preserved.
  */
-function hydrateReplicatedUserProfile(
+export function hydrateReplicatedUserProfile(
   user: typeof schema.users.$inferSelect,
   profile: FederationRelayProfileSnapshot | undefined,
   db: ReturnType<typeof getDb>,

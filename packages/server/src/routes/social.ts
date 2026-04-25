@@ -1,11 +1,15 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and, or, ne, like, sql, inArray } from 'drizzle-orm';
-import { getDb, schema } from '../db/index.js';
+import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from '../ws/handler.js';
 import { appendMutationLog, queueOutboxEvent, buildFriendContextId, getFriendEventTargets } from '../utils/federationOutbox.js';
-import { getOurOrigin } from '../utils/federationAuth.js';
+import { getOurOrigin, normalizeOriginForCompare } from '../utils/federationAuth.js';
+import { ensurePeered } from '../utils/federationPeering.js';
+import { lookupRemoteUser } from '../utils/federationLookup.js';
+import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
+import { resolveOrCreateReplicatedUser, hydrateReplicatedUserProfile } from './federation.js';
 import type { FederationRelayEvent, FederationRelayProfileSnapshot } from '@backspace/shared';
 import type {
   Friend,
@@ -26,6 +30,260 @@ function buildProfileSnapshot(user: typeof schema.users.$inferSelect): Federatio
     bio: user.bio ?? null,
   };
 }
+
+// ─── Local friend request helper ─────────────────────────────────────────────
+
+async function handleLocalFriendRequest(
+  db: ReturnType<typeof getDb>,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  localUsername: string,
+  sender: typeof schema.users.$inferSelect,
+  ourOrigin: string,
+): Promise<unknown> {
+  // Match the canonical-lowercase form used by auth (auth.ts:32, 211, 256).
+  const lookupUsername = localUsername.toLowerCase();
+
+  // Find the target user
+  const targetUser = db.select().from(schema.users).where(eq(schema.users.username, lookupUsername)).get();
+  if (!targetUser) {
+    return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+  }
+
+  if (targetUser.id === request.userId) {
+    return reply.code(400).send({ error: 'You cannot add yourself as a friend', statusCode: 400 });
+  }
+
+  // Check if already friends
+  const existingFriend = db.select().from(schema.friends).where(or(
+    and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUser.id)),
+    and(eq(schema.friends.userId, targetUser.id), eq(schema.friends.friendId, request.userId))
+  )).get();
+
+  if (existingFriend) {
+    return reply.code(400).send({ error: 'You are already friends with this user', statusCode: 400 });
+  }
+
+  // Check for existing pending request
+  const existingRequest = db.select().from(schema.friendRequests).where(and(
+    or(
+      and(eq(schema.friendRequests.fromId, request.userId), eq(schema.friendRequests.toId, targetUser.id)),
+      and(eq(schema.friendRequests.fromId, targetUser.id), eq(schema.friendRequests.toId, request.userId))
+    ),
+    eq(schema.friendRequests.status, 'pending')
+  )).get();
+
+  if (existingRequest) {
+    return reply.code(400).send({ error: 'A friend request is already pending', statusCode: 400 });
+  }
+
+  // Create the request
+  const id = generateSnowflake();
+  const now = Date.now();
+  db.insert(schema.friendRequests).values({
+    id,
+    fromId: request.userId,
+    toId: targetUser.id,
+    status: 'pending',
+    createdAt: now,
+  }).run();
+
+  // Broadcast friend_request_received to the target user
+  const friendRequestPayload: FriendRequest = {
+    id,
+    fromId: request.userId,
+    toId: targetUser.id,
+    status: 'pending',
+    createdAt: now,
+    user: sanitizeUser(sender),
+  };
+
+  connectionManager.sendToUser(targetUser.id, {
+    type: 'friend_request_received',
+    request: friendRequestPayload,
+  });
+
+  // Federation relay: notify the target user's home instance
+  const fromIdentity = {
+    homeUserId: sender.homeUserId || request.userId,
+    homeInstance: sender.homeInstance || ourOrigin,
+  };
+  const toIdentity = {
+    homeUserId: targetUser.homeUserId || targetUser.id,
+    homeInstance: targetUser.homeInstance || ourOrigin,
+  };
+
+  const targets = getFriendEventTargets(fromIdentity.homeInstance, toIdentity.homeInstance);
+  if (targets.length > 0) {
+    const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
+    const entityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now}`;
+
+    const payload: FederationRelayEvent = {
+      eventType: 'friend_request_create',
+      contextType: 'friend',
+      messageId: entityId,
+      encryptionVersion: 0,
+      timestamp: now,
+      friendship: {
+        from: fromIdentity,
+        to: toIdentity,
+        fromProfile: buildProfileSnapshot(sender),
+        toProfile: buildProfileSnapshot(targetUser),
+        status: 'pending',
+        createdAt: now,
+      },
+    };
+
+    const payloadStr = JSON.stringify(payload);
+    appendMutationLog(entityId, contextId, 'friend_request_create', payloadStr, 'friend');
+    queueOutboxEvent(entityId, contextId, 'friend_request_create', payloadStr, targets, 'friend');
+  }
+
+  return reply.code(201).send({ success: true, requestId: id });
+}
+
+// ─── Federated friend request helper ─────────────────────────────────────────
+
+async function handleFederatedFriendRequest(
+  db: ReturnType<typeof getDb>,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  raw: string,
+  atIndex: number,
+  sender: typeof schema.users.$inferSelect,
+  ourOrigin: string,
+): Promise<unknown> {
+  const baseName = raw.slice(0, atIndex).toLowerCase();
+  const targetDomain = raw.slice(atIndex + 1).toLowerCase();
+
+  // 1. Resolve scheme
+  const peerOrigin = resolveOriginFromHostname(targetDomain);
+  if (!peerOrigin) {
+    return reply.code(400).send({ error: 'invalid_target_domain', statusCode: 400, domain: targetDomain });
+  }
+
+  // 2. ensurePeered — block until 'active', or surface peer status as error
+  const peering = await ensurePeered(peerOrigin);
+  if (peering.status === 'rejected') {
+    return reply.code(403).send({ error: 'peer_rejected', statusCode: 403, domain: targetDomain });
+  }
+  if (peering.status === 'failed') {
+    return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+  }
+  if (peering.status === 'pending') {
+    const peerRow = db.select({ status: schema.federationPeers.status })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, peerOrigin))
+      .get();
+    if (peerRow?.status === 'awaiting_approval') {
+      return reply.code(409).send({ error: 'peer_pending_approval', statusCode: 409, domain: targetDomain });
+    }
+    return reply.code(409).send({ error: 'peer_pending', statusCode: 409, domain: targetDomain });
+  }
+  // peering.status === 'active' — continue
+
+  // 3. Lookup
+  const lookup = await lookupRemoteUser(peerOrigin, baseName);
+  if (!lookup.ok) {
+    if (lookup.reason === 'not_found') {
+      return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
+    }
+    if (lookup.reason === 'unreachable') {
+      return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+    }
+    if (lookup.reason === 'rate_limited') {
+      const headers: Record<string, string> = {};
+      if (lookup.retryAfter) headers['Retry-After'] = String(lookup.retryAfter);
+      return reply.code(429).headers(headers).send({ error: 'lookup_rate_limited', statusCode: 429 });
+    }
+    // Exhaustive — should be unreachable.
+    return reply.code(500).send({ error: 'unknown_lookup_failure', statusCode: 500 });
+  }
+
+  // 4. Self-friend pre-check
+  const senderCanonicalId = sender.homeUserId || sender.id;
+  if (
+    lookup.homeUserId === senderCanonicalId &&
+    normalizeOriginForCompare(peerOrigin) === normalizeOriginForCompare(ourOrigin)
+  ) {
+    return reply.code(400).send({ error: 'cannot_friend_self', statusCode: 400 });
+  }
+
+  // 5. Resolve / hydrate stub
+  const stub = resolveOrCreateReplicatedUser(lookup.homeUserId, targetDomain, db, { username: lookup.username });
+  if (!stub) {
+    // Tombstoned identity — refuse to resurrect.
+    return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
+  }
+  const stubHydrated = hydrateReplicatedUserProfile(stub, lookup.profile, db);
+
+  // 6. Transaction: insert + log + queue outbox
+  const now = Date.now();
+  const fromIdentity = {
+    homeUserId: sender.homeUserId || sender.id,
+    homeInstance: ourOrigin,
+  };
+  const toIdentity = {
+    homeUserId: stubHydrated.homeUserId!,
+    homeInstance: peerOrigin,
+  };
+  const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
+  const entityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now}`;
+  const requestId = generateSnowflake();
+
+  const payload: FederationRelayEvent = {
+    eventType: 'friend_request_create',
+    contextType: 'friend',
+    messageId: entityId,
+    encryptionVersion: 0,
+    timestamp: now,
+    friendship: {
+      from: fromIdentity,
+      to: toIdentity,
+      fromProfile: buildProfileSnapshot(sender),
+      toProfile: {
+        username: stubHydrated.username,
+        displayName: lookup.profile.displayName,
+        avatar: lookup.profile.avatar,
+        avatarColor: lookup.profile.avatarColor,
+        banner: lookup.profile.banner,
+        bio: lookup.profile.bio,
+      },
+      status: 'pending',
+      createdAt: now,
+    },
+  };
+  const payloadStr = JSON.stringify(payload);
+
+  const rawDb = getRawDb();
+  rawDb.transaction(() => {
+    db.insert(schema.friendRequests).values({
+      id: requestId,
+      fromId: sender.id,
+      toId: stubHydrated.id,
+      status: 'pending',
+      createdAt: now,
+      relayMessageId: entityId,
+    }).run();
+    appendMutationLog(entityId, contextId, 'friend_request_create', payloadStr, 'friend');
+    queueOutboxEvent(entityId, contextId, 'friend_request_create', payloadStr, [peerOrigin], 'friend');
+  })();
+
+  // 7. WS broadcast to sender's other tabs/devices
+  const requestSnapshot: FriendRequest = {
+    id: requestId,
+    fromId: sender.id,
+    toId: stubHydrated.id,
+    status: 'pending',
+    createdAt: now,
+    user: sanitizeUser(stubHydrated),
+  };
+  connectionManager.sendToUser(sender.id, { type: 'friend_request_sent', request: requestSnapshot });
+
+  return reply.code(201).send({ success: true, requestId });
+}
+
+// ─── Route registration ───────────────────────────────────────────────────────
 
 export async function socialRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/social/friends - List all friends
@@ -112,7 +370,7 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send(result);
   });
 
-  // POST /api/social/requests - Send a friend request
+  // POST /api/social/requests - Send a friend request (local or federated)
   app.post<{ Body: SendFriendRequest }>('/api/social/requests', {
     preHandler: authenticate,
   }, async (request, reply) => {
@@ -120,116 +378,36 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const db = getDb();
 
     if (!username || typeof username !== 'string') {
-      return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
+      return reply.code(400).send({ error: 'username_required', statusCode: 400 });
     }
 
-    // Match the canonical-lowercase form used by auth (auth.ts:32, 211, 256).
-    const lookupUsername = username.trim().toLowerCase();
-    if (!lookupUsername) {
-      return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
+    const raw = username.trim();
+    if (!raw) return reply.code(400).send({ error: 'username_required', statusCode: 400 });
+
+    const sender = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!sender) return reply.code(401).send({ error: 'authenticated user not found', statusCode: 401 });
+
+    const ourOrigin = getOurOrigin();
+    const ourHost = normalizeOriginForCompare(ourOrigin);
+
+    // Authority defense — only native users may originate friend_request_create
+    // outbox events from this instance (spec §5.6). Done before any branching.
+    const senderHomeNorm = normalizeOriginForCompare(sender.homeInstance);
+    if (senderHomeNorm && senderHomeNorm !== ourHost) {
+      return reply.code(403).send({ error: 'not_authoritative_for_sender', statusCode: 403 });
     }
 
-    // Find the target user
-    const targetUser = db.select().from(schema.users).where(eq(schema.users.username, lookupUsername)).get();
-    if (!targetUser) {
-      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    const atIndex = raw.lastIndexOf('@');
+    const isFederated =
+      atIndex > 0 &&
+      atIndex < raw.length - 1 &&
+      normalizeOriginForCompare(raw.slice(atIndex + 1)) !== ourHost;
+
+    if (!isFederated) {
+      const localUsername = atIndex > 0 ? raw.slice(0, atIndex) : raw;
+      return handleLocalFriendRequest(db, request, reply, localUsername, sender, ourOrigin);
     }
-
-    if (targetUser.id === request.userId) {
-      return reply.code(400).send({ error: 'You cannot add yourself as a friend', statusCode: 400 });
-    }
-
-    // Check if already friends
-    const existingFriend = db.select().from(schema.friends).where(or(
-      and(eq(schema.friends.userId, request.userId), eq(schema.friends.friendId, targetUser.id)),
-      and(eq(schema.friends.userId, targetUser.id), eq(schema.friends.friendId, request.userId))
-    )).get();
-
-    if (existingFriend) {
-      return reply.code(400).send({ error: 'You are already friends with this user', statusCode: 400 });
-    }
-
-    // Check for existing pending request
-    const existingRequest = db.select().from(schema.friendRequests).where(and(
-      or(
-        and(eq(schema.friendRequests.fromId, request.userId), eq(schema.friendRequests.toId, targetUser.id)),
-        and(eq(schema.friendRequests.fromId, targetUser.id), eq(schema.friendRequests.toId, request.userId))
-      ),
-      eq(schema.friendRequests.status, 'pending')
-    )).get();
-
-    if (existingRequest) {
-      return reply.code(400).send({ error: 'A friend request is already pending', statusCode: 400 });
-    }
-
-    // Create the request
-    const id = generateSnowflake();
-    const now = Date.now();
-    db.insert(schema.friendRequests).values({
-      id,
-      fromId: request.userId,
-      toId: targetUser.id,
-      status: 'pending',
-      createdAt: now,
-    }).run();
-
-    // Get the sender user for the WS event
-    const senderUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-
-    // Broadcast friend_request_received to the target user
-    const friendRequestPayload: FriendRequest = {
-      id,
-      fromId: request.userId,
-      toId: targetUser.id,
-      status: 'pending',
-      createdAt: now,
-      user: senderUser ? sanitizeUser(senderUser) : undefined,
-    };
-
-    connectionManager.sendToUser(targetUser.id, {
-      type: 'friend_request_received',
-      request: friendRequestPayload,
-    });
-
-    // Federation relay: notify the target user's home instance
-    const domainOrigin = getOurOrigin();
-
-    const fromIdentity = {
-      homeUserId: senderUser?.homeUserId || request.userId,
-      homeInstance: senderUser?.homeInstance || domainOrigin,
-    };
-    const toIdentity = {
-      homeUserId: targetUser.homeUserId || targetUser.id,
-      homeInstance: targetUser.homeInstance || domainOrigin,
-    };
-
-    const targets = getFriendEventTargets(fromIdentity.homeInstance, toIdentity.homeInstance);
-    if (targets.length > 0) {
-      const contextId = buildFriendContextId(fromIdentity.homeUserId, toIdentity.homeUserId);
-      const entityId = `friend_req:${[fromIdentity.homeUserId, toIdentity.homeUserId].sort().join(':')}:${now}`;
-
-      const payload: FederationRelayEvent = {
-        eventType: 'friend_request_create',
-        contextType: 'friend',
-        messageId: entityId,
-        encryptionVersion: 0,
-        timestamp: now,
-        friendship: {
-          from: fromIdentity,
-          to: toIdentity,
-          fromProfile: senderUser ? buildProfileSnapshot(senderUser) : undefined,
-          toProfile: buildProfileSnapshot(targetUser),
-          status: 'pending',
-          createdAt: now,
-        },
-      };
-
-      const payloadStr = JSON.stringify(payload);
-      appendMutationLog(entityId, contextId, 'friend_request_create', payloadStr, 'friend');
-      queueOutboxEvent(entityId, contextId, 'friend_request_create', payloadStr, targets, 'friend');
-    }
-
-    return reply.code(201).send({ success: true, requestId: id });
+    return handleFederatedFriendRequest(db, request, reply, raw, atIndex, sender, ourOrigin);
   });
 
   // PATCH /api/social/requests/:id - Accept/Decline a friend request

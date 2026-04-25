@@ -1,0 +1,173 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as schema from '../db/schema.js';
+import { setWorkerId } from '../utils/snowflake.js';
+
+setWorkerId(1);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CALLER_ID = 'caller-id';
+
+let sqlite: Database.Database;
+let testDb: ReturnType<typeof drizzle<typeof schema>>;
+const sendToUser = vi.fn();
+const ensurePeeredMock = vi.fn();
+const lookupRemoteUserMock = vi.fn();
+const resolveOriginFromHostnameMock = vi.fn();
+
+vi.mock('../db/index.js', () => ({ getDb: () => testDb, getRawDb: () => sqlite, schema }));
+vi.mock('../utils/auth.js', () => ({
+  authenticate: async (req: { userId?: string }) => { req.userId = CALLER_ID; },
+}));
+vi.mock('../ws/handler.js', () => ({
+  connectionManager: { sendToUser, sendToAdmins: vi.fn(), sendToDmMembers: vi.fn(), getAllOnlineUserIds: () => [] },
+}));
+vi.mock('../utils/federationAuth.js', async (importActual) => {
+  const actual = await importActual<typeof import('../utils/federationAuth.js')>();
+  return { ...actual, getOurOrigin: () => 'https://home.test' };
+});
+vi.mock('../utils/federationPeering.js', () => ({
+  ensurePeered: (...args: unknown[]) => ensurePeeredMock(...args),
+  racePeering: vi.fn(),
+}));
+vi.mock('../utils/federationLookup.js', () => ({
+  lookupRemoteUser: (...args: unknown[]) => lookupRemoteUserMock(...args),
+}));
+vi.mock('../utils/federationOriginResolve.js', () => ({
+  resolveOriginFromHostname: (...args: unknown[]) => resolveOriginFromHostnameMock(...args),
+}));
+
+function applyMigrations(db: Database.Database): void {
+  const dir = path.resolve(__dirname, '../../drizzle');
+  for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort()) {
+    const sqlText = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const stmt of sqlText.split(/-->\s*statement-breakpoint/)) {
+      const clean = stmt.trim();
+      if (clean) db.exec(clean);
+    }
+  }
+}
+
+function seedSelf(opts: { homeInstance?: string | null; homeUserId?: string | null } = {}): void {
+  testDb.insert(schema.users).values({
+    id: CALLER_ID,
+    username: 'caller',
+    displayName: 'Caller',
+    passwordHash: 'x',
+    status: 'online',
+    isAdmin: 0,
+    homeInstance: opts.homeInstance ?? null,
+    homeUserId: opts.homeUserId ?? null,
+    createdAt: Date.now(),
+  }).run();
+  // Seed instance_settings with relay enabled so queue/log writes are not silently skipped.
+  // Use raw exec to avoid the updatedAt NOT NULL constraint (no default in schema).
+  sqlite.exec(`INSERT OR IGNORE INTO instance_settings (id, federation_relay_enabled, updated_at) VALUES (1, 1, ${Date.now()})`);
+}
+
+async function buildApp(): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+  const { socialRoutes } = await import('./social.js');
+  await app.register(socialRoutes);
+  await app.ready();
+  return app;
+}
+
+beforeEach(() => {
+  sqlite = new Database(':memory:');
+  testDb = drizzle(sqlite, { schema });
+  applyMigrations(sqlite);
+  sendToUser.mockReset();
+  ensurePeeredMock.mockReset();
+  lookupRemoteUserMock.mockReset();
+  resolveOriginFromHostnameMock.mockReset();
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('POST /api/social/requests — federated branch (happy path)', () => {
+  it('creates a stub, inserts the request with relayMessageId, queues a relay event', async () => {
+    seedSelf();
+
+    resolveOriginFromHostnameMock.mockReturnValue('https://orbit.test');
+    ensurePeeredMock.mockResolvedValue({ status: 'active', peerId: 'peer-1' });
+    lookupRemoteUserMock.mockResolvedValue({
+      ok: true,
+      homeUserId: 'remote-alice',
+      username: 'alice',
+      profile: {
+        displayName: 'Alice',
+        avatar: null,
+        avatarColor: 'mint',
+        banner: null,
+        bio: 'hi',
+      },
+    });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+
+    // Status and body
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body) as { success: boolean; requestId: string };
+    expect(body.success).toBe(true);
+    expect(typeof body.requestId).toBe('string');
+
+    // friend_requests row
+    const reqRow = testDb.select().from(schema.friendRequests)
+      .where(eq(schema.friendRequests.id, body.requestId))
+      .get();
+    expect(reqRow).toBeTruthy();
+    expect(reqRow!.fromId).toBe(CALLER_ID);
+    expect(reqRow!.relayMessageId).toMatch(/^friend_req:/);
+
+    // Stub user exists with correct federated identity
+    const stub = testDb.select().from(schema.users)
+      .where(eq(schema.users.homeUserId, 'remote-alice'))
+      .get();
+    expect(stub).toBeTruthy();
+    expect(stub!.homeInstance).toBe('orbit.test');
+    expect(stub!.displayName).toBe('Alice');
+    expect(stub!.bio).toBe('hi');
+
+    // federation_outbox row
+    const peer = testDb.select({ id: schema.federationPeers.id, origin: schema.federationPeers.origin })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://orbit.test'))
+      .get();
+    expect(peer).toBeTruthy();
+
+    const outboxRow = testDb.select().from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.peerId, peer!.id))
+      .get();
+    expect(outboxRow).toBeTruthy();
+    expect(outboxRow!.eventType).toBe('friend_request_create');
+    expect(outboxRow!.entityId).toBe(reqRow!.relayMessageId);
+
+    // federation_mutation_log row
+    const mutationRow = testDb.select().from(schema.federationMutationLog)
+      .where(eq(schema.federationMutationLog.entityId, reqRow!.relayMessageId!))
+      .get();
+    expect(mutationRow).toBeTruthy();
+
+    // WS broadcast to sender
+    expect(sendToUser).toHaveBeenCalledWith(
+      CALLER_ID,
+      expect.objectContaining({
+        type: 'friend_request_sent',
+        request: expect.objectContaining({ id: body.requestId }),
+      }),
+    );
+  });
+});
