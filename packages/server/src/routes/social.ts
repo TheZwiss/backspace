@@ -119,12 +119,18 @@ export async function socialRoutes(app: FastifyInstance): Promise<void> {
     const { username } = request.body;
     const db = getDb();
 
-    if (!username) {
+    if (!username || typeof username !== 'string') {
+      return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
+    }
+
+    // Match the canonical-lowercase form used by auth (auth.ts:32, 211, 256).
+    const lookupUsername = username.trim().toLowerCase();
+    if (!lookupUsername) {
       return reply.code(400).send({ error: 'Username is required', statusCode: 400 });
     }
 
     // Find the target user
-    const targetUser = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+    const targetUser = db.select().from(schema.users).where(eq(schema.users.username, lookupUsername)).get();
     if (!targetUser) {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }

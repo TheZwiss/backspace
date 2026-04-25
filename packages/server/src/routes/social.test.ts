@@ -159,3 +159,57 @@ describe('GET /api/social/search — filter hygiene', () => {
     expect(out.map(u => u.id)).toContain('u1');
   });
 });
+
+describe('POST /api/social/requests — case-insensitive username lookup', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedUser({ id: CALLER_ID, username: 'caller' });
+    // Target stored canonically lowercase, as registration would write it.
+    seedUser({ id: 'target-id', username: 'bob' });
+    app = await buildApp();
+  });
+
+  async function sendRequest(username: string) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username },
+    });
+  }
+
+  it('finds the target when the caller types the exact stored handle', async () => {
+    const res = await sendRequest('bob');
+    expect(res.statusCode).toBe(201);
+    const inserted = testDb.select().from(schema.friendRequests)
+      .where(eq(schema.friendRequests.toId, 'target-id')).get();
+    expect(inserted).toBeTruthy();
+  });
+
+  it('finds the target when the caller types a mixed-case handle', async () => {
+    const res = await sendRequest('Bob');
+    expect(res.statusCode).toBe(201);
+    const inserted = testDb.select().from(schema.friendRequests)
+      .where(eq(schema.friendRequests.toId, 'target-id')).get();
+    expect(inserted).toBeTruthy();
+  });
+
+  it('finds the target when the caller types an all-uppercase handle', async () => {
+    const res = await sendRequest('BOB');
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('trims surrounding whitespace before lookup', async () => {
+    const res = await sendRequest('  bob  ');
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('returns 404 when the handle does not exist', async () => {
+    const res = await sendRequest('nobody');
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toBe('User not found');
+  });
+});
