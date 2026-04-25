@@ -161,14 +161,17 @@ describe('POST /api/social/requests — federated branch (happy path)', () => {
       .get();
     expect(mutationRow).toBeTruthy();
 
-    // WS broadcast to sender
-    expect(sendToUser).toHaveBeenCalledWith(
-      CALLER_ID,
-      expect.objectContaining({
-        type: 'friend_request_sent',
-        request: expect.objectContaining({ id: body.requestId }),
-      }),
+    // WS broadcast to sender — the 'user' field must carry the TARGET's profile (alice),
+    // not the sender. This is the federated analogue of the local-branch invariant.
+    const sentEvent = sendToUser.mock.calls.find(
+      (c: unknown[]) => (c[1] as { type?: string })?.type === 'friend_request_sent',
     );
+    expect(sentEvent).toBeDefined();
+    expect(sentEvent![0]).toBe(CALLER_ID);
+    expect(sentEvent![1].request.id).toBe(body.requestId);
+    // homeUserId identifies the target; username is the canonical stub form (<homeUserId>@<host>).
+    expect(sentEvent![1].request.user.homeUserId).toBe('remote-alice');
+    expect(sentEvent![1].request.user.username).toBe('remote-alice@orbit.test');
   });
 });
 

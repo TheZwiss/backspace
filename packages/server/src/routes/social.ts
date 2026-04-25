@@ -88,8 +88,8 @@ async function handleLocalFriendRequest(
     createdAt: now,
   }).run();
 
-  // Broadcast friend_request_received to the target user
-  const friendRequestPayload: FriendRequest = {
+  // Broadcast to the target: they need to know who sent the request (sender profile).
+  const receivedPayload: FriendRequest = {
     id,
     fromId: request.userId,
     toId: targetUser.id,
@@ -98,14 +98,24 @@ async function handleLocalFriendRequest(
     user: sanitizeUser(sender),
   };
 
+  // Broadcast to the sender's other tabs: they need to know who they added (target profile).
+  const sentPayload: FriendRequest = {
+    id,
+    fromId: request.userId,
+    toId: targetUser.id,
+    status: 'pending',
+    createdAt: now,
+    user: sanitizeUser(targetUser),
+  };
+
   connectionManager.sendToUser(targetUser.id, {
     type: 'friend_request_received',
-    request: friendRequestPayload,
+    request: receivedPayload,
   });
 
   connectionManager.sendToUser(request.userId, {
     type: 'friend_request_sent',
-    request: friendRequestPayload,
+    request: sentPayload,
   });
 
   // Federation relay: notify the target user's home instance

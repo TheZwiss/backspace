@@ -236,5 +236,9 @@ describe('POST /api/social/requests — case-insensitive username lookup', () =>
     const sent = sendToUser.mock.calls.find(c => c[1]?.type === 'friend_request_sent');
     expect(sent).toBeDefined();
     expect(sent![0]).toBe(CALLER_ID);
+    // The 'user' field on the sent payload must be the TARGET (alice),
+    // not the sender — symmetric with how the federated branch builds it.
+    expect(sent![1].request.user.id).toBe('u1');
+    expect(sent![1].request.user.username).toBe('alice');
   });
 });
