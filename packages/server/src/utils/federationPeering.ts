@@ -84,6 +84,28 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
     }
   }
 
+  // Pre-handshake gate: refuse if we have an unresolved inbound approval-request
+  // for this origin. The local admin must approve or deny it first. Without this
+  // check, any code path calling ensurePeered (e.g., the silent auto-reconnect
+  // in stores/instanceStore.ts) could bypass autoAcceptPeering=0 by initiating a
+  // fresh handshake to the remote, which the remote then accepts against its
+  // existing awaiting_approval row (routes/federation.ts /peer/accept branch).
+  // The legitimate approval flow (routes/federation.ts /approval-requests/:id/
+  // approve) does NOT call ensurePeered — it deletes the approval-request first
+  // and does its own fetch — so this guard does not block legitimate approvals.
+  const pendingInbound = db
+    .select({ id: schema.peerApprovalRequests.id })
+    .from(schema.peerApprovalRequests)
+    .where(eq(schema.peerApprovalRequests.origin, normalized))
+    .get();
+
+  if (pendingInbound) {
+    return {
+      status: 'rejected',
+      error: 'Local admin must resolve pending peering approval before initiating',
+    };
+  }
+
   // Deduplicate: if a handshake is already in flight, share the promise
   const inflight = inFlightPeering.get(normalized);
   if (inflight) {

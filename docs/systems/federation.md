@@ -157,6 +157,8 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 
 **Expiry** — The janitor (`federationJanitor.ts`) runs on its scheduled interval and deletes rows where `expires_at < now`. Expired requests do NOT create a `rejected` peer — the requesting instance can re-submit. Admin denial, by contrast, does create a `rejected` peer record, blocking re-requests until an admin clears it.
 
+**Pre-handshake guard (`ensurePeered`)** — Before any outbound handshake, `ensurePeered(origin)` in `federationPeering.ts` refuses with `{ status: 'rejected', error: 'Local admin must resolve…' }` if a `peer_approval_requests` row exists for that origin. This blocks the auto-reconnect bypass: without the guard, any code path calling `ensurePeered` (e.g., the silent reconnect in `stores/instanceStore.ts`) could initiate a fresh outbound handshake to a peer that has a pending inbound approval request, and the receiver's `/peer/accept` `awaiting_approval` branch would activate the relationship without admin involvement. The legitimate approve flow (`POST /api/federation/approval-requests/:id/approve`) does NOT call `ensurePeered` — it deletes the approval-request row and does its own direct `fetch` to `/peer/accept` — so the guard does not block legitimate approvals. Note: the guard closes the trigger only; the receiver-side trust assumption in the `/peer/accept` `awaiting_approval` branch is still permissive and is tracked separately at `docs/superpowers/problems/2026-04-26-peer-handshake-trust-model.md`.
+
 ### Admin Endpoints
 
 | Endpoint | Method | Auth | Purpose |
