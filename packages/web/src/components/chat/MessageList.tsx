@@ -60,6 +60,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const isNearBottomRef = useRef(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isAtBottomRef = useRef(true);
+  const lastProgrammaticBottomScrollRef = useRef<number | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
   const showPaginationSkeleton = useDelayedLoading(isLoadingMore);
@@ -114,6 +115,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     }
 
     prevMessagesLength.current = 0;
+    lastProgrammaticBottomScrollRef.current = null;
 
     // If we have a saved position for the incoming channel, don't mark as near/at-bottom
     // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
@@ -154,6 +156,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         }
         // No saved anchor or message not in cache — snap to bottom
         container.scrollTop = container.scrollHeight;
+        lastProgrammaticBottomScrollRef.current = container.scrollTop;
         isAtBottomRef.current = true;
         setIsAtBottom(true);
       });
@@ -175,6 +178,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       const c = containerRef.current;
       if (!c || !isAtBottomRef.current) return;
       c.scrollTop = c.scrollHeight;
+      lastProgrammaticBottomScrollRef.current = c.scrollTop;
     });
     observer.observe(content);
     return () => observer.disconnect();
@@ -191,6 +195,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       const c = containerRef.current;
       if (!c || !isAtBottomRef.current) return;
       c.scrollTop = c.scrollHeight;
+      lastProgrammaticBottomScrollRef.current = c.scrollTop;
     };
 
     content.addEventListener('load', handleMediaLoad, true);
@@ -230,6 +235,27 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;
     if (!container) return;
+
+    // Sentinel: if scrollTop equals our last programmatic bottom-scroll value, this event
+    // was queued by our own command. Layout may have grown between the command and the
+    // event firing, but our intent is "stay at bottom" — do not let a post-growth distance
+    // measurement flip the at-bottom flags. Re-pin defensively (content may have grown
+    // again) and update the sentinel; convergence is described in the spec §2.
+    if (container.scrollTop === lastProgrammaticBottomScrollRef.current) {
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+      isNearBottomRef.current = true;
+      setIsNearBottom(true);
+      container.scrollTop = container.scrollHeight;
+      lastProgrammaticBottomScrollRef.current = container.scrollTop;
+      visibleMsgIdRef.current = null;
+      return;
+    }
+
+    // Sentinel mismatch — the user has scrolled (or is scrolling) somewhere we did not
+    // command. Invalidate the sentinel so a future user scroll that coincidentally lands on
+    // the stale value can't trigger a false match and yank them to bottom.
+    lastProgrammaticBottomScrollRef.current = null;
 
     // Check scroll position relative to bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
