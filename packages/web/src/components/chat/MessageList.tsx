@@ -240,7 +240,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     // was queued by our own command. Layout may have grown between the command and the
     // event firing, but our intent is "stay at bottom" — do not let a post-growth distance
     // measurement flip the at-bottom flags. Re-pin defensively (content may have grown
-    // again) and update the sentinel; convergence is described in the spec §2.
+    // again) and update the sentinel. See docs/systems/message-list.md (Auto-scroll model).
     if (container.scrollTop === lastProgrammaticBottomScrollRef.current) {
       isAtBottomRef.current = true;
       setIsAtBottom(true);
