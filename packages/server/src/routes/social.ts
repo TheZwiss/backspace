@@ -103,6 +103,11 @@ async function handleLocalFriendRequest(
     request: friendRequestPayload,
   });
 
+  connectionManager.sendToUser(request.userId, {
+    type: 'friend_request_sent',
+    request: friendRequestPayload,
+  });
+
   // Federation relay: notify the target user's home instance
   const fromIdentity = {
     homeUserId: sender.homeUserId || request.userId,

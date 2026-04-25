@@ -219,4 +219,22 @@ describe('POST /api/social/requests — case-insensitive username lookup', () =>
     expect(res.statusCode).toBe(404);
     expect(JSON.parse(res.body).error).toBe('User not found');
   });
+
+  it('broadcasts friend_request_sent to the sender on local request creation', async () => {
+    seedUser({ id: 'u1', username: 'alice' });
+    const { connectionManager } = await import('../ws/handler.js');
+    const sendToUser = connectionManager.sendToUser as unknown as ReturnType<typeof vi.fn>;
+    sendToUser.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const sent = sendToUser.mock.calls.find(c => c[1]?.type === 'friend_request_sent');
+    expect(sent).toBeDefined();
+    expect(sent![0]).toBe(CALLER_ID);
+  });
 });
