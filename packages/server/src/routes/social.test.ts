@@ -13,6 +13,12 @@ setWorkerId(1);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Module-level mutable state. Each describe's beforeEach reassigns
+// `sqlite`/`testDb`/`app`; the `getDb: () => testDb` getter in the mock
+// closes over the current binding, so reassignment is observed. Adding
+// a top-level `it` (outside any describe) or switching to `.concurrent`
+// would break this pattern — keep new tests inside a describe block
+// that owns its own beforeEach reset.
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 let sqlite: Database.Database;
 let testDb: TestDb;
