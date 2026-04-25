@@ -136,6 +136,32 @@ function isRelayRateLimited(peerOrigin: string): boolean {
   return false;
 }
 
+// ─── In-memory rate limiter for the user-lookup endpoint (per-peer) ──────────
+const lookupRateBuckets = new Map<string, number[]>();
+const LOOKUP_RATE_WINDOW_MS = 60_000;
+const LOOKUP_RATE_MAX = 60;
+
+function isLookupRateLimited(peerOrigin: string): boolean {
+  const now = Date.now();
+  let timestamps = lookupRateBuckets.get(peerOrigin);
+  if (!timestamps) {
+    timestamps = [];
+    lookupRateBuckets.set(peerOrigin, timestamps);
+  }
+  const cutoff = now - LOOKUP_RATE_WINDOW_MS;
+  while (timestamps.length > 0 && (timestamps[0] ?? Infinity) < cutoff) {
+    timestamps.shift();
+  }
+  if (timestamps.length >= LOOKUP_RATE_MAX) return true;
+  timestamps.push(now);
+  return false;
+}
+
+// Test-only export — used by federation.userLookup.test.ts to reset between cases.
+export function _resetLookupRateBuckets(): void {
+  lookupRateBuckets.clear();
+}
+
 // ─── In-memory rate limiter for the ensure endpoint (per-user) ─────────────
 const ensureRateBuckets = new Map<string, number[]>();
 const ENSURE_RATE_WINDOW_MS = 15 * 60_000; // 15 minutes
