@@ -464,13 +464,14 @@ function AddFriendTab({
 
   const trimmedQuery = query.trim();
   const directAt = trimmedQuery.lastIndexOf('@');
+  // Allow bare handle (no @) or @ at non-edge position; hide @, @bob, bob@.
   const showDirectAdd = trimmedQuery.length > 0
     && (directAt === -1 || (directAt > 0 && directAt < trimmedQuery.length - 1));
   // Bare handle gets the home host appended for display only — submission
   // still uses the raw trimmed query.
-  const directAddDisplay = trimmedQuery.includes('@')
-    ? trimmedQuery
-    : `${trimmedQuery}@${window.location.host}`;
+  const directAddDisplay = directAt === -1
+    ? `${trimmedQuery}@${window.location.host}`
+    : trimmedQuery;
 
   // Direct Add handler
   const handleDirectAdd = async () => {
