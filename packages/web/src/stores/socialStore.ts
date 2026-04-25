@@ -57,6 +57,7 @@ interface SocialState {
   removeFriend: (id: string) => Promise<void>;
   searchUsers: (query: string) => Promise<TaggedUser[]>;
   addIncomingRequest: (request: FriendRequest, origin: string) => void;
+  addOutboundRequest: (request: FriendRequest, origin: string) => void;
   addFriendFromAccepted: (friend: Friend, requestId: string, origin: string) => void;
   updateFriendPresence: (userId: string, status: string) => void;
   updateFriendProfile: (user: User) => void;
@@ -334,6 +335,17 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   // Called from WS handler when another user sends you a friend request
   addIncomingRequest: (request: FriendRequest, origin: string) => {
+    set((state) => {
+      const canonicalId = request.user?.homeUserId ?? request.user?.id;
+      if (canonicalId && state.requests.some(r => (r.user?.homeUserId ?? r.user?.id) === canonicalId)) {
+        return state;
+      }
+      return { requests: [...state.requests, { ...request, _instanceOrigin: origin }] };
+    });
+  },
+
+  // Called from WS handler for multi-tab sync when this user creates an outbound request
+  addOutboundRequest: (request: FriendRequest, origin: string) => {
     set((state) => {
       const canonicalId = request.user?.homeUserId ?? request.user?.id;
       if (canonicalId && state.requests.some(r => (r.user?.homeUserId ?? r.user?.id) === canonicalId)) {
