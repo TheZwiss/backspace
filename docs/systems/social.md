@@ -160,7 +160,7 @@ Queries `friend_requests` with `status='pending'` where the authenticated user i
 
 **Query params:** `q` (min 1 character)
 
-Simpler than discover: LIKE match on `username` or `displayName`, excludes self, limit 10. Returns `User[]` (no mutual counts, no relationship enrichment). Does **not** filter by `discoverable` or exclude replicated users.
+Same filter set as discover: `isDeleted = 0`, `discoverable = 1`, native-only (`homeInstance IS NULL OR ''`), excludes self. LIKE match on `username` or `displayName`, limit 10. Returns `User[]` with no mutual counts and no relationship enrichment — the client (`FriendsPage.tsx:AddFriendTab`) enriches results against the local `friends`/`requests` arrays at render time. Federated users are surfaced via the client-side cross-instance fan-out in `socialStore.searchUsers`, not via this endpoint.
 
 ---
 
@@ -592,7 +592,7 @@ The Add Friend tab merges search and discovery into a single UI:
 
 1. **Empty query:** Shows discover grid (from `discoverStore.fetchUsers()`, loaded on mount)
 2. **Query entered:** Switches to search mode (debounced 300ms, uses `socialStore.searchUsers()`)
-3. **Direct Add detection:** If query contains `@` (at non-edge position), shows a "Send friend request to user@domain" action row
+3. **Direct-Add row:** Shown whenever the search input is non-empty and resolves to a well-formed handle (`trimmed.length > 0 && (no @ || @ at non-edge position)`). Displays the resolved form: when the typed query has no `@`, the row shows `<query>@<window.location.host>` so the user sees which instance the request will hit; when `@` is present, displays the typed query verbatim. The submit button calls `sendFriendRequest(query.trim())` — the resolved form is display-only; routing to the correct API client (home-only for no-`@`, federation-aware for `@host` form) happens inside `sendFriendRequest`, which lowercases the parsed `@domain` before comparison so mixed-case hostnames route correctly. Server-side `POST /api/social/requests` lowercases the lookup input before matching, so mixed-case bare handles resolve too. A 404 from the server (`"User not found"`) surfaces as a warning toast via the catch-all in `handleDirectAdd`.
 
 ### Search Result Enrichment
 
