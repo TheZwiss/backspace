@@ -293,3 +293,161 @@ describe('POST /api/social/requests — federated branch (lookup failures)', () 
     expect(JSON.parse(res.body).error).toBe('invalid_target_domain');
   });
 });
+
+describe('POST /api/social/requests — federated branch (authority + self-friend + idempotency)', () => {
+  beforeEach(() => {
+    resolveOriginFromHostnameMock.mockReturnValue('https://orbit.test');
+    ensurePeeredMock.mockResolvedValue({ status: 'active', peerId: 'p1' });
+    lookupRemoteUserMock.mockResolvedValue({
+      ok: true, homeUserId: 'remote-alice', username: 'alice',
+      profile: { displayName: 'Alice', avatar: null, avatarColor: 'mint', banner: null, bio: null },
+    });
+  });
+
+  it('returns 403 not_authoritative_for_sender when caller is a federated user', async () => {
+    seedSelf({ homeInstance: 'other.test', homeUserId: 'me-elsewhere' });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toBe('not_authoritative_for_sender');
+  });
+
+  it('passes authority check when sender homeInstance is stored as bare host', async () => {
+    // homeInstance stored without scheme — normalizeOriginForCompare('home.test') must
+    // equal normalizeOriginForCompare('https://home.test') (T1 invariant).
+    seedSelf({ homeInstance: 'home.test', homeUserId: CALLER_ID });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('returns 400 cannot_friend_self when looked-up user is canonical-self', async () => {
+    // The dispatcher routes this as federated because targetDomain ('otherhost') is not
+    // normalized to our host. resolveOriginFromHostname maps it to our own origin anyway
+    // (defense-in-depth: misconfigured or spoofed domain). The lookup returns our own
+    // canonical userId, triggering the self-friend check.
+    seedSelf();
+    resolveOriginFromHostnameMock.mockReturnValue('https://home.test');
+    lookupRemoteUserMock.mockResolvedValue({
+      ok: true, homeUserId: CALLER_ID, username: 'caller',
+      profile: { displayName: 'Caller', avatar: null, avatarColor: 'mint', banner: null, bio: null },
+    });
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'caller@otherhost' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('cannot_friend_self');
+  });
+
+  it('returns 409 already_friends if friendship row exists', async () => {
+    seedSelf();
+    // Pre-seed stub and friendship
+    testDb.insert(schema.users).values({
+      id: 'stub-alice',
+      username: 'remote-alice@orbit.test',
+      displayName: 'Alice',
+      passwordHash: '',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: 'orbit.test',
+      homeUserId: 'remote-alice',
+      createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.friends).values({
+      userId: CALLER_ID,
+      friendId: 'stub-alice',
+      createdAt: Date.now(),
+    }).run();
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).error).toBe('already_friends');
+  });
+
+  it('returns 200 + existing requestId when same-direction request already pending (idempotent)', async () => {
+    seedSelf();
+    // Pre-seed stub and same-direction pending request
+    testDb.insert(schema.users).values({
+      id: 'stub-alice',
+      username: 'remote-alice@orbit.test',
+      displayName: 'Alice',
+      passwordHash: '',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: 'orbit.test',
+      homeUserId: 'remote-alice',
+      createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.friendRequests).values({
+      id: 'existing-req',
+      fromId: CALLER_ID,
+      toId: 'stub-alice',
+      status: 'pending',
+      createdAt: Date.now(),
+    }).run();
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { success: boolean; requestId: string };
+    expect(body.requestId).toBe('existing-req');
+
+    // No duplicate row created
+    const allRequests = testDb.select().from(schema.friendRequests).all();
+    expect(allRequests).toHaveLength(1);
+  });
+
+  it('returns 409 incoming_request_exists when opposite-direction request already pending', async () => {
+    seedSelf();
+    // Pre-seed stub and opposite-direction pending request
+    testDb.insert(schema.users).values({
+      id: 'stub-alice',
+      username: 'remote-alice@orbit.test',
+      displayName: 'Alice',
+      passwordHash: '',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: 'orbit.test',
+      homeUserId: 'remote-alice',
+      createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.friendRequests).values({
+      id: 'incoming-req',
+      fromId: 'stub-alice',
+      toId: CALLER_ID,
+      status: 'pending',
+      createdAt: Date.now(),
+    }).run();
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body) as { error: string; requestId: string };
+    expect(body.error).toBe('incoming_request_exists');
+    expect(body.requestId).toBe('incoming-req');
+  });
+});

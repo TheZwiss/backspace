@@ -217,6 +217,39 @@ async function handleFederatedFriendRequest(
   }
   const stubHydrated = hydrateReplicatedUserProfile(stub, lookup.profile, db);
 
+  // 5a. Direction-aware idempotency
+  const existingRequest = db.select().from(schema.friendRequests).where(and(
+    or(
+      and(eq(schema.friendRequests.fromId, sender.id), eq(schema.friendRequests.toId, stubHydrated.id)),
+      and(eq(schema.friendRequests.fromId, stubHydrated.id), eq(schema.friendRequests.toId, sender.id)),
+    ),
+    eq(schema.friendRequests.status, 'pending'),
+  )).get();
+
+  if (existingRequest) {
+    if (existingRequest.fromId === sender.id) {
+      // Same direction — idempotent return
+      return reply.code(200).send({ success: true, requestId: existingRequest.id });
+    } else {
+      // Opposite direction — incoming request already exists
+      return reply.code(409).send({
+        error: 'incoming_request_exists',
+        statusCode: 409,
+        requestId: existingRequest.id,
+      });
+    }
+  }
+
+  // 5b. Already-friends check
+  const existingFriend = db.select().from(schema.friends).where(or(
+    and(eq(schema.friends.userId, sender.id), eq(schema.friends.friendId, stubHydrated.id)),
+    and(eq(schema.friends.userId, stubHydrated.id), eq(schema.friends.friendId, sender.id)),
+  )).get();
+
+  if (existingFriend) {
+    return reply.code(409).send({ error: 'already_friends', statusCode: 409 });
+  }
+
   // 6. Transaction: insert + log + queue outbox
   const now = Date.now();
   const fromIdentity = {
