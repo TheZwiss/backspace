@@ -9,6 +9,7 @@ export type PeerActivationReason =
   | 'initiate_accepted'
   | 'accept_rejected_override'
   | 'accept_awaiting_approval'
+  | 'accept_awaiting_approval_fallback'
   | 'accept_pending'
   | 'accept_new'
   | 'approval_handshake'
