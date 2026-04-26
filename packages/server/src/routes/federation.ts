@@ -1852,6 +1852,92 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── GET /api/federation/peering-notifications ─────────────────────────────
+  // User-facing: list the requesting user's terminal-state peering
+  // notifications (kind='approved'|'denied'|'expired'). Optional ?unread=1
+  // filter narrows to rows where readAt IS NULL. Ordered DESC by createdAt
+  // (newest first).
+  app.get<{ Querystring: { unread?: string } }>(
+    '/api/federation/peering-notifications',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const db = getDb();
+      const userId = request.userId;
+      const unread = request.query?.unread === '1';
+
+      const whereClause = unread
+        ? and(
+            eq(schema.peerApprovalNotifications.userId, userId),
+            isNull(schema.peerApprovalNotifications.readAt),
+          )
+        : eq(schema.peerApprovalNotifications.userId, userId);
+
+      const notifications = db
+        .select()
+        .from(schema.peerApprovalNotifications)
+        .where(whereClause)
+        .orderBy(desc(schema.peerApprovalNotifications.createdAt))
+        .all();
+
+      return reply.send({ notifications });
+    },
+  );
+
+  // ─── POST /api/federation/peering-notifications/:id/read ───────────────────
+  // User-facing: mark a single peering notification as read. Authorization:
+  // notification.userId must match request.userId.
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/peering-notifications/:id/read',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const db = getDb();
+      const { id } = request.params;
+      const userId = request.userId;
+
+      const notif = db
+        .select()
+        .from(schema.peerApprovalNotifications)
+        .where(eq(schema.peerApprovalNotifications.id, id))
+        .get();
+      if (!notif) {
+        return reply.code(404).send({ error: 'notification_not_found', statusCode: 404 });
+      }
+      if (notif.userId !== userId) {
+        return reply.code(403).send({ error: 'forbidden', statusCode: 403 });
+      }
+
+      db.update(schema.peerApprovalNotifications)
+        .set({ readAt: Date.now() })
+        .where(eq(schema.peerApprovalNotifications.id, id))
+        .run();
+      return reply.send({ success: true });
+    },
+  );
+
+  // ─── POST /api/federation/peering-notifications/read-all ───────────────────
+  // User-facing: mark all the requesting user's unread peering notifications
+  // as read. Already-read rows are NOT touched (their readAt is preserved).
+  // Returns the count of rows affected for UI feedback.
+  app.post(
+    '/api/federation/peering-notifications/read-all',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const db = getDb();
+      const userId = request.userId;
+      const result = db
+        .update(schema.peerApprovalNotifications)
+        .set({ readAt: Date.now() })
+        .where(
+          and(
+            eq(schema.peerApprovalNotifications.userId, userId),
+            isNull(schema.peerApprovalNotifications.readAt),
+          ),
+        )
+        .run();
+      return reply.send({ success: true, count: result.changes });
+    },
+  );
+
   // ─── POST /api/federation/peers/:id/rotate ──────────────────────────────────
   // Admin-only: trigger immediate secret rotation for a peer.
   app.post<{ Params: { id: string } }>(

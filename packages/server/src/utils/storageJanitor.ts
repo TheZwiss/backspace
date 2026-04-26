@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
+import { generateSnowflake } from './snowflake.js';
 import type { StorageStats, StorageBreakdown, OrphanedFile, CleanupResult } from '@backspace/shared';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.bmp', '.avif']);
@@ -433,65 +434,92 @@ export function cleanupFederationFileQueue(): number {
 
 /**
  * Expire peer approval requests older than their expiresAt timestamp.
- * For each expired request, attempt to send a signed denial notification
- * to the requesting instance before deleting. If notification fails,
- * leave the record for the next janitor cycle.
+ *
+ * Outbound rows: before deletion, fan out kind='expired' notifications to
+ * each subscriber so the original requester(s) can see the terminal state on
+ * next page load. Subscriber rows cascade-delete via FK when the parent row
+ * is removed.
+ *
+ * Inbound rows: deleted outright. Both sides expire independently (their
+ * own janitor will fan out kind='expired' notifications to their subscribers
+ * on their schedule); no cross-instance network notification is required.
+ *
+ * No WebSocket broadcast is emitted on expiry — offline users see the
+ * notification on next GET /api/federation/peering-notifications, matching
+ * the persistence guarantee of the notifications table.
  */
-export async function cleanupExpiredApprovalRequests(): Promise<number> {
+export function cleanupExpiredApprovalRequests(): number {
   const db = getDb();
-  const expired = db
+  const expiredRequests = db
     .select()
     .from(schema.peerApprovalRequests)
     .where(lte(schema.peerApprovalRequests.expiresAt, Date.now()))
     .all();
 
-  if (expired.length === 0) return 0;
+  if (expiredRequests.length === 0) return 0;
 
-  const { getOurOrigin, buildFederationHeaders } = await import('./federationAuth.js');
-  const ourOrigin = getOurOrigin();
-  let cleaned = 0;
-
-  for (const req of expired) {
-    // Outbound rows have no hmac_secret and no remote /peer/denied endpoint;
-    // their expiry handling (subscriber notifications) lands in Task 9.
-    // Until then, skip outbound rows here so this loop only processes inbound expirations.
-    if (!req.hmacSecret) {
-      continue;
+  const now = Date.now();
+  let deletedCount = 0;
+  for (const req of expiredRequests) {
+    if (req.direction === 'outbound') {
+      // Fan out kind='expired' notifications to subscribers before delete.
+      const subs = db
+        .select()
+        .from(schema.peerApprovalSubscribers)
+        .where(eq(schema.peerApprovalSubscribers.requestId, req.id))
+        .all();
+      for (const sub of subs) {
+        db.insert(schema.peerApprovalNotifications)
+          .values({
+            id: generateSnowflake(),
+            userId: sub.userId,
+            kind: 'expired',
+            peerOrigin: req.origin,
+            triggerReason: sub.triggerReason,
+            triggerTarget: sub.triggerTarget,
+            createdAt: now,
+            readAt: null,
+          })
+          .run();
+      }
     }
-
-    const denialBody = JSON.stringify({
-      origin: ourOrigin,
-      reason: 'expired' as const,
-      message: 'Request expired — no response from admin within 30 days',
-    });
-
-    const headers = buildFederationHeaders(denialBody, req.hmacSecret, ourOrigin);
-
-    let sent = false;
-    try {
-      const response = await fetch(`${req.origin}/api/federation/peer/denied`, {
-        method: 'POST',
-        headers,
-        body: denialBody,
-        signal: AbortSignal.timeout(10_000),
-      });
-      sent = response.ok;
-    } catch {
-      // Network error — will retry next cycle
-    }
-
-    if (sent) {
-      // No rejected peer record for expiry — origin can re-request
-      db.delete(schema.peerApprovalRequests)
-        .where(eq(schema.peerApprovalRequests.id, req.id))
-        .run();
-      cleaned++;
-    } else {
-      console.warn(`[storage-janitor] Failed to send expiry denial to ${req.origin} — will retry next cycle`);
-    }
+    // Cascade-delete the parent (subscribers go via FK cascade for outbound;
+    // inbound has no subscribers to clear).
+    db.delete(schema.peerApprovalRequests)
+      .where(eq(schema.peerApprovalRequests.id, req.id))
+      .run();
+    deletedCount++;
   }
 
-  return cleaned;
+  if (deletedCount > 0) {
+    console.log(`[storage-janitor] Deleted ${deletedCount} expired peer_approval_requests rows`);
+  }
+
+  return deletedCount;
+}
+
+/**
+ * Delete read peering notifications older than 30 days. Unread notifications
+ * are never auto-cleaned — the user must explicitly read or dismiss them.
+ */
+const NOTIFICATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function cleanupReadPeeringNotifications(): number {
+  const db = getDb();
+  const cutoff = Date.now() - NOTIFICATION_RETENTION_MS;
+  const result = db
+    .delete(schema.peerApprovalNotifications)
+    .where(
+      and(
+        isNotNull(schema.peerApprovalNotifications.readAt),
+        lte(schema.peerApprovalNotifications.readAt, cutoff),
+      ),
+    )
+    .run();
+  if (result.changes > 0) {
+    console.log(`[storage-janitor] Deleted ${result.changes} read peering notifications older than 30 days`);
+  }
+  return result.changes;
 }
 
 /**
@@ -629,14 +657,18 @@ export function runFederationJanitor(): void {
       );
     }
 
-    // Async: expire approval requests (sends network notifications)
-    cleanupExpiredApprovalRequests().then((approvalExpired) => {
+    // Expire approval requests (outbound rows fan out kind='expired'
+    // notifications to subscribers before delete; inbound rows are deleted
+    // outright). Then sweep read peering notifications older than 30 days.
+    try {
+      const approvalExpired = cleanupExpiredApprovalRequests();
       if (approvalExpired > 0) {
         console.log(`[storage-janitor] Expired ${approvalExpired} peer approval request(s)`);
       }
-    }).catch((err) => {
+      cleanupReadPeeringNotifications();
+    } catch (err) {
       console.error('[storage-janitor] Approval request expiry error:', err);
-    });
+    }
   } catch (err) {
     console.error('[storage-janitor] Federation GC sweep error:', err);
   }
