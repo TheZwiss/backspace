@@ -6,7 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { eq, and, or, isNull, inArray, sql, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
-import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders } from '../utils/federationAuth.js';
+import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders, normalizeOriginForCompare } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
@@ -4529,6 +4529,17 @@ function processFriendRequestCreateEvent(
     return;
   }
 
+  // Self-target guard (defense-in-depth): from-identity must not equal to-identity.
+  // Sender's local cannot_friend_self check should catch this, but the receiver must not trust it.
+  if (
+    from.homeUserId === to.homeUserId &&
+    normalizeOriginForCompare(from.homeInstance) === normalizeOriginForCompare(to.homeInstance)
+  ) {
+    console.warn(`[federation] Self-target friend_request_create rejected: homeUserId=${from.homeUserId} homeInstance=${extractDomain(from.homeInstance)} source=${extractDomain(sourceInstance)}`);
+    rejected.push({ messageId: event.messageId, reason: 'self_target_invalid' });
+    return;
+  }
+
   // Resolve the sender (create stub if needed — they're on a remote instance)
   const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
   if (!fromUserResolved) {
@@ -4562,14 +4573,23 @@ function processFriendRequestCreateEvent(
     return;
   }
 
-  // Idempotency: if a pending request already exists from this sender to this recipient, accept as no-op
+  // Idempotency: a pending request in EITHER direction makes this event a no-op.
+  //   Forward (from→to): re-delivery of an event we've already processed.
+  //   Reverse (to→from): the local user has already sent a request TO this remote sender.
+  //     Race window: both sides click "add friend" near-simultaneously. Each sender's both-direction
+  //     check passes locally (no rows yet anywhere). When the events cross, each receiver must
+  //     treat the reverse-direction collision as idempotent — otherwise both instances end up
+  //     with two opposite-direction pending rows for the same logical pair. Mirror the
+  //     sender-side both-direction check (`incoming_request_exists` in social.ts).
   const existingRequest = db
     .select()
     .from(schema.friendRequests)
     .where(
       and(
-        eq(schema.friendRequests.fromId, fromUser.id),
-        eq(schema.friendRequests.toId, toUser.id),
+        or(
+          and(eq(schema.friendRequests.fromId, fromUser.id), eq(schema.friendRequests.toId, toUser.id)),
+          and(eq(schema.friendRequests.fromId, toUser.id), eq(schema.friendRequests.toId, fromUser.id)),
+        ),
         eq(schema.friendRequests.status, 'pending'),
       ),
     )

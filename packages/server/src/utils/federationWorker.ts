@@ -66,6 +66,7 @@ const TERMINAL_REJECTION_REASONS = new Set<string>([
   'recipient_not_found',  // receiver doesn't know the target user
   'attribution_mismatch', // payload claims a homeInstance the source can't authoritatively speak for
   'unknown_event_type',   // peer doesn't understand this eventType — never will
+  'self_target_invalid',  // payload's from-identity equals to-identity (sender's self-check should have caught this)
 ]);
 
 // ─── Worker State ───────────────────────────────────────────────────────────

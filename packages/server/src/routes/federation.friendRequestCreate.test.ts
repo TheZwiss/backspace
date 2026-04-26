@@ -537,6 +537,163 @@ describe('processFriendRequestCreateEvent — branch coverage', () => {
     expect(req?.createdAt).toBeLessThanOrEqual(Date.now());
   });
 
+  it('accepts idempotently when a reverse-direction pending request already exists (cross-fire race)', async () => {
+    // Race scenario: alice@home and bob@orbit both click "add friend" near-simultaneously.
+    // Each sender's local both-direction check passes (no rows yet anywhere). When events cross,
+    // alice's outbound creates the bob-stub→alice row first; bob's inbound (this event) must
+    // detect the existing alice→bob-stub row in the REVERSE direction and silent-accept.
+    seedLocalUser('alice-id', 'alice');
+    seedReplicatedUser({
+      id: 'bob-stub',
+      username: 'remote-bob@orbit.test',
+      homeUserId: 'remote-bob',
+      homeInstance: 'orbit.test',
+    });
+    // Pre-existing reverse-direction row: alice (local) → bob-stub. Equivalent to alice having
+    // already sent her own outbound friend request to bob just before bob's event arrived.
+    testDb.insert(schema.friendRequests).values({
+      id: 'alice-outbound',
+      fromId: 'alice-id',
+      toId: 'bob-stub',
+      status: 'pending',
+      createdAt: 1000,
+    }).run();
+
+    const event = makeEvent({
+      messageId: 'reverse-direction-collision',
+      friendship: {
+        from: { homeUserId: 'remote-bob', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'alice-id', homeInstance: 'https://home.test' },
+        fromProfile: { username: 'bob' },
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    // Idempotent silent-accept: no new row, no broadcast, original alice-outbound preserved.
+    expect(result.accepted).toEqual(['reverse-direction-collision']);
+    expect(result.rejected).toEqual([]);
+    const reqs = testDb.select().from(schema.friendRequests).all();
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]!.id).toBe('alice-outbound');
+    expect(reqs[0]!.fromId).toBe('alice-id');
+    expect(reqs[0]!.toId).toBe('bob-stub');
+    expect(sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('does not block on a non-pending reverse-direction row (declined)', async () => {
+    // The reverse-direction idempotency must still be gated on status='pending'.
+    // A previously declined request from alice→bob-stub does NOT make this event idempotent.
+    seedLocalUser('alice-id', 'alice');
+    seedReplicatedUser({
+      id: 'bob-stub',
+      username: 'remote-bob@orbit.test',
+      homeUserId: 'remote-bob',
+      homeInstance: 'orbit.test',
+    });
+    testDb.insert(schema.friendRequests).values({
+      id: 'old-reverse-declined',
+      fromId: 'alice-id',
+      toId: 'bob-stub',
+      status: 'declined',
+      createdAt: 1000,
+    }).run();
+
+    const event = makeEvent({
+      messageId: 'fresh-after-reverse-decline',
+      friendship: {
+        from: { homeUserId: 'remote-bob', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'alice-id', homeInstance: 'https://home.test' },
+        fromProfile: { username: 'bob' },
+        createdAt: 5000,
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    expect(result.accepted).toEqual(['fresh-after-reverse-decline']);
+    expect(result.rejected).toEqual([]);
+    const pending = testDb.select().from(schema.friendRequests)
+      .where(eq(schema.friendRequests.status, 'pending')).all();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.fromId).toBe('bob-stub');
+    expect(pending[0]!.toId).toBe('alice-id');
+    expect(sendToUser).toHaveBeenCalledOnce();
+  });
+
+  it('rejects with self_target_invalid when from-identity equals to-identity (defense-in-depth)', async () => {
+    // Malformed/malicious event where the from and to identities collapse. The sender's
+    // local cannot_friend_self check should prevent this, but the receiver must not trust it.
+    // Pre-resolution rejection: no stub created, no row inserted, no broadcast.
+    const event = makeEvent({
+      messageId: 'self-target-raw',
+      friendship: {
+        from: { homeUserId: 'remote-bob', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'remote-bob', homeInstance: 'https://orbit.test' },
+        fromProfile: { username: 'bob' },
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    expect(result.rejected).toEqual([{ messageId: 'self-target-raw', reason: 'self_target_invalid' }]);
+    expect(result.accepted).toEqual([]);
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+    // No side-effect stub creation for the malformed identity.
+    expect(testDb.select().from(schema.users).where(eq(schema.users.homeUserId, 'remote-bob')).all()).toHaveLength(0);
+    expect(sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('rejects self-target even when origin shapes differ (URL vs bare host, trailing slash)', async () => {
+    // normalizeOriginForCompare must collapse "https://orbit.test", "orbit.test", and
+    // "https://orbit.test/" to the same canonical form so the guard is not bypassable
+    // by surface formatting of homeInstance.
+    const event = makeEvent({
+      messageId: 'self-target-normalized',
+      friendship: {
+        from: { homeUserId: 'remote-bob', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'remote-bob', homeInstance: 'orbit.test/' },
+        fromProfile: { username: 'bob' },
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    expect(result.rejected).toEqual([{ messageId: 'self-target-normalized', reason: 'self_target_invalid' }]);
+    expect(result.accepted).toEqual([]);
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+    expect(sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('does not falsely flag self-target when only homeUserId matches across different instances', async () => {
+    // Two different users on different instances who happen to share a homeUserId string
+    // must NOT be treated as self-target. This protects against a too-aggressive guard.
+    seedLocalUser('shared-id', 'alice');
+
+    const event = makeEvent({
+      messageId: 'shared-id-cross-instance',
+      friendship: {
+        from: { homeUserId: 'shared-id', homeInstance: 'https://orbit.test' },
+        to: { homeUserId: 'shared-id', homeInstance: 'https://home.test' },
+        fromProfile: { username: 'bob' },
+      },
+    });
+
+    const { processRelayEvents } = await import('./federation.js');
+    const result = await processRelayEvents([event], 'https://orbit.test', 'https://orbit.test', testDb);
+
+    expect(result.accepted).toEqual(['shared-id-cross-instance']);
+    expect(result.rejected).toEqual([]);
+    const reqs = testDb.select().from(schema.friendRequests).all();
+    expect(reqs).toHaveLength(1);
+    expect(reqs[0]!.toId).toBe('shared-id');
+    expect(sendToUser).toHaveBeenCalledOnce();
+  });
+
   it('isolates per-event success/failure within a batch (mixed accepted/rejected)', async () => {
     seedLocalUser('alice-id', 'alice');
 

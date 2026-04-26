@@ -326,18 +326,23 @@ The wire format of the queued event is identical to the pre-2026-04-25 flow; onl
 4. On success: deletes outbox entries. On failure: exponential backoff retry.
 
 **Inbound (receiving instance -- `federation.ts:processFriendRequestCreateEvent`):**
-1. **Validate:** `event.friendship` must exist, `from.homeInstance === sourceInstance` (authority check)
-2. **Resolve sender:** `resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance)` -- creates stub if needed
-3. **Hydrate sender profile:** `hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile)` -- updates stub fields
-4. **Resolve recipient:** `resolveLocalUser(to.homeUserId)` -- must be a native user on this instance (returns `undefined` if not found -> reject)
-5. **Idempotency checks:** If already friends -> accept as no-op. If pending request already exists from same sender -> accept as no-op.
-6. **Create request:** Insert `friend_requests` row with local IDs
-7. **WS broadcast:** `friend_request_received` sent to local recipient with sender's sanitized profile
-8. Push `event.messageId` to accepted array
+1. **Validate:** `event.friendship` must exist, `from.homeInstance === sourceInstance` (authority check).
+2. **Self-target guard (defense-in-depth):** if `from.homeUserId === to.homeUserId` and `normalizeOriginForCompare(from.homeInstance) === normalizeOriginForCompare(to.homeInstance)`, reject with `self_target_invalid`. Runs before any side effects (no stub creation). The sender's local `cannot_friend_self` check should catch this, but the receiver must not trust upstream validation.
+3. **Resolve sender:** `resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance)` -- creates stub if needed.
+4. **Hydrate sender profile:** `hydrateReplicatedUserProfile(fromUser, event.friendship.fromProfile)` -- updates stub fields.
+5. **Resolve recipient:** `resolveLocalUser(to.homeUserId)` -- must be a native user on this instance (returns `undefined` if not found -> reject `recipient_not_found`).
+6. **Idempotency checks:**
+   - **Already friends (either direction):** accept as no-op.
+   - **Pending request in EITHER direction:** accept as no-op. Forward (from→to) covers redelivery; reverse (to→from) covers the cross-fire race where alice@A and bob@B click "add friend" near-simultaneously and each sender's local both-direction check passes before either event reaches the wire. Mirrors the sender-side `incoming_request_exists` both-direction check (step 8 above) to keep the receiver and sender contracts symmetric.
+7. **Create request:** Insert `friend_requests` row with local IDs.
+8. **WS broadcast:** `friend_request_received` sent to local recipient with sender's sanitized profile.
+9. Push `event.messageId` to accepted array.
+
+> **Race outcome.** Under the cross-fire scenario both instances converge on a single pending row (whichever event materialized first). The redundant outbound on the other side becomes harmless dead state — the local user already sees the pending request via existing UI. Auto-promotion to mutual friendship when both directions exist is not implemented; it is a product/design conversation, not a correctness fix.
 
 ### Failure Handling: Async Rollback
 
-When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. As of 2026-04-25, a configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`.
+When the outbox worker receives a relay response from the remote instance, it classifies each rejected entry. A configurable set of **terminal rejection reasons** (`TERMINAL_REJECTION_REASONS` in `federationWorker.ts`) causes an outbox entry to be deleted with no retry: `duplicate`, `recipient_not_found`, `attribution_mismatch`, `unknown_event_type`, `self_target_invalid`.
 
 For non-`duplicate` terminals, the worker invokes the registered permanent-failure callback via `invokePermanentFailureCallback(eventType, messageId, reason)` from `utils/federationRollback.ts`. For `friend_request_create`, this is **`rollbackFriendRequestCreate`**:
 
