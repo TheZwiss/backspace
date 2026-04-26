@@ -195,7 +195,6 @@ describe('GET /api/federation/peering-notifications', () => {
     const body = response.json() as {
       notifications: Array<{
         id: string;
-        userId: string;
         kind: string;
         peerOrigin: string;
         triggerReason: string;
@@ -211,7 +210,6 @@ describe('GET /api/federation/peering-notifications', () => {
     // Shape check on the newest row.
     expect(body.notifications[0]).toEqual({
       id: 'notif-new',
-      userId: 'alice',
       kind: 'denied',
       peerOrigin: 'https://other.example',
       triggerReason: 'space_join',
@@ -299,10 +297,11 @@ describe('GET /api/federation/peering-notifications', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = response.json() as { notifications: Array<{ id: string; userId: string }> };
+    const body = response.json() as { notifications: Array<{ id: string }> };
     expect(body.notifications).toHaveLength(1);
+    // Alice's row comes back (isolation: bob-notif is excluded by userId filter
+    // in the WHERE clause; the response shape itself no longer surfaces userId).
     expect(body.notifications[0]!.id).toBe('alice-notif');
-    expect(body.notifications[0]!.userId).toBe('alice');
   });
 });
 

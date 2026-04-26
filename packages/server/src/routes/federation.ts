@@ -1873,7 +1873,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         : eq(schema.peerApprovalNotifications.userId, userId);
 
       const notifications = db
-        .select()
+        .select({
+          id: schema.peerApprovalNotifications.id,
+          kind: schema.peerApprovalNotifications.kind,
+          peerOrigin: schema.peerApprovalNotifications.peerOrigin,
+          triggerReason: schema.peerApprovalNotifications.triggerReason,
+          triggerTarget: schema.peerApprovalNotifications.triggerTarget,
+          createdAt: schema.peerApprovalNotifications.createdAt,
+          readAt: schema.peerApprovalNotifications.readAt,
+        })
         .from(schema.peerApprovalNotifications)
         .where(whereClause)
         .orderBy(desc(schema.peerApprovalNotifications.createdAt))
