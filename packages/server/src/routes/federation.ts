@@ -1370,6 +1370,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'Approval request not found', statusCode: 404 });
       }
 
+      // Outbound rows have no hmac_secret and no remote /peer/denied endpoint to call.
+      // Direction-branched handling lands in Task 7; until then, inbound is the only path here.
+      if (!approvalReq.hmacSecret) {
+        return reply.code(400).send({
+          error: 'Cannot deny an outbound peering request via this endpoint yet — outbound denial handling is not implemented.',
+          statusCode: 400,
+        });
+      }
+
       const ourOrigin = getOurOrigin();
       const denialBody = JSON.stringify({
         origin: ourOrigin,

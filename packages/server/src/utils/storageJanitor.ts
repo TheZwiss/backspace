@@ -452,6 +452,13 @@ export async function cleanupExpiredApprovalRequests(): Promise<number> {
   let cleaned = 0;
 
   for (const req of expired) {
+    // Outbound rows have no hmac_secret and no remote /peer/denied endpoint;
+    // their expiry handling (subscriber notifications) lands in Task 9.
+    // Until then, skip outbound rows here so this loop only processes inbound expirations.
+    if (!req.hmacSecret) {
+      continue;
+    }
+
     const denialBody = JSON.stringify({
       origin: ourOrigin,
       reason: 'expired' as const,

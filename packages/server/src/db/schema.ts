@@ -379,13 +379,41 @@ export const federationPeers = sqliteTable('federation_peers', {
 
 export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
   id: text('id').primaryKey(),
-  origin: text('origin').notNull().unique(),
+  origin: text('origin').notNull(),
+  direction: text('direction').notNull().default('inbound'),
   instanceName: text('instance_name'),
-  hmacSecret: text('hmac_secret').notNull(),
+  hmacSecret: text('hmac_secret'),
   requestedAt: integer('requested_at').notNull(),
   expiresAt: integer('expires_at').notNull(),
   approvalToken: text('approval_token'),
-});
+}, (table) => ({
+  uniqOriginDirection: unique().on(table.origin, table.direction),
+}));
+
+export const peerApprovalSubscribers = sqliteTable('peer_approval_subscribers', {
+  id: text('id').primaryKey(),
+  requestId: text('request_id').notNull().references(() => peerApprovalRequests.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  triggerReason: text('trigger_reason').notNull(),
+  triggerTarget: text('trigger_target').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  uniqSubscription: unique().on(table.requestId, table.userId, table.triggerReason, table.triggerTarget),
+  userIdx: index('idx_peer_approval_subscribers_user_id').on(table.userId),
+}));
+
+export const peerApprovalNotifications = sqliteTable('peer_approval_notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  peerOrigin: text('peer_origin').notNull(),
+  triggerReason: text('trigger_reason').notNull(),
+  triggerTarget: text('trigger_target').notNull(),
+  createdAt: integer('created_at').notNull(),
+  readAt: integer('read_at'),
+}, (table) => ({
+  userIdx: index('idx_peer_approval_notifications_user_id').on(table.userId),
+}));
 
 export const federationOutbox = sqliteTable('federation_outbox', {
   id: text('id').primaryKey(),
