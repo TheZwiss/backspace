@@ -192,6 +192,9 @@ reason: `'displaced'` (new tab) | `'session_closed'`
 | type | fields | scope |
 |------|--------|-------|
 | `federation_file_rejected` | messageId, dmChannelId, attachmentId, affectedUsers[] | DM members |
+| `federation_approval_request_received` | — (refetch trigger; payload: `{ type }`) | admins. Fires for **both** inbound peering requests (remote → us) AND outbound queue creation when the [Outbound Peering Gate](federation.md#outbound-peering-gate) creates a `peer_approval_requests` row in response to a user_action. Payload shape unchanged from the inbound-only behavior; only the firing surface widened. |
+| `peering_subscription_changed` | — (refetch trigger; payload: `{ type }`) | the subscribing user (all of their connected sessions). Fires when a `peer_approval_subscribers` row belonging to the user is created, modified, or deleted (gate fan-in, user cancel, parent cascade). Client refetches `GET /api/federation/peering-subscriptions`. |
+| `peering_notification_received` | `{ type, kind: 'approved' \| 'denied' \| 'expired' }` | the user the notification belongs to. Fires when a `peer_approval_notifications` row is created (`onPeerActivated` outbound fanout, outbound `/deny` fanout, janitor outbound expiry). Client refetches `GET /api/federation/peering-notifications` and may surface a transient toast for online users. |
 
 **S2S relay-only event (not a direct client WS event):**
 
