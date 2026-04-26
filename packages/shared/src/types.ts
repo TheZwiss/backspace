@@ -467,6 +467,8 @@ export type ServerEvent =
   | { type: 'federation_peer_active'; peerOrigin: string }
   | { type: 'federation_peers_changed' }
   | { type: 'federation_approval_request_received'; origin: string; instanceName?: string }
+  | { type: 'peering_subscription_changed' }
+  | { type: 'peering_notification_received'; kind: PeeringNotificationKind }
   | { type: 'dm_owner_updated'; dmChannelId: string; newOwnerId: string }
   | { type: 'pong' }
   | { type: 'error'; message: string };
@@ -1025,4 +1027,99 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
+}
+
+// ─── Outbound peering gate ──────────────────────────────────────────────────
+
+/**
+ * Why a user-initiated federation action triggered the outbound peering gate.
+ * Recorded on `peer_approval_subscribers.trigger_reason` so admins can see
+ * the human-readable cause and the user can recover their original action
+ * after approval. Persisted as a string column with this exact set of values.
+ */
+export type TriggerReason = 'friend_add' | 'space_join' | 'direct_message';
+
+/**
+ * Caller intent passed into `ensurePeered()`. The gate (when
+ * `autoAcceptPeering=0` and no peer row exists) branches on `kind`:
+ *   - 'user_action': queue an outbound approval request and surface
+ *     `admin_required` to the caller so the user sees a clear pending state.
+ *   - 'system': skip queueing; surface `admin_required` so the calling
+ *     subsystem (e.g. background relay) can fail loudly without spamming
+ *     admin queues with rows nobody asked for.
+ *
+ * `target` is the human-readable target identifier the user acted on
+ * (e.g. `username@instance.example` for friend_add, the space invite code
+ * for space_join, the federated DM channel id for direct_message).
+ */
+export type EnsurePeeredCallerIntent =
+  | { kind: 'user_action'; userId: string; reason: TriggerReason; target: string }
+  | { kind: 'system' };
+
+/**
+ * Terminal-state notification kinds delivered to subscribers when the
+ * outbound queue resolves. 'expired' is delivered by the storage janitor
+ * before it deletes an unresolved outbound queue row past `expiresAt`.
+ */
+export type PeeringNotificationKind = 'approved' | 'denied' | 'expired';
+
+/**
+ * Per-user pending row joined from `peer_approval_subscribers` to its parent
+ * `peer_approval_requests`. Returned from
+ * `GET /api/federation/peering-subscriptions`. Used to render the user's own
+ * "waiting on admin" surface so they remember which actions are blocked.
+ */
+export interface PeeringSubscription {
+  id: string;
+  requestId: string;
+  peerOrigin: string;
+  peerInstanceName: string | null;
+  triggerReason: TriggerReason;
+  triggerTarget: string;
+  createdAt: number;
+}
+
+/**
+ * Terminal-state notification row returned from
+ * `GET /api/federation/peering-notifications`. Persists until the user
+ * explicitly reads (sets `readAt`) or the janitor cleans up read rows
+ * older than the retention window.
+ */
+export interface PeeringNotification {
+  id: string;
+  kind: PeeringNotificationKind;
+  peerOrigin: string;
+  triggerReason: TriggerReason;
+  triggerTarget: string;
+  createdAt: number;
+  readAt: number | null;
+}
+
+/**
+ * Subscriber summary embedded in the admin-facing approval request response
+ * for outbound rows. Lets the admin see which users are waiting on each
+ * outbound request without a separate fetch.
+ */
+export interface ApprovalRequestSubscriberSummary {
+  userId: string;
+  username: string;
+  triggerReason: TriggerReason;
+  triggerTarget: string;
+}
+
+/**
+ * Admin-facing approval request row returned from
+ * `GET /api/federation/approval-requests`. Inbound rows are remote
+ * instances asking to peer with us; outbound rows are local users asking
+ * us to peer with a remote instance. Outbound rows include `subscribers`
+ * so the admin can see who is waiting.
+ */
+export interface ApprovalRequest {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  origin: string;
+  instanceName: string | null;
+  requestedAt: number;
+  expiresAt: number;
+  subscribers?: ApprovalRequestSubscriberSummary[];
 }
