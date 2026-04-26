@@ -377,6 +377,11 @@ export const federationPeers = sqliteTable('federation_peers', {
   approvalToken: text('approval_token'),
 });
 
+// SQL-level CHECK constraint enforces (direction='inbound' → hmac_secret NOT NULL).
+// See packages/server/drizzle/0003_brave_inhumans.sql. drizzle-kit cannot represent
+// CHECK constraints in its snapshot, so any future migration that recreates this
+// table MUST re-add the CHECK clause by hand. The snapshot WILL silently drop it
+// otherwise.
 export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
   id: text('id').primaryKey(),
   origin: text('origin').notNull(),
