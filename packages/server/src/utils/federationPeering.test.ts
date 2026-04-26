@@ -1,6 +1,71 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as schema from '../db/schema.js';
+import { setWorkerId } from './snowflake.js';
 import type { EnsurePeeredResult } from './federationPeering.js';
 import { racePeering } from './federationPeering.js';
+
+setWorkerId(1);
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+type TestDb = ReturnType<typeof drizzle<typeof schema>>;
+let sqlite: Database.Database;
+let testDb: TestDb;
+
+vi.mock('../db/index.js', () => ({
+  getDb: () => testDb,
+  schema,
+}));
+
+vi.mock('./federationAuth.js', async () => {
+  const actual = await vi.importActual<typeof import('./federationAuth.js')>('./federationAuth.js');
+  return {
+    ...actual,
+    getOurOrigin: () => 'https://local.example',
+    generateHmacSecret: () => 'mock-hmac-secret',
+  };
+});
+
+vi.mock('../routes/federation.js', () => ({
+  validateOrigin: (raw: string) => {
+    try {
+      const url = new URL(raw);
+      return url.origin;
+    } catch {
+      return null;
+    }
+  },
+}));
+
+vi.mock('../ws/handler.js', () => ({
+  connectionManager: {
+    sendToAdmins: vi.fn(),
+    sendToUser: vi.fn(),
+    getAllOnlineUserIds: () => [],
+  },
+}));
+
+vi.mock('./federationPeerActivation.js', () => ({
+  onPeerActivated: vi.fn(async () => undefined),
+  onPeerDeactivated: vi.fn(async () => undefined),
+}));
+
+function applyMigrations(db: Database.Database): void {
+  const migrationsDir = path.resolve(__dirname, '../../drizzle');
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  for (const f of files) {
+    const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
+    const statements = sqlText.split(/-->\s*statement-breakpoint/);
+    for (const stmt of statements) {
+      const clean = stmt.trim();
+      if (clean) db.exec(clean);
+    }
+  }
+}
 
 describe('EnsurePeeredResult type', () => {
   it('active result has peerId', () => {
@@ -114,48 +179,32 @@ describe('racePeering', () => {
 });
 
 describe('ensurePeered needs_attention handling', () => {
-  beforeEach(() => {
-    vi.resetModules();
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    const { _clearInFlightPeering } = await import('./federationPeering.js');
+    _clearInFlightPeering();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sqlite.close();
   });
 
   it('returns rejected without calling performHandshake when peer is in needs_attention', async () => {
-    const fakeDbGet = vi.fn().mockReturnValue({
+    testDb.insert(schema.federationPeers).values({
       id: 'peer-na',
       origin: 'https://remote.example',
       status: 'needs_attention',
       hmacSecret: 'secret',
       createdAt: Date.now(),
       lastSyncedAt: 0,
-    });
+    }).run();
 
-    vi.doMock('../db/index.js', () => ({
-      getDb: () => ({
-        select: () => ({
-          from: () => ({
-            where: () => ({
-              get: fakeDbGet,
-            }),
-          }),
-        }),
-      }),
-    }));
-
-    vi.doMock('../utils/federationAuth.js', () => ({
-      getOurOrigin: () => 'https://local.example',
-      generateHmacSecret: () => 'new-secret',
-    }));
-
-    vi.doMock('../routes/federation.js', () => ({
-      validateOrigin: (o: string) => o,
-    }));
-
-    vi.doMock('../utils/federationPeerActivation.js', () => ({
-      onPeerActivated: vi.fn(),
-    }));
-
-    const { ensurePeered } = await import('./federationPeering.js');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
+    const { ensurePeered } = await import('./federationPeering.js');
     const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('rejected');
@@ -164,7 +213,5 @@ describe('ensurePeered needs_attention handling', () => {
     }
     // performHandshake must not have fired — no POST to /peer/accept
     expect(fetchSpy).not.toHaveBeenCalled();
-
-    vi.restoreAllMocks();
   });
 });
