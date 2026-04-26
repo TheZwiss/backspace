@@ -385,7 +385,7 @@ export const federationPeers = sqliteTable('federation_peers', {
 export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
   id: text('id').primaryKey(),
   origin: text('origin').notNull(),
-  direction: text('direction').notNull().default('inbound'),
+  direction: text('direction', { enum: ['inbound', 'outbound'] }).notNull().default('inbound'),
   instanceName: text('instance_name'),
   hmacSecret: text('hmac_secret'),
   requestedAt: integer('requested_at').notNull(),
@@ -410,7 +410,7 @@ export const peerApprovalSubscribers = sqliteTable('peer_approval_subscribers', 
 export const peerApprovalNotifications = sqliteTable('peer_approval_notifications', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  kind: text('kind').notNull(),
+  kind: text('kind', { enum: ['approved', 'denied', 'expired'] }).notNull(),
   peerOrigin: text('peer_origin').notNull(),
   triggerReason: text('trigger_reason').notNull(),
   triggerTarget: text('trigger_target').notNull(),

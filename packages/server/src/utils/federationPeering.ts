@@ -1,10 +1,11 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
 import { onPeerActivated, onPeerDeactivated } from './federationPeerActivation.js';
+import type { EnsurePeeredCallerIntent } from '@backspace/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -12,7 +13,8 @@ export type EnsurePeeredResult =
   | { status: 'active'; peerId: string }
   | { status: 'rejected'; error: string }
   | { status: 'failed'; error: string }
-  | { status: 'pending'; error: string };
+  | { status: 'pending'; error: string }
+  | { status: 'admin_required'; error: string };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,106 @@ function getInstanceName(): string | undefined {
     .where(eq(schema.instanceSettings.id, 1))
     .get();
   return row?.name ?? undefined;
+}
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * When the outbound gate fires for a `user_action` intent, upsert the
+ * `peer_approval_requests` (parent, keyed on origin+direction='outbound')
+ * and `peer_approval_subscribers` (per-user, keyed on parent+user+reason+target)
+ * rows, then broadcast WS events so the admin queue and the user's pending
+ * list refresh. Idempotent: repeated calls for the same (origin, user, reason,
+ * target) refresh `created_at` rather than creating duplicate rows.
+ *
+ * NOTE: parent row is created with `hmac_secret = NULL`. The CHECK constraint
+ * permits this for `direction='outbound'`. The approve handler generates fresh
+ * HMAC at the moment it actually sends `/peer/accept` to the remote.
+ */
+async function queueOutboundApproval(
+  origin: string,
+  intent: Extract<EnsurePeeredCallerIntent, { kind: 'user_action' }>,
+): Promise<void> {
+  const db = getDb();
+  const now = Date.now();
+
+  // Upsert parent row keyed on (origin, direction='outbound').
+  let parent = db
+    .select()
+    .from(schema.peerApprovalRequests)
+    .where(
+      and(
+        eq(schema.peerApprovalRequests.origin, origin),
+        eq(schema.peerApprovalRequests.direction, 'outbound'),
+      ),
+    )
+    .get();
+
+  if (!parent) {
+    const id = generateSnowflake();
+    db.insert(schema.peerApprovalRequests)
+      .values({
+        id,
+        origin,
+        direction: 'outbound',
+        instanceName: null,
+        hmacSecret: null,
+        requestedAt: now,
+        expiresAt: now + THIRTY_DAYS_MS,
+        approvalToken: null,
+      })
+      .run();
+    parent = db
+      .select()
+      .from(schema.peerApprovalRequests)
+      .where(eq(schema.peerApprovalRequests.id, id))
+      .get()!;
+  }
+
+  // Upsert subscriber row.
+  const existingSub = db
+    .select({ id: schema.peerApprovalSubscribers.id })
+    .from(schema.peerApprovalSubscribers)
+    .where(
+      and(
+        eq(schema.peerApprovalSubscribers.requestId, parent.id),
+        eq(schema.peerApprovalSubscribers.userId, intent.userId),
+        eq(schema.peerApprovalSubscribers.triggerReason, intent.reason),
+        eq(schema.peerApprovalSubscribers.triggerTarget, intent.target),
+      ),
+    )
+    .get();
+
+  if (existingSub) {
+    db.update(schema.peerApprovalSubscribers)
+      .set({ createdAt: now })
+      .where(eq(schema.peerApprovalSubscribers.id, existingSub.id))
+      .run();
+  } else {
+    db.insert(schema.peerApprovalSubscribers)
+      .values({
+        id: generateSnowflake(),
+        requestId: parent.id,
+        userId: intent.userId,
+        triggerReason: intent.reason,
+        triggerTarget: intent.target,
+        createdAt: now,
+      })
+      .run();
+  }
+
+  // Broadcast: admins refresh queue; the calling user refreshes pending list.
+  // Dynamic import is the existing circular-dep workaround in this file
+  // (see ws/handler.js imports later). Keep it consistent.
+  const { connectionManager } = await import('../ws/handler.js');
+  connectionManager.sendToAdmins({
+    type: 'federation_approval_request_received' as const,
+    origin,
+    instanceName: undefined,
+  });
+  connectionManager.sendToUser(intent.userId, {
+    type: 'peering_subscription_changed' as const,
+  });
 }
 
 // ─── In-flight deduplication ─────────────────────────────────────────────────
@@ -40,7 +142,10 @@ const inFlightPeering = new Map<string, Promise<EnsurePeeredResult>>();
  * - { status: 'rejected', error } — remote rejected auto-peering, or peer was revoked
  * - { status: 'failed', error } — transient error (network, timeout), will retry
  */
-export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> {
+export async function ensurePeered(
+  origin: string,
+  intent: EnsurePeeredCallerIntent,
+): Promise<EnsurePeeredResult> {
   // Validate origin format
   const normalized = validateOrigin(origin);
   if (!normalized) {
@@ -104,6 +209,34 @@ export async function ensurePeered(origin: string): Promise<EnsurePeeredResult> 
       status: 'rejected',
       error: 'Local admin must resolve pending peering approval before initiating',
     };
+  }
+
+  // Outbound gate: when autoAcceptPeering=0, regular-user-initiated outbound
+  // becomes admin-approvable; system-initiated outbound is refused outright.
+  // Runs only when no peer row exists (existing rows already passed the gate
+  // when first created — toggling autoAccept later doesn't retroactively gate).
+  if (!existing) {
+    const settings = db
+      .select({ autoAcceptPeering: schema.instanceSettings.autoAcceptPeering })
+      .from(schema.instanceSettings)
+      .where(eq(schema.instanceSettings.id, 1))
+      .get();
+    const autoAccept = settings?.autoAcceptPeering ?? 1;
+
+    if (autoAccept === 0) {
+      if (intent.kind === 'user_action') {
+        await queueOutboundApproval(normalized, intent);
+        return {
+          status: 'admin_required',
+          error: 'Awaiting your admin\'s approval to initiate peering',
+        };
+      }
+      // system intent — refuse without queue
+      return {
+        status: 'admin_required',
+        error: 'Outbound peering requires admin approval on this instance',
+      };
+    }
   }
 
   // Deduplicate: if a handshake is already in flight, share the promise
@@ -280,9 +413,13 @@ export function _clearInFlightPeering(): void {
 export async function racePeering(
   origin: string,
   timeoutMs: number,
-  ensurePeeredFn: (origin: string) => Promise<EnsurePeeredResult> = ensurePeered,
+  intent: EnsurePeeredCallerIntent,
+  ensurePeeredFn: (
+    origin: string,
+    intent: EnsurePeeredCallerIntent,
+  ) => Promise<EnsurePeeredResult> = ensurePeered,
 ): Promise<EnsurePeeredResult | { status: 'timeout' }> {
-  const handshake = ensurePeeredFn(origin);
+  const handshake = ensurePeeredFn(origin, intent);
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<{ status: 'timeout' }>(resolve => {
