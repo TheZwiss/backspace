@@ -98,7 +98,7 @@ describe('performHandshake — persist remote instanceName', () => {
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('active');
     const row = testDb.select().from(schema.federationPeers)
@@ -117,7 +117,7 @@ describe('performHandshake — persist remote instanceName', () => {
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('active');
     const row = testDb.select().from(schema.federationPeers)
@@ -136,7 +136,7 @@ describe('performHandshake — persist remote instanceName', () => {
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('active');
     const row = testDb.select().from(schema.federationPeers)

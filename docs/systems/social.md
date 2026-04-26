@@ -300,6 +300,7 @@ As of 2026-04-25, the sender's home server owns the entire federated friend-add 
    - `'pending'` + peer row `awaiting_approval` (re-queried after the call) → 409 `peer_pending_approval`
    - `'rejected'` → 403 `peer_rejected`
    - `'failed'` → 503 `peer_unreachable`
+   - `'admin_required'` (gate fired locally) → 409 `peer_pending_local_admin` — your own admin must approve before we reach out
 5. **lookupRemoteUser(peerOrigin, baseName)** — POSTs HMAC-signed `{ username }` to `peerOrigin/api/federation/users/lookup`. Result mapping:
    - `not_found` → 404 `user_not_found`
    - `unreachable` → 503 `peer_unreachable`

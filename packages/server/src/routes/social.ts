@@ -178,7 +178,12 @@ async function handleFederatedFriendRequest(
   }
 
   // 2. ensurePeered — block until 'active', or surface peer status as error
-  const peering = await ensurePeered(peerOrigin);
+  const peering = await ensurePeered(peerOrigin, {
+    kind: 'user_action',
+    userId: sender.id,
+    reason: 'friend_add',
+    target: `${baseName}@${targetDomain}`,
+  });
   if (peering.status === 'rejected') {
     return reply.code(403).send({ error: 'peer_rejected', statusCode: 403, domain: targetDomain });
   }
@@ -194,6 +199,13 @@ async function handleFederatedFriendRequest(
       return reply.code(409).send({ error: 'peer_pending_approval', statusCode: 409, domain: targetDomain });
     }
     return reply.code(409).send({ error: 'peer_pending', statusCode: 409, domain: targetDomain });
+  }
+  if (peering.status === 'admin_required') {
+    return reply.code(409).send({
+      error: 'peer_pending_local_admin',
+      statusCode: 409,
+      domain: targetDomain,
+    });
   }
   // peering.status === 'active' — continue
 

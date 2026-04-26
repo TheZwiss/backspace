@@ -520,6 +520,7 @@ export const CALL_PEERING_TIMEOUT_MS = 3_000;
 export type CallRelayFailureReason =
   | 'peer_rejected'
   | 'peer_awaiting_approval'
+  | 'peer_admin_required'
   | 'peer_transient_failure'
   | 'post_failed';
 
@@ -547,6 +548,7 @@ export function mapCallReasonToEventReason(reason: CallRelayFailureReason): DmCa
   switch (reason) {
     case 'peer_rejected': return 'peer_rejected';
     case 'peer_awaiting_approval': return 'peer_awaiting_approval';
+    case 'peer_admin_required': return 'peer_transient_failure'; // gate-unreachable from system intent; defensive map
     case 'peer_transient_failure': return 'peer_transient_failure';
     case 'post_failed': return 'peer_transient_failure'; // 4xx looks transient to users
   }
@@ -583,14 +585,14 @@ export async function sendCallRelay(
   if (!peer) {
     // ─── Non-blocking mode (typing): warm up in background, do not POST ──
     if (timeoutMs === 0) {
-      ensurePeered(targetPeerOrigin).catch(err => {
+      ensurePeered(targetPeerOrigin, { kind: 'system' }).catch(err => {
         console.warn('[federation] typing-triggered background handshake:', targetPeerOrigin, err);
       });
       return { ok: false, reason: 'peer_transient_failure', error: 'peer not active' };
     }
 
     // ─── Race ensurePeered against the deadline ──
-    const raced = await racePeering(targetPeerOrigin, timeoutMs);
+    const raced = await racePeering(targetPeerOrigin, timeoutMs, { kind: 'system' });
 
     switch (raced.status) {
       case 'active':
@@ -607,6 +609,8 @@ export async function sendCallRelay(
         return { ok: false, reason: 'peer_rejected', error: raced.error };
       case 'pending':
         return { ok: false, reason: 'peer_awaiting_approval', error: raced.error };
+      case 'admin_required':
+        return { ok: false, reason: 'peer_admin_required', error: raced.error };
       case 'failed':
         return { ok: false, reason: 'peer_transient_failure', error: raced.error };
       case 'timeout':

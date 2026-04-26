@@ -134,8 +134,8 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
 
     // Mid-handshake, the pending peer row existed.
     expect(peerRowsDuringHandshake).toHaveLength(1);
-    expect(peerRowsDuringHandshake[0].status).toBe('pending');
-    expect(peerRowsDuringHandshake[0].origin).toBe('https://orbit.example');
+    expect(peerRowsDuringHandshake[0]!.status).toBe('pending');
+    expect(peerRowsDuringHandshake[0]!.origin).toBe('https://orbit.example');
 
     // No outbound queue rows were created.
     const parents = testDb.select().from(schema.peerApprovalRequests).all();
@@ -166,17 +166,17 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     // Parent row created.
     const parents = testDb.select().from(schema.peerApprovalRequests).all();
     expect(parents).toHaveLength(1);
-    expect(parents[0].direction).toBe('outbound');
-    expect(parents[0].origin).toBe('https://orbit.example');
-    expect(parents[0].hmacSecret).toBeNull();
+    expect(parents[0]!.direction).toBe('outbound');
+    expect(parents[0]!.origin).toBe('https://orbit.example');
+    expect(parents[0]!.hmacSecret).toBeNull();
 
     // Subscriber row created.
     const subs = testDb.select().from(schema.peerApprovalSubscribers).all();
     expect(subs).toHaveLength(1);
-    expect(subs[0].userId).toBe('user1');
-    expect(subs[0].triggerReason).toBe('friend_add');
-    expect(subs[0].triggerTarget).toBe('bob@orbit.example');
-    expect(subs[0].requestId).toBe(parents[0].id);
+    expect(subs[0]!.userId).toBe('user1');
+    expect(subs[0]!.triggerReason).toBe('friend_add');
+    expect(subs[0]!.triggerTarget).toBe('bob@orbit.example');
+    expect(subs[0]!.requestId).toBe(parents[0]!.id);
 
     // No federation_peers row created; no outbound POST attempted.
     const peers = testDb.select().from(schema.federationPeers).all();
@@ -288,7 +288,7 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     // Existing pending peer row still present (existingPeerId path doesn't delete on failure).
     const peers = testDb.select().from(schema.federationPeers).all();
     expect(peers).toHaveLength(1);
-    expect(peers[0].id).toBe('peer-pending');
+    expect(peers[0]!.id).toBe('peer-pending');
   });
 
   // ─── Test 6 ─────────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
 
     const subsAfterFirst = testDb.select().from(schema.peerApprovalSubscribers).all();
     expect(subsAfterFirst).toHaveLength(1);
-    const firstCreatedAt = subsAfterFirst[0].createdAt;
+    const firstCreatedAt = subsAfterFirst[0]!.createdAt;
 
     // Wait a moment so the refreshed createdAt would differ.
     await new Promise(r => setTimeout(r, 5));
@@ -366,18 +366,18 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     // Still exactly one parent row keyed on (origin, direction='outbound').
     const parents = testDb.select().from(schema.peerApprovalRequests).all();
     expect(parents).toHaveLength(1);
-    expect(parents[0].direction).toBe('outbound');
-    expect(parents[0].origin).toBe('https://orbit.example');
+    expect(parents[0]!.direction).toBe('outbound');
+    expect(parents[0]!.origin).toBe('https://orbit.example');
 
     // Still exactly one subscriber keyed on (request_id, user_id, reason, target).
     const subs = testDb.select().from(schema.peerApprovalSubscribers).all();
     expect(subs).toHaveLength(1);
-    expect(subs[0].userId).toBe('user1');
-    expect(subs[0].triggerReason).toBe('friend_add');
-    expect(subs[0].triggerTarget).toBe('bob@orbit.example');
+    expect(subs[0]!.userId).toBe('user1');
+    expect(subs[0]!.triggerReason).toBe('friend_add');
+    expect(subs[0]!.triggerTarget).toBe('bob@orbit.example');
 
     // createdAt was refreshed on the second call.
-    expect(subs[0].createdAt).toBeGreaterThan(firstCreatedAt);
+    expect(subs[0]!.createdAt).toBeGreaterThan(firstCreatedAt);
   });
 
   // ─── Test 8 ─────────────────────────────────────────────────────────────
@@ -409,8 +409,8 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     // Exactly one parent row.
     const parents = testDb.select().from(schema.peerApprovalRequests).all();
     expect(parents).toHaveLength(1);
-    expect(parents[0].origin).toBe('https://orbit.example');
-    expect(parents[0].direction).toBe('outbound');
+    expect(parents[0]!.origin).toBe('https://orbit.example');
+    expect(parents[0]!.direction).toBe('outbound');
 
     // Two subscribers, both pointing at the same parent.
     const subs = testDb.select().from(schema.peerApprovalSubscribers).all();
@@ -418,7 +418,7 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
     const userIds = subs.map(s => s.userId).sort();
     expect(userIds).toEqual(['user1', 'user2']);
     for (const sub of subs) {
-      expect(sub.requestId).toBe(parents[0].id);
+      expect(sub.requestId).toBe(parents[0]!.id);
       expect(sub.triggerReason).toBe('friend_add');
       expect(sub.triggerTarget).toBe('bob@orbit.example');
     }
@@ -443,13 +443,13 @@ describe('ensurePeered — outbound gate behavior across (autoAccept × peer-row
 
     const subs = testDb.select().from(schema.peerApprovalSubscribers).all();
     expect(subs).toHaveLength(1);
-    expect(subs[0].userId).toBe('user1');
-    expect(subs[0].triggerReason).toBe('space_join');
-    expect(subs[0].triggerTarget).toBe('space-abc-123');
+    expect(subs[0]!.userId).toBe('user1');
+    expect(subs[0]!.triggerReason).toBe('space_join');
+    expect(subs[0]!.triggerTarget).toBe('space-abc-123');
 
     const parents = testDb.select().from(schema.peerApprovalRequests).all();
     expect(parents).toHaveLength(1);
-    expect(parents[0].direction).toBe('outbound');
-    expect(parents[0].origin).toBe('https://orbit.example');
+    expect(parents[0]!.direction).toBe('outbound');
+    expect(parents[0]!.origin).toBe('https://orbit.example');
   });
 });

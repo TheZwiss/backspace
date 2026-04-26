@@ -798,14 +798,26 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { ensurePeered } = await import('../utils/federationPeering.js');
-      const result = await ensurePeered(remoteOrigin);
+      // NOTE: /peer/ensure is currently only invoked from friend-add client paths
+      // (see packages/web/src/stores/instanceStore.ts ensurePeered references).
+      // The hardcoded reason here is correct TODAY but will become wrong when
+      // DM-to-stranger or space-join grow into the gate. When that happens,
+      // surface the reason and target through the request body instead. Do NOT
+      // silently leave the hardcoding in place when adding a new caller.
+      const result = await ensurePeered(remoteOrigin, {
+        kind: 'user_action',
+        userId: request.userId,
+        reason: 'friend_add',
+        target: remoteOrigin,
+      });
 
       // NOTE: The internal EnsurePeeredResult status names differ from the client-facing
       // peeringStatus values. The mapping:
-      //   'active'   → 'active'            (peer is live)
-      //   'rejected' → 'rejected'          (permanently blocked)
-      //   'pending'  → 'awaiting_approval' (queued on remote, waiting for admin)
-      //   'failed'   → 'pending'           (transient error, will retry automatically)
+      //   'active'         → 'active'            (peer is live)
+      //   'rejected'       → 'rejected'          (permanently blocked)
+      //   'pending'        → 'awaiting_approval' (queued on remote, waiting for admin)
+      //   'failed'         → 'pending'           (transient error, will retry automatically)
+      //   'admin_required' → 'admin_required'    (local outbound gate fired — our admin must approve)
       // The internal 'pending' means "we got a 202 from the remote — admin hasn't acted yet",
       // while 'failed' means "network/timeout — the outbox worker will retry next tick".
       // The client sees 'awaiting_approval' (actionable info) vs 'pending' (transient, will resolve).
@@ -818,6 +830,8 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(200).send({ peeringStatus: 'awaiting_approval', error: result.error });
         case 'failed':
           return reply.code(200).send({ peeringStatus: 'pending', error: result.error });
+        case 'admin_required':
+          return reply.code(200).send({ peeringStatus: 'admin_required' });
         default:
           return reply.code(200).send({ peeringStatus: 'pending', error: 'Unknown peering result' });
       }
