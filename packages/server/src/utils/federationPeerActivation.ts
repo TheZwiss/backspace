@@ -3,6 +3,7 @@ import * as schema from '../db/schema.js';
 import { and, eq } from 'drizzle-orm';
 import { isFederationRelayEnabled } from './federationOutbox.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
+import { generateSnowflake } from './snowflake.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 
 export type PeerActivationReason =
@@ -50,6 +51,7 @@ export async function onPeerActivated(
     try {
       resetOutboxBackoff(peerId);
       await syncPeerMutationLog(peerId, reason);
+      await fanoutOutboundSubscribers(peerId);
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     } catch (err) {
@@ -170,6 +172,91 @@ export async function syncPeerMutationLog(
     }
   } catch (err) {
     console.error(`[federation] Sync-pull from ${activePeer.origin} failed:`, err);
+  }
+}
+
+/**
+ * Fan out approved-notifications to all subscribers of any outbound
+ * peer_approval_requests row matching this activated peer's origin, then
+ * cascade-delete the parent row (which clears subscriber rows via the
+ * schema's onDelete: 'cascade').
+ *
+ * Single-source-of-truth cleanup hook for outbound subscribers. Runs from
+ * inside onPeerActivated so EVERY activation path triggers it, regardless
+ * of how the peer became active (queue approval, /peer/initiate,
+ * autoAccept=1 remote, mutual-approval token verification).
+ *
+ * Critical correctness invariant: cleanup hangs off status→active, NOT off
+ * the local admin's approve action. When the remote also gates, our peer
+ * row goes to awaiting_approval first; subscribers must remain queued
+ * until the remote also approves and the peer fully activates.
+ *
+ * No-op when no outbound queue row exists for the origin (the common case
+ * for non-gated peerings).
+ *
+ * Does NOT broadcast federation_peers_changed itself — onPeerActivated
+ * does that after this returns, so the queue-change signal is unified
+ * with the peer-state-change signal admins already receive.
+ */
+async function fanoutOutboundSubscribers(peerId: string): Promise<void> {
+  const db = getDb();
+  const peer = db
+    .select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.id, peerId))
+    .get();
+  if (!peer) return;
+
+  const parent = db
+    .select()
+    .from(schema.peerApprovalRequests)
+    .where(
+      and(
+        eq(schema.peerApprovalRequests.origin, peer.origin),
+        eq(schema.peerApprovalRequests.direction, 'outbound'),
+      ),
+    )
+    .get();
+  if (!parent) return;
+
+  const subscribers = db
+    .select()
+    .from(schema.peerApprovalSubscribers)
+    .where(eq(schema.peerApprovalSubscribers.requestId, parent.id))
+    .all();
+
+  const now = Date.now();
+  const { connectionManager } = await import('../ws/handler.js');
+
+  for (const sub of subscribers) {
+    db.insert(schema.peerApprovalNotifications)
+      .values({
+        id: generateSnowflake(),
+        userId: sub.userId,
+        kind: 'approved',
+        peerOrigin: peer.origin,
+        triggerReason: sub.triggerReason,
+        triggerTarget: sub.triggerTarget,
+        createdAt: now,
+        readAt: null,
+      })
+      .run();
+
+    connectionManager.sendToUser(sub.userId, {
+      type: 'peering_notification_received' as const,
+      kind: 'approved',
+    });
+  }
+
+  // Cascade-deletes subscriber rows via onDelete: 'cascade'.
+  db.delete(schema.peerApprovalRequests)
+    .where(eq(schema.peerApprovalRequests.id, parent.id))
+    .run();
+
+  if (subscribers.length > 0) {
+    console.log(
+      `[federation] fanoutOutboundSubscribers(${peerId}) approved ${subscribers.length} subscriber notification${subscribers.length === 1 ? '' : 's'} for ${peer.origin}`,
+    );
   }
 }
 
