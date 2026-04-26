@@ -198,10 +198,20 @@ export async function ensurePeered(
   // The legitimate approval flow (routes/federation.ts /approval-requests/:id/
   // approve) does NOT call ensurePeered — it deletes the approval-request first
   // and does its own fetch — so this guard does not block legitimate approvals.
+  //
+  // direction='inbound' filter: the table is bidirectional as of the outbound
+  // peering gate (Task 3); outbound rows live in the same table and must NOT
+  // trigger this guard. The outbound gate below (`if (!existing)` block) is
+  // responsible for outbound row state.
   const pendingInbound = db
     .select({ id: schema.peerApprovalRequests.id })
     .from(schema.peerApprovalRequests)
-    .where(eq(schema.peerApprovalRequests.origin, normalized))
+    .where(
+      and(
+        eq(schema.peerApprovalRequests.origin, normalized),
+        eq(schema.peerApprovalRequests.direction, 'inbound'),
+      ),
+    )
     .get();
 
   if (pendingInbound) {
