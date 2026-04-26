@@ -775,6 +775,10 @@ async function handleOutboundDeny(
       type: 'peering_notification_received' as const,
       kind: 'denied',
     });
+    // Subscriber row is about to cascade-delete; refresh the user's pending list.
+    connectionManager.sendToUser(sub.userId, {
+      type: 'peering_subscription_changed' as const,
+    });
   }
 
   // Cascade-delete clears subscribers via onDelete: 'cascade'.

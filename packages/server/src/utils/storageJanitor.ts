@@ -460,6 +460,7 @@ export async function cleanupExpiredApprovalRequests(): Promise<number> {
   if (expiredRequests.length === 0) return 0;
 
   const { getOurOrigin, buildFederationHeaders } = await import('./federationAuth.js');
+  const { connectionManager } = await import('../ws/handler.js');
   const ourOrigin = getOurOrigin();
   const now = Date.now();
   let deletedCount = 0;
@@ -486,6 +487,16 @@ export async function cleanupExpiredApprovalRequests(): Promise<number> {
             readAt: null,
           })
           .run();
+        // Subscriber row is about to cascade-delete; if the user is online,
+        // refresh their pending list AND notification list. Offline users see
+        // both on next page load via the GET endpoints (persistence guarantee).
+        connectionManager.sendToUser(sub.userId, {
+          type: 'peering_notification_received' as const,
+          kind: 'expired',
+        });
+        connectionManager.sendToUser(sub.userId, {
+          type: 'peering_subscription_changed' as const,
+        });
       }
       db.delete(schema.peerApprovalRequests)
         .where(eq(schema.peerApprovalRequests.id, req.id))

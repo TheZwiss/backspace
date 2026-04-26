@@ -246,6 +246,11 @@ async function fanoutOutboundSubscribers(peerId: string): Promise<void> {
       type: 'peering_notification_received' as const,
       kind: 'approved',
     });
+    // The subscriber row is about to cascade-delete; tell the user's UI to
+    // refetch its pending list so the now-stale row disappears.
+    connectionManager.sendToUser(sub.userId, {
+      type: 'peering_subscription_changed' as const,
+    });
   }
 
   // Cascade-deletes subscriber rows via onDelete: 'cascade'.
