@@ -409,12 +409,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // (autoAcceptPeering is off on their side). Do NOT activate the
           // local peer — mirror the auto-peer flow in federationPeering.ts
           // by transitioning the pending record to awaiting_approval.
-          // Without this branch the local peer would flip to `active`
-          // (because response.ok is true for 202) while the remote had us
-          // pending, producing a local-active / remote-pending split that
-          // only self-heals when the remote admin approves.
+          // Capture the approval token they returned so the next inbound
+          // /peer/accept (when their admin approves) can be verified. §3.7.
+          let returnedToken: string | null = null;
+          try {
+            const body = (await response.json()) as { approvalToken?: string };
+            if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
+              returnedToken = body.approvalToken;
+            }
+          } catch {
+            // Non-JSON / empty body — legacy peer.
+          }
+
           db.update(schema.federationPeers)
-            .set({ status: 'awaiting_approval' })
+            .set({ status: 'awaiting_approval', approvalToken: returnedToken })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
           connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -462,7 +470,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -1239,6 +1247,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             sourceOrigin: localOrigin,
             hmacSecret,
             instanceName,
+            // Forward the stored token (issued in our 202 response when the
+            // remote first sent /peer/accept). Lets the remote verify mutual
+            // admin approval. Spec §3.7.
+            ...(approvalReq.approvalToken ? { approvalToken: approvalReq.approvalToken } : {}),
           }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -1246,8 +1258,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         if (response.status === 202) {
           // Remote instance also has autoAcceptPeering off — they queued our request.
           // Don't activate our peer. Set to awaiting_approval until their admin also approves.
+          // Capture the approval token they returned so the next inbound
+          // /peer/accept (when their admin approves) can be verified. §3.7.
+          let returnedToken: string | null = null;
+          try {
+            const body = (await response.json()) as { approvalToken?: string };
+            if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
+              returnedToken = body.approvalToken;
+            }
+          } catch {
+            // Non-JSON / empty body — legacy peer.
+          }
+
           db.update(schema.federationPeers)
-            .set({ status: 'awaiting_approval' })
+            .set({ status: 'awaiting_approval', approvalToken: returnedToken })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
           // Delete the approval request since we already acted on it
@@ -1288,7 +1312,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName })
+          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
 
