@@ -1769,6 +1769,89 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── GET /api/federation/peering-subscriptions ─────────────────────────────
+  // User-facing: list the requesting user's pending outbound peering
+  // subscriber rows joined to their parent peer_approval_requests. Used by the
+  // pending-peering UI surface to show "you have a peering with X waiting on
+  // your admin's approval" rows.
+  app.get(
+    '/api/federation/peering-subscriptions',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const db = getDb();
+      const userId = request.userId;
+      const rows = db
+        .select({
+          id: schema.peerApprovalSubscribers.id,
+          requestId: schema.peerApprovalSubscribers.requestId,
+          peerOrigin: schema.peerApprovalRequests.origin,
+          peerInstanceName: schema.peerApprovalRequests.instanceName,
+          triggerReason: schema.peerApprovalSubscribers.triggerReason,
+          triggerTarget: schema.peerApprovalSubscribers.triggerTarget,
+          createdAt: schema.peerApprovalSubscribers.createdAt,
+        })
+        .from(schema.peerApprovalSubscribers)
+        .innerJoin(
+          schema.peerApprovalRequests,
+          eq(schema.peerApprovalRequests.id, schema.peerApprovalSubscribers.requestId),
+        )
+        .where(eq(schema.peerApprovalSubscribers.userId, userId))
+        .orderBy(desc(schema.peerApprovalSubscribers.createdAt))
+        .all();
+      return reply.send({ subscriptions: rows });
+    },
+  );
+
+  // ─── DELETE /api/federation/peering-subscriptions/:id ──────────────────────
+  // User-facing: cancel one of the requesting user's pending peering
+  // subscriptions. Authorization: subscriber.userId must match request.userId.
+  // If this was the last subscriber for its parent request, the parent
+  // cascade-deletes too (avoids zombie outbound rows in the admin queue).
+  // No notification is created for the canceller (per spec §4.3 (iii)).
+  app.delete<{ Params: { id: string } }>(
+    '/api/federation/peering-subscriptions/:id',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const db = getDb();
+      const { id } = request.params;
+      const userId = request.userId;
+
+      const sub = db
+        .select()
+        .from(schema.peerApprovalSubscribers)
+        .where(eq(schema.peerApprovalSubscribers.id, id))
+        .get();
+      if (!sub) {
+        return reply.code(404).send({ error: 'subscription_not_found', statusCode: 404 });
+      }
+      if (sub.userId !== userId) {
+        return reply.code(403).send({ error: 'forbidden', statusCode: 403 });
+      }
+
+      db.delete(schema.peerApprovalSubscribers)
+        .where(eq(schema.peerApprovalSubscribers.id, id))
+        .run();
+
+      // If the row we just removed was the last subscriber on its parent
+      // peer_approval_request, cascade-delete the parent. The admin queue
+      // refreshes via federation_peers_changed.
+      const remaining = db
+        .select({ id: schema.peerApprovalSubscribers.id })
+        .from(schema.peerApprovalSubscribers)
+        .where(eq(schema.peerApprovalSubscribers.requestId, sub.requestId))
+        .all();
+      if (remaining.length === 0) {
+        db.delete(schema.peerApprovalRequests)
+          .where(eq(schema.peerApprovalRequests.id, sub.requestId))
+          .run();
+        connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+      }
+
+      connectionManager.sendToUser(userId, { type: 'peering_subscription_changed' as const });
+      return reply.send({ success: true });
+    },
+  );
+
   // ─── POST /api/federation/peers/:id/rotate ──────────────────────────────────
   // Admin-only: trigger immediate secret rotation for a peer.
   app.post<{ Params: { id: string } }>(
