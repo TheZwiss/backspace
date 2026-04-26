@@ -366,17 +366,62 @@ PK: (spaceId, userId, restrictionType)
 | approvalToken | text | | Single-use 64-hex-char token stored when this row is in `awaiting_approval` (received from remote's 202 response). Verified against the inbound `/peer/accept` `approvalToken` field before promoting to `active`. Cleared (`NULL`) on promotion. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
 
 ### peer_approval_requests
-Holds incoming peering requests queued for admin review when `autoAcceptPeering` is `false`. One row per requesting origin (UNIQUE constraint). Rows expire after 30 days via janitor cleanup.
+Queue of peering requests pending admin review when `autoAcceptPeering` is `false`. Holds **both directions**: inbound rows (remote asked to peer with us) and outbound rows (a local user-initiated `ensurePeered` call gated on this side; see [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate)). UNIQUE on `(origin, direction)` so the same origin may have at most one row per direction simultaneously. Rows expire after 30 days via janitor cleanup.
 
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
 | id | text PK | | Snowflake |
-| origin | text NOT NULL UNIQUE | | Requesting instance's origin URL |
-| instanceName | text | | Instance name sent by requester |
-| hmacSecret | text NOT NULL | | Requester's HMAC secret; used to sign denial notification |
+| origin | text NOT NULL | | Requesting / target instance's origin URL. UNIQUE per `direction` (composite UNIQUE `(origin, direction)`). |
+| direction | text NOT NULL | `'inbound'` | `'inbound'` (remote → us) or `'outbound'` (us → remote, gate-created on user_action). Migration backfills existing rows to `'inbound'`. |
+| instanceName | text | | Instance name (sent by requester for inbound; null for outbound until populated by future enrichment). |
+| hmacSecret | text | | Requester's HMAC secret for inbound (used to sign the `/peer/denied` notification). **Nullable** — outbound rows have `hmac_secret = NULL` and the `/approve` handler generates fresh HMAC at the moment it sends `/peer/accept`. CHECK enforced (see below). |
 | requestedAt | integer NOT NULL | | Epoch ms |
 | expiresAt | integer NOT NULL | | Epoch ms; requestedAt + 30 days |
-| approvalToken | text | | Single-use 64-hex-char token issued in the 202 response when this row is created. Forwarded by `/approve` in its outbound `/peer/accept` so the remote initiator can verify mutual admin approval. Deleted along with this row when `/approve` runs. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
+| approvalToken | text | | Single-use 64-hex-char token issued by the receiver in the 202 response when an inbound row is created. Forwarded by `/approve` in its outbound `/peer/accept` so the remote initiator can verify mutual admin approval. Deleted along with this row when `/approve` runs. Inbound-only meaning preserved (outbound rows always have `approval_token = NULL`). See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
+
+**CHECK constraint** (direction-specific shape):
+
+```sql
+CHECK (
+  (direction = 'inbound' AND hmac_secret IS NOT NULL)
+  OR (direction = 'outbound')
+)
+```
+
+> **drizzle-kit limitation:** drizzle-kit does NOT represent SQLite CHECK constraints in its snapshot/diff. The constraint is created by the original baseline migration (or, for the post-baseline ALTER, hand-written SQL) and is preserved in `schema.ts` as a comment so a future table recreate (drizzle generates a recreate when UNIQUE/PK changes again) re-adds the CHECK by hand. If you regenerate a migration that recreates this table, audit the generated SQL and re-add the CHECK clause manually before applying.
+
+### peer_approval_subscribers
+Per-user "I want this peering relationship" subscriber rows attached to outbound `peer_approval_requests`. Logically outbound-only (inbound rows have no subscribers). Existence = waiting; deletion = resolved (resolution recorded in `peer_approval_notifications` at deletion time, except for the canceller path). One subscriber may have multiple rows on the same parent if they triggered the gate from different actions/targets.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | Snowflake |
+| requestId | text NOT NULL | FK → peer_approval_requests.id CASCADE — parent deletion (admin approve→active fanout, admin deny, last-subscriber cancel, expiry) automatically clears subscriber rows. |
+| userId | text NOT NULL | FK → users.id CASCADE |
+| triggerReason | text NOT NULL | `'friend_add'` \| `'space_join'` \| `'direct_message'` (`PeeringTriggerReason` enum in `packages/shared/src/types.ts`). |
+| triggerTarget | text NOT NULL | Action target — for `friend_add` this is `username@instance`; for `space_join` an invite code or space ID; for `direct_message` a recipient handle. Never stores message bodies, attachments, or user content. |
+| createdAt | integer NOT NULL | Epoch ms |
+
+**UNIQUE:** `(request_id, user_id, trigger_reason, trigger_target)` — same user retriggering the gate with the same reason+target updates rather than duplicates.
+**Index:** `idx_peer_approval_subscribers_user_id` on `(user_id)` — supports the user-facing pending list query.
+
+### peer_approval_notifications
+Terminal-state notifications for peering events (approved / denied / expired). Scoped to peering — NOT a generalized in-app notification system. When a generalized system is built later, this table either migrates into it or stays as a peering-specific artifact (decision deferred to that spec).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | Snowflake |
+| userId | text NOT NULL | FK → users.id CASCADE |
+| kind | text NOT NULL | `'approved'` \| `'denied'` \| `'expired'`. |
+| peerOrigin | text NOT NULL | Origin URL the notification refers to. |
+| triggerReason | text NOT NULL | Mirrors the originating subscriber row's `trigger_reason`. |
+| triggerTarget | text NOT NULL | Mirrors the originating subscriber row's `trigger_target`. |
+| createdAt | integer NOT NULL | Epoch ms |
+| readAt | integer | Nullable. NULL = unread; epoch ms once dismissed/marked read. |
+
+**Index:** `idx_peer_approval_notifications_user_id` on `(user_id)` — supports the user-facing list and unread-filter queries.
+
+Inserted by `onPeerActivated` (`'approved'`), the outbound `/deny` handler (`'denied'`), and the storage janitor outbound expiry pass (`'expired'`). Read rows older than 30 days are auto-cleaned by the janitor; unread rows are never auto-cleaned.
 
 ### federation_outbox
 UNIQUE: (peerId, entityId)

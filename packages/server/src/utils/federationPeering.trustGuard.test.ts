@@ -103,7 +103,7 @@ describe('ensurePeered — refuses when unresolved inbound approval-request exis
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
-    const result = await ensurePeered('https://orbit.test');
+    const result = await ensurePeered('https://orbit.test', { kind: 'system' });
 
     expect(result.status).toBe('rejected');
     if (result.status === 'rejected') {
@@ -126,7 +126,7 @@ describe('ensurePeered — refuses when unresolved inbound approval-request exis
 
     const { ensurePeered, _clearInFlightPeering } = await import('./federationPeering.js');
     _clearInFlightPeering();
-    const result = await ensurePeered('https://nopeer.test');
+    const result = await ensurePeered('https://nopeer.test', { kind: 'system' });
 
     // Reached performHandshake — failure mode is 'failed' (network), NOT
     // the pre-handshake 'rejected' from the new guard.

@@ -53,9 +53,12 @@ import type {
   FederationIdentityDeleteRequest,
   FederationIdentityDeleteResponse,
   FederationPeer,
+  ApprovalRequest,
+  PeeringSubscription,
+  PeeringNotification,
 } from '@backspace/shared';
 
-export type { FederationPeer };
+export type { FederationPeer, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
 export class RateLimitError extends Error {
   readonly retryAfter: number;
@@ -64,14 +67,6 @@ export class RateLimitError extends Error {
     this.name = 'RateLimitError';
     this.retryAfter = retryAfter;
   }
-}
-
-export interface ApprovalRequest {
-  id: string;
-  origin: string;
-  instanceName: string | null;
-  requestedAt: number;
-  expiresAt: number;
 }
 
 export class BackspaceApiClient {
@@ -230,6 +225,11 @@ export class BackspaceApiClient {
     approvalRequests: () => Promise<{ requests: ApprovalRequest[] }>;
     approveRequest: (id: string) => Promise<{ success: boolean; peer?: FederationPeer }>;
     denyRequest: (id: string) => Promise<{ success: boolean }>;
+    peeringSubscriptions: () => Promise<{ subscriptions: PeeringSubscription[] }>;
+    cancelPeeringSubscription: (id: string) => Promise<{ success: boolean }>;
+    peeringNotifications: (unreadOnly?: boolean) => Promise<{ notifications: PeeringNotification[] }>;
+    markPeeringNotificationRead: (id: string) => Promise<{ success: boolean }>;
+    markAllPeeringNotificationsRead: () => Promise<{ success: boolean; count: number }>;
   };
 
   readonly admin: {
@@ -696,6 +696,27 @@ export class BackspaceApiClient {
       denyRequest: (id: string) =>
         request<{ success: boolean }>(
           'POST', `/federation/approval-requests/${id}/deny`
+        ),
+      peeringSubscriptions: () =>
+        request<{ subscriptions: PeeringSubscription[] }>(
+          'GET', '/federation/peering-subscriptions'
+        ),
+      cancelPeeringSubscription: (id: string) =>
+        request<{ success: boolean }>(
+          'DELETE', `/federation/peering-subscriptions/${id}`
+        ),
+      peeringNotifications: (unreadOnly = false) =>
+        request<{ notifications: PeeringNotification[] }>(
+          'GET',
+          `/federation/peering-notifications${unreadOnly ? '?unread=1' : ''}`,
+        ),
+      markPeeringNotificationRead: (id: string) =>
+        request<{ success: boolean }>(
+          'POST', `/federation/peering-notifications/${id}/read`
+        ),
+      markAllPeeringNotificationsRead: () =>
+        request<{ success: boolean; count: number }>(
+          'POST', '/federation/peering-notifications/read-all'
         ),
     };
 

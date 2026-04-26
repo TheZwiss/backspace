@@ -693,16 +693,44 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
           <div className="text-xs text-txt-tertiary py-2">Loading...</div>
         )}
         {requests.map((req) => {
-          const name = req.instanceName || new URL(req.origin).host;
+          const isOutbound = req.direction === 'outbound';
+          let name = req.instanceName || '';
+          if (!name) {
+            try {
+              name = new URL(req.origin).host;
+            } catch {
+              name = req.origin;
+            }
+          }
+          const subCount = req.subscribers?.length ?? 0;
+          const titleText = isOutbound
+            ? `${name} — ${subCount} ${subCount === 1 ? 'user wants' : 'users want'} us to peer`
+            : name;
           return (
             <div key={req.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
               <div className="flex items-center justify-between">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-txt-primary truncate">{name}</div>
+                  <div className="text-sm font-medium text-txt-primary truncate">{titleText}</div>
                   <div className="text-[11px] text-txt-tertiary truncate">{req.origin}</div>
                   <div className="text-[11px] text-txt-tertiary mt-0.5">
                     Requested {formatRelativeTime(req.requestedAt)}
                   </div>
+                  {isOutbound && req.subscribers && req.subscribers.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {req.subscribers.map((sub) => (
+                        <div
+                          key={`${sub.userId}:${sub.triggerReason}:${sub.triggerTarget}`}
+                          className="text-[11px] text-txt-tertiary"
+                        >
+                          <span className="font-medium text-txt-secondary">{sub.username}</span>
+                          {' — '}
+                          {sub.triggerReason === 'friend_add' && `friend-add to ${sub.triggerTarget}`}
+                          {sub.triggerReason === 'space_join' && `wants to join ${sub.triggerTarget}`}
+                          {sub.triggerReason === 'direct_message' && `wants to DM ${sub.triggerTarget}`}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <button
@@ -740,22 +768,35 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
         })}
       </div>
 
-      {confirmAction && (
-        <ConfirmDialog
-          isOpen={true}
-          onClose={() => { if (!actionLoading) setConfirmAction(null); }}
-          onConfirm={handleConfirm}
-          title={confirmAction.type === 'approve' ? 'Approve Peering Request' : 'Deny Peering Request'}
-          description={
-            confirmAction.type === 'approve'
-              ? `This will initiate a peering handshake with ${confirmAction.request.instanceName || confirmAction.request.origin}. The remote instance must be reachable.`
-              : `This will deny the request and block future auto-peering requests from ${confirmAction.request.instanceName || confirmAction.request.origin}. You can unblock them later from the rejected peers list.`
-          }
-          confirmLabel={confirmAction.type === 'approve' ? 'Approve' : 'Deny'}
-          variant={confirmAction.type === 'approve' ? 'warning' : 'danger'}
-          loading={!!actionLoading}
-        />
-      )}
+      {confirmAction && (() => {
+        const isOutbound = confirmAction.request.direction === 'outbound';
+        const targetName = confirmAction.request.instanceName || confirmAction.request.origin;
+        const subCount = confirmAction.request.subscribers?.length ?? 0;
+        const description =
+          confirmAction.type === 'approve'
+            ? isOutbound
+              ? `This will initiate a peering handshake with ${targetName} on behalf of the ${subCount} requesting ${subCount === 1 ? 'user' : 'users'}. The remote instance must be reachable.`
+              : `This will initiate a peering handshake with ${targetName}. The remote instance must be reachable.`
+            : isOutbound
+              ? `This will deny the outbound peering request and notify the requesting ${subCount === 1 ? 'user' : 'users'}. They can re-trigger the request from their friend list.`
+              : `This will deny the request and block future auto-peering requests from ${targetName}. You can unblock them later from the rejected peers list.`;
+        const confirmLabel =
+          confirmAction.type === 'approve'
+            ? isOutbound ? 'Approve & Peer' : 'Approve'
+            : isOutbound ? 'Deny & Notify' : 'Deny';
+        return (
+          <ConfirmDialog
+            isOpen={true}
+            onClose={() => { if (!actionLoading) setConfirmAction(null); }}
+            onConfirm={handleConfirm}
+            title={confirmAction.type === 'approve' ? 'Approve Peering Request' : 'Deny Peering Request'}
+            description={description}
+            confirmLabel={confirmLabel}
+            variant={confirmAction.type === 'approve' ? 'warning' : 'danger'}
+            loading={!!actionLoading}
+          />
+        );
+      })()}
     </div>
   );
 }

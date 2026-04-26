@@ -101,7 +101,7 @@ describe('performHandshake — approval token capture & clear', () => {
     );
 
     const { ensurePeered } = await import('./federationPeering.js');
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('pending');
 
@@ -120,7 +120,7 @@ describe('performHandshake — approval token capture & clear', () => {
     );
 
     const { ensurePeered } = await import('./federationPeering.js');
-    const result = await ensurePeered('https://legacy.example');
+    const result = await ensurePeered('https://legacy.example', { kind: 'system' });
 
     expect(result.status).toBe('pending');
     const peer = testDb.select().from(schema.federationPeers)
@@ -135,7 +135,7 @@ describe('performHandshake — approval token capture & clear', () => {
     );
 
     const { ensurePeered } = await import('./federationPeering.js');
-    const result = await ensurePeered('https://empty.example');
+    const result = await ensurePeered('https://empty.example', { kind: 'system' });
 
     expect(result.status).toBe('pending');
     const peer = testDb.select().from(schema.federationPeers)
@@ -161,7 +161,7 @@ describe('performHandshake — approval token capture & clear', () => {
     );
 
     const { ensurePeered } = await import('./federationPeering.js');
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
     expect(result.status).toBe('active');
 
     const peer = testDb.select().from(schema.federationPeers)

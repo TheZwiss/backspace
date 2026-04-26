@@ -20,6 +20,8 @@ export function mapServerErrorToMessage(
     case 'already_friends': return "You're already friends with this user.";
     case 'peer_pending_approval':
       return "The remote instance's admin needs to approve federation. Try again later.";
+    case 'peer_pending_local_admin':
+      return "Your admin needs to approve federation with this instance. You'll see your request in Connections settings.";
     case 'peer_pending':
       return 'Connecting to the remote instance — try again in a moment.';
     case 'incoming_request_exists':

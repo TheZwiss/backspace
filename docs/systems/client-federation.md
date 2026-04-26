@@ -340,7 +340,58 @@ Client-driven LWW whole-registry push (same pattern as `profileSync.ts`):
 
 ---
 
-## 8. Relationship to S2S Federation
+## 8. Outbound Peering Gate (client surfaces)
+
+When the local instance has `autoAcceptPeering=0`, every outbound new-peer attempt funnels through the centralized [Outbound Peering Gate](federation.md#outbound-peering-gate) on the server. The client surfaces three things: a new error code on the friend-add path, a new peering-status value on `/peer/ensure`, and two new Connections-settings panels (pending and outcomes).
+
+### Peering-status taxonomy (`/peer/ensure` response)
+
+`peeringStatus` returned from `POST /api/federation/peer/ensure` now includes `'admin_required'` alongside the existing `'active' | 'pending' | 'awaiting_approval' | 'rejected' | 'unreachable' | 'revoked'`. `'admin_required'` means: gate fired locally, your own admin must approve before any traffic reaches the wire. The user's request becomes admin-approvable rather than auto-firing.
+
+### Friend-add error mapping (`peer_pending_local_admin`)
+
+`POST /api/social/requests` returns 409 `peer_pending_local_admin` when the gate fires for a never-peered remote target (the user's request is queued + subscriber-tracked on the server; admin must approve).
+
+`packages/web/src/utils/friendErrors.ts` maps `peer_pending_local_admin` to:
+
+> "Your admin needs to approve federation with this instance. You'll see your request in Connections settings."
+
+The catch handler reads `err.message` (per the API client error contract documented in §1) and passes it to `mapServerErrorToMessage`. Distinct from `peer_pending_approval` ("the *remote* admin must approve") — this one is local-admin gating.
+
+### Connections settings — Pending peering approvals
+
+A new section in the Connections settings UI (alongside the federation registry) lists the calling user's rows from `peer_approval_subscribers`, joined to parent `peer_approval_requests`. Each row renders:
+
+- "Awaiting your admin's approval to federate with `{peerOrigin}` so you can `friend_add → alice@orbit`."
+- A Cancel button. Cancel calls `DELETE /api/federation/peering-subscriptions/:id`. If the cancelled row was the last subscriber for the parent, the parent cascades and disappears from the admin's queue too.
+
+Live updates: a `peering_subscription_changed` WebSocket event refetches the list.
+
+### Connections settings — Recent peering outcomes
+
+A second new section above the pending list shows unread `peer_approval_notifications` rows ordered by `createdAt DESC`. Each row's copy branches on `kind`:
+
+- **`approved`** — "Your peering request to `{peerOrigin}` was approved — retry your friend-add to `{triggerTarget}`?" `[Retry]` `[Dismiss]`. Retry deep-links to the friend-add UI prefilled with the original target. Today only the `friend_add` reason produces a retry deep-link; future trigger reasons add their own deep-link flows. Dismiss POSTs to `/peering-notifications/:id/read`.
+- **`denied`** — "Your peering request to `{peerOrigin}` was denied by your admin." `[Dismiss]`.
+- **`expired`** — "Your peering request to `{peerOrigin}` expired without admin action." `[Dismiss]`.
+
+A "Mark all as read" action POSTs to `/peering-notifications/read-all`. Read rows hide from view (soft-delete preserves audit; the storage janitor cleans up read rows older than 30 days).
+
+Live updates: a `peering_notification_received` WebSocket event refetches the list and may surface a transient toast for the matching `kind` (online users only).
+
+### Federation store slice
+
+A new `federationStore.ts` slice (separate from `instanceStore`) holds:
+
+- `peeringSubscriptions: PeeringSubscriptionSummary[]`
+- `peeringNotifications: PeeringNotificationSummary[]`
+- `pendingFriendAddPrefill?: { username: string }` — side-channel populated by the Retry button on `kind='approved'` notifications, consumed by the friend-add modal on next open.
+
+This slice is intentionally separate from `instanceStore` because the data is per-user (not per-instance) and lives on the home server only. WebSocket handlers route `peering_subscription_changed` and `peering_notification_received` events into this slice's refetch actions.
+
+---
+
+## 9. Relationship to S2S Federation
 
 Client-side and S2S federation serve different purposes:
 

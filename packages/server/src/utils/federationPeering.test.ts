@@ -51,9 +51,9 @@ describe('racePeering', () => {
       status: 'active',
       peerId: 'peer-1',
     }));
-    const result = await racePeering('https://example.com', 1_000, stub);
+    const result = await racePeering('https://example.com', 1_000, { kind: 'system' }, stub);
     expect(result).toEqual({ status: 'active', peerId: 'peer-1' });
-    expect(stub).toHaveBeenCalledWith('https://example.com');
+    expect(stub).toHaveBeenCalledWith('https://example.com', { kind: 'system' });
   });
 
   it('returns timeout when ensurePeered takes longer than the deadline', async () => {
@@ -61,7 +61,7 @@ describe('racePeering', () => {
     const stub = vi.fn((): Promise<EnsurePeeredResult> => new Promise(() => {
       // Never resolves — simulates a slow handshake.
     }));
-    const racePromise = racePeering('https://example.com', 50, stub);
+    const racePromise = racePeering('https://example.com', 50, { kind: 'system' }, stub);
     await vi.advanceTimersByTimeAsync(50);
     const result = await racePromise;
     expect(result).toEqual({ status: 'timeout' });
@@ -73,7 +73,7 @@ describe('racePeering', () => {
       status: 'rejected',
       error: 'peer denied',
     }));
-    const result = await racePeering('https://example.com', 1_000, stub);
+    const result = await racePeering('https://example.com', 1_000, { kind: 'system' }, stub);
     expect(result).toEqual({ status: 'rejected', error: 'peer denied' });
   });
 
@@ -83,7 +83,7 @@ describe('racePeering', () => {
     const stub = vi.fn(() => new Promise<EnsurePeeredResult>((_, reject) => {
       setTimeout(() => reject(new Error('late failure')), 30);
     }));
-    const racePromise = racePeering('https://example.com', 10, stub);
+    const racePromise = racePeering('https://example.com', 10, { kind: 'system' }, stub);
     await vi.advanceTimersByTimeAsync(10);
     const result = await racePromise;
     expect(result).toEqual({ status: 'timeout' });
@@ -104,7 +104,7 @@ describe('racePeering', () => {
     const stub = vi.fn(async (): Promise<EnsurePeeredResult> => {
       throw new Error('immediate handshake failure');
     });
-    const result = await racePeering('https://example.com', 1_000, stub);
+    const result = await racePeering('https://example.com', 1_000, { kind: 'system' }, stub);
     expect(result).toEqual({ status: 'failed', error: 'immediate handshake failure' });
     // The handshake rejection was the race winner — no background warn should fire.
     await Promise.resolve();
@@ -156,7 +156,7 @@ describe('ensurePeered needs_attention handling', () => {
     const { ensurePeered } = await import('./federationPeering.js');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    const result = await ensurePeered('https://remote.example');
+    const result = await ensurePeered('https://remote.example', { kind: 'system' });
 
     expect(result.status).toBe('rejected');
     if (result.status === 'rejected') {

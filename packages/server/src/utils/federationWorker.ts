@@ -496,7 +496,7 @@ async function resolvePendingPeers(): Promise<void> {
   for (const { peerId, peerOrigin } of pendingWithEntries) {
     console.log(`[federation-worker] Attempting auto-peer with ${peerOrigin}...`);
 
-    const result = await ensurePeered(peerOrigin);
+    const result = await ensurePeered(peerOrigin, { kind: 'system' });
 
     switch (result.status) {
       case 'active':

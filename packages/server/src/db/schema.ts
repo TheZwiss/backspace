@@ -377,15 +377,48 @@ export const federationPeers = sqliteTable('federation_peers', {
   approvalToken: text('approval_token'),
 });
 
+// SQL-level CHECK constraint enforces (direction='inbound' → hmac_secret NOT NULL).
+// See packages/server/drizzle/0003_brave_inhumans.sql. drizzle-kit cannot represent
+// CHECK constraints in its snapshot, so any future migration that recreates this
+// table MUST re-add the CHECK clause by hand. The snapshot WILL silently drop it
+// otherwise.
 export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
   id: text('id').primaryKey(),
-  origin: text('origin').notNull().unique(),
+  origin: text('origin').notNull(),
+  direction: text('direction', { enum: ['inbound', 'outbound'] }).notNull().default('inbound'),
   instanceName: text('instance_name'),
-  hmacSecret: text('hmac_secret').notNull(),
+  hmacSecret: text('hmac_secret'),
   requestedAt: integer('requested_at').notNull(),
   expiresAt: integer('expires_at').notNull(),
   approvalToken: text('approval_token'),
-});
+}, (table) => ({
+  uniqOriginDirection: unique().on(table.origin, table.direction),
+}));
+
+export const peerApprovalSubscribers = sqliteTable('peer_approval_subscribers', {
+  id: text('id').primaryKey(),
+  requestId: text('request_id').notNull().references(() => peerApprovalRequests.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  triggerReason: text('trigger_reason').notNull(),
+  triggerTarget: text('trigger_target').notNull(),
+  createdAt: integer('created_at').notNull(),
+}, (table) => ({
+  uniqSubscription: unique().on(table.requestId, table.userId, table.triggerReason, table.triggerTarget),
+  userIdx: index('idx_peer_approval_subscribers_user_id').on(table.userId),
+}));
+
+export const peerApprovalNotifications = sqliteTable('peer_approval_notifications', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['approved', 'denied', 'expired'] }).notNull(),
+  peerOrigin: text('peer_origin').notNull(),
+  triggerReason: text('trigger_reason').notNull(),
+  triggerTarget: text('trigger_target').notNull(),
+  createdAt: integer('created_at').notNull(),
+  readAt: integer('read_at'),
+}, (table) => ({
+  userIdx: index('idx_peer_approval_notifications_user_id').on(table.userId),
+}));
 
 export const federationOutbox = sqliteTable('federation_outbox', {
   id: text('id').primaryKey(),

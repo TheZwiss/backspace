@@ -142,6 +142,7 @@ GET    /social/search          ?q=                        → { users[] }
 | 404 | `user_not_found` | Remote lookup returned 404 (no such user, or tombstoned) |
 | 409 | `already_friends` | Friendship row already exists |
 | 409 | `peer_pending_approval` | Remote admin needs to approve the peering relationship |
+| 409 | `peer_pending_local_admin` | Local instance has `autoAcceptPeering=0` and the user attempted to friend-add a never-peered remote target. The user's own admin must approve before any traffic reaches the wire. Distinct from `peer_pending_approval` (remote admin must approve). See [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate). |
 | 409 | `peer_pending` | Peer handshake in flight |
 | 409 | `incoming_request_exists` | Opposite-direction pending request exists; response includes `requestId` for deep-link |
 | 429 | `lookup_rate_limited` | Remote `/users/lookup` returned 429; `Retry-After` header forwarded |
@@ -228,6 +229,104 @@ POST   /federation/users/lookup    (HMAC-signed S2S, rate-limited 60/min/peer)  
 **`POST /api/federation/peer/accept`** — public, IP-rate-limited. Optional `approvalToken` (64-hex) on the request body proves mutual admin approval; required to promote an `awaiting_approval` row to `active` when the receiver has `autoAcceptPeering=0`. The receiver returns it in the 202 body when queueing the request for admin review (`{ queued: true, message, approvalToken }`); the initiator stores it and the receiver's `/approve` later forwards it back. See `federation.md` §1 "Approval Token Verification" for the full lifecycle and threat model.
 
 **`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
+
+### Federation Peering Approval Queue
+
+Inbound + outbound peering approval queue (`autoAcceptPeering=0`). See [federation.md → Peer Approval Queue](federation.md#peer-approval-queue) and [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate).
+
+```
+GET  /federation/approval-requests              (admin)            → { requests: ApprovalRequestSummary[] }
+POST /federation/approval-requests/:id/approve  (admin)            → { success, peerStatus?, peer? }
+POST /federation/approval-requests/:id/deny     (admin)            → { success }
+```
+
+**`ApprovalRequestSummary` shape:**
+
+```typescript
+type ApprovalRequestSummary = {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  origin: string;
+  instanceName: string | null;
+  requestedAt: number;
+  expiresAt: number;
+  // Outbound rows ONLY — inbound rows OMIT this field entirely (it is absent, not null and not []).
+  subscribers?: ApprovalRequestSubscriberSummary[];
+};
+
+type ApprovalRequestSubscriberSummary = {
+  id: string;
+  userId: string;
+  username: string;
+  triggerReason: 'friend_add' | 'space_join' | 'direct_message';
+  triggerTarget: string;
+  createdAt: number;
+};
+```
+
+**`POST /approval-requests/:id/approve`** — direction-branched.
+- **Inbound** — existing behavior preserved verbatim (creates / upserts a local `federation_peers` row with status `pending`, sends `/peer/accept` to origin forwarding the stored `approvalToken`, deletes the queue row regardless of whether the result is `active` (200) or `awaiting_approval` (202)).
+- **Outbound** — generates a fresh HMAC, sends `/peer/accept` to the origin (no token; we are the initiator).
+  - On 200 → peer becomes `active`. `onPeerActivated` runs: fans out `kind='approved'` notifications to subscribers and cascade-deletes the queue row. The handler does NOT duplicate this cleanup.
+  - On 202 → peer transitions to `awaiting_approval`, captures the returned `approvalToken`, and the queue row + subscribers are LEFT INTACT for the eventual remote-admin approval. `onPeerActivated` is NOT called yet.
+  - On 4xx/5xx/network → the peer row is cleaned up; the queue row is LEFT INTACT so the admin can retry. Response status mirrors the wire failure (`502`/`503`/`504`).
+- **Response body:** `{ success, peerStatus?: 'active' | 'awaiting_approval', peer? }` for outbound; `{ success }` for inbound.
+
+**`POST /approval-requests/:id/deny`** — direction-branched.
+- **Inbound** — existing behavior preserved (sends signed `/peer/denied` to origin, upserts a local `rejected` `federation_peers` row, deletes the queue row).
+- **Outbound** — fans out `kind='denied'` notifications to all `peer_approval_subscribers` of the queue row, then cascade-deletes the parent (no remote network call). Broadcasts `federation_peers_changed` to admins so the queue UI refreshes.
+
+### Federation Peering Subscriptions (user-facing)
+
+```
+GET    /federation/peering-subscriptions     (auth)   → { subscriptions: PeeringSubscriptionSummary[] }
+DELETE /federation/peering-subscriptions/:id (auth)   → { success }
+```
+
+User-facing surface for the rows in `peer_approval_subscribers` belonging to the calling user. GET joins the parent `peer_approval_requests` row to include peer origin/instance metadata.
+
+```typescript
+type PeeringSubscriptionSummary = {
+  id: string;
+  requestId: string;
+  peerOrigin: string;
+  peerInstanceName: string | null;
+  triggerReason: 'friend_add' | 'space_join' | 'direct_message';
+  triggerTarget: string;
+  createdAt: number;
+};
+```
+
+**`DELETE /peering-subscriptions/:id`:**
+- 404 if the subscriber row doesn't exist.
+- 403 if the row belongs to a different user.
+- On success: deletes the subscriber row; if it was the last subscriber for the parent, cascade-deletes the parent (admin's queue row disappears too). No `peer_approval_notifications` row is created (the user took the action; they know).
+- Broadcasts `peering_subscription_changed` to the calling user (multi-tab refresh) and `federation_peers_changed` to admins if the parent was deleted.
+
+### Federation Peering Notifications (user-facing)
+
+```
+GET  /federation/peering-notifications        (auth)  ?unread=1?  → { notifications: PeeringNotificationSummary[] }
+POST /federation/peering-notifications/:id/read   (auth)         → { success }
+POST /federation/peering-notifications/read-all   (auth)         → { success, count }
+```
+
+User-facing terminal-state notifications for peering events. GET orders DESC by `createdAt`; `?unread=1` filters to `readAt IS NULL`.
+
+```typescript
+type PeeringNotificationSummary = {
+  id: string;
+  kind: 'approved' | 'denied' | 'expired';
+  peerOrigin: string;
+  triggerReason: 'friend_add' | 'space_join' | 'direct_message';
+  triggerTarget: string;
+  createdAt: number;
+  readAt: number | null;
+};
+```
+
+**`POST /:id/read`** — sets `readAt = Date.now()` for the calling user's notification (404 / 403 on miss / mismatch).
+**`POST /read-all`** — marks all of the calling user's unread notifications as read; returns `{ success, count }` where `count` is the number of rows updated.
 
 ## Utilities (`routes/utils.ts`) — auth required
 ```

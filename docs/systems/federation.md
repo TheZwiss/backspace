@@ -145,20 +145,38 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 - `requested_at` / `expires_at` — Epoch ms; expiry is `requested_at + 30 days`
 - `approval_token` — Single-use 64-hex-char random token issued in the 202 response and forwarded by `/approve`. See [Approval Token Verification](#approval-token-verification).
 
-**Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`:
-1. A fresh `federationPeer` record is created (or existing `rejected`/`awaiting_approval` record is upserted) with status `pending`
-2. A standard `peer/accept` handshake is sent to the requesting origin
-3. On success the local peer becomes `active`; the `peer_approval_requests` row is deleted
+**Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`. The handler dispatches on `peer_approval_requests.direction`:
 
-**Denial flow** — Admin denies via `POST /api/federation/approval-requests/:id/deny`:
+*Inbound* (remote asked to peer with us):
+1. A fresh `federationPeer` record is created (or existing `rejected`/`awaiting_approval` record is upserted) with status `pending`
+2. A standard `peer/accept` handshake is sent to the requesting origin (forwarding the stored `approvalToken` per [Approval Token Verification](#approval-token-verification))
+3. On 200 the local peer becomes `active`; on 202 the peer transitions to `awaiting_approval` (mutual-gate); the `peer_approval_requests` row is deleted in both cases
+
+*Outbound* (local users asked us to peer with a remote — created by the gate in `ensurePeered`):
+1. A fresh `federationPeer` row is created with status `pending` (HMAC generated at this moment — outbound queue rows store `hmac_secret = NULL`)
+2. `peer/accept` is sent to the remote with no `approvalToken` (we are the initiator with no prior token from this remote)
+3. On 200 the peer is promoted to `active`. `onPeerActivated` then fires `fanoutOutboundSubscribers` (see [Outbound peering gate](#outbound-peering-gate)) which writes `kind='approved'` notifications for each subscriber and cascade-deletes the parent `peer_approval_requests` row. The handler does NOT duplicate this cleanup.
+4. On 202 the peer transitions to `awaiting_approval`, captures the returned `approvalToken`, and the queue row + subscribers are LEFT INTACT — they wait for the eventual remote-admin approval. `onPeerActivated` is NOT called on this path.
+5. On 4xx/5xx/network error the peer row is deleted; the queue row is left intact so the admin can retry. Response status is `502`/`503`/`504` accordingly.
+6. Response body shape: `{ success, peerStatus: 'active' | 'awaiting_approval', peer? }`. The `peerStatus` field is the outbound-only signal.
+
+**Denial flow** — Admin denies via `POST /api/federation/approval-requests/:id/deny`. The handler dispatches on direction:
+
+*Inbound*:
 1. Server sends `POST {origin}/api/federation/peer/denied` signed with the requester's `hmac_secret` (from the approval request row)
 2. Receiving instance transitions its local peer record from `awaiting_approval` → `rejected`
 3. A local `federationPeer` record is upserted with status `rejected` to block future unsolicited requests from the same origin
 4. The `peer_approval_requests` row is deleted
 
+*Outbound*:
+1. For each row in `peer_approval_subscribers`, a `kind='denied'` notification is inserted into `peer_approval_notifications` and a `peering_notification_received` WS event is sent to the user
+2. The parent `peer_approval_requests` row is deleted (cascade clears subscribers)
+3. No remote network call — the remote never knew we were considering this peer
+4. `federation_peers_changed` is broadcast to admins so the queue UI refreshes
+
 **Expiry** — The janitor (`federationJanitor.ts`) runs on its scheduled interval and deletes rows where `expires_at < now`. Expired requests do NOT create a `rejected` peer — the requesting instance can re-submit. Admin denial, by contrast, does create a `rejected` peer record, blocking re-requests until an admin clears it.
 
-**Pre-handshake guard (`ensurePeered`)** — Before any outbound handshake, `ensurePeered(origin)` in `federationPeering.ts` refuses with `{ status: 'rejected', error: 'Local admin must resolve…' }` if a `peer_approval_requests` row exists for that origin. This blocks the auto-reconnect trigger: without the guard, any code path calling `ensurePeered` (e.g., the silent reconnect in `stores/instanceStore.ts`) could initiate a fresh outbound handshake to a peer that has a pending inbound approval request. The legitimate approve flow (`POST /api/federation/approval-requests/:id/approve`) does NOT call `ensurePeered` — it deletes the approval-request row and does its own direct `fetch` to `/peer/accept` — so the guard does not block legitimate approvals.
+**Pre-handshake guard (`ensurePeered`)** — Before any outbound handshake, `ensurePeered(origin)` in `federationPeering.ts` refuses with `{ status: 'rejected', error: 'Local admin must resolve…' }` if an **inbound** `peer_approval_requests` row exists for that origin. The guard query is narrowed to `direction='inbound'` (commit `0d3d087`) so the gate's own outbound queue rows do not falsely block their own approval path. This blocks the auto-reconnect trigger: without the guard, any code path calling `ensurePeered` (e.g., the silent reconnect in `stores/instanceStore.ts`) could initiate a fresh outbound handshake to a peer that has a pending inbound approval request. The legitimate approve flow (`POST /api/federation/approval-requests/:id/approve`) does NOT call `ensurePeered` — it deletes the approval-request row and does its own direct `fetch` to `/peer/accept` — so the guard does not block legitimate approvals.
 
 ### Approval Token Verification
 
@@ -178,7 +196,73 @@ The pre-handshake guard above closes the most reliable trigger but cannot preven
 
 **Backward compatibility.** Both schema columns are nullable. Older peers that don't include `approvalToken` in the request body or 202 response result in `null` storage; the receiver's verification then falls through the `autoAcceptPeering` gate. Existing `active` peers and existing `awaiting_approval` rows in production at upgrade time are unaffected — the verification only runs on the receiver's `awaiting_approval` branch. Stalled legacy `awaiting_approval` rows (no stored token) cannot complete via inbound `/peer/accept` from a legacy initiator unless the receiver is `autoAccept=1`; admins should re-initiate them through the standard flow if needed.
 
-**What this does NOT defend against** — a remote operator running custom code with full DB access can read their stored token and forge `/peer/accept`. That is the inherent trust radius of federation peering. The threat model is bug-prone code paths (auto-reconnect, voice-call peering races, future `ensurePeered` callers) on otherwise-honest peers, not adversarial operators. Sender-side outbound gating for `autoAcceptPeering=0` is a separate concern tracked as a follow-up.
+**What this does NOT defend against** — a remote operator running custom code with full DB access can read their stored token and forge `/peer/accept`. That is the inherent trust radius of federation peering. The threat model is bug-prone code paths (auto-reconnect, voice-call peering races, future `ensurePeered` callers) on otherwise-honest peers, not adversarial operators. Sender-side outbound gating for `autoAcceptPeering=0` was tracked as the "Direction C" follow-up and is now closed by the [Outbound Peering Gate](#outbound-peering-gate) below (spec `docs/superpowers/specs/2026-04-26-outbound-peering-gate-design.md`, commits `ac2565f..c795d72`).
+
+### Outbound Peering Gate
+
+The receiver-side trust class is closed by the approval-token mechanism above. The sender-side trust class — *bug-prone or incidental code paths on the initiator that drag the local instance into peering relationships without local admin consent* — is closed by a centralized gate inside `ensurePeered`. After this change, `autoAcceptPeering=0` is symmetric: BOTH inbound and outbound new-peer establishment require local admin approval. Existing active peers keep working unchanged.
+
+Spec: `docs/superpowers/specs/2026-04-26-outbound-peering-gate-design.md`.
+
+**Gate location.** `ensurePeered` (`utils/federationPeering.ts`) is the single chokepoint every outbound new-peer attempt funnels through (friend-add, `/peer/ensure`, `sendCallRelay`'s no-active-peer branch, future callers). The gate runs ONLY when **no `federation_peers` row exists for the origin**. If any peer row exists in any status (`active`, `pending`, `awaiting_approval`, `rejected`, `revoked`, `unreachable`, `needs_attention`), the gate is a no-op — the existing branches in `ensurePeered` handle the row as today. This matches the threat model: the worry is automated paths creating *new* peerings without admin consent.
+
+**Required caller intent.** Every call site MUST pass an explicit `EnsurePeeredCallerIntent` (declared in `packages/shared/src/types.ts`). The argument is required at the type level so a future caller cannot silently fall through to system behavior:
+
+```ts
+export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message';
+
+export type EnsurePeeredCallerIntent =
+  | { kind: 'user_action'; userId: string; reason: PeeringTriggerReason; target: string }
+  | { kind: 'system' };
+
+export type EnsurePeeredResult =
+  | { status: 'active'; peerId: string }
+  | { status: 'rejected'; error: string }
+  | { status: 'failed'; error: string }
+  | { status: 'pending'; error: string }
+  | { status: 'admin_required'; error: string };  // ← new variant
+```
+
+(Type was originally drafted as `TriggerReason` and renamed to `PeeringTriggerReason` in commit `f6487a2` to disambiguate from unrelated outbox/voice trigger enums.)
+
+**Gate-but-don't-queue split.** When the gate fires (no peer row + `autoAcceptPeering=0`), behavior diverges on intent:
+
+- **`intent.kind === 'user_action'`** — upsert an outbound `peer_approval_requests` row keyed on `(origin, direction='outbound')`, upsert a `peer_approval_subscribers` row keyed on `(request_id, user_id, trigger_reason, trigger_target)`, broadcast `federation_approval_request_received` to admins, broadcast `peering_subscription_changed` to the requesting user, return `{ status: 'admin_required', error: 'Awaiting your admin\'s approval to initiate peering' }`. The user's request is admin-approvable but no traffic reaches the wire yet.
+- **`intent.kind === 'system'`** — no DB writes, no admin broadcast, no admin-visible queue clutter; return `{ status: 'admin_required', error: 'Outbound peering requires admin approval on this instance' }`. A stale outbox event or dead voice-call has no admin remedy worth surfacing.
+
+**`'admin_required'` result semantics.** Each user-action caller maps the new variant to its own surface (e.g. friend-add returns `409 peer_pending_local_admin`; `sendCallRelay` returns `peer_admin_required` and threads through the existing exhaustive `CallRelayFailureReason` switch). See `social.md` §6 outbound flow for the friend-add error mapping.
+
+**Lifecycle (centralized cleanup on `onPeerActivated`).** The most important correctness invariant: outbound subscriber cleanup hangs off **status transition to `active` (`onPeerActivated`)**, NOT off the local admin's approve-action handler. This holds across every activation path:
+
+- queue approval (`/api/federation/approval-requests/:id/approve` 200 branch)
+- admin-direct (`/peer/initiate`)
+- autoAccept=1 remote (`/peer/accept` 200 from a remote that auto-accepts)
+- mutual-token approval (the receiver's `/peer/accept` verifying `approvalToken` and promoting `awaiting_approval → active`)
+
+When `federation_peers.status` transitions to `active`, `onPeerActivated` (`utils/federationPeerActivation.ts`) calls `fanoutOutboundSubscribers(origin)`: it queries the outbound `peer_approval_requests` row for the activated origin, inserts a `kind='approved'` row in `peer_approval_notifications` for each subscriber, broadcasts `peering_notification_received` per subscriber, then deletes the parent `peer_approval_requests` row (cascade clears subscribers). No per-action code knows about subscribers; the queue-approval handler does NOT duplicate this cleanup — it just performs the handshake and lets the resulting status transition trigger fanout.
+
+The reason cleanup must NOT live in the approve-action handler: when the remote also has `autoAcceptPeering=0`, local admin approval transitions our peer row to `awaiting_approval`, not `active`. Subscribers must remain queued until full activation completes (which may be days later when the remote admin approves). Wiring cleanup to the approve-action handler instead would clear subscribers prematurely; users would retry against an `awaiting_approval` peer and hit `peer_pending_approval` 409, confused.
+
+The other lifecycle exits write notifications and cascade-delete the parent at the trigger site:
+
+- **Admin denies an outbound request** (`POST /api/federation/approval-requests/:id/deny`, `direction='outbound'` branch) — fans out `kind='denied'` notifications to subscribers, then deletes the parent (cascade clears subscribers). No remote network call — the remote never knew we were considering this peer. `federation_peers_changed` is broadcast to admins so the queue UI refreshes.
+- **Last-subscriber cancel** (`DELETE /api/federation/peering-subscriptions/:id`) — deletes the subscriber row; if it was the last subscriber for the parent, cascade-deletes the parent. No notification created (the user took the action; they know).
+- **Parent-row expiry** (`storageJanitor.ts` outbound branch) — fans out `kind='expired'` notifications to subscribers before deleting the parent. **Inbound expiry behavior is preserved unchanged** from pre-branch: the janitor still sends a signed `/peer/denied` to the inbound origin and only deletes the row on success (the Task 9 first-pass mistakenly removed this; commit `c4e7438` restored it).
+
+**No status column on subscribers.** Existence = waiting; deletion = resolved (with the resolution mode encoded in the notification row created at deletion time, except for the canceller path).
+
+**Gate composition with the trust-guard.** The pre-handshake trust-guard ("inbound `peer_approval_requests` exists → refuse outbound with `'rejected'`") is preserved unchanged and runs after the gate. The trust-guard query was narrowed to `direction='inbound'` so the gate's own outbound queue rows don't false-positive block their own approval path. The two layers compose cleanly: the gate fires earlier when there's no peer row at all; the trust-guard fires later when an inbound row exists.
+
+**Caller summary** (intent each call site declares):
+
+| Site | Intent | On `'admin_required'` |
+|---|---|---|
+| `routes/social.ts` (friend-add) | `user_action` reason `friend_add` target `name@domain` | 409 `peer_pending_local_admin` |
+| `routes/federation.ts` (`/peer/ensure`) | `user_action` reason `friend_add` (default; client-supplied reason is ignored today) | response `peeringStatus: 'admin_required'` |
+| `utils/federationOutbox.ts` (`sendCallRelay` no-active-peer) | `system` | `CallRelayFailureReason.peer_admin_required` |
+| `utils/federationWorker.ts` (`resolvePendingPeers`) | n/a | operates only on already-existing pending rows; gate is unreachable from this path |
+
+Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`. They issue their own `fetch` and run their own activation logic. The gate does not affect admin power; admins retain full ability to pre-peer or approve outbound regardless of the setting.
 
 ### Admin Endpoints
 
@@ -193,9 +277,9 @@ The pre-handshake guard above closes the most reliable trigger but cannot preven
 | `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
 | `/api/federation/peers/:id/reset` | POST | JWT + admin | Delete peer record (cascade-deletes outbox). Only admissible in `needs_attention` state. |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
-| `/api/federation/approval-requests` | GET | JWT + admin | List pending peering approval requests |
-| `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request, initiate handshake |
-| `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request, notify requester |
+| `/api/federation/approval-requests` | GET | JWT + admin | List pending peering approval requests (inbound + outbound). Outbound rows include `subscribers: ApprovalRequestSubscriberSummary[]` (possibly empty). Inbound rows omit `subscribers`. Each row carries `direction: 'inbound' \| 'outbound'`. |
+| `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request — direction-branched (see Approval flow above) |
+| `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request — direction-branched (see Denial flow above) |
 
 **`POST /api/federation/peer/ensure`** — Wraps `ensurePeered()`. Accepts `{ remoteOrigin: string }` in body. Returns `{ peeringStatus, peerId?, error? }` where `peeringStatus` is one of `active`, `pending`, `awaiting_approval`, `rejected`, `unreachable`, or `revoked`.
 

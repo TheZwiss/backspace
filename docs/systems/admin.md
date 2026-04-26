@@ -361,26 +361,31 @@ The temporary password is shown exactly once in the admin UI -- the UsersPanel d
 
 ### Peering Approval Requests
 
-All admin-only. Only present when `autoAcceptPeering` is `false` and incoming peering requests are queued.
+All admin-only. Present when `autoAcceptPeering` is `false`. The queue holds **both directions**:
+- **Inbound** rows — remote instances asking to peer with us.
+- **Outbound** rows — local users who initiated peering (friend-add, etc.) that the local [Outbound Peering Gate](federation.md#outbound-peering-gate) intercepted because no `federation_peers` row exists yet for the target.
 
 ```
-GET  /api/federation/approval-requests              → PeerApprovalRequest[]
-POST /api/federation/approval-requests/:id/approve  → { success: boolean }
-POST /api/federation/approval-requests/:id/deny     → { success: boolean }
+GET  /api/federation/approval-requests              → { requests: ApprovalRequestSummary[] }
+POST /api/federation/approval-requests/:id/approve  → { success, peerStatus?, peer? }
+POST /api/federation/approval-requests/:id/deny     → { success }
 ```
 
-`PeerApprovalRequest` shape:
+`ApprovalRequestSummary` (see [api.md → Federation Peering Approval Queue](api.md#federation-peering-approval-queue) for the complete TypeScript shape):
 ```typescript
 {
-  id: string;           // Snowflake
-  origin: string;       // Requesting instance URL
+  id: string;
+  direction: 'inbound' | 'outbound';
+  origin: string;
   instanceName: string | null;
-  requestedAt: number;  // Epoch ms
-  expiresAt: number;    // Epoch ms (requestedAt + 30 days)
+  requestedAt: number;
+  expiresAt: number;
+  // Outbound rows ONLY — inbound rows omit this field entirely (absent, not null and not []).
+  subscribers?: Array<{ id, userId, username, triggerReason, triggerTarget, createdAt }>;
 }
 ```
 
-See [federation.md](federation.md) — Peer Approval Queue section for the full approval/denial/expiry flow.
+See [federation.md](federation.md) — Peer Approval Queue and Outbound Peering Gate sections for the full approval/denial/expiry flow (including the direction-branched approve/deny semantics, `onPeerActivated` cleanup invariant, and the inbound-expiry `/peer/denied` notification preserved unchanged).
 
 ---
 
@@ -431,9 +436,13 @@ Manages: instance name, registration toggle, discovery toggle, GIF API key, fede
 
 #### FederationPanel
 
-Manages: federation peers list, pending approval requests, manual peering initiation, secret rotation, peer reset.
+Manages: federation peers list, pending approval requests (inbound + outbound), manual peering initiation, secret rotation, peer reset.
 
-- **Pending Approvals section:** Visible only when `pendingApprovalCount > 0` (from ready payload). Positioned above the peer list. Each row shows the requesting instance name and origin with Approve and Deny buttons. Approve calls `api.federation.approveApprovalRequest(id)` and Deny calls `api.federation.denyApprovalRequest(id)`; both remove the row from the local list on success.
+- **Pending Approvals section:** Visible only when `pendingApprovalCount > 0` (from ready payload — the count sums inbound + outbound rows). Positioned above the peer list. Both directions render as rows in the same unified queue, branched on `direction`:
+  - **Inbound rows** — "{instanceName} ({origin}) — wants to peer with us." Approve / Deny buttons.
+  - **Outbound rows** — "{instanceName} ({origin}) — N user(s) want us to peer with them. Triggered by: friend-add (etc.)." Inline expansion reveals the subscriber list (`username — friend_add → alice@orbit`, ...). Approve / Deny buttons same as inbound; backend branches on direction.
+  - Approve calls `api.federation.approveApprovalRequest(id)` and Deny calls `api.federation.denyApprovalRequest(id)`. Both remove the row from the local list on success and refresh on `federation_approval_request_received` (which now also fires for outbound queue creation) and `federation_peers_changed`.
+  - **ConfirmDialog copy variants:** the dialog branches on direction. Outbound approve confirms "send `/peer/accept` to {origin} on behalf of N user(s)"; outbound deny confirms "fan out denied notifications to N user(s) and discard the queued request" (no remote network call).
 - Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable/awaiting_approval/rejected/needs_attention), last-seen/synced times, and per-peer actions.
 - Peers with status `'revoked'` are filtered out of the visible list.
 - Revoke calls `api.federation.revokePeer(peerId)` and removes from local list.

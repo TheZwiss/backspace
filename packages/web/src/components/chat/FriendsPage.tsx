@@ -7,6 +7,7 @@ import { mapServerErrorToMessage } from '../../utils/friendErrors';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useInstanceStore } from '../../stores/instanceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useFederationStore } from '../../stores/federationStore';
 import { Avatar } from '../ui/Avatar';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
@@ -33,6 +34,17 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
   const [pendingUnfriend, setPendingUnfriend] = useState<{ id: string; name: string } | null>(null);
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
+
+  // If the user clicked "Retry your friend request" in the Connections panel
+  // and we just navigated here, the federation store carries the original
+  // target. Switching to the Add tab makes the AddFriendTab mount, which then
+  // consumes the prefill into its query input. We only check on mount — the
+  // store value is one-shot (cleared by AddFriendTab on consume).
+  useEffect(() => {
+    if (useFederationStore.getState().pendingFriendAddPrefill) {
+      setActiveTab('add');
+    }
+  }, []);
 
   const {
     friends,
@@ -394,7 +406,13 @@ function AddFriendTab({
   const fetchDiscoverUsers = useDiscoverStore((s) => s.fetchUsers);
   const updateRelationship = useDiscoverStore((s) => s.updateRelationship);
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => {
+    // Consume the federation store's pending friend-add prefill at mount so
+    // a Retry click in the Connections panel lands here with the original
+    // target already in the input. The consume call clears the store value
+    // so subsequent mounts (e.g. tab switching) start empty.
+    return useFederationStore.getState().consumePendingFriendAddPrefill() ?? '';
+  });
   const [rawSearchResults, setRawSearchResults] = useState<TaggedUser[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [directAddLoading, setDirectAddLoading] = useState(false);

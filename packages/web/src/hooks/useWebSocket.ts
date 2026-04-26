@@ -14,6 +14,7 @@ import { getActiveRoom } from './useLiveKit';
 import { useUIStore } from '../stores/uiStore';
 import { useActivityStore } from '../stores/activityStore';
 import { useDiscoverStore } from '../stores/discoverStore';
+import { useFederationStore } from '../stores/federationStore';
 
 // ─── Rejected peer origins (for unreachable member indicators) ───────────────
 const rejectedPeerOrigins = new Set<string>();
@@ -778,6 +779,33 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'federation_approval_request_received': {
       notifyFederationChangeListeners();
+      break;
+    }
+
+    case 'peering_subscription_changed': {
+      // The user's pending peering-subscription set changed (admin approved/
+      // denied/expired the parent request, or the user cancelled a row from
+      // another tab). Refetch — the server is the source of truth.
+      void useFederationStore.getState().refetchPeeringSubscriptions();
+      break;
+    }
+
+    case 'peering_notification_received': {
+      // Terminal-state outcome arrived for one of the user's outbound peering
+      // requests. Refetch the notifications list and surface a transient
+      // toast — the inline list in the Connections panel is the persistent
+      // surface; the toast is opportunistic for online users.
+      void useFederationStore.getState().refetchPeeringNotifications();
+      const message =
+        event.kind === 'approved'
+          ? 'Your peering request was approved'
+          : event.kind === 'denied'
+            ? 'Your peering request was denied'
+            : 'Your peering request expired';
+      // uiStore exposes 'info' | 'warning' | 'success' — use 'success' for
+      // approved, 'warning' for denied/expired (no error severity exists).
+      const severity: 'success' | 'warning' = event.kind === 'approved' ? 'success' : 'warning';
+      useUIStore.getState().addToast(message, severity, 4500);
       break;
     }
 
