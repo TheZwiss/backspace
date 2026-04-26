@@ -1037,7 +1037,7 @@ export interface FederationPeer {
  * the human-readable cause and the user can recover their original action
  * after approval. Persisted as a string column with this exact set of values.
  */
-export type TriggerReason = 'friend_add' | 'space_join' | 'direct_message';
+export type PeeringTriggerReason = 'friend_add' | 'space_join' | 'direct_message';
 
 /**
  * Caller intent passed into `ensurePeered()`. The gate (when
@@ -1053,7 +1053,7 @@ export type TriggerReason = 'friend_add' | 'space_join' | 'direct_message';
  * for space_join, the federated DM channel id for direct_message).
  */
 export type EnsurePeeredCallerIntent =
-  | { kind: 'user_action'; userId: string; reason: TriggerReason; target: string }
+  | { kind: 'user_action'; userId: string; reason: PeeringTriggerReason; target: string }
   | { kind: 'system' };
 
 /**
@@ -1074,7 +1074,7 @@ export interface PeeringSubscription {
   requestId: string;
   peerOrigin: string;
   peerInstanceName: string | null;
-  triggerReason: TriggerReason;
+  triggerReason: PeeringTriggerReason;
   triggerTarget: string;
   createdAt: number;
 }
@@ -1089,7 +1089,7 @@ export interface PeeringNotification {
   id: string;
   kind: PeeringNotificationKind;
   peerOrigin: string;
-  triggerReason: TriggerReason;
+  triggerReason: PeeringTriggerReason;
   triggerTarget: string;
   createdAt: number;
   readAt: number | null;
@@ -1103,7 +1103,7 @@ export interface PeeringNotification {
 export interface ApprovalRequestSubscriberSummary {
   userId: string;
   username: string;
-  triggerReason: TriggerReason;
+  triggerReason: PeeringTriggerReason;
   triggerTarget: string;
 }
 
@@ -1121,5 +1121,11 @@ export interface ApprovalRequest {
   instanceName: string | null;
   requestedAt: number;
   expiresAt: number;
+  /**
+   * Subscriber summaries — present (and possibly empty array) only when
+   * `direction === 'outbound'`. ABSENT (`undefined`) when `direction === 'inbound'`.
+   * Inbound rows have no per-action context; the field is omitted from the server
+   * response, not set to `[]`.
+   */
   subscribers?: ApprovalRequestSubscriberSummary[];
 }
