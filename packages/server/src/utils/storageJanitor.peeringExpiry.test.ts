@@ -102,10 +102,17 @@ describe('cleanupExpiredApprovalRequests', () => {
       createdAt: past - 500,
     }).run();
 
+    // Outbound expiry must NOT make any network call. Spy on fetch to assert.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+
     const { cleanupExpiredApprovalRequests } = await import('./storageJanitor.js');
     const before = Date.now();
-    const cleaned = cleanupExpiredApprovalRequests();
+    const cleaned = await cleanupExpiredApprovalRequests();
     const after = Date.now();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
 
     expect(cleaned).toBe(1);
 
@@ -142,9 +149,10 @@ describe('cleanupExpiredApprovalRequests', () => {
     expect(bobNotif!.readAt).toBeNull();
   });
 
-  // Janitor expiry test B: inbound row with past expiresAt → janitor deletes
-  // it without writing any notifications.
-  it('inbound expired row: deletes outright with NO notifications written', async () => {
+  // Janitor expiry test B1: inbound row with past expiresAt + successful
+  // /peer/denied POST → janitor sends signed denial, then deletes the row.
+  // No local notifications are written for inbound.
+  it('inbound expired row: sends signed /peer/denied to origin and deletes on success', async () => {
     const past = Date.now() - 1_000;
     testDb.insert(schema.peerApprovalRequests).values({
       id: 'req-in',
@@ -157,16 +165,102 @@ describe('cleanupExpiredApprovalRequests', () => {
       approvalToken: null,
     }).run();
 
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 }),
+    );
+
     const { cleanupExpiredApprovalRequests } = await import('./storageJanitor.js');
-    const cleaned = cleanupExpiredApprovalRequests();
+    const cleaned = await cleanupExpiredApprovalRequests();
 
     expect(cleaned).toBe(1);
+
+    // Exactly one signed POST to the origin's /peer/denied endpoint.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://orbit.example/api/federation/peer/denied');
+    expect(init?.method).toBe('POST');
+
+    const headers = init?.headers as Record<string, string>;
+    expect(headers['X-Federation-Signature']).toMatch(/^sha256=[0-9a-f]+$/);
+    expect(headers['X-Federation-Origin']).toBe('https://local.example');
+    expect(headers['X-Federation-Timestamp']).toMatch(/^\d+$/);
+    expect(headers['X-Federation-Nonce']).toBeDefined();
+    expect(headers['Content-Type']).toBe('application/json');
+
+    const body = JSON.parse(init?.body as string);
+    expect(body.origin).toBe('https://local.example');
+    expect(body.reason).toBe('expired');
+    expect(typeof body.message).toBe('string');
+    expect(body.message.length).toBeGreaterThan(0);
 
     // Parent deleted.
     expect(testDb.select().from(schema.peerApprovalRequests)
       .where(eq(schema.peerApprovalRequests.id, 'req-in')).get()).toBeUndefined();
 
-    // No notifications written for inbound.
+    // No local notifications written for inbound.
+    expect(testDb.select().from(schema.peerApprovalNotifications).all()).toHaveLength(0);
+  });
+
+  // Janitor expiry test B2: inbound row with past expiresAt + failed POST
+  // (network error or non-2xx) → janitor keeps the row for retry on the
+  // next cycle. No local notifications written.
+  it('inbound expired row: keeps row for retry when /peer/denied POST fails', async () => {
+    const past = Date.now() - 1_000;
+    testDb.insert(schema.peerApprovalRequests).values({
+      id: 'req-in-fail',
+      origin: 'https://orbit.example',
+      direction: 'inbound',
+      instanceName: 'Orbit',
+      hmacSecret: 'shared-secret',
+      requestedAt: past - 1000,
+      expiresAt: past,
+      approvalToken: null,
+    }).run();
+
+    // Simulate a 503 (non-ok response) — the row must remain.
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 503 }),
+    );
+
+    const { cleanupExpiredApprovalRequests } = await import('./storageJanitor.js');
+    const cleaned = await cleanupExpiredApprovalRequests();
+
+    expect(cleaned).toBe(0);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Row still present — eligible for retry next cycle.
+    expect(testDb.select().from(schema.peerApprovalRequests)
+      .where(eq(schema.peerApprovalRequests.id, 'req-in-fail')).get()).toBeDefined();
+
+    // No local notifications written.
+    expect(testDb.select().from(schema.peerApprovalNotifications).all()).toHaveLength(0);
+  });
+
+  // Network-error variant of B2: thrown error (e.g. AbortError, DNS failure)
+  // is caught and treated as not-sent. Row must remain for retry.
+  it('inbound expired row: keeps row when fetch throws a network error', async () => {
+    const past = Date.now() - 1_000;
+    testDb.insert(schema.peerApprovalRequests).values({
+      id: 'req-in-throw',
+      origin: 'https://orbit.example',
+      direction: 'inbound',
+      instanceName: 'Orbit',
+      hmacSecret: 'shared-secret',
+      requestedAt: past - 1000,
+      expiresAt: past,
+      approvalToken: null,
+    }).run();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const { cleanupExpiredApprovalRequests } = await import('./storageJanitor.js');
+    const cleaned = await cleanupExpiredApprovalRequests();
+
+    expect(cleaned).toBe(0);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    expect(testDb.select().from(schema.peerApprovalRequests)
+      .where(eq(schema.peerApprovalRequests.id, 'req-in-throw')).get()).toBeDefined();
     expect(testDb.select().from(schema.peerApprovalNotifications).all()).toHaveLength(0);
   });
 
@@ -193,7 +287,7 @@ describe('cleanupExpiredApprovalRequests', () => {
     }).run();
 
     const { cleanupExpiredApprovalRequests } = await import('./storageJanitor.js');
-    const cleaned = cleanupExpiredApprovalRequests();
+    const cleaned = await cleanupExpiredApprovalRequests();
 
     expect(cleaned).toBe(0);
 

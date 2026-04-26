@@ -438,17 +438,18 @@ export function cleanupFederationFileQueue(): number {
  * Outbound rows: before deletion, fan out kind='expired' notifications to
  * each subscriber so the original requester(s) can see the terminal state on
  * next page load. Subscriber rows cascade-delete via FK when the parent row
- * is removed.
+ * is removed. No network call — the remote was never told about our queued
+ * outbound request to begin with.
  *
- * Inbound rows: deleted outright. Both sides expire independently (their
- * own janitor will fan out kind='expired' notifications to their subscribers
- * on their schedule); no cross-instance network notification is required.
+ * Inbound rows: send a signed POST /peer/denied with reason='expired' to
+ * the requesting origin so it can update its UI. Only delete the row if the
+ * POST succeeded; otherwise keep it and retry on the next janitor cycle.
  *
- * No WebSocket broadcast is emitted on expiry — offline users see the
+ * No WebSocket broadcast is emitted on local expiry — offline users see the
  * notification on next GET /api/federation/peering-notifications, matching
  * the persistence guarantee of the notifications table.
  */
-export function cleanupExpiredApprovalRequests(): number {
+export async function cleanupExpiredApprovalRequests(): Promise<number> {
   const db = getDb();
   const expiredRequests = db
     .select()
@@ -458,11 +459,15 @@ export function cleanupExpiredApprovalRequests(): number {
 
   if (expiredRequests.length === 0) return 0;
 
+  const { getOurOrigin, buildFederationHeaders } = await import('./federationAuth.js');
+  const ourOrigin = getOurOrigin();
   const now = Date.now();
   let deletedCount = 0;
+
   for (const req of expiredRequests) {
     if (req.direction === 'outbound') {
-      // Fan out kind='expired' notifications to subscribers before delete.
+      // Outbound expiry: fan out kind='expired' notifications to subscribers,
+      // then cascade-delete. No network call.
       const subs = db
         .select()
         .from(schema.peerApprovalSubscribers)
@@ -482,13 +487,54 @@ export function cleanupExpiredApprovalRequests(): number {
           })
           .run();
       }
+      db.delete(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, req.id))
+        .run();
+      deletedCount++;
+      continue;
     }
-    // Cascade-delete the parent (subscribers go via FK cascade for outbound;
-    // inbound has no subscribers to clear).
-    db.delete(schema.peerApprovalRequests)
-      .where(eq(schema.peerApprovalRequests.id, req.id))
-      .run();
-    deletedCount++;
+
+    // Inbound expiry: signed /peer/denied POST to origin; only delete on
+    // success. Preserved verbatim from pre-branch behavior.
+    if (!req.hmacSecret) {
+      // CHECK constraint guarantees inbound rows have hmac_secret; defensive guard.
+      console.warn(
+        `[storage-janitor] Inbound approval-request ${req.id} missing hmac_secret — skipping expiry notification`,
+      );
+      continue;
+    }
+
+    const denialBody = JSON.stringify({
+      origin: ourOrigin,
+      reason: 'expired' as const,
+      message: 'Request expired — no response from admin within 30 days',
+    });
+    const headers = buildFederationHeaders(denialBody, req.hmacSecret, ourOrigin);
+
+    let sent = false;
+    try {
+      const response = await fetch(`${req.origin}/api/federation/peer/denied`, {
+        method: 'POST',
+        headers,
+        body: denialBody,
+        signal: AbortSignal.timeout(10_000),
+      });
+      sent = response.ok;
+    } catch {
+      // Network error — will retry next cycle
+    }
+
+    if (sent) {
+      // No rejected peer record for expiry — origin can re-request
+      db.delete(schema.peerApprovalRequests)
+        .where(eq(schema.peerApprovalRequests.id, req.id))
+        .run();
+      deletedCount++;
+    } else {
+      console.warn(
+        `[storage-janitor] Failed to send expiry denial to ${req.origin} — will retry next cycle`,
+      );
+    }
   }
 
   if (deletedCount > 0) {
@@ -643,7 +689,7 @@ export function cleanupSoftDeletedDmChannels(): number {
  *  - Stale file queue entries
  *  - Soft-deleted DM channels past grace period
  */
-export function runFederationJanitor(): void {
+export async function runFederationJanitor(): Promise<void> {
   try {
     const outbox = cleanupFederationOutbox();
     const mutLog = cleanupFederationMutationLog();
@@ -657,11 +703,14 @@ export function runFederationJanitor(): void {
       );
     }
 
-    // Expire approval requests (outbound rows fan out kind='expired'
-    // notifications to subscribers before delete; inbound rows are deleted
-    // outright). Then sweep read peering notifications older than 30 days.
+    // Expire approval requests:
+    //   - Outbound rows fan out kind='expired' notifications to subscribers
+    //     before cascade-delete (local DB only).
+    //   - Inbound rows send a signed /peer/denied POST to the requesting
+    //     origin; only delete on success, otherwise retry next cycle.
+    // Then sweep read peering notifications older than 30 days.
     try {
-      const approvalExpired = cleanupExpiredApprovalRequests();
+      const approvalExpired = await cleanupExpiredApprovalRequests();
       if (approvalExpired > 0) {
         console.log(`[storage-janitor] Expired ${approvalExpired} peer approval request(s)`);
       }
