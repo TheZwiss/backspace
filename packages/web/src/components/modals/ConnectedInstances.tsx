@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import type { InstanceInfoResponse, FederationRegistryEntry } from '@backspace/shared';
+import { useNavigate } from 'react-router-dom';
+import type {
+  InstanceInfoResponse,
+  FederationRegistryEntry,
+  PeeringSubscription,
+  PeeringNotification,
+  PeeringTriggerReason,
+} from '@backspace/shared';
 import { useInstanceStore, DifferentPasswordError, isSelfOrigin } from '../../stores/instanceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useFederationStore } from '../../stores/federationStore';
 import { isElectron } from '../../platform/platform';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
@@ -967,12 +975,328 @@ function sortEntries(entries: FederationRegistryEntry[], sortBy: SortBy): Federa
   });
 }
 
+// ─── Outbound peering gate helpers ──────────────────────────────────────────
+
+function actionLabel(reason: PeeringTriggerReason): string {
+  switch (reason) {
+    case 'friend_add': return 'friend request';
+    case 'space_join': return 'space join';
+    case 'direct_message': return 'direct message';
+  }
+}
+
+function actionVerbPhrase(reason: PeeringTriggerReason, target: string): string {
+  switch (reason) {
+    case 'friend_add': return `Friend request to ${target}`;
+    case 'space_join': return `Join ${target}`;
+    case 'direct_message': return `Direct message to ${target}`;
+  }
+}
+
+// ─── Pending peering subscriptions section ──────────────────────────────────
+
+function PendingSubscriptionRow({ subscription }: { subscription: PeeringSubscription }) {
+  const cancelPeeringSubscription = useFederationStore((s) => s.cancelPeeringSubscription);
+  const addToast = useUIStore((s) => s.addToast);
+  const [busy, setBusy] = useState(false);
+
+  const host = safeHost(subscription.peerOrigin);
+  const peerLabel = subscription.peerInstanceName || host;
+
+  const handleCancel = async () => {
+    setBusy(true);
+    try {
+      await cancelPeeringSubscription(subscription.id);
+      addToast('Peering request cancelled', 'success', 3000);
+    } catch (err) {
+      addToast(
+        `Failed to cancel: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        'warning',
+        5000,
+      );
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white/[0.02] rounded-md px-3 py-2.5 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-sm text-txt-primary truncate">
+          {actionVerbPhrase(subscription.triggerReason, subscription.triggerTarget)}
+        </div>
+        <div className="text-[11px] text-txt-tertiary truncate">
+          on <span className="text-txt-secondary">{peerLabel}</span>
+          {subscription.peerInstanceName && (
+            <span className="ml-1 text-txt-tertiary/70">({host})</span>
+          )}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleCancel}
+        disabled={busy}
+        className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors shrink-0 disabled:opacity-50"
+      >
+        {busy ? 'Cancelling...' : 'Cancel'}
+      </button>
+    </div>
+  );
+}
+
+function PendingPeeringSubscriptionsSection() {
+  const subscriptions = useFederationStore((s) => s.peeringSubscriptions);
+
+  if (subscriptions.length === 0) return null;
+
+  return (
+    <div>
+      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+        Pending Peering Approvals
+      </div>
+      <p className="text-xs text-txt-tertiary mb-2">
+        Your admin must approve before these requests can proceed.
+      </p>
+      <div className="rounded-lg bg-white/[0.02] p-3 space-y-2">
+        {subscriptions.map((s) => (
+          <PendingSubscriptionRow key={s.id} subscription={s} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Recent peering outcomes section ────────────────────────────────────────
+
+function notificationAccentClasses(kind: PeeringNotification['kind']): {
+  surface: string;
+  iconBg: string;
+  iconColor: string;
+} {
+  switch (kind) {
+    case 'approved':
+      return {
+        surface: 'bg-status-online/[0.06] border border-status-online/15',
+        iconBg: 'bg-status-online/15',
+        iconColor: 'text-status-online',
+      };
+    case 'denied':
+      return {
+        surface: 'bg-accent-rose/[0.06] border border-accent-rose/15',
+        iconBg: 'bg-accent-rose/15',
+        iconColor: 'text-txt-danger',
+      };
+    case 'expired':
+      return {
+        surface: 'bg-accent-amber/[0.06] border border-accent-amber/15',
+        iconBg: 'bg-accent-amber/15',
+        iconColor: 'text-accent-amber',
+      };
+  }
+}
+
+function NotificationIcon({ kind, className }: { kind: PeeringNotification['kind']; className: string }) {
+  // approved: check, denied: cross, expired: clock
+  if (kind === 'approved') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+      </svg>
+    );
+  }
+  if (kind === 'denied') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className}>
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z" />
+    </svg>
+  );
+}
+
+function PeeringNotificationCard({
+  notification,
+  onRetry,
+}: {
+  notification: PeeringNotification;
+  onRetry: (notification: PeeringNotification) => void;
+}) {
+  const markPeeringNotificationRead = useFederationStore((s) => s.markPeeringNotificationRead);
+  const addToast = useUIStore((s) => s.addToast);
+  const [busy, setBusy] = useState(false);
+
+  const host = safeHost(notification.peerOrigin);
+  const accent = notificationAccentClasses(notification.kind);
+
+  const handleDismiss = async () => {
+    setBusy(true);
+    try {
+      await markPeeringNotificationRead(notification.id);
+    } catch (err) {
+      addToast(
+        `Failed to dismiss: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        'warning',
+        5000,
+      );
+      setBusy(false);
+    }
+  };
+
+  // Retry is only meaningful on approved notifications, and the gate currently
+  // only wires friend_add. space_join and direct_message reach the gate via
+  // backend paths that aren't user-initiated end-to-end yet, so we hide Retry
+  // for those rather than promise an action we cannot deliver.
+  const showRetry =
+    notification.kind === 'approved' && notification.triggerReason === 'friend_add';
+
+  let primaryText: string;
+  if (notification.kind === 'approved') {
+    primaryText = `Your peering request to ${host} was approved by your admin.`;
+  } else if (notification.kind === 'denied') {
+    primaryText = `Your peering request to ${host} was denied by your admin.`;
+  } else {
+    primaryText = `Your peering request to ${host} expired without admin action.`;
+  }
+
+  const contextText =
+    notification.kind === 'approved' && notification.triggerReason !== 'friend_add'
+      ? `Original action: ${actionVerbPhrase(notification.triggerReason, notification.triggerTarget)}.`
+      : `Original action: ${actionVerbPhrase(notification.triggerReason, notification.triggerTarget)}`;
+
+  return (
+    <div className={`rounded-md px-3 py-2.5 ${accent.surface}`}>
+      <div className="flex items-start gap-2.5">
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${accent.iconBg}`}>
+          <NotificationIcon kind={notification.kind} className={accent.iconColor} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm text-txt-primary">{primaryText}</div>
+          <div className="text-[11px] text-txt-tertiary mt-0.5">{contextText}</div>
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {showRetry && (
+              <button
+                type="button"
+                onClick={() => onRetry(notification)}
+                className="px-3 py-1.5 text-xs font-medium bg-status-online/15 text-status-online hover:bg-status-online/25 rounded transition-colors"
+              >
+                Retry your {actionLabel(notification.triggerReason)}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleDismiss}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs font-medium bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary rounded transition-colors disabled:opacity-50"
+            >
+              {busy ? 'Dismissing...' : 'Dismiss'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecentPeeringOutcomesSection() {
+  const notifications = useFederationStore((s) => s.peeringNotifications);
+  const markAllPeeringNotificationsRead = useFederationStore((s) => s.markAllPeeringNotificationsRead);
+  const setPendingFriendAddPrefill = useFederationStore((s) => s.setPendingFriendAddPrefill);
+  const closeModal = useUIStore((s) => s.closeModal);
+  const setShowDms = useUIStore((s) => s.setShowDms);
+  const setMobileTab = useUIStore((s) => s.setMobileTab);
+  const isMobile = useUIStore((s) => s.isMobile);
+  const addToast = useUIStore((s) => s.addToast);
+  const navigate = useNavigate();
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  if (notifications.length === 0) return null;
+
+  const handleRetry = (notification: PeeringNotification) => {
+    if (notification.triggerReason !== 'friend_add') {
+      // Defensive — Retry button is only rendered for friend_add. Bail
+      // silently if a future change widens this without updating the handler.
+      return;
+    }
+    // Set the prefill side-channel before navigating so AddFriendTab finds
+    // it on its initial render.
+    setPendingFriendAddPrefill(notification.triggerTarget);
+    // Mark this notification read in the background — the user has acted on
+    // it. Use the per-id endpoint so other unread notifications stay visible.
+    void useFederationStore.getState().markPeeringNotificationRead(notification.id);
+    // Close the settings modal that hosts this panel.
+    closeModal();
+    if (isMobile) {
+      // Mobile: jump to the DMs/Friends tab so MobileShell renders FriendsPage.
+      setMobileTab('dms');
+    } else {
+      // Desktop: route to /channels/@me — AppLayout's effect calls
+      // setShowDms(true) for the @me path, and MainContent renders FriendsPage
+      // when no DM channel is selected.
+      setShowDms(true);
+      navigate('/channels/@me');
+    }
+  };
+
+  const handleDismissAll = async () => {
+    setBulkBusy(true);
+    try {
+      await markAllPeeringNotificationsRead();
+    } catch (err) {
+      addToast(
+        `Failed to dismiss all: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        'warning',
+        5000,
+      );
+      setBulkBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">
+          Recent Peering Outcomes
+        </div>
+        {notifications.length > 1 && (
+          <button
+            type="button"
+            onClick={handleDismissAll}
+            disabled={bulkBusy}
+            className="text-[11px] text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+          >
+            {bulkBusy ? 'Dismissing...' : 'Dismiss all'}
+          </button>
+        )}
+      </div>
+      <div className="space-y-2">
+        {notifications.map((n) => (
+          <PeeringNotificationCard key={n.id} notification={n} onRetry={handleRetry} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export function ConnectedInstances() {
   const instances = useInstanceStore((s) => s.instances);
   const registry = useInstanceStore((s) => s.registry);
   const user = useAuthStore((s) => s.user);
+
+  const refetchPeeringSubscriptions = useFederationStore((s) => s.refetchPeeringSubscriptions);
+  const refetchPeeringNotifications = useFederationStore((s) => s.refetchPeeringNotifications);
+
+  // Hydrate the outbound-peering-gate user surfaces on mount. WS events
+  // (peering_subscription_changed / peering_notification_received) will keep
+  // them fresh while the panel stays mounted.
+  useEffect(() => {
+    void refetchPeeringSubscriptions();
+    void refetchPeeringNotifications();
+  }, [refetchPeeringSubscriptions, refetchPeeringNotifications]);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -1025,7 +1349,15 @@ export function ConnectedInstances() {
       : null;
 
   return (
-    <div>
+    <div className="space-y-5">
+      {/* Terminal-state outcomes first — newly resolved requests warrant the
+          user's attention (especially approvals they can now retry). */}
+      <RecentPeeringOutcomesSection />
+
+      {/* Active waiting state. */}
+      <PendingPeeringSubscriptionsSection />
+
+      <div>
       <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
         Connected Instances
       </div>
@@ -1108,6 +1440,7 @@ export function ConnectedInstances() {
             + Add Instance
           </button>
         )}
+      </div>
       </div>
     </div>
   );
