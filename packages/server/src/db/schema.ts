@@ -374,6 +374,7 @@ export const federationPeers = sqliteTable('federation_peers', {
   secretRotatedAt: integer('secret_rotated_at'),
   autoRotateIntervalDays: integer('auto_rotate_interval_days').notNull().default(90),
   createdAt: integer('created_at').notNull(),
+  approvalToken: text('approval_token'),
 });
 
 export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
@@ -383,6 +384,7 @@ export const peerApprovalRequests = sqliteTable('peer_approval_requests', {
   hmacSecret: text('hmac_secret').notNull(),
   requestedAt: integer('requested_at').notNull(),
   expiresAt: integer('expires_at').notNull(),
+  approvalToken: text('approval_token'),
 });
 
 export const federationOutbox = sqliteTable('federation_outbox', {
