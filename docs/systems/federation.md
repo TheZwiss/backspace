@@ -143,6 +143,7 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 - `instance_name` — Instance name sent by requester
 - `hmac_secret` — Requester's HMAC secret; used to sign the denial notification
 - `requested_at` / `expires_at` — Epoch ms; expiry is `requested_at + 30 days`
+- `approval_token` — Single-use 64-hex-char random token issued in the 202 response and forwarded by `/approve`. See [Approval Token Verification](#approval-token-verification).
 
 **Approval flow** — Admin approves via `POST /api/federation/approval-requests/:id/approve`:
 1. A fresh `federationPeer` record is created (or existing `rejected`/`awaiting_approval` record is upserted) with status `pending`
@@ -157,7 +158,27 @@ When `autoAcceptPeering` is `false` and an instance calls `POST /api/federation/
 
 **Expiry** — The janitor (`federationJanitor.ts`) runs on its scheduled interval and deletes rows where `expires_at < now`. Expired requests do NOT create a `rejected` peer — the requesting instance can re-submit. Admin denial, by contrast, does create a `rejected` peer record, blocking re-requests until an admin clears it.
 
-**Pre-handshake guard (`ensurePeered`)** — Before any outbound handshake, `ensurePeered(origin)` in `federationPeering.ts` refuses with `{ status: 'rejected', error: 'Local admin must resolve…' }` if a `peer_approval_requests` row exists for that origin. This blocks the auto-reconnect bypass: without the guard, any code path calling `ensurePeered` (e.g., the silent reconnect in `stores/instanceStore.ts`) could initiate a fresh outbound handshake to a peer that has a pending inbound approval request, and the receiver's `/peer/accept` `awaiting_approval` branch would activate the relationship without admin involvement. The legitimate approve flow (`POST /api/federation/approval-requests/:id/approve`) does NOT call `ensurePeered` — it deletes the approval-request row and does its own direct `fetch` to `/peer/accept` — so the guard does not block legitimate approvals. Note: the guard closes the trigger only; the receiver-side trust assumption in the `/peer/accept` `awaiting_approval` branch is still permissive and is tracked separately at `docs/superpowers/problems/2026-04-26-peer-handshake-trust-model.md`.
+**Pre-handshake guard (`ensurePeered`)** — Before any outbound handshake, `ensurePeered(origin)` in `federationPeering.ts` refuses with `{ status: 'rejected', error: 'Local admin must resolve…' }` if a `peer_approval_requests` row exists for that origin. This blocks the auto-reconnect trigger: without the guard, any code path calling `ensurePeered` (e.g., the silent reconnect in `stores/instanceStore.ts`) could initiate a fresh outbound handshake to a peer that has a pending inbound approval request. The legitimate approve flow (`POST /api/federation/approval-requests/:id/approve`) does NOT call `ensurePeered` — it deletes the approval-request row and does its own direct `fetch` to `/peer/accept` — so the guard does not block legitimate approvals.
+
+### Approval Token Verification
+
+The pre-handshake guard above closes the most reliable trigger but cannot prevent every adversarial code path on a remote side from sending an inbound `/peer/accept` against a row in `awaiting_approval`. To close that broader class, the protocol adds a cryptographic single-use **approval token** verified on the receiver before promoting `awaiting_approval → active`. Spec: `docs/superpowers/specs/2026-04-26-peer-approval-token.md`.
+
+**Issuance.** When `/peer/accept` returns 202 (queue-as-approval-request, `autoAcceptPeering=0`), the server generates a 32-byte random hex token via `crypto.randomBytes(32).toString('hex')`, stores it on the new `peer_approval_requests.approval_token` column, and returns it in the 202 body as `{ queued: true, message, approvalToken }`.
+
+**Storage on the initiator.** When the initiator's outbound `/peer/accept` (from `performHandshake`, `/peer/initiate`, or `/approve`) receives 202, it parses `approvalToken` from the response body and stores it on the local `federation_peers.approval_token` column alongside `status='awaiting_approval'`.
+
+**Forwarding from `/approve`.** When the local admin approves an inbound queued request, the `/approve` endpoint reads `approvalToken` from the queued `peer_approval_requests` row and includes it in its outbound `/peer/accept` body. No other code path forwards a token — the security property is "only `/approve` reads the stored token from the DB."
+
+**Verification on the initiator's `/peer/accept` handler.** When an inbound request matches an existing `awaiting_approval` peer row, the handler verifies `existing.approval_token === request.body.approvalToken` (length-checked, plain `===` — see spec §3.1 on why constant-time comparison isn't required). On match, the row is promoted to `active`, the stored token is cleared (`approval_token=NULL`), and any stale `peer_approval_requests` row for the origin is deleted. On mismatch (or missing token), behavior depends on the receiver's `autoAcceptPeering`:
+- `autoAcceptPeering=0` → `queueApprovalRequest()` is invoked: a new `peer_approval_requests` row is upserted with a fresh token, returns 202. The existing `awaiting_approval` row is left untouched. **No bypass.**
+- `autoAcceptPeering=1` → fallback promote to `active` (no security regression vs. prior behavior — `autoAccept=1` would accept any inbound `/peer/accept` regardless).
+
+**Single-use lifecycle.** The token is consumed on first successful match: cleared from `federation_peers.approval_token` at the receiver's promote step, cleared from the initiator's `federation_peers.approval_token` when its own outbound returns 200, and deleted along with the approval-request row when `/approve` completes. This bounds replay of a leaked token (DB snapshot, log capture) to the period before the legitimate `/approve` runs.
+
+**Backward compatibility.** Both schema columns are nullable. Older peers that don't include `approvalToken` in the request body or 202 response result in `null` storage; the receiver's verification then falls through the `autoAcceptPeering` gate. Existing `active` peers and existing `awaiting_approval` rows in production at upgrade time are unaffected — the verification only runs on the receiver's `awaiting_approval` branch. Stalled legacy `awaiting_approval` rows (no stored token) cannot complete via inbound `/peer/accept` from a legacy initiator unless the receiver is `autoAccept=1`; admins should re-initiate them through the standard flow if needed.
+
+**What this does NOT defend against** — a remote operator running custom code with full DB access can read their stored token and forge `/peer/accept`. That is the inherent trust radius of federation peering. The threat model is bug-prone code paths (auto-reconnect, voice-call peering races, future `ensurePeered` callers) on otherwise-honest peers, not adversarial operators. Sender-side outbound gating for `autoAcceptPeering=0` is a separate concern tracked as a follow-up.
 
 ### Admin Endpoints
 
