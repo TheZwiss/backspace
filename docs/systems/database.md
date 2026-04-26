@@ -363,6 +363,7 @@ PK: (spaceId, userId, restrictionType)
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
+| approvalToken | text | | Single-use 64-hex-char token stored when this row is in `awaiting_approval` (received from remote's 202 response). Verified against the inbound `/peer/accept` `approvalToken` field before promoting to `active`. Cleared (`NULL`) on promotion. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
 
 ### peer_approval_requests
 Holds incoming peering requests queued for admin review when `autoAcceptPeering` is `false`. One row per requesting origin (UNIQUE constraint). Rows expire after 30 days via janitor cleanup.
@@ -375,6 +376,7 @@ Holds incoming peering requests queued for admin review when `autoAcceptPeering`
 | hmacSecret | text NOT NULL | | Requester's HMAC secret; used to sign denial notification |
 | requestedAt | integer NOT NULL | | Epoch ms |
 | expiresAt | integer NOT NULL | | Epoch ms; requestedAt + 30 days |
+| approvalToken | text | | Single-use 64-hex-char token issued in the 202 response when this row is created. Forwarded by `/approve` in its outbound `/peer/accept` so the remote initiator can verify mutual admin approval. Deleted along with this row when `/approve` runs. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
 
 ### federation_outbox
 UNIQUE: (peerId, entityId)

@@ -15,6 +15,13 @@
       "when": 1777144927946,
       "tag": "0001_complex_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777196627239,
+      "tag": "0002_peer_approval_token",
+      "breakpoints": true
     }
   ]
 }

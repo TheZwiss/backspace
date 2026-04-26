@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -246,6 +246,77 @@ setInterval(() => {
   }
 }, ACCEPT_RATE_WINDOW_MS).unref();
 
+/**
+ * Queue an inbound peer/accept request for local-admin approval.
+ *
+ * Called from `/peer/accept` when:
+ *   (a) `autoAcceptPeering=0` and no `pending`/`awaiting_approval` peer row
+ *       exists for the source origin (first-contact request from remote), OR
+ *   (b) the receiver is in `awaiting_approval` for this origin but the
+ *       inbound `/peer/accept` cannot be cryptographically verified
+ *       (token absent or mismatched) — see spec §3.5.
+ *
+ * Generates a fresh single-use approval token, upserts the
+ * `peer_approval_requests` row, notifies admins, and returns 202 with the
+ * token in the body. The initiator stores the token alongside its
+ * `awaiting_approval` row so a future `/peer/accept` from this side's
+ * `/approve` endpoint can verify mutual admin approval.
+ */
+function queueApprovalRequest(
+  db: ReturnType<typeof getDb>,
+  reply: FastifyReply,
+  sourceOrigin: string,
+  hmacSecret: string,
+  reqInstanceName: string | null,
+): FastifyReply {
+  const now = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const approvalToken = randomBytes(32).toString('hex');
+
+  const existingRequest = db
+    .select({ id: schema.peerApprovalRequests.id })
+    .from(schema.peerApprovalRequests)
+    .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
+    .get();
+
+  if (existingRequest) {
+    db.update(schema.peerApprovalRequests)
+      .set({
+        instanceName: reqInstanceName,
+        hmacSecret,
+        requestedAt: now,
+        expiresAt: now + THIRTY_DAYS_MS,
+        approvalToken,
+      })
+      .where(eq(schema.peerApprovalRequests.id, existingRequest.id))
+      .run();
+  } else {
+    db.insert(schema.peerApprovalRequests)
+      .values({
+        id: generateSnowflake(),
+        origin: sourceOrigin,
+        instanceName: reqInstanceName,
+        hmacSecret,
+        requestedAt: now,
+        expiresAt: now + THIRTY_DAYS_MS,
+        approvalToken,
+      })
+      .run();
+  }
+
+  connectionManager.sendToAdmins({
+    type: 'federation_approval_request_received' as const,
+    origin: sourceOrigin,
+    instanceName: reqInstanceName ?? undefined,
+  });
+
+  return reply.code(202).send({
+    queued: true,
+    message: 'Request queued for admin approval',
+    approvalToken,
+  });
+}
+
 export async function federationRoutes(app: FastifyInstance): Promise<void> {
   // ─── POST /api/federation/peer/initiate ────────────────────────────────────
   // Admin-only: start a peering handshake with a remote instance.
@@ -338,12 +409,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // (autoAcceptPeering is off on their side). Do NOT activate the
           // local peer — mirror the auto-peer flow in federationPeering.ts
           // by transitioning the pending record to awaiting_approval.
-          // Without this branch the local peer would flip to `active`
-          // (because response.ok is true for 202) while the remote had us
-          // pending, producing a local-active / remote-pending split that
-          // only self-heals when the remote admin approves.
+          // Capture the approval token they returned so the next inbound
+          // /peer/accept (when their admin approves) can be verified. §3.7.
+          let returnedToken: string | null = null;
+          try {
+            const body = (await response.json()) as { approvalToken?: string };
+            if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
+              returnedToken = body.approvalToken;
+            }
+          } catch {
+            // Non-JSON / empty body — legacy peer.
+          }
+
           db.update(schema.federationPeers)
-            .set({ status: 'awaiting_approval' })
+            .set({ status: 'awaiting_approval', approvalToken: returnedToken })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
           connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -391,7 +470,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -432,7 +511,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
   // ─── POST /api/federation/peer/accept ──────────────────────────────────────
   // Server-to-server: accept a peering request from a remote instance.
   // No JWT auth — this is first contact. Rate-limited by IP.
-  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string; instanceName?: string } }>(
+  app.post<{ Body: { sourceOrigin: string; challenge?: string; hmacSecret: string; instanceName?: string; approvalToken?: string } }>(
     '/api/federation/peer/accept',
     async (request, reply) => {
       const clientIp = request.ip;
@@ -443,7 +522,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const { sourceOrigin: rawOrigin, hmacSecret, instanceName: reqInstanceName } = request.body ?? {};
+      const { sourceOrigin: rawOrigin, hmacSecret, instanceName: reqInstanceName, approvalToken: inboundToken } = request.body ?? {};
 
       if (!rawOrigin || typeof rawOrigin !== 'string') {
         return reply.code(400).send({ error: 'sourceOrigin is required', statusCode: 400 });
@@ -514,50 +593,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             });
           }
 
-          // Queue for admin approval — upsert into peer_approval_requests
-          const now = Date.now();
-          const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-          const existingRequest = db
-            .select({ id: schema.peerApprovalRequests.id })
-            .from(schema.peerApprovalRequests)
-            .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
-            .get();
-
-          if (existingRequest) {
-            db.update(schema.peerApprovalRequests)
-              .set({
-                instanceName: reqInstanceName ?? null,
-                hmacSecret,
-                requestedAt: now,
-                expiresAt: now + THIRTY_DAYS_MS,
-              })
-              .where(eq(schema.peerApprovalRequests.id, existingRequest.id))
-              .run();
-          } else {
-            db.insert(schema.peerApprovalRequests)
-              .values({
-                id: generateSnowflake(),
-                origin: sourceOrigin,
-                instanceName: reqInstanceName ?? null,
-                hmacSecret,
-                requestedAt: now,
-                expiresAt: now + THIRTY_DAYS_MS,
-              })
-              .run();
-          }
-
-          // Notify admin users that a new approval request arrived
-          connectionManager.sendToAdmins({
-            type: 'federation_approval_request_received' as const,
-            origin: sourceOrigin,
-            instanceName: reqInstanceName ?? undefined,
-          });
-
-          return reply.code(202).send({
-            queued: true,
-            message: 'Request queued for admin approval',
-          });
+          return queueApprovalRequest(db, reply, sourceOrigin, hmacSecret, reqInstanceName ?? null);
         }
       }
 
@@ -617,31 +653,82 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
         }
         if (existing.status === 'awaiting_approval') {
-          // Remote admin approved — this is a fresh handshake from them.
-          db.update(schema.federationPeers)
-            .set({
-              hmacSecret,
-              instanceName: reqInstanceName ?? null,
-              status: 'active',
-              lastSeenAt: Date.now(),
-            })
-            .where(eq(schema.federationPeers.id, existing.id))
-            .run();
+          // Spec §3.5: token verification gates the awaiting_approval → active
+          // promotion. Without proof the inbound came from the remote's
+          // /approve endpoint, an adversarial timing-knowledge attack or a
+          // bug-prone background code path could falsely flip this row to
+          // active. The token is single-use entropy issued in the 202 we
+          // returned when the remote's outbound /peer/accept first hit our
+          // queue — only their /approve endpoint forwards it.
+          const tokenValid =
+            typeof existing.approvalToken === 'string' &&
+            existing.approvalToken.length > 0 &&
+            existing.approvalToken === inboundToken;
 
-          // Broadcast activation
-          for (const uid of connectionManager.getAllOnlineUserIds()) {
-            connectionManager.sendToUser(uid, {
-              type: 'federation_peer_active' as const,
-              peerOrigin: sourceOrigin,
-            });
+          if (tokenValid) {
+            db.update(schema.federationPeers)
+              .set({
+                hmacSecret,
+                instanceName: reqInstanceName ?? null,
+                status: 'active',
+                lastSeenAt: Date.now(),
+                approvalToken: null,
+              })
+              .where(eq(schema.federationPeers.id, existing.id))
+              .run();
+
+            // Clean up any stale approval-request row for this origin (e.g.,
+            // queued debris from a prior bypass attempt that did not promote).
+            db.delete(schema.peerApprovalRequests)
+              .where(eq(schema.peerApprovalRequests.origin, sourceOrigin))
+              .run();
+
+            for (const uid of connectionManager.getAllOnlineUserIds()) {
+              connectionManager.sendToUser(uid, {
+                type: 'federation_peer_active' as const,
+                peerOrigin: sourceOrigin,
+              });
+            }
+            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+            onPeerActivated(existing.id, 'accept_awaiting_approval').catch(err =>
+              console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
+            );
+            return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
           }
 
-          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
-          onPeerActivated(existing.id, 'accept_awaiting_approval').catch(err =>
-            console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval) failed:', err)
-          );
+          // Token absent or mismatched. Cannot prove mutual approval.
+          if (autoAccept === 1) {
+            // We accept any inbound anyway — promoting here is no weaker than
+            // accepting a fresh handshake from a new peer. Clear the stored
+            // token (moot now) and proceed.
+            db.update(schema.federationPeers)
+              .set({
+                hmacSecret,
+                instanceName: reqInstanceName ?? null,
+                status: 'active',
+                lastSeenAt: Date.now(),
+                approvalToken: null,
+              })
+              .where(eq(schema.federationPeers.id, existing.id))
+              .run();
 
-          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
+            for (const uid of connectionManager.getAllOnlineUserIds()) {
+              connectionManager.sendToUser(uid, {
+                type: 'federation_peer_active' as const,
+                peerOrigin: sourceOrigin,
+              });
+            }
+            connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+            onPeerActivated(existing.id, 'accept_awaiting_approval_fallback').catch(err =>
+              console.error('[federation] onPeerActivated from /peer/accept (awaiting_approval fallback) failed:', err)
+            );
+            return reply.code(200).send({ accepted: true, instanceName: ourInstanceName });
+          }
+
+          // autoAccept=0 + unverifiable inbound → queue as new approval-request.
+          // Existing awaiting_approval row stays untouched; the new approval-
+          // request lets the local admin decide whether to honor this inbound.
+          return queueApprovalRequest(db, reply, sourceOrigin, hmacSecret, reqInstanceName ?? null);
         }
         // Pending — update with new secret and activate
         db.update(schema.federationPeers)
@@ -1160,6 +1247,10 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             sourceOrigin: localOrigin,
             hmacSecret,
             instanceName,
+            // Forward the stored token (issued in our 202 response when the
+            // remote first sent /peer/accept). Lets the remote verify mutual
+            // admin approval. Spec §3.7.
+            ...(approvalReq.approvalToken ? { approvalToken: approvalReq.approvalToken } : {}),
           }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -1167,8 +1258,20 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         if (response.status === 202) {
           // Remote instance also has autoAcceptPeering off — they queued our request.
           // Don't activate our peer. Set to awaiting_approval until their admin also approves.
+          // Capture the approval token they returned so the next inbound
+          // /peer/accept (when their admin approves) can be verified. §3.7.
+          let returnedToken: string | null = null;
+          try {
+            const body = (await response.json()) as { approvalToken?: string };
+            if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
+              returnedToken = body.approvalToken;
+            }
+          } catch {
+            // Non-JSON / empty body — legacy peer.
+          }
+
           db.update(schema.federationPeers)
-            .set({ status: 'awaiting_approval' })
+            .set({ status: 'awaiting_approval', approvalToken: returnedToken })
             .where(eq(schema.federationPeers.id, peerId))
             .run();
           // Delete the approval request since we already acted on it
@@ -1209,7 +1312,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName })
+          .set({ status: 'active', lastSeenAt: now, instanceName: remoteInstanceName, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
 

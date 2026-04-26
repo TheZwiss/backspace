@@ -166,9 +166,22 @@ async function performHandshake(
     });
 
     if (response.status === 202) {
-      // Request queued for admin approval on the remote side
+      // Capture the approval token from the 202 body if present. Stored on
+      // our federation_peers row so a subsequent inbound /peer/accept (from
+      // the remote's /approve flow) can be cryptographically verified before
+      // we promote awaiting_approval → active. Spec §3.7.
+      let approvalToken: string | null = null;
+      try {
+        const body = (await response.json()) as { approvalToken?: string };
+        if (typeof body?.approvalToken === 'string' && body.approvalToken.length > 0) {
+          approvalToken = body.approvalToken;
+        }
+      } catch {
+        // Non-JSON or empty body — legacy receiver, leave null.
+      }
+
       db.update(schema.federationPeers)
-        .set({ status: 'awaiting_approval' })
+        .set({ status: 'awaiting_approval', approvalToken })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       const { connectionManager } = await import('../ws/handler.js');
@@ -191,7 +204,7 @@ async function performHandshake(
       }
 
       db.update(schema.federationPeers)
-        .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName })
+        .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, approvalToken: null })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       const { connectionManager } = await import('../ws/handler.js');
