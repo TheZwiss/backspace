@@ -28,6 +28,7 @@ import { federationRoutes } from './routes/federation.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
+import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
 
 import { registerWebSocket } from './ws/handler.js';
 import path from 'path';
@@ -81,6 +82,14 @@ async function main(): Promise<void> {
   // Initialize database
   getDb();
   await seedDatabase();
+
+  // Reset orphaned `users.status` rows for locally-homed users. The previous
+  // process's in-memory disconnect timers are gone, so any non-offline row
+  // is stale by construction. Replicated (federated) rows are skipped — their
+  // status is a projection of remote presence, not local WS state. Must run
+  // before WS auth is accepted so the first connection broadcasts the correct
+  // online transition. See utils/presenceBoot.ts.
+  resetStalePresenceOnBoot();
 
   await app.register(authRoutes);
   await app.register(userRoutes);

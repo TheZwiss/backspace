@@ -191,8 +191,7 @@ Validates format (same rules as local registration: 3-32 chars, `/^[a-z0-9_]+$/`
 5. Verify password via bcrypt
 6. **If password invalid AND user is federated:** attempt self-healing (see below)
 7. **If password invalid AND user is local:** reject
-8. Set user status to `'online'`
-9. Sign JWT, return `{ token, user }`
+8. Sign JWT, return `{ token, user }`. **Note:** Login does NOT mutate `users.status`. A successful login does not by itself imply a live connection (the client may never establish a WebSocket due to network failure, mobile background, error path); writing `'online'` here would produce a permanently stuck-online row that no disconnect timer cleans up. The WebSocket auth path (`ws/handler.ts`) is the single source of truth for `status = 'online'`. See `docs/systems/activity-presence.md` "Boot Reset" for the mitigation that runs on server start.
 
 ### Federation Password Self-Healing
 

@@ -12,6 +12,7 @@ Source files:
 - `packages/web/src/components/modals/settingsPanels/PrivacyPanel.tsx` — showActivity toggle UI
 - `packages/server/src/ws/handler.ts` — ConnectionManager (in-memory activity state, rate limiting, disconnect cleanup)
 - `packages/server/src/ws/events.ts` — handlePresenceUpdate, handleActivityUpdate, validateActivities
+- `packages/server/src/utils/presenceBoot.ts` — boot-time reset of orphaned `users.status` rows (federation-safe)
 - `packages/server/src/routes/users.ts` — REST showActivity toggle with server-side activity clear
 - `packages/desktop/src/activityDetector.ts` — Process polling, game dictionary matching (boundary: see Desktop section)
 - `packages/desktop/src/preload.ts` — IPC channel exposure (activity-detected, get-current-activity)
@@ -122,16 +123,40 @@ function getPrimaryActivity(activities: Activity[]): Activity | null {
 
 The `users.status` column (see database.md) stores the current presence status. Default: `'offline'`.
 
-- **On connect:** Server sets `status = 'online'` in DB (`ws/handler.ts:1344`)
-- **On manual change:** Client sends `presence_update` with `status` field; server persists to DB (`ws/events.ts:483`)
-- **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:225`)
+- **On connect:** Server sets `status = 'online'` in DB at WebSocket auth (`ws/handler.ts`, the line after `authenticated = true`). The REST `/api/auth/login` route does **not** set status — login alone does not imply a live socket; the WS handshake is the single source of truth.
+- **On manual change:** Client sends `presence_update` with `status` field; server persists to DB (`ws/events.ts`)
+- **On disconnect:** After 5s grace period, server sets `status = 'offline'` in DB (`ws/handler.ts:finalizeDisconnect`)
+- **On boot:** Server resets stale rows for locally-homed, non-deleted users (see "Boot Reset" below).
+
+### Boot Reset (`utils/presenceBoot.ts`)
+
+`users.status` is only flipped back to `'offline'` by `ConnectionManager.finalizeDisconnect()` after a real WS close + 5s grace timer. Those timers live in process memory, so a server restart (deploy, crash, OOM, kill) loses them and any row currently set to `'online'`, `'idle'`, or `'dnd'` stays frozen at that value forever — making the user appear permanently online to friends and space co-members until they next connect.
+
+`resetStalePresenceOnBoot()` runs once during server boot in `index.ts`, after `getDb()`/`seedDatabase()` and before WebSocket route registration. It executes a single update:
+
+```
+UPDATE users
+   SET status = 'offline'
+ WHERE home_instance IS NULL
+   AND is_deleted = 0
+   AND status != 'offline'
+```
+
+Three guards on the WHERE clause:
+
+1. **`home_instance IS NULL`** — replicated user stubs (federated identities homed elsewhere) have their status projected to us by the home instance via `presence_update` relays, not by our local WS state. Their status must not be touched on our boot.
+2. **`is_deleted = 0`** — tombstoned users are excluded from presence broadcasts already; their stored status is left alone as a maintenance courtesy (no behavioral effect either way, but avoids silent rewrites).
+3. **`status != 'offline'`** — keeps the operation a no-op once steady-state is reached; `changes` is logged only when non-zero.
+
+Because the in-memory `ConnectionManager` is empty at boot by construction, no live connection can be misrepresented by this reset.
 
 ### Connect/Disconnect Flow
 
-1. **Auth succeeds** → `status` set to `'online'` in DB → `presence_update` broadcast to all user's spaces (excludes self; self gets `ready` payload)
-2. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect
-3. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts `presence_update` with `status: 'offline'` and `activities: []` to all spaces
-4. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally
+1. **Server boot** → `resetStalePresenceOnBoot()` flips any locally-homed, non-deleted `online`/`idle`/`dnd` rows to `offline`. Federated rows untouched.
+2. **Auth succeeds** → `status` set to `'online'` in DB → `presence_update` broadcast to all user's spaces (excludes self; self gets `ready` payload)
+3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect
+4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts `presence_update` with `status: 'offline'` and `activities: []` to all spaces
+5. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally
 
 ### Presence Broadcast Scope
 

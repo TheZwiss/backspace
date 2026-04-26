@@ -308,13 +308,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    db.update(schema.users).set({ status: 'online' }).where(eq(schema.users.id, user.id)).run();
-
+    // Note: status='online' is set exclusively by the WebSocket auth path
+    // (ws/handler.ts). A successful REST /login does not by itself imply a
+    // live connection — the client may never establish a WS (transient
+    // network failure, mobile background, error path), which would otherwise
+    // produce a permanently stuck-online row that no disconnect timer can
+    // clean up. The user's reported status remains whatever it was; the WS
+    // handshake will flip it to 'online' once a real socket attaches.
     const token = signJwt({ userId: user.id, username: user.username });
 
     const response: AuthResponse = {
       token,
-      user: sanitizeUser({ ...user, status: 'online' }, true),
+      user: sanitizeUser(user, true),
     };
 
     return reply.code(200).send(response);
