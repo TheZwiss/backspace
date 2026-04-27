@@ -15,9 +15,11 @@ the same PR.
 ```bash
 pnpm gen-icons
 git status                       # review which files changed
-git add -A
+git add packages/desktop/build/ packages/desktop/resources/ packages/web/public/icons/
 git commit -m "chore: regenerate brand icons"
 ```
+
+(Stage explicit paths rather than `git add -A` — the generator only writes to those three directories, and an unrelated working-tree change shouldn't accidentally land in a "regenerate icons" commit.)
 
 ## Determinism
 

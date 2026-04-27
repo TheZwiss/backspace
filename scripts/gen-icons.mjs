@@ -22,7 +22,7 @@
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import sharp from 'sharp';
 import pngToIco from 'png-to-ico';
 import png2icons from 'png2icons';
@@ -102,7 +102,7 @@ async function writeMaskablePng(path, markSvg, canvas, scale, bgHex) {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
-    .png()
+    .png({ compressionLevel: 9, palette: false })
     .toBuffer();
   mkdirSync(dirname(path), { recursive: true });
   const composed = await sharp({
@@ -122,13 +122,28 @@ async function writeMaskablePng(path, markSvg, canvas, scale, bgHex) {
 // ---- main ----
 
 async function main() {
+  // Spec: refuse to run if any source SVG is missing — fail loudly, not on
+  // a downstream sharp error with a cryptic ENOENT.
+  for (const [, path] of Object.entries(SRC)) {
+    if (!existsSync(path)) {
+      throw new Error(
+        `Missing source SVG: ${relative(ROOT, path)} — copy from Artworks-Backspace/SVG/`,
+      );
+    }
+  }
+
   const appIcon      = loadSvg(SRC.appIcon);
   const mark         = loadSvg(SRC.mark);
   const markMonoDark = loadSvg(SRC.markMonoDark);
 
   const written = [];
   const trace = (label, path, info) =>
-    written.push({ label, info, path: relative(ROOT, path) });
+    written.push({
+      label,
+      info,
+      bytes: statSync(path).size,
+      path: relative(ROOT, path),
+    });
 
   // --- Desktop: application icon ---
   const linuxSizes = [16, 32, 48, 64, 128, 256, 512, 1024];
@@ -189,13 +204,19 @@ async function main() {
   trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (transparent)');
 
   // --- Summary ---
+  const fmtBytes = (n) => {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  };
   console.log('\nGenerated icons:');
-  console.log('  ' + 'kind'.padEnd(14) + 'info'.padEnd(30) + 'path');
-  console.log('  ' + '----'.padEnd(14) + '----'.padEnd(30) + '----');
+  console.log('  ' + 'kind'.padEnd(14) + 'info'.padEnd(30) + 'size'.padStart(10) + '  path');
+  console.log('  ' + '----'.padEnd(14) + '----'.padEnd(30) + '----'.padStart(10) + '  ----');
   for (const r of written) {
-    console.log('  ' + r.label.padEnd(14) + r.info.padEnd(30) + r.path);
+    console.log('  ' + r.label.padEnd(14) + r.info.padEnd(30) + fmtBytes(r.bytes).padStart(10) + '  ' + r.path);
   }
-  console.log(`\n${written.length} files written.`);
+  const totalBytes = written.reduce((sum, r) => sum + r.bytes, 0);
+  console.log(`\n${written.length} files written, ${fmtBytes(totalBytes)} total.`);
 }
 
 main().catch((e) => {
