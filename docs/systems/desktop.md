@@ -128,9 +128,10 @@ The unconditional startup re-apply was removed (it was overwriting user changes 
 
 ```
 if linux AND $APPIMAGE is set:
-  read ~/.config/autostart/backspace.desktop → recordedExecPath
-  if saved.openAtLogin AND $APPIMAGE != recordedExecPath:
+  read ~/.config/autostart/backspace.desktop → recordedExecPath (null if file missing)
+  if saved.openAtLogin AND recordedExecPath != null AND $APPIMAGE != recordedExecPath:
     re-apply to refresh the autostart entry's Exec= path
+  (a missing .desktop file is treated as user-disabled — never recreated here)
 ```
 
 This keeps AppImage updates working (the AppImage moved to a new path → autostart entry needs the new path) without overriding any user-level OS state on Windows or macOS.
