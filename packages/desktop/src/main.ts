@@ -572,21 +572,39 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('set-auto-launch-settings', (_event, settings: { openAtLogin?: boolean; startMinimized?: boolean }) => {
-    const current = loadAutoLaunchSettings();
-    const osState = app.getLoginItemSettings();
+    // Read current truth from the OS (not from disk) so a partial update preserves
+    // whatever the user (or Task Manager / System Settings) most recently set.
+    let currentOpenAtLogin: boolean;
+    let currentStartMinimized: boolean;
 
-    const newOpenAtLogin = settings.openAtLogin ?? osState.openAtLogin;
-    const newStartMinimized = settings.startMinimized ?? current.startMinimized;
+    if (process.platform === 'win32') {
+      const osState = app.getLoginItemSettings({ path: process.execPath });
+      const ownEntry = osState.launchItems?.find(
+        (item) => item.name === 'Backspace' || item.path?.toLowerCase() === process.execPath.toLowerCase(),
+      );
+      currentOpenAtLogin = osState.executableWillLaunchAtLogin ?? false;
+      currentStartMinimized = deriveStartMinimizedFromArgs(ownEntry?.args);
+    } else {
+      const osState = app.getLoginItemSettings();
+      const saved = loadAutoLaunchSettings();
+      currentOpenAtLogin = osState.openAtLogin;
+      currentStartMinimized = saved.startMinimized;
+    }
 
-    const updated: AutoLaunchSettings = {
-      openAtLogin: newOpenAtLogin,
-      startMinimized: newStartMinimized,
-    };
+    const newOpenAtLogin = settings.openAtLogin ?? currentOpenAtLogin;
+    const newStartMinimized = settings.startMinimized ?? currentStartMinimized;
 
-    saveAutoLaunchSettings(updated);
     applyLoginItemSettings(newOpenAtLogin, newStartMinimized);
 
-    return updated;
+    // Persist startMinimized as a disk cache for the macOS / Linux read path.
+    // We also save openAtLogin for forward compatibility / debugging, but it is
+    // never the source of truth on read.
+    saveAutoLaunchSettings({
+      openAtLogin: newOpenAtLogin,
+      startMinimized: newStartMinimized,
+    });
+
+    return { openAtLogin: newOpenAtLogin, startMinimized: newStartMinimized };
   });
 
   // Keybinds
