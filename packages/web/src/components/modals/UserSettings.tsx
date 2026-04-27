@@ -121,7 +121,7 @@ export function UserSettingsModal() {
           <div className="glass-bubble rounded-lg p-2 flex-1 flex flex-col">
             <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
             <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
-            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice</button>
+            <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice &amp; Video</button>
             <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
 
             <div className="border-t border-white/[0.04] my-2 mx-2" />
@@ -172,7 +172,7 @@ export function UserSettingsModal() {
             <div className="glass-bubble rounded-lg p-2 space-y-0.5">
               <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-3 py-1">User Settings</div>
               <button onClick={() => handleTabClick('account')} className={tabClass('account')}>Account</button>
-              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice</button>
+              <button onClick={() => handleTabClick('voice')} className={tabClass('voice')}>Voice &amp; Video</button>
               <button onClick={() => handleTabClick('privacy')} className={tabClass('privacy')}>Privacy</button>
 
               <div className="border-t border-white/[0.04] my-2 mx-2" />
