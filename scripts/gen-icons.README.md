@@ -39,8 +39,8 @@ git history clean.
 
 | Brand source                    | Drives                                        |
 |---------------------------------|-----------------------------------------------|
-| `assets/brand/app-icon.svg`     | Every full app icon, all favicons, PWA        |
-| `assets/brand/mark.svg`         | Win/Linux tray, in-app logo, PWA maskable     |
+| `assets/brand/app-icon.svg`     | Every full app icon, all favicons, PWA, in-app `logo.png` |
+| `assets/brand/mark.svg`         | Win/Linux tray, PWA maskable inner mark       |
 | `assets/brand/mark-mono-dark.svg` | macOS menu-bar template (alpha + black)     |
 
 `Artworks-Backspace/` is the design archive — never read by this script.

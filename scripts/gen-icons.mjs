@@ -200,8 +200,12 @@ async function main() {
   );
   trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), `512 (60% mark on ${MASKABLE_BG})`);
 
-  await writePng(join(WEB_ICONS, 'logo.png'), mark, 256);
-  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (transparent)');
+  // SpaceSidebar's 40×40 rounded-[20px] tile uses object-cover. The full
+  // badge (Element 1) integrates cleanly because its dark bg fills the tile
+  // and its internal padding keeps the mark off the tile edges. Bare mark
+  // on transparent touched the tile edges and conflicted with active rings.
+  await writePng(join(WEB_ICONS, 'logo.png'), appIcon, 256);
+  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (full badge)');
 
   // --- Summary ---
   const fmtBytes = (n) => {
