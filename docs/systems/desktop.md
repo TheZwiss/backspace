@@ -102,28 +102,53 @@ Settings stored in `{userData}/auto-launch.json`:
 
 ```typescript
 interface AutoLaunchSettings {
-  openAtLogin: boolean;   // default: false
-  startMinimized: boolean; // default: true
+  openAtLogin: boolean;   // default: false; disk cache, NOT source of truth
+  startMinimized: boolean; // default: true; disk cache; OS-authoritative on Windows
 }
 ```
 
+### Source of Truth
+
+The OS is the source of truth for `openAtLogin` on all platforms. Disk is used only to recover values Electron does not expose:
+- **Windows:** OS-authoritative for both `openAtLogin` (via `executableWillLaunchAtLogin`, which honours Task Manager's `StartupApproved\Run` disable) and `startMinimized` (derived from `launchItems[].args`).
+- **macOS:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (no introspection available).
+- **Linux:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (we deliberately do not parse `Exec=` lines from `.desktop` files; out-of-band edits are rare and parsing shell-quoted strings is fragile).
+
 ### Platform-Specific Implementation (`applyLoginItemSettings()`)
 
-| Platform | Method | Minimized Launch |
-|----------|--------|-----------------|
-| macOS | `app.setLoginItemSettings({ openAtLogin, openAsHidden })` | `openAsHidden` flag |
-| Windows | `app.setLoginItemSettings({ openAtLogin, args, name })` | `--hidden` CLI arg |
-| Linux | `app.setLoginItemSettings({ openAtLogin, path, args })` | `--hidden` CLI arg; `path` set to `$APPIMAGE` for AppImage portability |
+| Platform | Method | Key parameters | Rationale |
+|----------|--------|----------------|-----------|
+| macOS    | `app.setLoginItemSettings({ openAtLogin, openAsHidden, args })` | `openAsHidden: startMinimized`; `args: ['--hidden']` when `startMinimized` | Both detection paths covered (legacy `wasOpenedAsHidden` for macOS < 13 and `--hidden` argv for macOS 13+) |
+| Windows  | `app.setLoginItemSettings({ openAtLogin, enabled, path, args, name })` | `enabled: openAtLogin`; `path: process.execPath`; `args: ['--hidden']` when `startMinimized`; `name: 'Backspace'` | `enabled` is required to clear Task Manager's `StartupApproved\Run` disable when re-enabling. `path`/`args` enable correct matching in subsequent `getLoginItemSettings`. |
+| Linux    | `app.setLoginItemSettings({ openAtLogin, name, path?, args? })` | `name: 'backspace'` (deterministic `.desktop` filename); `path: $APPIMAGE` when running as AppImage; `args: ['--hidden']` when `startMinimized` | `name` ensures stable `~/.config/autostart/backspace.desktop` path. AppImage path tracks updates. |
 
-On startup, settings are re-applied to the OS (`applyLoginItemSettings`) to refresh the login item path (important for AppImage updates where the path changes).
+### Startup Re-Apply
 
-### Launch Detection
+The unconditional startup re-apply was removed (it was overwriting user changes made via Task Manager / System Settings). Today the only re-apply happens on Linux/AppImage and only when needed:
 
-Hidden launch is detected at `ready-to-show` via:
-- `process.argv.includes('--hidden')` (Windows/Linux)
-- `app.getLoginItemSettings().wasOpenedAsHidden` (macOS)
+```
+if linux AND $APPIMAGE is set:
+  read ~/.config/autostart/backspace.desktop → recordedExecPath
+  if saved.openAtLogin AND $APPIMAGE != recordedExecPath:
+    re-apply to refresh the autostart entry's Exec= path
+```
 
-If launched hidden, the window is created but never shown (stays in tray).
+This keeps AppImage updates working (the AppImage moved to a new path → autostart entry needs the new path) without overriding any user-level OS state on Windows or macOS.
+
+### Hidden-Launch Detection
+
+At `ready-to-show`:
+- `process.argv.includes('--hidden')` — primary signal on all platforms (we pass `args: ['--hidden']` everywhere when `startMinimized`).
+- `app.getLoginItemSettings().wasOpenedAsHidden` — macOS-only fallback for the legacy `openAsHidden` path (macOS < 13).
+
+If either is true, the window is created but not shown (stays in tray).
+
+### Pure Helpers
+
+Pure logic lives in `packages/desktop/src/autoLaunch.ts` with vitest coverage in `autoLaunch.test.ts`:
+- `deriveStartMinimizedFromArgs(args)` — used by both IPC handlers on Windows.
+- `parseExecPathFromDesktopFile(content)` — used by the Linux/AppImage path-refresh.
+- `shouldReapplyAppImage(currentAppImagePath, recordedExecPath)` — used by the Linux/AppImage path-refresh.
 
 ---
 
@@ -765,7 +790,7 @@ GitHub releases are the update source. The `electron-updater` library handles ch
 6. Create tray icon
 7. Initialize auto-updater (10s delayed first check)
 8. Start activity detection (immediate first poll, 15s interval, background remote sync)
-9. Sync auto-launch settings with OS
+9. Linux/AppImage path-refresh: re-apply autostart entry if `$APPIMAGE` path changed (conditional; no-op on Windows/macOS)
 10. Check for deep link in launch args
 
 ### Shutdown Sequence (`before-quit`)
