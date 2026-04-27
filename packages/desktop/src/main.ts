@@ -13,6 +13,7 @@ import {
 } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 import { KeybindManager } from './keybindManager';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
@@ -870,9 +871,38 @@ if (!gotTheLock) {
 
     ipcMain.handle('get-current-activity', () => getCurrentActivity());
 
-    // Sync auto-launch settings with OS on startup (refreshes login item path for AppImage updates)
-    const autoLaunchSettings = loadAutoLaunchSettings();
-    applyLoginItemSettings(autoLaunchSettings.openAtLogin, autoLaunchSettings.startMinimized);
+    // Linux/AppImage path-refresh ONLY. On Windows and macOS the OS is the source
+    // of truth for openAtLogin (Task 4) and we must not override user changes made
+    // via Task Manager / System Settings by re-applying disk state here.
+    //
+    // For an AppImage install whose path changed (e.g. the user replaced the file
+    // after an update), the autostart .desktop file's Exec= line points at the old
+    // path. Re-apply only when $APPIMAGE differs from the recorded Exec= path.
+    if (process.platform === 'linux' && process.env.APPIMAGE) {
+      try {
+        const desktopFilePath = path.join(
+          os.homedir(),
+          '.config',
+          'autostart',
+          'backspace.desktop',
+        );
+        let recordedExecPath: string | null = null;
+        try {
+          const content = fs.readFileSync(desktopFilePath, 'utf-8');
+          recordedExecPath = parseExecPathFromDesktopFile(content);
+        } catch {
+          // No autostart entry exists. recordedExecPath stays null and shouldReapplyAppImage
+          // will return false — a missing file is treated as user-disabled (out-of-band edit),
+          // not a stale-path-needs-refresh signal.
+        }
+        const saved = loadAutoLaunchSettings();
+        if (saved.openAtLogin && shouldReapplyAppImage(process.env.APPIMAGE, recordedExecPath)) {
+          applyLoginItemSettings(saved.openAtLogin, saved.startMinimized);
+        }
+      } catch (err) {
+        console.error('[autoLaunch] AppImage path-refresh check failed:', err);
+      }
+    }
 
     // Check if the app was launched with a deep link (Windows/Linux)
     const launchArg = process.argv.find((arg) => arg.startsWith('backspace://'));
