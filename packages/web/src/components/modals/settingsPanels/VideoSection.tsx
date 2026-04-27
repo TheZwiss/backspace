@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Track } from 'livekit-client';
 import { useVoiceStore } from '../../../stores/voiceStore';
+import { getActiveRoom } from '../../../hooks/useLiveKit';
 import { isElectron, getElectronAPI } from '../../../platform/platform';
 
 type PermissionState = 'unknown' | 'probing' | 'granted' | 'initial-denied' | 'hard-blocked';
@@ -56,6 +58,7 @@ function buildDisplayLabels(devices: MediaDeviceInfo[]): Map<string, string> {
 export function VideoSection() {
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
+  const isCameraOn = useVoiceStore((s) => s.isCameraOn);
 
   const [permState, setPermState] = useState<PermissionState>('unknown');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -137,19 +140,69 @@ export function VideoSection() {
     };
   }, [permState]);
 
-  // Pre-call preview: start a getUserMedia stream for the selected device whenever
-  // permission is granted. Swap source when cameraDeviceId changes.
+  // Dual-mode preview:
+  //   - In-call: if a LiveKit local Camera publication exists with a live MediaStreamTrack,
+  //     attach that track to the <video> element (no parallel getUserMedia — avoids
+  //     NotReadableError on platforms with exclusive-camera semantics, and avoids
+  //     double-capture / the camera light being lit twice on platforms that allow it).
+  //   - Pre-call: open getUserMedia for the selected device.
+  // Reactive on isCameraOn so flipping camera mid-session swaps modes cleanly.
   useEffect(() => {
     if (permState !== 'granted') return;
 
     let cancelled = false;
 
-    const start = async () => {
-      // Stop any prior stream before requesting a new one.
+    // Stop the pre-call getUserMedia stream we own. Releases the camera light.
+    const stopPreCall = () => {
       if (previewStreamRef.current) {
         previewStreamRef.current.getTracks().forEach((t) => t.stop());
         previewStreamRef.current = null;
       }
+    };
+
+    // Detach an in-call LK track. Never call mst.stop() — the publication is
+    // still being consumed by other call participants.
+    const detachInCall = () => {
+      const videoEl = previewVideoRef.current;
+      if (videoEl) videoEl.srcObject = null;
+    };
+
+    const fullStop = () => {
+      stopPreCall();
+      detachInCall();
+    };
+
+    // Returns true iff an LK camera track was successfully attached to the preview.
+    // Returns false (never throws) when no room/publication exists or the track is dead,
+    // so the pre-call fallback can run cleanly.
+    const tryInCall = (): boolean => {
+      const room = getActiveRoom();
+      if (!room) return false;
+      const camPub = Array.from(room.localParticipant.trackPublications.values()).find(
+        (pub) => pub.source === Track.Source.Camera,
+      );
+      const mst = camPub?.track?.mediaStreamTrack;
+      if (!mst || mst.readyState !== 'live') return false;
+
+      // Defensive: ensure we don't keep a parallel getUserMedia stream alive.
+      stopPreCall();
+
+      const videoEl = previewVideoRef.current;
+      if (!videoEl) return false;
+      // Wrap the LK MediaStreamTrack in a fresh MediaStream for srcObject assignment.
+      // This is the same pattern LiveKit's track.attach() uses internally; the
+      // wrapper does not duplicate or take ownership of the track.
+      videoEl.srcObject = new MediaStream([mst]);
+      videoEl.play().catch(() => {});
+      setPreviewError(null);
+      return true;
+    };
+
+    const startPreCall = async () => {
+      // Make sure no LK attachment is left over from a previous mode.
+      detachInCall();
+      // Stop any prior pre-call stream before requesting a new one.
+      stopPreCall();
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -180,20 +233,20 @@ export function VideoSection() {
       }
     };
 
-    start();
+    // Mode decision. tryInCall short-circuits to the pre-call fallback if the LK
+    // track isn't ready yet (e.g., user just toggled camera on, publication still
+    // negotiating).
+    if (isCameraOn && tryInCall()) {
+      // In-call mode active.
+    } else {
+      startPreCall();
+    }
 
     return () => {
       cancelled = true;
-      if (previewStreamRef.current) {
-        previewStreamRef.current.getTracks().forEach((t) => t.stop());
-        previewStreamRef.current = null;
-      }
-      const videoEl = previewVideoRef.current;
-      if (videoEl) {
-        videoEl.srcObject = null;
-      }
+      fullStop();
     };
-  }, [permState, cameraDeviceId]);
+  }, [permState, cameraDeviceId, isCameraOn]);
 
   const displayLabels = useMemo(() => buildDisplayLabels(devices), [devices]);
 
