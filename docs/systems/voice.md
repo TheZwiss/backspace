@@ -263,3 +263,43 @@ ScreenShareConfig {
 **Persistence:** `voiceStore` with Zustand localStorage. Keys: `echoCancellation`, `autoGainControl`, `rnnoiseEnabled`, `screenShareConfig`.
 
 **Camera preset:** 1280x720, 2Mbps, 30fps, H.264
+
+---
+
+## Camera Device Selection
+
+Users pick a camera in **User Settings → Voice & Video → Video**. Selection is persisted in `voiceStore.cameraDeviceId` (`string | null`; `null` = "let LiveKit/browser auto-pick on next fresh enable").
+
+### Store field
+- `cameraDeviceId: string | null` — persisted via `partialize`. No persist-version bump was needed when it was added: the existing merge `{ ...currentState, ...persistedState }` hydrates absent keys from `initialState` automatically.
+- Sister action: `pruneStaleDevices()` — sweeps mic, speaker, and camera persisted IDs, resetting any that aren't present in `enumerateDevices()`. Skips a kind whose enumerated set has no non-empty deviceIds (Firefox/Safari pre-permission obscures IDs and we cannot distinguish stale from obscured). Called from `AppLayout` mount and on every `devicechange` event.
+
+### Camera enable path (canonical)
+`utils/voiceActions.handleCameraAction()` is the **sole** camera-toggle path — voice-bar button, mobile button, and keybind all call it. It applies `CAMERA_PRESET` (720p30 H.264) and injects `cameraDeviceId` into `VideoCaptureOptions.deviceId` when non-null.
+
+### Hot-swap mid-call
+`useLiveKit`'s `syncCamera` effect watches `cameraDeviceId`, `isCameraOn`, `isConnected`. When the published track's actual `getSettings().deviceId` differs from the store target (and target is non-null), it calls `room.switchActiveDevice('videoinput', targetId)` — an in-place source swap, no re-publish. Failure path: try to restore the previous deviceId in store (if its track is still live), else disable the camera entirely; toast `"Could not switch camera"`. The `null` ("Auto") target is intentionally a no-op: no force-switch of an already-live publication.
+
+`isConnected` here is strictly `state === ConnectionState.Connected` (`useLiveKit.ts`). Do **not** broaden it to include `Reconnecting` without revisiting the effect — `switchActiveDevice` against a reconnecting room would fail.
+
+### Track-end detection
+On `RoomEvent.LocalTrackPublished` for the camera, the underlying `MediaStreamTrack` gets an `onended` listener. When it fires:
+1. If `consumeIntentionalCameraOff()` returns true (user clicked the camera off; flag was set in `handleCameraAction`'s disable branch), bail — no probe, no toast.
+2. Else re-probe `getUserMedia({video:{deviceId}})` to distinguish causes: `NotAllowedError` → `"Camera permission was revoked"` (macOS Privacy revoke); `NotFoundError` → `"Camera disconnected"` (unplug); other → `"Camera unavailable"`.
+3. Tear down camera state via the unified path: `markIntentionalCameraOff()` → `setCameraEnabled(false)` → `isCameraOn = false` → `broadcastVoiceStatus()` → toast.
+
+The `_intentionalCameraOff` module-level flag in `voiceActions.ts` is the gate. Producers: `handleCameraAction` disable branch, `syncCamera` rollback, the track-end handler's own teardown. Consumer: the track-end handler.
+
+### Two-mode preview (in `VideoSection.tsx`)
+| Mode | Triggered when | Source |
+|---|---|---|
+| In-call | An LK camera publication exists | Attach the LK `MediaStreamTrack` to the preview `<video>` |
+| Pre-call | No room or no publication | Open a `getUserMedia({ video: { deviceId } })` stream for the selected device |
+
+Mode is reactive on `isCameraOn` changes. Pre-call streams stop on tab hide (`visibilitychange`), modal close, panel switch, and component unmount; in-call attaches detach the same way but the LK track keeps running.
+
+### Architectural asymmetry: mic republishes, camera switches
+Mic publishes the output of a Web Audio graph (RNNoise, gain, AEC) — `LocalParticipant.switchActiveDevice` cannot operate on it because the published track is a `MediaStreamAudioDestinationNode.stream`'s track, not a raw mic track. Mic device changes therefore unpublish/republish via `AudioManager.getFreshTrack()`. Camera publishes the raw `getUserMedia` track and uses `switchActiveDevice` for in-place swaps. **Do not unify.**
+
+### Federation
+No federation work. The LK room is at the host instance; remote peers connect to it directly. `switchActiveDevice` is room-internal and works regardless of where the room lives.
