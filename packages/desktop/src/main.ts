@@ -558,9 +558,16 @@ function registerIpcHandlers(): void {
       const ownEntry = osState.launchItems?.find(
         (item) => item.name === 'Backspace' || item.path?.toLowerCase() === process.execPath.toLowerCase(),
       );
+      // When the Run entry exists, its args are the source of truth for startMinimized.
+      // When the entry is absent (autostart is off), there is no OS state to read, so we
+      // fall back to the disk cache — this preserves the user's preference across an
+      // off/on cycle so re-enabling restores their previous startMinimized choice.
+      const startMinimized = ownEntry
+        ? deriveStartMinimizedFromArgs(ownEntry.args)
+        : loadAutoLaunchSettings().startMinimized;
       return {
         openAtLogin: osState.executableWillLaunchAtLogin ?? false,
-        startMinimized: deriveStartMinimizedFromArgs(ownEntry?.args),
+        startMinimized,
       };
     }
     // macOS and Linux: getLoginItemSettings doesn't expose args, so startMinimized
@@ -587,7 +594,12 @@ function registerIpcHandlers(): void {
         (item) => item.name === 'Backspace' || item.path?.toLowerCase() === process.execPath.toLowerCase(),
       );
       currentOpenAtLogin = osState.executableWillLaunchAtLogin ?? false;
-      currentStartMinimized = deriveStartMinimizedFromArgs(ownEntry?.args);
+      // See `get-auto-launch-settings`: when the entry is absent, fall back to disk
+      // cache so a partial update that re-enables openAtLogin restores the user's
+      // previously-saved startMinimized choice rather than resetting to false.
+      currentStartMinimized = ownEntry
+        ? deriveStartMinimizedFromArgs(ownEntry.args)
+        : loadAutoLaunchSettings().startMinimized;
     } else {
       const osState = app.getLoginItemSettings();
       const saved = loadAutoLaunchSettings();
