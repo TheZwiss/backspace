@@ -85,6 +85,15 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const prevChannelIdRef = useRef<string>(channelId);
   const visibleMsgIdRef = useRef<string | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  // Live mirror of the current `channelId` prop. Updated synchronously each render so
+  // that async callbacks (notably the `loadMoreMessages` await in `handleScroll` and the
+  // `requestAnimationFrame` it schedules) can compare a captured channel against the
+  // current channel and bail if the user switched away mid-flight. We don't read the
+  // store's `currentChannelId` because it lags one render behind a URL-driven channel
+  // switch (it's set in an `AppLayout` effect that fires after MessageList renders with
+  // the new prop), which would let the guard mis-fire during that single-frame window.
+  const currentChannelIdRef = useRef(channelId);
+  currentChannelIdRef.current = channelId;
 
   // Final defensive pin after a bottom-bound smooth scroll completes.
   // Runs from either the native `scrollend` handler (preferred) or the timeout fallback
@@ -203,6 +212,14 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
     prevMessagesLength.current = 0;
     lastProgrammaticBottomScrollRef.current = null;
+
+    // Belt-and-suspenders: clear any in-flight pagination flag from the outgoing channel.
+    // `handleScroll`'s try/finally normally clears it when the await resolves, but the
+    // captured-channelId guard only silently drops the stale result — if the network
+    // hangs and the await never resolves, the new channel would inherit the flag and
+    // render a phantom pagination skeleton. Resetting here costs nothing and covers
+    // the never-resolves case. Idempotent w.r.t. the finally block.
+    setIsLoadingMore(false);
 
     // If we have a saved position for the incoming channel, don't mark as near/at-bottom
     // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
@@ -438,18 +455,41 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       visibleMsgIdRef.current = null;
     }
 
-    // Load more when scrolled to top
+    // Load more when scrolled to top.
+    // Capture the channelId locally so we can detect a channel switch that races the
+    // async load. Two guard points:
+    //  1. Before scheduling the rAF — if the user already switched, we have no business
+    //     touching scroll on the outgoing channel's (now-unmounted-from-view) container,
+    //     and `prevScrollHeight` is meaningless against the new channel's DOM.
+    //  2. *Inside* the rAF callback — the rAF runs ~16ms after we schedule it, so the
+    //     channel can switch in that window even if it was still current at schedule time.
+    // The try/finally guarantees `setIsLoadingMore(false)` runs even if `loadMoreMessages`
+    // throws (defense in depth — `chatStore.loadMoreMessages` currently catches and returns
+    // false, but we don't want a future refactor to leak the flag). The Effect-3 reset on
+    // channel switch is the third safety net for the "await never resolves" case.
     if (container.scrollTop < 50 && hasMore && !isLoadingMore) {
+      const requestChannelId = channelId;
       setIsLoadingMore(true);
       const prevScrollHeight = container.scrollHeight;
-      const loaded = await loadMoreMessages(channelId);
-      if (loaded) {
-        // Maintain scroll position
+      try {
+        const loaded = await loadMoreMessages(requestChannelId);
+        if (!loaded) return;
+        // Channel-switch guard #1: skip the rAF entirely if the user moved away during
+        // the await. The container ref now points at the new channel's scroller, so
+        // applying `scrollHeight - prevScrollHeight` would yank it to a wrong position.
+        if (currentChannelIdRef.current !== requestChannelId) return;
         requestAnimationFrame(() => {
-          container.scrollTop = container.scrollHeight - prevScrollHeight;
+          // Channel-switch guard #2: re-check inside the rAF callback. The frame between
+          // scheduling and firing (~16ms) is enough time for a click to switch channels,
+          // and the same wrong-position outcome would result.
+          if (currentChannelIdRef.current !== requestChannelId) return;
+          const c = containerRef.current;
+          if (!c) return;
+          c.scrollTop = c.scrollHeight - prevScrollHeight;
         });
+      } finally {
+        setIsLoadingMore(false);
       }
-      setIsLoadingMore(false);
     }
   }, [channelId, hasMore, isLoadingMore, loadMoreMessages]);
 
