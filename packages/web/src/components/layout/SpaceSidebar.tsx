@@ -79,21 +79,13 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
     }
 
     if (type === 'dm') {
-      // Home tile uses brand-tinted lavender (the endpoint of the mark's
-      // gradient — see assets/brand/mark.svg) so the bg is on-brand and
-      // visibly NOT grey against the cool-dark sidebar (any neutral tint
-      // reads as muddy grey-on-dark; only saturation breaks the grey).
-      // Discord's home button uses brand blurple the same way; ours uses
-      // accent-lavender. The bare mark in logo.png sits at 75% scale on
-      // transparent so the lavender tile is the visible frame, escalating
-      // at rest → hover → active for clear interaction feedback.
-      return {
-        background: active
-          ? 'rgba(196, 181, 253, 0.28)'
-          : isHovered
-            ? 'rgba(196, 181, 253, 0.16)'
-            : 'rgba(196, 181, 253, 0.08)',
-      };
+      // Home tile renders logo.png (full Element 1 badge with #000 bg)
+      // via object-cover; the badge IS the visible tile fill, so no
+      // separate button background is needed. The button's overflow-hidden
+      // + rounded-[20px → 13px] morph clips the opaque badge cleanly,
+      // giving the same hover/active feedback shape as space tiles with
+      // custom icons.
+      return undefined;
     }
 
     // Space type — if it has a custom icon image, no gradient needed
@@ -101,7 +93,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
     const spaceGrad = getSpaceGradient(id, name, avatarColor);
     return { background: spaceGrad.gradient };
-  }, [type, id, name, icon, avatarColor, isHovered, active]);
+  }, [type, id, name, icon, avatarColor, isHovered]);
 
   const getButtonClasses = () => {
     const base = 'w-10 h-10 flex items-center justify-center duration-200 overflow-hidden [transition:border-radius_0.2s,background_0.2s,color_0.2s]';

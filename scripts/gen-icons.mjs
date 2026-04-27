@@ -204,15 +204,19 @@ async function main() {
   );
   trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), `512 (60% mark on ${MASKABLE_BG})`);
 
-  // SpaceSidebar's 40×40 rounded-[20px] tile uses object-cover and provides
-  // its own dark surface (`bg-surface-*`). Render the bare mark on a
-  // transparent canvas at 75% scale: the sidebar's tile is the visual frame,
-  // the 25% padding keeps the mark off the squircle edges and out of the
-  // way of the active-state ring, and there's no warm-bg/cool-sidebar
-  // mismatch (the previous full-badge approach made #1d1d1b read as a
-  // visible warm-grey square inside the cool #1a1a23 sidebar).
-  await writeCenteredMarkPng(join(WEB_ICONS, 'logo.png'), mark, 256, 0.75, null);
-  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (75% mark, transparent)');
+  // Logo for the SpaceSidebar home tile: full Element 1 badge with the
+  // bg fill swapped from #1d1d1b → #000000. The badge IS the brand
+  // identity at small sizes (full mark mass + own internal padding),
+  // and pure black against the sidebar's #1a1a23 reads as deliberately
+  // darker (intentional dark tile) rather than as a warm/cool mismatch
+  // (the original #1d1d1b looked like an off-grey rectangle). The
+  // sidebar's overflow-hidden + rounded-[20px → 13px] morph clips the
+  // badge cleanly because the bg is fully opaque.
+  const logoSvg = Buffer.from(
+    appIcon.toString('utf8').replace(/#1d1d1b/gi, '#000000'),
+  );
+  await writePng(join(WEB_ICONS, 'logo.png'), logoSvg, 256);
+  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (full badge, #000)');
 
   // --- Summary ---
   const fmtBytes = (n) => {
