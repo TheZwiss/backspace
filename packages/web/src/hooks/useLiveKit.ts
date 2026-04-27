@@ -22,7 +22,6 @@ import { broadcastVoiceStatus } from '../utils/voice';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
-  CAMERA_PRESET,
   CAMERA_OVERDRIVE,
   buildScreenShareOptions,
   applyOverdrive,
@@ -644,16 +643,6 @@ export function useLiveKit() {
     useVoiceStore.getState().toggleMic();
   }, []);
 
-  const toggleCamera = useCallback(async () => {
-    if (roomRef.current) {
-      if (!isCameraOn) {
-        await roomRef.current.localParticipant.setCameraEnabled(true, { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate }, { videoCodec: CAMERA_PRESET.codec, videoEncoding: CAMERA_PRESET.encoding, simulcast: true });
-        setTimeout(() => { if (roomRef.current) applyOverdrive(roomRef.current, Track.Source.Camera, CAMERA_OVERDRIVE); }, 2000);
-      } else { await roomRef.current.localParticipant.setCameraEnabled(false); }
-      updateParticipants();
-    }
-  }, [isCameraOn, updateParticipants]);
-
   const toggleScreenShare = useCallback(async () => {
     if (!roomRef.current) return;
     if (!useVoiceStore.getState().isScreenSharing) {
@@ -721,5 +710,5 @@ export function useLiveKit() {
   }, []);
 
 
-  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic, toggleCamera, toggleScreenShare };
+  return { room, isConnected, isConnecting, connectionState, connectedChannelId, connectionError, connect, disconnect, toggleMic, toggleScreenShare };
 }

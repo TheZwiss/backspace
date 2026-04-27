@@ -8,6 +8,7 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
 import { wsSend } from '../../hooks/useWebSocket';
 import { getChannelOrigin } from '../../stores/spaceStore';
+import { handleCameraAction } from '../../utils/voiceActions';
 
 export function MobileVoiceFullScreen() {
   const popMobileScreen = useUIStore((s) => s.popMobileScreen);
@@ -20,7 +21,6 @@ export function MobileVoiceFullScreen() {
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const toggleMute = useVoiceStore((s) => s.toggleMic);
   const toggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-  const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const toggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const leaveVoice = useVoiceStore((s) => s.leaveVoice);
   const voiceUsers = useVoiceStore((s) => s.voiceUsers);
@@ -283,7 +283,7 @@ export function MobileVoiceFullScreen() {
 
         {/* Camera */}
         <button
-          onClick={toggleCamera}
+          onClick={handleCameraAction}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
             isCameraOn ? 'bg-accent-mint/20 text-accent-mint' : 'bg-surface-elevated text-txt-primary hover:bg-interactive-hover'
           }`}

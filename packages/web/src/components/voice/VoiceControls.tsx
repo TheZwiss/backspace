@@ -8,6 +8,7 @@ import { ConnectionInfoPopover } from './ConnectionInfoPopover';
 import { startScreenShare, stopScreenShare } from '../../utils/screenShare';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { broadcastVoiceStatus } from '../../utils/voice';
+import { handleCameraAction } from '../../utils/voiceActions';
 
 /**
  * VoiceControls renders the voice status + button rows.
@@ -17,7 +18,6 @@ export function VoiceControls() {
   const currentVoiceChannelId = useVoiceStore((s) => s.currentVoiceChannelId);
   const isCameraOn = useVoiceStore((s) => s.isCameraOn);
   const isScreenSharing = useVoiceStore((s) => s.isScreenSharing);
-  const toggleCamera = useVoiceStore((s) => s.toggleCamera);
   const rnnoiseEnabled = useVoiceStore((s) => s.rnnoiseEnabled);
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const connectionError = useVoiceStore((s) => s.connectionError);
@@ -43,19 +43,6 @@ export function VoiceControls() {
 
   const channel = channels.find(c => c.id === currentVoiceChannelId);
   const channelName = channel?.name ?? (activeDmCall ? 'DM Call' : 'Voice Channel');
-
-  const handleCamera = async () => {
-    const room = getActiveRoom();
-    if (!room) return;
-    try {
-      const willEnable = !isCameraOn;
-      await room.localParticipant.setCameraEnabled(willEnable);
-      toggleCamera();
-      broadcastVoiceStatus();
-    } catch (err) {
-      console.error('[VoiceControls] Failed to toggle camera:', err);
-    }
-  };
 
   const handleScreenShare = async () => {
     const room = getActiveRoom();
@@ -162,7 +149,7 @@ export function VoiceControls() {
       <div className="relative flex items-center gap-1 px-3 pb-2 pt-1">
         {canSpeak && (
           <button
-            onClick={handleCamera}
+            onClick={handleCameraAction}
             className={`${btnBase} ${
               isCameraOn
                 ? 'bg-surface-base text-status-online hover:bg-surface-channel'

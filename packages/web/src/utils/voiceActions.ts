@@ -7,6 +7,25 @@ import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from './voice';
 import { CAMERA_PRESET, startScreenShare, stopScreenShare } from './screenShare';
 
 /**
+ * One-shot flag used to distinguish user-initiated camera-off from unexpected
+ * track-end events (hardware unplug, OS permission revoke). Set right before
+ * `setCameraEnabled(false)` in any deliberate disable path; consumed-and-cleared
+ * by the camera-track `ended` handler in useLiveKit. Module-level by design:
+ * never persisted, never on the store, single producer + single consumer.
+ */
+let _intentionalCameraOff = false;
+
+export function markIntentionalCameraOff(): void {
+  _intentionalCameraOff = true;
+}
+
+export function consumeIntentionalCameraOff(): boolean {
+  const v = _intentionalCameraOff;
+  _intentionalCameraOff = false;
+  return v;
+}
+
+/**
  * Toggle mute. Respects space-mute/deafen guards.
  * Extracted from VoiceControlBar so keybinds and buttons share the same logic.
  */
@@ -31,7 +50,8 @@ export function handleDeafenAction(isSpaceDeafened: boolean): void {
 }
 
 /**
- * Toggle camera. Requires LiveKit room.
+ * Toggle camera. Requires LiveKit room. Sole canonical camera-toggle path —
+ * the voice-bar button, mobile button, and keybind all funnel through here.
  */
 export async function handleCameraAction(): Promise<void> {
   const room = getActiveRoom();
@@ -40,8 +60,9 @@ export async function handleCameraAction(): Promise<void> {
   try {
     const willEnable = !isCameraOn;
     if (willEnable) {
-      await room.localParticipant.setCameraEnabled(true,
-        { resolution: CAMERA_PRESET.resolution },
+      await room.localParticipant.setCameraEnabled(
+        true,
+        { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate },
         {
           videoCodec: CAMERA_PRESET.codec,
           videoEncoding: CAMERA_PRESET.encoding,
@@ -49,6 +70,9 @@ export async function handleCameraAction(): Promise<void> {
         }
       );
     } else {
+      // Mark this disable as intentional so the track-`ended` handler skips
+      // its unplug/permission-revoke probe + toast.
+      markIntentionalCameraOff();
       await room.localParticipant.setCameraEnabled(false);
     }
     useVoiceStore.getState().toggleCamera();
