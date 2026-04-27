@@ -298,6 +298,8 @@ The `_intentionalCameraOff` module-level flag in `voiceActions.ts` is the gate. 
 
 Mode is reactive on `isCameraOn` changes. Pre-call streams stop on tab hide (`visibilitychange`), modal close, panel switch, and component unmount; in-call attaches detach the same way but the LK track keeps running.
 
+**Privacy: dormant-by-default.** The pre-call mode never auto-starts. On section mount, `navigator.permissions.query({ name: 'camera' as PermissionName })` reports the permission state without firing the camera. The preview tile is dormant (placeholder + "Click to test camera" overlay) until the user explicitly clicks it, or until the prompt-state CTA button triggers `getUserMedia` (which both grants permission and opens preview in one step). Rationale: macOS holds the camera LED on for ~2s after release, so any incidental `getUserMedia` call (probe, transient mount) flashes the LED — a privacy/UX defect. The only entry points to `getUserMedia` are explicit user gestures: dormant-tile click, prompt CTA, "Try again" in the denied banner, and dropdown change while preview is already running.
+
 ### Architectural asymmetry: mic republishes, camera switches
 Mic publishes the output of a Web Audio graph (RNNoise, gain, AEC) — `LocalParticipant.switchActiveDevice` cannot operate on it because the published track is a `MediaStreamAudioDestinationNode.stream`'s track, not a raw mic track. Mic device changes therefore unpublish/republish via `AudioManager.getFreshTrack()`. Camera publishes the raw `getUserMedia` track and uses `switchActiveDevice` for in-place swaps. **Do not unify.**
 
