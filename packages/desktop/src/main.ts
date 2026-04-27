@@ -323,7 +323,10 @@ function createWindow(): void {
   }
 
   mainWindow.once('ready-to-show', () => {
-    // Check if launched minimized (auto-start to tray)
+    // Hidden-launch detection. We pass `args: ['--hidden']` on all three platforms
+    // (see applyLoginItemSettings), so the argv check is the primary signal. On
+    // macOS we also honour `wasOpenedAsHidden` as a fallback for the legacy
+    // openAsHidden path on macOS < 13.
     const launchedHidden =
       process.argv.includes('--hidden') ||
       (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAsHidden);
