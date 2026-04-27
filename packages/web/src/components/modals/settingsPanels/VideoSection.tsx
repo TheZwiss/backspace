@@ -64,6 +64,13 @@ export function VideoSection() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // Tracks the deviceId the browser actually picked for the active preview track.
+  // Drives the "Currently using: …" subline shown only in Auto mode.
+  const [activeDeviceId, setActiveDeviceId] = useState<string | null>(null);
+  // Bumped on visibilitychange to force the dual-mode preview effect to re-run
+  // (cleanup releases the camera light when the tab is hidden, then a fresh run
+  // restarts the preview when the tab becomes visible again).
+  const [restartTick, setRestartTick] = useState(0);
   // Tracks mount state so async probe handlers don't write to state after unmount.
   const mountedRef = useRef(true);
   // Anchor for the dropdown's click-outside-to-close behaviour.
@@ -83,6 +90,19 @@ export function VideoSection() {
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [listOpen]);
+
+  // Tab-visibility cleanup: release the camera light when the tab is hidden.
+  // The dual-mode preview effect depends on `restartTick`; bumping it forces its
+  // cleanup to run (which calls fullStop()) and the effect re-runs. The effect
+  // itself short-circuits while document.visibilityState === 'hidden', so no new
+  // stream is opened until the tab is visible again.
+  useEffect(() => {
+    const onVisibility = () => {
+      setRestartTick((t) => t + 1);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
   // Run the probe once on mount.
   useEffect(() => {
@@ -150,6 +170,13 @@ export function VideoSection() {
   useEffect(() => {
     if (permState !== 'granted') return;
 
+    // Tab is hidden — the previous run's cleanup already fired when restartTick
+    // changed, releasing the camera. Don't start a new stream while hidden;
+    // we'll re-run again on the next visibilitychange when the tab returns.
+    if (document.visibilityState === 'hidden') {
+      return () => {};
+    }
+
     let cancelled = false;
 
     // Stop the pre-call getUserMedia stream we own. Releases the camera light.
@@ -170,6 +197,7 @@ export function VideoSection() {
     const fullStop = () => {
       stopPreCall();
       detachInCall();
+      setActiveDeviceId(null);
     };
 
     // Returns true iff an LK camera track was successfully attached to the preview.
@@ -194,6 +222,7 @@ export function VideoSection() {
       // wrapper does not duplicate or take ownership of the track.
       videoEl.srcObject = new MediaStream([mst]);
       videoEl.play().catch(() => {});
+      setActiveDeviceId(mst.getSettings().deviceId ?? null);
       setPreviewError(null);
       return true;
     };
@@ -219,6 +248,8 @@ export function VideoSection() {
           // Autoplay errors on muted video are common and benign.
           videoEl.play().catch(() => {});
         }
+        const id = stream.getVideoTracks()[0]?.getSettings().deviceId ?? null;
+        setActiveDeviceId(id);
         setPreviewError(null);
       } catch (err) {
         if (cancelled) return;
@@ -246,7 +277,7 @@ export function VideoSection() {
       cancelled = true;
       fullStop();
     };
-  }, [permState, cameraDeviceId, isCameraOn]);
+  }, [permState, cameraDeviceId, isCameraOn, restartTick]);
 
   const displayLabels = useMemo(() => buildDisplayLabels(devices), [devices]);
 
@@ -368,6 +399,17 @@ export function VideoSection() {
             </div>
           )}
         </div>
+        {cameraDeviceId === null && activeDeviceId && (() => {
+          const m = devices.find((d) => d.deviceId === activeDeviceId);
+          const label = m
+            ? displayLabels.get(activeDeviceId) ?? (m.label || 'detected camera')
+            : 'detected camera';
+          return (
+            <div className="text-xs text-txt-tertiary mt-1">
+              Currently using: {label}
+            </div>
+          );
+        })()}
         {devices.length === 0 && (
           <div className="text-xs text-txt-tertiary mt-1">No cameras detected.</div>
         )}
