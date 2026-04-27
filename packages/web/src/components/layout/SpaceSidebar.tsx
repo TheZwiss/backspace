@@ -79,17 +79,20 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
     }
 
     if (type === 'dm') {
-      // Home tile uses a translucent white surface so the squircle→square
-      // corner-radius transition has something visible to morph. The bare
-      // mark in logo.png is centred with internal padding (transparent
-      // outside ~75% scale), so without a button background there is no
-      // visible hover/active feedback at all.
+      // Home tile uses brand-tinted lavender (the endpoint of the mark's
+      // gradient — see assets/brand/mark.svg) so the bg is on-brand and
+      // visibly NOT grey against the cool-dark sidebar (any neutral tint
+      // reads as muddy grey-on-dark; only saturation breaks the grey).
+      // Discord's home button uses brand blurple the same way; ours uses
+      // accent-lavender. The bare mark in logo.png sits at 75% scale on
+      // transparent so the lavender tile is the visible frame, escalating
+      // at rest → hover → active for clear interaction feedback.
       return {
         background: active
-          ? 'rgba(255, 255, 255, 0.10)'
+          ? 'rgba(196, 181, 253, 0.28)'
           : isHovered
-            ? 'rgba(255, 255, 255, 0.07)'
-            : 'rgba(255, 255, 255, 0.04)',
+            ? 'rgba(196, 181, 253, 0.16)'
+            : 'rgba(196, 181, 253, 0.08)',
       };
     }
 
