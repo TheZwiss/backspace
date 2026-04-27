@@ -92,10 +92,14 @@ async function writeIcns(path, svg) {
   writeFileSync(path, icns);
 }
 
-async function writeMaskablePng(path, markSvg, canvas, scale, bgHex) {
-  // Compose: solid square background + bare mark centred at scale × canvas.
-  // 60% scale guarantees content survives Android's most aggressive launcher
-  // masks (Samsung One UI's full circle, Pixel's squircle).
+async function writeCenteredMarkPng(path, markSvg, canvas, scale, bgHex) {
+  // Compose: square canvas + bare mark centred at scale × canvas.
+  //   bgHex = hex string → opaque background (PWA maskable: survives
+  //                       Android launcher masks like Samsung One UI's
+  //                       full circle, Pixel's squircle).
+  //   bgHex = null/undefined → transparent canvas (in-app slots whose
+  //                            container provides the visual frame, e.g.
+  //                            SpaceSidebar's 40×40 squircle tile).
   const innerSize = Math.round(canvas * scale);
   const inner = await sharp(markSvg, { density: SVG_DENSITY })
     .resize(innerSize, innerSize, {
@@ -110,7 +114,7 @@ async function writeMaskablePng(path, markSvg, canvas, scale, bgHex) {
       width: canvas,
       height: canvas,
       channels: 4,
-      background: bgHex,
+      background: bgHex ?? { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
     .composite([{ input: inner, gravity: 'center' }])
@@ -191,7 +195,7 @@ async function main() {
   await writePng(join(WEB_ICONS, 'icon-512.png'), appIcon, 512);
   trace('pwa-512', join(WEB_ICONS, 'icon-512.png'), '512');
 
-  await writeMaskablePng(
+  await writeCenteredMarkPng(
     join(WEB_ICONS, 'icon-maskable-512.png'),
     mark,
     512,
@@ -200,12 +204,15 @@ async function main() {
   );
   trace('pwa-maskable', join(WEB_ICONS, 'icon-maskable-512.png'), `512 (60% mark on ${MASKABLE_BG})`);
 
-  // SpaceSidebar's 40×40 rounded-[20px] tile uses object-cover. The full
-  // badge (Element 1) integrates cleanly because its dark bg fills the tile
-  // and its internal padding keeps the mark off the tile edges. Bare mark
-  // on transparent touched the tile edges and conflicted with active rings.
-  await writePng(join(WEB_ICONS, 'logo.png'), appIcon, 256);
-  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (full badge)');
+  // SpaceSidebar's 40×40 rounded-[20px] tile uses object-cover and provides
+  // its own dark surface (`bg-surface-*`). Render the bare mark on a
+  // transparent canvas at 75% scale: the sidebar's tile is the visual frame,
+  // the 25% padding keeps the mark off the squircle edges and out of the
+  // way of the active-state ring, and there's no warm-bg/cool-sidebar
+  // mismatch (the previous full-badge approach made #1d1d1b read as a
+  // visible warm-grey square inside the cool #1a1a23 sidebar).
+  await writeCenteredMarkPng(join(WEB_ICONS, 'logo.png'), mark, 256, 0.75, null);
+  trace('in-app-logo', join(WEB_ICONS, 'logo.png'), '256 (75% mark, transparent)');
 
   // --- Summary ---
   const fmtBytes = (n) => {
