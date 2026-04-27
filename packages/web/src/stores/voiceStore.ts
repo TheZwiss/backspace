@@ -32,6 +32,7 @@ interface VoiceState {
   outputVolume: number; // 0-200 (100 = default)
   inputDeviceId: string;
   outputDeviceId: string;
+  cameraDeviceId: string | null; // null = auto-select on next camera enable
   focusedParticipantId: string | null;
   screenShareConfig: ScreenShareConfig;
   // Per-participant volume (userId → 0-200, 100 = default)
@@ -87,6 +88,7 @@ interface VoiceState {
   setOutputVolume: (volume: number) => void;
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
+  setCameraDeviceId: (deviceId: string | null) => void;
   pttActive: boolean;
   setMuted: (muted: boolean) => void;
   setPttActive: (active: boolean) => void;
@@ -154,6 +156,7 @@ export const useVoiceStore = create<VoiceState>()(
       outputVolume: 100,
       inputDeviceId: 'default',
       outputDeviceId: 'default',
+      cameraDeviceId: null,
       focusedParticipantId: null,
       screenShareConfig: { height: 720, fps: 60, mode: 'gaming', customBitrateKbps: null, shareAudio: !isElectron() },
       participantVolumes: new Map(),
@@ -314,8 +317,10 @@ export const useVoiceStore = create<VoiceState>()(
       setOutputVolume: (volume) => set({ outputVolume: volume }),
       
       setInputDevice: (deviceId) => set({ inputDeviceId: deviceId }),
-      
+
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
+
+      setCameraDeviceId: (deviceId) => set({ cameraDeviceId: deviceId }),
 
       setMuted: (muted: boolean) => set({ isMuted: muted }),
       setPttActive: (active: boolean) => set({ pttActive: active }),
@@ -561,6 +566,7 @@ export const useVoiceStore = create<VoiceState>()(
         outputVolume: 100,
         inputDeviceId: 'default',
         outputDeviceId: 'default',
+        cameraDeviceId: null,
         focusedParticipantId: null,
         participantVolumes: new Map(),
         participantMutes: new Map(),
@@ -658,6 +664,7 @@ export const useVoiceStore = create<VoiceState>()(
         outputVolume: state.outputVolume,
         inputDeviceId: state.inputDeviceId,
         outputDeviceId: state.outputDeviceId,
+        cameraDeviceId: state.cameraDeviceId,
         screenShareConfig: state.screenShareConfig,
         echoCancellation: state.echoCancellation,
         autoGainControl: state.autoGainControl,
