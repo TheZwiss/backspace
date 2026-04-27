@@ -16,6 +16,8 @@
     "build": "tsc && electron-builder",
     "build:all": "tsc && electron-builder --mac --win --linux --arm64 --x64",
     "clean": "rm -rf dist dist-electron",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "electron-rebuild -f -w uiohook-napi"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "@electron/rebuild": "^3.7.1",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   }
 }
