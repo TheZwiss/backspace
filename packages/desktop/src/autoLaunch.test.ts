@@ -47,6 +47,15 @@ describe('parseExecPathFromDesktopFile', () => {
   it('returns null on empty input', () => {
     expect(parseExecPathFromDesktopFile('')).toBeNull();
   });
+
+  it('returns null on an empty quoted Exec= path', () => {
+    expect(parseExecPathFromDesktopFile('Exec=""\n')).toBeNull();
+  });
+
+  it('handles CRLF line endings', () => {
+    const content = '[Desktop Entry]\r\nExec=/opt/Backspace/backspace --hidden\r\n';
+    expect(parseExecPathFromDesktopFile(content)).toBe('/opt/Backspace/backspace');
+  });
 });
 
 describe('shouldReapplyAppImage', () => {

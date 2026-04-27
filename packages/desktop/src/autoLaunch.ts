@@ -18,12 +18,13 @@ export function parseExecPathFromDesktopFile(content: string): string | null {
     const line = raw.trim();
     if (!line || line.startsWith('#')) continue;
     if (!line.startsWith('Exec=')) continue;
-    const value = line.slice('Exec='.length).trimStart();
+    const value = line.slice('Exec='.length);
     if (!value) continue;
     if (value.startsWith('"')) {
       const end = value.indexOf('"', 1);
       if (end === -1) return null;
-      return value.slice(1, end);
+      const extracted = value.slice(1, end);
+      return extracted === '' ? null : extracted;
     }
     const sp = value.indexOf(' ');
     return sp === -1 ? value : value.slice(0, sp);
