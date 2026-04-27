@@ -149,7 +149,7 @@ If `requestedAvatarColor` is provided and is in `AVATAR_COLORS`, use it. Otherwi
 4. Check username uniqueness (exact match on lowercased username)
 5. Hash password (bcrypt, 12 rounds)
 6. Generate Snowflake ID
-7. Insert user row with `status: 'online'`, admin flag if first user
+7. Insert user row (status defaults to `'offline'` at the schema level; it is set to `'online'` only when the client establishes a WebSocket via the WS auth path in `ws/handler.ts`). Admin flag set if first user.
 8. Sign JWT with `{ userId, username }`
 9. Return `{ token, user }` (user sanitized via `sanitizeUser(user, true)`)
 

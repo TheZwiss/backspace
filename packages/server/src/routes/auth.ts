@@ -166,12 +166,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       ? requestedAvatarColor
       : AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)];
 
+    // Note: status is left at the schema default ('offline') and is set to
+    // 'online' exclusively by the WebSocket auth path (ws/handler.ts). A
+    // successful REST /register does not by itself imply a live connection —
+    // the client may never establish a WS (transient network failure, mobile
+    // background, error path between this 201 response and /ws connect),
+    // which would otherwise produce a permanently stuck-online row that no
+    // disconnect timer can clean up. The WS handshake will flip it to
+    // 'online' once a real socket attaches.
     db.insert(schema.users).values({
       id: userId,
       username: trimmedUsername,
       displayName: displayName?.trim() || null,
       passwordHash,
-      status: 'online',
       isAdmin: isFirstUser ? 1 : 0,
       homeInstance: homeInstance || null,
       homeUserId: (homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null,
