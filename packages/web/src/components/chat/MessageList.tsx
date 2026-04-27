@@ -61,6 +61,23 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isAtBottomRef = useRef(true);
   const lastProgrammaticBottomScrollRef = useRef<number | null>(null);
+  // Smooth-scroll intent tracking. While a smooth scroll is animating toward the bottom,
+  // intermediate `handleScroll` measurements would otherwise see a large `distanceFromBottom`
+  // and flip `isAtBottomRef` to false — closing the ResizeObserver/load-handler gate so
+  // late-loading media (avatars, embeds, images, Spotify thumbs) growing `scrollHeight`
+  // mid-animation never triggers a re-pin. The smooth scroll then lands at the originally
+  // computed (now stale) target, leaving the user above the true bottom.
+  // 'bottom' = animating toward the bottom, suppress at-bottom flip during the window.
+  // 'message' = jump-to-message animation, do NOT suppress (the user is legitimately moving away).
+  // null = no animation in progress.
+  const smoothScrollIntentRef = useRef<'bottom' | 'message' | null>(null);
+  const smoothScrollDeadlineRef = useRef(0);
+  const smoothScrollFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 5000px = same threshold as `nearBottom`. If the user wheels away mid-animation, their
+  // distance jumps well past this, and we let the at-bottom flag flip honestly so the
+  // smooth scroll's terminal frames don't fight a deliberate user gesture.
+  const SMOOTH_SCROLL_USER_INTENT_THRESHOLD = 5000;
+  const SMOOTH_SCROLL_DEADLINE_MS = 800;
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
   const showPaginationSkeleton = useDelayedLoading(isLoadingMore);
@@ -68,6 +85,76 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const prevChannelIdRef = useRef<string>(channelId);
   const visibleMsgIdRef = useRef<string | null>(null);
   const ackTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Final defensive pin after a bottom-bound smooth scroll completes.
+  // Runs from either the native `scrollend` handler (preferred) or the timeout fallback
+  // (browsers without scrollend support). Whichever fires first clears the intent and
+  // cancels its counterpart.
+  const finalizeBottomSmoothScroll = useCallback(() => {
+    if (smoothScrollIntentRef.current !== 'bottom') {
+      // Already cleared (e.g. user wheeled away and we let the gate flip honestly,
+      // or the scrollend fired for an unrelated user-driven scroll).
+      return;
+    }
+    const container = containerRef.current;
+    if (!container) {
+      smoothScrollIntentRef.current = null;
+      smoothScrollDeadlineRef.current = 0;
+      if (smoothScrollFallbackTimerRef.current) {
+        clearTimeout(smoothScrollFallbackTimerRef.current);
+        smoothScrollFallbackTimerRef.current = null;
+      }
+      return;
+    }
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const userScrolledAway = distanceFromBottom >= SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
+    if (!userScrolledAway) {
+      container.scrollTop = container.scrollHeight;
+      lastProgrammaticBottomScrollRef.current = container.scrollTop;
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+      isNearBottomRef.current = true;
+      setIsNearBottom(true);
+    }
+    smoothScrollIntentRef.current = null;
+    smoothScrollDeadlineRef.current = 0;
+    if (smoothScrollFallbackTimerRef.current) {
+      clearTimeout(smoothScrollFallbackTimerRef.current);
+      smoothScrollFallbackTimerRef.current = null;
+    }
+  }, []);
+
+  // Set the smooth-scroll intent and arm the final-pin path. Pick exactly one signal
+  // (native scrollend if supported, timeout otherwise) — the scrollend listener itself
+  // is registered persistently in a separate effect; here we only arm the timeout fallback
+  // when scrollend is unavailable so they don't double-fire.
+  const beginSmoothScrollIntent = useCallback((intent: 'bottom' | 'message') => {
+    smoothScrollIntentRef.current = intent;
+    smoothScrollDeadlineRef.current = performance.now() + SMOOTH_SCROLL_DEADLINE_MS;
+    if (smoothScrollFallbackTimerRef.current) {
+      clearTimeout(smoothScrollFallbackTimerRef.current);
+      smoothScrollFallbackTimerRef.current = null;
+    }
+    const hasScrollend = typeof window !== 'undefined' && 'onscrollend' in window;
+    if (intent === 'bottom' && !hasScrollend) {
+      smoothScrollFallbackTimerRef.current = setTimeout(() => {
+        smoothScrollFallbackTimerRef.current = null;
+        finalizeBottomSmoothScroll();
+      }, SMOOTH_SCROLL_DEADLINE_MS);
+    }
+    // For 'message' intent: there is no defensive final pin (the target is not the bottom),
+    // but the intent ref must still be cleared once the animation ends. Use a timeout in all
+    // cases for 'message' — the scrollend listener also clears it, whichever fires first.
+    if (intent === 'message') {
+      smoothScrollFallbackTimerRef.current = setTimeout(() => {
+        smoothScrollFallbackTimerRef.current = null;
+        if (smoothScrollIntentRef.current === 'message') {
+          smoothScrollIntentRef.current = null;
+          smoothScrollDeadlineRef.current = 0;
+        }
+      }, SMOOTH_SCROLL_DEADLINE_MS);
+    }
+  }, [finalizeBottomSmoothScroll]);
 
   // Permission check: DM channels always allow history; space channels check READ_MESSAGE_HISTORY
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
@@ -162,10 +249,11 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       });
     } else if (messages.length > prev && isAtBottomRef.current) {
       // New messages arrived while at bottom — smooth scroll
+      beginSmoothScrollIntent('bottom');
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- isAtBottomRef read via ref intentionally
-  }, [messages.length, channelId]);
+  }, [messages.length, channelId, beginSmoothScrollIntent]);
 
   // Auto-scroll when content height grows (embeds/images loading) while near bottom
   const hasMessages = messages.length > 0;
@@ -202,6 +290,52 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     return () => content.removeEventListener('load', handleMediaLoad, true);
   }, [hasMessages, channelId]);
 
+  // Effect 7 — `scrollend` listener (Chrome 114+, Safari 18+).
+  // Fires once per smooth-scroll animation completion. When a 'bottom' intent is in
+  // flight, do a final defensive instant pin: layout may have grown between the
+  // smooth-scroll command and its terminal frame (lazy-loaded media, late embeds),
+  // and the smooth animation will have stopped at the originally computed target.
+  // For browsers without scrollend, the timeout fallback armed in
+  // `beginSmoothScrollIntent` handles the same final pin.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    if (typeof window === 'undefined' || !('onscrollend' in window)) return;
+
+    const handleScrollEnd = () => {
+      const intent = smoothScrollIntentRef.current;
+      if (intent === 'bottom') {
+        finalizeBottomSmoothScroll();
+      } else if (intent === 'message') {
+        // No defensive pin (target is not bottom), but clear the intent so the next
+        // bottom-bound smooth scroll's suppression works correctly.
+        smoothScrollIntentRef.current = null;
+        smoothScrollDeadlineRef.current = 0;
+        if (smoothScrollFallbackTimerRef.current) {
+          clearTimeout(smoothScrollFallbackTimerRef.current);
+          smoothScrollFallbackTimerRef.current = null;
+        }
+      }
+    };
+
+    container.addEventListener('scrollend', handleScrollEnd);
+    return () => container.removeEventListener('scrollend', handleScrollEnd);
+  }, [hasMessages, channelId, finalizeBottomSmoothScroll]);
+
+  // Cleanup: on channel switch / unmount, clear any in-flight smooth-scroll intent
+  // (we don't want a 'bottom' intent armed on the previous channel to suppress the
+  // first user scroll on the new channel).
+  useEffect(() => {
+    return () => {
+      smoothScrollIntentRef.current = null;
+      smoothScrollDeadlineRef.current = 0;
+      if (smoothScrollFallbackTimerRef.current) {
+        clearTimeout(smoothScrollFallbackTimerRef.current);
+        smoothScrollFallbackTimerRef.current = null;
+      }
+    };
+  }, [channelId]);
+
   // Jump-to-message: scroll to target and highlight
   useEffect(() => {
     if (!jumpToMessageId) return;
@@ -209,6 +343,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     const scrollToMessage = () => {
       const el = document.getElementById(`msg-${jumpToMessageId}`);
       if (el) {
+        beginSmoothScrollIntent('message');
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.add('search-highlight');
         setTimeout(() => el.classList.remove('search-highlight'), 2000);
@@ -230,18 +365,21 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         });
       });
     });
-  }, [jumpToMessageId, channelId, loadMessagesAround, onJumpComplete]);
+  }, [jumpToMessageId, channelId, loadMessagesAround, onJumpComplete, beginSmoothScrollIntent]);
 
   const handleScroll = useCallback(async () => {
     const container = containerRef.current;
     if (!container) return;
+
+    const sentinelBefore = lastProgrammaticBottomScrollRef.current;
+    const sentinelMatch = container.scrollTop === sentinelBefore;
 
     // Sentinel: if scrollTop equals our last programmatic bottom-scroll value, this event
     // was queued by our own command. Layout may have grown between the command and the
     // event firing, but our intent is "stay at bottom" — do not let a post-growth distance
     // measurement flip the at-bottom flags. Re-pin defensively (content may have grown
     // again) and update the sentinel. See docs/systems/message-list.md (Auto-scroll model).
-    if (container.scrollTop === lastProgrammaticBottomScrollRef.current) {
+    if (sentinelMatch) {
       isAtBottomRef.current = true;
       setIsAtBottom(true);
       isNearBottomRef.current = true;
@@ -260,11 +398,29 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     // Check scroll position relative to bottom
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     // "at bottom" = within 150px — used for auto-scrolling on new messages
-    const atBottom = distanceFromBottom < 150;
-    setIsAtBottom(atBottom);
-    isAtBottomRef.current = atBottom;
+    const atBottomMeasured = distanceFromBottom < 150;
     // "near bottom" = within 5000px — used for "Jump to Present" button visibility
     const nearBottom = distanceFromBottom < 5000;
+
+    // Smooth-scroll-to-bottom suppression: while a smooth animation we initiated is
+    // animating toward the bottom, intermediate frames report large `distanceFromBottom`.
+    // Honoring those would flip `isAtBottomRef` to false and close the
+    // ResizeObserver/load-handler gates — preventing any late-loading media (avatars,
+    // embeds, attachment images, Spotify thumbs) growing scrollHeight mid-animation
+    // from re-pinning. The smooth scroll then lands at the originally computed (now
+    // stale) target. Suppress the flip ONLY for 'bottom' intent — 'message' intent
+    // (jump-to-message) legitimately moves the user away from bottom, so let the gate
+    // flip honestly there. Also let the gate flip if the user has wheeled away well
+    // past the near-bottom band (5000px), which signals a deliberate user gesture
+    // overriding our animation.
+    const intent = smoothScrollIntentRef.current;
+    const intentActive = intent === 'bottom' && performance.now() < smoothScrollDeadlineRef.current;
+    const userScrolledAway = distanceFromBottom >= SMOOTH_SCROLL_USER_INTENT_THRESHOLD;
+    const suppressBottomFlip = intentActive && !userScrolledAway;
+
+    const atBottom = suppressBottomFlip ? true : atBottomMeasured;
+    setIsAtBottom(atBottom);
+    isAtBottomRef.current = atBottom;
     setIsNearBottom(nearBottom);
     isNearBottomRef.current = nearBottom;
 
@@ -384,7 +540,10 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
       {!isNearBottom && messages.length > 0 && (
         <button
-          onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => {
+            beginSmoothScrollIntent('bottom');
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+          }}
           className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[120] glass-bubble px-4 py-2 flex items-center gap-2 rounded-full text-txt-secondary hover:text-txt-primary transition-all animate-fade-in cursor-pointer"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
