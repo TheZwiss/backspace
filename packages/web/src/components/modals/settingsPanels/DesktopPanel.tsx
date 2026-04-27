@@ -5,6 +5,7 @@ function AutoLaunchSettings() {
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [startMinimized, setStartMinimized] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     window.backspace?.getAutoLaunchSettings().then((settings) => {
@@ -15,24 +16,30 @@ function AutoLaunchSettings() {
   }, []);
 
   const handleOpenAtLoginChange = async (enabled: boolean) => {
-    setOpenAtLogin(enabled);
+    if (busy) return;
+    setBusy(true);
     try {
       const result = await window.backspace!.setAutoLaunchSettings({ openAtLogin: enabled });
       setOpenAtLogin(result.openAtLogin);
       setStartMinimized(result.startMinimized);
-    } catch {
-      setOpenAtLogin(!enabled);
+    } catch (err) {
+      console.error('[autoLaunch] setAutoLaunchSettings(openAtLogin) failed:', err);
+    } finally {
+      setBusy(false);
     }
   };
 
   const handleStartMinimizedChange = async (enabled: boolean) => {
-    setStartMinimized(enabled);
+    if (busy) return;
+    setBusy(true);
     try {
       const result = await window.backspace!.setAutoLaunchSettings({ startMinimized: enabled });
       setOpenAtLogin(result.openAtLogin);
       setStartMinimized(result.startMinimized);
-    } catch {
-      setStartMinimized(!enabled);
+    } catch (err) {
+      console.error('[autoLaunch] setAutoLaunchSettings(startMinimized) failed:', err);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -47,7 +54,7 @@ function AutoLaunchSettings() {
             Automatically launch Backspace when you log in
           </div>
         </div>
-        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} />
+        <Toggle enabled={openAtLogin} onChange={handleOpenAtLoginChange} disabled={busy} />
       </div>
       <div className="flex items-center justify-between py-1">
         <div className="flex-1 mr-4">
@@ -56,7 +63,7 @@ function AutoLaunchSettings() {
             Start hidden in the system tray instead of showing the window
           </div>
         </div>
-        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} />
+        <Toggle enabled={startMinimized} onChange={handleStartMinimizedChange} disabled={busy || !openAtLogin} />
       </div>
     </>
   );
