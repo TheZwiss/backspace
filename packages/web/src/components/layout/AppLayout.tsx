@@ -92,6 +92,16 @@ export function AppLayout() {
     AudioManager.getInstance().setOutputDevice(outputDeviceId);
   }, [outputDeviceId]);
 
+  // Sweep stale persisted device IDs (mic/speaker/camera) on mount and whenever
+  // the device list changes (USB plug/unplug, permission unlock, etc.).
+  useEffect(() => {
+    const prune = useVoiceStore.getState().pruneStaleDevices;
+    prune(); // initial sweep
+    const handler = () => prune();
+    navigator.mediaDevices.addEventListener('devicechange', handler);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', handler);
+  }, []);
+
   const { user, isLoading } = useAuth();
   const showBootSkeleton = useDelayedLoading(isLoading);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
