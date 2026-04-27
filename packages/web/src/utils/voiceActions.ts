@@ -1,3 +1,4 @@
+import type { VideoCaptureOptions } from 'livekit-client';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useUIStore } from '../stores/uiStore';
 import { getActiveRoom } from '../hooks/useLiveKit';
@@ -60,9 +61,15 @@ export async function handleCameraAction(): Promise<void> {
   try {
     const willEnable = !isCameraOn;
     if (willEnable) {
+      const cameraDeviceId = useVoiceStore.getState().cameraDeviceId;
+      const captureOpts: VideoCaptureOptions = {
+        resolution: CAMERA_PRESET.resolution,
+        frameRate: CAMERA_PRESET.encoding.maxFramerate,
+      };
+      if (cameraDeviceId) captureOpts.deviceId = cameraDeviceId;
       await room.localParticipant.setCameraEnabled(
         true,
-        { resolution: CAMERA_PRESET.resolution, frameRate: CAMERA_PRESET.encoding.maxFramerate },
+        captureOpts,
         {
           videoCodec: CAMERA_PRESET.codec,
           videoEncoding: CAMERA_PRESET.encoding,
