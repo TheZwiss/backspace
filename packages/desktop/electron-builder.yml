@@ -35,10 +35,11 @@ mac:
     - dmg
     - zip
 win:
-  icon: ./build/icon.png
+  icon: ./build/icon.ico
   target:
     - nsis
 linux:
+  icon: build/icons/
   target:
     - AppImage
     - deb
