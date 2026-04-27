@@ -11,8 +11,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build:ts": "tsc",
-    "dev": "mkdir -p build && cp ../../icon.png build/icon.png && bash scripts/gen-icns.sh && cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
-    "prebuild": "mkdir -p build && cp ../../icon.png build/icon.png",
+    "dev": "cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
     "build": "tsc && electron-builder",
     "build:all": "tsc && electron-builder --mac --win --linux --arm64 --x64",
     "clean": "rm -rf dist dist-electron",
