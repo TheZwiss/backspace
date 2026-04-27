@@ -89,6 +89,7 @@ interface VoiceState {
   setInputDevice: (deviceId: string) => void;
   setOutputDevice: (deviceId: string) => void;
   setCameraDeviceId: (deviceId: string | null) => void;
+  pruneStaleDevices: () => Promise<void>;
   pttActive: boolean;
   setMuted: (muted: boolean) => void;
   setPttActive: (active: boolean) => void;
@@ -321,6 +322,39 @@ export const useVoiceStore = create<VoiceState>()(
       setOutputDevice: (deviceId) => set({ outputDeviceId: deviceId }),
 
       setCameraDeviceId: (deviceId) => set({ cameraDeviceId: deviceId }),
+
+      pruneStaleDevices: async () => {
+        try {
+          const devs = await navigator.mediaDevices.enumerateDevices();
+          // Firefox/Safari hide deviceIds pre-permission. If the enumerated set for a
+          // kind has zero non-empty deviceIds, skip pruning that kind — we cannot
+          // distinguish "stale" from "obscured".
+          const audioInIds = new Set(
+            devs.filter(d => d.kind === 'audioinput' && d.deviceId).map(d => d.deviceId)
+          );
+          const audioOutIds = new Set(
+            devs.filter(d => d.kind === 'audiooutput' && d.deviceId).map(d => d.deviceId)
+          );
+          const videoInIds = new Set(
+            devs.filter(d => d.kind === 'videoinput' && d.deviceId).map(d => d.deviceId)
+          );
+
+          const s = get();
+          const next: Partial<VoiceState> = {};
+          if (audioInIds.size > 0 && s.inputDeviceId !== 'default' && !audioInIds.has(s.inputDeviceId)) {
+            next.inputDeviceId = 'default';
+          }
+          if (audioOutIds.size > 0 && s.outputDeviceId !== 'default' && !audioOutIds.has(s.outputDeviceId)) {
+            next.outputDeviceId = 'default';
+          }
+          if (videoInIds.size > 0 && s.cameraDeviceId !== null && !videoInIds.has(s.cameraDeviceId)) {
+            next.cameraDeviceId = null;
+          }
+          if (Object.keys(next).length) set(next);
+        } catch {
+          // enumerateDevices unavailable (no MediaDevices API or permission policy denial) — skip
+        }
+      },
 
       setMuted: (muted: boolean) => set({ isMuted: muted }),
       setPttActive: (active: boolean) => set({ pttActive: active }),
