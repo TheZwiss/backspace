@@ -110,7 +110,7 @@ interface AutoLaunchSettings {
 ### Source of Truth
 
 The OS is the source of truth for `openAtLogin` on all platforms. Disk is used only to recover values Electron does not expose:
-- **Windows:** OS-authoritative for both `openAtLogin` (via `executableWillLaunchAtLogin`, which honours Task Manager's `StartupApproved\Run` disable) and `startMinimized` (derived from `launchItems[].args`).
+- **Windows:** OS-authoritative for `openAtLogin` (via `executableWillLaunchAtLogin`, which honours Task Manager's `StartupApproved\Run` disable). For `startMinimized`: derived from `launchItems[].args` when an entry exists; falls back to the disk cache when no entry exists, so the user's preference survives an off/on cycle.
 - **macOS:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (no introspection available).
 - **Linux:** OS-authoritative for `openAtLogin`. Disk-cached for `startMinimized` (we deliberately do not parse `Exec=` lines from `.desktop` files; out-of-band edits are rare and parsing shell-quoted strings is fragile).
 
