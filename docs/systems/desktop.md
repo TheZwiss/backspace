@@ -159,9 +159,12 @@ Pure logic lives in `packages/desktop/src/autoLaunch.ts` with vitest coverage in
 
 | Platform | Source | Notes |
 |----------|--------|-------|
-| macOS | `resources/tray-iconTemplate.png` | Template image (auto light/dark); Electron resolves `@2x` variant |
-| Windows/Linux | `resources/tray-icon.png` | Colored icon, resized to 16x16 |
-| Fallback | Programmatic 16x16 BGRA buffer | Blurple circle (#5865f2) |
+| macOS | `resources/tray-iconTemplate.png` (+ `@2x`) | Template image: solid black + alpha at 22×22 / 44×44; OS recolours for light/dark/active |
+| Windows | `resources/tray-icon.ico` | Multi-size `.ico` (16/20/24/32/40/48); Windows + Electron auto-pick best size for current DPI |
+| Linux | `resources/tray-icon.png` | Single 22×22 colored PNG (AppIndicator / StatusNotifier convention); no runtime resize |
+| Fallback | Programmatic 16×16 BGRA buffer | Blurple circle (#5865f2); should not trigger now that templates ship populated |
+
+All four assets are produced by `scripts/gen-icons.mjs` from `assets/brand/{mark.svg, mark-mono-dark.svg}` — see the [icon system spec](../superpowers/specs/2026-04-27-icon-system-design.md) for the full output matrix and `scripts/gen-icons.README.md` for regeneration workflow.
 
 ### Context Menu
 
