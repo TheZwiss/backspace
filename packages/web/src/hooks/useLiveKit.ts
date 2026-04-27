@@ -17,8 +17,10 @@ import { getApiForOrigin, getChannelOrigin, getMyUserIdForOrigin, useSpaceStore 
 import { wsSend } from './useWebSocket';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
+import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus } from '../utils/voice';
+import { markIntentionalCameraOff } from '../utils/voiceActions';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
@@ -149,6 +151,7 @@ export function useLiveKit() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
   const connectedChannelRef = useRef<string | null>(null);
+  const switchCameraGenRef = useRef(0);
   
   const isMuted = useVoiceStore((s) => s.isMuted);
   const isDeafened = useVoiceStore((s) => s.isDeafened);
@@ -162,6 +165,7 @@ export function useLiveKit() {
   const permissionMutedUserIds = useVoiceStore((s) => s.permissionMutedUserIds);
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
+  const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
   const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
   const autoGainControl = useVoiceStore((s) => s.autoGainControl);
@@ -383,6 +387,61 @@ export function useLiveKit() {
       unsubscribe();
     };
   }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+
+  // Hot-swap the camera source when cameraDeviceId changes mid-call.
+  // Compares against the published track's actual deviceId (getSettings().deviceId)
+  // rather than a memoised previous store value, so the null → explicit-same-device
+  // transition is a correct no-op.
+  useEffect(() => {
+    const r = roomRef.current;
+    if (!r || !isConnected || !isCameraOn) return;
+
+    const camPub = r.localParticipant.getTrackPublications()
+      .find(p => p.source === Track.Source.Camera);
+    if (!camPub?.track) return;
+
+    const currentDeviceId = camPub.track.mediaStreamTrack?.getSettings().deviceId;
+    const target = cameraDeviceId;
+
+    if (target === null) return;            // "Auto" never force-switches a live publication
+    if (currentDeviceId === target) return; // already on target
+
+    const myGen = ++switchCameraGenRef.current;
+
+    // Race semantics: if the effect re-fires while this IIFE is in flight
+    // (rapid dropdown changes), the newer firing will increment the gen.
+    // This IIFE's catch then no-ops its store rollback — the newer attempt
+    // owns the canonical store state.
+    (async () => {
+      const prev = currentDeviceId ?? null;
+      try {
+        await r.switchActiveDevice('videoinput', target);
+      } catch (err) {
+        console.error('[LiveKit] Camera hot-swap failed:', err);
+        // A newer device-switch attempt has superseded ours. Don't write stale
+        // rollback state; let the newer attempt's outcome stand.
+        if (myGen !== switchCameraGenRef.current) {
+          useUIStore.getState().addToast('Could not switch camera', 'warning');
+          return;
+        }
+        const stillLive = camPub.track?.mediaStreamTrack?.readyState === 'live';
+        if (stillLive && prev) {
+          useVoiceStore.getState().setCameraDeviceId(prev);
+        } else if (stillLive) {
+          useVoiceStore.getState().setCameraDeviceId(null);
+        } else {
+          // Track is dead — disable the camera entirely. Mark the disable
+          // intentional so the track-`ended` handler does not also fire its
+          // unplug/permission-revoke toast (which would be redundant here).
+          markIntentionalCameraOff();
+          await r.localParticipant.setCameraEnabled(false).catch(() => {});
+          useVoiceStore.setState({ isCameraOn: false });
+          broadcastVoiceStatus();
+        }
+        useUIStore.getState().addToast('Could not switch camera', 'warning');
+      }
+    })();
+  }, [cameraDeviceId, isCameraOn, isConnected]);
 
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
