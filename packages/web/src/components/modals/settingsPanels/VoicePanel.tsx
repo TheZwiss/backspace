@@ -1,5 +1,6 @@
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { Toggle } from '../../ui/Toggle';
+import { VideoSection } from './VideoSection';
 
 export function VoicePanel() {
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
@@ -38,6 +39,8 @@ export function VoicePanel() {
           </div>
         </div>
       </div>
+
+      <VideoSection />
 
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
