@@ -15,6 +15,7 @@ import path from 'path';
 import fs from 'fs';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 import { KeybindManager } from './keybindManager';
+import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
 
 let mainWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
@@ -544,6 +545,24 @@ function registerIpcHandlers(): void {
 
   // Auto-launch settings
   ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
+    if (process.platform === 'win32') {
+      // Pass path/args so getLoginItemSettings can find the matching launchItems[] entry.
+      // We can't know in advance whether the user's saved choice was minimized or not,
+      // so we query without args and inspect launchItems[] directly. Use
+      // executableWillLaunchAtLogin to honour Task Manager's StartupApproved state.
+      const osState = app.getLoginItemSettings({ path: process.execPath });
+      const ownEntry = osState.launchItems?.find(
+        (item) => item.name === 'Backspace' || item.path?.toLowerCase() === process.execPath.toLowerCase(),
+      );
+      return {
+        openAtLogin: osState.executableWillLaunchAtLogin ?? false,
+        startMinimized: deriveStartMinimizedFromArgs(ownEntry?.args),
+      };
+    }
+    // macOS and Linux: getLoginItemSettings doesn't expose args, so startMinimized
+    // is disk-cached. Rationale: parsing freedesktop Exec= lines on Linux is fragile
+    // (quoting, escaping, third-party flags) and the out-of-band edit case is rare;
+    // macOS has no introspection. openAtLogin is OS-authoritative on both platforms.
     const saved = loadAutoLaunchSettings();
     const osState = app.getLoginItemSettings();
     return {
