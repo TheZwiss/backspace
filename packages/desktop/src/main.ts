@@ -253,12 +253,20 @@ function loadTrayIcon(): Electron.NativeImage {
         icon.setTemplateImage(true);
         return icon;
       }
+    } else if (process.platform === 'win32') {
+      // Windows: multi-size .ico — Windows + Electron auto-pick best size for current DPI.
+      const icoPath = path.join(resourcesDir, 'tray-icon.ico');
+      const icon = nativeImage.createFromPath(icoPath);
+      if (!icon.isEmpty()) {
+        return icon;
+      }
     } else {
-      // Windows/Linux: colored icon
+      // Linux: single 22x22 PNG (AppIndicator / StatusNotifier convention).
+      // No runtime resize — the source is already at correct tray size.
       const iconPath = path.join(resourcesDir, 'tray-icon.png');
       const icon = nativeImage.createFromPath(iconPath);
       if (!icon.isEmpty()) {
-        return icon.resize({ width: 16, height: 16 });
+        return icon;
       }
     }
   } catch {
