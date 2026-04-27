@@ -164,22 +164,42 @@ function saveAutoLaunchSettings(settings: AutoLaunchSettings): void {
 
 function applyLoginItemSettings(openAtLogin: boolean, startMinimized: boolean): void {
   if (process.platform === 'darwin') {
+    // macOS: pass `args` in addition to `openAsHidden` so the renderer/main can
+    // detect a hidden launch via `process.argv.includes('--hidden')` on macOS 13+
+    // where the new ServiceManagement-backed implementation may not honour
+    // `wasOpenedAsHidden`. Both detection paths now work (defence in depth).
     app.setLoginItemSettings({
       openAtLogin,
       openAsHidden: startMinimized,
+      args: startMinimized ? ['--hidden'] : [],
     });
   } else if (process.platform === 'win32') {
+    // Windows: `enabled` is REQUIRED to undo a Task-Manager-side disable.
+    // Without it, re-enabling our toggle leaves the StartupApproved\Run
+    // "disabled" marker in place and the user's Run entry still won't fire.
+    // We pass `enabled: openAtLogin` so toggling ON re-enables, toggling OFF
+    // removes the entry entirely (deletion supersedes the disable marker).
+    // `path` and `args` are passed explicitly so subsequent get() calls can
+    // match the right launchItems[] entry.
     app.setLoginItemSettings({
       openAtLogin,
+      enabled: openAtLogin,
+      path: process.execPath,
       args: startMinimized ? ['--hidden'] : [],
       name: 'Backspace',
     });
   } else {
-    // Linux: setLoginItemSettings creates a .desktop file in ~/.config/autostart/
-    // For AppImage, the path changes on update — we pass it explicitly.
-    // Electron's Linux impl doesn't support `path`/`args` in types,
-    // but the runtime does accept them in the options object.
-    const opts: Record<string, unknown> = { openAtLogin };
+    // Linux: setLoginItemSettings creates ~/.config/autostart/<name>.desktop.
+    // - We pass an explicit `name: 'backspace'` so the filename is deterministic
+    //   across deb/AppImage installs and Electron versions.
+    // - For AppImage, $APPIMAGE points to the (possibly newly-updated) AppImage
+    //   path; pass it as `path` so the autostart entry tracks updates.
+    //   Electron's TypeScript types don't list `path`/`args`/`name` on Linux,
+    //   but the runtime accepts them.
+    const opts: Record<string, unknown> = {
+      openAtLogin,
+      name: 'backspace',
+    };
     if (process.env.APPIMAGE) {
       opts.path = process.env.APPIMAGE;
     }
