@@ -60,10 +60,14 @@ export function VideoSection() {
   const [permState, setPermState] = useState<PermissionState>('unknown');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [listOpen, setListOpen] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   // Tracks mount state so async probe handlers don't write to state after unmount.
   const mountedRef = useRef(true);
   // Anchor for the dropdown's click-outside-to-close behaviour.
   const dropdownRef = useRef<HTMLDivElement>(null);
+  // Preview tile refs.
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
 
   // Close the dropdown when the user clicks outside it.
   useEffect(() => {
@@ -132,6 +136,64 @@ export function VideoSection() {
       navigator.mediaDevices.removeEventListener('devicechange', onChange);
     };
   }, [permState]);
+
+  // Pre-call preview: start a getUserMedia stream for the selected device whenever
+  // permission is granted. Swap source when cameraDeviceId changes.
+  useEffect(() => {
+    if (permState !== 'granted') return;
+
+    let cancelled = false;
+
+    const start = async () => {
+      // Stop any prior stream before requesting a new one.
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        previewStreamRef.current = stream;
+        const videoEl = previewVideoRef.current;
+        if (videoEl) {
+          videoEl.srcObject = stream;
+          // Autoplay errors on muted video are common and benign.
+          videoEl.play().catch(() => {});
+        }
+        setPreviewError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const name = errorName(err);
+        if (name === 'NotReadableError') {
+          setPreviewError('Camera is in use by another application.');
+        } else if (name === 'OverconstrainedError') {
+          setPreviewError('Selected camera is unavailable.');
+        } else {
+          setPreviewError('Could not start camera preview.');
+        }
+      }
+    };
+
+    start();
+
+    return () => {
+      cancelled = true;
+      if (previewStreamRef.current) {
+        previewStreamRef.current.getTracks().forEach((t) => t.stop());
+        previewStreamRef.current = null;
+      }
+      const videoEl = previewVideoRef.current;
+      if (videoEl) {
+        videoEl.srcObject = null;
+      }
+    };
+  }, [permState, cameraDeviceId]);
 
   const displayLabels = useMemo(() => buildDisplayLabels(devices), [devices]);
 
@@ -203,6 +265,20 @@ export function VideoSection() {
         Video
       </div>
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">
+        <div className="aspect-video w-full rounded-lg bg-surface-base overflow-hidden relative mb-3">
+          <video
+            ref={previewVideoRef}
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+            style={{ transform: 'scaleX(-1)' }}
+          />
+          {previewError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-surface-base/80 text-xs text-txt-tertiary text-center px-4">
+              {previewError}
+            </div>
+          )}
+        </div>
         <div className="text-[13px] font-medium text-txt-primary mb-1.5">Camera</div>
         <div ref={dropdownRef}>
           <button
