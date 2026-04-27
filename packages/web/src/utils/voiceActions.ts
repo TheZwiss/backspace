@@ -80,7 +80,14 @@ export async function handleCameraAction(): Promise<void> {
       // Mark this disable as intentional so the track-`ended` handler skips
       // its unplug/permission-revoke probe + toast.
       markIntentionalCameraOff();
-      await room.localParticipant.setCameraEnabled(false);
+      try {
+        await room.localParticipant.setCameraEnabled(false);
+      } catch (err) {
+        // Disable rejected — consume the flag so it doesn't poison the
+        // next genuine unplug. Re-throw to the outer catch for logging.
+        consumeIntentionalCameraOff();
+        throw err;
+      }
     }
     useVoiceStore.getState().toggleCamera();
     broadcastVoiceStatus();

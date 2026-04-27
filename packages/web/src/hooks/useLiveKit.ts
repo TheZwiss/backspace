@@ -20,7 +20,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
 import { broadcastVoiceStatus } from '../utils/voice';
-import { markIntentionalCameraOff } from '../utils/voiceActions';
+import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/voiceActions';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
 import {
@@ -430,9 +430,12 @@ export function useLiveKit() {
         } else if (stillLive) {
           useVoiceStore.getState().setCameraDeviceId(null);
         } else {
-          // Track is dead — disable the camera entirely. Mark the disable
-          // intentional so the track-`ended` handler does not also fire its
-          // unplug/permission-revoke toast (which would be redundant here).
+          // Track is dead — disable the camera entirely. Mark the flag now to
+          // suppress the already-queued `ended` event on the dead track.
+          markIntentionalCameraOff();
+          // Re-mark immediately before the disable: LiveKit may synthesize a
+          // second `ended` event during teardown, and the flag is consumed once.
+          // markIntentionalCameraOff is idempotent.
           markIntentionalCameraOff();
           await r.localParticipant.setCameraEnabled(false).catch(() => {});
           useVoiceStore.setState({ isCameraOn: false });
@@ -553,6 +556,49 @@ export function useLiveKit() {
         if (publication.source === Track.Source.ScreenShare) {
           const { userId } = parseIdentity(newRoom.localParticipant.identity);
           useVoiceStore.getState().watchStream(userId);
+        }
+        if (publication.source === Track.Source.Camera) {
+          const mst = publication.track?.mediaStreamTrack;
+          if (mst) {
+            // Replace any prior listener — on a re-publish the underlying track is new.
+            mst.onended = async () => {
+              // User-initiated camera-off → skip the probe + toast entirely.
+              if (consumeIntentionalCameraOff()) return;
+              // Room is tearing down or has been replaced → skip.
+              if (roomRef.current !== newRoom) return;
+
+              // Re-probe getUserMedia to distinguish hardware unplug from
+              // OS-level permission revoke. Keep the probe short and tolerant.
+              const deviceId = useVoiceStore.getState().cameraDeviceId;
+              let copy = 'Camera unavailable';
+              try {
+                const probe = await navigator.mediaDevices.getUserMedia({
+                  video: deviceId ? { deviceId: { exact: deviceId } } : true,
+                });
+                probe.getTracks().forEach(t => t.stop());
+                // Probe succeeded — reason is unknown; keep generic copy.
+              } catch (err: any) {
+                if (err?.name === 'NotAllowedError') copy = 'Camera permission was revoked';
+                else if (err?.name === 'NotFoundError') copy = 'Camera disconnected';
+                // Any other error → keep generic copy.
+              }
+
+              // The probe is async and may have taken time (especially if the
+              // browser surfaced a permission prompt). If the user disconnected
+              // while the probe was in flight, `roomRef.current` is no longer
+              // `newRoom` — silently no-op so we don't mutate state or surface
+              // a toast for a session the user has already left.
+              if (roomRef.current !== newRoom) return;
+
+              // Tear down camera state via the unified path. Mark intentional so
+              // the disable's own track-end doesn't recurse into this handler.
+              markIntentionalCameraOff();
+              await roomRef.current.localParticipant.setCameraEnabled(false).catch(() => {});
+              useVoiceStore.setState({ isCameraOn: false });
+              broadcastVoiceStatus();
+              useUIStore.getState().addToast(copy, 'warning');
+            };
+          }
         }
         guardedUpdate();
       });
