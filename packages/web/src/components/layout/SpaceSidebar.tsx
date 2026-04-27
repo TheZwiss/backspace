@@ -79,7 +79,18 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
     }
 
     if (type === 'dm') {
-      return undefined;
+      // Home tile uses a translucent white surface so the squircle→square
+      // corner-radius transition has something visible to morph. The bare
+      // mark in logo.png is centred with internal padding (transparent
+      // outside ~75% scale), so without a button background there is no
+      // visible hover/active feedback at all.
+      return {
+        background: active
+          ? 'rgba(255, 255, 255, 0.10)'
+          : isHovered
+            ? 'rgba(255, 255, 255, 0.07)'
+            : 'rgba(255, 255, 255, 0.04)',
+      };
     }
 
     // Space type — if it has a custom icon image, no gradient needed
@@ -87,7 +98,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
     const spaceGrad = getSpaceGradient(id, name, avatarColor);
     return { background: spaceGrad.gradient };
-  }, [type, id, name, icon, avatarColor, isHovered]);
+  }, [type, id, name, icon, avatarColor, isHovered, active]);
 
   const getButtonClasses = () => {
     const base = 'w-10 h-10 flex items-center justify-center duration-200 overflow-hidden [transition:border-radius_0.2s,background_0.2s,color_0.2s]';
