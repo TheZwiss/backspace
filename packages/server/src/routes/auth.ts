@@ -8,6 +8,7 @@ import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/sha
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { findFederatedUser } from './federation.js';
+import { getInviteByToken, inviteStatus } from '../utils/inviteService.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
@@ -237,6 +238,48 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const existing = db.select().from(schema.users).where(eq(schema.users.username, trimmed)).get();
     return reply.code(200).send({ available: !existing });
+  });
+
+  // Public — used by RegisterPage to debounce-validate invite tokens during
+  // typing. The status -> response mapping enforces a "collapsed enumeration
+  // shield": revoked, not-found, and malformed tokens all collapse to
+  // `'invalid'` so this endpoint can't be used to distinguish them. Only
+  // `expired` and `exhausted` surface as themselves because those are
+  // legitimate UX hints ("ask the admin to extend it") rather than
+  // existence/state leaks. The `name` field is returned ONLY in the valid
+  // case — invalid responses must not leak any invite metadata.
+  // Status code is always 200; the response body discriminates.
+  app.get<{ Querystring: { token?: string } }>('/api/auth/check-invite', {
+    config: {
+      rateLimit: {
+        max: 30,
+        timeWindow: '1 minute',
+        keyGenerator: (request: any) => request.ip,
+      },
+    },
+  }, async (request, reply) => {
+    const token = request.query.token;
+    if (!token || typeof token !== 'string') {
+      return reply.code(200).send({ valid: false, reason: 'invalid' });
+    }
+
+    // getInviteByToken pre-validates the 22-char base64url shape before
+    // hitting the DB; malformed inputs return null here, so the same branch
+    // covers both "wrong shape" and "shape ok, not in DB".
+    const row = getInviteByToken(token);
+    if (!row) {
+      return reply.code(200).send({ valid: false, reason: 'invalid' });
+    }
+
+    const status = inviteStatus(row);
+    if (status === 'active') {
+      return reply.code(200).send({ valid: true, name: row.name });
+    }
+    if (status === 'expired' || status === 'exhausted') {
+      return reply.code(200).send({ valid: false, reason: status });
+    }
+    // status === 'revoked' — collapsed to 'invalid' (no enumeration leak)
+    return reply.code(200).send({ valid: false, reason: 'invalid' });
   });
 
   app.post<{ Body: LoginRequest }>('/api/auth/login', {
