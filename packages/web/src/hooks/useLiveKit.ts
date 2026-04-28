@@ -32,6 +32,7 @@ import {
   handleScreenShareUnpublished,
   resolveNativeOverdrive,
 } from '../utils/screenShare';
+import { parseStreamWatch } from '../utils/streamWatchProtocol';
 import { getMediaStreamTrack } from '../utils/livekitInternals';
 import { deactivate as deactivateHwOverdrive } from '../utils/hwOverdrive';
 
@@ -293,6 +294,17 @@ export function useLiveKit() {
   }, []);
 
   const handleDataReceived = useCallback((payload: Uint8Array, participant?: RemoteParticipant) => {
+    // Try the stream_watch protocol first (typed parser; returns null on non-matches).
+    if (participant) {
+      const sw = parseStreamWatch(payload);
+      if (sw) {
+        // sw.target is the streamer's bare userId. participant.identity is the
+        // viewer's full LiveKit identity ("userId:username"); we key by identity
+        // so ParticipantDisconnected can evict cleanly.
+        useVoiceStore.getState().recordStreamWatch(sw.target, participant.identity, sw.watching);
+        return;
+      }
+    }
     try {
       const text = new TextDecoder().decode(payload);
       const msg = JSON.parse(text);
@@ -532,6 +544,7 @@ export function useLiveKit() {
         }
       });
       newRoom.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+        useVoiceStore.getState().evictWatcher(participant.identity);
         guardedUpdate();
         // Clean up stale WS-based voice status for the departed participant
         const { userId } = parseIdentity(participant.identity);
