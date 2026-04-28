@@ -353,7 +353,7 @@ describe('POST /api/auth/register — federation gate split', () => {
 
   it('federated registration: blocked even with valid token when federatedRegistrationOpen=false', async () => {
     testDb.update(schema.instanceSettings)
-      .set({ registrationOpen: 0, federatedRegistrationOpen: 0 })
+      .set({ federatedRegistrationOpen: 0 })
       .where(eq(schema.instanceSettings.id, 1))
       .run();
     const token = 'abcdefghijklmnopqrstuv';
@@ -453,5 +453,38 @@ describe('POST /api/auth/register — federation gate split', () => {
       payload: { username: 'newalice', password: 'password123', inviteToken: token },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it('open registration: revoked/expired token is silently ignored, registration still succeeds', async () => {
+    // Spec §5.7: when registration is open, the token field is not even
+    // validated. A revoked token in the request body must NOT block signup
+    // and must NOT be consumed.
+    const adminId = ADMIN_ID;
+    const token = 'r'.repeat(22);
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-revoked',
+      token,
+      name: 'revoked',
+      createdBy: adminId,
+      createdAt: Date.now(),
+      maxUses: 10,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: Date.now(), // revoked!
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'eve', password: 'password123', inviteToken: token },
+    });
+    expect(res.statusCode).toBe(201);
+
+    // Revoked invite still revoked — usedCount unchanged, no redemption row.
+    const inv = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, 'inv-revoked')).get();
+    expect(inv?.usedCount).toBe(0);
+    expect(inv?.revokedAt).not.toBeNull();
+    const reds = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, 'inv-revoked')).all();
+    expect(reds).toHaveLength(0);
   });
 });

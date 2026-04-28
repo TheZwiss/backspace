@@ -85,6 +85,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     const registrationOpen = instanceRow?.registrationOpen !== null && instanceRow?.registrationOpen !== undefined
       ? instanceRow.registrationOpen === 1
       : config.registrationOpen;
+    // instanceRow is guaranteed by ensureDefaults() (migrate.ts) to have id=1
+    // post-boot, with federatedRegistrationOpen NOT NULL DEFAULT 1. The optional
+    // chain is defensive against the impossible-in-production case of a missing
+    // row (e.g., a hand-cleared DB) — falls open-closed rather than open-open
+    // for federation, which is the safer default.
     const federatedRegistrationOpen = instanceRow?.federatedRegistrationOpen === 1;
 
     // Optional invite token. Only meaningful for the local-closed path; ignored

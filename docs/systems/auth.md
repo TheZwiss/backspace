@@ -165,6 +165,8 @@ db.transaction(() => {
 
 If any step throws (concurrent revoke, last-slot race, username collision against the unique index), the entire transaction rolls back -- `usedCount` is never incremented on a failed registration. The route catches `InviteUnavailableError` from `redeemInvite()` and surfaces it as 403 `"Invalid or expired invite"`.
 
+- **Federated stub upgrade and federated new-account paths do NOT enter `redeemInvite`.** They are gated only by `federatedRegistrationOpen` and never consume tokens, even if a token is provided in the request body. This is the structural enforcement of the spec §1.3 invariant "tokens never unlock federated creation".
+
 The `/api/auth/check-invite` debounced UX endpoint pre-validates a token from the register page; the in-txn re-derive inside `redeemInvite()` is the authoritative enforcement point.
 
 ### First-User Admin Promotion
