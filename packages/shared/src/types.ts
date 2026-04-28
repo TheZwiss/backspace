@@ -1135,6 +1135,7 @@ export interface ApprovalRequest {
 
 // ─── Invite Links ──────────────────────────────────────────────────────────
 
+/** Derived status of an invite link. Active = usable; expired/exhausted/revoked = archived. */
 export type InviteStatus = 'active' | 'expired' | 'exhausted' | 'revoked';
 
 export interface InviteLinkSummary {
@@ -1147,8 +1148,10 @@ export interface InviteLinkSummary {
   expiresAt: number | null;
   revokedAt: number | null;
   createdBy: string;
+  /** Joined from users.username at read time. `'Deleted User'` when the creator's account is tombstoned. `null` only if the FK is somehow unresolvable (defensive). */
   createdByUsername: string | null;
   createdAt: number;
+  /** Server-constructed full URL, e.g. `https://host.example/register?invite=<token>`. Clients must NOT assemble this themselves. */
   url: string;
 }
 
@@ -1167,7 +1170,7 @@ export interface CreateInviteRequest {
   expiresAt: number | null;
 }
 
-export interface PatchInviteRequest {
+export interface UpdateInviteRequest {
   name?: string;
   maxUses?: number | null;
   expiresAt?: number | null;
