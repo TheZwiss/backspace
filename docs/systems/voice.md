@@ -143,6 +143,11 @@ The `SoundController` uses `isSelf(id)` which checks against BOTH `currentUser.i
 
 **Disconnect teardown:** `roomRef` is set to `null` before calling `destroyRoom()`. This prevents `ParticipantDisconnected` events (fired during teardown) from triggering `updateParticipants`, which would cause `user_leave` sounds for departing participants alongside the disconnect sound.
 
+**Sound effects.** The full system-sound inventory and trigger map lives in
+`docs/systems/sounds.md`. This includes the `stream_watch` data-channel
+protocol used for viewer detection (mirroring the existing `deafen`
+data-channel ping receiver in `handleDataReceived`).
+
 ---
 
 ## Voice Moderation
