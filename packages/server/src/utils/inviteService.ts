@@ -441,6 +441,12 @@ export function reinstateInvite(id: string, req: ReinstateInviteRequest): Reinst
       updates.expiresAt = validateExpiresAt(req.expiresAt, true);
     }
 
+    // Skip the UPDATE entirely when there's nothing to set — Drizzle throws
+    // 'No values to set' before our post-state validator can produce the
+    // user-facing InviteValidationError. Path C (already active) handles its
+    // rejection above, so an empty updates map only reaches here when the
+    // caller didn't provide bumps for an expired/exhausted invite — the
+    // post-state check below will throw the correct error in that case.
     if (Object.keys(updates).length > 0) {
       tx.update(schema.inviteLinks).set(updates).where(eq(schema.inviteLinks.id, id)).run();
     }

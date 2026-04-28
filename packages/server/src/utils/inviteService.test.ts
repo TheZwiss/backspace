@@ -445,4 +445,22 @@ describe('reinstateInvite', () => {
     const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
     expect(row?.maxUses).toBe(1);
   });
+
+  it('Path A — rolls back token rotation when caller did not bump enough', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 1, expiresAt: null }, adminId);
+    const originalToken = inv.token;
+    // Exhaust then revoke
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+    revokeInvite(inv.id);
+
+    // Try to reinstate without bumping maxUses — would-be Path A but post-state check rejects
+    expect(() => reinstateInvite(inv.id, {})).toThrow(InviteValidationError);
+
+    // Verify rollback: original token preserved, revokedAt still set, usedCount still at limit
+    const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(row?.token).toBe(originalToken);
+    expect(row?.revokedAt).not.toBeNull();
+    expect(row?.usedCount).toBe(1);
+  });
 });
