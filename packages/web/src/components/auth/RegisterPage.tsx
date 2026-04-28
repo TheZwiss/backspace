@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { ImageCropModal } from '../ui/ImageCropModal';
 import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
-import type { AvatarColor } from '@backspace/shared';
+import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@backspace/shared';
 import { api, RateLimitError } from '../../api/client';
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
@@ -26,6 +26,15 @@ export function RegisterPage() {
   const usernameCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usernameCheckAbortRef = useRef<AbortController | null>(null);
 
+  // Instance info (for registration policy)
+  const [instanceInfo, setInstanceInfo] = useState<InstanceInfoResponse | null>(null);
+
+  // Invite token state
+  const [manualInviteToken, setManualInviteToken] = useState('');
+  const [inviteCheck, setInviteCheck] = useState<CheckInviteResponse | null>(null);
+  const [inviteChecking, setInviteChecking] = useState(false);
+  const inviteCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Step 2 fields
   const [displayName, setDisplayName] = useState('');
   const [avatarColor, setAvatarColor] = useState<AvatarColor>(
@@ -44,6 +53,7 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
+  const urlInviteToken = searchParams.get('invite');
 
   // Cleanup blob URL on unmount
   useEffect(() => {
@@ -51,6 +61,70 @@ export function RegisterPage() {
       if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     };
   }, [avatarPreview]);
+
+  // Fetch instance info to determine registration policy
+  useEffect(() => {
+    let cancelled = false;
+    api.instance.info()
+      .then((info) => { if (!cancelled) setInstanceInfo(info); })
+      .catch(() => {
+        // Leave null — treat as open by default to avoid soft-locking the page.
+        // Server-side validation (Task 11) is the real gate.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Validate URL-supplied invite token on mount
+  useEffect(() => {
+    if (!urlInviteToken) return;
+    let cancelled = false;
+    setInviteChecking(true);
+    api.auth.checkInvite(urlInviteToken)
+      .then((res) => { if (!cancelled) setInviteCheck(res); })
+      .catch(() => { if (!cancelled) setInviteCheck({ valid: false, reason: 'invalid' }); })
+      .finally(() => { if (!cancelled) setInviteChecking(false); });
+    return () => { cancelled = true; };
+  }, [urlInviteToken]);
+
+  // Debounced manual-entry invite validation
+  useEffect(() => {
+    if (urlInviteToken) return; // URL token takes precedence while it is present
+
+    const trimmed = manualInviteToken.trim();
+    if (!trimmed) {
+      setInviteCheck(null);
+      setInviteChecking(false);
+      return;
+    }
+
+    // Extract bare token if user pasted a full URL
+    let token = trimmed;
+    const urlMatch = trimmed.match(/[?&]invite=([A-Za-z0-9_-]{22})/);
+    if (urlMatch) token = urlMatch[1]!;
+
+    let cancelled = false;
+
+    if (inviteCheckTimerRef.current) clearTimeout(inviteCheckTimerRef.current);
+
+    inviteCheckTimerRef.current = setTimeout(async () => {
+      setInviteChecking(true);
+      try {
+        const res = await api.auth.checkInvite(token);
+        if (cancelled) return;
+        setInviteCheck(res);
+      } catch {
+        if (cancelled) return;
+        setInviteCheck({ valid: false, reason: 'invalid' });
+      } finally {
+        if (!cancelled) setInviteChecking(false);
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      if (inviteCheckTimerRef.current) clearTimeout(inviteCheckTimerRef.current);
+    };
+  }, [manualInviteToken, urlInviteToken]);
 
   // Debounced username availability check
   useEffect(() => {
@@ -128,6 +202,17 @@ export function RegisterPage() {
     return () => clearInterval(timer);
   }, [retryAfter]);
 
+  // ── Invite requirements ──
+  const inviteRequired = instanceInfo !== null && !instanceInfo.registrationOpen;
+  const inviteValid = inviteRequired ? inviteCheck?.valid === true : true;
+
+  // Show the manual-entry container when:
+  // - Registration is closed AND
+  // - There is no URL token, OR the URL token has already been validated as invalid
+  const showManualEntry = instanceInfo !== null
+    && !instanceInfo.registrationOpen
+    && (!urlInviteToken || inviteCheck?.valid === false);
+
   // ── Step 1 validation ──
   const handleContinue = (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,10 +277,23 @@ export function RegisterPage() {
       const dn = skip ? undefined : displayName.trim() || undefined;
       const ac = skip ? undefined : avatarColor;
 
+      // Resolve the token to send: prefer URL token, fall back to manual entry
+      const tokenForRegister = (() => {
+        if (urlInviteToken) return urlInviteToken;
+        const trimmed = manualInviteToken.trim();
+        if (!trimmed) return undefined;
+        const urlMatch = trimmed.match(/[?&]invite=([A-Za-z0-9_-]{22})/);
+        return urlMatch ? urlMatch[1] : trimmed;
+      })();
+
       // Step 1: Register via API — store token in localStorage for API auth,
       // but NOT in Zustand yet so AuthRedirect doesn't fire prematurely
       const response = await api.auth.register({
-        username: username.trim(), password, displayName: dn, avatarColor: ac,
+        username: username.trim(),
+        password,
+        displayName: dn,
+        avatarColor: ac,
+        ...(tokenForRegister ? { inviteToken: tokenForRegister } : {}),
       });
       localStorage.setItem('backspace_token', response.token);
 
@@ -235,6 +333,13 @@ export function RegisterPage() {
 
   const isDisabled = isRegistering || retryAfter > 0;
 
+  // Continue button is blocked while username is invalid/taken OR when an invite is required
+  // but not yet validated as valid
+  const continueDisabled =
+    usernameStatus === 'taken' ||
+    usernameStatus === 'invalid' ||
+    (inviteRequired && !inviteValid);
+
   return (
     <div className="min-h-full flex items-center justify-center bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
@@ -255,6 +360,74 @@ export function RegisterPage() {
               {error && (
                 <div className="mb-4 p-3 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">
                   {error}
+                </div>
+              )}
+
+              {/* Closed-registration invite entry — shown when registration is closed and:
+                  (a) no URL token is present, or (b) the URL token has already failed validation */}
+              {showManualEntry && (
+                <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-surface-border space-y-2">
+                  <div className="text-sm text-txt-secondary">
+                    Registration is invite-only on this instance. Paste your invite link or enter the code below.
+                  </div>
+                  <input
+                    type="text"
+                    value={manualInviteToken}
+                    onChange={(e) => setManualInviteToken(e.target.value)}
+                    placeholder="Invite code or link"
+                    className="input-standard w-full px-3 py-2 text-sm"
+                    aria-label="Invite code or link"
+                    autoComplete="off"
+                  />
+                  {inviteChecking && (
+                    <div className="text-xs text-txt-tertiary">Checking...</div>
+                  )}
+                  {!inviteChecking && inviteCheck?.valid === true && (
+                    <div className="text-xs text-status-online flex items-center gap-1">
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Valid invite: {inviteCheck.name}
+                    </div>
+                  )}
+                  {!inviteChecking && inviteCheck?.valid === false && (
+                    <div className="text-xs text-txt-danger">
+                      {inviteCheck.reason === 'expired' && 'This invite link has expired. Ask the admin for a new one.'}
+                      {inviteCheck.reason === 'exhausted' && 'This invite has reached its usage limit. Ask the admin to extend it.'}
+                      {inviteCheck.reason === 'invalid' && 'Invalid invite code.'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* URL-token chip — shown whenever a token was provided in the URL */}
+              {urlInviteToken && (
+                <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-xs">
+                  {inviteChecking ? (
+                    <>
+                      <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Validating invite...
+                    </>
+                  ) : inviteCheck?.valid === true ? (
+                    <>
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      Using invite: {inviteCheck.name}
+                    </>
+                  ) : inviteCheck?.valid === false ? (
+                    <>
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                      Invalid invite link — please request a new one
+                    </>
+                  ) : (
+                    <>Validating invite...</>
+                  )}
                 </div>
               )}
 
@@ -325,11 +498,18 @@ export function RegisterPage() {
 
               <button
                 type="submit"
-                disabled={usernameStatus === 'taken' || usernameStatus === 'invalid'}
+                disabled={continueDisabled}
                 className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue
               </button>
+
+              {/* Helper text when invite is required but not yet entered */}
+              {inviteRequired && !manualInviteToken.trim() && !urlInviteToken && (
+                <div className="text-xs text-txt-tertiary mt-2">
+                  An invite is required to register on this instance.
+                </div>
+              )}
 
               <p className="mt-3 text-sm text-txt-tertiary">
                 Already have an account?{' '}
