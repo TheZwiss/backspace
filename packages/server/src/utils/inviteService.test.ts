@@ -23,6 +23,7 @@ vi.mock('../db/index.js', () => ({
 
 import { inviteStatus, generateInviteToken, createInvite, getInviteByToken, listInvites, listRedemptions, InviteValidationError } from './inviteService.js';
 import { patchInvite, revokeInvite, InviteStateConflictError, InviteNotFoundError } from './inviteService.js';
+import { reinstateInvite } from './inviteService.js';
 import { eq } from 'drizzle-orm';
 
 function applyMigrations(db: Database.Database): void {
@@ -372,5 +373,76 @@ describe('revokeInvite', () => {
 
   it('throws InviteNotFoundError on missing id', () => {
     expect(() => revokeInvite('nonexistent')).toThrow(InviteNotFoundError);
+  });
+});
+
+describe('reinstateInvite', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('Path A — was revoked: rotates token, clears revokedAt, applies bumps', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
+    const originalToken = inv.token;
+    revokeInvite(inv.id);
+
+    const result = reinstateInvite(inv.id, { maxUses: 10 });
+    expect(result.tokenRotated).toBe(true);
+    expect(result.invite.token).not.toBe(originalToken);
+    expect(result.invite.token).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(result.invite.revokedAt).toBeNull();
+    expect(result.invite.maxUses).toBe(10);
+    expect(result.invite.status).toBe('active');
+  });
+
+  it('Path B — exhausted: keeps same token, applies maxUses bump', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 1, expiresAt: null }, adminId);
+    // Exhaust it
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+
+    const result = reinstateInvite(inv.id, { maxUses: 5 });
+    expect(result.tokenRotated).toBe(false);
+    expect(result.invite.token).toBe(inv.token);
+    expect(result.invite.maxUses).toBe(5);
+    expect(result.invite.status).toBe('active');
+  });
+
+  it('Path B — expired: keeps same token, bumps expiresAt', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: Date.now() + 100_000 }, adminId);
+    // Move to past to expire
+    testDb.update(schema.inviteLinks).set({ expiresAt: Date.now() - 1000 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+
+    const future = Date.now() + 86_400_000;
+    const result = reinstateInvite(inv.id, { expiresAt: future });
+    expect(result.tokenRotated).toBe(false);
+    expect(result.invite.token).toBe(inv.token);
+    expect(result.invite.expiresAt).toBe(future);
+    expect(result.invite.status).toBe('active');
+  });
+
+  it('Path C — already-active: throws InviteStateConflictError', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    expect(() => reinstateInvite(inv.id, {})).toThrow(InviteStateConflictError);
+  });
+
+  it('throws InviteValidationError when result is still non-active (caller did not bump enough)', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 1, expiresAt: null }, adminId);
+    // Exhaust it
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+
+    // Caller did not bump maxUses → still exhausted → must throw
+    expect(() => reinstateInvite(inv.id, {})).toThrow(InviteValidationError);
+
+    // Verify the txn rolled back: row still has maxUses=1 (no partial update)
+    const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(row?.maxUses).toBe(1);
   });
 });

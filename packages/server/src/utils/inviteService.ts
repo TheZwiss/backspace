@@ -3,7 +3,14 @@ import { eq, desc } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { config } from '../config.js';
-import type { InviteLinkSummary, CreateInviteRequest, InviteRedemption, UpdateInviteRequest } from '@backspace/shared';
+import type {
+  InviteLinkSummary,
+  CreateInviteRequest,
+  InviteRedemption,
+  UpdateInviteRequest,
+  ReinstateInviteRequest,
+  ReinstateInviteResponse,
+} from '@backspace/shared';
 
 /**
  * Derived status of an invite link. Mirrors the `InviteStatus` union exported
@@ -379,5 +386,78 @@ export function revokeInvite(id: string): InviteLinkSummary {
     const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
     if (!updated) throw new Error('Failed to read updated invite');
     return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx));
+  });
+}
+
+/**
+ * Reinstate a non-active invite back to `active`. Three branches per spec §3.1:
+ *
+ *   - **Path A (revoked)**: rotates the token (security boundary — old shared
+ *     links must stop working) and clears `revokedAt`. Caller may also bump
+ *     `maxUses` / `expiresAt` in the same call.
+ *   - **Path B (expired/exhausted)**: preserves the token. Caller MUST supply
+ *     bumps that push the row back into derived `active` state, otherwise the
+ *     txn rolls back with `InviteValidationError` (we never leave an invite
+ *     half-reinstated, e.g. exhausted-and-still-exhausted with no token rotation
+ *     and no state change).
+ *   - **Path C (already active)**: rejected with `InviteStateConflictError`
+ *     (mapped to 409). Reinstating an active invite is meaningless and would
+ *     surprise an admin who clicked the wrong row.
+ *
+ * Wrapped in a SQLite transaction with an in-txn re-read so the post-update
+ * status check sees the row as the next reader would. If the post-state isn't
+ * `active`, the throw aborts the txn and the row reverts.
+ */
+export function reinstateInvite(id: string, req: ReinstateInviteRequest): ReinstateInviteResponse {
+  const db = getDb();
+  return db.transaction((tx) => {
+    const row = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!row) throw new InviteNotFoundError();
+
+    const currentStatus = inviteStatus(row);
+    if (currentStatus === 'active') {
+      throw new InviteStateConflictError('Invite is already active');
+    }
+
+    const updates: Partial<typeof schema.inviteLinks.$inferInsert> = {};
+    let tokenRotated = false;
+
+    if (currentStatus === 'revoked') {
+      updates.revokedAt = null;
+      updates.token = generateInviteToken();
+      tokenRotated = true;
+    }
+
+    if (req.maxUses !== undefined) {
+      const v = validateMaxUses(req.maxUses);
+      if (v !== null && v < row.usedCount) {
+        throw new InviteValidationError(
+          `maxUses (${v}) cannot be less than current usedCount (${row.usedCount})`,
+        );
+      }
+      updates.maxUses = v;
+    }
+    if (req.expiresAt !== undefined) {
+      updates.expiresAt = validateExpiresAt(req.expiresAt, true);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      tx.update(schema.inviteLinks).set(updates).where(eq(schema.inviteLinks.id, id)).run();
+    }
+
+    const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!updated) throw new Error('Failed to read updated invite');
+
+    if (inviteStatus(updated) !== 'active') {
+      // Caller did not bump enough — abort the txn so nothing is half-applied
+      throw new InviteValidationError(
+        'Reinstate would leave invite in non-active state. Bump maxUses and/or expiresAt.',
+      );
+    }
+
+    return {
+      invite: rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx)),
+      tokenRotated,
+    };
   });
 }
