@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InviteLinkSummary } from '@backspace/shared';
 import { api } from '../../../api/client';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -125,16 +125,27 @@ export function RegistrationPanel() {
   const [invites, setInvites] = useState<InviteLinkSummary[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
 
+  // Tracks the currently displayed tab so in-flight fetches can detect when
+  // the user has switched tabs and discard their stale response. Without this
+  // guard, a slower 'archived' response can resolve after a newer 'active'
+  // response and clobber the visible list. Used by both the auto-load effect
+  // and manual fetchInvites() callers (e.g. post-mutation refresh).
+  const tabRef = useRef<'active' | 'archived'>(tab);
+  useEffect(() => {
+    tabRef.current = tab;
+  }, [tab]);
+
   const fetchInvites = useCallback(
     async (which: 'active' | 'archived') => {
       setInvitesLoading(true);
       try {
         const res = await api.invites.list(which);
+        if (tabRef.current !== which) return;
         setInvites(res.invites);
       } catch {
-        addToast('Failed to load invites', 'warning');
+        if (tabRef.current === which) addToast('Failed to load invites', 'warning');
       } finally {
-        setInvitesLoading(false);
+        if (tabRef.current === which) setInvitesLoading(false);
       }
     },
     [addToast],
