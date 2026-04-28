@@ -24,6 +24,7 @@ vi.mock('../db/index.js', () => ({
 import { inviteStatus, generateInviteToken, createInvite, getInviteByToken, listInvites, listRedemptions, InviteValidationError } from './inviteService.js';
 import { patchInvite, revokeInvite, InviteStateConflictError, InviteNotFoundError } from './inviteService.js';
 import { reinstateInvite } from './inviteService.js';
+import { redeemInvite, deleteInvite, InviteUnavailableError } from './inviteService.js';
 import { eq } from 'drizzle-orm';
 
 function applyMigrations(db: Database.Database): void {
@@ -462,5 +463,147 @@ describe('reinstateInvite', () => {
     expect(row?.token).toBe(originalToken);
     expect(row?.revokedAt).not.toBeNull();
     expect(row?.usedCount).toBe(1);
+  });
+});
+
+describe('redeemInvite', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('happy path: increments usedCount, writes redemption row, calls insertUser callback', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
+    const newUserId = 'new-user-1';
+    const newUsername = 'alice';
+
+    let insertCalled = false;
+    const result = redeemInvite(inv.token, () => {
+      insertCalled = true;
+      // Caller's INSERT — uses the outer testDb handle (mocked getDb), which
+      // is correctly serialized into the same logical txn by better-sqlite3.
+      testDb.insert(schema.users).values({
+        id: newUserId,
+        username: newUsername,
+        passwordHash: 'x',
+        createdAt: Date.now(),
+      }).run();
+      return { id: newUserId, username: newUsername };
+    });
+
+    expect(insertCalled).toBe(true);
+    expect(result.id).toBe(newUserId);
+    expect(result.username).toBe(newUsername);
+
+    // user row exists
+    const user = testDb.select().from(schema.users).where(eq(schema.users.id, newUserId)).get();
+    expect(user?.username).toBe(newUsername);
+
+    // usedCount incremented
+    const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(row?.usedCount).toBe(1);
+
+    // redemption row written
+    const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
+    expect(redemptions).toHaveLength(1);
+    expect(redemptions[0]?.userId).toBe(newUserId);
+    expect(redemptions[0]?.registrantUsername).toBe(newUsername);
+  });
+
+  it('throws InviteUnavailableError when status is not active under txn (exhausted)', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 1, expiresAt: null }, adminId);
+    // Simulate "another concurrent registration consumed the last slot just before this call"
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+
+    let insertCalled = false;
+    expect(() => redeemInvite(inv.token, () => {
+      insertCalled = true;
+      return { id: 'x', username: 'x' };
+    })).toThrow(InviteUnavailableError);
+
+    expect(insertCalled).toBe(false);
+    // No redemption row
+    const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('aborts transaction (no usedCount increment, no redemption row) if insertUser throws', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
+
+    expect(() => redeemInvite(inv.token, () => {
+      throw new Error('username collision');
+    })).toThrow('username collision');
+
+    // usedCount unchanged
+    const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(row?.usedCount).toBe(0);
+
+    // No redemption row
+    const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('throws InviteUnavailableError when token not found', () => {
+    expect(() => redeemInvite('aaaaaaaaaaaaaaaaaaaaaa', () => ({ id: 'x', username: 'x' }))).toThrow(InviteUnavailableError);
+  });
+
+  it('throws InviteUnavailableError on revoked invite', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    revokeInvite(inv.id);
+
+    let insertCalled = false;
+    expect(() => redeemInvite(inv.token, () => {
+      insertCalled = true;
+      return { id: 'x', username: 'x' };
+    })).toThrow(InviteUnavailableError);
+
+    expect(insertCalled).toBe(false);
+  });
+});
+
+describe('deleteInvite', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('deletes the invite and CASCADE-removes redemption rows', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+
+    // Seed a redemption referencing this invite
+    const userId = 'redeemer-1';
+    testDb.insert(schema.users).values({
+      id: userId, username: 'redeemer', passwordHash: 'x', createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.inviteRedemptions).values({
+      id: 'red-del-1',
+      inviteId: inv.id,
+      userId,
+      registrantUsername: 'redeemer',
+      redeemedAt: Date.now(),
+    }).run();
+
+    deleteInvite(inv.id);
+
+    // Invite row gone
+    const inviteRow = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(inviteRow).toBeUndefined();
+
+    // Redemption row CASCADE-deleted
+    const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('throws InviteNotFoundError when id not found', () => {
+    expect(() => deleteInvite('nonexistent')).toThrow(InviteNotFoundError);
   });
 });

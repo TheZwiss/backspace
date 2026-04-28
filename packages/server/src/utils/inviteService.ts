@@ -467,3 +467,93 @@ export function reinstateInvite(id: string, req: ReinstateInviteRequest): Reinst
     };
   });
 }
+
+/**
+ * Thrown when an invite cannot be redeemed because its current state forbids
+ * it (token not found, revoked, expired, exhausted). Caller (HTTP register
+ * route) maps this to 403 Forbidden. The reason string is preserved in the
+ * message for debugging — the user-facing copy is constructed by the route.
+ */
+export class InviteUnavailableError extends Error {
+  constructor(reason: string) {
+    super(`Invite unavailable: ${reason}`);
+    this.name = 'InviteUnavailableError';
+  }
+}
+
+/**
+ * Result returned by the `insertUser` callback to `redeemInvite`. Captures
+ * just the fields needed to write the redemption row (id for the FK,
+ * username for the forensic snapshot in `registrant_username`).
+ */
+export interface RedemptionUserResult {
+  id: string;
+  username: string;
+}
+
+/**
+ * Atomically redeem an invite token. The caller-supplied `insertUser` callback
+ * runs inside the same SQLite transaction as the usedCount increment + redemption
+ * insert. If insertUser throws, the entire transaction rolls back — the invite
+ * is NOT consumed for failed registrations (e.g. username uniqueness collisions).
+ *
+ * Re-derives status under the transaction to close the TOCTOU window between
+ * `/api/auth/check-invite` (which the client may call seconds before submit)
+ * and the actual register POST: another user could have consumed the last slot
+ * in between. Re-checking inside the txn ensures the slot we increment is the
+ * one we observed available.
+ */
+export function redeemInvite(
+  token: string,
+  insertUser: () => RedemptionUserResult,
+): RedemptionUserResult {
+  const db = getDb();
+  return db.transaction((tx) => {
+    const row = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.token, token)).get();
+    if (!row) throw new InviteUnavailableError('not found');
+    const status = inviteStatus(row);
+    if (status !== 'active') {
+      throw new InviteUnavailableError(status);
+    }
+
+    // The insertUser callback runs inside the transaction. The caller's INSERT
+    // statement uses the outer `db` connection, but better-sqlite3 serializes
+    // all writes regardless of which Drizzle handle issued them, so the user
+    // insert joins the same atomic unit. If insertUser throws, the entire
+    // transaction rolls back including the usedCount bump and redemption row.
+    const userResult = insertUser();
+
+    tx.update(schema.inviteLinks)
+      .set({ usedCount: row.usedCount + 1 })
+      .where(eq(schema.inviteLinks.id, row.id))
+      .run();
+
+    tx.insert(schema.inviteRedemptions).values({
+      id: generateSnowflake(),
+      inviteId: row.id,
+      userId: userResult.id,
+      registrantUsername: userResult.username,
+      redeemedAt: Date.now(),
+    }).run();
+
+    return userResult;
+  });
+}
+
+/**
+ * Permanently delete an invite. Redemption rows for this invite are removed
+ * via `ON DELETE CASCADE` on `invite_redemptions.invite_id` — this is the
+ * documented destructive intent of "delete the invite and its history".
+ *
+ * No transaction needed: deleteInvite has no read-modify-write state semantics
+ * that other concurrent mutators would race against. The existence check is
+ * for the 404 response only; if a concurrent process deletes the row between
+ * the SELECT and the DELETE, the DELETE is a harmless no-op and the caller
+ * still observes the row gone afterwards.
+ */
+export function deleteInvite(id: string): void {
+  const db = getDb();
+  const row = db.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+  if (!row) throw new InviteNotFoundError();
+  db.delete(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).run();
+}
