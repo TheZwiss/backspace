@@ -482,6 +482,7 @@ export interface RegisterRequest {
   avatarColor?: string;
   homeInstance?: string;
   homeUserId?: string;
+  inviteToken?: string;
 }
 
 export interface LoginRequest {
@@ -681,6 +682,7 @@ export interface GifResult {
 export interface InstanceAdminSettings {
   instanceName: string;
   registrationOpen: boolean;
+  federatedRegistrationOpen: boolean;
   discoveryEnabled: boolean;
   gifApiKey?: string;
   gifEnabled?: boolean;
@@ -710,6 +712,7 @@ export interface InstanceInfoResponse {
   name: string;
   version: string;
   registrationOpen: boolean;
+  federatedRegistrationOpen: boolean;
 }
 
 export interface VerifyPasswordRequest {
@@ -1129,3 +1132,65 @@ export interface ApprovalRequest {
    */
   subscribers?: ApprovalRequestSubscriberSummary[];
 }
+
+// ─── Invite Links ──────────────────────────────────────────────────────────
+
+export type InviteStatus = 'active' | 'expired' | 'exhausted' | 'revoked';
+
+export interface InviteLinkSummary {
+  id: string;
+  token: string;
+  name: string;
+  status: InviteStatus;
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: number | null;
+  revokedAt: number | null;
+  createdBy: string;
+  createdByUsername: string | null;
+  createdAt: number;
+  url: string;
+}
+
+export interface InviteRedemption {
+  id: string;
+  userId: string | null;
+  registrantUsername: string;
+  currentUsername: string | null;
+  isDeleted: boolean;
+  redeemedAt: number;
+}
+
+export interface CreateInviteRequest {
+  name: string;
+  maxUses: number | null;
+  expiresAt: number | null;
+}
+
+export interface PatchInviteRequest {
+  name?: string;
+  maxUses?: number | null;
+  expiresAt?: number | null;
+}
+
+export interface ReinstateInviteRequest {
+  maxUses?: number | null;
+  expiresAt?: number | null;
+}
+
+export interface ReinstateInviteResponse {
+  invite: InviteLinkSummary;
+  tokenRotated: boolean;
+}
+
+export interface CheckInviteValidResponse {
+  valid: true;
+  name: string;
+}
+
+export interface CheckInviteInvalidResponse {
+  valid: false;
+  reason: 'expired' | 'exhausted' | 'invalid';
+}
+
+export type CheckInviteResponse = CheckInviteValidResponse | CheckInviteInvalidResponse;
