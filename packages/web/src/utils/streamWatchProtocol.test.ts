@@ -9,9 +9,9 @@ describe('streamWatchProtocol', () => {
   it('round-trips an encoded payload', () => {
     const payload = { type: 'stream_watch' as const, target: 'user-1', watching: true };
     const encoded = encodeStreamWatch(payload);
-    // Verify contract: TextEncoder.encode always returns Uint8Array with buffer + byteLength
-    expect(encoded.buffer).toBeDefined();
-    expect(encoded.byteLength).toBeGreaterThan(0);
+    // Realm-safe Uint8Array check — TextEncoder returns a Uint8Array from Node's
+    // realm, which `toBeInstanceOf(Uint8Array)` rejects under vitest+jsdom.
+    expect(Object.prototype.toString.call(encoded)).toBe('[object Uint8Array]');
     const parsed = parseStreamWatch(encoded);
     expect(parsed).toEqual(payload);
   });
