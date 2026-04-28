@@ -99,10 +99,13 @@ disconnecting participant identity from every watcher set
 side at that point.
 
 **Self-stream-end suppression.** When the streamer themselves stops sharing,
-SoundController detects this in the same set-diff that fires `stream_ended`.
-For that one tick, both the previous and current watcher sets are treated as
-empty (no per-watcher sounds), and the store entry is cleared via a deferred
-`clearStreamWatchers` call so the next subscribe tick sees prev=current=∅.
+SoundController detects this in the same set-diff that fires `stream_ended`
+and synchronously calls `clearStreamWatchers(myUserId)`. The watcher diff is
+gated on `selfIsSharing` (which is now false), so neither the outer
+subscriber tick nor the re-entered subscriber tick triggered by the clear
+fires any per-watcher sound. The same gate also makes a stop-then-restart
+cycle fire `clearStreamWatchers` on `selfStreamJustStarted`, dropping any
+stale watcher entries from the previous run.
 
 **Why not `LocalTrackSubscribed`?** Insufficient: fires only for the first
 subscriber and has no unsubscribe counterpart in LiveKit JS 2.17.
