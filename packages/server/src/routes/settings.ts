@@ -185,6 +185,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const response: InstanceAdminSettings = {
       instanceName: row.instanceName ?? 'Backspace',
       registrationOpen: row.registrationOpen !== null ? row.registrationOpen === 1 : config.registrationOpen,
+      federatedRegistrationOpen: row.federatedRegistrationOpen === 1,
       discoveryEnabled: row.discoveryEnabled === 1,
       gifApiKey: gifKey ? `****${gifKey.slice(-4)}` : undefined,
       gifEnabled: !!gifKey,
@@ -214,6 +215,13 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
 
     if (body.registrationOpen !== undefined) {
       updateData.registrationOpen = body.registrationOpen ? 1 : 0;
+    }
+
+    if (body.federatedRegistrationOpen !== undefined) {
+      if (typeof body.federatedRegistrationOpen !== 'boolean') {
+        return reply.code(400).send({ error: 'federatedRegistrationOpen must be boolean', statusCode: 400 });
+      }
+      updateData.federatedRegistrationOpen = body.federatedRegistrationOpen ? 1 : 0;
     }
 
     if (body.discoveryEnabled !== undefined) {
@@ -276,6 +284,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const response: InstanceAdminSettings = {
       instanceName: updatedRow.instanceName ?? 'Backspace',
       registrationOpen: updatedRow.registrationOpen !== null ? updatedRow.registrationOpen === 1 : config.registrationOpen,
+      federatedRegistrationOpen: updatedRow.federatedRegistrationOpen === 1,
       discoveryEnabled: updatedRow.discoveryEnabled === 1,
       gifApiKey: updatedGifKey ? `****${updatedGifKey.slice(-4)}` : undefined,
       gifEnabled: !!updatedGifKey,

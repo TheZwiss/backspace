@@ -53,7 +53,8 @@ Settings are split into two API surfaces:
 | Field | Type | DB Column | Validation | Notes |
 |-------|------|-----------|------------|-------|
 | instanceName | string | instanceName | 1-32 chars, trimmed | Default: `'Backspace'` |
-| registrationOpen | boolean | registrationOpen | boolean | DB null = use env `REGISTRATION_OPEN` (default true) |
+| registrationOpen | boolean | registrationOpen | boolean | Local-account registration. DB null = use env `REGISTRATION_OPEN` (default true) |
+| federatedRegistrationOpen | boolean | federatedRegistrationOpen | boolean | Federated-account creation against this instance. NOT NULL DEFAULT 1. Controls whether remote users can create `username@thisInstance` accounts via Connections (see auth.md + client-federation.md) |
 | discoveryEnabled | boolean | discoveryEnabled | boolean | Controls space Explore page |
 | gifApiKey | string? | gifApiKey | string or empty to clear | Returned masked as `****{last4}` for security |
 | gifEnabled | boolean? | (derived) | -- | Read-only; true when gifApiKey is non-null |
@@ -164,10 +165,13 @@ No authentication. Returns:
   name: string;        // instanceSettings.instanceName ?? 'Backspace'
   version: string;     // Hardcoded '1.0.0' in instance.ts
   registrationOpen: boolean;  // DB setting overrides env if non-null
+  federatedRegistrationOpen: boolean;  // NOT NULL DEFAULT 1; gates federated-account creation
 }
 ```
 
 Registration resolution order: `instance_settings.registrationOpen` (if not null) > `config.registrationOpen` (from `REGISTRATION_OPEN` env, default true).
+
+`federatedRegistrationOpen` is consumed by the Connections UI (client-federation.md) to decide whether to surface the "create federated account on this instance" affordance.
 
 ### General Instance Settings
 
