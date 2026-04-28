@@ -113,13 +113,29 @@ function InviteRow({ invite }: InviteRowProps) {
   );
 }
 
-const EXPIRY_PRESETS: ReadonlyArray<{ label: string; ms: number | null }> = [
-  { label: '1 hour', ms: 3_600_000 },
-  { label: '24 hours', ms: 86_400_000 },
-  { label: '7 days', ms: 7 * 86_400_000 },
-  { label: '30 days', ms: 30 * 86_400_000 },
-  { label: 'Never', ms: null },
+type ExpiryPresetId = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom';
+
+const EXPIRY_PRESETS: ReadonlyArray<{ id: ExpiryPresetId; label: string; ms: number | null }> = [
+  { id: '1h', label: '1 hour', ms: 3_600_000 },
+  { id: '24h', label: '24 hours', ms: 86_400_000 },
+  { id: '7d', label: '7 days', ms: 7 * 86_400_000 },
+  { id: '30d', label: '30 days', ms: 30 * 86_400_000 },
+  { id: 'never', label: 'Never', ms: null },
+  // Custom uses a free-form datetime input rendered below the preset row;
+  // ms is intentionally null and ignored for this id.
+  { id: 'custom', label: 'Custom…', ms: null },
 ];
+
+/**
+ * Format a millisecond timestamp as a value suitable for `<input type="datetime-local">`.
+ * The input expects local-wall-clock time in `YYYY-MM-DDTHH:mm` format (no timezone suffix);
+ * the browser then interprets it in the user's local timezone on read-back via `new Date(value)`.
+ */
+function toDatetimeLocalValue(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 interface CreateInviteModalProps {
   onClose: () => void;
@@ -131,7 +147,8 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
   const [name, setName] = useState('');
   const [unlimited, setUnlimited] = useState(true);
   const [maxUses, setMaxUses] = useState('1');
-  const [expiryPreset, setExpiryPreset] = useState<number | null>(7 * 86_400_000);
+  const [expiryId, setExpiryId] = useState<ExpiryPresetId>('7d');
+  const [customDateTime, setCustomDateTime] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -167,7 +184,32 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
       }
       maxUsesNum = parsed;
     }
-    const expiresAt = expiryPreset === null ? null : Date.now() + expiryPreset;
+
+    // Resolve expiresAt from the preset selection. Custom requires a non-empty,
+    // strictly-future datetime; everything else is derived from the preset's ms offset.
+    let expiresAt: number | null;
+    if (expiryId === 'never') {
+      expiresAt = null;
+    } else if (expiryId === 'custom') {
+      if (customDateTime === '') {
+        addToast('Pick a future date & time', 'warning');
+        return;
+      }
+      const ts = new Date(customDateTime).getTime();
+      if (!Number.isFinite(ts) || ts <= Date.now()) {
+        addToast('Pick a future date & time', 'warning');
+        return;
+      }
+      expiresAt = ts;
+    } else {
+      const preset = EXPIRY_PRESETS.find((p) => p.id === expiryId);
+      if (!preset || preset.ms === null) {
+        // Unreachable: only 'never'/'custom' have null ms, and both are handled above.
+        addToast('Invalid expiry selection', 'warning');
+        return;
+      }
+      expiresAt = Date.now() + preset.ms;
+    }
 
     setSubmitting(true);
     try {
@@ -271,12 +313,12 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
             <div className="flex items-center gap-2 flex-wrap">
               {EXPIRY_PRESETS.map((p) => (
                 <button
-                  key={p.label}
+                  key={p.id}
                   type="button"
-                  onClick={() => setExpiryPreset(p.ms)}
+                  onClick={() => setExpiryId(p.id)}
                   disabled={submitting}
                   className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 ${
-                    expiryPreset === p.ms
+                    expiryId === p.id
                       ? 'bg-accent-primary text-white'
                       : 'bg-surface-input text-txt-tertiary hover:text-txt-secondary'
                   }`}
@@ -285,6 +327,16 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
                 </button>
               ))}
             </div>
+            {expiryId === 'custom' && (
+              <input
+                type="datetime-local"
+                value={customDateTime}
+                onChange={(e) => setCustomDateTime(e.target.value)}
+                min={toDatetimeLocalValue(Date.now() + 60_000)}
+                disabled={submitting}
+                className="input-standard w-full px-3 py-2 text-sm mt-2"
+              />
+            )}
           </div>
 
           {/* Actions */}
