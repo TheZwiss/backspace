@@ -57,7 +57,7 @@ Settings are split into two API surfaces:
 | discoveryEnabled | boolean | discoveryEnabled | boolean | Controls space Explore page |
 | gifApiKey | string? | gifApiKey | string or empty to clear | Returned masked as `****{last4}` for security |
 | gifEnabled | boolean? | (derived) | -- | Read-only; true when gifApiKey is non-null |
-| maxUploadSizeMb | number | maxUploadSizeBytes | 1-5120 MB | Stored as bytes; converted on read/write. DB null = use env `MAX_UPLOAD_SIZE` (default 100MB) |
+| maxUploadSizeMb | number | maxUploadSizeBytes | positive integer (>=1 MB), upper bound is JS safe-integer ceiling (~8 EB) — effectively unlimited | Operator-set; no application cap. Stored as bytes; converted on read/write. DB null = use env `MAX_UPLOAD_SIZE` (default 100MB) |
 | federationRelayEnabled | boolean | federationRelayEnabled | boolean | Default: 1 (enabled) |
 | federationRelayTtlDays | number | federationRelayTtlDays | integer 1-365 | Default: 30 days |
 | autoAcceptPeering | boolean | autoAcceptPeering | boolean | Default: true. When false, `peer/accept` rejects unsolicited requests (403 PEERING_REQUIRES_APPROVAL); only requests where a local `pending` record already exists are accepted |

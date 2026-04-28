@@ -12,6 +12,22 @@ function formatBytes(bytes: number): string {
   return `${value < 10 ? value.toFixed(2) : value < 100 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
 }
 
+type UploadUnit = 'MB' | 'GB';
+
+// Render a number with up to 3 decimals, trimming trailing zeros. 1.5 → "1.5", 5 → "5", 0.098 → "0.098".
+function formatUnitValue(n: number): string {
+  return Number(n.toFixed(3)).toString();
+}
+
+function parseDisplayMb(input: string, unit: UploadUnit): number | null {
+  const trimmed = input.trim();
+  if (trimmed === '') return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const mb = unit === 'GB' ? Math.round(n * 1024) : Math.round(n);
+  return Number.isInteger(mb) && mb >= 1 ? mb : null;
+}
+
 export function StoragePanel() {
   const [stats, setStats] = useState<StorageStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,9 +40,9 @@ export function StoragePanel() {
   // Upload limit state
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
-  const [uploadLimitMb, setUploadLimitMb] = useState<number>(100);
+  const [uploadUnit, setUploadUnit] = useState<UploadUnit>('MB');
+  const [uploadLimitInput, setUploadLimitInput] = useState<string>('100');
   const [uploadLimitSaving, setUploadLimitSaving] = useState(false);
-  const [uploadLimitDirty, setUploadLimitDirty] = useState(false);
 
   // Media retention state
   const [mediaAgeDays, setMediaAgeDays] = useState(90);
@@ -52,17 +68,34 @@ export function StoragePanel() {
   }, [fetchStats]);
 
   useEffect(() => {
-    if (instanceSettings?.maxUploadSizeMb) {
-      setUploadLimitMb(instanceSettings.maxUploadSizeMb);
+    const mb = instanceSettings?.maxUploadSizeMb;
+    if (typeof mb === 'number' && mb > 0) {
+      const unit: UploadUnit = mb >= 1024 ? 'GB' : 'MB';
+      setUploadUnit(unit);
+      setUploadLimitInput(unit === 'GB' ? formatUnitValue(mb / 1024) : String(mb));
     }
   }, [instanceSettings]);
 
+  const parsedUploadMb = parseDisplayMb(uploadLimitInput, uploadUnit);
+  const uploadLimitDirty = parsedUploadMb !== null && parsedUploadMb !== instanceSettings?.maxUploadSizeMb;
+
+  const handleUploadUnitChange = (next: UploadUnit) => {
+    if (next === uploadUnit) return;
+    const n = Number(uploadLimitInput.trim());
+    if (Number.isFinite(n) && n > 0) {
+      setUploadLimitInput(next === 'GB' ? formatUnitValue(n / 1024) : String(Math.round(n * 1024)));
+    }
+    setUploadUnit(next);
+  };
+
   const handleUploadLimitSave = async () => {
+    if (parsedUploadMb === null) return;
+    const mb = parsedUploadMb;
     setUploadLimitSaving(true);
     try {
-      await updateInstanceSettings({ maxUploadSizeMb: uploadLimitMb });
-      setUploadLimitDirty(false);
-      addToast(`Upload limit set to ${uploadLimitMb} MB`, 'success');
+      await updateInstanceSettings({ maxUploadSizeMb: mb });
+      const display = mb >= 1024 ? `${formatUnitValue(mb / 1024)} GB` : `${mb} MB`;
+      addToast(`Upload limit set to ${display}`, 'success');
     } catch {
       addToast('Failed to update upload limit', 'warning');
     } finally {
@@ -199,16 +232,31 @@ export function StoragePanel() {
             <label className="text-sm text-txt-secondary whitespace-nowrap">Max file size</label>
             <input
               type="number"
-              min={1}
-              max={5120}
-              value={uploadLimitMb}
-              onChange={(e) => { setUploadLimitMb(Number(e.target.value)); setUploadLimitDirty(true); }}
-              className="input-standard w-20 px-2 py-1 text-sm text-center"
+              min={uploadUnit === 'GB' ? 0.001 : 1}
+              step={uploadUnit === 'GB' ? 0.5 : 1}
+              value={uploadLimitInput}
+              onChange={(e) => setUploadLimitInput(e.target.value)}
+              className="input-standard w-24 px-2 py-1 text-sm text-center"
             />
-            <span className="text-sm text-txt-tertiary">MB</span>
+            <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
+              {(['MB', 'GB'] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => handleUploadUnitChange(u)}
+                  className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
+                    uploadUnit === u
+                      ? 'bg-accent-primary text-white'
+                      : 'text-txt-tertiary hover:text-txt-primary'
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
             <button
               onClick={handleUploadLimitSave}
-              disabled={!uploadLimitDirty || uploadLimitSaving || uploadLimitMb < 1 || uploadLimitMb > 5120}
+              disabled={!uploadLimitDirty || uploadLimitSaving || parsedUploadMb === null}
               className="px-3 py-1 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ml-auto"
             >
               {uploadLimitSaving ? 'Saving...' : 'Save'}

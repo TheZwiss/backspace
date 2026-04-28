@@ -65,7 +65,7 @@ async function main(): Promise<void> {
 
   await app.register(multipart, {
     limits: {
-      fileSize: 5 * 1024 * 1024 * 1024,  // 5GB hard ceiling — actual limit enforced per-request from DB
+      fileSize: Number.MAX_SAFE_INTEGER, // No global cap — actual limit enforced per-request from DB
     },
   });
 
