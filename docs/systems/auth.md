@@ -1,7 +1,9 @@
 # Authentication & Session System
 
 Source files:
-- `packages/server/src/routes/auth.ts` -- Registration, login, username availability endpoints
+- `packages/server/src/routes/auth.ts` -- Registration, login, username availability, invite-token check endpoints
+- `packages/server/src/routes/invites.ts` -- Admin invite-link CRUD (create / list / patch / revoke / reinstate / delete / redemptions)
+- `packages/server/src/utils/inviteService.ts` -- Invite token generation, status derivation, atomic `redeemInvite()` transaction
 - `packages/server/src/routes/users.ts` -- Password change, account deletion endpoints (lines 58-156)
 - `packages/server/src/routes/admin.ts` -- Admin password reset endpoint (lines 232-265)
 - `packages/server/src/utils/auth.ts` -- Password hashing, JWT sign/verify, `authenticate` preHandler, `requireAdmin`
@@ -135,21 +137,47 @@ DB value overrides env when explicitly set by admin. When closed, a valid `invit
 
 **Invariants** (spec §1.3):
 
-- **Login is never gated** by either toggle. Both gates affect *creation only*. Existing accounts remain loginable regardless of policy.
-- The federated stub upgrade flow (below) is gated by `federatedRegistrationOpen`, never by an invite token.
+- **Login-unaffected invariant.** Neither toggle gates `POST /api/auth/login` for any user. Existing federated accounts always log in regardless of `federatedRegistrationOpen`; existing local accounts always log in regardless of `registrationOpen`. Both gates affect **creation only**. This is why the Connections add-instance form keeps its submit button enabled even when the target instance has `federatedRegistrationOpen = false` (see `client-federation.md`): the request runs through `instanceStore`'s register-then-login fall-through, and the login leg succeeds for users who already have a federated account on that instance.
+- The federated stub upgrade flow (below) is gated by `federatedRegistrationOpen`, never by an invite token. Tokens only unlock the local anonymous-signup path.
 
 **Toggle matrix** (spec §5.6):
 
-| `registrationOpen` | `federatedRegistrationOpen` | Local register | Federated register |
-|---|---|---|---|
-| true | true | open | allowed |
-| true | false | open | 403 |
-| false | true | invite-required | allowed |
-| false | false | invite-required | 403 |
+| `registrationOpen` | `federatedRegistrationOpen` | Local register | Federated register | Connections UI behavior |
+|---|---|---|---|---|
+| true | true | open | allowed | normal |
+| true | false | open | 403 | warning banner; submit enabled (login fall-through) |
+| false | true | invite-required | allowed | normal |
+| false | false | invite-required | 403 | warning banner; submit enabled (login fall-through) |
+| false (any) | (any) | invite bypasses | NOT bypassable by token | — |
+
+S2S DM stub creation (relay path, never `/register`) is gated only by federation peering settings — neither toggle affects it.
 
 ### Invite Tokens
 
-When `registrationOpen` is false, the local-signup path accepts an `inviteToken` field on the register body. Token format: 22-char base64url (16 random bytes). Lifecycle and admin CRUD live in `inviteService.ts` and `routes/invites.ts` -- see `docs/systems/admin.md` for the panel UX and the full status state machine.
+When `registrationOpen` is false, the local-signup path accepts an `inviteToken` field on the register body. Token format: 22-char base64url (`crypto.randomBytes(16).toString('base64url')` — 128 bits of entropy; collision probability against the existing space is `~2^-122`, with the DB UNIQUE on `invite_links.token` as the safety net + retry-up-to-3 in the create handler). Admin CRUD lives in `inviteService.ts` and `routes/invites.ts` -- see `docs/systems/admin.md` for the panel UX and the full status state machine.
+
+**Lifecycle:**
+
+```
+create  →  active  ──(usedCount = maxUses)─→  exhausted  ┐
+              │                                          │
+              │  ┌──(expiresAt < now)──→  expired  ──────┤
+              │  │                                       │
+              ↓  ↓                                       │
+            revoke ──(revokedAt set)──→  revoked         │ reinstate
+                                            │           ←┘ (Path A: token rotates;
+                                            │              Path B: same token)
+                                            └──→ active again
+                                                   │
+                                            DELETE /admin/invites/:id
+                                                   │
+                                                   ↓
+                                                hard-delete (CASCADE redemptions)
+```
+
+Status is **derived** at read time from `(revokedAt, expiresAt, usedCount, maxUses)` — no stored column. Reinstate branches on the pre-reinstate status: revoked → token rotates (`tokenRotated: true`); expired/exhausted → token preserved (`tokenRotated: false`); already-active → 409.
+
+**Audit trail (`invite_redemptions`):** every successful redemption inserts one row with `inviteId` (FK CASCADE — admin hard-delete drops the audit), `userId` (FK SET NULL — defensive against future hard-delete; tombstone keeps it populated), `registrantUsername` (snapshot at registration moment, preserves forensic value when the user is later renamed or tombstoned `!deleted:{uid}`), and `redeemedAt`.
 
 Atomic redemption (spec §2.4):
 
@@ -580,6 +608,7 @@ If `user` is a replicated alias of `homeUser` (via `isSelf`), returns `homeUser`
 |----------|-----|--------|
 | `POST /api/auth/register` | 10 | 2 min |
 | `GET /api/auth/check-username` | 30 | 1 min |
+| `GET /api/auth/check-invite` | 30 | 1 min |
 | `POST /api/auth/login` | 15 | 2 min |
 | `POST /api/users/@me/change-password` | 5 | 15 min |
 | `DELETE /api/users/@me` | 3 | 15 min |
@@ -594,7 +623,8 @@ All keyed by `request.ip`.
 |------------|---------|---------|-------|
 | `jwtSecret` | `JWT_SECRET` | (required) | Min 32 chars, startup crash if shorter |
 | `jwtExpiresIn` | `JWT_EXPIRES_IN` | `'30d'` | Passed to `jsonwebtoken` `expiresIn` option |
-| `registrationOpen` | `REGISTRATION_OPEN` | `true` | Overridden by `instanceSettings.registrationOpen` in DB |
+| `registrationOpen` | `REGISTRATION_OPEN` | `true` | Overridden by `instanceSettings.registrationOpen` in DB (null DB row = env fallback). Local anonymous signup gate. |
+| (no env) | -- | `true` | `instanceSettings.federatedRegistrationOpen` is DB-only (NOT NULL DEFAULT 1) — no env override. Federated identity replication gate. |
 
 ---
 

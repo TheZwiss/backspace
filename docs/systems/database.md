@@ -319,6 +319,42 @@ PK: (spaceId, userId, restrictionType)
 
 ---
 
+## Registration Invites
+
+### invite_links
+Admin-managed registration invite tokens. Status (`active` / `expired` / `exhausted` / `revoked`) is **derived** at read time from `revokedAt` + `expiresAt` + `usedCount`/`maxUses`; there is no stored status column. See `packages/server/src/utils/inviteService.ts` (`inviteStatus()`).
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| id | text PK | | Snowflake |
+| token | text UNIQUE NOT NULL | | 22-char base64url (`crypto.randomBytes(16).toString('base64url')`). Rotated on revoked → reinstate. UNIQUE constraint provides the lookup index. |
+| name | text NOT NULL | | Admin-facing label, 1-64 chars trimmed. |
+| createdBy | text NOT NULL | | FK → users.id (no CASCADE — admin tombstone keeps the row resolvable). |
+| createdAt | integer NOT NULL | | Epoch ms |
+| maxUses | integer | | NULL = unlimited; positive integer otherwise. |
+| usedCount | integer NOT NULL | 0 | Incremented atomically inside the redemption transaction. |
+| expiresAt | integer | | Epoch ms; NULL = never expires. |
+| revokedAt | integer | | Epoch ms; NULL = not revoked. Set by revoke endpoint, cleared by reinstate. |
+
+**Index:** `idx_invite_links_created_at` on `(createdAt)`.
+
+### invite_redemptions
+One row per successful invite-token consumption. Surrogate ID supports future per-redemption metadata without schema churn.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | text PK | Snowflake |
+| inviteId | text NOT NULL | FK → invite_links.id ON DELETE CASCADE — hard-deleting an invite drops its redemption history with it. |
+| userId | text | FK → users.id ON DELETE SET NULL — defensive against future hard-delete paths; tombstone (soft-delete) keeps the row populated. |
+| registrantUsername | text NOT NULL | Snapshot of username at the registration moment. Preserves forensic value when the user is later renamed or tombstoned (`!deleted:{uid}`). |
+| redeemedAt | integer NOT NULL | Epoch ms |
+
+**Indexes:** `idx_invite_redemptions_invite_id` on `(inviteId)`, `idx_invite_redemptions_user_id` on `(userId)`.
+
+The user INSERT, `usedCount` increment, and redemption row INSERT all run in a single SQLite transaction (`inviteService.redeemInvite()`), which re-derives status under the transaction to close the TOCTOU window between `/check-invite` and `/register`.
+
+---
+
 ## Instance Settings (singleton, id=1)
 
 | Column | Type | Default | Notes |
@@ -334,7 +370,8 @@ PK: (spaceId, userId, restrictionType)
 | allowedFramerates | text NOT NULL | `'30,45,60'` | CSV |
 | maxResolution | integer NOT NULL | 1080 | |
 | maxFramerate | integer NOT NULL | 60 | |
-| registrationOpen | integer | | null = use env |
+| registrationOpen | integer | | Local-anonymous-signup gate. null = use env (`config.registrationOpen`); 0/1 = explicit admin override. |
+| federatedRegistrationOpen | integer NOT NULL | 1 | Independent gate for federated identity replication via Connections (`POST /api/auth/register` with `homeInstance` set). Existing federated accounts always log in regardless of this value. |
 | gifApiKey | text | | Klipy API key |
 | bitrateMatrixOverrides | text | | JSON sparse overrides |
 | allowCustomBitrate | integer NOT NULL | 1 | |

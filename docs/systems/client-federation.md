@@ -286,6 +286,26 @@ The **Connections** panel (in user settings) allows managing remote instance con
 - **Remote Instances** — each shows status (connected/disconnected/error), hostname, username. Actions: Reconnect, Re-authenticate, Sync Password, Disconnect.
 - **Add Instance** — multi-step form: enter hostname → verify password → register/login → connected.
 
+### Add-Instance Pre-Flight: `federatedRegistrationOpen`
+
+The hostname-probe step calls `GET /api/instance/info` on the target. The response carries two registration fields:
+
+```typescript
+{ name, version, registrationOpen: boolean, federatedRegistrationOpen: boolean }
+```
+
+`federatedRegistrationOpen` is the gate for **creating a federated `username@thisInstance` account** via the Connections flow. When the probe returns `federatedRegistrationOpen === false`, `ConnectedInstances.tsx` (the AddInstanceFlow's password step) renders an amber-tinted banner above the password input:
+
+> "This instance has disabled new federated registrations. Existing accounts can still sign in."
+
+**The submit button stays enabled.** This is the [login-unaffected invariant](auth.md#3-registration-flow) made operational on the client. The flow runs through `instanceStore`'s register-then-login fall-through:
+- A user **without** an existing federated account on the target — register attempts 403 with `Federated registration is closed on this instance`; login attempts then fail with the existing "no account" error; the user sees the post-error toast.
+- A user **with** an existing federated account on the target — register 403s, then login succeeds against their existing credentials. Working path preserved for legitimate re-login.
+
+Disabling submit would extend the gate into login territory and soft-lock users with existing accounts on a closed instance — exactly the failure mode the invariant prevents. The 403 server-side stays as the security boundary; the banner is a UX hint.
+
+The probe response is not cached client-side beyond the in-flight request, so toggle flips on the target are observed on the next add-instance attempt without explicit invalidation.
+
 ### Identity Deletion
 
 Each remote instance row exposes an identity deletion flow with three modes:
