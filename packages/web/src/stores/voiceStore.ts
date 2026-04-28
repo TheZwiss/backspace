@@ -47,6 +47,10 @@ interface VoiceState {
   streamMutes: Map<string, boolean>;        // userId → muted?
   watchingStreams: Set<string>;             // userIds we're watching
   unwatchedCameras: Set<string>;           // userIds whose cameras we've opted out of
+  streamWatchers: Map<string, Set<string>>;  // streamerUserId → set of watcher LiveKit identities (in-memory only)
+  recordStreamWatch: (streamerUserId: string, watcherIdentity: string, watching: boolean) => void;
+  clearStreamWatchers: (streamerUserId: string) => void;
+  evictWatcher: (watcherIdentity: string) => void;
   soundEffectVolume: number;                 // 0-200 (100 = default)
   setSoundEffectVolume: (volume: number) => void;
   messageSoundAllChannels: boolean;          // false (default) = DM + mention only; true = every channel
@@ -191,6 +195,43 @@ export const useVoiceStore = create<VoiceState>()(
       streamMutes: new Map(),
       watchingStreams: new Set(),
       unwatchedCameras: new Set(),
+      streamWatchers: new Map(),
+      recordStreamWatch: (streamerUserId, watcherIdentity, watching) => {
+        set((state) => {
+          const newMap = new Map(state.streamWatchers);
+          const existing = newMap.get(streamerUserId);
+          const next = new Set(existing ?? []);
+          if (watching) next.add(watcherIdentity);
+          else next.delete(watcherIdentity);
+          if (next.size === 0) newMap.delete(streamerUserId);
+          else newMap.set(streamerUserId, next);
+          return { streamWatchers: newMap };
+        });
+      },
+      clearStreamWatchers: (streamerUserId) => {
+        set((state) => {
+          if (!state.streamWatchers.has(streamerUserId)) return state;
+          const newMap = new Map(state.streamWatchers);
+          newMap.delete(streamerUserId);
+          return { streamWatchers: newMap };
+        });
+      },
+      evictWatcher: (watcherIdentity) => {
+        set((state) => {
+          let mutated = false;
+          const newMap = new Map(state.streamWatchers);
+          for (const [streamerId, watchers] of newMap) {
+            if (watchers.has(watcherIdentity)) {
+              const next = new Set(watchers);
+              next.delete(watcherIdentity);
+              if (next.size === 0) newMap.delete(streamerId);
+              else newMap.set(streamerId, next);
+              mutated = true;
+            }
+          }
+          return mutated ? { streamWatchers: newMap } : state;
+        });
+      },
       streamAttenuationEnabled: false,
       streamAttenuationStrength: 50,
 
@@ -487,6 +528,7 @@ export const useVoiceStore = create<VoiceState>()(
         streamMutes: new Map(),
         watchingStreams: new Set(),
         unwatchedCameras: new Set(),
+        streamWatchers: new Map(),
         // Space-enforced restrictions
         spaceMutedUserIds: new Set(),
         spaceDeafenedUserIds: new Set(),
@@ -545,6 +587,7 @@ export const useVoiceStore = create<VoiceState>()(
             streamMutes: new Map(),
             watchingStreams: new Set(),
             unwatchedCameras: new Set(),
+            streamWatchers: new Map(),
             voiceUsers,
           };
         });
@@ -584,6 +627,7 @@ export const useVoiceStore = create<VoiceState>()(
           streamMutes: new Map(),
           watchingStreams: new Set(),
           unwatchedCameras: new Set(),
+          streamWatchers: new Map(),
         });
       },
 
@@ -621,6 +665,7 @@ export const useVoiceStore = create<VoiceState>()(
         streamMutes: new Map(),
         watchingStreams: new Set(),
         unwatchedCameras: new Set(),
+        streamWatchers: new Map(),
         spaceMutedUserIds: new Set(),
         spaceDeafenedUserIds: new Set(),
         permissionMutedUserIds: new Set(),
