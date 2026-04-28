@@ -8,6 +8,10 @@ import { AVATAR_COLORS } from '@backspace/shared';
 import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@backspace/shared';
 import { api, RateLimitError } from '../../api/client';
 
+// Single-source regex for extracting a bare invite token from a pasted full URL.
+// Token format: 22 chars base64url ([A-Za-z0-9_-]).
+const INVITE_URL_REGEX = /[?&]invite=([A-Za-z0-9_-]{22})/;
+
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function RegisterPage() {
@@ -34,6 +38,10 @@ export function RegisterPage() {
   const [inviteCheck, setInviteCheck] = useState<CheckInviteResponse | null>(null);
   const [inviteChecking, setInviteChecking] = useState(false);
   const inviteCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref tracking whether the URL token has been confirmed invalid by the server.
+  // Used as the gate for the manual-entry debounce so we don't need inviteCheck?.valid
+  // in the manual-effect dep array (which would cause a dep loop via setInviteCheck).
+  const urlTokenInvalidRef = useRef(false);
 
   // Step 2 fields
   const [displayName, setDisplayName] = useState('');
@@ -74,21 +82,48 @@ export function RegisterPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Validate URL-supplied invite token on mount
+  // Validate URL-supplied invite token — only fires when:
+  // (a) a URL token is present, AND
+  // (b) instanceInfo has loaded AND indicates registration is closed.
+  // Per spec §4.4: when registration is open, the URL invite param is silently ignored
+  // (no token consumption, no validation, no rate-limit slot burned).
+  // When the result is invalid, urlTokenInvalidRef is set so the manual-entry
+  // debounce effect can use it as a stable gate without introducing a dep loop.
   useEffect(() => {
     if (!urlInviteToken) return;
+    if (!instanceInfo || instanceInfo.registrationOpen) return;
     let cancelled = false;
+    urlTokenInvalidRef.current = false;
     setInviteChecking(true);
     api.auth.checkInvite(urlInviteToken)
-      .then((res) => { if (!cancelled) setInviteCheck(res); })
-      .catch(() => { if (!cancelled) setInviteCheck({ valid: false, reason: 'invalid' }); })
+      .then((res) => {
+        if (!cancelled) {
+          if (!res.valid) urlTokenInvalidRef.current = true;
+          setInviteCheck(res);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          urlTokenInvalidRef.current = true;
+          setInviteCheck({ valid: false, reason: 'invalid' });
+        }
+      })
       .finally(() => { if (!cancelled) setInviteChecking(false); });
     return () => { cancelled = true; };
-  }, [urlInviteToken]);
+  }, [urlInviteToken, instanceInfo]);
 
-  // Debounced manual-entry invite validation
+  // Debounced manual-entry invite validation.
+  // The URL token takes precedence while it is still in-flight or has been confirmed valid.
+  // Once the URL token is confirmed invalid (urlTokenInvalidRef.current === true), this
+  // effect fires on manual input changes.
+  //
+  // We intentionally do NOT include inviteCheck?.valid in the dep array — the URL-token
+  // validation effect sets urlTokenInvalidRef synchronously when the server response arrives,
+  // and the user's next keystroke in the manual field re-triggers this effect. This avoids
+  // a dep-loop where setInviteCheck() inside this effect would mutate a dep and cause
+  // infinite re-runs.
   useEffect(() => {
-    if (urlInviteToken) return; // URL token takes precedence while it is present
+    if (urlInviteToken && !urlTokenInvalidRef.current) return; // URL token takes precedence while in flight or valid
 
     const trimmed = manualInviteToken.trim();
     if (!trimmed) {
@@ -99,15 +134,22 @@ export function RegisterPage() {
 
     // Extract bare token if user pasted a full URL
     let token = trimmed;
-    const urlMatch = trimmed.match(/[?&]invite=([A-Za-z0-9_-]{22})/);
+    const urlMatch = trimmed.match(INVITE_URL_REGEX);
     if (urlMatch) token = urlMatch[1]!;
 
     let cancelled = false;
 
     if (inviteCheckTimerRef.current) clearTimeout(inviteCheckTimerRef.current);
 
+    // Set checking=true immediately so the manual-entry row shows "Checking..." rather
+    // than the stale URL-token failure state while the user is actively typing.
+    setInviteChecking(true);
+
     inviteCheckTimerRef.current = setTimeout(async () => {
-      setInviteChecking(true);
+      if (cancelled) return;
+      // Clear stale check result (e.g., prior URL-token invalid result) before the
+      // fresh API response arrives so stale text never briefly flashes on completion.
+      setInviteCheck(null);
       try {
         const res = await api.auth.checkInvite(token);
         if (cancelled) return;
@@ -277,13 +319,25 @@ export function RegisterPage() {
       const dn = skip ? undefined : displayName.trim() || undefined;
       const ac = skip ? undefined : avatarColor;
 
-      // Resolve the token to send: prefer URL token, fall back to manual entry
+      // Resolve the token to send.
+      // Per spec §4.4 / §3: open-registration instances silently ignore invite tokens —
+      // sending one would be harmless (server ignores it) but it's cleaner to omit it
+      // client-side so nothing unexpected is on the wire.
       const tokenForRegister = (() => {
-        if (urlInviteToken) return urlInviteToken;
+        if (!instanceInfo || instanceInfo.registrationOpen) {
+          return undefined;
+        }
+        // URL token takes precedence ONLY while it hasn't been confirmed invalid.
+        const urlInvalid = !!urlInviteToken && inviteCheck?.valid === false;
+        if (urlInviteToken && !urlInvalid) return urlInviteToken;
         const trimmed = manualInviteToken.trim();
-        if (!trimmed) return undefined;
-        const urlMatch = trimmed.match(/[?&]invite=([A-Za-z0-9_-]{22})/);
-        return urlMatch ? urlMatch[1] : trimmed;
+        if (trimmed) {
+          const urlMatch = trimmed.match(INVITE_URL_REGEX);
+          return urlMatch ? urlMatch[1] : trimmed;
+        }
+        // Manual empty AND URL token was confirmed invalid — send URL token so the
+        // server returns the authoritative error message rather than "invite required".
+        return urlInviteToken ?? undefined;
       })();
 
       // Step 1: Register via API — store token in localStorage for API auth,
@@ -400,8 +454,9 @@ export function RegisterPage() {
                 </div>
               )}
 
-              {/* URL-token chip — shown whenever a token was provided in the URL */}
-              {urlInviteToken && (
+              {/* URL-token chip — shown only when registration is closed AND a URL token was provided.
+                  Per spec §4.4: open-registration instances silently ignore the ?invite= param. */}
+              {urlInviteToken && instanceInfo && !instanceInfo.registrationOpen && (
                 <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-xs">
                   {inviteChecking ? (
                     <>
