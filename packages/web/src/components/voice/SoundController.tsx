@@ -271,7 +271,7 @@ export function SoundController() {
       if (incomingCallLoop.current) incomingCallLoop.current.stop();
       if (outgoingCallLoop.current) outgoingCallLoop.current.stop();
     };
-  }, [audioManager, currentUser?.id, currentUser?.homeUserId]);
+  }, [currentUser?.id, currentUser?.homeUserId]);
 
   return null;
 }
