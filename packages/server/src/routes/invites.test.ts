@@ -35,10 +35,10 @@ vi.mock('../utils/auth.js', () => ({
   },
   requireAdmin: async (
     _req: { userId?: string },
-    reply: { code: (n: number) => { send: (b: unknown) => void } },
+    reply: { code: (n: number) => { send: (b: unknown) => unknown } },
   ) => {
     if (!callerIsAdmin) {
-      reply.code(403).send({ error: 'Admin required', statusCode: 403 });
+      return reply.code(403).send({ error: 'Admin required', statusCode: 403 });
     }
   },
 }));
