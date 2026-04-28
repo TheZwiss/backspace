@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Backspace',
         short_name: 'Backspace',
-        description: 'Self-hosted chat platform',
+        description: 'The self-hosted Discord and TeamSpeak alternative. HD voice, video, and screen share — open-source and free.',
         display: 'standalone',
         start_url: '/',
         theme_color: '#0b0b10',

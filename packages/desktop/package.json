@@ -2,7 +2,7 @@
   "name": "@backspace/desktop",
   "version": "1.0.0",
   "private": true,
-  "description": "Backspace — a self-hosted, open-source chat platform",
+  "description": "Backspace",
   "author": {
     "name": "youruser",
     "email": "backspace@backspace.chat"
