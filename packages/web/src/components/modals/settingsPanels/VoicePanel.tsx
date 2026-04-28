@@ -11,6 +11,8 @@ export function VoicePanel() {
   const setRnnoiseEnabled = useVoiceStore((s) => s.setRnnoiseEnabled);
   const soundEffectVolume = useVoiceStore((s) => s.soundEffectVolume);
   const setSoundEffectVolume = useVoiceStore((s) => s.setSoundEffectVolume);
+  const messageSoundAllChannels = useVoiceStore((s) => s.messageSoundAllChannels);
+  const setMessageSoundAllChannels = useVoiceStore((s) => s.setMessageSoundAllChannels);
 
   return (
     <div className="space-y-5">
@@ -36,6 +38,15 @@ export function VoicePanel() {
                 background: `linear-gradient(to right, rgb(var(--accent-primary)) 0%, rgb(var(--accent-primary)) ${soundEffectVolume / 2}%, rgb(var(--interactive-muted)) ${soundEffectVolume / 2}%, rgb(var(--interactive-muted)) 100%)`,
               }}
             />
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="text-sm text-txt-primary">Play sound for every message</div>
+              <div className="text-xs text-txt-tertiary">
+                Off (default): only DMs and messages that mention you. On: every channel.
+              </div>
+            </div>
+            <Toggle enabled={messageSoundAllChannels} onChange={setMessageSoundAllChannels} />
           </div>
         </div>
       </div>
