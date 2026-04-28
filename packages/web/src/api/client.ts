@@ -243,7 +243,7 @@ export class BackspaceApiClient {
   readonly invites: {
     list: (status?: 'active' | 'archived') => Promise<{ invites: InviteLinkSummary[] }>;
     create: (body: CreateInviteRequest) => Promise<InviteLinkSummary>;
-    patch: (id: string, body: UpdateInviteRequest) => Promise<InviteLinkSummary>;
+    update: (id: string, body: UpdateInviteRequest) => Promise<InviteLinkSummary>;
     revoke: (id: string) => Promise<{ invite: InviteLinkSummary }>;
     reinstate: (id: string, body: ReinstateInviteRequest) => Promise<ReinstateInviteResponse>;
     delete: (id: string) => Promise<{ success: boolean }>;
@@ -745,7 +745,7 @@ export class BackspaceApiClient {
         request<{ invites: InviteLinkSummary[] }>('GET', `/admin/invites?status=${status}`),
       create: (body: CreateInviteRequest) =>
         request<InviteLinkSummary>('POST', '/admin/invites', body),
-      patch: (id: string, body: UpdateInviteRequest) =>
+      update: (id: string, body: UpdateInviteRequest) =>
         request<InviteLinkSummary>('PATCH', `/admin/invites/${id}`, body),
       revoke: (id: string) =>
         request<{ invite: InviteLinkSummary }>('POST', `/admin/invites/${id}/revoke`),
