@@ -29,6 +29,13 @@
       "when": 1777229997210,
       "tag": "0003_brave_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1777395066272,
+      "tag": "0004_slim_mentallo",
+      "breakpoints": true
     }
   ]
 }

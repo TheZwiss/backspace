@@ -310,6 +310,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   maxResolution: integer('max_resolution').notNull().default(1080),
   maxFramerate: integer('max_framerate').notNull().default(60),
   registrationOpen: integer('registration_open'),  // null = use env var default, 0/1 = explicit
+  federatedRegistrationOpen: integer('federated_registration_open').notNull().default(1),
   gifApiKey: text('gif_api_key'),
   bitrateMatrixOverrides: text('bitrate_matrix_overrides'),
   allowCustomBitrate: integer('allow_custom_bitrate').notNull().default(1),
@@ -480,4 +481,29 @@ export const userFederationRegistry = sqliteTable('user_federation_registry', {
   errorMessage: text('error_message'),
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.origin] }),
+}));
+
+export const inviteLinks = sqliteTable('invite_links', {
+  id: text('id').primaryKey(),
+  token: text('token').notNull().unique(),
+  name: text('name').notNull(),
+  createdBy: text('created_by').notNull().references(() => users.id),
+  createdAt: integer('created_at').notNull(),
+  maxUses: integer('max_uses'),
+  usedCount: integer('used_count').notNull().default(0),
+  expiresAt: integer('expires_at'),
+  revokedAt: integer('revoked_at'),
+}, (table) => ({
+  createdAtIdx: index('idx_invite_links_created_at').on(table.createdAt),
+}));
+
+export const inviteRedemptions = sqliteTable('invite_redemptions', {
+  id: text('id').primaryKey(),
+  inviteId: text('invite_id').notNull().references(() => inviteLinks.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  registrantUsername: text('registrant_username').notNull(),
+  redeemedAt: integer('redeemed_at').notNull(),
+}, (table) => ({
+  inviteIdx: index('idx_invite_redemptions_invite_id').on(table.inviteId),
+  userIdx: index('idx_invite_redemptions_user_id').on(table.userId),
 }));
