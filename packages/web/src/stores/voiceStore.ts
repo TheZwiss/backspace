@@ -49,6 +49,8 @@ interface VoiceState {
   unwatchedCameras: Set<string>;           // userIds whose cameras we've opted out of
   soundEffectVolume: number;                 // 0-200 (100 = default)
   setSoundEffectVolume: (volume: number) => void;
+  messageSoundAllChannels: boolean;          // false (default) = DM + mention only; true = every channel
+  setMessageSoundAllChannels: (allChannels: boolean) => void;
   streamAttenuationEnabled: boolean;        // global toggle, default true
   streamAttenuationStrength: number;        // 0-100, default 50
   setStreamVolume: (userId: string, volume: number) => void;
@@ -181,6 +183,8 @@ export const useVoiceStore = create<VoiceState>()(
 
       soundEffectVolume: 100,
       setSoundEffectVolume: (volume) => set({ soundEffectVolume: volume }),
+      messageSoundAllChannels: false,
+      setMessageSoundAllChannels: (allChannels) => set({ messageSoundAllChannels: allChannels }),
 
       // Stream widget state
       streamVolumes: new Map(),
@@ -704,6 +708,7 @@ export const useVoiceStore = create<VoiceState>()(
         autoGainControl: state.autoGainControl,
         rnnoiseEnabled: state.rnnoiseEnabled,
         soundEffectVolume: state.soundEffectVolume,
+        messageSoundAllChannels: state.messageSoundAllChannels,
         streamAttenuationEnabled: state.streamAttenuationEnabled,
         streamAttenuationStrength: state.streamAttenuationStrength,
         // Per-user preferences (Map → plain object for JSON)
