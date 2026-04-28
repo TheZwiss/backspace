@@ -4,6 +4,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
+import { encodeStreamWatch } from '../../utils/streamWatchProtocol';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
@@ -140,6 +141,14 @@ function StreamAttenuationItem() {
   );
 }
 
+function broadcastStreamWatch(streamerUserId: string, watching: boolean): void {
+  const room = getActiveRoom();
+  if (!room) return;
+  const payload = encodeStreamWatch({ type: 'stream_watch', target: streamerUserId, watching });
+  // Reliable delivery; data channels are room-scoped and small (under 1KB).
+  void room.localParticipant.publishData(payload, { reliable: true });
+}
+
 export function StreamTile({ tile, large }: StreamTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -266,6 +275,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
             onClick: () => {
               useVoiceStore.getState().unwatchStream(userId);
               setStreamSubscription(getActiveRoom(), identity, false);
+              broadcastStreamWatch(userId, false);
             },
           });
         } else {
@@ -279,6 +289,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
             onClick: () => {
               useVoiceStore.getState().watchStream(userId);
               setStreamSubscription(getActiveRoom(), identity, true);
+              broadcastStreamWatch(userId, true);
             },
           });
         }
@@ -322,6 +333,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const handleWatch = useCallback(() => {
     useVoiceStore.getState().watchStream(userId);
     setStreamSubscription(getActiveRoom(), participant.identity, true);
+    broadcastStreamWatch(userId, true);
   }, [userId, participant.identity]);
 
   const hasVideo = liveScreenTrack !== null;
