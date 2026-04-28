@@ -8,7 +8,7 @@ import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/sha
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { findFederatedUser } from './federation.js';
-import { getInviteByToken, inviteStatus } from '../utils/inviteService.js';
+import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: RegisterRequest }>('/api/auth/register', {
@@ -76,13 +76,47 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     const db = getDb();
 
-    // Check registration: DB setting overrides env var if explicitly set by admin
+    // Read both gates from instance_settings.
+    // - registrationOpen: nullable column; null falls back to env var (config.registrationOpen).
+    //   Admin-explicit 0/1 overrides env. Gates LOCAL anonymous signup.
+    // - federatedRegistrationOpen: NOT NULL DEFAULT 1 column. Gates FEDERATED identity
+    //   replication (homeInstance set). Independent of registrationOpen by spec §1.2.
     const instanceRow = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
     const registrationOpen = instanceRow?.registrationOpen !== null && instanceRow?.registrationOpen !== undefined
       ? instanceRow.registrationOpen === 1
       : config.registrationOpen;
-    if (!registrationOpen) {
-      return reply.code(403).send({ error: 'Registration is currently closed', statusCode: 403 });
+    const federatedRegistrationOpen = instanceRow?.federatedRegistrationOpen === 1;
+
+    // Optional invite token. Only meaningful for the local-closed path; ignored
+    // entirely on the federated path (spec §1.3, §5.6) and on the local-open path
+    // (spec §5.7).
+    const inviteToken = typeof request.body.inviteToken === 'string'
+      ? request.body.inviteToken
+      : undefined;
+
+    if (homeInstance) {
+      // Federated path: token IGNORED entirely. Gate is federatedRegistrationOpen.
+      if (!federatedRegistrationOpen) {
+        return reply.code(403).send({ error: 'Federated registration is closed on this instance', statusCode: 403 });
+      }
+      // Fall through to existing federated stub upgrade / new federated user logic below.
+    } else {
+      // Local path: registrationOpen is the primary gate. A valid invite token
+      // bypasses it when closed. When open, the token is silently ignored.
+      if (!registrationOpen) {
+        if (!inviteToken) {
+          return reply.code(403).send({ error: 'Registration is closed. An invite is required.', statusCode: 403 });
+        }
+        // Pre-flight check: reject obviously-invalid tokens before any expensive
+        // work (bcrypt). The final enforcement still happens inside the redemption
+        // transaction below — this only short-circuits the easy reject path.
+        const inviteRow = getInviteByToken(inviteToken);
+        if (!inviteRow || inviteStatus(inviteRow) !== 'active') {
+          return reply.code(403).send({ error: 'Invalid or expired invite', statusCode: 403 });
+        }
+      }
+      // If registrationOpen is true: inviteToken is silently ignored — no validation,
+      // no consumption (spec §5.7).
     }
 
     const passwordHash = await hashPassword(password);
@@ -175,7 +209,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // which would otherwise produce a permanently stuck-online row that no
     // disconnect timer can clean up. The WS handshake will flip it to
     // 'online' once a real socket attaches.
-    db.insert(schema.users).values({
+    const userRow = {
       id: userId,
       username: trimmedUsername,
       displayName: displayName?.trim() || null,
@@ -185,7 +219,35 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       homeUserId: (homeInstance && homeUserId && typeof homeUserId === 'string') ? homeUserId : null,
       avatarColor,
       createdAt: now,
-    }).run();
+    };
+
+    // Only the LOCAL-CLOSED-WITH-VALID-TOKEN path consumes an invite. The federated
+    // paths (handled above and in the stub-upgrade block) and the local-open path
+    // never touch the invite_links table.
+    const consumesInvite = !homeInstance && !registrationOpen && !!inviteToken;
+
+    if (consumesInvite) {
+      // Atomic redemption: the user INSERT, the usedCount bump, and the
+      // invite_redemptions row all run inside one SQLite transaction. If any
+      // step throws (token consumed by a concurrent request, username collision
+      // bumping into the unique index, etc.) the entire transaction rolls back —
+      // we never burn a redemption on a failed registration.
+      try {
+        redeemInvite(inviteToken!, () => {
+          db.insert(schema.users).values(userRow).run();
+          return { id: userId, username: trimmedUsername };
+        });
+      } catch (err) {
+        if (err instanceof InviteUnavailableError) {
+          // Concurrent revoke / last-slot race / expiry-while-typing all surface here.
+          return reply.code(403).send({ error: 'Invalid or expired invite', statusCode: 403 });
+        }
+        throw err;
+      }
+    } else {
+      // Standard local-open or federated-new-user path: plain user insert.
+      db.insert(schema.users).values(userRow).run();
+    }
 
     const user = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!user) {

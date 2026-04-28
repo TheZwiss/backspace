@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -201,5 +202,256 @@ describe('GET /api/auth/check-invite', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json()).toEqual({ valid: false, reason: 'invalid' });
     }
+  });
+});
+
+describe('POST /api/auth/register — federation gate split', () => {
+  beforeEach(() => {
+    // Ensure a fresh instance_settings singleton row with both gates default-true.
+    // The test harness's applyMigrations creates the table but does not seed the
+    // id=1 row (production does so via migrate.ts:ensureDefaults on first boot).
+    // Each test then mutates the toggles it cares about.
+    testDb.delete(schema.instanceSettings).run();
+    testDb.insert(schema.instanceSettings).values({
+      id: 1,
+      registrationOpen: 1,
+      federatedRegistrationOpen: 1,
+      updatedAt: Date.now(),
+    }).run();
+  });
+
+  it('open registration: register without token succeeds; token field ignored if present', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'alice', password: 'password123' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    // Try with bogus token — still succeeds, token ignored
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'bob', password: 'password123', inviteToken: 'fakefakefakefakefakeXX' },
+    });
+    expect(res2.statusCode).toBe(201);
+  });
+
+  it('closed registration without token: 403 "An invite is required"', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'newalice', password: 'password123' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('invite is required');
+  });
+
+  it('closed registration with valid token: succeeds, usedCount incremented, redemption written', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    const token = 'abcdefghijklmnopqrstuv';
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-redeem-1',
+      token,
+      name: 'F',
+      createdBy: ADMIN_ID,
+      createdAt: Date.now(),
+      maxUses: 5,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: null,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'newalice', password: 'password123', inviteToken: token },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const inv = testDb.select().from(schema.inviteLinks)
+      .where(eq(schema.inviteLinks.id, 'inv-redeem-1')).get();
+    expect(inv?.usedCount).toBe(1);
+    const redemptions = testDb.select().from(schema.inviteRedemptions)
+      .where(eq(schema.inviteRedemptions.inviteId, 'inv-redeem-1')).all();
+    expect(redemptions).toHaveLength(1);
+    expect(redemptions[0]?.registrantUsername).toBe('newalice');
+  });
+
+  it('closed registration with invalid token: 403 "Invalid or expired invite"', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'newalice', password: 'password123', inviteToken: 'fakefakefakefakefakeXX' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('Invalid or expired');
+  });
+
+  it('open registration with token: usedCount NOT incremented', async () => {
+    const token = 'abcdefghijklmnopqrstuv';
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-ignore-1',
+      token,
+      name: 'F',
+      createdBy: ADMIN_ID,
+      createdAt: Date.now(),
+      maxUses: 5,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: null,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'newalice', password: 'password123', inviteToken: token },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const inv = testDb.select().from(schema.inviteLinks)
+      .where(eq(schema.inviteLinks.id, 'inv-ignore-1')).get();
+    expect(inv?.usedCount).toBe(0);
+
+    const redemptions = testDb.select().from(schema.inviteRedemptions)
+      .where(eq(schema.inviteRedemptions.inviteId, 'inv-ignore-1')).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('federated registration: blocked when federatedRegistrationOpen=false', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ federatedRegistrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'alice@otherhost',
+        password: 'password123',
+        homeInstance: 'otherhost',
+        homeUserId: 'remote-id',
+      },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('Federated registration');
+  });
+
+  it('federated registration: blocked even with valid token when federatedRegistrationOpen=false', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0, federatedRegistrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    const token = 'abcdefghijklmnopqrstuv';
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-fed-blocked',
+      token,
+      name: 'F',
+      createdBy: ADMIN_ID,
+      createdAt: Date.now(),
+      maxUses: 5,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: null,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'alice@otherhost',
+        password: 'password123',
+        homeInstance: 'otherhost',
+        homeUserId: 'remote-id',
+        inviteToken: token,
+      },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toContain('Federated registration');
+
+    // Token MUST NOT be consumed
+    const inv = testDb.select().from(schema.inviteLinks)
+      .where(eq(schema.inviteLinks.id, 'inv-fed-blocked')).get();
+    expect(inv?.usedCount).toBe(0);
+  });
+
+  it('federated registration: token IGNORED even if provided (no usedCount increment)', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0, federatedRegistrationOpen: 1 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    const token = 'abcdefghijklmnopqrstuv';
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-fed-ignore',
+      token,
+      name: 'F',
+      createdBy: ADMIN_ID,
+      createdAt: Date.now(),
+      maxUses: 5,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: null,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: {
+        username: 'alice@otherhost',
+        password: 'password123',
+        homeInstance: 'otherhost',
+        homeUserId: 'remote-id',
+        inviteToken: token,
+      },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const inv = testDb.select().from(schema.inviteLinks)
+      .where(eq(schema.inviteLinks.id, 'inv-fed-ignore')).get();
+    expect(inv?.usedCount).toBe(0);
+
+    const redemptions = testDb.select().from(schema.inviteRedemptions)
+      .where(eq(schema.inviteRedemptions.inviteId, 'inv-fed-ignore')).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('closed registration: token last-slot race → 403 (in-txn re-derive)', async () => {
+    testDb.update(schema.instanceSettings)
+      .set({ registrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+    const token = 'abcdefghijklmnopqrstuv';
+    testDb.insert(schema.inviteLinks).values({
+      id: 'inv-exhausted',
+      token,
+      name: 'F',
+      createdBy: ADMIN_ID,
+      createdAt: Date.now(),
+      maxUses: 1,
+      usedCount: 1, // already at the cap
+      expiresAt: null,
+      revokedAt: null,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'newalice', password: 'password123', inviteToken: token },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });
