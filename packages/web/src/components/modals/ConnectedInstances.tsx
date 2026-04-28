@@ -203,6 +203,12 @@ function AddInstanceFlow({ onDone }: { onDone: () => void }) {
             </div>
           </div>
 
+          {!probeResult.federatedRegistrationOpen && (
+            <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+              This instance has disabled new federated registrations. Existing accounts can still sign in.
+            </div>
+          )}
+
           <form onSubmit={(e) => { e.preventDefault(); handleConnect(); }} className="space-y-2">
             <input type="text" autoComplete="username" value={user?.username || ''} readOnly tabIndex={-1} className="sr-only" />
             <div>
