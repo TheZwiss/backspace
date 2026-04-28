@@ -531,19 +531,47 @@ describe('redeemInvite', () => {
     expect(redemptions).toHaveLength(0);
   });
 
-  it('aborts transaction (no usedCount increment, no redemption row) if insertUser throws', () => {
+  it('does not bump usedCount or write a redemption when insertUser throws synchronously', () => {
     const adminId = seedAdmin();
     const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
 
     expect(() => redeemInvite(inv.token, () => {
-      throw new Error('username collision');
-    })).toThrow('username collision');
+      throw new Error('username taken');
+    })).toThrow('username taken');
 
     // usedCount unchanged
     const row = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
     expect(row?.usedCount).toBe(0);
 
     // No redemption row
+    const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
+    expect(redemptions).toHaveLength(0);
+  });
+
+  it('rolls back insertUser writes when a later step throws (true SQLite ROLLBACK)', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
+    const newUserId = 'rollback-user-1';
+
+    // The callback writes a real users row, then throws AFTER the write.
+    // If the txn truly rolls back, the users row must not exist after the call.
+    expect(() => redeemInvite(inv.token, () => {
+      testDb.insert(schema.users).values({
+        id: newUserId,
+        username: 'will-be-rolled-back',
+        passwordHash: 'x',
+        createdAt: Date.now(),
+      }).run();
+      throw new Error('post-insert failure');
+    })).toThrow('post-insert failure');
+
+    // Proves SQLite ROLLBACK reverted the user insert AND the would-be usedCount bump
+    const u = testDb.select().from(schema.users).where(eq(schema.users.id, newUserId)).get();
+    expect(u).toBeUndefined();
+
+    const after = testDb.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, inv.id)).get();
+    expect(after?.usedCount).toBe(0);
+
     const redemptions = testDb.select().from(schema.inviteRedemptions).where(eq(schema.inviteRedemptions.inviteId, inv.id)).all();
     expect(redemptions).toHaveLength(0);
   });

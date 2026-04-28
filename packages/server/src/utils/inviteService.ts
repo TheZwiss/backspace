@@ -469,13 +469,22 @@ export function reinstateInvite(id: string, req: ReinstateInviteRequest): Reinst
 }
 
 /**
+ * Discriminant union of reasons an invite cannot be redeemed. Surfaced as a
+ * typed public field on `InviteUnavailableError` so the HTTP register route
+ * can switch on it to produce user-facing copy without parsing the message
+ * string. Mirrors the non-active subset of `InviteStatus` plus `'not found'`
+ * for the missing-token case.
+ */
+export type InviteUnavailableReason = 'not found' | 'revoked' | 'expired' | 'exhausted';
+
+/**
  * Thrown when an invite cannot be redeemed because its current state forbids
  * it (token not found, revoked, expired, exhausted). Caller (HTTP register
- * route) maps this to 403 Forbidden. The reason string is preserved in the
- * message for debugging — the user-facing copy is constructed by the route.
+ * route) maps this to 403 Forbidden. The `reason` field is the structured
+ * discriminant; the message string is preserved for debugging/logging.
  */
 export class InviteUnavailableError extends Error {
-  constructor(reason: string) {
+  constructor(public readonly reason: InviteUnavailableReason) {
     super(`Invite unavailable: ${reason}`);
     this.name = 'InviteUnavailableError';
   }
@@ -513,6 +522,9 @@ export function redeemInvite(
     if (!row) throw new InviteUnavailableError('not found');
     const status = inviteStatus(row);
     if (status !== 'active') {
+      // 'active' is excluded by the guard above, so `status` is necessarily
+      // one of 'revoked' | 'expired' | 'exhausted' — all valid
+      // InviteUnavailableReason values. TS narrows the union here.
       throw new InviteUnavailableError(status);
     }
 
