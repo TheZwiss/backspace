@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InviteLinkSummary } from '@backspace/shared';
 import { api } from '../../../api/client';
@@ -112,6 +113,205 @@ function InviteRow({ invite }: InviteRowProps) {
   );
 }
 
+const EXPIRY_PRESETS: ReadonlyArray<{ label: string; ms: number | null }> = [
+  { label: '1 hour', ms: 3_600_000 },
+  { label: '24 hours', ms: 86_400_000 },
+  { label: '7 days', ms: 7 * 86_400_000 },
+  { label: '30 days', ms: 30 * 86_400_000 },
+  { label: 'Never', ms: null },
+];
+
+interface CreateInviteModalProps {
+  onClose: () => void;
+  onCreated: (created: InviteLinkSummary) => void;
+}
+
+function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
+  const addToast = useUIStore((s) => s.addToast);
+  const [name, setName] = useState('');
+  const [unlimited, setUnlimited] = useState(true);
+  const [maxUses, setMaxUses] = useState('1');
+  const [expiryPreset, setExpiryPreset] = useState<number | null>(7 * 86_400_000);
+  const [submitting, setSubmitting] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus name input on mount
+  useEffect(() => {
+    nameInputRef.current?.focus();
+  }, []);
+
+  // Escape closes the modal (capture phase so it fires before parent handlers)
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKey, true);
+    return () => document.removeEventListener('keydown', handleKey, true);
+  }, [onClose, submitting]);
+
+  const handleCreate = async () => {
+    const trimmed = name.trim();
+    if (trimmed.length === 0 || trimmed.length > 64) {
+      addToast('Name must be 1–64 characters', 'warning');
+      return;
+    }
+    let maxUsesNum: number | null = null;
+    if (!unlimited) {
+      const parsed = Number(maxUses);
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        addToast('Max uses must be a positive integer', 'warning');
+        return;
+      }
+      maxUsesNum = parsed;
+    }
+    const expiresAt = expiryPreset === null ? null : Date.now() + expiryPreset;
+
+    setSubmitting(true);
+    try {
+      const created = await api.invites.create({ name: trimmed, maxUses: maxUsesNum, expiresAt });
+      try {
+        await navigator.clipboard.writeText(created.url);
+        addToast('Link created. Copied to clipboard.', 'success', 2000);
+      } catch {
+        addToast('Link created. Copy manually from the row.', 'success', 2000);
+      }
+      onCreated(created);
+      onClose();
+    } catch (err) {
+      addToast(`Failed to create invite: ${(err as Error).message}`, 'warning');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
+      onClick={!submitting ? onClose : undefined}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50" />
+
+      {/* Modal panel — stop propagation so backdrop click doesn't fire inside */}
+      <div
+        className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCreate();
+          }}
+          className="p-6 space-y-5"
+        >
+          <h3 className="text-lg font-semibold text-txt-primary">Create invite link</h3>
+
+          {/* Name */}
+          <div>
+            <label className="block text-sm text-txt-secondary mb-1.5">Name</label>
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={64}
+              placeholder="e.g. Friends batch 1"
+              className="input-standard w-full"
+              disabled={submitting}
+            />
+          </div>
+
+          {/* Max uses */}
+          <div>
+            <label className="block text-sm text-txt-secondary mb-1.5">Max uses</label>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="maxUsesMode"
+                  checked={unlimited}
+                  onChange={() => setUnlimited(true)}
+                  disabled={submitting}
+                  className="accent-accent-primary"
+                />
+                <span className="text-txt-primary">Unlimited</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="maxUsesMode"
+                  checked={!unlimited}
+                  onChange={() => setUnlimited(false)}
+                  disabled={submitting}
+                  className="accent-accent-primary"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  value={maxUses}
+                  onChange={(e) => {
+                    setMaxUses(e.target.value);
+                    setUnlimited(false);
+                  }}
+                  onClick={() => setUnlimited(false)}
+                  disabled={submitting}
+                  className="input-standard w-16 text-center disabled:opacity-50"
+                />
+                <span className="text-txt-secondary">uses</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Expiry */}
+          <div>
+            <label className="block text-sm text-txt-secondary mb-1.5">Expires</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {EXPIRY_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setExpiryPreset(p.ms)}
+                  disabled={submitting}
+                  className={`px-2.5 py-1 text-xs rounded transition-colors disabled:opacity-50 ${
+                    expiryPreset === p.ms
+                      ? 'bg-accent-primary text-white'
+                      : 'bg-surface-input text-txt-tertiary hover:text-txt-secondary'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {submitting ? 'Creating…' : 'Create link'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function RegistrationPanel() {
   const instanceSettings = useSettingsStore((s) => s.instanceSettings);
   const updateInstanceSettings = useSettingsStore((s) => s.updateInstanceSettings);
@@ -120,6 +320,7 @@ export function RegistrationPanel() {
   const [draft, setDraft] = useState<RegistrationDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
 
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   const [invites, setInvites] = useState<InviteLinkSummary[]>([]);
@@ -201,6 +402,7 @@ export function RegistrationPanel() {
   };
 
   return (
+    <>
     <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
       <h2 className="text-lg font-semibold text-txt-primary">Registration</h2>
       <div className="text-xs text-txt-tertiary">
@@ -254,6 +456,7 @@ export function RegistrationPanel() {
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Invite Links</div>
           <button
             type="button"
+            onClick={() => setShowCreate(true)}
             className="px-3 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
           >
             + Create link
@@ -319,5 +522,13 @@ export function RegistrationPanel() {
         </div>
       )}
     </form>
+
+    {showCreate && (
+      <CreateInviteModal
+        onClose={() => setShowCreate(false)}
+        onCreated={() => fetchInvites('active')}
+      />
+    )}
+    </>
   );
 }
