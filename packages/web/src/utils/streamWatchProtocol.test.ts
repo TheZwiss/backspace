@@ -9,8 +9,9 @@ describe('streamWatchProtocol', () => {
   it('round-trips an encoded payload', () => {
     const payload = { type: 'stream_watch' as const, target: 'user-1', watching: true };
     const encoded = encodeStreamWatch(payload);
-    expect(encoded).toBeDefined();
-    expect(encoded.length).toBeGreaterThan(0);
+    // Verify contract: TextEncoder.encode always returns Uint8Array with buffer + byteLength
+    expect(encoded.buffer).toBeDefined();
+    expect(encoded.byteLength).toBeGreaterThan(0);
     const parsed = parseStreamWatch(encoded);
     expect(parsed).toEqual(payload);
   });
