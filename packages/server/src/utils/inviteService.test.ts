@@ -135,23 +135,23 @@ describe('createInvite', () => {
 
   it('rejects empty name', () => {
     const adminId = seedAdmin();
-    expect(() => createInvite({ name: '', maxUses: null, expiresAt: null }, adminId)).toThrow();
+    expect(() => createInvite({ name: '', maxUses: null, expiresAt: null }, adminId)).toThrow(InviteValidationError);
   });
 
   it('rejects name longer than 64 chars', () => {
     const adminId = seedAdmin();
-    expect(() => createInvite({ name: 'x'.repeat(65), maxUses: null, expiresAt: null }, adminId)).toThrow();
+    expect(() => createInvite({ name: 'x'.repeat(65), maxUses: null, expiresAt: null }, adminId)).toThrow(InviteValidationError);
   });
 
   it('rejects non-positive maxUses', () => {
     const adminId = seedAdmin();
-    expect(() => createInvite({ name: 'a', maxUses: 0, expiresAt: null }, adminId)).toThrow();
-    expect(() => createInvite({ name: 'a', maxUses: -1, expiresAt: null }, adminId)).toThrow();
+    expect(() => createInvite({ name: 'a', maxUses: 0, expiresAt: null }, adminId)).toThrow(InviteValidationError);
+    expect(() => createInvite({ name: 'a', maxUses: -1, expiresAt: null }, adminId)).toThrow(InviteValidationError);
   });
 
   it('rejects past expiresAt', () => {
     const adminId = seedAdmin();
-    expect(() => createInvite({ name: 'a', maxUses: null, expiresAt: Date.now() - 1000 }, adminId)).toThrow();
+    expect(() => createInvite({ name: 'a', maxUses: null, expiresAt: Date.now() - 1000 }, adminId)).toThrow(InviteValidationError);
   });
 });
 

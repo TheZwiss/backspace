@@ -154,10 +154,16 @@ function rowToSummary(
  * Resolve the username to display for an invite's creator. Returns the live
  * username, `'Deleted User'` for tombstoned accounts (spec §3.1, §4.1), or
  * `null` if the FK is unresolvable (defensive — should not happen in practice).
+ *
+ * Accepts an optional Drizzle handle so callers inside a `db.transaction`
+ * body can pass the `tx` proxy and keep the read on the same logical txn as
+ * surrounding writes. Defaults to the outer `getDb()` for non-txn callers.
  */
-function resolveCreatorUsername(creatorId: string): string | null {
-  const db = getDb();
-  const u = db.select({ username: schema.users.username, isDeleted: schema.users.isDeleted })
+function resolveCreatorUsername(
+  creatorId: string,
+  dbHandle: ReturnType<typeof getDb> = getDb(),
+): string | null {
+  const u = dbHandle.select({ username: schema.users.username, isDeleted: schema.users.isDeleted })
     .from(schema.users)
     .where(eq(schema.users.id, creatorId))
     .get();
@@ -342,13 +348,13 @@ export function patchInvite(id: string, req: UpdateInviteRequest): InviteLinkSum
 
     if (Object.keys(updates).length === 0) {
       // No-op: just return current summary
-      return rowToSummary(row, resolveCreatorUsername(row.createdBy));
+      return rowToSummary(row, resolveCreatorUsername(row.createdBy, tx));
     }
 
     tx.update(schema.inviteLinks).set(updates).where(eq(schema.inviteLinks.id, id)).run();
     const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
     if (!updated) throw new Error('Failed to read updated invite');
-    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy));
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx));
   });
 }
 
@@ -372,6 +378,6 @@ export function revokeInvite(id: string): InviteLinkSummary {
     tx.update(schema.inviteLinks).set({ revokedAt: Date.now() }).where(eq(schema.inviteLinks.id, id)).run();
     const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
     if (!updated) throw new Error('Failed to read updated invite');
-    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy));
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx));
   });
 }
