@@ -3,7 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { config } from '../config.js';
-import type { InviteLinkSummary, CreateInviteRequest, InviteRedemption } from '@backspace/shared';
+import type { InviteLinkSummary, CreateInviteRequest, InviteRedemption, UpdateInviteRequest } from '@backspace/shared';
 
 /**
  * Derived status of an invite link. Mirrors the `InviteStatus` union exported
@@ -112,6 +112,19 @@ function validateExpiresAt(expiresAt: number | null, allowPast: boolean): number
 }
 
 /**
+ * Folds a (username, isDeleted) pair into the display string used by
+ * InviteLinkSummary.createdByUsername / InviteRedemption.currentUsername.
+ *
+ * - null username → null (FK unresolvable; should be rare, defensive)
+ * - isDeleted=1   → 'Deleted User' (matches sanitizeUser convention)
+ * - else          → username
+ */
+function foldUsername(username: string | null, isDeleted: number | null): string | null {
+  if (username === null) return null;
+  return isDeleted === 1 ? 'Deleted User' : username;
+}
+
+/**
  * Project an `invite_links` row plus the resolved creator-username into the
  * shared `InviteLinkSummary` shape. Centralized so list/create/patch/reinstate
  * all return identically-shaped rows. Status is derived (never stored) per
@@ -148,9 +161,7 @@ function resolveCreatorUsername(creatorId: string): string | null {
     .from(schema.users)
     .where(eq(schema.users.id, creatorId))
     .get();
-  if (!u) return null;
-  if (u.isDeleted === 1) return 'Deleted User';
-  return u.username;
+  return foldUsername(u?.username ?? null, u?.isDeleted ?? null);
 }
 
 /**
@@ -221,11 +232,7 @@ export function listInvites(filter: 'active' | 'archived'): InviteLinkSummary[] 
     .all();
 
   const summaries = rows.map(({ invite, creatorUsername, creatorIsDeleted }) => {
-    const username = creatorUsername === null
-      ? null
-      : creatorIsDeleted === 1
-        ? 'Deleted User'
-        : creatorUsername;
+    const username = foldUsername(creatorUsername, creatorIsDeleted);
     return rowToSummary(invite, username);
   });
 
@@ -263,12 +270,108 @@ export function listRedemptions(inviteId: string): InviteRedemption[] {
     id: redemption.id,
     userId: redemption.userId,
     registrantUsername: redemption.registrantUsername,
-    currentUsername: redemption.userId === null
-      ? null
-      : currentIsDeleted === 1
-        ? 'Deleted User'
-        : currentUsername,
+    currentUsername: redemption.userId === null ? null : foldUsername(currentUsername, currentIsDeleted),
     isDeleted: currentIsDeleted === 1,
     redeemedAt: redemption.redeemedAt,
   }));
+}
+
+/**
+ * Thrown when a mutation targets an invite id that does not exist. Caller
+ * (HTTP route) maps this to 404 Not Found.
+ */
+export class InviteNotFoundError extends Error {
+  constructor() {
+    super('Invite not found');
+    this.name = 'InviteNotFoundError';
+  }
+}
+
+/**
+ * Thrown when a mutation is rejected because the invite's current state
+ * forbids it (e.g. patching a revoked invite, double-revoking). Caller
+ * (HTTP route) maps this to 409 Conflict; the message is the user-facing
+ * copy that surfaces in the toast.
+ */
+export class InviteStateConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InviteStateConflictError';
+  }
+}
+
+/**
+ * Patch an existing invite's mutable fields. Wrapped in a SQLite transaction
+ * with an in-txn re-fetch so concurrent admin edits are serialized: the
+ * second writer sees the first writer's committed state and either applies
+ * its own delta on top or rejects (e.g. observed-revoked).
+ *
+ * Validation rules per spec §3.1:
+ *   - 404 if id not found.
+ *   - 409 if invite is currently revoked (must reinstate first to modify).
+ *   - 400 if maxUses would drop below current usedCount (would retroactively
+ *     exhaust — confusing; admin should use revoke instead).
+ *   - expiresAt may be moved into the past (effective soft-shut → status
+ *     flips to 'expired' on next read).
+ *
+ * An empty patch body is a no-op that returns the current summary unchanged.
+ */
+export function patchInvite(id: string, req: UpdateInviteRequest): InviteLinkSummary {
+  const db = getDb();
+  return db.transaction((tx) => {
+    const row = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!row) throw new InviteNotFoundError();
+    if (row.revokedAt !== null) {
+      throw new InviteStateConflictError('Invite is revoked. Reinstate first to modify.');
+    }
+
+    const updates: Partial<typeof schema.inviteLinks.$inferInsert> = {};
+    if (req.name !== undefined) updates.name = validateName(req.name);
+    if (req.maxUses !== undefined) {
+      const v = validateMaxUses(req.maxUses);
+      if (v !== null && v < row.usedCount) {
+        throw new InviteValidationError(
+          `maxUses (${v}) cannot be less than current usedCount (${row.usedCount})`,
+        );
+      }
+      updates.maxUses = v;
+    }
+    if (req.expiresAt !== undefined) {
+      updates.expiresAt = validateExpiresAt(req.expiresAt, true);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      // No-op: just return current summary
+      return rowToSummary(row, resolveCreatorUsername(row.createdBy));
+    }
+
+    tx.update(schema.inviteLinks).set(updates).where(eq(schema.inviteLinks.id, id)).run();
+    const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!updated) throw new Error('Failed to read updated invite');
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy));
+  });
+}
+
+/**
+ * Revoke an invite. Wrapped in a SQLite transaction with an in-txn re-fetch
+ * so concurrent revokes are serialized: the first wins, the second sees
+ * `revokedAt !== null` and throws `InviteStateConflictError` (mapped to 409
+ * by the route — explicit rejection rather than silent no-op, per spec §3.1).
+ *
+ * Token is preserved on revoke; reinstate-from-revoked rotates the token as
+ * a security boundary (handled in `reinstateInvite`, not here).
+ */
+export function revokeInvite(id: string): InviteLinkSummary {
+  const db = getDb();
+  return db.transaction((tx) => {
+    const row = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!row) throw new InviteNotFoundError();
+    if (row.revokedAt !== null) {
+      throw new InviteStateConflictError('Invite is already revoked');
+    }
+    tx.update(schema.inviteLinks).set({ revokedAt: Date.now() }).where(eq(schema.inviteLinks.id, id)).run();
+    const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
+    if (!updated) throw new Error('Failed to read updated invite');
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy));
+  });
 }

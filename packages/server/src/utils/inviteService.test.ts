@@ -21,7 +21,8 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-import { inviteStatus, generateInviteToken, createInvite, getInviteByToken, listInvites, listRedemptions } from './inviteService.js';
+import { inviteStatus, generateInviteToken, createInvite, getInviteByToken, listInvites, listRedemptions, InviteValidationError } from './inviteService.js';
+import { patchInvite, revokeInvite, InviteStateConflictError, InviteNotFoundError } from './inviteService.js';
 import { eq } from 'drizzle-orm';
 
 function applyMigrations(db: Database.Database): void {
@@ -293,5 +294,83 @@ describe('listRedemptions', () => {
     expect(list[0]?.userId).toBeNull();
     expect(list[0]?.currentUsername).toBeNull();
     expect(list[0]?.isDeleted).toBe(false);
+  });
+});
+
+describe('patchInvite', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('updates name', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'old', maxUses: null, expiresAt: null }, adminId);
+    const updated = patchInvite(inv.id, { name: 'new' });
+    expect(updated.name).toBe('new');
+  });
+
+  it('updates maxUses', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 5, expiresAt: null }, adminId);
+    const updated = patchInvite(inv.id, { maxUses: 20 });
+    expect(updated.maxUses).toBe(20);
+  });
+
+  it('rejects maxUses below current usedCount', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: 10, expiresAt: null }, adminId);
+    testDb.update(schema.inviteLinks).set({ usedCount: 7 }).where(eq(schema.inviteLinks.id, inv.id)).run();
+    expect(() => patchInvite(inv.id, { maxUses: 5 })).toThrow(InviteValidationError);
+  });
+
+  it('throws InviteNotFoundError when id not found', () => {
+    expect(() => patchInvite('nonexistent', { name: 'x' })).toThrow(InviteNotFoundError);
+  });
+
+  it('throws InviteStateConflictError when invite is revoked', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    testDb.update(schema.inviteLinks).set({ revokedAt: Date.now() }).where(eq(schema.inviteLinks.id, inv.id)).run();
+    expect(() => patchInvite(inv.id, { name: 'x' })).toThrow(InviteStateConflictError);
+  });
+
+  it('allows expiresAt to be moved to past (effective soft-shut)', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: Date.now() + 100_000 }, adminId);
+    const past = Date.now() - 1000;
+    const updated = patchInvite(inv.id, { expiresAt: past });
+    expect(updated.expiresAt).toBe(past);
+    expect(updated.status).toBe('expired');
+  });
+});
+
+describe('revokeInvite', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('sets revokedAt and returns revoked summary', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    const revoked = revokeInvite(inv.id);
+    expect(revoked.status).toBe('revoked');
+    expect(revoked.revokedAt).toBeGreaterThan(0);
+  });
+
+  it('throws InviteStateConflictError on already-revoked', () => {
+    const adminId = seedAdmin();
+    const inv = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    revokeInvite(inv.id);
+    expect(() => revokeInvite(inv.id)).toThrow(InviteStateConflictError);
+  });
+
+  it('throws InviteNotFoundError on missing id', () => {
+    expect(() => revokeInvite('nonexistent')).toThrow(InviteNotFoundError);
   });
 });
