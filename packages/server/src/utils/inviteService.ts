@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { config } from '../config.js';
-import type { InviteLinkSummary, CreateInviteRequest } from '@backspace/shared';
+import type { InviteLinkSummary, CreateInviteRequest, InviteRedemption } from '@backspace/shared';
 
 /**
  * Derived status of an invite link. Mirrors the `InviteStatus` union exported
@@ -196,4 +196,79 @@ export function getInviteByToken(token: string): typeof schema.inviteLinks.$infe
   const db = getDb();
   const row = db.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.token, token)).get();
   return row ?? null;
+}
+
+/**
+ * List invites filtered by lifecycle state. `'active'` returns only rows whose
+ * derived status is `active`; `'archived'` returns rows in `expired`,
+ * `exhausted`, or `revoked`. The status is derived in TS (single source of
+ * truth: `inviteStatus()`), so we fetch all rows then filter — see spec §6.3
+ * (no per-instance invite policy / janitor) for why this is acceptable at v1
+ * scale; switch to a SQL-side filter only if instances accumulate thousands of
+ * invites. The LEFT JOIN against `users` resolves `createdByUsername` in a
+ * single query, avoiding the N+1 the spec calls out (§3.1).
+ */
+export function listInvites(filter: 'active' | 'archived'): InviteLinkSummary[] {
+  const db = getDb();
+  const rows = db.select({
+    invite: schema.inviteLinks,
+    creatorUsername: schema.users.username,
+    creatorIsDeleted: schema.users.isDeleted,
+  })
+    .from(schema.inviteLinks)
+    .leftJoin(schema.users, eq(schema.inviteLinks.createdBy, schema.users.id))
+    .orderBy(desc(schema.inviteLinks.createdAt))
+    .all();
+
+  const summaries = rows.map(({ invite, creatorUsername, creatorIsDeleted }) => {
+    const username = creatorUsername === null
+      ? null
+      : creatorIsDeleted === 1
+        ? 'Deleted User'
+        : creatorUsername;
+    return rowToSummary(invite, username);
+  });
+
+  if (filter === 'active') return summaries.filter(s => s.status === 'active');
+  return summaries.filter(s => s.status !== 'active');
+}
+
+/**
+ * List redemptions for one invite, newest first. The LEFT JOIN against `users`
+ * via `userId` surfaces the live username so the UI can render
+ * "registered as alice (now Anastasia)" — the snapshot in `registrantUsername`
+ * stays forensically stable while `currentUsername` reflects the live state.
+ *
+ * Three null-handling branches per spec §3.1:
+ *   - live user           → `currentUsername = users.username`, `isDeleted = false`
+ *   - tombstoned user     → `currentUsername = 'Deleted User'`,  `isDeleted = true`
+ *   - hard-deleted user   → `userId = null`, `currentUsername = null`,
+ *                           `isDeleted = false` (the row is genuinely gone, not
+ *                           soft-deleted; "Deleted User" would be misleading)
+ */
+export function listRedemptions(inviteId: string): InviteRedemption[] {
+  const db = getDb();
+  const rows = db.select({
+    redemption: schema.inviteRedemptions,
+    currentUsername: schema.users.username,
+    currentIsDeleted: schema.users.isDeleted,
+  })
+    .from(schema.inviteRedemptions)
+    .leftJoin(schema.users, eq(schema.inviteRedemptions.userId, schema.users.id))
+    .where(eq(schema.inviteRedemptions.inviteId, inviteId))
+    .orderBy(desc(schema.inviteRedemptions.redeemedAt))
+    .all();
+
+  return rows.map(({ redemption, currentUsername, currentIsDeleted }) => ({
+    id: redemption.id,
+    userId: redemption.userId,
+    registrantUsername: redemption.registrantUsername,
+    currentUsername: redemption.userId === null
+      ? null
+      : currentIsDeleted === 1
+        ? 'Deleted User'
+        : currentUsername,
+    isDeleted: currentIsDeleted === 1,
+    redeemedAt: redemption.redeemedAt,
+  }));
 }

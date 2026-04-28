@@ -21,7 +21,8 @@ vi.mock('../db/index.js', () => ({
   schema,
 }));
 
-import { inviteStatus, generateInviteToken, createInvite, getInviteByToken } from './inviteService.js';
+import { inviteStatus, generateInviteToken, createInvite, getInviteByToken, listInvites, listRedemptions } from './inviteService.js';
+import { eq } from 'drizzle-orm';
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
@@ -168,7 +169,129 @@ describe('getInviteByToken', () => {
     expect(found?.id).toBe(created.id);
   });
 
-  it('returns null when token not found', () => {
-    expect(getInviteByToken('nonexistent_token_aaaaaa')).toBeNull();
+  it('returns null when token has invalid format', () => {
+    expect(getInviteByToken('tooshort')).toBeNull();
+    expect(getInviteByToken('nonexistent_token_aaaaaa')).toBeNull(); // 24 chars
+  });
+
+  it('returns null when token is well-formed but not in DB', () => {
+    expect(getInviteByToken('aaaaaaaaaaaaaaaaaaaaaa')).toBeNull(); // 22 chars, valid format
+  });
+});
+
+describe('listInvites', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('returns active invites only with status=active', () => {
+    const adminId = seedAdmin();
+    const a = createInvite({ name: 'active1', maxUses: null, expiresAt: null }, adminId);
+    const b = createInvite({ name: 'active2', maxUses: 1, expiresAt: null }, adminId);
+    // Manually exhaust b
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, b.id)).run();
+
+    const list = listInvites('active');
+    expect(list.map(i => i.id)).toEqual([a.id]);
+  });
+
+  it('returns archived invites only with status=archived', () => {
+    const adminId = seedAdmin();
+    createInvite({ name: 'active', maxUses: null, expiresAt: null }, adminId);
+    const exhausted = createInvite({ name: 'exhausted', maxUses: 1, expiresAt: null }, adminId);
+    testDb.update(schema.inviteLinks).set({ usedCount: 1 }).where(eq(schema.inviteLinks.id, exhausted.id)).run();
+    const revoked = createInvite({ name: 'revoked', maxUses: null, expiresAt: null }, adminId);
+    testDb.update(schema.inviteLinks).set({ revokedAt: Date.now() }).where(eq(schema.inviteLinks.id, revoked.id)).run();
+
+    const list = listInvites('archived');
+    expect(list.map(i => i.id).sort()).toEqual([exhausted.id, revoked.id].sort());
+    expect(list.find(i => i.id === exhausted.id)?.status).toBe('exhausted');
+    expect(list.find(i => i.id === revoked.id)?.status).toBe('revoked');
+  });
+
+  it('JOIN surfaces createdByUsername; tombstoned creator -> "Deleted User"', () => {
+    const adminId = seedAdmin();
+    createInvite({ name: 'i1', maxUses: null, expiresAt: null }, adminId);
+    // Tombstone admin
+    testDb.update(schema.users).set({ isDeleted: 1, username: '!deleted:' + adminId }).where(eq(schema.users.id, adminId)).run();
+
+    const list = listInvites('active');
+    expect(list[0]?.createdByUsername).toBe('Deleted User');
+  });
+
+  it('sorts by createdAt DESC', async () => {
+    const adminId = seedAdmin();
+    const a = createInvite({ name: 'first', maxUses: null, expiresAt: null }, adminId);
+    await new Promise(r => setTimeout(r, 5));
+    const b = createInvite({ name: 'second', maxUses: null, expiresAt: null }, adminId);
+    const list = listInvites('active');
+    expect(list.map(i => i.id)).toEqual([b.id, a.id]);
+  });
+});
+
+describe('listRedemptions', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('returns redemption rows with currentUsername joined', () => {
+    const adminId = seedAdmin();
+    const invite = createInvite({ name: 'i', maxUses: null, expiresAt: null }, adminId);
+    const userId = 'user-1';
+    testDb.insert(schema.users).values({ id: userId, username: 'alice', passwordHash: 'x', createdAt: Date.now() }).run();
+    testDb.insert(schema.inviteRedemptions).values({
+      id: 'red-1',
+      inviteId: invite.id,
+      userId,
+      registrantUsername: 'alice',
+      redeemedAt: Date.now(),
+    }).run();
+
+    const list = listRedemptions(invite.id);
+    expect(list).toHaveLength(1);
+    expect(list[0]?.registrantUsername).toBe('alice');
+    expect(list[0]?.currentUsername).toBe('alice');
+    expect(list[0]?.isDeleted).toBe(false);
+  });
+
+  it('marks tombstoned users with currentUsername="Deleted User" and isDeleted=true', () => {
+    const adminId = seedAdmin();
+    const invite = createInvite({ name: 'i', maxUses: null, expiresAt: null }, adminId);
+    const userId = 'user-2';
+    testDb.insert(schema.users).values({ id: userId, username: 'bob', passwordHash: 'x', isDeleted: 1, createdAt: Date.now() }).run();
+    testDb.insert(schema.inviteRedemptions).values({
+      id: 'red-2',
+      inviteId: invite.id,
+      userId,
+      registrantUsername: 'bob',
+      redeemedAt: Date.now(),
+    }).run();
+
+    const list = listRedemptions(invite.id);
+    expect(list[0]?.currentUsername).toBe('Deleted User');
+    expect(list[0]?.isDeleted).toBe(true);
+  });
+
+  it('handles null userId (hard-deleted user)', () => {
+    const adminId = seedAdmin();
+    const invite = createInvite({ name: 'i', maxUses: null, expiresAt: null }, adminId);
+    testDb.insert(schema.inviteRedemptions).values({
+      id: 'red-3',
+      inviteId: invite.id,
+      userId: null,
+      registrantUsername: 'ghost',
+      redeemedAt: Date.now(),
+    }).run();
+
+    const list = listRedemptions(invite.id);
+    expect(list[0]?.userId).toBeNull();
+    expect(list[0]?.currentUsername).toBeNull();
+    expect(list[0]?.isDeleted).toBe(false);
   });
 });
