@@ -160,10 +160,10 @@ describe('GET /api/auth/check-invite', () => {
       url: `/api/auth/check-invite?token=${token}`,
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.valid).toBe(false);
-    expect(body.reason).toBe('invalid');
-    expect(body.name).toBeUndefined();
+    // toEqual locks the byte-identical-response contract: the enumeration
+    // shield depends on revoked/unknown/malformed all returning the SAME
+    // body, not just bodies that happen to satisfy individual assertions.
+    expect(res.json()).toEqual({ valid: false, reason: 'invalid' });
   });
 
   it("returns valid: false, reason: 'invalid' for unknown token", async () => {
@@ -174,10 +174,7 @@ describe('GET /api/auth/check-invite', () => {
       url: `/api/auth/check-invite?token=${token}`,
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.valid).toBe(false);
-    expect(body.reason).toBe('invalid');
-    expect(body.name).toBeUndefined();
+    expect(res.json()).toEqual({ valid: false, reason: 'invalid' });
   });
 
   it("returns valid: false, reason: 'invalid' for malformed token", async () => {
@@ -186,27 +183,23 @@ describe('GET /api/auth/check-invite', () => {
       url: '/api/auth/check-invite?token=tooshort',
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.valid).toBe(false);
-    expect(body.reason).toBe('invalid');
-    expect(body.name).toBeUndefined();
+    expect(res.json()).toEqual({ valid: false, reason: 'invalid' });
   });
 
-  it('does not include name field on invalid responses', async () => {
-    // Sweep across all invalid permutations to assert the absence-of-leak
-    // contract once for the whole endpoint, not just per-status.
+  it('returns byte-identical bodies across all invalid permutations', async () => {
+    // The enumeration shield depends on revoked/unknown/malformed/missing
+    // all returning the SAME body. Object equality (toEqual) catches any
+    // future code path that adds an extra field on one branch but not others.
     const cases = [
-      { url: '/api/auth/check-invite' },
-      { url: '/api/auth/check-invite?token=' },
-      { url: '/api/auth/check-invite?token=tooshort' },
-      { url: `/api/auth/check-invite?token=${'Z'.repeat(22)}` },
+      '/api/auth/check-invite',
+      '/api/auth/check-invite?token=',
+      '/api/auth/check-invite?token=tooshort',
+      `/api/auth/check-invite?token=${'Z'.repeat(22)}`,
     ];
-    for (const c of cases) {
-      const res = await app.inject({ method: 'GET', url: c.url });
+    for (const url of cases) {
+      const res = await app.inject({ method: 'GET', url });
       expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.valid).toBe(false);
-      expect(body).not.toHaveProperty('name');
+      expect(res.json()).toEqual({ valid: false, reason: 'invalid' });
     }
   });
 });
