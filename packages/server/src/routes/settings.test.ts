@@ -145,14 +145,27 @@ describe('PATCH /api/settings/instance — federatedRegistrationOpen', () => {
   });
 
   it('leaves federatedRegistrationOpen unchanged when omitted from payload', async () => {
+    // First toggle the DB column to false. If the field's value comes from the
+    // schema default (1) instead of the actual DB row, this test would still
+    // pass for the wrong reason. Toggling to non-default then asserting the
+    // non-default survives a partial PATCH proves real preservation.
+    testDb.update(schema.instanceSettings)
+      .set({ federatedRegistrationOpen: 0 })
+      .where(eq(schema.instanceSettings.id, 1))
+      .run();
+
     const res = await app.inject({
       method: 'PATCH',
       url: '/api/settings/instance',
       payload: { instanceName: 'NewName' },
     });
     expect(res.statusCode).toBe(200);
-    // Schema default is 1 → response should still report true
-    expect(res.json().federatedRegistrationOpen).toBe(true);
+    // Field still false (the partial PATCH did not touch it)
+    expect(res.json().federatedRegistrationOpen).toBe(false);
     expect(res.json().instanceName).toBe('NewName');
+
+    // Verify against the DB directly to rule out a response-shape-only fix
+    const row = testDb.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
+    expect(row?.federatedRegistrationOpen).toBe(0);
   });
 });
