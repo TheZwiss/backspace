@@ -1,4 +1,5 @@
 import type { AvatarColor } from '@backspace/shared';
+import { validateExternalUrl } from './ssrf.js';
 
 export interface SpaceInviteSnapshot {
   spaceId: string;
@@ -24,6 +25,11 @@ export async function fetchSpaceInviteSnapshot(
   timeoutMs = 5000,
 ): Promise<SpaceInviteSnapshot | null> {
   const url = `${spaceInstanceOrigin}/api/spaces/invite/${encodeURIComponent(inviteCode)}/preview`;
+  try {
+    await validateExternalUrl(url);
+  } catch {
+    return null;
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
