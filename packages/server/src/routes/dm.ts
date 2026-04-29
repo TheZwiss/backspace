@@ -1757,7 +1757,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     const payload: SpaceInviteSystemPayload = {
       event: 'space_invite',
       spaceId: body.spaceId,
-      spaceInstanceOrigin: body.spaceInstanceOrigin,
+      spaceInstanceOrigin: spaceOrigin,
       inviteCode: body.inviteCode,
       snapshot: {
         spaceName: snapshot.spaceName,

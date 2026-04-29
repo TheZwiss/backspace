@@ -248,6 +248,11 @@ describe('POST /api/dm/space-invite', () => {
     expect(parsed.snapshot.avatarColor).toBe('mint');
     expect(parsed.snapshot.description).toBe('desc');
     expect(parsed.snapshot.instanceName).toBe('Backspace');
+
+    // Canonicalization: empty origin (local) must be stored as the absolute home
+    // origin so relayed messages carry the correct value to remote recipients.
+    expect(parsed.spaceInstanceOrigin).toBe('https://local.test');
+    expect(parsed.spaceInstanceOrigin).not.toBe('');
   });
 
   it('reuses an existing 1-on-1 DM rather than creating a new one', async () => {
@@ -385,5 +390,36 @@ describe('POST /api/dm/space-invite', () => {
     expect(res.statusCode).toBe(200);
     expect(fetchSpaceInviteSnapshot).toHaveBeenCalledWith('https://remote.example', 'abc');
     expect(getLocalInviteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('preserves explicit remote spaceInstanceOrigin in stored payload', async () => {
+    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      spaceId: 'S1',
+      spaceName: 'Remote',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 5,
+      instanceName: 'OtherHost',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/space-invite',
+      payload: {
+        target: { userId: 'bob' },
+        spaceId: 'S1',
+        spaceInstanceOrigin: 'https://other.example',
+        inviteCode: 'abc',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { messageId: string };
+    const stored = testDb.select()
+      .from(schema.dmMessages)
+      .where(eq(schema.dmMessages.id, body.messageId))
+      .get();
+    const parsed = JSON.parse(stored!.content!);
+    expect(parsed.spaceInstanceOrigin).toBe('https://other.example');
   });
 });
