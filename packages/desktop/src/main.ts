@@ -24,6 +24,8 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let pendingDeepLink: string | null = null;
 
+const knownInstanceOrigins = new Set<string>();
+
 // ─── Instance URL Persistence ────────────────────────────────────────────────
 
 function getInstanceUrlPath(): string {
@@ -388,8 +390,20 @@ function createWindow(): void {
     mainWindow?.webContents.send('window-focus-changed', false);
   });
 
-  // Open external links in default browser
+  // Intercept own-instance /join/* URLs so they open in-app instead of the
+  // system browser. Other URLs continue to open externally.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const u = new URL(url);
+      if (
+        (u.protocol === 'http:' || u.protocol === 'https:') &&
+        knownInstanceOrigins.has(u.origin) &&
+        u.pathname.startsWith('/join/')
+      ) {
+        mainWindow?.webContents.send('open-internal-route', u.pathname + u.search);
+        return { action: 'deny' };
+      }
+    } catch { /* malformed URL — fall through to external */ }
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
@@ -493,6 +507,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.on('close-window', () => {
     mainWindow?.close();
+  });
+
+  // Connected-origins sync — renderer pushes the current set of instance origins
+  // so setWindowOpenHandler can route /join/* URLs in-app synchronously.
+  ipcMain.on('set-connected-origins', (_evt, origins: unknown) => {
+    if (!Array.isArray(origins)) return;
+    knownInstanceOrigins.clear();
+    for (const o of origins) {
+      if (typeof o === 'string' && o.length > 0) knownInstanceOrigins.add(o);
+    }
   });
 
   // Instance URL management
