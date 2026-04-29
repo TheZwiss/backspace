@@ -347,6 +347,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   joinByCode: async (inviteCode: string, origin?: string) => {
+    // Normalize: an explicit home origin is equivalent to undefined (local).
+    // Mirrors inviteParser's same normalization at the URL boundary.
+    if (origin && typeof window !== 'undefined' && origin === window.location.origin) {
+      origin = undefined;
+    }
     if (origin) {
       // Remote instance — verify connectivity via dynamic import (avoids circular dep)
       const { useInstanceStore } = await import('./instanceStore');
