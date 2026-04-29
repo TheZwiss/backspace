@@ -439,7 +439,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .groupBy(schema.dmMessages.dmChannelId)
       .all();
 
-    const lastMessageMap = new Map<string, { id: string; dmChannelId: string; userId: string; content: string | null; createdAt: number }>();
+    const lastMessageMap = new Map<string, { id: string; dmChannelId: string; userId: string; content: string | null; createdAt: number; type: 'user' | 'system' }>();
     if (maxTimestamps.length > 0) {
       // Build conditions to fetch the actual message rows matching max timestamps
       const conditions = maxTimestamps.map(t =>
@@ -455,6 +455,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           lastMessageMap.set(m.dmChannelId, {
             id: m.id, dmChannelId: m.dmChannelId, userId: m.userId,
             content: m.content, createdAt: m.createdAt,
+            type: m.type === 'system' ? 'system' : 'user',
           });
         }
       }
@@ -502,6 +503,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           userId: lastMsg.userId,
           content: lastMsg.content,
           createdAt: lastMsg.createdAt,
+          type: lastMsg.type,
           attachments: lastMsgAttachmentMap.get(lastMsg.id) ?? [],
         } : null,
       });
@@ -621,6 +623,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             userId: lastMsg.userId,
             content: lastMsg.content,
             createdAt: lastMsg.createdAt,
+            type: lastMsg.type === 'system' ? 'system' : 'user',
           } : null,
         };
 
@@ -1145,6 +1148,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
         userId: lastMsg.userId,
         content: lastMsg.content,
         createdAt: lastMsg.createdAt,
+        type: lastMsg.type === 'system' ? 'system' : 'user',
       } : null,
     };
 

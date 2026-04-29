@@ -1328,6 +1328,7 @@ function buildReadyPayload(userId: string): {
           userId: last.userId,
           content: last.content,
           createdAt: last.createdAt,
+          type: last.type === 'system' ? 'system' : 'user',
           attachments: dmLastMsgAttachmentMap.get(last.id) ?? [],
         } : null,
       });

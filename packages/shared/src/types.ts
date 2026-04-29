@@ -294,6 +294,12 @@ export interface DmLastMessagePreview {
   userId: string;
   content: string | null;
   createdAt: number;
+  /**
+   * 'system' for membership/lifecycle JSON payloads (member_added, member_removed,
+   * owner_changed, space_invite). 'user' (or omitted) for normal user-authored
+   * messages. The sidebar renderer relies on this to avoid showing raw JSON.
+   */
+  type?: 'user' | 'system';
   attachments?: Array<{ type: string; filename: string }>;
 }
 

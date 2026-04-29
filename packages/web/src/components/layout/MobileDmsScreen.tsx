@@ -10,6 +10,7 @@ import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
 import { parseFederatedUsername } from '../../utils/identity';
+import { formatDmSidebarPreview } from '../../utils/dmFormatters';
 
 export function MobileDmsScreen() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -151,11 +152,10 @@ export function MobileDmsScreen() {
           const readState = readStates.get(dm.id);
           const isUnread = lastMsgId && (!readState || readState < lastMsgId);
 
-          const preview = dm.lastMessage?.content;
+          // formatDmSidebarPreview returns the full preview line (system messages
+          // get human-readable text; group user-messages get the "Sender: " prefix).
+          const preview = formatDmSidebarPreview(dm, authUser ?? null);
           const previewTime = dm.lastMessage?.createdAt;
-          const previewSender = dm.lastMessage
-            ? dm.members.find(m => m.id === dm.lastMessage!.userId)
-            : null;
 
           const mainUser = otherMembers[0];
           const avatarUrl = mainUser?.avatar
@@ -206,9 +206,7 @@ export function MobileDmsScreen() {
                 })()}
                 {preview && (
                   <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-txt-secondary font-medium' : 'text-txt-tertiary'}`}>
-                    {previewSender && previewSender.id !== authUser?.id
-                      ? `${previewSender.displayName ?? parseFederatedUsername(previewSender.username).baseName}: ${preview}`
-                      : preview}
+                    {preview}
                   </p>
                 )}
               </div>

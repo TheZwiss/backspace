@@ -530,6 +530,27 @@ JSON content shape:
 
 The `spaceInstanceOrigin` is the space's home instance, **not** the sender's. The recipient's client uses it to fetch the live preview (`getApiForOrigin(spaceInstanceOrigin).spaces.invitePreview`) and to call `joinByCode(code, spaceInstanceOrigin)` on click.
 
+### Sidebar Preview Rendering
+
+System messages MUST NOT surface their raw JSON `content` in the DM sidebar preview. The sidebar uses the `type` field on the `lastMessage` payload (`'user' | 'system'`) to dispatch:
+
+| Event | Sidebar preview |
+|-------|-----------------|
+| `space_invite` | `📨 Sent invite to {snapshot.spaceName}` (or `📨 Sent a space invite` if name missing) |
+| `member_added` | `{actorName} added {targetDisplayName}` |
+| `member_removed` (`reason='leave'`) | `{targetDisplayName} left the group` |
+| `member_removed` (kick) | `{actorName} removed {targetDisplayName}` |
+| `owner_changed` | `{newOwnerDisplayName} is now the group owner` |
+| Unknown / malformed JSON | `System message` |
+
+`actorName` is resolved from the channel `members` roster by `lastMessage.userId`, falling back to the embedded `user` object on `DmMessageWithUser` payloads (used for federation bootstrap). System messages are NEVER prefixed with `${sender}: ` in group DMs — the rendered text already incorporates the actor.
+
+User messages keep the existing behavior: text/attachment formatting via `formatDmPreview`, with a `${senderDisplayName}: ` prefix in group DMs when the author is not the current user.
+
+The single source of truth on the client is `packages/web/src/utils/dmFormatters.ts:formatDmSidebarPreview(dm, currentUser)`. All call sites (`DmListItem`, `MobileDmsScreen`) MUST use it — never read `lastMessage.content` directly.
+
+**Server contract:** Every code path that emits a `DmLastMessagePreview` (REST `GET/POST /api/dm`, `POST /api/dm/:id/members`, WS `ready` payload, `dm_channel_created` reopen) MUST include the `type` field copied from the `dm_messages.type` column. Without this, the client cannot distinguish system from user messages and falls back to rendering raw JSON.
+
 ### Instance-Local Creation
 
 System messages are NOT relayed via federation. Each instance creates its own independently:
@@ -725,3 +746,4 @@ For full wire formats, see `docs/systems/websocket.md`.
 | Cross-instance duplicate channels | Duplicate sidebar entries | `dm_channel_created` broadcast to ALL members including remote | Local-only broadcast principle |
 | Bootstrap vs incremental confusion | N/A (design note) | `bootstrapped` flag is function-local; batch events work correctly because bootstrap adds ALL roster members | No fix needed -- documented as correct behavior |
 | Duplicated membership system messages across restarts | 4× "Jannis added youruser" in group DM, channel keeps flipping to unread after each deploy | Membership event processors inserted system messages unconditionally. Each approval-flow re-peering reset peer `last_synced_at = 0`, so initial sync replayed every historical `member_add` / `member_remove` / `ownership_transfer` on next boot. Each replay's new snowflake ID exceeded the user's `read_states.last_read_message_id`, flipping unread. | Dedup by `(sourceInstance, event.messageId)` on the inserted system message. Both bootstrap and incremental paths in `processMemberAddEvent` now persist these fields so replay is a no-op. |
+| Raw JSON in DM sidebar previews | DM sidebar showed `{"event":"space_invite",...}` / `{"event":"member_added",...}` as the last-message preview | `DmLastMessagePreview` shape omitted `type`, so the client could not distinguish system from user messages and rendered `lastMessage.content` verbatim. | Added `type` to `DmLastMessagePreview`, populated it from `dm_messages.type` in every server emission site, and routed the sidebar through a single `formatDmSidebarPreview` helper that renders human-readable text for each system event. |

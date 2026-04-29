@@ -2,7 +2,7 @@ import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isSelf } from '../../utils/identity';
-import { formatDmTimestamp, formatDmPreview } from '../../utils/dmFormatters';
+import { formatDmTimestamp, formatDmSidebarPreview } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
@@ -98,19 +98,11 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   } text-txt-tertiary hover:text-txt-primary transition-opacity flex-shrink-0 ml-1`;
 
   // ── Preview text ──────────────────────────────────────────────────────
-  const preview = formatDmPreview(dm.lastMessage ?? null);
-  let previewText: string | null = null;
-  if (isGroup) {
-    const lastMsg = dm.lastMessage;
-    const senderName = (lastMsg && 'user' in lastMsg ? lastMsg.user?.displayName : undefined)
-      ?? dm.members.find(m => m.id === lastMsg?.userId)?.displayName
-      ?? 'Unknown';
-    previewText = preview
-      ? `${senderName}: ${preview}`
-      : `${dm.members.length} Members`;
-  } else {
-    previewText = preview;
-  }
+  // formatDmSidebarPreview handles user/system messages and applies the
+  // sender prefix for group user-messages. We only need to provide the
+  // empty-group fallback ourselves.
+  const preview = formatDmSidebarPreview(dm, user);
+  const previewText = preview ?? (isGroup ? `${dm.members.length} Members` : null);
 
   const itemJsx = (
     <div
