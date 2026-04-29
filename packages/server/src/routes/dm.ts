@@ -18,7 +18,11 @@ import {
   type Attachment,
   type Reaction,
   type Embed,
+  type SpaceInviteRequest,
+  type SpaceInviteResponse,
+  type SpaceInviteSystemPayload,
 } from '@backspace/shared';
+import { fetchSpaceInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
@@ -242,6 +246,143 @@ export function broadcastDmMessage(dmChannelId: string, message: DmMessageWithUs
       message,
     });
   }
+}
+
+/**
+ * Find the existing 1-on-1 DM channel between two users, reopening it if
+ * the caller had it soft-closed. Creates a new channel atomically when none
+ * exists. Returns the channel id.
+ *
+ * Mirrors the dedup-or-create behavior of the existing `POST /api/dm`
+ * handler, including:
+ *  - skipping group DMs (ownerId !== null) and channels with !== 2 members
+ *  - excluding soft-deleted channels
+ *  - reopening on the caller side and queueing a `dm_reopen` relay
+ *  - computing a deterministic `federatedId` when either party is federated
+ *  - notifying the target on a fresh create with the same `dm_channel_created`
+ *    payload shape (`id`, `ownerId`, `federatedId`, `createdAt`, `members`,
+ *    `lastMessage: null`).
+ *
+ * NOTE: This helper is intentionally duplicated from `POST /api/dm` rather
+ * than refactored out of it — mixing a behavior-preserving rewrite of a
+ * heavily-used path with new feature work is the regression pattern this
+ * codebase avoids.
+ */
+export function ensureOneOnOneDmChannel(
+  callerId: string,
+  targetUser: typeof schema.users.$inferSelect,
+  db: ReturnType<typeof getDb>,
+): string {
+  // 1. Look for an existing 1-on-1 channel between caller and target.
+  const callerMemberships = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.userId, callerId))
+    .all();
+
+  for (const membership of callerMemberships) {
+    const otherMember = db.select()
+      .from(schema.dmMembers)
+      .where(and(
+        eq(schema.dmMembers.dmChannelId, membership.dmChannelId),
+        eq(schema.dmMembers.userId, targetUser.id),
+      ))
+      .get();
+    if (!otherMember) continue;
+
+    // Only match 1-on-1 DMs (exactly 2 members). Skip group DMs that
+    // happen to include the target user.
+    const memberCount = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, membership.dmChannelId))
+      .all()
+      .length;
+    if (memberCount !== 2) continue;
+
+    const dmChannel = db.select()
+      .from(schema.dmChannels)
+      .where(and(
+        eq(schema.dmChannels.id, membership.dmChannelId),
+        isNull(schema.dmChannels.deletedAt),
+      ))
+      .get();
+    if (!dmChannel) continue;
+    if (dmChannel.ownerId !== null) continue; // belt-and-braces: skip group DMs
+
+    // Reopen if caller had it closed
+    if (membership.closed === 1) {
+      db.update(schema.dmMembers)
+        .set({ closed: 0 })
+        .where(and(
+          eq(schema.dmMembers.dmChannelId, membership.dmChannelId),
+          eq(schema.dmMembers.userId, callerId),
+        ))
+        .run();
+
+      // Relay reopen to federated peers
+      queueDmCloseRelay(membership.dmChannelId, callerId, 'dm_reopen');
+    }
+    return dmChannel.id;
+  }
+
+  // 2. Create new channel atomically.
+  const dmChannelId = generateSnowflake();
+  const now = Date.now();
+
+  // Compute deterministic federatedId for federated 1-on-1 DMs so that the
+  // S2S relay can find this channel when the reply arrives, preventing duplicates.
+  let federatedId: string | null = null;
+  if (isFederationRelayEnabled()) {
+    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
+    const callerHomeUserId = callerUser?.homeUserId || callerId;
+    const targetHomeUserId = targetUser.homeUserId || targetUser.id;
+    const callerHomeInstance = callerUser?.homeInstance || null;
+    const targetHomeInstance = targetUser.homeInstance || null;
+
+    if (callerHomeInstance || targetHomeInstance) {
+      federatedId = computeFederatedId(callerHomeUserId, targetHomeUserId);
+    }
+  }
+
+  db.transaction((tx) => {
+    tx.insert(schema.dmChannels).values({
+      id: dmChannelId,
+      ownerId: null,
+      federatedId,
+      createdAt: now,
+    }).run();
+
+    tx.insert(schema.dmMembers).values({
+      dmChannelId,
+      userId: callerId,
+    }).run();
+
+    tx.insert(schema.dmMembers).values({
+      dmChannelId,
+      userId: targetUser.id,
+    }).run();
+  });
+
+  // Notify the target so their sidebar updates — same payload shape as POST /api/dm.
+  const callerUser = db.select().from(schema.users).where(eq(schema.users.id, callerId)).get();
+  const members = [callerUser, targetUser]
+    .filter((u): u is NonNullable<typeof u> => u !== undefined)
+    .map(u => sanitizeUser(u));
+
+  const payload: DmChannel = {
+    id: dmChannelId,
+    ownerId: null,
+    federatedId: federatedId ?? null,
+    createdAt: now,
+    members,
+    lastMessage: null,
+  };
+
+  connectionManager.sendToUser(targetUser.id, {
+    type: 'dm_channel_created',
+    dmChannel: payload,
+  });
+
+  return dmChannelId;
 }
 
 export async function dmRoutes(app: FastifyInstance): Promise<void> {
@@ -1535,6 +1676,117 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       .filter((m): m is DmMessageWithUser => m !== null);
 
     return reply.code(200).send(messages);
+  });
+
+  // POST /api/dm/space-invite — Send a space invite card to a friend via DM.
+  // Trust model: the snapshot is fetched server-to-server from the space's home
+  // instance via fetchSpaceInviteSnapshot — never trust client-supplied snapshot data.
+  app.post<{ Body: SpaceInviteRequest }>('/api/dm/space-invite', {
+    config: {
+      rateLimit: {
+        max: 30,
+        timeWindow: '60 seconds',
+        keyGenerator: (request: any) => request.userId || request.ip,
+      },
+    },
+  }, async (request, reply) => {
+    const body = request.body;
+    if (!body || !body.spaceId || !body.inviteCode || !body.target) {
+      return reply.code(400).send({ error: 'invalid_body', statusCode: 400 });
+    }
+
+    const db = getDb();
+    const callerId = request.userId;
+
+    // 1. Resolve target user (local id OR federated homeUserId+homeInstance)
+    let targetUser: typeof schema.users.$inferSelect | null = null;
+    if ('userId' in body.target) {
+      targetUser = db.select().from(schema.users)
+        .where(eq(schema.users.id, body.target.userId)).get() ?? null;
+    } else if ('homeUserId' in body.target && 'homeInstance' in body.target) {
+      targetUser = resolveOrCreateReplicatedUser(
+        body.target.homeUserId,
+        body.target.homeInstance,
+        db,
+      );
+    } else {
+      return reply.code(400).send({ error: 'invalid_target', statusCode: 400 });
+    }
+
+    if (!targetUser) {
+      return reply.code(404).send({ error: 'user_not_found', statusCode: 404 });
+    }
+    if (targetUser.id === callerId) {
+      return reply.code(400).send({ error: 'cannot_invite_self', statusCode: 400 });
+    }
+
+    // 2. Friendship check (anti-spam, NOT a permission gate — see spec).
+    const friendship = db.select().from(schema.friends).where(
+      or(
+        and(eq(schema.friends.userId, callerId), eq(schema.friends.friendId, targetUser.id)),
+        and(eq(schema.friends.userId, targetUser.id), eq(schema.friends.friendId, callerId)),
+      ),
+    ).get();
+    if (!friendship) {
+      return reply.code(400).send({ error: 'not_a_friend', statusCode: 400 });
+    }
+
+    // 3. Server-to-server snapshot fetch from the space's home instance.
+    const ourOrigin = getOurOrigin();
+    const spaceOrigin = body.spaceInstanceOrigin || ourOrigin;
+    const snapshot = await fetchSpaceInviteSnapshot(spaceOrigin, body.inviteCode);
+    if (!snapshot) {
+      return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
+    }
+    if (snapshot.spaceId !== body.spaceId) {
+      // spaceId mismatch — code points at a different space than the client claimed.
+      return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
+    }
+
+    // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
+    const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
+
+    // 5. Build content + insert system message.
+    const now = Date.now();
+    const messageId = generateSnowflake();
+    const payload: SpaceInviteSystemPayload = {
+      event: 'space_invite',
+      spaceId: body.spaceId,
+      spaceInstanceOrigin: body.spaceInstanceOrigin,
+      inviteCode: body.inviteCode,
+      snapshot: {
+        spaceName: snapshot.spaceName,
+        icon: snapshot.icon,
+        avatarColor: snapshot.avatarColor,
+        memberCount: snapshot.memberCount,
+        description: snapshot.description,
+        instanceName: snapshot.instanceName,
+      },
+    };
+
+    db.insert(schema.dmMessages).values({
+      id: messageId,
+      dmChannelId,
+      userId: callerId,
+      content: JSON.stringify(payload),
+      type: 'system',
+      createdAt: now,
+    }).run();
+
+    // 6. Hydrate + broadcast locally.
+    const message = getDmMessageWithUser(messageId);
+    if (!message) {
+      return reply.code(500).send({ error: 'message_lookup_failed', statusCode: 500 });
+    }
+    broadcastDmMessage(dmChannelId, message);
+
+    // 7. Federation relay if the recipient is on a remote instance.
+    if (isFederationRelayEnabled() && targetUser.homeInstance && targetUser.homeInstance !== ourOrigin) {
+      queueDmRelay(message, dmChannelId, 'create');
+    }
+
+    const response: SpaceInviteResponse = { dmChannelId, messageId, message };
+    return reply.code(200).send(response);
   });
 
   // POST /api/dm/:id/messages - Send a DM message
