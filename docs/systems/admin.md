@@ -9,10 +9,13 @@ Source files:
 - `packages/server/src/utils/storageJanitor.ts` -- Storage stats, orphan detection, cleanup
 - `packages/web/src/stores/settingsStore.ts` -- Zustand store for instance/streaming settings
 - `packages/web/src/components/modals/instanceSettingsPanels/GeneralPanel.tsx` -- General settings UI
+- `packages/web/src/components/modals/instanceSettingsPanels/RegistrationPanel.tsx` -- Registration toggles + invite-link CRUD UI
 - `packages/web/src/components/modals/instanceSettingsPanels/FederationPanel.tsx` -- Federation peers panel (peering, approval queue, peer status, rotation, reset)
 - `packages/web/src/components/modals/instanceSettingsPanels/StoragePanel.tsx` -- Storage management UI
 - `packages/web/src/components/modals/instanceSettingsPanels/StreamingPanel.tsx` -- Streaming config UI
 - `packages/web/src/components/modals/instanceSettingsPanels/UsersPanel.tsx` -- User management UI
+- `packages/server/src/routes/invites.ts` -- Admin invite-link CRUD endpoints
+- `packages/server/src/utils/inviteService.ts` -- Token generation, derived status, atomic redemption transaction
 - `packages/shared/src/types.ts` -- Shared type interfaces
 - `packages/shared/src/constants.ts` -- Streaming constants (resolutions, framerates, bitrate matrix)
 
@@ -53,7 +56,8 @@ Settings are split into two API surfaces:
 | Field | Type | DB Column | Validation | Notes |
 |-------|------|-----------|------------|-------|
 | instanceName | string | instanceName | 1-32 chars, trimmed | Default: `'Backspace'` |
-| registrationOpen | boolean | registrationOpen | boolean | DB null = use env `REGISTRATION_OPEN` (default true) |
+| registrationOpen | boolean | registrationOpen | boolean | Local-account registration. DB null = use env `REGISTRATION_OPEN` (default true) |
+| federatedRegistrationOpen | boolean | federatedRegistrationOpen | boolean | Federated-account creation against this instance. NOT NULL DEFAULT 1. Controls whether remote users can create `username@thisInstance` accounts via Connections (see auth.md + client-federation.md) |
 | discoveryEnabled | boolean | discoveryEnabled | boolean | Controls space Explore page |
 | gifApiKey | string? | gifApiKey | string or empty to clear | Returned masked as `****{last4}` for security |
 | gifEnabled | boolean? | (derived) | -- | Read-only; true when gifApiKey is non-null |
@@ -164,10 +168,13 @@ No authentication. Returns:
   name: string;        // instanceSettings.instanceName ?? 'Backspace'
   version: string;     // Hardcoded '1.0.0' in instance.ts
   registrationOpen: boolean;  // DB setting overrides env if non-null
+  federatedRegistrationOpen: boolean;  // NOT NULL DEFAULT 1; gates federated-account creation
 }
 ```
 
 Registration resolution order: `instance_settings.registrationOpen` (if not null) > `config.registrationOpen` (from `REGISTRATION_OPEN` env, default true).
+
+`federatedRegistrationOpen` is consumed by the Connections UI (client-federation.md) to decide whether to surface the "create federated account on this instance" affordance.
 
 ### General Instance Settings
 
@@ -428,11 +435,75 @@ All panels live under `packages/web/src/components/modals/instanceSettingsPanels
 
 #### GeneralPanel
 
-Manages: instance name, registration toggle, discovery toggle, GIF API key, federation relay toggle/TTL.
+Manages: instance name, discovery toggle, GIF API key, federation relay toggle/TTL.
 
 - Instance name input: max 32 chars, enforced client-side via `slice(0, 32)`
 - GIF key: password input, separate dirty tracking (`gifKeyDirty`). Only sent on save if modified. "Clear key" button sets empty string.
 - Federation relay toggle and TTL input: drive `federationRelayEnabled` and `federationRelayTtlDays` instance settings.
+
+The registration toggles (`registrationOpen` / `federatedRegistrationOpen`) and the invite-link manager live in [RegistrationPanel](#registrationpanel).
+
+#### RegistrationPanel
+
+Owns the two independent registration gates and the admin invite-link CRUD surface. Mounted in the instance settings sidebar between **General** and **Users**.
+
+**Toggles** (top of panel) — bound to `settingsStore.instanceSettings.registrationOpen` and `.federatedRegistrationOpen`. Save bar appears at the bottom of the panel when either toggle differs from the synced value (existing pattern from `GeneralPanel`):
+
+- **Public registration** (`registrationOpen`) — "Allow anyone to create a local account from `/register`. When off, only invite links work for new local accounts."
+- **Federated registration** (`federatedRegistrationOpen`) — "Allow users from other instances to create a federated account here via their Connections settings. Existing federated accounts log in normally."
+
+**Invite Links** (below the toggles) — segmented `[Active] [Archived]` tabs (local component state, default `active`). Tab switch refetches via `GET /api/admin/invites?status=...`. A `tabRef` discards stale in-flight fetches when the admin switches tabs mid-load. `[+ Create link]` button opens the Create modal.
+
+**Invite row** — name (left, primary text), usage indicator (`usedCount / maxUses` or `usedCount uses · unlimited`, color-coded amber at >=80%), status pill on archived tab (`Expired` rose / `Exhausted` amber / `Revoked` txt-tertiary), expiry summary subline (active: `Expires in 4 days` / `No expiration`; archived: `Expired Apr 25` / `Exhausted Apr 27` / `Revoked Apr 28`), creator + relative-time created.
+
+**Row actions** branch on derived status:
+- **Active rows:** `Copy link`, `Edit`, `Revoke`, kebab → `Delete permanently`, `View redemptions`.
+- **Archived rows:** `Reinstate`, kebab → `Delete permanently`, `View redemptions`.
+
+**Modals:**
+
+- **Create Invite** — Name (1-64 chars), Max uses (radio: Unlimited / `[N >= 1]`), Expires (preset: `1 hour` / `24 hours` / `7 days` / `30 days` / `Never` / `Custom…`). Defaults: `maxUses: null`, `expiresAt: now + 7 days`. On success the URL is auto-copied to clipboard and the new row animates in at the top of the active list.
+- **Edit Invite** — same shape as Create, pre-filled. Hidden for `revoked` rows (Reinstate is the only path back).
+- **Reinstate — Variant A** (was `revoked`): rotates the token (`tokenRotated: true`). Modal copy: "This will generate a new link. The previously revoked URL stays inactive." Required to bump `maxUses` and/or `expiresAt` so the resulting row derives status `active` (server returns 400 otherwise).
+- **Reinstate — Variant B** (was `expired` or `exhausted`): preserves the same token (`tokenRotated: false`). Modal copy: "The same link will start working again. Anyone who saved the URL will be able to use it." Same bump-to-active validation.
+- **Delete confirmation** — uses the existing `ConfirmDialog` with `variant="danger"`, copy: "Delete `<name>` permanently? This cannot be undone. Redemption history for this link will also be removed. If you only want to stop the link from working, use Revoke instead — that preserves the redemption record." (Spec §4.2 originally proposed type-to-confirm, but the codebase uses the existing `ConfirmDialog` precedent for high-blast-radius admin actions; type-to-confirm was not introduced as a one-off pattern.)
+
+**Redemption viewer** — opens via `View redemptions` action. Shows `usedCount of maxUses` header (or `usedCount uses · unlimited`), then one row per redemption: `registrantUsername` (left) + `redeemedAt` formatted (right). When `currentUsername !== registrantUsername` (post-rename) or `isDeleted === true`, the registrant name is annotated `alice (now Anastasia)` / `alice (now Deleted User)` — snapshot stable, live state visible. Clicking a non-deleted row opens the user's profile (`UserPopover`). If the invite is revoked, a banner at the top notes "The redemptions above represent users who registered before revocation."
+
+**Invites outlive their creator's account.** `invite_links.createdBy` has no CASCADE — when an admin is tombstoned, their invites stay live and any current admin can manage them. The list joins `users` to surface `createdByUsername`, which resolves to `'Deleted User'` when the creator has `isDeleted = 1` (matching the `sanitizeUser` convention).
+
+**State ownership.** Invite CRUD is **not** in `settingsStore` — it's transient panel state owned by `RegistrationPanel` (`useState` for `tab`, `invites`, `invitesLoading`, modal flags). Pattern matches `UsersPanel`. Reasoning: invites are page-scoped, not session-scoped — caching them globally would just create staleness bugs when the panel reopens.
+
+**Type shapes** (from `packages/shared/src/types.ts`):
+
+```typescript
+type InviteLinkSummary = {
+  id: string;
+  token: string;
+  name: string;
+  status: 'active' | 'expired' | 'exhausted' | 'revoked';  // derived; never stored
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: number | null;
+  revokedAt: number | null;
+  createdBy: string;
+  createdByUsername: string | null;  // 'Deleted User' when creator's isDeleted = 1
+  createdAt: number;
+  lastRedeemedAt: number | null;  // epoch ms of most recent redemption; null when usedCount = 0
+  url: string;  // server-built `https://<host>/register?invite=<token>` — clients MUST NOT assemble
+};
+
+type InviteRedemption = {
+  id: string;
+  userId: string | null;       // null only on hard-delete (defensive — tombstone keeps row populated)
+  registrantUsername: string;  // snapshot at registration moment
+  currentUsername: string | null;
+  isDeleted: boolean;
+  redeemedAt: number;
+};
+```
+
+See [api.md → Admin: Invite Management](api.md#admin-invite-management-routesinvitests) for full endpoint signatures and the [auth.md → Invite Tokens](auth.md#invite-tokens) section for the redemption transaction + audit trail.
 
 #### FederationPanel
 

@@ -7,10 +7,27 @@ Source files: `packages/server/src/routes/*.ts`
 
 ## Auth (`routes/auth.ts`) — public, rate-limited
 ```
-POST /auth/register         { username, password, displayName?, avatarColor?, homeInstance?, homeUserId? } → { token, user }
+POST /auth/register         { username, password, displayName?, avatarColor?, homeInstance?, homeUserId?, inviteToken? } → { token, user }
 GET  /auth/check-username    ?username= → { available, reason? }
+GET  /auth/check-invite      ?token=    → CheckInviteResponse
 POST /auth/login             { username, password } → { token, user }
 ```
+
+**`POST /auth/register` gating** — branches on whether `homeInstance` is set:
+- **Federated path** (`homeInstance` set): gated solely by `instance_settings.federatedRegistrationOpen`. `inviteToken` is ignored entirely (not validated, not consumed). 403 `Federated registration is closed on this instance` when closed. Existing federated stubs (relay-created, `passwordHash = '!federation-replicated'`) upgrade in place — login is never blocked by this gate.
+- **Local path** (no `homeInstance`):
+  - When `registrationOpen` is true: `inviteToken` is silently ignored (no row touched, no `usedCount` increment).
+  - When `registrationOpen` is false: `inviteToken` is required. The token is pre-validated, then the user INSERT + `usedCount` increment + `invite_redemptions` row INSERT all run in a single transaction (`inviteService.redeemInvite`). 403 `Registration is closed. An invite is required.` (no token) or `Invalid or expired invite` (token rejected at any stage, including a concurrent-redemption race re-check inside the transaction).
+
+**`GET /auth/check-invite`** — public, rate-limited 30/min/IP. Always returns 200; the body discriminates:
+
+```typescript
+type CheckInviteResponse =
+  | { valid: true; name: string }            // active token; name surfaces for UX
+  | { valid: false; reason: 'expired' | 'exhausted' | 'invalid' };
+```
+
+`revoked`, malformed (non-22-char-base64url), and not-in-DB tokens all collapse to `'invalid'` (enumeration shield). `name` is returned **only** in the valid case.
 
 ## Users (`routes/users.ts`) — auth required
 ```
@@ -189,18 +206,20 @@ Permissions checked: CONNECT, SPEAK, STREAM (space channels). DM calls: always f
 
 ## Instance (`routes/instance.ts`) — public
 ```
-GET /instance/info → { name, version, registrationOpen }
+GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen }
 ```
+`federatedRegistrationOpen` is a UX hint consumed by the Connections add-instance pre-flight (see `client-federation.md`). The 403 from `POST /auth/register` remains the security boundary.
 
 ## Settings (`routes/settings.ts`)
 ```
 GET   /settings/streaming    (auth)        → { streamingLimits }
 PATCH /settings/streaming    (admin)       → { streamingLimits }
-GET   /settings/instance     (admin)       → { instanceName, registrationOpen, discoveryEnabled, ... }
-PATCH /settings/instance     (admin)       { instanceName?, registrationOpen?, discoveryEnabled?,
-                                             gifApiKey?, maxUploadSizeMb?, federationRelayEnabled?,
-                                             federationRelayTtlDays? } → { settings }
+GET   /settings/instance     (admin)       → { instanceName, registrationOpen, federatedRegistrationOpen, discoveryEnabled, ... }
+PATCH /settings/instance     (admin)       { instanceName?, registrationOpen?, federatedRegistrationOpen?,
+                                             discoveryEnabled?, gifApiKey?, maxUploadSizeMb?,
+                                             federationRelayEnabled?, federationRelayTtlDays? } → { settings }
 ```
+`registrationOpen` and `federatedRegistrationOpen` are **independent** toggles. PATCH validates `federatedRegistrationOpen` is `boolean` if provided; rejects 400 otherwise. `registrationOpen` is stored as a nullable column (null = fall back to `config.registrationOpen` env default); `federatedRegistrationOpen` is NOT NULL with default 1.
 
 ## Admin (`routes/admin.ts`) — admin required
 ```
@@ -213,6 +232,64 @@ GET    /admin/users/instances                              → distinct home ins
 PATCH  /admin/users/:id/role         { isAdmin }           → AdminUser
 POST   /admin/users/:id/reset-password                     → { temporaryPassword }
 DELETE /admin/users/:id                                    → { success }
+```
+
+## Admin: Invite Management (`routes/invites.ts`) — admin required
+
+All endpoints sit behind `[authenticate, requireAdmin]`. Mutating endpoints wrap their read-modify-write in a SQLite transaction with an in-txn re-fetch + status re-derive; any state mismatch returns 409. Service layer: `packages/server/src/utils/inviteService.ts` (`InviteValidationError` → 400, `InviteNotFoundError` → 404, `InviteStateConflictError` → 409).
+
+```
+POST   /admin/invites                       { name, maxUses, expiresAt }              → InviteLinkSummary  (201)
+GET    /admin/invites              ?status=active|archived (default: active)          → { invites: InviteLinkSummary[] }
+PATCH  /admin/invites/:id                   { name?, maxUses?, expiresAt? }           → InviteLinkSummary
+POST   /admin/invites/:id/revoke                                                       → { invite: InviteLinkSummary }
+POST   /admin/invites/:id/reinstate         { maxUses?, expiresAt? }                  → { invite: InviteLinkSummary, tokenRotated: boolean }
+DELETE /admin/invites/:id                                                              → { success: true }
+GET    /admin/invites/:id/redemptions                                                  → { redemptions: InviteRedemption[] }
+```
+
+**`POST /admin/invites`** — `name` 1-64 chars trimmed; `maxUses` null (unlimited) or positive integer; `expiresAt` null (never) or epoch ms strictly greater than `Date.now()`. 400 on shape violation.
+
+**`GET /admin/invites?status=`** — `active` returns rows whose derived status is `active`; `archived` returns `expired | exhausted | revoked`. Sort `createdAt DESC`. Joins `users` to surface `createdByUsername` (`'Deleted User'` if creator's `isDeleted = 1`).
+
+**`PATCH /admin/invites/:id`** — partial body. 400 if `maxUses` is a positive integer less than the current `usedCount` (would retroactively exhaust — admin should revoke instead). 409 if the invite is currently `revoked` (status conflict — reinstate first).
+
+**`POST /admin/invites/:id/revoke`** — sets `revokedAt = Date.now()`. 409 if already revoked.
+
+**`POST /admin/invites/:id/reinstate`** — branches on the row's pre-reinstate derived status:
+- **Path A — was `revoked`**: rotates the token (`crypto.randomBytes(16).toString('base64url')`), clears `revokedAt`, applies any provided `maxUses`/`expiresAt` overrides. Response includes `tokenRotated: true`. 400 if the resulting row would still derive non-`active` (caller must bump enough).
+- **Path B — was `expired` or `exhausted`**: token preserved. Applies overrides. Response `tokenRotated: false`. 400 same rule.
+- **Path C — already `active`**: 409 "Invite is already active." Pure no-op rejection.
+
+**`DELETE /admin/invites/:id`** — hard-delete. CASCADE removes all `invite_redemptions` rows for this invite. Allowed in any status. 404 if not found.
+
+**`GET /admin/invites/:id/redemptions`** — sort `redeemedAt DESC`. Each row includes the registration-moment snapshot (`registrantUsername`) plus the live joined state (`currentUsername` / `isDeleted`) so the UI can render `alice (now Deleted User)` for renamed/tombstoned users.
+
+```typescript
+type InviteLinkSummary = {
+  id: string;
+  token: string;
+  name: string;
+  status: 'active' | 'expired' | 'exhausted' | 'revoked';  // derived
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: number | null;
+  revokedAt: number | null;
+  createdBy: string;
+  createdByUsername: string | null;  // 'Deleted User' if creator tombstoned
+  createdAt: number;
+  lastRedeemedAt: number | null;  // epoch ms of most recent redemption; null when usedCount = 0
+  url: string;  // server-built `https://<host>/register?invite=<token>` — clients MUST NOT assemble
+};
+
+type InviteRedemption = {
+  id: string;
+  userId: string | null;       // null only on hard-delete (defensive — tombstone keeps row)
+  registrantUsername: string;  // snapshot at registration moment
+  currentUsername: string | null;
+  isDeleted: boolean;
+  redeemedAt: number;
+};
 ```
 
 ## Federation (`routes/federation.ts`)

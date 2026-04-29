@@ -20,6 +20,7 @@ import { socialRoutes } from './routes/social.js';
 import { settingsRoutes } from './routes/settings.js';
 import { utilRoutes } from './routes/utils.js';
 import { instanceRoutes } from './routes/instance.js';
+import { invitesRoutes } from './routes/invites.js';
 import { exploreRoutes } from './routes/explore.js';
 import { searchRoutes } from './routes/search.js';
 import { adminRoutes } from './routes/admin.js';
@@ -103,6 +104,7 @@ async function main(): Promise<void> {
   await app.register(settingsRoutes);
   await app.register(utilRoutes);
   await app.register(instanceRoutes);
+  await app.register(invitesRoutes);
   await app.register(exploreRoutes);
   await app.register(searchRoutes);
   await app.register(adminRoutes);

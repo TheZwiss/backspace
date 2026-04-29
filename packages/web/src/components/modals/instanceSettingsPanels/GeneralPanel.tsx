@@ -28,7 +28,6 @@ export function GeneralPanel() {
 
   const baseChanges = instanceSettings && draft
     ? draft.instanceName !== instanceSettings.instanceName ||
-      draft.registrationOpen !== instanceSettings.registrationOpen ||
       draft.discoveryEnabled !== instanceSettings.discoveryEnabled
     : false;
   const hasChanges = baseChanges || gifKeyDirty;
@@ -39,7 +38,6 @@ export function GeneralPanel() {
     try {
       const payload: Partial<InstanceAdminSettings> = {
         instanceName: draft!.instanceName,
-        registrationOpen: draft!.registrationOpen,
         discoveryEnabled: draft!.discoveryEnabled,
       };
       if (gifKeyDirty) {
@@ -83,20 +81,6 @@ export function GeneralPanel() {
             className="input-standard w-full"
           />
           <div className="text-[11px] text-txt-tertiary text-right mt-1">{draft.instanceName.length}/32</div>
-        </div>
-      </div>
-
-      {/* Registration */}
-      <div>
-        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Registration</div>
-        <div className="rounded-lg bg-white/[0.02] p-3.5">
-          <label className="flex items-center justify-between cursor-pointer">
-            <div>
-              <div className="text-sm font-medium text-txt-primary">Open Registration</div>
-              <div className="text-xs text-txt-tertiary mt-0.5">Allow new users to create accounts on this instance</div>
-            </div>
-            <Toggle enabled={draft.registrationOpen} onChange={(v) => setDraft({ ...draft, registrationOpen: v })} />
-          </label>
         </div>
       </div>
 

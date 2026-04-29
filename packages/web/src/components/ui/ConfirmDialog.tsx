@@ -25,13 +25,16 @@ export function ConfirmDialog({
   loading = false,
 }: ConfirmDialogProps) {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !loading) onClose();
+    if (e.key === 'Escape' && !loading) {
+      e.stopPropagation();
+      onClose();
+    }
   }, [onClose, loading]);
 
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
+      document.addEventListener('keydown', handleKeyDown, true);
+      return () => document.removeEventListener('keydown', handleKeyDown, true);
     }
   }, [isOpen, handleKeyDown]);
 

@@ -56,6 +56,13 @@ import type {
   ApprovalRequest,
   PeeringSubscription,
   PeeringNotification,
+  InviteLinkSummary,
+  InviteRedemption,
+  CreateInviteRequest,
+  UpdateInviteRequest,
+  ReinstateInviteRequest,
+  ReinstateInviteResponse,
+  CheckInviteResponse,
 } from '@backspace/shared';
 
 export type { FederationPeer, ApprovalRequest, PeeringSubscription, PeeringNotification };
@@ -74,6 +81,7 @@ export class BackspaceApiClient {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
     login: (data: LoginRequest) => Promise<AuthResponse>;
     checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
+    checkInvite: (token: string) => Promise<CheckInviteResponse>;
   };
 
   readonly users: {
@@ -230,6 +238,16 @@ export class BackspaceApiClient {
     peeringNotifications: (unreadOnly?: boolean) => Promise<{ notifications: PeeringNotification[] }>;
     markPeeringNotificationRead: (id: string) => Promise<{ success: boolean }>;
     markAllPeeringNotificationsRead: () => Promise<{ success: boolean; count: number }>;
+  };
+
+  readonly invites: {
+    list: (status?: 'active' | 'archived') => Promise<{ invites: InviteLinkSummary[] }>;
+    create: (body: CreateInviteRequest) => Promise<InviteLinkSummary>;
+    update: (id: string, body: UpdateInviteRequest) => Promise<InviteLinkSummary>;
+    revoke: (id: string) => Promise<{ invite: InviteLinkSummary }>;
+    reinstate: (id: string, body: ReinstateInviteRequest) => Promise<ReinstateInviteResponse>;
+    delete: (id: string) => Promise<{ success: boolean }>;
+    redemptions: (id: string) => Promise<{ redemptions: InviteRedemption[] }>;
   };
 
   readonly admin: {
@@ -393,6 +411,8 @@ export class BackspaceApiClient {
         request<AuthResponse>('POST', '/auth/login', data, false),
       checkUsername: (username: string) =>
         request<{ available: boolean; reason?: string }>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
+      checkInvite: (token: string) =>
+        request<CheckInviteResponse>('GET', `/auth/check-invite?token=${encodeURIComponent(token)}`, undefined, false),
     };
 
     this.users = {
@@ -718,6 +738,23 @@ export class BackspaceApiClient {
         request<{ success: boolean; count: number }>(
           'POST', '/federation/peering-notifications/read-all'
         ),
+    };
+
+    this.invites = {
+      list: (status: 'active' | 'archived' = 'active') =>
+        request<{ invites: InviteLinkSummary[] }>('GET', `/admin/invites?status=${status}`),
+      create: (body: CreateInviteRequest) =>
+        request<InviteLinkSummary>('POST', '/admin/invites', body),
+      update: (id: string, body: UpdateInviteRequest) =>
+        request<InviteLinkSummary>('PATCH', `/admin/invites/${id}`, body),
+      revoke: (id: string) =>
+        request<{ invite: InviteLinkSummary }>('POST', `/admin/invites/${id}/revoke`),
+      reinstate: (id: string, body: ReinstateInviteRequest) =>
+        request<ReinstateInviteResponse>('POST', `/admin/invites/${id}/reinstate`, body),
+      delete: (id: string) =>
+        request<{ success: boolean }>('DELETE', `/admin/invites/${id}`),
+      redemptions: (id: string) =>
+        request<{ redemptions: InviteRedemption[] }>('GET', `/admin/invites/${id}/redemptions`),
     };
 
     this.admin = {

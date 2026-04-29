@@ -22,6 +22,7 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       name: instanceName,
       version: BACKSPACE_VERSION,
       registrationOpen,
+      federatedRegistrationOpen: settings?.federatedRegistrationOpen === 1,
     };
 
     return reply.code(200).send(response);

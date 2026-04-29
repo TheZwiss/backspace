@@ -4,12 +4,13 @@ import { useSettingsSections } from '../../../hooks/useSettingsSections';
 import type { SettingsSection } from '../SettingsSectionsContext';
 import { SettingsTabBar } from '../SettingsTabBar';
 import { GeneralPanel } from '../instanceSettingsPanels/GeneralPanel';
+import { RegistrationPanel } from '../instanceSettingsPanels/RegistrationPanel';
 import { FederationPanel } from '../instanceSettingsPanels/FederationPanel';
 import { StreamingPanel } from '../instanceSettingsPanels/StreamingPanel';
 import { StoragePanel } from '../instanceSettingsPanels/StoragePanel';
 import { UsersPanel } from '../instanceSettingsPanels/UsersPanel';
 
-type SubTab = 'general' | 'federation' | 'streaming' | 'storage' | 'users';
+type SubTab = 'general' | 'registration' | 'federation' | 'streaming' | 'storage' | 'users';
 
 export function InstancePanel() {
   const fetchInstanceSettings = useSettingsStore((s) => s.fetchInstanceSettings);
@@ -20,6 +21,7 @@ export function InstancePanel() {
 
   const sections = useMemo<SettingsSection[]>(() => [
     { id: 'general', label: 'General' },
+    { id: 'registration', label: 'Registration' },
     { id: 'federation', label: 'Federation', badgeCount: approvalCount },
     { id: 'streaming', label: 'Streaming' },
     { id: 'storage', label: 'Storage' },
@@ -43,6 +45,7 @@ export function InstancePanel() {
       <SettingsTabBar />
 
       {subTab === 'general' && <GeneralPanel />}
+      {subTab === 'registration' && <RegistrationPanel />}
       {subTab === 'federation' && <FederationPanel onApprovalCountChange={setApprovalCount} />}
       {subTab === 'streaming' && <StreamingPanel />}
       {subTab === 'storage' && <StoragePanel />}
