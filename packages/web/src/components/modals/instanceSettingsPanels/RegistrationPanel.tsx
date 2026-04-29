@@ -294,7 +294,6 @@ interface ExpirySelectorProps {
 function ExpirySelector({ value, customDateTime, onChange, showKeep, disabled }: ExpirySelectorProps) {
   return (
     <div>
-      <label className="block text-sm text-txt-secondary mb-1.5">Expires</label>
       <div className="flex items-center gap-2 flex-wrap">
         {showKeep && (
           <button
@@ -702,18 +701,32 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
         className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[16px] font-bold text-txt-primary">Edit "{invite.name}"</h3>
+            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
+              Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.
+            </p>
+          </div>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSave();
           }}
-          className="p-6 space-y-5"
+          className="px-5 pt-4 pb-5 space-y-5"
         >
-          <h3 className="text-lg font-semibold text-txt-primary">Edit "{invite.name}"</h3>
-
           {/* Name */}
           <div>
-            <label className="block text-sm text-txt-secondary mb-1.5">Name</label>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
             <input
               ref={nameInputRef}
               type="text"
@@ -727,10 +740,9 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
 
           {/* Max uses */}
           <div>
-            <label className="block text-sm text-txt-secondary mb-1.5">
-              Max uses{' '}
-              <span className="text-txt-tertiary">({invite.usedCount} used)</span>
-            </label>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+              Max uses <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} used)</span>
+            </div>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
@@ -770,31 +782,34 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
           </div>
 
           {/* Expiry */}
-          <ExpirySelector
-            value={expiryId}
-            customDateTime={customDateTime}
-            onChange={(v, dt) => {
-              setExpiryId(v);
-              setCustomDateTime(dt);
-            }}
-            showKeep={true}
-            disabled={submitting}
-          />
+          <div>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+            <ExpirySelector
+              value={expiryId}
+              customDateTime={customDateTime}
+              onChange={(v, dt) => {
+                setExpiryId(v);
+                setCustomDateTime(dt);
+              }}
+              showKeep={true}
+              disabled={submitting}
+            />
+          </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex gap-2 mt-4">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
             >
               {submitting ? 'Saving…' : 'Save changes'}
             </button>
@@ -907,6 +922,10 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
     }
   };
 
+  const subtitle = isRevoked
+    ? 'This invite was revoked. Reinstating generates a new link with a different URL — the old URL stays inactive.'
+    : 'This invite has lapsed. Reinstating reactivates the same URL — anyone who saved it will be able to use it again.';
+
   return createPortal(
     <div
       className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
@@ -918,36 +937,39 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
         className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[16px] font-bold text-txt-primary">Reinstate "{invite.name}"</h3>
+            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">{subtitle}</p>
+          </div>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleReinstate();
           }}
-          className="p-6 space-y-5"
+          className="px-5 pt-4 pb-5 space-y-5"
         >
-          <h3 className="text-lg font-semibold text-txt-primary">Reinstate "{invite.name}"</h3>
-
-          {isRevoked ? (
-            <p className="text-sm text-txt-secondary leading-relaxed">
-              <strong className="text-txt-primary">This will generate a new link.</strong>{' '}
-              The previously revoked URL stays inactive — anyone who had the old link will
-              not be able to use it.
-            </p>
-          ) : (
-            <p className="text-sm text-txt-secondary leading-relaxed">
-              <strong className="text-txt-primary">The same link will start working again.</strong>{' '}
-              Anyone who saved the URL will be able to use it.
-            </p>
+          {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
+          {isRevoked && (
+            <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
+              A new link will be generated. Anyone who had the old URL will not be able to use it.
+            </div>
           )}
 
           {/* Max uses */}
           <div>
-            <label className="block text-sm text-txt-secondary mb-1.5">
-              Max uses{' '}
-              <span className="text-txt-tertiary">
-                (current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})
-              </span>
-            </label>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+              Max uses <span className="normal-case font-normal text-txt-tertiary">(current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})</span>
+            </div>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
@@ -987,32 +1009,35 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
           </div>
 
           {/* Expiry */}
-          <ExpirySelector
-            value={expiryId}
-            customDateTime={customDateTime}
-            onChange={(v, dt) => {
-              if (v === 'keep') return; // unreachable: showKeep={false}
-              setExpiryId(v);
-              setCustomDateTime(dt);
-            }}
-            showKeep={false}
-            disabled={submitting}
-          />
+          <div>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+            <ExpirySelector
+              value={expiryId}
+              customDateTime={customDateTime}
+              onChange={(v, dt) => {
+                if (v === 'keep') return; // unreachable: showKeep={false}
+                setExpiryId(v);
+                setCustomDateTime(dt);
+              }}
+              showKeep={false}
+              disabled={submitting}
+            />
+          </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex gap-2 mt-4">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
             >
               {submitting
                 ? 'Reinstating…'
@@ -1090,21 +1115,30 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
         className="relative w-full max-w-lg mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden flex flex-col max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 pb-3 flex items-start justify-between gap-3">
-          <h3 className="text-lg font-semibold text-txt-primary truncate">
-            Redemptions for "{invite.name}"
-          </h3>
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3 flex-shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-accent-sky/15 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-accent-sky">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[16px] font-bold text-txt-primary">Redemptions for "{invite.name}"</h3>
+            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
+              Users who registered using this invite link, in the order they signed up.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-txt-tertiary hover:text-txt-primary text-xl leading-none px-1 -mt-1"
+            className="w-8 h-8 rounded-md text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] flex items-center justify-center flex-shrink-0 transition-colors"
           >
             ×
           </button>
         </div>
 
-        <div className="px-6 pb-3 space-y-3">
+        <div className="px-5 pt-4 pb-3 space-y-3">
           {invite.status === 'revoked' && (
             <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
               This invite was revoked
