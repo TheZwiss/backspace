@@ -974,62 +974,34 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
 
 interface InviteRowProps {
   invite: InviteLinkSummary;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onMutate: () => void;
 }
 
 /**
- * One row in the invite list. Owns its own modal/popover/confirm-dialog state so the
- * parent panel only deals with the list-level fetch + tab state.
+ * One row in the invite list. Renders as a clickable collapsed header that, when
+ * expanded, reveals a meta grid + status-specific action row. Owns its own modal
+ * and confirm-dialog state so the parent panel only manages list-level fetch +
+ * single-row expansion state (`expandedInviteId`).
  *
  * Action surface depends on `invite.status`:
- *   - active     → Copy link · Edit · Revoke  · ⋯ (View redemptions, Delete)
- *   - non-active → Reinstate                  · ⋯ (View redemptions, Delete)
- *
- * The kebab popover dismisses on outside click and Escape; clicks inside its items
- * already call `setShowKebab(false)` before triggering the action.
+ *   - active     → Copy link · Edit · Revoke · View redemptions
+ *   - non-active → Reinstate · Delete permanently · View redemptions
  */
-function InviteRow({ invite, onMutate }: InviteRowProps) {
+function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProps) {
   const addToast = useUIStore((s) => s.addToast);
   const [showEdit, setShowEdit] = useState(false);
   const [showReinstate, setShowReinstate] = useState(false);
   const [showRedemptions, setShowRedemptions] = useState(false);
-  const [showKebab, setShowKebab] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const kebabContainerRef = useRef<HTMLDivElement>(null);
-
-  // Dismiss kebab popover on outside click + Escape. Mirrors the pattern used in
-  // TransferOwnershipModal — listen on document, check containment via ref.
-  useEffect(() => {
-    if (!showKebab) return;
-    const handleMouseDown = (e: MouseEvent) => {
-      if (
-        kebabContainerRef.current &&
-        !kebabContainerRef.current.contains(e.target as Node)
-      ) {
-        setShowKebab(false);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // Stop propagation so the parent settings modal doesn't ALSO close.
-        e.stopPropagation();
-        setShowKebab(false);
-      }
-    };
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('keydown', handleKey, true);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('keydown', handleKey, true);
-    };
-  }, [showKebab]);
 
   const usageLabel =
     invite.maxUses === null
-      ? `${invite.usedCount} use${invite.usedCount === 1 ? '' : 's'} · unlimited`
-      : `${invite.usedCount} / ${invite.maxUses} uses`;
+      ? `${invite.usedCount} / ∞`
+      : `${invite.usedCount} / ${invite.maxUses}`;
 
   const usageNearLimit =
     invite.maxUses !== null && invite.maxUses > 0 && invite.usedCount / invite.maxUses >= 0.8;
@@ -1071,110 +1043,191 @@ function InviteRow({ invite, onMutate }: InviteRowProps) {
     }
   };
 
-  const statusPillClass =
-    invite.status === 'expired'
-      ? 'bg-rose-500/20 text-rose-400'
-      : invite.status === 'exhausted'
-        ? 'bg-amber-500/20 text-amber-400'
-        : 'bg-white/10 text-txt-tertiary';
+  const isActive = invite.status === 'active';
+  const createdByLabel = invite.createdByUsername ?? 'Unknown';
+
+  // Subtitle (collapsed view)
+  //   active   → "X / Y uses · Expires in 3 days · Created by alice"
+  //   archived → "X / Y uses · Revoked 4/12/2026 · 2d ago"
+  const subtitle = isActive
+    ? `${usageLabel} uses · ${formatExpiry(invite)} · Created by ${createdByLabel}`
+    : `${usageLabel} uses · ${formatExpiry(invite)} · ${formatRelative(invite.createdAt)}`;
+
+  // Archived row 1 second-cell label + value. EXHAUSTED has no dedicated terminal
+  // timestamp on the invite, so we surface lastRedeemedAt (the moment that drove
+  // it to exhausted) when known, falling back to em-dash if absent.
+  let archivedTerminalLabel: string;
+  let archivedTerminalValue: string;
+  if (invite.status === 'expired') {
+    archivedTerminalLabel = 'EXPIRED AT';
+    archivedTerminalValue = invite.expiresAt !== null ? formatRelative(invite.expiresAt) : '—';
+  } else if (invite.status === 'revoked') {
+    archivedTerminalLabel = 'REVOKED AT';
+    archivedTerminalValue = invite.revokedAt !== null ? formatRelative(invite.revokedAt) : '—';
+  } else {
+    // exhausted
+    archivedTerminalLabel = 'EXHAUSTED';
+    archivedTerminalValue =
+      invite.lastRedeemedAt !== null ? formatRelative(invite.lastRedeemedAt) : '—';
+  }
+
+  const tokenDisplay = `…${invite.token.slice(-6)}`;
+  const lastRedeemedDisplay =
+    invite.lastRedeemedAt !== null ? formatRelative(invite.lastRedeemedAt) : '—';
 
   return (
     <>
-      <div className="bg-white/[0.02] rounded-lg p-3 flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className="text-sm font-medium text-txt-primary truncate"
-              title={invite.name}
-            >
-              {invite.name}
-            </span>
-            <span
-              className={`text-xs ${usageNearLimit ? 'text-accent-amber' : 'text-txt-tertiary'}`}
-            >
-              · {usageLabel}
-            </span>
-            {invite.status !== 'active' && (
-              <span
-                className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${statusPillClass}`}
+      <div
+        className={`bg-white/[0.02] rounded-md transition-colors ${
+          expanded ? 'border border-white/[0.06]' : ''
+        }`}
+      >
+        {/* Collapsed clickable header */}
+        <div
+          className="flex items-center justify-between px-3 py-2.5 cursor-pointer hover:bg-white/[0.02] rounded-md"
+          onClick={onToggleExpand}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${inviteStatusDotColor(invite.status)}`} />
+            <div className="min-w-0">
+              <div
+                className="text-sm font-medium truncate text-txt-primary"
+                title={invite.name}
               >
-                {invite.status}
+                {invite.name}
+              </div>
+              <div className="text-[11px] text-txt-tertiary truncate">{subtitle}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            {!isActive && (
+              <span
+                className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded ${inviteStatusPillColor(invite.status)}`}
+              >
+                {inviteStatusLabel(invite.status)}
               </span>
             )}
-          </div>
-          <div className="text-xs text-txt-tertiary mt-1">
-            {formatExpiry(invite)} · Created by {invite.createdByUsername ?? 'Unknown'} ·{' '}
-            {formatRelative(invite.createdAt)}
+            <span className="text-txt-tertiary text-xs">{expanded ? '▾' : '▸'}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0 relative" ref={kebabContainerRef}>
-          {invite.status === 'active' ? (
-            <>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
-              >
-                Copy link
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowEdit(true)}
-                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmRevoke(true)}
-                className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
-              >
-                Revoke
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowReinstate(true)}
-              className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
-            >
-              Reinstate
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label="More actions"
-            onClick={() => setShowKebab((v) => !v)}
-            className="px-2 py-1 text-xs text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded transition-colors"
-          >
-            ⋯
-          </button>
-          {showKebab && (
-            <div className="glass absolute right-0 top-full mt-1 py-1 w-44 z-10 rounded-md">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowKebab(false);
-                  setShowRedemptions(true);
-                }}
-                className="w-full text-left px-3 py-1.5 text-xs text-txt-secondary hover:text-txt-primary hover:bg-white/[0.04] transition-colors"
-              >
-                View redemptions
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowKebab(false);
-                  setConfirmDelete(true);
-                }}
-                className="w-full text-left px-3 py-1.5 text-xs text-accent-rose hover:bg-accent-rose/10 transition-colors"
-              >
-                Delete permanently
-              </button>
+        {/* Expanded body */}
+        {expanded && (
+          <div className="px-3 pb-3">
+            <div className="border-t border-white/[0.05] pt-3">
+              {/* Row 1: USED · (EXPIRES | terminal-status AT) · CREATED */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Used</div>
+                  <div
+                    className={`text-xs ${
+                      usageNearLimit ? 'text-accent-amber font-medium' : 'text-txt-secondary'
+                    }`}
+                  >
+                    {usageLabel}
+                  </div>
+                </div>
+                {isActive ? (
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Expires</div>
+                    <div className="text-xs text-txt-secondary">{formatExpiry(invite)}</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">
+                      {archivedTerminalLabel}
+                    </div>
+                    <div className="text-xs text-txt-secondary">{archivedTerminalValue}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created</div>
+                  <div className="text-xs text-txt-secondary">{formatRelative(invite.createdAt)}</div>
+                </div>
+              </div>
+
+              {/* Row 2: CREATED BY · TOKEN · LAST REDEEMED */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Created by</div>
+                  <div className="text-xs text-txt-secondary truncate" title={createdByLabel}>
+                    {createdByLabel}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Token</div>
+                  <div className="text-xs font-mono text-txt-secondary" title={invite.token}>
+                    {tokenDisplay}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-txt-tertiary uppercase tracking-wider mb-0.5">Last redeemed</div>
+                  <div className="text-xs text-txt-secondary">{lastRedeemedDisplay}</div>
+                </div>
+              </div>
+
+              {/* Action row */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {isActive ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleCopy(); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
+                    >
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-lavender/10 text-accent-lavender hover:bg-accent-lavender/20 rounded transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmRevoke(true); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
+                    >
+                      Revoke
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
+                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                    >
+                      View redemptions
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowReinstate(true); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-status-online/10 text-status-online hover:bg-status-online/20 rounded transition-colors"
+                    >
+                      Reinstate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors"
+                    >
+                      Delete permanently
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setShowRedemptions(true); }}
+                      className="text-[11px] text-txt-tertiary hover:text-txt-secondary underline decoration-dotted transition-colors ml-1"
+                    >
+                      View redemptions
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {showEdit && (
@@ -1247,6 +1300,15 @@ export function RegistrationPanel() {
   const [invitesLoading, setInvitesLoading] = useState(false);
   const [activeCount, setActiveCount] = useState<number>(0);
   const [archivedCount, setArchivedCount] = useState<number>(0);
+  // Single-row expansion state — only one InviteRow at a time may be expanded.
+  // Lifted to the panel so switching tabs can reset it; otherwise an expanded row
+  // that scrolls out of the visible list keeps stale state.
+  const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
+
+  const handleTabSwitch = (next: 'active' | 'archived') => {
+    setTab(next);
+    setExpandedInviteId(null);
+  };
 
   // Tracks the currently displayed tab so in-flight fetches can detect when
   // the user has switched tabs and discard their stale response. Without this
@@ -1408,7 +1470,7 @@ export function RegistrationPanel() {
           <div className="flex bg-white/[0.04] rounded-md p-0.5">
             <button
               type="button"
-              onClick={() => setTab('active')}
+              onClick={() => handleTabSwitch('active')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
                 tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
@@ -1417,7 +1479,7 @@ export function RegistrationPanel() {
             </button>
             <button
               type="button"
-              onClick={() => setTab('archived')}
+              onClick={() => handleTabSwitch('archived')}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
                 tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
@@ -1437,7 +1499,15 @@ export function RegistrationPanel() {
         ) : (
           <div className="space-y-2">
             {invites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} onMutate={() => { fetchInvites(tab); refreshCounts(); }} />
+              <InviteRow
+                key={inv.id}
+                invite={inv}
+                expanded={expandedInviteId === inv.id}
+                onToggleExpand={() =>
+                  setExpandedInviteId(expandedInviteId === inv.id ? null : inv.id)
+                }
+                onMutate={() => { fetchInvites(tab); refreshCounts(); }}
+              />
             ))}
           </div>
         )}
