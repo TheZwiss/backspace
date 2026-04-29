@@ -468,18 +468,32 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
         className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[16px] font-bold text-txt-primary">Create invite link</h3>
+            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
+              Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.
+            </p>
+          </div>
+        </div>
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleCreate();
           }}
-          className="p-6 space-y-5"
+          className="px-5 pt-4 pb-5 space-y-5"
         >
-          <h3 className="text-lg font-semibold text-txt-primary">Create invite link</h3>
-
           {/* Name */}
           <div>
-            <label className="block text-sm text-txt-secondary mb-1.5">Name</label>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
             <input
               ref={nameInputRef}
               type="text"
@@ -494,7 +508,7 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
 
           {/* Max uses */}
           <div>
-            <label className="block text-sm text-txt-secondary mb-1.5">Max uses</label>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Max uses</div>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
@@ -534,34 +548,37 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
           </div>
 
           {/* Expiry */}
-          <ExpirySelector
-            value={expiryId}
-            customDateTime={customDateTime}
-            onChange={(v, dt) => {
-              // Create's expiryId state is the narrower ExpiryPresetId; 'keep' cannot
-              // be returned because <ExpirySelector showKeep={false}> never renders it.
-              if (v === 'keep') return;
-              setExpiryId(v);
-              setCustomDateTime(dt);
-            }}
-            showKeep={false}
-            disabled={submitting}
-          />
+          <div>
+            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+            <ExpirySelector
+              value={expiryId}
+              customDateTime={customDateTime}
+              onChange={(v, dt) => {
+                // Create's expiryId state is the narrower ExpiryPresetId; 'keep' cannot
+                // be returned because <ExpirySelector showKeep={false}> never renders it.
+                if (v === 'keep') return;
+                setExpiryId(v);
+                setCustomDateTime(dt);
+              }}
+              showKeep={false}
+              disabled={submitting}
+            />
+          </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex gap-2 mt-4">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
             >
               {submitting ? 'Creating…' : 'Create link'}
             </button>
