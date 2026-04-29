@@ -851,6 +851,7 @@ export interface FederationRelayEvent {
     userId: string;
     homeUserId: string;
     homeInstance: string;
+    type?: 'user' | 'system';
     content: string | null;
     replyToId: string | null;
     editedAt: number | null;
