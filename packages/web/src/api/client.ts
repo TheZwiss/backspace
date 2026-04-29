@@ -63,6 +63,8 @@ import type {
   ReinstateInviteRequest,
   ReinstateInviteResponse,
   CheckInviteResponse,
+  SpaceInviteRequest,
+  SpaceInviteResponse,
 } from '@backspace/shared';
 
 export type { FederationPeer, ApprovalRequest, PeeringSubscription, PeeringNotification };
@@ -166,6 +168,7 @@ export class BackspaceApiClient {
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
     addMember: (dmChannelId: string, data: AddDmMemberRequest) => Promise<DmChannel>;
     leave: (dmChannelId: string) => Promise<{ success: boolean }>;
+    spaceInvite: (body: SpaceInviteRequest) => Promise<SpaceInviteResponse>;
   };
 
   readonly social: {
@@ -563,6 +566,8 @@ export class BackspaceApiClient {
         request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
       leave: (dmChannelId: string) =>
         request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
+      spaceInvite: (body) =>
+        request<SpaceInviteResponse>('POST', '/dm/space-invite', body),
     };
 
     this.social = {
