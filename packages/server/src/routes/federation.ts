@@ -3462,6 +3462,7 @@ function processCreateEvent(
       dmChannelId: localDmChannelId,
       userId: authorUser.id,
       content: event.message.content,
+      type: event.message.type === 'system' ? 'system' : 'user',
       replyToId: null,
       createdAt: event.message.createdAt,
       editedAt: null,
