@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { config } from '../config.js';
@@ -132,14 +132,20 @@ function foldUsername(username: string | null, isDeleted: number | null): string
 }
 
 /**
- * Project an `invite_links` row plus the resolved creator-username into the
- * shared `InviteLinkSummary` shape. Centralized so list/create/patch/reinstate
- * all return identically-shaped rows. Status is derived (never stored) per
- * spec §2.1.
+ * Project an `invite_links` row plus the resolved creator-username and the
+ * most-recent redemption timestamp into the shared `InviteLinkSummary` shape.
+ * Centralized so list/create/patch/reinstate all return identically-shaped
+ * rows. Status is derived (never stored) per spec §2.1.
+ *
+ * `lastRedeemedAt` is `null` when the invite has zero redemptions. Callers
+ * that run inside a transaction pass the `MAX(redeemed_at)` they read inside
+ * the same transaction handle; `listInvites` bakes this into the SELECT
+ * projection as a correlated subquery.
  */
 function rowToSummary(
   row: typeof schema.inviteLinks.$inferSelect,
   createdByUsername: string | null,
+  lastRedeemedAt: number | null,
 ): InviteLinkSummary {
   return {
     id: row.id,
@@ -153,8 +159,29 @@ function rowToSummary(
     createdBy: row.createdBy,
     createdByUsername,
     createdAt: row.createdAt,
+    lastRedeemedAt,
     url: buildInviteUrl(row.token),
   };
+}
+
+/**
+ * Query `MAX(redeemed_at)` for a single invite from the `invite_redemptions`
+ * table. Returns `null` when there are no redemption rows for this invite.
+ *
+ * Accepts an optional Drizzle handle so mutation callers inside a transaction
+ * body can read the max from the same logical transaction as their surrounding
+ * writes. Defaults to the outer `getDb()` for non-txn callers.
+ */
+function resolveLastRedeemedAt(
+  inviteId: string,
+  dbHandle: ReturnType<typeof getDb> = getDb(),
+): number | null {
+  const result = dbHandle
+    .select({ maxAt: sql<number | null>`MAX(${schema.inviteRedemptions.redeemedAt})` })
+    .from(schema.inviteRedemptions)
+    .where(eq(schema.inviteRedemptions.inviteId, inviteId))
+    .get();
+  return result?.maxAt ?? null;
 }
 
 /**
@@ -206,7 +233,8 @@ export function createInvite(req: CreateInviteRequest, creatorId: string): Invit
 
   const row = db.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
   if (!row) throw new Error('Failed to insert invite');
-  return rowToSummary(row, resolveCreatorUsername(creatorId));
+  // Freshly created invite: zero redemptions, so lastRedeemedAt is always null.
+  return rowToSummary(row, resolveCreatorUsername(creatorId), null);
 }
 
 /**
@@ -238,15 +266,16 @@ export function listInvites(filter: 'active' | 'archived'): InviteLinkSummary[] 
     invite: schema.inviteLinks,
     creatorUsername: schema.users.username,
     creatorIsDeleted: schema.users.isDeleted,
+    lastRedeemedAt: sql<number | null>`(SELECT MAX(${schema.inviteRedemptions.redeemedAt}) FROM ${schema.inviteRedemptions} WHERE ${schema.inviteRedemptions.inviteId} = ${schema.inviteLinks.id})`,
   })
     .from(schema.inviteLinks)
     .leftJoin(schema.users, eq(schema.inviteLinks.createdBy, schema.users.id))
     .orderBy(desc(schema.inviteLinks.createdAt))
     .all();
 
-  const summaries = rows.map(({ invite, creatorUsername, creatorIsDeleted }) => {
+  const summaries = rows.map(({ invite, creatorUsername, creatorIsDeleted, lastRedeemedAt }) => {
     const username = foldUsername(creatorUsername, creatorIsDeleted);
-    return rowToSummary(invite, username);
+    return rowToSummary(invite, username, lastRedeemedAt);
   });
 
   if (filter === 'active') return summaries.filter(s => s.status === 'active');
@@ -355,13 +384,13 @@ export function patchInvite(id: string, req: UpdateInviteRequest): InviteLinkSum
 
     if (Object.keys(updates).length === 0) {
       // No-op: just return current summary
-      return rowToSummary(row, resolveCreatorUsername(row.createdBy, tx));
+      return rowToSummary(row, resolveCreatorUsername(row.createdBy, tx), resolveLastRedeemedAt(row.id, tx));
     }
 
     tx.update(schema.inviteLinks).set(updates).where(eq(schema.inviteLinks.id, id)).run();
     const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
     if (!updated) throw new Error('Failed to read updated invite');
-    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx));
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx), resolveLastRedeemedAt(updated.id, tx));
   });
 }
 
@@ -385,7 +414,7 @@ export function revokeInvite(id: string): InviteLinkSummary {
     tx.update(schema.inviteLinks).set({ revokedAt: Date.now() }).where(eq(schema.inviteLinks.id, id)).run();
     const updated = tx.select().from(schema.inviteLinks).where(eq(schema.inviteLinks.id, id)).get();
     if (!updated) throw new Error('Failed to read updated invite');
-    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx));
+    return rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx), resolveLastRedeemedAt(updated.id, tx));
   });
 }
 
@@ -462,7 +491,7 @@ export function reinstateInvite(id: string, req: ReinstateInviteRequest): Reinst
     }
 
     return {
-      invite: rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx)),
+      invite: rowToSummary(updated, resolveCreatorUsername(updated.createdBy, tx), resolveLastRedeemedAt(updated.id, tx)),
       tokenRotated,
     };
   });

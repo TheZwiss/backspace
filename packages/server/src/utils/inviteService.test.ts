@@ -595,6 +595,101 @@ describe('redeemInvite', () => {
   });
 });
 
+describe('lastRedeemedAt', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    sqlite.pragma('foreign_keys = ON');
+    applyMigrations(sqlite);
+    testDb = drizzle(sqlite, { schema });
+  });
+
+  it('listInvites returns null lastRedeemedAt when invite has zero redemptions', () => {
+    const adminId = seedAdmin();
+    createInvite({ name: 'no-redeems', maxUses: null, expiresAt: null }, adminId);
+    const list = listInvites('active');
+    expect(list).toHaveLength(1);
+    expect(list[0]?.lastRedeemedAt).toBeNull();
+  });
+
+  it('listInvites returns the max redeemed_at when invite has multiple redemptions', () => {
+    const adminId = seedAdmin();
+    const invite = createInvite({ name: 'multi', maxUses: null, expiresAt: null }, adminId);
+
+    const t1 = Date.now() - 2000;
+    const t2 = Date.now() - 1000;
+    const t3 = Date.now();
+    testDb.insert(schema.users).values({ id: 'u1', username: 'alice', passwordHash: 'x', createdAt: t1 }).run();
+    testDb.insert(schema.users).values({ id: 'u2', username: 'bob', passwordHash: 'x', createdAt: t2 }).run();
+    testDb.insert(schema.users).values({ id: 'u3', username: 'carol', passwordHash: 'x', createdAt: t3 }).run();
+    testDb.insert(schema.inviteRedemptions).values({ id: 'r1', inviteId: invite.id, userId: 'u1', registrantUsername: 'alice', redeemedAt: t1 }).run();
+    testDb.insert(schema.inviteRedemptions).values({ id: 'r2', inviteId: invite.id, userId: 'u2', registrantUsername: 'bob', redeemedAt: t3 }).run();
+    testDb.insert(schema.inviteRedemptions).values({ id: 'r3', inviteId: invite.id, userId: 'u3', registrantUsername: 'carol', redeemedAt: t2 }).run();
+
+    const list = listInvites('active');
+    expect(list).toHaveLength(1);
+    expect(list[0]?.lastRedeemedAt).toBe(t3);
+  });
+
+  it('listInvites correctly attributes lastRedeemedAt to the right invite when multiple invites exist', () => {
+    const adminId = seedAdmin();
+    const invA = createInvite({ name: 'A', maxUses: null, expiresAt: null }, adminId);
+    const invB = createInvite({ name: 'B', maxUses: null, expiresAt: null }, adminId);
+
+    const tA = Date.now() - 5000;
+    const tB = Date.now() - 1000;
+    testDb.insert(schema.users).values({ id: 'uA', username: 'alice', passwordHash: 'x', createdAt: tA }).run();
+    testDb.insert(schema.users).values({ id: 'uB', username: 'bob', passwordHash: 'x', createdAt: tB }).run();
+    testDb.insert(schema.inviteRedemptions).values({ id: 'rA', inviteId: invA.id, userId: 'uA', registrantUsername: 'alice', redeemedAt: tA }).run();
+    testDb.insert(schema.inviteRedemptions).values({ id: 'rB', inviteId: invB.id, userId: 'uB', registrantUsername: 'bob', redeemedAt: tB }).run();
+
+    const list = listInvites('active');
+    const summaryA = list.find(i => i.id === invA.id);
+    const summaryB = list.find(i => i.id === invB.id);
+    expect(summaryA?.lastRedeemedAt).toBe(tA);
+    expect(summaryB?.lastRedeemedAt).toBe(tB);
+  });
+
+  it('getInviteByToken returns the raw row (not InviteLinkSummary) — lastRedeemedAt is not on the raw row type', () => {
+    // getInviteByToken intentionally returns the raw $inferSelect row for use
+    // by the registration flow, not an InviteLinkSummary. Confirm the raw row
+    // exists and can be fetched — the absence of lastRedeemedAt on the type is
+    // enforced by TypeScript at compile time.
+    const adminId = seedAdmin();
+    const created = createInvite({ name: 'a', maxUses: null, expiresAt: null }, adminId);
+    const rawRow = getInviteByToken(created.token);
+    expect(rawRow).not.toBeNull();
+    expect(rawRow?.id).toBe(created.id);
+  });
+
+  it('after redeemInvite, a subsequent listInvites reflects the updated lastRedeemedAt', () => {
+    const adminId = seedAdmin();
+    const invite = createInvite({ name: 'redeem-test', maxUses: 5, expiresAt: null }, adminId);
+
+    // Confirm null before any redemption
+    const before = listInvites('active');
+    expect(before.find(i => i.id === invite.id)?.lastRedeemedAt).toBeNull();
+
+    const newUserId = 'redeemer-2';
+    const tBefore = Date.now();
+    redeemInvite(invite.token, () => {
+      testDb.insert(schema.users).values({
+        id: newUserId,
+        username: 'redeemer2',
+        passwordHash: 'x',
+        createdAt: Date.now(),
+      }).run();
+      return { id: newUserId, username: 'redeemer2' };
+    });
+    const tAfter = Date.now();
+
+    const after = listInvites('active');
+    const summary = after.find(i => i.id === invite.id);
+    expect(summary?.lastRedeemedAt).not.toBeNull();
+    expect(summary?.lastRedeemedAt).toBeGreaterThanOrEqual(tBefore);
+    expect(summary?.lastRedeemedAt).toBeLessThanOrEqual(tAfter);
+  });
+});
+
 describe('deleteInvite', () => {
   beforeEach(() => {
     sqlite = new Database(':memory:');

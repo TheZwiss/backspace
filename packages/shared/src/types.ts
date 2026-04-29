@@ -1151,6 +1151,8 @@ export interface InviteLinkSummary {
   /** Joined from users.username at read time. `'Deleted User'` when the creator's account is tombstoned. `null` only if the FK is somehow unresolvable (defensive). */
   createdByUsername: string | null;
   createdAt: number;
+  /** Epoch ms of the most recent redemption; `null` when the invite has zero redemptions. */
+  lastRedeemedAt: number | null;
   /** Server-constructed full URL, e.g. `https://host.example/register?invite=<token>`. Clients must NOT assemble this themselves. */
   url: string;
 }

@@ -278,6 +278,7 @@ type InviteLinkSummary = {
   createdBy: string;
   createdByUsername: string | null;  // 'Deleted User' if creator tombstoned
   createdAt: number;
+  lastRedeemedAt: number | null;  // epoch ms of most recent redemption; null when usedCount = 0
   url: string;  // server-built `https://<host>/register?invite=<token>` — clients MUST NOT assemble
 };
 
