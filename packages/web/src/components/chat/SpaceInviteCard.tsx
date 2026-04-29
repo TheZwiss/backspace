@@ -56,7 +56,15 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
       const space = await joinByCode(payload.inviteCode, payload.spaceInstanceOrigin || undefined);
       navigate(`/spaces/${space.id}`);
     } catch (err) {
-      setJoinError((err as Error)?.message ?? 'Failed to join');
+      const msg = (err as Error)?.message ?? '';
+      if (msg.toLowerCase().includes('already a member')) {
+        // Already a member is a successful state — just navigate to the space.
+        // Look up the space in the store by id; if not found (rare race), stay
+        // silent rather than block the user with a noisy error.
+        navigate(`/spaces/${payload.spaceId}`);
+        return;
+      }
+      setJoinError(msg || 'Failed to join');
       setJoining(false);
     }
   };

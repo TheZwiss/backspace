@@ -3,11 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SpaceInviteCard } from './SpaceInviteCard';
 
-const { mockJoinByCode, mockGetApiForOrigin } = vi.hoisted(() => ({
+const { mockJoinByCode, mockGetApiForOrigin, mockNavigate } = vi.hoisted(() => ({
   mockJoinByCode: vi.fn(),
   mockGetApiForOrigin: vi.fn(() => ({
     spaces: { invitePreview: vi.fn() },
   })),
+  mockNavigate: vi.fn(),
 }));
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: any) => selector({ joinByCode: mockJoinByCode }),
@@ -15,6 +16,10 @@ vi.mock('../../stores/spaceStore', () => ({
 }));
 vi.mock('../../api/client', () => ({
   createApiClient: vi.fn(),
+}));
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual<typeof import('react-router-dom')>('react-router-dom')),
+  useNavigate: () => mockNavigate,
 }));
 
 const basePayload = {
@@ -36,6 +41,7 @@ describe('SpaceInviteCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockJoinByCode.mockReset();
+    mockNavigate.mockReset();
     mockJoinByCode.mockResolvedValue({ id: 'S1', name: 'Aether' });
   });
 
@@ -90,5 +96,22 @@ describe('SpaceInviteCard', () => {
     // Specifically NOT called with empty string or undefined
     expect(mockJoinByCode).not.toHaveBeenCalledWith('abc', '');
     expect(mockJoinByCode).not.toHaveBeenCalledWith('abc', undefined);
+  });
+
+  it('navigates to space when join returns "already a member" (no error shown)', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    const user = userEvent.setup();
+
+    mockJoinByCode.mockRejectedValueOnce(new Error('You are already a member of this space'));
+    mockGetApiForOrigin.mockReturnValue({
+      spaces: { invitePreview: vi.fn().mockResolvedValue({ ...basePayload.snapshot, spaceId: 'S1' }) },
+    });
+
+    render(<MemoryRouter><SpaceInviteCard payload={basePayload} senderName="Alice" /></MemoryRouter>);
+    const btn = await screen.findByRole('button', { name: /^join$/i });
+    await user.click(btn);
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/spaces/S1'));
+    expect(screen.queryByText(/already a member of this space/i)).not.toBeInTheDocument();
   });
 });
