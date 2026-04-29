@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InviteLinkSummary, InviteRedemption, InviteStatus } from '@backspace/shared';
 import { api } from '../../../api/client';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -67,6 +67,182 @@ function inviteStatusLabel(status: InviteStatus): string {
     case 'exhausted': return 'Exhausted';
     case 'revoked':   return 'Revoked';
   }
+}
+
+// ---------------------------------------------------------------------------
+// Sort / filter types
+// ---------------------------------------------------------------------------
+
+type ActiveSort = 'recent' | 'oldest' | 'name' | 'mostUsed' | 'expiringSoonest';
+type ArchivedSort = 'recent' | 'oldest' | 'name';
+type ArchivedStatus = 'expired' | 'exhausted' | 'revoked';
+
+// ---------------------------------------------------------------------------
+// Sort / filter pure functions
+// Sort/filter applied client-side. At ~500+ invites in a single bucket,
+// move to server-side: add `?sort=` and `?status=` params to /admin/invites,
+// page through results. Today the test instances have <50 invites total.
+// ---------------------------------------------------------------------------
+
+function sortInvites(
+  list: InviteLinkSummary[],
+  sortKey: ActiveSort | ArchivedSort,
+): InviteLinkSummary[] {
+  const arr = [...list];
+  switch (sortKey) {
+    case 'recent':
+      return arr.sort((a, b) => b.createdAt - a.createdAt);
+    case 'oldest':
+      return arr.sort((a, b) => a.createdAt - b.createdAt);
+    case 'name':
+      return arr.sort((a, b) => a.name.localeCompare(b.name));
+    case 'mostUsed':
+      return arr.sort((a, b) => b.usedCount - a.usedCount);
+    case 'expiringSoonest':
+      return arr.sort((a, b) => {
+        // null expiresAt (no expiration) sorts last
+        if (a.expiresAt === null && b.expiresAt === null) return 0;
+        if (a.expiresAt === null) return 1;
+        if (b.expiresAt === null) return -1;
+        return a.expiresAt - b.expiresAt;
+      });
+  }
+}
+
+function filterInvitesByStatus(
+  list: InviteLinkSummary[],
+  statuses: Set<ArchivedStatus>,
+): InviteLinkSummary[] {
+  // ArchivedStatus excludes 'active' by construction — this filter is only
+  // applied on the archived tab where all invites have a non-active status.
+  return list.filter((inv) => statuses.has(inv.status as ArchivedStatus));
+}
+
+// ---------------------------------------------------------------------------
+// FilterDropdown
+// ---------------------------------------------------------------------------
+
+interface FilterDropdownProps {
+  view: 'active' | 'archived';
+  activeSort: ActiveSort;
+  onActiveSortChange: (s: ActiveSort) => void;
+  archivedSort: ArchivedSort;
+  onArchivedSortChange: (s: ArchivedSort) => void;
+  archivedStatusFilter: Set<ArchivedStatus>;
+  onArchivedStatusToggle: (s: ArchivedStatus) => void;
+}
+
+function FilterDropdown({
+  view,
+  activeSort,
+  onActiveSortChange,
+  archivedSort,
+  onArchivedSortChange,
+  archivedStatusFilter,
+  onArchivedStatusToggle,
+}: FilterDropdownProps) {
+  const [open, setOpen] = useState(false);
+
+  const activeSortOptions: Array<{ key: ActiveSort; label: string }> = [
+    { key: 'recent', label: 'Most recent' },
+    { key: 'oldest', label: 'Oldest' },
+    { key: 'name', label: 'Name (A–Z)' },
+    { key: 'mostUsed', label: 'Most used' },
+    { key: 'expiringSoonest', label: 'Expiring soonest' },
+  ];
+
+  const archivedSortOptions: Array<{ key: ArchivedSort; label: string }> = [
+    { key: 'recent', label: 'Most recent' },
+    { key: 'oldest', label: 'Oldest' },
+    { key: 'name', label: 'Name (A–Z)' },
+  ];
+
+  const archivedStatusOptions: ArchivedStatus[] = ['expired', 'exhausted', 'revoked'];
+
+  const handleArchivedStatusToggle = (s: ArchivedStatus) => {
+    // Prevent deselecting the last selected status — always keep at least one.
+    if (archivedStatusFilter.has(s) && archivedStatusFilter.size === 1) return;
+    onArchivedStatusToggle(s);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="opacity-60">
+          <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+        Filter
+        <span className="text-[10px]">▾</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 glass rounded-lg p-1.5 w-48">
+            {view === 'archived' && (
+              <>
+                <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
+                  Status
+                </div>
+                {archivedStatusOptions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => handleArchivedStatusToggle(s)}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${
+                      archivedStatusFilter.has(s)
+                        ? 'text-txt-primary bg-white/[0.04]'
+                        : 'text-txt-tertiary'
+                    } hover:bg-white/[0.06] transition-colors`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${inviteStatusDotColor(s)}`} />
+                    <span>{inviteStatusLabel(s)}</span>
+                  </button>
+                ))}
+                <div className="h-px bg-white/[0.06] my-1" />
+              </>
+            )}
+            <div className="text-[10px] font-semibold text-txt-tertiary uppercase tracking-wider px-2 py-1">
+              Sort by
+            </div>
+            {view === 'active'
+              ? activeSortOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => { onActiveSortChange(opt.key); setOpen(false); }}
+                    className={`w-full text-left px-2 py-1.5 text-xs rounded ${
+                      activeSort === opt.key
+                        ? 'text-accent-lavender bg-accent-lavender/[0.08]'
+                        : 'text-txt-primary'
+                    } hover:bg-white/[0.06] transition-colors`}
+                  >
+                    {opt.label}
+                  </button>
+                ))
+              : archivedSortOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => { onArchivedSortChange(opt.key); setOpen(false); }}
+                    className={`w-full text-left px-2 py-1.5 text-xs rounded ${
+                      archivedSort === opt.key
+                        ? 'text-accent-lavender bg-accent-lavender/[0.08]'
+                        : 'text-txt-primary'
+                    } hover:bg-white/[0.06] transition-colors`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 type ExpiryPresetId = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom';
@@ -1305,6 +1481,23 @@ export function RegistrationPanel() {
   // that scrolls out of the visible list keeps stale state.
   const [expandedInviteId, setExpandedInviteId] = useState<string | null>(null);
 
+  // Sort / filter state — independent per tab so switching tabs preserves each
+  // tab's last selection.
+  const [activeSort, setActiveSort] = useState<ActiveSort>('recent');
+  const [archivedSort, setArchivedSort] = useState<ArchivedSort>('recent');
+  const [archivedStatusFilter, setArchivedStatusFilter] = useState<Set<ArchivedStatus>>(
+    () => new Set<ArchivedStatus>(['expired', 'exhausted', 'revoked']),
+  );
+
+  const toggleArchivedStatus = (s: ArchivedStatus) => {
+    setArchivedStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
+
   const handleTabSwitch = (next: 'active' | 'archived') => {
     setTab(next);
     setExpandedInviteId(null);
@@ -1366,6 +1559,18 @@ export function RegistrationPanel() {
   useEffect(() => {
     fetchInvites(tab);
   }, [tab, fetchInvites]);
+
+  // Derived sorted + filtered list. Tab badge counts (`activeCount`/`archivedCount`)
+  // are NOT derived from this — they reflect the full unfiltered bucket size.
+  // Must be declared before any conditional early-return to satisfy rules-of-hooks.
+  const displayInvites = useMemo(() => {
+    let list = invites;
+    if (tab === 'archived') {
+      list = filterInvitesByStatus(list, archivedStatusFilter);
+    }
+    list = sortInvites(list, tab === 'active' ? activeSort : archivedSort);
+    return list;
+  }, [invites, tab, activeSort, archivedSort, archivedStatusFilter]);
 
   if (!draft) return <div className="text-sm text-txt-tertiary">Loading settings...</div>;
 
@@ -1465,7 +1670,7 @@ export function RegistrationPanel() {
           </button>
         </div>
 
-        {/* Row 2: tab strip (left) + filter placeholder (right — Commit 4) */}
+        {/* Row 2: tab strip (left) + FilterDropdown (right) */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex bg-white/[0.04] rounded-md p-0.5">
             <button
@@ -1487,7 +1692,15 @@ export function RegistrationPanel() {
               Archived <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
             </button>
           </div>
-          <div />
+          <FilterDropdown
+            view={tab}
+            activeSort={activeSort}
+            onActiveSortChange={setActiveSort}
+            archivedSort={archivedSort}
+            onArchivedSortChange={setArchivedSort}
+            archivedStatusFilter={archivedStatusFilter}
+            onArchivedStatusToggle={toggleArchivedStatus}
+          />
         </div>
 
         {invitesLoading ? (
@@ -1496,9 +1709,13 @@ export function RegistrationPanel() {
           <div className="text-sm text-txt-tertiary">
             {tab === 'active' ? 'No active invite links.' : 'No archived invite links.'}
           </div>
+        ) : displayInvites.length === 0 ? (
+          <div className="text-[11px] text-txt-tertiary py-3 text-center">
+            No invites match the current filter.
+          </div>
         ) : (
           <div className="space-y-2">
-            {invites.map((inv) => (
+            {displayInvites.map((inv) => (
               <InviteRow
                 key={inv.id}
                 invite={inv}
