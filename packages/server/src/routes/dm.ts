@@ -22,7 +22,7 @@ import {
   type SpaceInviteResponse,
   type SpaceInviteSystemPayload,
 } from '@backspace/shared';
-import { fetchSpaceInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
+import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
@@ -1731,10 +1731,15 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'not_a_friend', statusCode: 400 });
     }
 
-    // 3. Server-to-server snapshot fetch from the space's home instance.
+    // 3. Snapshot lookup. For local spaces, read the DB directly — fetching
+    // our own /preview endpoint over HTTPS fails inside Docker (NAT loopback).
+    // Cross-instance previews still go through the SSRF-validated HTTP path.
     const ourOrigin = getOurOrigin();
     const spaceOrigin = body.spaceInstanceOrigin || ourOrigin;
-    const snapshot = await fetchSpaceInviteSnapshot(spaceOrigin, body.inviteCode);
+    const isLocal = !body.spaceInstanceOrigin || body.spaceInstanceOrigin === ourOrigin;
+    const snapshot = isLocal
+      ? getLocalInviteSnapshot(body.inviteCode)
+      : await fetchSpaceInviteSnapshot(spaceOrigin, body.inviteCode);
     if (!snapshot) {
       return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
     }

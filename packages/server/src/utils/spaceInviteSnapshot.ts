@@ -1,4 +1,6 @@
 import type { AvatarColor } from '@backspace/shared';
+import { eq } from 'drizzle-orm';
+import { getDb, schema } from '../db/index.js';
 import { validateExternalUrl } from './ssrf.js';
 
 export interface SpaceInviteSnapshot {
@@ -9,6 +11,38 @@ export interface SpaceInviteSnapshot {
   avatarColor: AvatarColor | null;
   memberCount: number;
   instanceName: string;
+}
+
+/**
+ * Build a local invite snapshot directly from the DB. Used when the space
+ * lives on this instance — avoids an HTTP roundtrip through our own domain
+ * (which fails inside Docker due to NAT loopback) and is faster anyway.
+ *
+ * Returns the same shape as `fetchSpaceInviteSnapshot` so callers don't
+ * branch downstream of the snapshot lookup.
+ */
+export function getLocalInviteSnapshot(inviteCode: string): SpaceInviteSnapshot | null {
+  const db = getDb();
+  const space = db.select().from(schema.spaces)
+    .where(eq(schema.spaces.inviteCode, inviteCode)).get();
+  if (!space) return null;
+
+  const memberCount = db.select().from(schema.spaceMembers)
+    .where(eq(schema.spaceMembers.spaceId, space.id)).all().length;
+
+  const settings = db.select().from(schema.instanceSettings)
+    .where(eq(schema.instanceSettings.id, 1)).get();
+  const instanceName = settings?.instanceName ?? 'Backspace';
+
+  return {
+    spaceId: space.id,
+    spaceName: space.name,
+    description: space.description ?? null,
+    icon: space.icon ?? null,
+    avatarColor: (space.avatarColor as AvatarColor | null) ?? null,
+    memberCount,
+    instanceName,
+  };
 }
 
 /**

@@ -26,6 +26,7 @@ import type {
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 import { checkVoicePermissions } from '../ws/events.js';
+import { getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 
 function rowToSpace(row: typeof schema.spaces.$inferSelect): Space {
   return {
@@ -1227,29 +1228,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/spaces/invite/:code/preview — Public invite preview (no auth)
   app.get<{ Params: { code: string } }>('/api/spaces/invite/:code/preview', async (request, reply) => {
     const { code } = request.params;
-    const db = getDb();
-
-    const space = db.select().from(schema.spaces).where(eq(schema.spaces.inviteCode, code)).get();
-    if (!space) {
+    const snapshot = getLocalInviteSnapshot(code);
+    if (!snapshot) {
       return reply.code(404).send({ error: 'Invalid invite code', statusCode: 404 });
     }
-
-    const memberCount = db.select().from(schema.spaceMembers)
-      .where(eq(schema.spaceMembers.spaceId, space.id))
-      .all().length;
-
-    const settings = db.select().from(schema.instanceSettings).where(eq(schema.instanceSettings.id, 1)).get();
-    const instanceName = settings?.instanceName ?? 'Backspace';
-
-    return reply.code(200).send({
-      spaceId: space.id,
-      spaceName: space.name,
-      description: space.description ?? null,
-      icon: space.icon ?? null,
-      avatarColor: space.avatarColor ?? null,
-      memberCount,
-      instanceName,
-    });
+    return reply.code(200).send(snapshot);
   });
 
   // ─── Ban Management ───────────────────────────────────────────────────────

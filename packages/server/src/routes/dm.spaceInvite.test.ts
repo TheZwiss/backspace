@@ -59,11 +59,13 @@ vi.mock('../utils/federationAuth.js', async (importActual) => {
   return { ...actual, getOurOrigin: () => 'https://local.test' };
 });
 
-// Mock the snapshot fetch so tests don't make real HTTP calls.
+// Mock the snapshot helpers so tests don't make real HTTP calls and we can
+// observe which lookup path the route takes (local DB vs. cross-instance HTTP).
 vi.mock('../utils/spaceInviteSnapshot.js', () => ({
   fetchSpaceInviteSnapshot: vi.fn(),
+  getLocalInviteSnapshot: vi.fn(),
 }));
-import { fetchSpaceInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
+import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
@@ -130,6 +132,7 @@ describe('POST /api/dm/space-invite', () => {
     seedFriendship('alice', 'bob');
     currentUserId = 'alice';
     (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReset();
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReset();
     app = await buildApp();
   });
 
@@ -147,12 +150,13 @@ describe('POST /api/dm/space-invite', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toBe('not_a_friend');
-    // Snapshot should not be fetched if friendship gate fails first.
+    // Snapshot should not be looked up if friendship gate fails first.
     expect(fetchSpaceInviteSnapshot).not.toHaveBeenCalled();
+    expect(getLocalInviteSnapshot).not.toHaveBeenCalled();
   });
 
-  it('rejects 400 invite_invalid when upstream preview 404s (snapshot null)', async () => {
-    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+  it('rejects 400 invite_invalid when local snapshot lookup returns null', async () => {
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
     const res = await app.inject({
       method: 'POST',
       url: '/api/dm/space-invite',
@@ -171,7 +175,7 @@ describe('POST /api/dm/space-invite', () => {
   });
 
   it('rejects 400 invite_invalid when snapshot.spaceId mismatches the requested spaceId', async () => {
-    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       spaceId: 'WRONG',
       spaceName: 'X',
       description: null,
@@ -197,7 +201,7 @@ describe('POST /api/dm/space-invite', () => {
   });
 
   it('inserts a type=system message with parseable space_invite content on success', async () => {
-    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       spaceId: 'S1',
       spaceName: 'Aether',
       description: 'desc',
@@ -247,7 +251,7 @@ describe('POST /api/dm/space-invite', () => {
   });
 
   it('reuses an existing 1-on-1 DM rather than creating a new one', async () => {
-    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       spaceId: 'S1',
       spaceName: 'Aether',
       description: null,
@@ -296,5 +300,90 @@ describe('POST /api/dm/space-invite', () => {
       .all();
     expect(messages.length).toBe(2);
     expect(messages.every(m => m.type === 'system')).toBe(true);
+  });
+
+  it('uses local DB lookup (skips HTTP) when spaceInstanceOrigin is empty/local', async () => {
+    // Regression guard for the production hang: when the space is local, the
+    // route MUST NOT call fetchSpaceInviteSnapshot — that path tries to reach
+    // our own public domain over HTTPS, which fails inside Docker (NAT loopback).
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      spaceId: 'S1',
+      spaceName: 'Aether',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 1,
+      instanceName: 'Backspace',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/space-invite',
+      payload: {
+        target: { userId: 'bob' },
+        spaceId: 'S1',
+        spaceInstanceOrigin: '',
+        inviteCode: 'abc',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(getLocalInviteSnapshot).toHaveBeenCalledWith('abc');
+    // CRITICAL: the HTTP fetch path must NOT run for local invites.
+    expect(fetchSpaceInviteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('uses local DB lookup when spaceInstanceOrigin equals our own origin', async () => {
+    // Same fast-path applies if the client sends our origin explicitly.
+    (getLocalInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+      spaceId: 'S1',
+      spaceName: 'Aether',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 1,
+      instanceName: 'Backspace',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/space-invite',
+      payload: {
+        target: { userId: 'bob' },
+        spaceId: 'S1',
+        spaceInstanceOrigin: 'https://local.test',
+        inviteCode: 'abc',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(getLocalInviteSnapshot).toHaveBeenCalledWith('abc');
+    expect(fetchSpaceInviteSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('uses HTTP fetch path for cross-instance invites', async () => {
+    // Regression guard: when the space is on a different instance, we must
+    // hit the SSRF-validated HTTP path, not the local DB.
+    (fetchSpaceInviteSnapshot as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      spaceId: 'S1',
+      spaceName: 'Remote',
+      description: null,
+      icon: null,
+      avatarColor: null,
+      memberCount: 5,
+      instanceName: 'OtherHost',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/space-invite',
+      payload: {
+        target: { userId: 'bob' },
+        spaceId: 'S1',
+        spaceInstanceOrigin: 'https://remote.example',
+        inviteCode: 'abc',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(fetchSpaceInviteSnapshot).toHaveBeenCalledWith('https://remote.example', 'abc');
+    expect(getLocalInviteSnapshot).not.toHaveBeenCalled();
   });
 });
