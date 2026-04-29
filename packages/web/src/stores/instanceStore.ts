@@ -1112,6 +1112,37 @@ setUserIdForOriginResolver((origin: string): string | undefined => {
   return instance?.user.id;
 });
 
+// ─── Electron: push connected-instance origins to main process ───────────────
+// Enables the main process to intercept invite URLs that point to instances
+// we're already signed into. Uses the basic subscribe(listener) form (no
+// subscribeWithSelector middleware on this store) with a manual diff to avoid
+// IPC spam on unrelated state changes (e.g. isLoading toggles, registry updates).
+{
+  let lastSerialized = '';
+  const pushOrigins = (instances: ConnectedInstance[]) => {
+    if (typeof window === 'undefined' || !window.backspace?.setConnectedOrigins) return;
+    const origins = [
+      window.location.origin,
+      ...instances
+        .filter(i => i.status === 'connected')
+        .map(i => i.origin)
+        .filter(Boolean),
+    ];
+    const serialized = origins.join('|');
+    if (serialized === lastSerialized) return;
+    lastSerialized = serialized;
+    window.backspace.setConnectedOrigins(origins);
+  };
+
+  // Initial push (current state at module load time)
+  pushOrigins(useInstanceStore.getState().instances);
+
+  // Push on every state change; guard above skips when origin set is unchanged
+  useInstanceStore.subscribe((state) => {
+    pushOrigins(state.instances);
+  });
+}
+
 // ─── Hostname → origin resolution (federation) ────────────────────────────────
 // Maps a user's homeInstance hostname to its full origin URL.
 
