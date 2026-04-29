@@ -51,6 +51,16 @@ contextBridge.exposeInMainWorld('backspace', {
     ipcRenderer.on('deep-link', (_event, url) => callback(url));
   },
 
+  // Instance-origin-aware URL routing
+  setConnectedOrigins: (origins: string[]) => {
+    ipcRenderer.send('set-connected-origins', origins);
+  },
+  onOpenInternalRoute: (callback: (path: string) => void) => {
+    const handler = (_evt: Electron.IpcRendererEvent, path: string) => callback(path);
+    ipcRenderer.on('open-internal-route', handler);
+    return () => { ipcRenderer.removeListener('open-internal-route', handler); };
+  },
+
   // Screen share picker coordination
   onScreenShareSources: (callback: (sources: unknown[]) => void) => {
     ipcRenderer.on('screen-share-sources', (_event, sources) => callback(sources));

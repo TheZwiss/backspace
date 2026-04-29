@@ -35,6 +35,10 @@ interface BackspaceElectronAPI {
   // Deep linking (Task 2.3)
   onDeepLink: (callback: (url: string) => void) => void;
 
+  // Instance-origin-aware URL routing
+  setConnectedOrigins: (origins: string[]) => void;
+  onOpenInternalRoute: (callback: (path: string) => void) => (() => void);
+
   // Screen share picker coordination
   onScreenShareSources: (callback: (sources: ElectronScreenSource[]) => void) => void;
   selectScreenSource: (sourceId: string | null, shareAudio?: boolean) => void;
