@@ -306,6 +306,16 @@ export async function startScreenShare(room: Room): Promise<boolean> {
   } catch (err) {
     console.error('[ScreenShare] Failed to start screen share:', err);
     if (hwOverdrive) deactivateHwOverdrive();
+    // Loopback unsupported (Linux without pulse, macOS without Catap) makes
+    // the whole getDisplayMedia call reject. No auto-retry: the picker
+    // selection was consumed, retrying would re-prompt it.
+    if (config.shareAudio && err instanceof Error && err.name !== 'NotAllowedError') {
+      useUIStore.getState().addToast(
+        'Could not start stream with system audio. Disable "Share system audio" in the picker if your system does not support it.',
+        'warning',
+        8000,
+      );
+    }
     return false;
   }
 }

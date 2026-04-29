@@ -206,7 +206,7 @@ ScreenShareConfig {
   fps: number,                     // 30-120
   mode: 'gaming' | 'text',         // Affects bitrate & content hint
   customBitrateKbps: number | null, // Admin override (if allowed)
-  shareAudio: boolean               // System audio (disabled in Electron)
+  shareAudio: boolean               // System audio loopback (see Platform Support below)
 }
 ```
 
@@ -233,6 +233,19 @@ ScreenShareConfig {
 - `maxResolution`, `maxFramerate`, `maxBitrateKbps`, `minBitrateKbps`
 - `allowCustomBitrate` toggle
 - `bitrateMatrixOverrides` (JSON sparse overrides)
+
+### System Audio Loopback (`shareAudio`)
+
+The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to the screen-share publication. In the browser it maps to `getDisplayMedia({ audio: true })`. In Electron, the `setDisplayMediaRequestHandler` callback (`packages/desktop/src/main.ts`) returns `audio: 'loopback'` to opt into Chromium's system-audio loopback path.
+
+| Platform | Mechanism | Notes |
+|----------|-----------|-------|
+| Browser (Chrome/Edge) | `getDisplayMedia({ audio: true })` | Tab/window/system audio per the user's pick |
+| Electron / Windows | Chromium native loopback | Works out of the box |
+| Electron / macOS 13+ | CoreAudio Tap (Catap) | Requires `NSAudioCaptureUsageDescription` (set by `electron-builder.yml#mac.extendInfo`) |
+| Electron / Linux | PulseAudio loopback | **Requires** the `PulseaudioLoopbackForScreenShare` Chromium feature flag — enabled at startup in `main.ts` for Linux. Works on PulseAudio and on PipeWire systems with the `pipewire-pulse` compat layer. PipeWire-only systems without pulse compat will fail. |
+
+**Failure handling.** When loopback is not supported, Chromium rejects the entire `getDisplayMedia` request — the source-picker selection has already been consumed, so silently retrying without audio would re-prompt the picker. `startScreenShare` (`utils/screenShare.ts`) instead surfaces a warning toast directing the user to disable "Share system audio" if their system does not support loopback. We do **not** auto-mutate the user's `shareAudio` preference.
 
 ---
 

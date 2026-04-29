@@ -739,6 +739,11 @@ function handleDeepLink(url: string): void {
 // libraries are loaded in the same process. Force GTK 3 for compatibility.
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('gtk-version', '3');
+  // Chromium ships PulseAudio loopback for screen-share behind a feature flag.
+  // Without it, returning `audio: 'loopback'` from setDisplayMediaRequestHandler
+  // fails the whole getDisplayMedia request — screen share never starts when the
+  // user has "Share system audio" enabled.
+  app.commandLine.appendSwitch('enable-features', 'PulseaudioLoopbackForScreenShare');
 }
 
 // Set as default protocol handler
@@ -896,8 +901,15 @@ if (!gotTheLock) {
           return;
         }
 
-        // Provide the selected source — Electron creates the MediaStream
-        // System audio loopback: Windows/Linux native, macOS 13+ via ScreenCaptureKit
+        // Provide the selected source — Electron creates the MediaStream.
+        // System audio loopback support varies:
+        //   - Windows: native (Chromium default).
+        //   - macOS 13+: CoreAudio Tap; requires NSAudioCaptureUsageDescription
+        //     in Info.plist (electron-builder injects it via mac.extendInfo).
+        //   - Linux: PulseAudio loopback, gated behind the
+        //     `PulseaudioLoopbackForScreenShare` feature flag we enable above.
+        //     Fails on PipeWire-only systems without pulse compat — the
+        //     renderer catches that and toasts the user.
         callback({ video: selected, ...(shareAudio ? { audio: 'loopback' } : {}) });
       } catch (err) {
         console.error('[Main:ScreenShare] Handler error:', err);
