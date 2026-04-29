@@ -693,12 +693,18 @@ export function cleanupSoftDeletedDmChannels(): number {
   return purged;
 }
 
+// cleanupStorage is expensive (full disk scan + DB joins) so we run it at
+// most once per 24h rather than on every janitor tick.
+const STORAGE_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+let lastStorageCleanupAt = 0;
+
 /**
  * Run all periodic federation/GC cleanup tasks:
  *  - Expired outbox entries
  *  - Old mutation log entries
  *  - Stale file queue entries
  *  - Soft-deleted DM channels past grace period
+ *  - Once-per-day: cleanupStorage (orphan files + unlinked + dangling)
  */
 export async function runFederationJanitor(): Promise<void> {
   try {
@@ -728,6 +734,25 @@ export async function runFederationJanitor(): Promise<void> {
       cleanupReadPeeringNotifications();
     } catch (err) {
       console.error('[storage-janitor] Approval request expiry error:', err);
+    }
+
+    // Once-per-day storage cleanup. Sweeps orphan disk files (unreferenced
+    // by any DB row) + unlinked attachments (uploaded but never attached
+    // to a message past the 1h grace) + dangling attachment rows. Backs up
+    // the tus POST_FINISH atomicity guarantees in routes/files.ts.
+    const now = Date.now();
+    if (now - lastStorageCleanupAt >= STORAGE_CLEANUP_INTERVAL_MS) {
+      lastStorageCleanupAt = now;
+      try {
+        const result = cleanupStorage(false);
+        if (result.deletedFiles > 0 || result.deletedAttachmentRecords > 0 || result.errors.length > 0) {
+          console.log(
+            `[storage-janitor] Daily storage sweep: deletedFiles=${result.deletedFiles} freedBytes=${result.freedBytes} deletedAttachmentRecords=${result.deletedAttachmentRecords} errors=${result.errors.length}`,
+          );
+        }
+      } catch (err) {
+        console.error('[storage-janitor] Storage cleanup error:', err);
+      }
     }
   } catch (err) {
     console.error('[storage-janitor] Federation GC sweep error:', err);

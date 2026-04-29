@@ -14,6 +14,7 @@ import { spaceRoutes } from './routes/spaces.js';
 import { channelRoutes } from './routes/channels.js';
 import { messageRoutes } from './routes/messages.js';
 import { uploadRoutes } from './routes/uploads.js';
+import { filesRoutes } from './routes/files.js';
 import { dmRoutes } from './routes/dm.js';
 import { livekitRoutes } from './routes/livekit.js';
 import { socialRoutes } from './routes/social.js';
@@ -98,6 +99,7 @@ async function main(): Promise<void> {
   await app.register(channelRoutes);
   await app.register(messageRoutes);
   await app.register(uploadRoutes);
+  await app.register(filesRoutes);
   await app.register(dmRoutes);
   await app.register(livekitRoutes);
   await app.register(socialRoutes);
