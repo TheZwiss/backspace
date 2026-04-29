@@ -131,6 +131,14 @@ Parses three input formats into `{ code: string; origin?: string }`:
 
 If the parsed origin matches `window.location.origin`, it is treated as a bare code (origin stripped).
 
+### Direct Friend Invitation (in-app)
+
+`POST /api/dm/space-invite` (see [dm-system.md](dm-system.md)) sends a structured invite card to a friend via DM. The card carries a snapshot of the space (name, icon, member count, description) plus the canonical identifiers (`spaceId`, `spaceInstanceOrigin`, `inviteCode`).
+
+The endpoint lives on the **caller's home instance**, not the space's home. The caller's instance fetches the snapshot server-to-server from the space's `GET /api/spaces/invite/:code/preview` endpoint, then inserts a `type='system'` DM message with `event: 'space_invite'` content. Three-way federation (sender on X, recipient on Y, space on Z) is supported without new federation event kinds.
+
+The friend-picker surface in `InviteModal` uses the same per-space invite code as the link-share footer — there is exactly one invite code per space at any time, and revocation (when implemented) invalidates all outstanding cards atomically.
+
 ### Invite Preview
 
 **Endpoint:** `GET /api/spaces/invite/:code/preview` (no auth required)

@@ -530,6 +530,14 @@ Every relayed message is stored with:
 
 The `(source_instance, source_message_id)` pair is checked before insertion. Duplicates are rejected with reason `'duplicate'`. A unique partial index enforces this at the DB level: `idx_dm_messages_source_unique ON dm_messages(source_instance, source_message_id) WHERE source_instance IS NOT NULL`.
 
+### Optional `message.type` field (added 2026-04-29)
+
+`FederationRelayEvent.message.type?: 'user' | 'system'` is optional. When present and set to `'system'`, `processCreateEvent` writes the inserted `dm_messages.type` column accordingly; when absent, the receiving instance defaults to `'user'`.
+
+This is a **forward- and backward-compatible** addition because the inbound relay endpoint (`/api/federation/relay`) validates only structural fields (`version`, `events` array shape, `sourceInstance`); unknown fields are passed through. Old peers that don't emit `type` produce relay events that get inserted as user messages on receiving peers (the existing default), and old peers receiving relay events from new peers ignore the field entirely. No protocol-version bump is required.
+
+This permissiveness is **intentional** — the relay envelope is designed for additive evolution. Future optional fields should follow this same pattern (no schema bump, document the field here, defaults preserve old-peer behavior).
+
 ### Typing Indicator Relay
 
 **Event types:** `dm_typing_start`, `dm_typing_stop`

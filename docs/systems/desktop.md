@@ -84,6 +84,19 @@ Window `focus`/`blur` events send `window-focus-changed` (boolean) to the render
 
 `setWindowOpenHandler` intercepts all `window.open()` calls. HTTP/HTTPS URLs are opened in the default browser via `shell.openExternal()`. All popup windows are denied (`action: 'deny'`).
 
+### In-Instance `/join/` Interception
+
+Click-handlers on `https://...` URLs use `setWindowOpenHandler` (`packages/desktop/src/main.ts:391`). The handler intercepts URLs whose origin matches a connected instance and whose pathname starts with `/join/`, routing them in-app via the `open-internal-route` IPC channel instead of `shell.openExternal`.
+
+State plumbing:
+- Main process maintains `knownInstanceOrigins: Set<string>` populated via `set-connected-origins` IPC pushes from the renderer. Synchronously readable from inside `setWindowOpenHandler` (which must return its result synchronously).
+- Renderer's `instanceStore` subscribes its own `instances` selector and forwards the connected-origin list (home + connected remotes) to main on every change, including initial mount.
+- `packages/web/src/platform/deepLink.ts` (`useDeepLinkHandler`) subscribes to `onOpenInternalRoute` and calls `navigate(path)`.
+
+Predicate scope: only intercept URLs whose host matches a **currently connected** instance. Invites for unknown instances or disconnected federated peers still open externally — that's the entry point for `JoinPage`'s federation-redirect flow and must not be hijacked.
+
+Dev-mode caveat: if a developer runs Electron pointed at the Vite dev server (`http://localhost:5173`) while the API runs on `http://localhost:3005`, `window.location.origin` won't match the API origin and interception will not trigger. Production and standard-Electron-pointed-at-server dev are unaffected.
+
 ---
 
 ## Instance Picker
@@ -330,6 +343,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `check-for-updates` | R->M | — | `autoUpdater.checkForUpdates()` |
 | `screen-share-selected` | R->M | `sourceId, shareAudio?` | Safety net (actual handler is `ipcMain.once` in display media flow) |
 | `keybinds-sync` | R->M | `KeybindConfig[]` | `keybindManager.updateKeybinds()` |
+| `set-connected-origins` | R->M | `string[]` | Update `knownInstanceOrigins` set (used by in-instance `/join/` interception) |
 
 ### Request/Response (`ipcMain.handle`)
 
@@ -358,6 +372,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `keybind-action` | `{ actionId, pressed }` | KeybindManager match |
 | `accessibility-status` | `{ trusted }` | macOS accessibility check result |
 | `keybind-hook-error` | `{ message }` | uIOhook start failure |
+| `open-internal-route` | `string` (path) | In-instance `/join/` interception: renderer navigates to `path` instead of opening externally |
 
 ---
 
@@ -399,6 +414,8 @@ Detection: `typeof window.backspace !== 'undefined'` (see `platform.ts:isElectro
 | `onAccessibilityStatus(cb)` | listen | M->R | Returns cleanup function |
 | `onKeybindHookError(cb)` | listen | M->R | Returns cleanup function |
 | `checkAccessibility()` | invoke | R->M | Returns `Promise<boolean>` |
+| `setConnectedOrigins(origins)` | fire | R->M | Push connected-instance origin list to main (in-instance `/join/` interception) |
+| `onOpenInternalRoute(cb)` | listen | M->R | Returns cleanup function; `cb` receives a path string to navigate in-app |
 
 Direction legend: **fire** = `ipcRenderer.send` (no response), **invoke** = `ipcRenderer.invoke` (returns Promise), **listen** = `ipcRenderer.on` (event subscription).
 

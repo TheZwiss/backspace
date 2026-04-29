@@ -505,6 +505,31 @@ System messages (`type = 'system'` in `dm_messages`) record group lifecycle even
 | `member_removed` | `{ event, targetUserId, targetDisplayName, reason }` | User who left/was removed |
 | `owner_changed` | `{ event, newOwnerId, newOwnerDisplayName }` | Previous owner |
 
+### `space_invite` (user-initiated, federated via processCreateEvent)
+
+Sent by `POST /api/dm/space-invite` (see `docs/systems/spaces.md`). Unlike membership-event system messages, this one is user-initiated content — the inviter authored it deliberately. It travels through the standard DM message create relay (`processCreateEvent`), not a dedicated event kind.
+
+JSON content shape:
+
+```json
+{
+  "event": "space_invite",
+  "spaceId": "<snowflake>",
+  "spaceInstanceOrigin": "https://z.example",
+  "inviteCode": "<8-hex>",
+  "snapshot": {
+    "spaceName": "...",
+    "icon": null,
+    "avatarColor": null,
+    "memberCount": 12,
+    "description": "...",
+    "instanceName": "..."
+  }
+}
+```
+
+The `spaceInstanceOrigin` is the space's home instance, **not** the sender's. The recipient's client uses it to fetch the live preview (`getApiForOrigin(spaceInstanceOrigin).spaces.invitePreview`) and to call `joinByCode(code, spaceInstanceOrigin)` on click.
+
 ### Instance-Local Creation
 
 System messages are NOT relayed via federation. Each instance creates its own independently:
@@ -643,6 +668,7 @@ const normalized = homeInstance.startsWith('http')
 | `GET` | `/api/dm` | JWT | List caller's DM channels (excludes `closed=1` and `deleted_at` IS NOT NULL) |
 | `POST` | `/api/dm` | JWT | Create or get existing 1-on-1 DM. Accepts `{ userId }` (local) or `{ homeUserId, homeInstance }` (federated) |
 | `POST` | `/api/dm/group` | JWT | Create group DM with multiple members |
+| `POST` | `/api/dm/space-invite` | JWT | Send a space invite card to a friend via DM (see `docs/systems/spaces.md`) |
 | `DELETE` | `/api/dm/:id` | JWT | Soft-close DM for caller |
 | `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (any member). Accepts `{ userId }` or `{ homeUserId, homeInstance }` |
 | `DELETE` | `/api/dm/:id/members` | JWT | Leave group DM |
