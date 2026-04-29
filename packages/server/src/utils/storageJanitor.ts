@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { and, eq, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
+import { FileStore } from '@tus/file-store';
 import { config } from '../config.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { deleteUploadFile, deleteAttachmentFiles } from './fileCleanup.js';
@@ -693,6 +694,64 @@ export function cleanupSoftDeletedDmChannels(): number {
   return purged;
 }
 
+// ── Tus-specific janitor functions ──────────────────────────────────────────
+// Lazily construct (and cache) a FileStore pointed at config.tusUploadDir so
+// we don't re-instantiate it on every janitor tick. The store is only used
+// for its deleteExpired() method — we never serve uploads through it.
+let cachedTusStore: FileStore | null = null;
+function getTusStore(): FileStore {
+  if (!cachedTusStore) {
+    cachedTusStore = new FileStore({
+      directory: config.tusUploadDir,
+      expirationPeriodInMilliseconds: config.tusExpirationMs,
+    });
+  }
+  return cachedTusStore;
+}
+
+/**
+ * Tus's own expiration sweep — removes uploads whose creation_date sidecar
+ * is past the configured expirationPeriodInMilliseconds. Cheap when nothing
+ * has expired (one directory listing). Returns the number of removed entries.
+ */
+export async function cleanupTusUploads(): Promise<{ removed: number }> {
+  const store = getTusStore();
+  const removed = await store.deleteExpired();
+  return { removed: typeof removed === 'number' ? removed : 0 };
+}
+
+/**
+ * Defensive sweep of `${config.tusUploadDir}`: any file (payload OR sidecar)
+ * whose mtime is older than `config.tusStragglerSweepMs` is unlinked. Covers
+ * the rare case where a tus crash left an orphan that deleteExpired() doesn't
+ * recognize — e.g. a payload without sidecar (so creation_date is unknown),
+ * or a sidecar without payload (so getUpload() rejects).
+ */
+export function cleanupTusStragglers(): { removed: number } {
+  if (!fs.existsSync(config.tusUploadDir)) return { removed: 0 };
+  const entries = fs.readdirSync(config.tusUploadDir);
+  const cutoff = Date.now() - config.tusStragglerSweepMs;
+  let removed = 0;
+  for (const entry of entries) {
+    const full = path.join(config.tusUploadDir, entry);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(full);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    if (stat.mtimeMs >= cutoff) continue;
+    try {
+      fs.unlinkSync(full);
+      removed += 1;
+    } catch {
+      // Race with tus's own cleanup or permissions error — ignore
+    }
+  }
+  return { removed };
+}
+
 // cleanupStorage is expensive (full disk scan + DB joins) so we run it at
 // most once per 24h rather than on every janitor tick.
 const STORAGE_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -734,6 +793,25 @@ export async function runFederationJanitor(): Promise<void> {
       cleanupReadPeeringNotifications();
     } catch (err) {
       console.error('[storage-janitor] Approval request expiry error:', err);
+    }
+
+    // Tus expiration sweep — every tick. Removes tus uploads whose
+    // creation_date sidecar is past config.tusExpirationMs (24h default).
+    // Cheap when nothing has expired (one directory listing).
+    try {
+      await cleanupTusUploads();
+    } catch (err) {
+      console.warn('[storage-janitor] cleanupTusUploads failed:', err);
+    }
+
+    // Tus straggler sweep — every tick. Defensive removal of payload/sidecar
+    // files in .tus/ whose mtime is older than config.tusStragglerSweepMs
+    // (48h default). Catches orphans that deleteExpired() can't recognize
+    // (payload without sidecar, sidecar without payload).
+    try {
+      cleanupTusStragglers();
+    } catch (err) {
+      console.warn('[storage-janitor] cleanupTusStragglers failed:', err);
     }
 
     // Once-per-day storage cleanup. Sweeps orphan disk files (unreferenced
