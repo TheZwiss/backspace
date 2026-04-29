@@ -45,5 +45,12 @@ export function useDeepLinkHandler(): void {
         console.warn('[DeepLink] Unknown route:', url);
       }
     });
+
+    // Origin-aware /join/ interception from the main process
+    const offInternal = api.onOpenInternalRoute((path: string) => {
+      // path is e.g. '/join/cb265c4e' — already a normalized React Router path
+      navigate(path);
+    });
+    return () => { offInternal(); };
   }, [navigate]);
 }
