@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../ui/Avatar';
-import { getApiForOrigin } from '../../api/client';
+import { getApiForOrigin } from '../../stores/spaceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import type { SpaceInviteSystemPayload } from '@backspace/shared';
 
@@ -62,8 +62,8 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
   };
 
   return (
-    <div className={`my-1.5 max-w-md rounded-lg border border-border-subtle bg-surface-elevated overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
-      <div className="px-3 py-1 text-[11px] text-txt-tertiary border-b border-border-subtle">
+    <div className={`my-1.5 max-w-md rounded-lg border border-white/[0.06] bg-surface-channel overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
+      <div className="px-3 py-1 text-[11px] text-txt-tertiary border-b border-white/[0.06]">
         {senderName} sent an invite
       </div>
       <div className="flex items-center gap-3 p-3">

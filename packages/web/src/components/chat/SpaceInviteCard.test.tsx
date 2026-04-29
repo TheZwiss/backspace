@@ -3,17 +3,19 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SpaceInviteCard } from './SpaceInviteCard';
 
-const mockJoinByCode = vi.fn();
+const { mockJoinByCode, mockGetApiForOrigin } = vi.hoisted(() => ({
+  mockJoinByCode: vi.fn(),
+  mockGetApiForOrigin: vi.fn(() => ({
+    spaces: { invitePreview: vi.fn() },
+  })),
+}));
 vi.mock('../../stores/spaceStore', () => ({
   useSpaceStore: (selector: any) => selector({ joinByCode: mockJoinByCode }),
+  getApiForOrigin: mockGetApiForOrigin,
 }));
 vi.mock('../../api/client', () => ({
   createApiClient: vi.fn(),
-  getApiForOrigin: vi.fn(() => ({
-    spaces: { invitePreview:vi.fn() },
-  })),
 }));
-import { getApiForOrigin } from '../../api/client';
 
 const basePayload = {
   event: 'space_invite' as const,
@@ -38,7 +40,7 @@ describe('SpaceInviteCard', () => {
   });
 
   it('renders snapshot fields immediately on mount (snapshot-only state)', () => {
-    (getApiForOrigin as any).mockReturnValue({
+    mockGetApiForOrigin.mockReturnValue({
       spaces: { invitePreview:() => new Promise(() => {}) }, // never resolves
     });
     render(<MemoryRouter><SpaceInviteCard payload={basePayload} senderName="Alice" /></MemoryRouter>);
@@ -48,7 +50,7 @@ describe('SpaceInviteCard', () => {
   });
 
   it('refreshes member count when live preview resolves (live-confirmed state)', async () => {
-    (getApiForOrigin as any).mockReturnValue({
+    mockGetApiForOrigin.mockReturnValue({
       spaces: { invitePreview:vi.fn().mockResolvedValue({ ...basePayload.snapshot, spaceId: 'S1', memberCount: 99 }) },
     });
     render(<MemoryRouter><SpaceInviteCard payload={basePayload} senderName="Alice" /></MemoryRouter>);
@@ -56,7 +58,7 @@ describe('SpaceInviteCard', () => {
   });
 
   it('shows revoked state when preview rejects (revoked state)', async () => {
-    (getApiForOrigin as any).mockReturnValue({
+    mockGetApiForOrigin.mockReturnValue({
       spaces: { invitePreview:vi.fn().mockRejectedValue(new Error('not found')) },
     });
     render(<MemoryRouter><SpaceInviteCard payload={basePayload} senderName="Alice" /></MemoryRouter>);
@@ -75,7 +77,7 @@ describe('SpaceInviteCard', () => {
     const userEvent = (await import('@testing-library/user-event')).default;
     const user = userEvent.setup();
 
-    (getApiForOrigin as any).mockReturnValue({
+    mockGetApiForOrigin.mockReturnValue({
       spaces: { invitePreview:vi.fn().mockResolvedValue({ ...basePayload.snapshot, spaceId: 'S1' }) },
     });
 

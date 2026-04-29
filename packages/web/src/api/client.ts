@@ -813,9 +813,3 @@ export function createApiClient(origin: string, getToken: () => string | null, o
   return new BackspaceApiClient(baseUrl, getToken, onUnauthorized);
 }
 
-// Re-export the cross-store origin resolver so consumers can do
-// `import { getApiForOrigin } from '../api/client'`. The real implementation
-// lives in `utils/crossStoreResolvers` to avoid TDZ cycles between stores;
-// re-exporting here keeps the public import surface clean for callers that
-// don't need to know about the internal indirection.
-export { getApiForOrigin } from '../utils/crossStoreResolvers';
