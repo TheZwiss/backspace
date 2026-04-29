@@ -565,22 +565,24 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
-            >
-              {submitting ? 'Creating…' : 'Create link'}
-            </button>
+          <div className="flex justify-center pt-2">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={submitting}
+                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Creating…' : 'Create link'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -797,22 +799,24 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
-            >
-              {submitting ? 'Saving…' : 'Save changes'}
-            </button>
+          <div className="flex justify-center pt-2">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={submitting}
+                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1025,26 +1029,28 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="py-2.5 px-4 rounded-lg text-[13px] font-medium text-txt-tertiary border border-white/[0.06] hover:bg-white/[0.06] transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-accent-primary hover:bg-accent-primary/80 transition-colors disabled:opacity-50"
-            >
-              {submitting
-                ? 'Reinstating…'
-                : isRevoked
-                  ? 'Reinstate with new link'
-                  : 'Reinstate'}
-            </button>
+          <div className="flex justify-center pt-2">
+            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={submitting}
+                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+              >
+                {submitting
+                  ? 'Reinstating…'
+                  : isRevoked
+                    ? 'Reinstate with new link'
+                    : 'Reinstate'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -1482,9 +1488,10 @@ function InviteRow({ invite, expanded, onToggleExpand, onMutate }: InviteRowProp
         title={`Revoke "${invite.name}"?`}
         description={
           <>
-            The link will stop working immediately. Anyone who has the URL will not be able
-            to use it. You can reinstate the invite later — that will generate a new link
-            with a different URL.
+            The link stops working immediately. Anyone who has the URL can no longer use it.
+            <br />
+            <br />
+            If you change your mind later, <strong>Reinstate</strong> issues a fresh link under this entry — the original URL stays inactive.
           </>
         }
         confirmLabel="Revoke link"
