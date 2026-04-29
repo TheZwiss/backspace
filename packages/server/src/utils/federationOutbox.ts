@@ -492,6 +492,7 @@ export function getFriendEventTargets(
 export function buildRelayPayload(
   message: {
     id: string;
+    type?: 'user' | 'system' | null;
     content: string | null;
     replyToId?: string | null;
     editedAt?: number | null;
@@ -507,6 +508,7 @@ export function buildRelayPayload(
     userId: user.id,
     homeUserId: user.homeUserId || user.id,
     homeInstance: user.homeInstance || getOurOrigin(),
+    ...(message.type === 'system' ? { type: 'system' as const } : {}),
     content: message.content,
     replyToId: message.replyToId ?? null,
     editedAt: message.editedAt ?? null,
