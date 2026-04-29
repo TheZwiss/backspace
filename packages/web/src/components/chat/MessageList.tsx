@@ -10,7 +10,8 @@ import { Avatar } from '../ui/Avatar';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
-import type { MessageWithUser } from '@backspace/shared';
+import type { MessageWithUser, SpaceInviteSystemPayload } from '@backspace/shared';
+import { SpaceInviteCard } from './SpaceInviteCard';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
 
@@ -597,36 +598,42 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 }
 
 function SystemMessage({ message }: { message: MessageWithUser }) {
+  let data: Record<string, unknown> = {};
+  try { data = JSON.parse(message.content ?? '{}'); } catch { /* fall through */ }
+
+  const actorName = message.user?.displayName ?? message.user?.username ?? 'Someone';
+
+  if (data.event === 'space_invite') {
+    return (
+      <div className="px-4 py-1">
+        <SpaceInviteCard payload={data as unknown as SpaceInviteSystemPayload} senderName={actorName} />
+      </div>
+    );
+  }
+
+  // Legacy inline-text events
   let text = '';
   let icon = '';
-
-  try {
-    const data = JSON.parse(message.content ?? '{}');
-    const actorName = message.user?.displayName ?? message.user?.username ?? 'Someone';
-
-    switch (data.event) {
-      case 'member_added':
-        icon = '\u2192'; // →
-        text = `${actorName} added ${data.targetDisplayName} to the group`;
-        break;
-      case 'member_removed':
-        if (data.reason === 'leave') {
-          icon = '\u2190'; // ←
-          text = `${data.targetDisplayName} left the group`;
-        } else {
-          icon = '\u2190';
-          text = `${actorName} removed ${data.targetDisplayName} from the group`;
-        }
-        break;
-      case 'owner_changed':
-        icon = '\u265B'; // ♛
-        text = `${data.newOwnerDisplayName} is now the group owner`;
-        break;
-      default:
-        text = 'Unknown event';
-    }
-  } catch {
-    text = message.content ?? '';
+  switch (data.event) {
+    case 'member_added':
+      icon = '\u2192'; // →
+      text = `${actorName} added ${data.targetDisplayName} to the group`;
+      break;
+    case 'member_removed':
+      if (data.reason === 'leave') {
+        icon = '\u2190'; // ←
+        text = `${data.targetDisplayName} left the group`;
+      } else {
+        icon = '\u2190';
+        text = `${actorName} removed ${data.targetDisplayName} from the group`;
+      }
+      break;
+    case 'owner_changed':
+      icon = '\u265B'; // ♛
+      text = `${data.newOwnerDisplayName} is now the group owner`;
+      break;
+    default:
+      text = message.content ?? '';
   }
 
   return (
