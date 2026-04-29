@@ -48,6 +48,9 @@ export const config = {
   },
 
   uploadDir: env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')),
+  tusUploadDir: resolve(env('UPLOAD_DIR', resolve(__dirname, '../../../data/uploads')), '.tus'),
+  tusExpirationMs: envInt('TUS_EXPIRATION_HOURS', 24) * 60 * 60 * 1000,
+  tusStragglerSweepMs: envInt('TUS_STRAGGLER_SWEEP_HOURS', 48) * 60 * 60 * 1000,
   dbPath: env('DB_PATH', resolve(__dirname, '../../../data/backspace.db')),
   maxUploadSize: envInt('MAX_UPLOAD_SIZE', 104857600),
   registrationOpen: envBool('REGISTRATION_OPEN', true),
