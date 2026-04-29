@@ -599,6 +599,41 @@ export interface CreateDmMessageRequest {
   replyToId?: string;
 }
 
+// ─── Space Invite via DM ────────────────────────────────────────────────────
+
+export interface SpaceInviteRequest {
+  /** Caller-supplied target friend identity. Either local userId, or remote (homeUserId+homeInstance). */
+  target: { userId: string } | { homeUserId: string; homeInstance: string };
+  /** Space identifier on the space's home instance. */
+  spaceId: string;
+  /** Space's home instance origin. Empty string for the caller's home. */
+  spaceInstanceOrigin: string;
+  /** Per-space invite code (already issued; client passes whatever it has loaded). */
+  inviteCode: string;
+}
+
+export interface SpaceInviteResponse {
+  dmChannelId: string;
+  messageId: string;
+  message: DmMessageWithUser;
+}
+
+/** JSON content shape for type='system' space_invite messages. */
+export interface SpaceInviteSystemPayload {
+  event: 'space_invite';
+  spaceId: string;
+  spaceInstanceOrigin: string;
+  inviteCode: string;
+  snapshot: {
+    spaceName: string;
+    icon: string | null;
+    avatarColor: AvatarColor | null;
+    memberCount: number;
+    description: string | null;
+    instanceName: string;
+  };
+}
+
 export interface PaginatedQuery {
   before?: string;
   limit?: number;
