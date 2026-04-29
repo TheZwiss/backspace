@@ -9,6 +9,7 @@ import {
   type ContextMenuSubmenu,
 } from '../../stores/contextMenuStore';
 import { useUIStore } from '../../stores/uiStore';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 // ── Desktop item button ──────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ interface SubmenuFlyoutProps {
 
 function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close }: SubmenuFlyoutProps) {
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const portalContainer = usePortalContainer();
   const filteredChildren = filterMenuItems(submenu.children);
 
   useLayoutEffect(() => {
@@ -125,7 +127,7 @@ function SubmenuFlyout({ submenu, triggerRef, onMouseEnter, onMouseLeave, close 
         <DesktopLeafItem key={child.key} item={child} close={close} />
       ))}
     </div>,
-    document.body,
+    portalContainer,
   );
 }
 
@@ -281,6 +283,7 @@ interface DesktopMenuProps {
 
 function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const portalContainer = usePortalContainer();
 
   // Viewport-aware positioning via direct DOM mutation
   useLayoutEffect(() => {
@@ -411,7 +414,7 @@ function DesktopMenu({ items, position, close, closeGuard }: DesktopMenuProps) {
         ))}
       </div>
     </>,
-    document.body,
+    portalContainer,
   );
 }
 
@@ -463,6 +466,7 @@ interface MobileMenuProps {
 
 function MobileMenu({ items, close }: MobileMenuProps) {
   const [submenuStack, setSubmenuStack] = useState<ContextMenuSubmenu | null>(null);
+  const portalContainer = usePortalContainer();
 
   // Dismiss on scroll/resize
   useEffect(() => {
@@ -527,7 +531,7 @@ function MobileMenu({ items, close }: MobileMenuProps) {
         </div>
       </div>
     </>,
-    document.body,
+    portalContainer,
   );
 }
 

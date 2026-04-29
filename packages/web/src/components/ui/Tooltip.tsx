@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { useUIStore } from '../../stores/uiStore';
 
 interface TooltipProps {
@@ -19,6 +20,7 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const anchorRef = useRef<HTMLDivElement>(null);
   const floatingRef = useRef<HTMLDivElement>(null);
+  const portalContainer = usePortalContainer();
 
   const { style } = useFloatingPosition(anchorRef, floatingRef, {
     placement: position,
@@ -52,7 +54,7 @@ export function Tooltip({ content, children, position = 'right', delay = 200 }: 
         >
           {content}
         </div>,
-        document.body,
+        portalContainer,
       )}
     </div>
   );

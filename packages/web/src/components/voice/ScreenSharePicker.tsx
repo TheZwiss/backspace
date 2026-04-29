@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import { getElectronAPI } from '../../platform/platform';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 // ---------------------------------------------------------------------------
 // Zustand micro-store — bridges the event-driven API to React state
@@ -40,6 +42,7 @@ export function ScreenSharePicker() {
   const [search, setSearch] = useState('');
   const shareAudio = useVoiceStore((s) => s.screenShareConfig.shareAudio);
   const setScreenShareConfig = useVoiceStore((s) => s.setScreenShareConfig);
+  const portalContainer = usePortalContainer();
 
   // Register listener for sources from main process (once on mount)
   useEffect(() => {
@@ -100,7 +103,7 @@ export function ScreenSharePicker() {
 
   const activeSources = activeTab === 'screens' ? screens : windows;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center animate-fade-in">
       {/* Backdrop */}
       <div
@@ -211,7 +214,8 @@ export function ScreenSharePicker() {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    portalContainer,
   );
 }
 

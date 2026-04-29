@@ -236,6 +236,14 @@ ScreenShareConfig {
 
 ---
 
+## Voice Fullscreen
+
+The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` calls `voiceContainerRef.current.requestFullscreen()` (and exits via `document.exitFullscreen()` when the flag clears). A second effect listens to `fullscreenchange` and reflects the actual `document.fullscreenElement` back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+
+**Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenSharePicker`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
+
+---
+
 ## Audio Processing
 
 | Feature | Default | User Control | Notes |

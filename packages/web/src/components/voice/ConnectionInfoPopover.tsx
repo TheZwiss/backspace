@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrackStats, AudioTrackStat, VideoTrackStat } from '../../hooks/useTrackStats';
 import { getActiveRoom } from '../../hooks/useLiveKit';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ConnectionInfoPopoverProps {
   open: boolean;
@@ -118,6 +119,7 @@ function VideoTrackRow({ track }: { track: VideoTrackStat }) {
 
 export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionInfoPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  const portalContainer = usePortalContainer();
   const stats = useTrackStats(open);
 
   const { style } = useFloatingPosition(anchorRef, popoverRef, {
@@ -211,6 +213,6 @@ export function ConnectionInfoPopover({ open, onClose, anchorRef }: ConnectionIn
         )}
       </div>
     </div>,
-    document.body,
+    portalContainer,
   );
 }

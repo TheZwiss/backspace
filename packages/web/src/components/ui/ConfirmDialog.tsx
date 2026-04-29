@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -38,6 +39,8 @@ export function ConfirmDialog({
     }
   }, [isOpen, handleKeyDown]);
 
+  const portalContainer = usePortalContainer();
+
   if (!isOpen) return null;
 
   const isDanger = variant === 'danger';
@@ -74,6 +77,6 @@ export function ConfirmDialog({
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer,
   );
 }

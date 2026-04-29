@@ -5,6 +5,7 @@ import type { ScreenShareConfig } from '../../stores/voiceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { buildScreenShareOptions } from '../../utils/screenShare';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { usePortalContainer } from '../../hooks/usePortalContainer';
 import { Toggle } from '../ui/Toggle';
 import { isElectron } from '../../platform/platform';
 import { RESOLUTION_LABELS } from '@backspace/shared/src/constants';
@@ -46,6 +47,7 @@ function formatKbps(kbps: number): string {
 
 export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenShareSettingsPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  const portalContainer = usePortalContainer();
   const config = useVoiceStore((s) => s.screenShareConfig);
   const setConfig = useVoiceStore((s) => s.setScreenShareConfig);
   const hwOverdrive = useVoiceStore((s) => s.hwOverdrive);
@@ -296,6 +298,6 @@ export function ScreenShareSettingsPopover({ open, onClose, anchorRef }: ScreenS
         </span>
       </div>
     </div>,
-    document.body,
+    portalContainer,
   );
 }
