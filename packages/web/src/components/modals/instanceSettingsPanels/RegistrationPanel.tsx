@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { InviteLinkSummary, InviteRedemption } from '@backspace/shared';
+import type { InviteLinkSummary, InviteRedemption, InviteStatus } from '@backspace/shared';
 import { api } from '../../../api/client';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
@@ -40,6 +40,33 @@ function formatExpiry(invite: InviteLinkSummary): string {
   if (days >= 1) return `Expires in ${days} day${days === 1 ? '' : 's'}`;
   const hours = Math.floor(remaining / 3_600_000);
   return `Expires in ${hours}h`;
+}
+
+function inviteStatusDotColor(status: InviteStatus): string {
+  switch (status) {
+    case 'active':    return 'bg-status-online';
+    case 'expired':   return 'bg-accent-rose';
+    case 'exhausted': return 'bg-accent-amber';
+    case 'revoked':   return 'bg-txt-tertiary';
+  }
+}
+
+function inviteStatusPillColor(status: InviteStatus): string {
+  switch (status) {
+    case 'expired':   return 'bg-accent-rose/15 text-accent-rose';
+    case 'exhausted': return 'bg-accent-amber/15 text-accent-amber';
+    case 'revoked':   return 'bg-white/5 text-txt-tertiary';
+    case 'active':    return ''; // never rendered for active
+  }
+}
+
+function inviteStatusLabel(status: InviteStatus): string {
+  switch (status) {
+    case 'active':    return 'Active';
+    case 'expired':   return 'Expired';
+    case 'exhausted': return 'Exhausted';
+    case 'revoked':   return 'Revoked';
+  }
 }
 
 type ExpiryPresetId = '1h' | '24h' | '7d' | '30d' | 'never' | 'custom';
@@ -1218,6 +1245,8 @@ export function RegistrationPanel() {
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   const [invites, setInvites] = useState<InviteLinkSummary[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [activeCount, setActiveCount] = useState<number>(0);
+  const [archivedCount, setArchivedCount] = useState<number>(0);
 
   // Tracks the currently displayed tab so in-flight fetches can detect when
   // the user has switched tabs and discard their stale response. Without this
@@ -1244,6 +1273,23 @@ export function RegistrationPanel() {
     },
     [addToast],
   );
+
+  const refreshCounts = useCallback(async () => {
+    try {
+      const [a, r] = await Promise.all([
+        api.invites.list('active'),
+        api.invites.list('archived'),
+      ]);
+      setActiveCount(a.invites.length);
+      setArchivedCount(r.invites.length);
+    } catch {
+      // Leave previous counts on transient failure
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
 
   useEffect(() => {
     if (instanceSettings) {
@@ -1345,6 +1391,7 @@ export function RegistrationPanel() {
 
       {/* Invite Links */}
       <div className="border-t border-white/[0.06] pt-5">
+        {/* Row 1: heading + create button */}
         <div className="flex items-center justify-between mb-3">
           <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Invite Links</div>
           <button
@@ -1356,21 +1403,29 @@ export function RegistrationPanel() {
           </button>
         </div>
 
-        <div className="flex gap-1 mb-3 p-1 bg-surface-input rounded-lg w-fit">
-          {(['active', 'archived'] as const).map((t) => (
+        {/* Row 2: tab strip (left) + filter placeholder (right — Commit 4) */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex bg-white/[0.04] rounded-md p-0.5">
             <button
-              key={t}
               type="button"
-              onClick={() => setTab(t)}
-              className={`px-3 py-1 text-sm rounded transition-colors ${
-                tab === t
-                  ? 'bg-accent-primary text-white'
-                  : 'text-txt-tertiary hover:text-txt-primary'
+              onClick={() => setTab('active')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                tab === 'active' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
             >
-              {t === 'active' ? 'Active' : 'Archived'}
+              Active <span className="text-[10px] text-txt-tertiary ml-0.5">{activeCount}</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setTab('archived')}
+              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                tab === 'archived' ? 'bg-white/[0.08] text-txt-primary' : 'text-txt-tertiary hover:text-txt-secondary'
+              }`}
+            >
+              Archived <span className="text-[10px] text-txt-tertiary ml-0.5">{archivedCount}</span>
+            </button>
+          </div>
+          <div />
         </div>
 
         {invitesLoading ? (
@@ -1382,7 +1437,7 @@ export function RegistrationPanel() {
         ) : (
           <div className="space-y-2">
             {invites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} onMutate={() => fetchInvites(tab)} />
+              <InviteRow key={inv.id} invite={inv} onMutate={() => { fetchInvites(tab); refreshCounts(); }} />
             ))}
           </div>
         )}
@@ -1419,7 +1474,7 @@ export function RegistrationPanel() {
     {showCreate && (
       <CreateInviteModal
         onClose={() => setShowCreate(false)}
-        onCreated={() => fetchInvites('active')}
+        onCreated={() => { fetchInvites('active'); refreshCounts(); }}
       />
     )}
     </>
