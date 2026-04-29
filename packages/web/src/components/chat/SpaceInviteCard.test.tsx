@@ -96,6 +96,9 @@ describe('SpaceInviteCard', () => {
     // Specifically NOT called with empty string or undefined
     expect(mockJoinByCode).not.toHaveBeenCalledWith('abc', '');
     expect(mockJoinByCode).not.toHaveBeenCalledWith('abc', undefined);
+    // After a successful join, the app must navigate to the space via the real
+    // route (/channels/:spaceId), not the non-existent /spaces/:id route.
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/S1'));
   });
 
   it('navigates to space when join returns "already a member" (no error shown)', async () => {
@@ -111,7 +114,7 @@ describe('SpaceInviteCard', () => {
     const btn = await screen.findByRole('button', { name: /^join$/i });
     await user.click(btn);
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/spaces/S1'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/channels/S1'));
     expect(screen.queryByText(/already a member of this space/i)).not.toBeInTheDocument();
   });
 });

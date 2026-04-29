@@ -54,14 +54,14 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
       // the DM transport origin nor window.location.origin. Empty string maps
       // to undefined so joinByCode follows its local-instance branch.
       const space = await joinByCode(payload.inviteCode, payload.spaceInstanceOrigin || undefined);
-      navigate(`/spaces/${space.id}`);
+      navigate(`/channels/${space.id}`);
     } catch (err) {
       const msg = (err as Error)?.message ?? '';
       if (msg.toLowerCase().includes('already a member')) {
         // Already a member is a successful state — just navigate to the space.
         // Look up the space in the store by id; if not found (rare race), stay
         // silent rather than block the user with a noisy error.
-        navigate(`/spaces/${payload.spaceId}`);
+        navigate(`/channels/${payload.spaceId}`);
         return;
       }
       setJoinError(msg || 'Failed to join');
