@@ -67,6 +67,11 @@ interface TransferStoreActions {
   pauseUpload: (id: string) => void;
   resumeUpload: (id: string) => Promise<void>;
 
+  startDownload: (url: string, opts: { filename: string; size?: number; mimetype?: string; tray?: boolean }) => Promise<string>;
+  abortDownload: (id: string) => void;
+  pauseDownload: (id: string) => void;
+  resumeDownload: (id: string) => Promise<void>;
+
   get: (id: string) => Transfer | undefined;
   listVisible: () => Transfer[];
   listForChannel: (channelId: string) => Transfer[];
@@ -80,6 +85,9 @@ function uuid(): string {
 
 // Live tus Upload instances — keyed by transferId. Not serializable, never persisted.
 const liveUploads = new Map<string, Upload>();
+
+// Live download AbortControllers — keyed by transferId. Not serializable, never persisted.
+const liveDownloads = new Map<string, AbortController>();
 
 // Custom storage that serializes Map<string, Transfer> as an array of entries.
 // Only the `transfers` slice is persisted; partialize controls which entries.
@@ -352,6 +360,193 @@ export const useTransferStore = create<TransferStore>()(
         });
         liveUploads.set(id, upload);
         upload.start();
+      },
+
+      startDownload: async (url, opts) => {
+        const fileLike = {
+          name: opts.filename,
+          size: opts.size ?? 0,
+          mimetype: opts.mimetype ?? 'application/octet-stream',
+        };
+        const id = get().createTransfer({
+          type: 'download',
+          file: fileLike,
+          tray: opts.tray ?? true,
+          sourceUrl: url,
+        });
+
+        const controller = new AbortController();
+        liveDownloads.set(id, controller);
+        get().setState_(id, 'active');
+
+        // FS Access path: only when the API exists. We DON'T require opts.size —
+        // size is unknown for some downloads and we want resume capability anyway.
+        const supportsFs = typeof (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function';
+
+        try {
+          if (supportsFs) {
+            const { putHandle } = await import('../utils/idbHandles');
+            const showSavePicker = (window as unknown as {
+              showSaveFilePicker: (opts: { suggestedName: string }) => Promise<FileSystemFileHandle>;
+            }).showSaveFilePicker;
+            let handle: FileSystemFileHandle;
+            try {
+              handle = await showSavePicker({ suggestedName: opts.filename });
+            } catch {
+              // User canceled the picker — abort cleanly.
+              get().setState_(id, 'aborted');
+              liveDownloads.delete(id);
+              return id;
+            }
+            const handleId = `dl-${id}`;
+            await putHandle(handleId, handle);
+            // Persist the handle key on the transfer.
+            set((s) => {
+              const t = s.transfers.get(id);
+              if (!t) return s;
+              const next = new Map(s.transfers);
+              next.set(id, { ...t, destFileHandleId: handleId, bytesWrittenToDisk: 0 });
+              return { transfers: next };
+            });
+            const writable = await handle.createWritable({ keepExistingData: false });
+            const resp = await fetch(url, { signal: controller.signal });
+            if (!resp.ok || !resp.body) throw new Error(`Download failed: ${resp.status}`);
+            const reader = resp.body.getReader();
+            let written = 0;
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              await writable.write(value);
+              written += value.byteLength;
+              get().updateProgress(id, written);
+              set((s) => {
+                const t = s.transfers.get(id);
+                if (!t) return s;
+                const next = new Map(s.transfers);
+                next.set(id, { ...t, bytesWrittenToDisk: written });
+                return { transfers: next };
+              });
+            }
+            await writable.close();
+            get().setState_(id, 'completed');
+          } else {
+            // Blob fallback — accumulate in memory, then trigger anchor click.
+            const resp = await fetch(url, { signal: controller.signal });
+            if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+            const total = Number(resp.headers.get('Content-Length') ?? opts.size ?? 0);
+            const chunks: Uint8Array[] = [];
+            const reader = resp.body!.getReader();
+            let loaded = 0;
+            for (;;) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              loaded += value.byteLength;
+              if (total) get().updateProgress(id, loaded);
+            }
+            const blob = new Blob(chunks as BlobPart[], { type: fileLike.mimetype });
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = opts.filename;
+            a.click();
+            URL.revokeObjectURL(objUrl);
+            get().setState_(id, 'completed');
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            // Aborted via abortDownload/pauseDownload — state already set there.
+          } else {
+            const msg = err instanceof Error ? err.message : 'Download failed';
+            const permanent = /\b4\d\d\b/.test(msg);
+            get().setError(id, { message: msg, permanent });
+          }
+        } finally {
+          liveDownloads.delete(id);
+        }
+
+        return id;
+      },
+
+      abortDownload: (id) => {
+        const c = liveDownloads.get(id);
+        if (c) c.abort();
+        liveDownloads.delete(id);
+        get().setState_(id, 'aborted');
+      },
+
+      pauseDownload: (id) => {
+        const c = liveDownloads.get(id);
+        if (c) c.abort();
+        liveDownloads.delete(id);
+        get().setState_(id, 'paused');
+      },
+
+      resumeDownload: async (id) => {
+        const t = get().get(id);
+        if (!t || t.type !== 'download' || !t.sourceUrl) return;
+        if (!t.destFileHandleId) {
+          get().setError(id, { message: 'No destination handle — cannot resume', permanent: true });
+          return;
+        }
+        const { getHandle, ensurePermission } = await import('../utils/idbHandles');
+        const handle = await getHandle(t.destFileHandleId);
+        if (!handle) {
+          get().setError(id, { message: 'Destination handle missing', permanent: true });
+          return;
+        }
+        const perm = await ensurePermission(handle, 'readwrite');
+        if (perm !== 'granted') {
+          get().setError(id, { message: 'Permission denied', permanent: false });
+          return;
+        }
+        const handleAny = handle as unknown as {
+          getFile?: () => Promise<File>;
+          createWritable?: (opts: { keepExistingData: boolean }) => Promise<FileSystemWritableFileStream>;
+        };
+        const fileNow = await handleAny.getFile!();
+        const offset = fileNow.size;
+        const writable = await handleAny.createWritable!({ keepExistingData: true });
+        await (writable as unknown as { seek: (pos: number) => Promise<void> }).seek(offset);
+
+        const controller = new AbortController();
+        liveDownloads.set(id, controller);
+        get().setState_(id, 'active');
+        try {
+          const resp = await fetch(t.sourceUrl, {
+            signal: controller.signal,
+            headers: { Range: `bytes=${offset}-` },
+          });
+          if (!resp.ok && resp.status !== 206) throw new Error(`Resume failed: ${resp.status}`);
+          const reader = resp.body!.getReader();
+          let written = offset;
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            await writable.write(value);
+            written += value.byteLength;
+            get().updateProgress(id, written);
+            set((s) => {
+              const cur = s.transfers.get(id);
+              if (!cur) return s;
+              const next = new Map(s.transfers);
+              next.set(id, { ...cur, bytesWrittenToDisk: written });
+              return { transfers: next };
+            });
+          }
+          await writable.close();
+          get().setState_(id, 'completed');
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            get().setState_(id, 'paused');
+          } else {
+            const msg = err instanceof Error ? err.message : 'Resume failed';
+            const permanent = /\b4\d\d\b/.test(msg);
+            get().setError(id, { message: msg, permanent });
+          }
+        } finally {
+          liveDownloads.delete(id);
+        }
       },
 
       get: (id) => get().transfers.get(id),
