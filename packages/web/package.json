@@ -14,6 +14,7 @@
     "@emoji-mart/react": "^1.1.1",
     "@livekit/components-react": "^2.7.4",
     "@sapphi-red/web-noise-suppressor": "^0.3.5",
+    "idb": "^8.0.3",
     "livekit-client": "^2.9.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
@@ -22,6 +23,7 @@
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.28.0",
     "remark-gfm": "^4.0.1",
+    "tus-js-client": "^4.3.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -32,6 +34,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^28.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
