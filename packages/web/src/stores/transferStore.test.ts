@@ -1,5 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import 'fake-indexeddb/auto';
+
+// Stub authStore so transferStore's import chain doesn't pull in AudioManager (which needs AudioWorkletNode).
+vi.mock('./authStore', () => ({
+  useAuthStore: {
+    getState: () => ({ token: null, user: null }),
+  },
+}));
+
+// Stub tus-js-client — these basic-store tests don't exercise the upload path.
+vi.mock('tus-js-client', () => ({
+  Upload: class MockUpload {
+    constructor(_file: unknown, _opts: unknown) {}
+    start() {}
+    abort() { return Promise.resolve(); }
+  },
+}));
+
 import { useTransferStore } from './transferStore';
 
 describe('transferStore basics', () => {

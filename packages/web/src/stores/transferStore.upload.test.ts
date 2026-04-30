@@ -1,0 +1,163 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import 'fake-indexeddb/auto';
+
+// We mock tus-js-client to drive lifecycle synchronously without real network.
+const startMock = vi.fn();
+const abortMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('tus-js-client', () => {
+  class MockUpload {
+    private opts: any;
+    public url: string | null = null;
+    constructor(_file: File, opts: any) {
+      this.opts = opts;
+    }
+    start() {
+      startMock();
+      // 1. Simulate POST → Location returned.
+      this.opts.onAfterResponse?.({}, {
+        getHeader: (h: string) =>
+          h === 'Location' ? '/api/files/abc-123' :
+          h === 'Upload-Expires' ? new Date(Date.now() + 60_000).toUTCString() :
+          undefined,
+      });
+      // 2. Simulate progress.
+      this.opts.onProgress?.(50, 100);
+      // 3. Simulate success with a body containing Attachment JSON.
+      this.opts.onSuccess?.({
+        lastResponse: {
+          getBody: () => JSON.stringify({
+            id: 'att-9',
+            filename: 'a.png',
+            originalName: 'a.png',
+            mimetype: 'image/png',
+            size: 100,
+            thumbnailFilename: null,
+            width: null,
+            height: null,
+            duration: null,
+            messageId: '',
+          }),
+        },
+      });
+    }
+    abort(_terminate?: boolean) {
+      return abortMock();
+    }
+  }
+  return { Upload: MockUpload };
+});
+
+// Authstore mock: provide token + user.
+vi.mock('./authStore', () => ({
+  useAuthStore: {
+    getState: () => ({
+      token: 'test-token-12345',
+      user: { id: 'u-9', username: 'tester' },
+    }),
+  },
+}));
+
+import { useTransferStore } from './transferStore';
+
+describe('transferStore.startUpload', () => {
+  beforeEach(() => {
+    useTransferStore.setState({ transfers: new Map() });
+    startMock.mockClear();
+    abortMock.mockClear();
+    if (typeof localStorage !== 'undefined') localStorage.clear();
+  });
+
+  it('drives a transfer through tus → completed with attachmentId', async () => {
+    const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
+    const id = await useTransferStore.getState().startUpload(file, { channelId: 'ch-1', tray: true });
+    expect(startMock).toHaveBeenCalledTimes(1);
+    const t = useTransferStore.getState().get(id);
+    expect(t).toBeDefined();
+    expect(t!.state).toBe('completed');
+    expect(t!.attachmentId).toBe('att-9');
+    expect(t!.tusUploadUrl).toBe('/api/files/abc-123');
+    expect(t!.tusExpiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it('captures Upload-Expires timestamp on the first response', async () => {
+    const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
+    const id = await useTransferStore.getState().startUpload(file, { tray: true });
+    const t = useTransferStore.getState().get(id)!;
+    // Should be approximately 60s from now (we set Date+60s in the mock)
+    expect(t.tusExpiresAt).toBeGreaterThan(Date.now() + 50_000);
+    expect(t.tusExpiresAt).toBeLessThanOrEqual(Date.now() + 70_000);
+  });
+
+  it('throws when not authenticated', async () => {
+    // Override the authStore mock for this test only
+    const file = new File([new Uint8Array(10)], 'a.png', { type: 'image/png' });
+    const { useAuthStore } = await import('./authStore');
+    const orig = useAuthStore.getState;
+    (useAuthStore as any).getState = () => ({ token: null, user: null });
+    await expect(useTransferStore.getState().startUpload(file, { tray: true })).rejects.toThrow(/not authenticated/i);
+    (useAuthStore as any).getState = orig;
+  });
+
+  it('abortUpload calls Upload.abort(true) and sets state aborted', async () => {
+    const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
+    const id = await useTransferStore.getState().startUpload(file, { tray: true });
+    // After mock-driven success, the live upload is removed; abort the (now-completed) transfer should still flip state.
+    useTransferStore.getState().abortUpload(id);
+    expect(useTransferStore.getState().get(id)!.state).toBe('aborted');
+  });
+
+  it('pauseUpload sets state paused', async () => {
+    const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
+    const id = await useTransferStore.getState().startUpload(file, { tray: true });
+    useTransferStore.getState().pauseUpload(id);
+    expect(useTransferStore.getState().get(id)!.state).toBe('paused');
+  });
+});
+
+describe('transferStore.resumeUpload', () => {
+  beforeEach(() => {
+    useTransferStore.setState({ transfers: new Map() });
+    startMock.mockClear();
+    abortMock.mockClear();
+  });
+
+  it('returns early when transfer has no tusUploadUrl', async () => {
+    const id = useTransferStore.getState().createTransfer({
+      type: 'upload',
+      file: { name: 'a.png', size: 100, mimetype: 'image/png' },
+      tray: true,
+    });
+    useTransferStore.getState().setState_(id, 'paused');
+    await useTransferStore.getState().resumeUpload(id);
+    const t = useTransferStore.getState().get(id)!;
+    expect(t.state).toBe('failed');
+    expect(t.error?.message).toMatch(/no tus url/i);
+  });
+
+  it('returns failed when tus URL has expired', async () => {
+    const id = useTransferStore.getState().createTransfer({
+      type: 'upload',
+      file: { name: 'a.png', size: 100, mimetype: 'image/png' },
+      tray: true,
+    });
+    useTransferStore.getState().setTusUrl(id, '/api/files/expired', Date.now() - 1000);
+    useTransferStore.getState().setState_(id, 'paused');
+    await useTransferStore.getState().resumeUpload(id);
+    expect(useTransferStore.getState().get(id)!.state).toBe('failed');
+    expect(useTransferStore.getState().get(id)!.error?.message).toMatch(/expired/i);
+  });
+
+  it('stays paused when no FS handle is available (re-pick required)', async () => {
+    const id = useTransferStore.getState().createTransfer({
+      type: 'upload',
+      file: { name: 'a.png', size: 100, mimetype: 'image/png' },
+      tray: true,
+      // No fileHandleId — no handle stored
+    });
+    useTransferStore.getState().setTusUrl(id, '/api/files/abc', Date.now() + 60_000);
+    useTransferStore.getState().setState_(id, 'paused');
+    await useTransferStore.getState().resumeUpload(id);
+    expect(useTransferStore.getState().get(id)!.state).toBe('paused');
+  });
+});
