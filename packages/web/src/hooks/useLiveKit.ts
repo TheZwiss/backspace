@@ -143,6 +143,49 @@ function destroyRoom(room: Room | null): Promise<void> | void {
   return room.disconnect();
 }
 
+/**
+ * Ensures a fresh microphone track from the AudioManager pipeline is published
+ * to the supplied room. If the existing publication is already current (live
+ * MediaStreamTrack matching the latest AudioManager streamGeneration), this is
+ * a no-op apart from un-muting. Otherwise the stale track is unpublished and a
+ * cloned destination-node track is published in its place.
+ *
+ * Extracted from the syncMic effect so the input-track-loss recovery path can
+ * call it directly — without relying on syncMic's React dep array catching a
+ * change that never re-renders the hook.
+ */
+async function republishMicrophone(r: Room, lastMicGenRef: { current: number }): Promise<void> {
+  const audioManager = AudioManager.getInstance();
+  const currentGen = audioManager.getStreamGeneration();
+
+  const micPub = r.localParticipant.getTrackPublications()
+    .find(p => p.source === Track.Source.Microphone);
+
+  if (micPub?.track) {
+    // Track already published — check if it's still current
+    if (micPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
+      // Current and live — just unmute if needed
+      if (micPub.isMuted) {
+        await r.localParticipant.setMicrophoneEnabled(true);
+      }
+      return;
+    }
+    // Track is stale (device or constraint change) — replace it
+    await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack);
+  }
+
+  // Publish fresh track from AudioManager pipeline
+  const audioTrack = audioManager.getFreshTrack();
+  if (!audioTrack) return;
+
+  console.log('[LiveKit] Publishing fresh microphone track (gen:', currentGen, ')');
+  await r.localParticipant.publishTrack(audioTrack, {
+    name: 'microphone',
+    source: Track.Source.Microphone,
+  });
+  lastMicGenRef.current = currentGen;
+}
+
 export function useLiveKit() {
   const [room, setRoom] = useState<Room | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -353,36 +396,12 @@ export function useLiveKit() {
           return;
         }
 
-        // Not muted — ensure mic is published and live
+        // Not muted — ensure the AudioManager pipeline is on the right device
+        // and at the right volume, then republish if the published track is
+        // stale or missing.
         await audioManager.setInputDevice(inputDeviceId);
         audioManager.setInputVolume(inputVolume);
-
-        const currentGen = audioManager.getStreamGeneration();
-
-        if (micPub?.track) {
-          // Track already published — check if it's still current
-          if (micPub.track.mediaStreamTrack?.readyState === 'live' && lastMicGenRef.current === currentGen) {
-            // Current and live — just unmute if needed
-            if (micPub.isMuted) {
-              await r.localParticipant.setMicrophoneEnabled(true);
-            }
-            return;
-          }
-          // Track is stale (device or constraint change) — replace it
-          await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack);
-        }
-
-        // Publish fresh track from AudioManager pipeline
-        const audioTrack = audioManager.getFreshTrack();
-        if (!audioTrack) return;
-
-        console.log('[LiveKit] Publishing fresh microphone track (gen:', currentGen, ')');
-        await r.localParticipant.publishTrack(audioTrack, {
-          name: 'microphone',
-          source: Track.Source.Microphone,
-        });
-        lastMicGenRef.current = currentGen;
-
+        await republishMicrophone(r, lastMicGenRef);
       } catch (err) {
         console.error('[LiveKit] Failed to sync mic state:', err);
       }
@@ -391,14 +410,69 @@ export function useLiveKit() {
     syncMic();
 
     // Re-sync when AudioManager resumes
-    const unsubscribe = AudioManager.getInstance().onResumed(() => {
+    const unsubscribeResume = AudioManager.getInstance().onResumed(() => {
       syncMic();
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeResume();
     };
   }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+
+  // Subscribe to upstream-input-track-end events from AudioManager whenever a
+  // room is connected. The published mic track is a clone of a WebAudio
+  // destination node and never ends on hardware loss; only the upstream
+  // getUserMedia track does. AudioManager owns that signal — we react to it.
+  useEffect(() => {
+    if (!isConnected) return;
+    const am = AudioManager.getInstance();
+    const subscriberRoom = roomRef.current;
+
+    const unsubscribe = am.onInputTrackEnded(async () => {
+      // Room was replaced or torn down between event emission and handler run.
+      if (roomRef.current !== subscriberRoom || !subscriberRoom) return;
+
+      const deviceId = useVoiceStore.getState().inputDeviceId;
+      let copy = 'Microphone unavailable';
+
+      try {
+        const probe = await navigator.mediaDevices.getUserMedia({
+          audio: deviceId === 'default' ? true : { deviceId: { exact: deviceId } },
+        });
+        probe.getTracks().forEach(t => t.stop());
+
+        // Probe succeeded — device is back. Re-acquire and force a republish.
+        if (roomRef.current !== subscriberRoom) return;
+        try {
+          await am.setInputDevice(deviceId);
+          if (roomRef.current !== subscriberRoom) return;
+          await republishMicrophone(subscriberRoom, lastMicGenRef);
+          return;
+        } catch {
+          copy = 'Microphone could not be restored';
+        }
+      } catch (err: any) {
+        if (err?.name === 'NotAllowedError') {
+          copy = 'Microphone permission was revoked';
+        } else if (err?.name === 'NotFoundError') {
+          if (deviceId !== 'default') {
+            // The configured device disappeared. Fall back to default — the
+            // store update triggers syncMic via its dep array, which calls
+            // republishMicrophone with the freshly acquired default stream.
+            useVoiceStore.getState().setInputDevice('default');
+            copy = 'Microphone disconnected — switched to system default';
+          } else {
+            copy = 'Microphone disconnected';
+          }
+        }
+      }
+
+      if (roomRef.current !== subscriberRoom) return;
+      useUIStore.getState().addToast(copy, 'warning');
+    });
+
+    return () => { unsubscribe(); };
+  }, [isConnected]);
 
   // Hot-swap the camera source when cameraDeviceId changes mid-call.
   // Compares against the published track's actual deviceId (getSettings().deviceId)
@@ -613,62 +687,11 @@ export function useLiveKit() {
             };
           }
         }
-        if (publication.source === Track.Source.Microphone) {
-          const mst = publication.track?.mediaStreamTrack;
-          if (mst) {
-            mst.onended = async () => {
-              // The mic track we publish is the *cloned* output of the AudioManager
-              // pipeline (see AudioManager.getFreshTrack). It can end for two
-              // distinct reasons:
-              //   (a) The underlying upstream getUserMedia track ended (unplug,
-              //       OS revoke). The clone goes too.
-              //   (b) syncMic called unpublishTrack() during a deliberate
-              //       republish (device change, RNNoise toggle). In that case
-              //       the user did NOT lose audio — a fresh track is incoming.
-              //
-              // Distinguishing (a) from (b): inspect the AudioManager's current
-              // upstream stream. If it's null or non-active AND the room is
-              // still ours, we're in case (a).
-              if (roomRef.current !== newRoom) return;
-              const am = AudioManager.getInstance();
-              if (am.hasActiveStream()) return; // case (b) — pipeline is alive
-
-              // Probe getUserMedia to distinguish unplug vs revoke vs unavailable.
-              const deviceId = useVoiceStore.getState().inputDeviceId;
-              let copy = 'Microphone unavailable';
-              try {
-                const probe = await navigator.mediaDevices.getUserMedia({
-                  audio: deviceId === 'default' ? true : { deviceId: { exact: deviceId } },
-                });
-                probe.getTracks().forEach(t => t.stop());
-                // Probe succeeded — device is back. Try to re-acquire silently.
-                if (roomRef.current !== newRoom) return;
-                try {
-                  await am.setInputDevice(deviceId);
-                  // syncMic effect re-publishes when stream generation bumps.
-                  return;
-                } catch {
-                  copy = 'Microphone could not be restored';
-                }
-              } catch (err: any) {
-                if (err?.name === 'NotAllowedError') copy = 'Microphone permission was revoked';
-                else if (err?.name === 'NotFoundError') {
-                  // The configured device disappeared. Fall back to default if
-                  // the user wasn't already on it.
-                  if (deviceId !== 'default') {
-                    useVoiceStore.getState().setInputDevice('default');
-                    copy = 'Microphone disconnected — switched to system default';
-                  } else {
-                    copy = 'Microphone disconnected';
-                  }
-                }
-              }
-
-              if (roomRef.current !== newRoom) return;
-              useUIStore.getState().addToast(copy, 'warning');
-            };
-          }
-        }
+        // NOTE: Microphone track-loss is handled at the AudioManager layer via
+        // `onInputTrackEnded`, NOT here. The published mic track is a clone of
+        // a WebAudio destination node and does not end on hardware loss — only
+        // the upstream getUserMedia track does. See the `useEffect` that
+        // subscribes to `AudioManager.onInputTrackEnded` above.
         guardedUpdate();
       });
       newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
