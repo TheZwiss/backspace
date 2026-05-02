@@ -253,15 +253,17 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
       const t = useTransferStore.getState().transfers.get(transferId);
       if (t?.state === 'completed') {
-        // User is discarding a fully-uploaded attachment. Drop it entirely so
-        // no orphan 'aborted'-with-attachmentId record persists. Server-side
-        // bytes get cleaned by the storage janitor (per docs/systems/uploads.md).
+        // Fully-uploaded attachment with a finalized DB row. Server-side bytes
+        // get cleaned by the unlinked-attachment janitor (1h grace).
+        useTransferStore.getState().remove(transferId);
+      } else if (t && t.state !== 'aborted') {
+        // active/paused/queued/failed: abortUpload tears down any live tus
+        // instance AND sends DELETE for orphaned server-side .tus sessions.
+        // Then drop the transfer + free the retained File reference.
+        abortUpload(transferId);
         useTransferStore.getState().remove(transferId);
       } else {
-        // Tear down the live tus instance, then drop the transfer + free the
-        // retained File reference. (abortUpload alone leaves the record in the
-        // store for retry-after-abort; here the user is fully discarding.)
-        abortUpload(transferId);
+        // Already 'aborted' (server already cleaned); just drop the record.
         useTransferStore.getState().remove(transferId);
       }
       removeStaged(channelId, transferId);

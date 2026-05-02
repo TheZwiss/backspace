@@ -542,11 +542,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     const transfers = useTransferStore.getState().transfers;
                     for (const tid of pending.transferIds) {
                       const t = transfers.get(tid);
-                      if (t && (t.state === 'active' || t.state === 'paused' || t.state === 'queued')) {
+                      if (!t) continue;
+                      // Route anything with potential server-side state (active/paused/
+                      // queued/failed) through abortUpload — it sends DELETE so the
+                      // .tus session doesn't sit on disk for the janitor to sweep.
+                      // 'aborted' already cleaned itself; 'completed' has a finalized
+                      // attachment row that the unlinked-attachment janitor handles (1h grace).
+                      if (t.state !== 'aborted' && t.state !== 'completed') {
                         useTransferStore.getState().abortUpload(tid);
-                      } else {
-                        useTransferStore.getState().remove(tid);
                       }
+                      useTransferStore.getState().remove(tid);
                     }
                     if (channelKey) {
                       usePendingMessageStore.getState().removeByClientId(channelKey, pending.clientId);

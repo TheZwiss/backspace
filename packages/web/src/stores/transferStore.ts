@@ -281,12 +281,29 @@ export const useTransferStore = create<TransferStore>()(
       },
 
       abortUpload: (id) => {
+        const t = get().get(id);
         const u = liveUploads.get(id);
         if (u) {
           // tus-js-client v4: abort(true) deletes server-side state via DELETE.
-          // We pass true so the user actually frees the slot, not just "pause".
           void u.abort(true).catch(() => { /* server may be unreachable; that's OK */ });
           liveUploads.delete(id);
+        } else if (t?.tusUploadUrl && !t.attachmentId) {
+          // No live instance, but server-side .tus state still exists (e.g., this
+          // transfer failed mid-flight or was paused with a stored URL). Send DELETE
+          // directly so the partial bytes don't sit on disk until the janitor sweeps.
+          const token = useAuthStore.getState().token;
+          if (token) {
+            const fullUrl = t.tusUploadUrl.startsWith('http')
+              ? t.tusUploadUrl
+              : `${t.origin ?? ''}${t.tusUploadUrl}`;
+            void fetch(fullUrl, {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Tus-Resumable': '1.0.0',
+              },
+            }).catch(() => { /* server unreachable — janitor will eventually clean */ });
+          }
         }
         // Keep liveUploadFiles entry — needed for retry-after-abort. Cleared by remove().
         get().setState_(id, 'aborted');
