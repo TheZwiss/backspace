@@ -109,7 +109,11 @@ const mapAwareStorage: PersistStorage<Pick<TransferStoreState, 'transfers'>> = {
     if (typeof localStorage === 'undefined') return;
     const entries = Array.from(value.state.transfers.entries());
     const payload = JSON.stringify({ state: { transfers: entries }, version: value.version });
-    localStorage.setItem(name, payload);
+    try {
+      localStorage.setItem(name, payload);
+    } catch (err) {
+      console.warn(`[transferStore] persist failed:`, err);
+    }
   },
   removeItem: (name) => {
     if (typeof localStorage !== 'undefined') localStorage.removeItem(name);
