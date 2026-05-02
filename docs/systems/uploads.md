@@ -1,63 +1,82 @@
 # File & Upload System
 
 Source files:
-- `packages/server/src/routes/uploads.ts` -- Upload endpoint (multipart reception, size enforcement) and file serving (cache, security, Range)
+- `packages/server/src/routes/uploads.ts` -- File serving (cache, security, Range)
+- `packages/server/src/routes/files.ts` -- tus protocol endpoints (`/api/files/*`), PRE_CREATE / PRE_PATCH / POST_FINISH hooks, janitor helpers
 - `packages/server/src/utils/thumbnail.ts` -- Image thumbnail generation (sharp), video thumbnail extraction (ffmpeg), image dimension probing, profile image resizing, media metadata extraction
 - `packages/server/src/utils/fileCleanup.ts` -- File deletion helpers (disk + thumbnail + attachment record cleanup)
 - `packages/server/src/utils/storageJanitor.ts` -- Storage stats, orphan detection, cleanup routines (orphaned files, unlinked attachments, dangling references, old media), federation GC, soft-deleted DM channel purge
+- `packages/web/src/stores/transferStore.ts` -- Client transfer manager (uploads via tus-js-client, downloads via fetch + FS Access)
+- `packages/web/src/stores/composerStore.ts` -- Per-channel staged transfer IDs, draft text, replyTo
+- `packages/web/src/stores/pendingMessageStore.ts` -- Optimistic attachment-bearing message bubbles awaiting transfer completion
+- `packages/web/src/stores/pendingMessageRehydrate.ts` -- Orchestrator that fires the deferred `POST /messages` once all transfers in a bubble complete
 - `packages/web/src/utils/imageActions.ts` -- Client-side image save-to-disk and copy-to-clipboard actions
 - `packages/web/src/utils/cropImage.ts` -- Client-side image cropping pipeline (canvas-based, WebP output)
 - `packages/web/src/components/chat/AttachmentRenderer.tsx` -- Attachment display component (images, video, audio, generic files, federation badges)
+- `packages/web/src/components/chat/AttachmentProgress.tsx` -- Radial-progress overlay for in-flight transfers in optimistic bubbles
+- `packages/web/src/components/layout/TransferIndicator.tsx` -- Channel-header transfer indicator + global tray panel
 - `packages/web/src/components/chat/ImagePreview.tsx` -- Full-screen image preview modal with save/copy toolbar
 
 DB tables: `attachments`, `instance_settings` (maxUploadSizeBytes). See `docs/systems/database.md` for full schemas.
 
 **Out of scope:** Federation file replication/download queue (see `docs/systems/federation.md`), admin storage stats UI, admin user management.
 
+### Capability Matrix
+
+| Browser | Picker (`showOpenFilePicker`) | Drag-drop FS handle | Save destination handle | Reload survival |
+|---------|-------------------------------|---------------------|-------------------------|-----------------|
+| Chrome / Edge | yes | yes | yes | Auto-resume |
+| Firefox / Safari | — | — | — | Re-pick required |
+
+Paste-from-clipboard yields a `File`, not a handle, on every browser -- never reload-resumable.
+
 ---
 
-## 1. Upload Pipeline
+## 1. Upload Pipeline (tus)
 
-### Endpoint: `POST /api/uploads`
+The server speaks the [tus resumable upload protocol](https://tus.io/protocols/resumable-upload) on `/api/files/*` (see `routes/files.ts`). Uploads are chunked, resumable across tab reload and network drop, and authenticated on every request.
 
-| Property | Value |
-|----------|-------|
-| Auth | JWT required (`authenticate` preHandler) |
-| Content type | Multipart (`request.file()`) |
-| Rate limit | 30 requests / 1 minute (keyed by `userId` or IP) |
-| Size limit | Dynamic from `instance_settings.maxUploadSizeBytes`, fallback `config.maxUploadSize` (env `MAX_UPLOAD_SIZE`, default 100 MB) |
-| Response | `201` with `Attachment` object |
+### Endpoint Group: `/api/files/*`
 
-### Upload Flow
+| Method | Path | Purpose | Auth | Hooks |
+|--------|------|---------|------|-------|
+| `POST` | `/api/files/` | Create upload session. Returns `Location` (per-upload URL) and `Upload-Expires` (24 h). | JWT | PRE_CREATE: rate limit 30/min/user, size validation, snowflake assignment |
+| `HEAD` | `/api/files/:uploadId` | Resume probe. Returns `Upload-Offset`. | JWT + ownership | -- |
+| `PATCH` | `/api/files/:uploadId` | Append bytes at offset. | JWT + ownership | PRE_PATCH: slowloris rate ~1000/min/IP |
+| `DELETE` | `/api/files/:uploadId` | Abort and discard partial bytes. | JWT + ownership | -- |
+| `OPTIONS` | `/api/files/` | tus capability advertisement (extensions, max size). | none | -- |
 
-```
-Client (multipart POST)
-  -> authenticate JWT
-  -> read maxUploadSizeBytes from instance_settings (id=1)
-  -> request.file({ limits: { fileSize: maxSize } })
-  -> generate snowflake ID
-  -> derive filename: "${snowflakeId}${originalExtension}"
-  -> stream to disk via pipeline(data.file, writeStream)
-  -> check truncation (file exceeded limit) -> 413 + delete file
-  -> fs.statSync for actual file size
-  -> media processing (image/video/audio)
-  -> insert attachments record (messageId=NULL, dmMessageId=NULL)
-  -> return Attachment { id, filename, originalName, mimetype, size, thumbnailFilename?, width?, height?, duration? }
-```
+### Storage Layout
 
-**Key details:**
-- Filename: snowflake ID + original file extension (e.g., `1234567890123456.png`)
-- The attachment is created with `messageId = NULL` -- it is linked to a message later when the message is sent via `POST /channels/:id/messages` or `POST /dm/:id/messages`
-- Returned `Attachment.messageId` is set to `''` (empty string) in the response, not null
-- Upload directory: `config.uploadDir` (default `packages/server/data/uploads/`), created on route registration if missing
+| Path | Owner | Contents |
+|------|-------|----------|
+| `${uploadDir}/.tus/` | tus | In-progress uploads + per-upload `<id>.json` metadata sidecar. |
+| `${uploadDir}/` | server | Final files renamed on `POST_FINISH` to `${snowflakeId}${ext}`. |
 
-### Error Responses
+### POST_FINISH Hook
 
-| Code | Condition |
-|------|-----------|
-| `400` | No file in multipart request |
-| `413` | File exceeds dynamic size limit (file deleted from disk after truncation detection) |
-| `429` | Rate limit exceeded |
+When the final PATCH completes, the hook:
+
+1. Verifies `metadata.userId === req.user.id` (defense in depth -- ownership was already enforced on PATCH).
+2. Renames `${uploadDir}/.tus/<uploadId>` to `${uploadDir}/${snowflakeId}${ext}`, where `ext = path.extname(metadata.originalName).toLowerCase()`.
+3. Runs media processing (sharp for images, ffmpeg/ffprobe for video/audio) -- same code path as the legacy multipart endpoint used to.
+4. Inserts an `attachments` row with `messageId = NULL` (linked to a message later when the user sends).
+5. Returns the new `Attachment` JSON in the final-PATCH response body, so the client can stage the attachment ID without an extra round trip.
+
+### Janitor
+
+| Function | Sweeps |
+|----------|--------|
+| `cleanupTusUploads()` | Invokes `@tus/file-store.deleteExpired()` (24 h `Upload-Expires`). |
+| `cleanupTusStragglers()` | Defensive sweep of `.tus/` for files older than 48 h that the tus library failed to clean up. |
+| `getUnlinkedAttachments()` | Existing 1 h grace still applies to abandoned post-finish attachments. |
+
+### Security
+
+- JWT verified on every tus request (PRE_CREATE, PRE_PATCH, finalize, HEAD, DELETE).
+- PRE_PATCH ownership check: `metadata.userId === req.user.id`. Required to prevent in-flight upload hijack between session creation and finalize.
+- Size validated against `instance_settings.maxUploadSizeBytes` at PRE_CREATE; tus's own `maxSize` is set as defense-in-depth.
+- Original filename round-trips through tus metadata (base64-encoded per spec); the on-disk filename uses snowflake + sanitized extension only.
 
 ---
 
@@ -435,36 +454,31 @@ All require JWT + admin role. See `docs/systems/api.md` for request/response for
 
 ---
 
-## 9. Client-Side: Upload & Attachment Display
+## 9. Client-Side Architecture
 
-### Upload Flow (`MessageInput.tsx`)
+Three stores with strict separation of concerns:
 
-1. Files added via:
-   - **File picker button** (`<input type="file">` triggered by attach button click)
-   - **Drag and drop** (`onDrop` handler on input container) -- adds `e.dataTransfer.files` to state
-   - **Paste** (`onPaste` handler) -- extracts `image/*` items from clipboard `DataTransferItemList`
-2. Files stored in component state as `File[]`
-3. Preview rendered inline: images as `<img>` with `URL.createObjectURL`, non-images as file icon + name
-4. On submit:
-   - Resolves correct API client for channel origin (`getApiForOrigin(getChannelOrigin(channelId))`)
-   - Uploads files sequentially via `uploadClient.uploads.uploadWithProgress(file, onProgress)`
-   - Progress tracked per-file in a `Map<number, number>` (file index -> percentage 0-100)
-   - Collects `attachment.id` from each successful upload
-   - Failed uploads: toast notification, skipped (partial sends allowed if text or other attachments present)
-   - Sends message with collected `attachmentIds` array
+| Store | Source file | Ownership |
+|-------|-------------|-----------|
+| `transferStore` | `packages/web/src/stores/transferStore.ts` | Every byte transfer (uploads + downloads). Source of truth for the global tray. Persists transfer metadata via `transferStore@v1`. |
+| `composerStore` | `packages/web/src/stores/composerStore.ts` | Per-channel staged transfer IDs + draft text + replyTo. Replaces `MessageInput` component-local state. Persists via `composerStore@v1`. |
+| `pendingMessageStore` | `packages/web/src/stores/pendingMessageStore.ts` | Composed-but-not-yet-sent attachment-bearing bubbles, keyed by `clientId`. Persists via `pendingMessageStore@v1`. Text-only messages are out of scope -- they keep the existing `chatStore.sendMessage` `temp_*` optimistic path. |
 
-### Progress Tracking (`api/client.ts`)
+### Optimistic Bubble Lifecycle
 
-Two upload methods:
+1. User attaches a file -> `transferStore.startUpload` (eager, fires before Send) -> the new transferId joins `composerStore[channelId].stagedTransferIds`.
+2. User clicks Send -> `pendingMessageStore.append({ ... transferIds })` -> `composerStore.clear`. The bubble renders in `MessageList` at its `createdAtLocal` position.
+3. The orchestrator (`packages/web/src/stores/pendingMessageRehydrate.ts`) polls `listReadyForDeferredSend()`; once every transfer in the bubble is `completed` with an `attachmentId`, it fires `POST /messages` with the collected `attachmentIds` and removes the bubble on success.
+4. WS echo dedup: when a real `message_create` arrives with `userId === currentUser.id` whose content + sorted attachmentIds match a pending bubble, the bubble is removed (FIFO tiebreaker).
+5. Failure: bubble flips to `state: 'failed'`. Retry re-runs failed transfers only; discard aborts everything and clears the bubble.
 
-| Method | Transport | Timeout | Progress |
-|--------|-----------|---------|----------|
-| `uploads.upload(file)` | `fetch` API | 120 seconds | No |
-| `uploads.uploadWithProgress(file, onProgress)` | `XMLHttpRequest` | 10 minutes | Yes, via `xhr.upload.progress` event |
+### Reload Survival
 
-Both send multipart `FormData` with the file under key `'file'`.
-
-The progress callback receives `(loaded: number, total: number)` from the XHR progress event.
+- `transferStore`, `composerStore`, `pendingMessageStore` all use Zustand `persist` against versioned `localStorage` keys (`transferStore@v1`, `composerStore@v1`, `pendingMessageStore@v1`).
+- File handles (Chrome/Edge picker + drag-drop only) are persisted to IndexedDB via `idbHandles.ts` keyed by `transfer.fileHandleId`. Permission is re-prompted on resume.
+- Bytes themselves never persist. On unsupported browsers the user re-picks (uploads) or restarts (downloads).
+- TTL: pending bubbles whose `tusExpiresAt` is past are dropped on rehydrate with a one-time toast.
+- All-transfers-already-complete branch: if every transferId in a rehydrated pending bubble already has an `attachmentId`, the deferred `POST /messages` fires immediately on app start.
 
 ### Attachment Rendering (`AttachmentRenderer.tsx`)
 
@@ -593,6 +607,33 @@ Handles URL rewriting for federated content:
 | `normalizeMessageAssets(message, origin)` | Rewrites user assets + attachment filenames/thumbnails for remote origins; recurses into `replyTo` |
 
 These functions are called client-side when displaying content from federated instances, ensuring relative upload paths are resolved to the correct remote server.
+
+---
+
+## 13. Download Pipeline
+
+`transferStore.startDownload(url, opts)` is the single client-side entry point for saving any file (right-click Save Image / Save Video / Save Audio, the file-card download button, and the `ImagePreview` toolbar). The store branches on capability:
+
+### Path 1: FS Access (Chrome/Edge with `showSaveFilePicker`)
+
+1. Prompt the user via `showSaveFilePicker`. Persist the returned handle to IndexedDB.
+2. Open a writable; stream `fetch` body to disk; update progress per chunk.
+3. **Pause:** `controller.abort()` and close the writable. **Resume:** re-permission the handle, query the existing file size, restart `fetch` with `Range: bytes=<size>-`.
+4. Reload survival: the handle persists in IDB and the partial bytes are already on disk -- resume picks up where the previous tab left off.
+
+### Path 2: Blob fallback (Safari/Firefox/paste-no-handle)
+
+1. `fetch` accumulates body to in-memory chunks.
+2. On completion: `URL.createObjectURL` + temporary anchor click + `URL.revokeObjectURL`.
+3. Pause is unsupported (the tray button is disabled with a tooltip). Reload discards the in-memory blob with a one-time toast.
+
+### Triggers
+
+| Source file | Site |
+|-------------|------|
+| `packages/web/src/utils/imageActions.ts` | `saveImage()` -- right-click Save Image, `ImagePreview` toolbar |
+| `packages/web/src/components/chat/messageMenuItems.tsx` | Save Image / Save Video / Save Audio menu entries |
+| `packages/web/src/components/chat/AttachmentRenderer.tsx` | File-card download button (replaces the previous native `<a download>`) |
 
 ---
 
