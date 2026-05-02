@@ -52,6 +52,12 @@ export interface CreateTransferInput {
 
 interface TransferStoreState {
   transfers: Map<string, Transfer>;
+  /**
+   * Mirrors the keys of the module-scoped `liveUploadFiles` map so React components
+   * can subscribe to "do we still hold the original File for this transfer?" reactively.
+   * Session-scoped — never persisted (the underlying File refs vanish on reload).
+   */
+  hasInMemoryFile: Set<string>;
 }
 
 interface TransferStoreActions {
@@ -129,8 +135,23 @@ const mapAwareStorage: PersistStorage<Pick<TransferStoreState, 'transfers'>> = {
 
 export const useTransferStore = create<TransferStore>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // DRY helper: keep the reactive `hasInMemoryFile` set in sync with the
+      // module-scoped `liveUploadFiles` map. Both call-sites that mutate the map
+      // immediately follow up with this so subscribers re-render.
+      const setInMemoryRef = (id: string, present: boolean) => {
+        set((s) => {
+          const has = s.hasInMemoryFile.has(id);
+          if (present === has) return s;
+          const next = new Set(s.hasInMemoryFile);
+          if (present) next.add(id); else next.delete(id);
+          return { hasInMemoryFile: next };
+        });
+      };
+
+      return ({
       transfers: new Map<string, Transfer>(),
+      hasInMemoryFile: new Set<string>(),
 
       createTransfer: (input) => {
         const id = uuid();
@@ -196,13 +217,16 @@ export const useTransferStore = create<TransferStore>()(
         return { transfers: next };
       }),
 
-      remove: (id) => set((s) => {
-        if (!s.transfers.has(id)) return s;
-        const next = new Map(s.transfers);
-        next.delete(id);
+      remove: (id) => {
         liveUploadFiles.delete(id);
-        return { transfers: next };
-      }),
+        setInMemoryRef(id, false);
+        set((s) => {
+          if (!s.transfers.has(id)) return s;
+          const next = new Map(s.transfers);
+          next.delete(id);
+          return { transfers: next };
+        });
+      },
 
       startUpload: async (file, opts) => {
         const token = useAuthStore.getState().token;
@@ -262,6 +286,7 @@ export const useTransferStore = create<TransferStore>()(
             } finally {
               liveUploads.delete(id);
               liveUploadFiles.delete(id);
+              setInMemoryRef(id, false);
             }
           },
           onError: (err: Error) => {
@@ -276,6 +301,7 @@ export const useTransferStore = create<TransferStore>()(
         const upload = new Upload(file as File, tusOpts);
         liveUploads.set(id, upload);
         liveUploadFiles.set(id, file);
+        setInMemoryRef(id, true);
         upload.start();
         return id;
       },
@@ -349,10 +375,14 @@ export const useTransferStore = create<TransferStore>()(
         }
 
         if (!blob) {
-          // No handle, no in-memory file — surface "re-pick to resume" to the user.
-          // (Cross-reload on Firefox/Safari, or after MessageInput unmount cleared
-          // the in-memory File and the bubble survives without an FS handle.)
-          get().setState_(id, 'paused');
+          // No in-memory File (post-reload) AND no FS handle to reacquire bytes from.
+          // The user must discard and re-upload. Setting 'failed' lets the orchestrator's
+          // mark-failed sweep keep the bubble in failed state and Message.tsx surfaces
+          // the discard control. The Retry button is hidden in this case (canRetry gate).
+          get().setError(id, {
+            message: 'File no longer available — discard and re-upload',
+            permanent: true,
+          });
           return;
         }
 
@@ -425,6 +455,7 @@ export const useTransferStore = create<TransferStore>()(
             } finally {
               liveUploads.delete(id);
               liveUploadFiles.delete(id);
+              setInMemoryRef(id, false);
             }
           },
           onError: (err: Error) => {
@@ -434,6 +465,11 @@ export const useTransferStore = create<TransferStore>()(
             liveUploads.delete(id);
           },
         };
+
+        // Retain the resolved blob in the in-memory map so a subsequent retry-after-failure
+        // (e.g., transient network error) can resume without going through the handle path.
+        liveUploadFiles.set(id, blob);
+        setInMemoryRef(id, true);
 
         const upload = new Upload(blob as File, tusOpts);
         liveUploads.set(id, upload);
@@ -631,7 +667,8 @@ export const useTransferStore = create<TransferStore>()(
       listVisible: () => Array.from(get().transfers.values()).filter((t) => t.tray),
       listForChannel: (channelId) =>
         Array.from(get().transfers.values()).filter((t) => t.channelId === channelId),
-    }),
+    });
+    },
     {
       name: 'transferStore@v1',
       storage: mapAwareStorage,

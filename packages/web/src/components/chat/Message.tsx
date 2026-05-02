@@ -51,6 +51,7 @@ function PendingAttachmentTile({ transferId }: PendingAttachmentTileProps) {
         total={transfer.progress.total}
         state={transfer.state}
         filename={transfer.file.name}
+        error={transfer.error?.message}
         onPause={transfer.state === 'active' ? () => pauseUpload(transfer.id) : undefined}
         onResume={transfer.state === 'paused' ? () => resumeUpload(transfer.id) : undefined}
         onAbort={() => abortUpload(transfer.id)}
@@ -133,11 +134,22 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const showInteractions = !pending;
 
   const transfersForRow = useTransferStore((s) => s.transfers);
+  const inMemoryFiles = useTransferStore((s) => s.hasInMemoryFile);
   const anyTransferTerminallyBad = !!pending && pending.transferIds.some((tid) => {
     const t = transfersForRow.get(tid);
     return t && (t.state === 'failed' || t.state === 'aborted');
   });
   const showRetryDiscardRow = pending?.state === 'failed' || anyTransferTerminallyBad;
+  // Retry is only feasible when we can re-source the bytes for every transfer in the
+  // pending row — either the in-memory File ref still exists (same-session retry)
+  // or a persisted FileSystemFileHandle can reacquire the bytes (Chrome/Edge drag-drop).
+  // After a reload (or post-redeploy refresh) without a handle, both are gone, and
+  // showing a Retry button that silently no-ops would strand the user. Hide it instead.
+  const canRetry = !!pending && pending.transferIds.every((tid) => {
+    const t = transfersForRow.get(tid);
+    if (!t || t.type !== 'upload') return false;
+    return inMemoryFiles.has(tid) || !!t.fileHandleId;
+  });
 
   const channelKey: string = isPendingMessage(message)
     ? message.channelId || message.dmChannelId || ''
@@ -519,24 +531,26 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                   Upload failed
                 </span>
                 <span className="w-px h-3.5 bg-accent-rose/25" aria-hidden="true" />
-                <button
-                  onClick={async () => {
-                    const transfers = useTransferStore.getState().transfers;
-                    const retryIds = pending.transferIds.filter((tid) => {
-                      const s = transfers.get(tid)?.state;
-                      return s === 'failed' || s === 'aborted';
-                    });
-                    // Flip the bubble back to 'sending' first so the orchestrator
-                    // re-evaluates after the resumed transfers complete.
-                    usePendingMessageStore.getState().markSending(pending.clientId);
-                    for (const tid of retryIds) {
-                      await useTransferStore.getState().resumeUpload(tid);
-                    }
-                  }}
-                  className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
-                >
-                  Retry
-                </button>
+                {canRetry && (
+                  <button
+                    onClick={async () => {
+                      const transfers = useTransferStore.getState().transfers;
+                      const retryIds = pending.transferIds.filter((tid) => {
+                        const s = transfers.get(tid)?.state;
+                        return s === 'failed' || s === 'aborted';
+                      });
+                      // Flip the bubble back to 'sending' first so the orchestrator
+                      // re-evaluates after the resumed transfers complete.
+                      usePendingMessageStore.getState().markSending(pending.clientId);
+                      for (const tid of retryIds) {
+                        await useTransferStore.getState().resumeUpload(tid);
+                      }
+                    }}
+                    className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     const transfers = useTransferStore.getState().transfers;

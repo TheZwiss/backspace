@@ -6,6 +6,8 @@ interface Props {
   total: number;
   state: TransferState;
   filename: string;
+  /** Optional human-readable error surfaced as a hover tooltip when state==='failed'. */
+  error?: string;
   onPause?: () => void;
   onResume?: () => void;
   onAbort?: () => void;
@@ -19,7 +21,7 @@ function fmt(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
-export function AttachmentProgress({ loaded, total, state, filename, onPause, onResume, onAbort, size = 'tile' }: Props) {
+export function AttachmentProgress({ loaded, total, state, filename, error, onPause, onResume, onAbort, size = 'tile' }: Props) {
   const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
   const bg = state === 'failed' ? 'bg-accent-rose/30' : 'bg-accent-mint/30';
   const isFinal = state === 'completed' || state === 'aborted';
@@ -28,6 +30,7 @@ export function AttachmentProgress({ loaded, total, state, filename, onPause, on
       <div
         className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center`}
         style={state !== 'failed' ? { background: `conic-gradient(rgba(180,220,200,.85) ${pct}%, rgba(255,255,255,.15) ${pct}%)` } : undefined}
+        title={state === 'failed' ? error : undefined}
       >
         <div className="w-7 h-7 rounded-full bg-surface-overlay text-[10px] text-txt-primary flex items-center justify-center font-medium">
           {state === 'failed' ? '!' : `${pct}%`}
