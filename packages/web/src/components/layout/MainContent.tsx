@@ -15,6 +15,7 @@ import { Avatar } from '../ui/Avatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
+import { TransferIndicator } from './TransferIndicator';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
@@ -131,6 +132,7 @@ export function MainContent() {
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <TransferIndicator />
               <MemberListToggleButton />
             </div>
           </div>
@@ -228,6 +230,7 @@ export function MainContent() {
                 <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
               </svg>
             </button>
+            <TransferIndicator />
             <div className="w-[1px] h-5 bg-border-soft mx-1" />
             <MemberListToggleButton />
           </div>
@@ -252,6 +255,7 @@ export function MainContent() {
         <div className="h-14 px-5 flex items-center justify-between border-b border-border-hard">
           <span className="text-txt-tertiary">Select a channel</span>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <TransferIndicator />
             <MemberListToggleButton />
           </div>
         </div>
@@ -276,6 +280,7 @@ export function MainContent() {
               <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary">{channel.name}</span>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              <TransferIndicator />
               <MemberListToggleButton />
             </div>
           </div>
@@ -319,6 +324,7 @@ export function MainContent() {
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <TransferIndicator />
             <MemberListToggleButton />
           </div>
         </div>
@@ -369,6 +375,7 @@ export function MainContent() {
               <path d="M21.707 20.293l-5.395-5.395A7.457 7.457 0 0018 10.5 7.5 7.5 0 1010.5 18c1.575 0 3.027-.486 4.228-1.31l5.476 5.476a.997.997 0 001.414 0l.089-.089a1 1 0 000-1.414l.001-.37zM10.5 16a5.5 5.5 0 110-11 5.5 5.5 0 010 11z" />
             </svg>
           </button>
+          <TransferIndicator />
           <div className="w-[1px] h-5 bg-border-soft mx-1" />
           <MemberListToggleButton />
         </div>

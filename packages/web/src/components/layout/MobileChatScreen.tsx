@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TypingIndicator } from '../chat/TypingIndicator';
+import { TransferIndicator } from './TransferIndicator';
 
 interface MobileChatScreenProps {
   params?: Record<string, string>;
@@ -61,6 +62,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
             {isDm ? channelName : `# ${channelName}`}
           </h1>
         </div>
+        <TransferIndicator />
         {!isDm && (
           <button
             onClick={() => pushMobileScreen('members')}
