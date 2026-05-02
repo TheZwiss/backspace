@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { AudioManager } from '../../../audio/AudioManager';
 import { useAudioDevices } from '../../../hooks/useAudioDevices';
+import { SectionShell, DropdownItem } from './_shared/SettingsPickerPrimitives';
 
 export function AudioInputSection() {
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
@@ -13,6 +14,12 @@ export function AudioInputSection() {
   const [listOpen, setListOpen] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [activeUpstreamId, setActiveUpstreamId] = useState<string | null>(null);
+  // Bumped whenever AudioManager's AudioContext transitions to 'running'.
+  // Used as a dep on effects that need to re-run once the context exists —
+  // the user may open Settings before joining voice (no AudioContext yet),
+  // then join voice and expect the meter / resolved-default hint to come
+  // alive without reopening the panel.
+  const [audioCtxGen, setAudioCtxGen] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
 
@@ -28,9 +35,21 @@ export function AudioInputSection() {
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [listOpen]);
 
+  // Listen for AudioContext resume events so dependent effects re-trigger
+  // when the context first becomes available (e.g. user joins voice after
+  // opening Settings). onResumed fires on every 'running' state transition;
+  // we only need an opaque generation bump to re-run downstream effects.
+  useEffect(() => {
+    if (permState !== 'granted') return;
+    const am = AudioManager.getInstance();
+    const unsubscribe = am.onResumed(() => setAudioCtxGen((g) => g + 1));
+    return () => { unsubscribe(); };
+  }, [permState]);
+
   // Live mic-level meter. Reuses AudioManager's analyser node, which is part
-  // of the canonical pipeline — no extra getUserMedia required if the user is
-  // already in voice OR the AudioContext is active.
+  // of the canonical pipeline — no extra getUserMedia required once the user
+  // is in voice. Re-runs on `audioCtxGen` bumps so the meter activates after
+  // the AudioContext appears mid-session.
   useEffect(() => {
     if (permState !== 'granted') return;
     let stopped = false;
@@ -52,15 +71,17 @@ export function AudioInputSection() {
       stopped = true;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [permState]);
+  }, [permState, audioCtxGen]);
 
-  // Track the resolved upstream deviceId for the "System Default · X" hint.
+  // Track the resolved upstream deviceId for the "Currently using: X" hint.
+  // Re-runs on `audioCtxGen` because the resolved-default ID is only known
+  // after AudioManager has actually opened a stream.
   useEffect(() => {
     if (permState !== 'granted') return;
     const am = AudioManager.getInstance();
     const id = am.getCurrentInputDeviceId();
     setActiveUpstreamId(id === 'default' ? null : id);
-  }, [permState, inputDeviceId]);
+  }, [permState, inputDeviceId, audioCtxGen]);
 
   if (permState === 'unknown') {
     return (
@@ -187,44 +208,10 @@ export function AudioInputSection() {
             ))}
           </div>
           <div className="text-xs text-txt-tertiary mt-1.5">
-            The level meter is live whenever an audio session is active. Join a voice channel to test mic input.
+            The level meter activates once you join a voice channel.
           </div>
         </div>
       </div>
     </SectionShell>
-  );
-}
-
-function SectionShell({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">{title}</div>
-      <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5">{children}</div>
-    </div>
-  );
-}
-
-interface DropdownItemProps {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}
-
-function DropdownItem({ label, active, onClick }: DropdownItemProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
-        active ? 'text-txt-primary' : 'text-txt-secondary'
-      }`}
-    >
-      {active && (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-accent-primary flex-shrink-0">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-        </svg>
-      )}
-      <span className={`truncate ${active ? '' : 'pl-6'}`}>{label}</span>
-    </button>
   );
 }
