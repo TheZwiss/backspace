@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTransferStore, type Transfer } from '../../stores/transferStore';
 
 function fmt(bytes: number): string {

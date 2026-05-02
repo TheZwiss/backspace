@@ -4,6 +4,7 @@ import { Upload, type UploadOptions } from 'tus-js-client';
 import type { Attachment } from '@backspace/shared';
 import { useAuthStore } from './authStore';
 import { getTokenForOrigin } from '../utils/crossStoreResolvers';
+import { getHandle, putHandle, ensurePermission, queryHandlePermission } from '../utils/idbHandles';
 
 export type TransferType = 'upload' | 'download';
 export type TransferState =
@@ -362,7 +363,6 @@ export const useTransferStore = create<TransferStore>()(
 
         // Fall back to persisted FileSystemFileHandle (cross-reload resume on Chrome/Edge).
         if (!blob && t.fileHandleId) {
-          const { getHandle, ensurePermission } = await import('../utils/idbHandles');
           const handle = await getHandle(t.fileHandleId);
           if (handle) {
             const perm = await ensurePermission(handle, 'read');
@@ -500,7 +500,6 @@ export const useTransferStore = create<TransferStore>()(
 
         try {
           if (supportsFs) {
-            const { putHandle } = await import('../utils/idbHandles');
             const showSavePicker = (window as unknown as {
               showSaveFilePicker: (opts: { suggestedName: string }) => Promise<FileSystemFileHandle>;
             }).showSaveFilePicker;
@@ -604,7 +603,6 @@ export const useTransferStore = create<TransferStore>()(
           get().setError(id, { message: 'No destination handle — cannot resume', permanent: true });
           return;
         }
-        const { getHandle, ensurePermission } = await import('../utils/idbHandles');
         const handle = await getHandle(t.destFileHandleId);
         if (!handle) {
           get().setError(id, { message: 'Destination handle missing', permanent: true });
@@ -747,7 +745,6 @@ async function normalizeRehydratedTransfers(): Promise<void> {
 
       // 3) Auto-resume when permission is already 'granted'.
       try {
-        const { getHandle, queryHandlePermission } = await import('../utils/idbHandles');
         const handle = await getHandle(handleId);
         if (!handle) {
           store.setError(current.id, {
