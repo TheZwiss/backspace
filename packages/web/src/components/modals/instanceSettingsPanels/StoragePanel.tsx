@@ -50,6 +50,12 @@ export function StoragePanel() {
   const [mediaCleaning, setMediaCleaning] = useState(false);
   const [mediaPreviewDone, setMediaPreviewDone] = useState(false);
 
+  // Stale tus session cleanup state
+  const [tusMaxAgeHours, setTusMaxAgeHours] = useState(1);
+  const [tusCleanupResult, setTusCleanupResult] = useState<CleanupResult | null>(null);
+  const [tusCleaning, setTusCleaning] = useState(false);
+  const [tusPreviewDone, setTusPreviewDone] = useState(false);
+
   const fetchStats = useCallback(async () => {
     setLoading(true);
     setLoadError('');
@@ -120,6 +126,27 @@ export function StoragePanel() {
       addToast(err instanceof Error ? err.message : 'Media cleanup failed', 'warning');
     } finally {
       setMediaCleaning(false);
+    }
+  };
+
+  const handleTusCleanup = async (dryRun: boolean) => {
+    if (!Number.isFinite(tusMaxAgeHours) || tusMaxAgeHours <= 0) return;
+    setTusCleaning(true);
+    setTusCleanupResult(null);
+    try {
+      const result = await api.admin.cleanupTusSessions(tusMaxAgeHours, dryRun);
+      setTusCleanupResult(result);
+      if (dryRun) {
+        setTusPreviewDone(true);
+      } else {
+        setTusPreviewDone(false);
+        addToast(`Cleaned ${result.deletedFiles} stale upload session${result.deletedFiles !== 1 ? 's' : ''} (${formatBytes(result.freedBytes)})`, 'success');
+        await fetchStats();
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Stale upload cleanup failed', 'warning');
+    } finally {
+      setTusCleaning(false);
     }
   };
 
@@ -201,6 +228,13 @@ export function StoragePanel() {
               {stats.danglingAttachments}
             </div>
             <div className="text-xs text-txt-tertiary">{formatBytes(stats.danglingSize)}</div>
+          </div>
+          <div className="rounded-lg bg-white/[0.02] p-3.5">
+            <div className="text-xs text-txt-tertiary mb-0.5">Stale Uploads</div>
+            <div className={`text-lg font-semibold ${stats.staleTusSessions > 0 ? 'text-accent-amber' : 'text-txt-primary'}`}>
+              {stats.staleTusSessions}
+            </div>
+            <div className="text-xs text-txt-tertiary">{formatBytes(stats.staleTusSize)}</div>
           </div>
         </div>
       </div>
@@ -310,6 +344,69 @@ export function StoragePanel() {
               {cleanupResult.errors.length > 0 && (
                 <div className="mt-1 text-txt-danger">
                   {cleanupResult.errors.length} error{cleanupResult.errors.length !== 1 ? 's' : ''}: {cleanupResult.errors[0]}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stale Uploads */}
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Stale Uploads</div>
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
+          <div className="text-xs text-txt-tertiary">
+            Abandoned tus upload sessions in <code className="text-txt-secondary">.tus/</code> (paused/crashed without DELETE). Auto-expire runs every 24 hours; this lets you sweep proactively.
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-txt-secondary whitespace-nowrap">Max age (hours)</label>
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              value={tusMaxAgeHours}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setTusMaxAgeHours(Number.isFinite(next) && next > 0 ? next : 0);
+                setTusPreviewDone(false);
+                setTusCleanupResult(null);
+              }}
+              className="input-standard w-24 px-2 py-1 text-sm text-center"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTusCleanup(true)}
+              disabled={tusCleaning || tusMaxAgeHours <= 0}
+              className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-txt-secondary text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {tusCleaning ? 'Scanning...' : 'Preview Cleanup'}
+            </button>
+            <button
+              onClick={() => handleTusCleanup(false)}
+              disabled={tusCleaning || !tusPreviewDone}
+              className="px-3 py-1.5 bg-accent-rose hover:bg-accent-rose/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+            >
+              {tusCleaning ? 'Cleaning...' : 'Clean Up Now'}
+            </button>
+          </div>
+
+          {tusCleanupResult && (
+            <div className={`p-2 rounded text-sm ${
+              tusCleanupResult.dryRun
+                ? 'bg-accent-amber/10 border border-accent-amber/30 text-accent-amber'
+                : 'bg-status-online/10 border border-status-online/30 text-status-online'
+            }`}>
+              <div className="font-medium mb-1">
+                {tusCleanupResult.dryRun ? 'Preview — no files deleted' : 'Cleanup complete'}
+              </div>
+              <div>
+                {tusCleanupResult.deletedFiles} session file{tusCleanupResult.deletedFiles !== 1 ? 's' : ''} ({formatBytes(tusCleanupResult.freedBytes)})
+              </div>
+              {tusCleanupResult.errors.length > 0 && (
+                <div className="mt-1 text-txt-danger">
+                  {tusCleanupResult.errors.length} error{tusCleanupResult.errors.length !== 1 ? 's' : ''}: {tusCleanupResult.errors[0]}
                 </div>
               )}
             </div>

@@ -78,4 +78,133 @@ describe('cleanupTusStragglers', () => {
 
     expect(result.removed).toBe(0);
   });
+
+  it('honours an explicit threshold override', async () => {
+    const { cleanupTusStragglers } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const file = path.join(tmpDir, 'two-hour-old');
+    fs.writeFileSync(file, 'data');
+    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    const seconds = twoHoursAgo / 1000;
+    fs.utimesSync(file, seconds, seconds);
+
+    // Default 48h threshold would skip this file. Override to 1h to catch it.
+    const result = cleanupTusStragglers(60 * 60 * 1000);
+
+    expect(result.removed).toBe(1);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+});
+
+describe('getStaleTusInfo', () => {
+  it('returns zeros when the directory does not exist', async () => {
+    const { getStaleTusInfo } = await import('./storageJanitor.js');
+    expect(fs.existsSync(tmpDir)).toBe(false);
+
+    const info = getStaleTusInfo(60 * 60 * 1000);
+
+    expect(info).toEqual({ count: 0, size: 0, oldestAt: null });
+  });
+
+  it('excludes entries newer than the threshold', async () => {
+    const { getStaleTusInfo } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'fresh'), 'recent');
+    // mtime defaults to "now" — within any reasonable threshold.
+
+    const info = getStaleTusInfo(60 * 60 * 1000);
+
+    expect(info.count).toBe(0);
+    expect(info.size).toBe(0);
+    expect(info.oldestAt).toBeNull();
+  });
+
+  it('includes entries older than the threshold and tracks oldest mtime', async () => {
+    const { getStaleTusInfo } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const stale1 = path.join(tmpDir, 'stale-1');
+    const stale2 = path.join(tmpDir, 'stale-2');
+    const fresh = path.join(tmpDir, 'fresh');
+    fs.writeFileSync(stale1, 'a'.repeat(100));
+    fs.writeFileSync(stale2, 'b'.repeat(250));
+    fs.writeFileSync(fresh, 'c'.repeat(50));
+
+    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
+    fs.utimesSync(stale1, twoHoursAgo / 1000, twoHoursAgo / 1000);
+    fs.utimesSync(stale2, fourHoursAgo / 1000, fourHoursAgo / 1000);
+
+    const info = getStaleTusInfo(60 * 60 * 1000); // 1h threshold
+
+    expect(info.count).toBe(2);
+    expect(info.size).toBe(350);
+    expect(info.oldestAt).not.toBeNull();
+    // Oldest mtime should be ~ fourHoursAgo (within fs precision, allow 1.5s slack)
+    expect(Math.abs((info.oldestAt ?? 0) - fourHoursAgo)).toBeLessThan(1500);
+  });
+
+  it('skips subdirectories', async () => {
+    const { getStaleTusInfo } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const sub = path.join(tmpDir, 'subdir');
+    fs.mkdirSync(sub);
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    fs.utimesSync(sub, oneDayAgo / 1000, oneDayAgo / 1000);
+
+    const info = getStaleTusInfo(60 * 60 * 1000);
+
+    expect(info.count).toBe(0);
+  });
+});
+
+describe('cleanupStaleTusSessions', () => {
+  it('returns zero counts when the directory does not exist', async () => {
+    const { cleanupStaleTusSessions } = await import('./storageJanitor.js');
+    expect(fs.existsSync(tmpDir)).toBe(false);
+
+    const result = cleanupStaleTusSessions(60 * 60 * 1000, false);
+
+    expect(result.deletedFiles).toBe(0);
+    expect(result.freedBytes).toBe(0);
+    expect(result.errors).toEqual([]);
+  });
+
+  it('counts but does not delete when dryRun=true', async () => {
+    const { cleanupStaleTusSessions } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const stale = path.join(tmpDir, 'stale');
+    fs.writeFileSync(stale, 'x'.repeat(200));
+    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    fs.utimesSync(stale, twoHoursAgo / 1000, twoHoursAgo / 1000);
+
+    const result = cleanupStaleTusSessions(60 * 60 * 1000, true);
+
+    expect(result.deletedFiles).toBe(1);
+    expect(result.freedBytes).toBe(200);
+    expect(result.errors).toEqual([]);
+    // File must still exist on disk.
+    expect(fs.existsSync(stale)).toBe(true);
+  });
+
+  it('unlinks stale entries when dryRun=false and leaves fresh ones alone', async () => {
+    const { cleanupStaleTusSessions } = await import('./storageJanitor.js');
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const stale = path.join(tmpDir, 'stale');
+    const fresh = path.join(tmpDir, 'fresh');
+    fs.writeFileSync(stale, 'x'.repeat(123));
+    fs.writeFileSync(fresh, 'y'.repeat(456));
+
+    const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+    fs.utimesSync(stale, threeHoursAgo / 1000, threeHoursAgo / 1000);
+
+    const result = cleanupStaleTusSessions(60 * 60 * 1000, false);
+
+    expect(result.deletedFiles).toBe(1);
+    expect(result.freedBytes).toBe(123);
+    expect(result.errors).toEqual([]);
+    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(fresh)).toBe(true);
+  });
 });

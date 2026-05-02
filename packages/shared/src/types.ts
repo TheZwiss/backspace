@@ -820,6 +820,10 @@ export interface StorageStats {
   unlinkedSize: number;
   danglingAttachments: number;
   danglingSize: number;
+  /** Count of `.tus/` entries (payloads + sidecars) with mtime older than 1h. */
+  staleTusSessions: number;
+  /** Total size in bytes of those stale `.tus/` entries. */
+  staleTusSize: number;
   breakdown: StorageBreakdown[];
 }
 

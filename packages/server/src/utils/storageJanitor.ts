@@ -174,11 +174,22 @@ function getDanglingAttachments(): { id: string; filename: string; size: number 
   return [...danglingSpace, ...danglingDm];
 }
 
+/**
+ * Threshold for the `staleTusSessions` count exposed via `getStorageStats()`.
+ * Distinct from `tusStragglerSweepMs` (defensive sweep, default 48h) and from
+ * the configurable `maxAgeHours` of the admin cleanup route — this is purely
+ * the "how many entries look abandoned right now?" display threshold. An
+ * active upload writes chunks often, so a 1h+ gap is a strong signal the user
+ * walked away (paused/crashed/discarded without DELETE).
+ */
+const STALE_TUS_DISPLAY_THRESHOLD_MS = 60 * 60 * 1000;
+
 export function getStorageStats(): StorageStats {
   const diskFiles = getDiskFiles();
   const referenced = getReferencedFilenames();
   const unlinked = getUnlinkedAttachments();
   const dangling = getDanglingAttachments();
+  const staleTus = getStaleTusInfo(STALE_TUS_DISPLAY_THRESHOLD_MS);
 
   const danglingFilenames = new Set<string>();
   let danglingSize = 0;
@@ -235,6 +246,8 @@ export function getStorageStats(): StorageStats {
     unlinkedSize,
     danglingAttachments: dangling.length,
     danglingSize,
+    staleTusSessions: staleTus.count,
+    staleTusSize: staleTus.size,
     breakdown,
   };
 }
@@ -721,19 +734,33 @@ export async function cleanupTusUploads(): Promise<{ removed: number }> {
 }
 
 /**
- * Defensive sweep of `${config.tusUploadDir}`: any file (payload OR sidecar)
- * whose mtime is older than `config.tusStragglerSweepMs` is unlinked. Covers
- * the rare case where a tus crash left an orphan that deleteExpired() doesn't
- * recognize — e.g. a payload without sidecar (so creation_date is unknown),
- * or a sidecar without payload (so getUpload() rejects).
+ * Walk `config.tusUploadDir`, yielding `{ name, full, size, mtimeMs }` for each
+ * regular file matching `predicate`. Tolerates missing dir (yields nothing) and
+ * skips entries whose `statSync` throws (e.g. file vanished mid-walk).
+ *
+ * Shared between the unconditional straggler sweep, the admin-driven
+ * stale-session cleanup, and the stats helper. Centralising the iteration
+ * keeps the .tus/ semantics (which entries count as "files we care about") in
+ * exactly one place.
  */
-export function cleanupTusStragglers(): { removed: number } {
-  if (!fs.existsSync(config.tusUploadDir)) return { removed: 0 };
-  const entries = fs.readdirSync(config.tusUploadDir);
-  const cutoff = Date.now() - config.tusStragglerSweepMs;
-  let removed = 0;
-  for (const entry of entries) {
-    const full = path.join(config.tusUploadDir, entry);
+interface TusEntry {
+  name: string;
+  full: string;
+  size: number;
+  mtimeMs: number;
+}
+
+function walkTusDir(predicate: (entry: TusEntry) => boolean): TusEntry[] {
+  if (!fs.existsSync(config.tusUploadDir)) return [];
+  let names: string[];
+  try {
+    names = fs.readdirSync(config.tusUploadDir);
+  } catch {
+    return [];
+  }
+  const out: TusEntry[] = [];
+  for (const name of names) {
+    const full = path.join(config.tusUploadDir, name);
     let stat: fs.Stats;
     try {
       stat = fs.statSync(full);
@@ -741,15 +768,90 @@ export function cleanupTusStragglers(): { removed: number } {
       continue;
     }
     if (!stat.isFile()) continue;
-    if (stat.mtimeMs >= cutoff) continue;
-    try {
-      fs.unlinkSync(full);
-      removed += 1;
-    } catch {
-      // Race with tus's own cleanup or permissions error — ignore
-    }
+    const entry: TusEntry = { name, full, size: stat.size, mtimeMs: stat.mtimeMs };
+    if (predicate(entry)) out.push(entry);
   }
-  return { removed };
+  return out;
+}
+
+/**
+ * Inspect `.tus/` for entries whose mtime is older than `thresholdMs`. Returns
+ * an aggregate snapshot — count, total bytes, oldest mtime — without touching
+ * any files. Used by `getStorageStats()` to surface a count of "abandoned"
+ * tus sessions in the admin UI, and by the admin route as a dry-run primitive.
+ *
+ * "Stale" here is purely mtime-based and counts both payloads and `.json`
+ * sidecars; the conservative threshold (1h) used by `getStorageStats` matches
+ * the intuition that an active upload writes chunks frequently, so a 1h+ gap
+ * means the user genuinely walked away.
+ */
+export function getStaleTusInfo(thresholdMs: number): { count: number; size: number; oldestAt: number | null } {
+  const cutoff = Date.now() - thresholdMs;
+  let count = 0;
+  let size = 0;
+  let oldestAt: number | null = null;
+  walkTusDir((entry) => {
+    if (entry.mtimeMs >= cutoff) return false;
+    count += 1;
+    size += entry.size;
+    if (oldestAt === null || entry.mtimeMs < oldestAt) oldestAt = entry.mtimeMs;
+    return false; // we don't need the returned array, just side-effects
+  });
+  return { count, size, oldestAt };
+}
+
+/**
+ * Admin-driven sweep of stale tus sessions. Walks `.tus/`, finds entries with
+ * mtime older than `thresholdMs`, optionally unlinks each one, and returns an
+ * aggregate result. In `dryRun=true` mode no files are touched. Per-file
+ * unlink errors are collected (not thrown) so a single bad entry can't abort
+ * the whole sweep.
+ *
+ * Note that `.tus/` holds *pairs* (payload + `.json` sidecar) per session, but
+ * we treat each file independently — the sidecar's mtime is updated by
+ * `@tus/file-store` on every PATCH, so payload + sidecar move together; if the
+ * pair is genuinely abandoned, both are stale and both get reaped. No need for
+ * pair reconciliation.
+ */
+export function cleanupStaleTusSessions(
+  thresholdMs: number,
+  dryRun: boolean,
+): { deletedFiles: number; freedBytes: number; errors: string[] } {
+  const cutoff = Date.now() - thresholdMs;
+  const stale = walkTusDir((entry) => entry.mtimeMs < cutoff);
+  const errors: string[] = [];
+  let deletedFiles = 0;
+  let freedBytes = 0;
+  for (const entry of stale) {
+    if (!dryRun) {
+      try {
+        fs.unlinkSync(entry.full);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`Failed to delete ${entry.name}: ${message}`);
+        continue;
+      }
+    }
+    deletedFiles += 1;
+    freedBytes += entry.size;
+  }
+  return { deletedFiles, freedBytes, errors };
+}
+
+/**
+ * Defensive sweep of `${config.tusUploadDir}`: any file (payload OR sidecar)
+ * whose mtime is older than `thresholdMs` (default `config.tusStragglerSweepMs`,
+ * 48 h) is unlinked. Covers the rare case where a tus crash left an orphan
+ * that deleteExpired() doesn't recognize — e.g. a payload without sidecar (so
+ * creation_date is unknown), or a sidecar without payload (so getUpload()
+ * rejects).
+ *
+ * Janitor-tick contract preserved: returns `{ removed }` with the count of
+ * files actually unlinked. Internally delegates to `cleanupStaleTusSessions`.
+ */
+export function cleanupTusStragglers(thresholdMs: number = config.tusStragglerSweepMs): { removed: number } {
+  const result = cleanupStaleTusSessions(thresholdMs, false);
+  return { removed: result.deletedFiles };
 }
 
 // cleanupStorage is expensive (full disk scan + DB joins) so we run it at

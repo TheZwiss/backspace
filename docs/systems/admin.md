@@ -204,7 +204,10 @@ GET  /api/admin/storage/stats         → StorageStats
 GET  /api/admin/storage/orphans       → { orphans: OrphanedFile[] }
 POST /api/admin/storage/cleanup       { dryRun?: boolean } → CleanupResult
 POST /api/admin/storage/cleanup-media { maxAgeDays: number, dryRun?: boolean } → CleanupResult
+POST /api/admin/storage/cleanup-tus   { maxAgeHours?: number = 1, dryRun?: boolean = false } → CleanupResult
 ```
+
+The `cleanup-tus` route walks `.tus/`, deleting (or counting, if `dryRun`) any entry whose mtime is older than `maxAgeHours`. No DB rows are touched — `.tus/` is filesystem-only — so `deletedAttachmentRecords` in the response is always `0`. See `docs/systems/uploads.md` §Janitor for the full lifecycle (immediate-DELETE on cancel/discard, automatic 24 h `cleanupTusUploads`, 48 h defensive `cleanupTusStragglers`, and this admin-driven sweep).
 
 **StorageStats shape:**
 ```typescript
@@ -219,9 +222,13 @@ POST /api/admin/storage/cleanup-media { maxAgeDays: number, dryRun?: boolean } �
   unlinkedSize: number;
   danglingAttachments: number; // Attachment records pointing to missing files
   danglingSize: number;
+  staleTusSessions: number;    // .tus/ payload + sidecar files with mtime > 1 h old
+  staleTusSize: number;        // Total bytes of those stale tus entries
   breakdown: { type: string; count: number; size: number }[];
 }
 ```
+
+`staleTusSessions` / `staleTusSize` use a **fixed 1 h display threshold** (active uploads write chunks frequently; a 1 h+ gap means the user walked away). This is distinct from the `maxAgeHours` body parameter on `cleanup-tus`, which is configurable per request.
 
 **CleanupResult shape:**
 ```typescript
@@ -234,7 +241,7 @@ POST /api/admin/storage/cleanup-media { maxAgeDays: number, dryRun?: boolean } �
 }
 ```
 
-Storage functions (`getStorageStats`, `getOrphanedFiles`, `cleanupStorage`, `cleanupOldMedia`) are implemented in `utils/storageJanitor.ts`. Out of scope here -- if an uploads.md spec is created, document there.
+Storage functions (`getStorageStats`, `getOrphanedFiles`, `cleanupStorage`, `cleanupOldMedia`, `cleanupStaleTusSessions`, `getStaleTusInfo`) are implemented in `utils/storageJanitor.ts`. Tus-specific lifecycle details live in `docs/systems/uploads.md` §Janitor.
 
 **Cleanup flow (UI):**
 1. Admin clicks "Preview Cleanup" -- calls `cleanupStorage(dryRun=true)` or `cleanupOldMedia(days, dryRun=true)`

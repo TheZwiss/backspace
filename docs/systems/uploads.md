@@ -65,11 +65,16 @@ When the final PATCH completes, the hook:
 
 ### Janitor
 
-| Function | Sweeps |
-|----------|--------|
-| `cleanupTusUploads()` | Invokes `@tus/file-store.deleteExpired()` (24 h `Upload-Expires`). |
-| `cleanupTusStragglers()` | Defensive sweep of `.tus/` for files older than 48 h that the tus library failed to clean up. |
-| `getUnlinkedAttachments()` | Existing 1 h grace still applies to abandoned post-finish attachments. |
+| Trigger | Function / Path | Sweeps |
+|---------|-----------------|--------|
+| User cancels mid-upload | Client `tus.abort(true)` → tus DELETE | Immediate cleanup of the `.tus/` payload + sidecar. |
+| User discards a paused/failed bubble | `transferStore.abortUpload` → manual `fetch DELETE` (when no live tus instance) | Immediate cleanup of the `.tus/` payload + sidecar. |
+| Janitor tick (every ~30 s) | `cleanupTusUploads()` | Invokes `@tus/file-store.deleteExpired()` (24 h `Upload-Expires` default, configurable via `tusExpirationMs`). |
+| Janitor tick (every ~30 s) | `cleanupTusStragglers()` | Defensive unlink of any `.tus/` entry whose mtime is older than `tusStragglerSweepMs` (48 h default) — catches orphans the tus library missed (payload without sidecar, sidecar without payload). |
+| Admin-triggered | `POST /api/admin/storage/cleanup-tus` → `cleanupStaleTusSessions(thresholdMs, dryRun)` | Manual sweep with configurable `maxAgeHours` (default 1 h). Supports preview (`dryRun=true`) before live deletion. |
+| Janitor tick (post-finalize) | `getUnlinkedAttachments()` | 1 h grace for finalized attachment rows that were never linked to a message. |
+
+Stats: `getStorageStats()` exposes `staleTusSessions` + `staleTusSize` for the admin Storage Overview, computed via `getStaleTusInfo(60 * 60 * 1000)` — entries with mtime older than 1 h. The display threshold is fixed (matches the cleanup default); the admin route's `maxAgeHours` is what's actually configurable.
 
 ### Security
 
@@ -449,6 +454,7 @@ The admin routes (`routes/admin.ts`) expose the janitor functions via REST:
 | `GET /api/admin/storage/orphans` | GET | `getOrphanedFiles()` |
 | `POST /api/admin/storage/cleanup` | POST | `cleanupStorage(dryRun)` |
 | `POST /api/admin/storage/cleanup-media` | POST | `cleanupOldMedia(maxAgeDays, dryRun)` |
+| `POST /api/admin/storage/cleanup-tus` | POST | `cleanupStaleTusSessions(maxAgeHours * 3600 * 1000, dryRun)` |
 
 All require JWT + admin role. See `docs/systems/api.md` for request/response formats.
 

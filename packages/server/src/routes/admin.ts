@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { eq, like, or, and, ne, sql, isNull, isNotNull, gte, lte, asc, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin, hashPassword } from '../utils/auth.js';
-import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia } from '../utils/storageJanitor.js';
+import { getStorageStats, getOrphanedFiles, cleanupStorage, cleanupOldMedia, cleanupStaleTusSessions } from '../utils/storageJanitor.js';
 import { getDb, schema } from '../db/index.js';
 import { connectionManager } from '../ws/handler.js';
 import { tombstoneUser, collectDeletionBroadcastTargets } from '../utils/userDeletion.js';
@@ -71,6 +71,32 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send(result);
     } catch (err: any) {
       return reply.code(500).send({ error: `Media cleanup failed: ${err.message}`, statusCode: 500 });
+    }
+  });
+
+  // POST /api/admin/storage/cleanup-tus — admin-driven sweep of stale tus
+  // upload sessions. Defaults: maxAgeHours=1 (matches the staleTusSessions
+  // display threshold), dryRun=false. Per-file unlink errors are surfaced via
+  // CleanupResult.errors. No DB rows touched — `.tus/` is filesystem-only.
+  app.post<{ Body: { maxAgeHours?: number; dryRun?: boolean } }>('/api/admin/storage/cleanup-tus', { preHandler: [authenticate, requireAdmin] }, async (request, reply) => {
+    try {
+      const rawAge = request.body?.maxAgeHours;
+      const maxAgeHours = rawAge === undefined ? 1 : Number(rawAge);
+      if (!Number.isFinite(maxAgeHours) || maxAgeHours <= 0) {
+        return reply.code(400).send({ error: 'maxAgeHours must be a positive finite number', statusCode: 400 });
+      }
+      const dryRun = request.body?.dryRun ?? false;
+      const thresholdMs = maxAgeHours * 60 * 60 * 1000;
+      const result = cleanupStaleTusSessions(thresholdMs, dryRun);
+      return reply.code(200).send({
+        dryRun,
+        deletedFiles: result.deletedFiles,
+        freedBytes: result.freedBytes,
+        deletedAttachmentRecords: 0,
+        errors: result.errors,
+      });
+    } catch (err: any) {
+      return reply.code(500).send({ error: `Tus cleanup failed: ${err.message}`, statusCode: 500 });
     }
   });
 
