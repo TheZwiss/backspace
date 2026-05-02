@@ -498,6 +498,12 @@ export const useTransferStore = create<TransferStore>()(
         // size is unknown for some downloads and we want resume capability anyway.
         const supportsFs = typeof (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker === 'function';
 
+        // Hoisted so the catch block can flush partial bytes on AbortError.
+        // Without close(), the FS Access writable's buffer is discarded and the
+        // file is left at its truncated (open-time) size — which is 0 since we
+        // open with keepExistingData: false. Resuming would then re-download
+        // from byte 0 instead of continuing from the offset we'd reached.
+        let writable: FileSystemWritableFileStream | undefined;
         try {
           if (supportsFs) {
             const showSavePicker = (window as unknown as {
@@ -522,7 +528,7 @@ export const useTransferStore = create<TransferStore>()(
               next.set(id, { ...t, destFileHandleId: handleId, bytesWrittenToDisk: 0 });
               return { transfers: next };
             });
-            const writable = await handle.createWritable({ keepExistingData: false });
+            writable = await handle.createWritable({ keepExistingData: false });
             const resp = await fetch(url, { signal: controller.signal });
             if (!resp.ok || !resp.body) throw new Error(`Download failed: ${resp.status}`);
             const reader = resp.body.getReader();
@@ -542,6 +548,7 @@ export const useTransferStore = create<TransferStore>()(
               });
             }
             await writable.close();
+            writable = undefined;
             get().setState_(id, 'completed');
           } else {
             // Blob fallback — accumulate in memory, then trigger anchor click.
@@ -568,6 +575,13 @@ export const useTransferStore = create<TransferStore>()(
             get().setState_(id, 'completed');
           }
         } catch (err) {
+          // Always flush whatever we managed to write before bubbling out — on
+          // AbortError so resume can pick up at the right offset, and on real
+          // errors so disk state matches reality (no half-buffered ghost bytes).
+          if (writable) {
+            try { await writable.close(); } catch { /* best effort */ }
+            writable = undefined;
+          }
           if (err instanceof Error && err.name === 'AbortError') {
             // Aborted via abortDownload/pauseDownload — state already set there.
           } else {
@@ -650,6 +664,9 @@ export const useTransferStore = create<TransferStore>()(
           await writable.close();
           get().setState_(id, 'completed');
         } catch (err) {
+          // Flush partial bytes before bubbling out so the next resume's offset
+          // (read via getFile().size) reflects what's actually on disk.
+          try { await writable.close(); } catch { /* best effort */ }
           if (err instanceof Error && err.name === 'AbortError') {
             get().setState_(id, 'paused');
           } else {
