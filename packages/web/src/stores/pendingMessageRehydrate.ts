@@ -52,6 +52,29 @@ export function startPendingMessageOrchestrator(): void {
     }
   });
 
+  // 3b. Also re-check when pendingMessageStore mutates (e.g., new bubble appended
+  //     AFTER boot, with all transfers already completed — eager-upload path).
+  //     Without this, a bubble that becomes ready by virtue of pendingMessageStore
+  //     changing — not transferStore — is never dispatched.
+  let lastBubblesSig = '';
+  usePendingMessageStore.subscribe((s) => {
+    const sig = Array.from(s.bubbles.values())
+      .flat()
+      .map((b) => `${b.clientId}|${b.state}|${b.retryCount}`)
+      .sort()
+      .join(',');
+    if (sig === lastBubblesSig) return;
+    lastBubblesSig = sig;
+
+    const fresh = usePendingMessageStore.getState().listReadyForDeferredSend();
+    for (const b of fresh) {
+      if (!sentClientIds.has(b.clientId)) {
+        sentClientIds.add(b.clientId);
+        void deferredSend(b);
+      }
+    }
+  });
+
   // 4. Auto-retry on `online`: bump+resend bubbles that failed once with no
   //    prior retries (network-induced failure most likely). Uses the
   //    failed-retryable query — listReadyForDeferredSend gates state==='sending'
