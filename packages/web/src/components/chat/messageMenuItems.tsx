@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '../../stores/contextMenuStore';
 import type { MessageWithUser } from '@backspace/shared';
 import { saveImage, copyImageToClipboard } from '../../utils/imageActions';
 import { useUIStore } from '../../stores/uiStore';
+import { useTransferStore } from '../../stores/transferStore';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮'];
 
@@ -23,6 +24,12 @@ interface MessageMenuParams {
   onMarkUnread: (messageId: string) => void;
   imageUrl?: string | null;
   sourceUrl?: string | null;
+  videoUrl?: string | null;
+  videoFilename?: string | null;
+  videoSize?: number | null;
+  audioUrl?: string | null;
+  audioFilename?: string | null;
+  audioSize?: number | null;
 }
 
 export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuItem[] {
@@ -43,6 +50,12 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
     onMarkUnread,
     imageUrl,
     sourceUrl,
+    videoUrl,
+    videoFilename,
+    videoSize,
+    audioUrl,
+    audioFilename,
+    audioSize,
   } = params;
 
   const items: ContextMenuItem[] = [];
@@ -89,6 +102,52 @@ export function buildMessageMenuItems(params: MessageMenuParams): ContextMenuIte
       });
     }
     items.push({ key: 'image-sep', type: 'separator' });
+  }
+
+  // ── Video Actions (when right-clicking a video attachment) ─────────────
+  if (videoUrl && videoFilename) {
+    items.push({
+      key: 'save-video',
+      type: 'action',
+      label: 'Save Video',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+        </svg>
+      ),
+      onClick: () => {
+        void useTransferStore.getState().startDownload(videoUrl, {
+          filename: videoFilename,
+          size: videoSize ?? undefined,
+          mimetype: 'video/*',
+          tray: true,
+        });
+      },
+    });
+    items.push({ key: 'video-sep', type: 'separator' });
+  }
+
+  // ── Audio Actions (when right-clicking an audio attachment) ────────────
+  if (audioUrl && audioFilename) {
+    items.push({
+      key: 'save-audio',
+      type: 'action',
+      label: 'Save Audio',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+        </svg>
+      ),
+      onClick: () => {
+        void useTransferStore.getState().startDownload(audioUrl, {
+          filename: audioFilename,
+          size: audioSize ?? undefined,
+          mimetype: 'audio/*',
+          tray: true,
+        });
+      },
+    });
+    items.push({ key: 'audio-sep', type: 'separator' });
   }
 
   // ── Link Actions (when URL text is suppressed) ──────────────────────

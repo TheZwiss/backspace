@@ -10,7 +10,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
-import { AttachmentRenderer } from './AttachmentRenderer';
+import { AttachmentRenderer, attUrlOf } from './AttachmentRenderer';
 import { AttachmentProgress } from './AttachmentProgress';
 import { EmbedRenderer } from './EmbedRenderer';
 import { Username } from '../ui/Username';
@@ -248,12 +248,40 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     const isContentImage = imgEl && !imgEl.closest('[data-avatar]') && !imgEl.closest('[data-embed-thumbnail]');
     const imageUrl = isContentImage ? imgEl.src : null;
 
+    // Detect right-click on a video/audio element and resolve its underlying attachment.
+    // `message` is the persisted form here — pending messages return early above.
+    const persistedAttachments = (message as MessageWithUser).attachments ?? [];
+    const videoEl = (e.target as HTMLElement).closest('video') as HTMLVideoElement | null;
+    const audioEl = (e.target as HTMLElement).closest('audio') as HTMLAudioElement | null;
+    const matchAttByUrl = (mediaSrc: string, kind: 'video' | 'audio') => {
+      // currentSrc is absolute; attUrlOf may be relative — compare via URL parse.
+      let mediaPath: string;
+      try {
+        mediaPath = new URL(mediaSrc, window.location.origin).pathname;
+      } catch { mediaPath = mediaSrc; }
+      return persistedAttachments.find((att) => {
+        if (!att.mimetype.startsWith(`${kind}/`)) return false;
+        const attRaw = attUrlOf(att.filename);
+        let attPath: string;
+        try { attPath = new URL(attRaw, window.location.origin).pathname; } catch { attPath = attRaw; }
+        return attPath === mediaPath;
+      }) ?? null;
+    };
+    const videoAtt = videoEl?.currentSrc ? matchAttByUrl(videoEl.currentSrc, 'video') : null;
+    const audioAtt = audioEl?.currentSrc ? matchAttByUrl(audioEl.currentSrc, 'audio') : null;
+
     const items = buildMessageMenuItems({
       message,
       selectedText,
       previousMessageId,
       imageUrl,
       sourceUrl,
+      videoUrl: videoAtt ? attUrlOf(videoAtt.filename) : null,
+      videoFilename: videoAtt ? videoAtt.originalName : null,
+      videoSize: videoAtt ? videoAtt.size : null,
+      audioUrl: audioAtt ? attUrlOf(audioAtt.filename) : null,
+      audioFilename: audioAtt ? audioAtt.originalName : null,
+      audioSize: audioAtt ? audioAtt.size : null,
       isAuthor,
       isDm: isDmMessage,
       canAddReactions,
