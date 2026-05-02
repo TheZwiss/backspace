@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Attachment } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
+import { useTransferStore } from '../../stores/transferStore';
 import { Tooltip } from '../ui/Tooltip';
 
 interface AttachmentRendererProps {
@@ -13,13 +14,21 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+/**
+ * Resolves the displayable URL for an attachment. Same logic used by inline
+ * `<img>`/`<video>`/`<audio>` rendering and the file-card download button —
+ * exported so right-click menus can use it without duplicating the rule.
+ */
+export function attUrlOf(filename: string): string {
+  if (filename.startsWith('http') || filename.startsWith('/')) return filename;
+  return `/api/uploads/${filename}`;
+}
+
 export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   const openImagePreview = useUIStore((s) => s.openImagePreview);
+  const startDownload = useTransferStore((s) => s.startDownload);
 
-  const attUrl =
-    attachment.filename.startsWith('http') || attachment.filename.startsWith('/')
-      ? attachment.filename
-      : `/api/uploads/${attachment.filename}`;
+  const attUrl = attUrlOf(attachment.filename);
 
   const thumbUrl = attachment.thumbnailFilename
     ? attachment.thumbnailFilename.startsWith('http') || attachment.thumbnailFilename.startsWith('/')
@@ -154,10 +163,17 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   }
 
   return (
-    <a
-      href={attUrl}
-      download={originalName}
-      className="mt-1 max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att"
+    <button
+      type="button"
+      onClick={() => {
+        void startDownload(attUrl, {
+          filename: originalName,
+          size,
+          mimetype,
+          tray: true,
+        });
+      }}
+      className="mt-1 max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att text-left w-full"
     >
       <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -176,6 +192,6 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
           {federationInlineBadge}
         </div>
       </div>
-    </a>
+    </button>
   );
 }
