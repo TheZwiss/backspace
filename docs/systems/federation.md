@@ -898,6 +898,10 @@ When the origin instance receives a `file_rejected` event:
 
 Uses the same backoff schedule as outbox delivery. Max attempts: 10 (`MAX_FILE_ATTEMPTS`). After exceeding max attempts: `status = 'failed'`, `rejectionReason = 'max_attempts_exceeded'`.
 
+### Boundary vs. tus Upload Migration (2026-04)
+
+The `federation_file_queue` worker downloads files from peer instances via plain `fetch` + `Readable.fromWeb` to disk, post-completion. It consumes finished files at `${uploadDir}/${filename}`. Whether a file got there via the legacy multipart endpoint, the current tus endpoint at `/api/files/*`, or any future protocol is invisible to this worker -- its contract is purely with the on-disk filename. No changes were required when the upload protocol changed.
+
 ---
 
 ## 8. Read State Relay

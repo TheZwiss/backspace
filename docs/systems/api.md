@@ -184,9 +184,21 @@ PATCH  /spaces/:id/join-requests/:rid    { action }          → { request }  [M
 GET    /users/@me/join-requests          ?status=            → { requests[] }
 ```
 
-## Uploads (`routes/uploads.ts`)
+## Uploads (`routes/files.ts`, `routes/uploads.ts`)
+
+### Tus Upload Endpoints
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/files/` | JWT | Create resumable upload. Returns `Location` (upload URL) and `Upload-Expires`. |
+| HEAD | `/api/files/:uploadId` | JWT (ownership) | Probe `Upload-Offset` for resume. |
+| PATCH | `/api/files/:uploadId` | JWT (ownership) | Append bytes at offset. |
+| DELETE | `/api/files/:uploadId` | JWT (ownership) | Abort. |
+
+The final PATCH that completes an upload returns the `Attachment` JSON in its response body. See `docs/systems/uploads.md` for the full pipeline (PRE_CREATE / PRE_PATCH / POST_FINISH hooks, storage layout, janitor).
+
+### File Serving
 ```
-POST /uploads     (auth, multipart, rate-limited) → { attachment }
 GET  /uploads/:filename  (public, supports Range) → file stream
 ```
 
