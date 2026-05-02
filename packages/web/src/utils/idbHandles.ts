@@ -55,6 +55,23 @@ export function supportsDnDHandles(): boolean {
 }
 
 /**
+ * Silently query the current permission state on a stored handle.
+ * Never prompts; returns whatever the browser reports right now. Used by the
+ * boot-time rehydrate path so we can auto-resume only when permission is
+ * already 'granted' and avoid a "user gesture required" failure for 'prompt'.
+ */
+export async function queryHandlePermission(
+  handle: FileSystemHandle,
+  mode: 'read' | 'readwrite',
+): Promise<PermissionState> {
+  const handleAny = handle as unknown as {
+    queryPermission?: (opts: { mode: string }) => Promise<PermissionState>;
+  };
+  if (typeof handleAny.queryPermission !== 'function') return 'denied';
+  return handleAny.queryPermission({ mode });
+}
+
+/**
  * Re-prompt for permission on a stored handle. Returns 'granted', 'denied', or 'prompt'.
  * Some non-standard FS Access surfaces don't expose `queryPermission`/`requestPermission` —
  * if missing, returns 'denied' so callers fall back to re-pick.

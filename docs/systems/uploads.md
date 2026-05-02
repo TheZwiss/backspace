@@ -481,10 +481,22 @@ Three stores with strict separation of concerns:
 ### Reload Survival
 
 - `transferStore`, `composerStore`, `pendingMessageStore` all use Zustand `persist` against versioned `localStorage` keys (`transferStore@v1`, `composerStore@v1`, `pendingMessageStore@v1`).
-- File handles (Chrome/Edge picker + drag-drop only) are persisted to IndexedDB via `idbHandles.ts` keyed by `transfer.fileHandleId`. Permission is re-prompted on resume.
+- File handles (Chrome/Edge picker + drag-drop only) are persisted to IndexedDB via `idbHandles.ts` keyed by `transfer.fileHandleId`. Permission is re-prompted on resume only when the explicit Resume click provides a user-gesture; the boot path queries silently and never prompts.
 - Bytes themselves never persist. On unsupported browsers the user re-picks (uploads) or restarts (downloads).
 - TTL: pending bubbles whose `tusExpiresAt` is past are dropped on rehydrate with a one-time toast.
 - All-transfers-already-complete branch: if every transferId in a rehydrated pending bubble already has an `attachmentId`, the deferred `POST /messages` fires immediately on app start.
+
+#### Boot-time normalization
+
+On store rehydrate (`onRehydrateStorage` in `transferStore.ts` -> `normalizeRehydratedTransfers`):
+
+1. Any transfer left in `'active'` state (defensive — `partialize` already filters most) is demoted to `'paused'`. No live worker exists post-reload.
+2. For each `'paused'` transfer, if the bytes are unrecoverable (upload with no `fileHandleId`; download with no `destFileHandleId`), the transfer is marked `'failed'` with an actionable message ("File no longer available — discard and re-upload" / "Download cannot resume — bytes lost. Restart the download."). The UI then surfaces the discard control instead of a misleading paused state.
+3. For each `'paused'` transfer with a stored handle, the rehydrate path *silently* queries permission via `queryHandlePermission` (never calls `requestPermission`, so no user-gesture is required and no prompt appears). If `'granted'`, the transfer auto-resumes on the next tick. If `'prompt'` or `'denied'`, it stays paused — the user's click on Resume provides the user-gesture for `requestPermission`.
+
+Idempotent: re-running is harmless (already-resumed transfers move to `'active'`, no-op for completed/failed).
+
+The paused state is visually distinct in `AttachmentProgress.tsx`: desaturated grey conic-gradient ring with a centered pause-icon disk (instead of the mint ring + percentage text used while active), so the user can immediately tell "nothing is happening" from "in progress".
 
 ### Attachment Rendering (`AttachmentRenderer.tsx`)
 

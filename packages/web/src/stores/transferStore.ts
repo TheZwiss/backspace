@@ -688,6 +688,92 @@ export const useTransferStore = create<TransferStore>()(
           )
         ),
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error || !state) return;
+        // Normalize on the next tick so the store is fully wired before we mutate
+        // it, and so async work (handle probe + auto-resume) doesn't block the
+        // rehydrate path.
+        queueMicrotask(() => {
+          void normalizeRehydratedTransfers();
+        });
+      },
     },
   ),
 );
+
+/**
+ * Boot-time normalization of rehydrated transfers.
+ *
+ * 1. Demotes any leaked 'active' state to 'paused' (defensive — partialize already
+ *    filters most, but a transfer mid-progress can still slip through if it had a
+ *    tusUploadUrl).
+ * 2. Marks bytes-unrecoverable paused transfers as 'failed' with an actionable
+ *    message — we have no in-memory File post-reload and no FS handle to reacquire
+ *    bytes from, so showing a paused state would be misleading.
+ * 3. For paused transfers with a stored handle whose permission is already
+ *    'granted', silently auto-resumes. For 'prompt' / 'denied', leaves paused so
+ *    the user's explicit Resume click provides the user-gesture for
+ *    `requestPermission`.
+ *
+ * Idempotent — re-running is harmless.
+ */
+async function normalizeRehydratedTransfers(): Promise<void> {
+  const store = useTransferStore.getState();
+  const transfers = Array.from(store.transfers.values());
+
+  for (const t of transfers) {
+    // 1) Demote any leaked 'active' state — no live worker exists post-reload.
+    if (t.state === 'active') {
+      store.setState_(t.id, 'paused');
+    }
+
+    const current = useTransferStore.getState().get(t.id);
+    if (!current) continue;
+
+    // 2) Bytes-unrecoverable paused transfers → immediately fail.
+    if (current.state === 'paused') {
+      const isUpload = current.type === 'upload';
+      const handleId = isUpload ? current.fileHandleId : current.destFileHandleId;
+      if (!handleId) {
+        store.setError(current.id, {
+          message: isUpload
+            ? 'File no longer available — discard and re-upload'
+            : 'Download cannot resume — bytes lost. Restart the download.',
+          permanent: true,
+        });
+        continue;
+      }
+
+      // 3) Auto-resume when permission is already 'granted'.
+      try {
+        const { getHandle, queryHandlePermission } = await import('../utils/idbHandles');
+        const handle = await getHandle(handleId);
+        if (!handle) {
+          store.setError(current.id, {
+            message: isUpload
+              ? 'File handle missing — discard and re-upload'
+              : 'Destination handle missing — restart the download',
+            permanent: true,
+          });
+          continue;
+        }
+        const mode: 'read' | 'readwrite' = isUpload ? 'read' : 'readwrite';
+        const perm = await queryHandlePermission(handle, mode);
+        if (perm === 'granted') {
+          // Use the live store reference so subsequent state changes are visible
+          // to subscribers.
+          if (isUpload) {
+            void useTransferStore.getState().resumeUpload(current.id);
+          } else {
+            void useTransferStore.getState().resumeDownload(current.id);
+          }
+        }
+        // perm === 'prompt' or 'denied' → user must click Resume to trigger
+        // requestPermission with a user-gesture.
+      } catch {
+        // Probe failed (IDB unavailable, etc.) — leave paused. User can click
+        // Resume to retry through the normal path.
+      }
+    }
+  }
+}
