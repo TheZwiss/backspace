@@ -613,6 +613,62 @@ export function useLiveKit() {
             };
           }
         }
+        if (publication.source === Track.Source.Microphone) {
+          const mst = publication.track?.mediaStreamTrack;
+          if (mst) {
+            mst.onended = async () => {
+              // The mic track we publish is the *cloned* output of the AudioManager
+              // pipeline (see AudioManager.getFreshTrack). It can end for two
+              // distinct reasons:
+              //   (a) The underlying upstream getUserMedia track ended (unplug,
+              //       OS revoke). The clone goes too.
+              //   (b) syncMic called unpublishTrack() during a deliberate
+              //       republish (device change, RNNoise toggle). In that case
+              //       the user did NOT lose audio — a fresh track is incoming.
+              //
+              // Distinguishing (a) from (b): inspect the AudioManager's current
+              // upstream stream. If it's null or non-active AND the room is
+              // still ours, we're in case (a).
+              if (roomRef.current !== newRoom) return;
+              const am = AudioManager.getInstance();
+              if (am.hasActiveStream()) return; // case (b) — pipeline is alive
+
+              // Probe getUserMedia to distinguish unplug vs revoke vs unavailable.
+              const deviceId = useVoiceStore.getState().inputDeviceId;
+              let copy = 'Microphone unavailable';
+              try {
+                const probe = await navigator.mediaDevices.getUserMedia({
+                  audio: deviceId === 'default' ? true : { deviceId: { exact: deviceId } },
+                });
+                probe.getTracks().forEach(t => t.stop());
+                // Probe succeeded — device is back. Try to re-acquire silently.
+                if (roomRef.current !== newRoom) return;
+                try {
+                  await am.setInputDevice(deviceId);
+                  // syncMic effect re-publishes when stream generation bumps.
+                  return;
+                } catch {
+                  copy = 'Microphone could not be restored';
+                }
+              } catch (err: any) {
+                if (err?.name === 'NotAllowedError') copy = 'Microphone permission was revoked';
+                else if (err?.name === 'NotFoundError') {
+                  // The configured device disappeared. Fall back to default if
+                  // the user wasn't already on it.
+                  if (deviceId !== 'default') {
+                    useVoiceStore.getState().setInputDevice('default');
+                    copy = 'Microphone disconnected — switched to system default';
+                  } else {
+                    copy = 'Microphone disconnected';
+                  }
+                }
+              }
+
+              if (roomRef.current !== newRoom) return;
+              useUIStore.getState().addToast(copy, 'warning');
+            };
+          }
+        }
         guardedUpdate();
       });
       newRoom.on(RoomEvent.LocalTrackUnpublished, (publication: LocalTrackPublication) => {
