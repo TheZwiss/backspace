@@ -1,24 +1,35 @@
 import { useUIStore } from '../stores/uiStore';
+import { useTransferStore } from '../stores/transferStore';
+
+function deriveFilename(url: string): string {
+  try {
+    const u = new URL(url, window.location.origin);
+    const last = u.pathname.split('/').pop() || 'image';
+    return last.split('?')[0] || 'image';
+  } catch {
+    return url.split('/').pop()?.split('?')[0] ?? 'image';
+  }
+}
 
 /**
- * Downloads an image by fetching it as a blob and triggering a download.
- * Falls back to opening in a new tab if CORS blocks the fetch.
+ * Downloads an image via the transfer manager. Falls back to opening in a new
+ * tab if the transfer pipeline can't fetch the URL (e.g., CORS).
  */
 export async function saveImage(url: string, filename?: string): Promise<void> {
-  const derivedFilename = filename ?? url.split('/').pop()?.split('?')[0] ?? 'image';
+  const fname = filename ?? deriveFilename(url);
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = derivedFilename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(blobUrl);
+    const transferId = await useTransferStore.getState().startDownload(url, {
+      filename: fname,
+      mimetype: 'image/*',
+      tray: true,
+    });
+    // startDownload never throws on user-cancel — it sets state to 'aborted'
+    // and resolves with the id. Detect that and stay silent.
+    const t = useTransferStore.getState().get(transferId);
+    if (t?.state === 'failed') {
+      throw new Error(t.error?.message ?? 'Download failed');
+    }
   } catch {
     window.open(url, '_blank', 'noopener');
     useUIStore.getState().addToast('Opened in new tab', 'info', 3000);
