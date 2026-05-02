@@ -87,6 +87,12 @@ function uuid(): string {
 // Live tus Upload instances — keyed by transferId. Not serializable, never persisted.
 const liveUploads = new Map<string, Upload>();
 
+// Original File/Blob references — keyed by transferId. Survive pause; cleared
+// on abort or success. Used for in-session resume when no FileSystemFileHandle exists
+// (file picker, paste, or drag-drop on Firefox/Safari). Cross-reload resume still
+// requires a handle — that path uses idbHandles.
+const liveUploadFiles = new Map<string, Blob>();
+
 // Live download AbortControllers — keyed by transferId. Not serializable, never persisted.
 const liveDownloads = new Map<string, AbortController>();
 
@@ -254,6 +260,7 @@ export const useTransferStore = create<TransferStore>()(
               get().setError(id, { message: msg, permanent: true });
             } finally {
               liveUploads.delete(id);
+              liveUploadFiles.delete(id);
             }
           },
           onError: (err: Error) => {
@@ -267,6 +274,7 @@ export const useTransferStore = create<TransferStore>()(
 
         const upload = new Upload(file as File, tusOpts);
         liveUploads.set(id, upload);
+        liveUploadFiles.set(id, file);
         upload.start();
         return id;
       },
@@ -279,6 +287,7 @@ export const useTransferStore = create<TransferStore>()(
           void u.abort(true).catch(() => { /* server may be unreachable; that's OK */ });
           liveUploads.delete(id);
         }
+        liveUploadFiles.delete(id);
         get().setState_(id, 'aborted');
       },
 
@@ -310,9 +319,12 @@ export const useTransferStore = create<TransferStore>()(
           return;
         }
 
-        // Try to reacquire the file via the persisted FileSystemFileHandle.
-        let blob: Blob | undefined;
-        if (t.fileHandleId) {
+        // Try in-memory File (same-session resume — file picker, paste, browsers
+        // without getAsFileSystemHandle).
+        let blob: Blob | undefined = liveUploadFiles.get(id);
+
+        // Fall back to persisted FileSystemFileHandle (cross-reload resume on Chrome/Edge).
+        if (!blob && t.fileHandleId) {
           const { getHandle, ensurePermission } = await import('../utils/idbHandles');
           const handle = await getHandle(t.fileHandleId);
           if (handle) {
@@ -327,7 +339,9 @@ export const useTransferStore = create<TransferStore>()(
         }
 
         if (!blob) {
-          // No handle path — UI surfaces "re-pick to resume". Stay paused.
+          // No handle, no in-memory file — surface "re-pick to resume" to the user.
+          // (Cross-reload on Firefox/Safari or after MessageInput unmount that cleared
+          // its preview-URL ref will land here.)
           get().setState_(id, 'paused');
           return;
         }
@@ -354,6 +368,7 @@ export const useTransferStore = create<TransferStore>()(
               get().setError(id, { message: msg, permanent: true });
             } finally {
               liveUploads.delete(id);
+              liveUploadFiles.delete(id);
             }
           },
           onError: (err: Error) => {

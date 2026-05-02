@@ -132,6 +132,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const pending = isPendingMessage(message) ? message.__pending : null;
   const showInteractions = !pending;
 
+  const transfersForRow = useTransferStore((s) => s.transfers);
+  const anyTransferTerminallyBad = !!pending && pending.transferIds.some((tid) => {
+    const t = transfersForRow.get(tid);
+    return t && (t.state === 'failed' || t.state === 'aborted');
+  });
+  const showRetryDiscardRow = pending?.state === 'failed' || anyTransferTerminallyBad;
+
   const channelKey: string = isPendingMessage(message)
     ? message.channelId || message.dmChannelId || ''
     : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
@@ -503,7 +510,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             )}
 
             {/* Failed-state retry/discard row */}
-            {pending?.state === 'failed' && (
+            {showRetryDiscardRow && pending && (
               <div className="mt-1 flex gap-2 px-2 py-1 rounded-md bg-accent-rose/15 text-xs">
                 <button
                   onClick={async () => {

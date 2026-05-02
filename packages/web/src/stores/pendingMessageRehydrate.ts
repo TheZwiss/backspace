@@ -43,6 +43,23 @@ export function startPendingMessageOrchestrator(): void {
     if (sig === lastStateSig) return;
     lastStateSig = sig;
 
+    // Mark bubbles as 'failed' when any of their transfers are in a terminal-failure
+    // state (aborted or failed). This surfaces the retry/discard row in Message.tsx
+    // instead of leaving the bubble stuck in 'sending' forever.
+    const allTransfers = useTransferStore.getState().transfers;
+    for (const list of usePendingMessageStore.getState().bubbles.values()) {
+      for (const b of list) {
+        if (b.state !== 'sending') continue;
+        const anyBad = b.transferIds.some((tid) => {
+          const t = allTransfers.get(tid);
+          return t && (t.state === 'failed' || t.state === 'aborted');
+        });
+        if (anyBad) {
+          usePendingMessageStore.getState().markFailed(b.clientId);
+        }
+      }
+    }
+
     const fresh = usePendingMessageStore.getState().listReadyForDeferredSend();
     for (const b of fresh) {
       if (!sentClientIds.has(b.clientId)) {
