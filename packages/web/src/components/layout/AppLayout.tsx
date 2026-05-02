@@ -92,14 +92,103 @@ export function AppLayout() {
     AudioManager.getInstance().setOutputDevice(outputDeviceId);
   }, [outputDeviceId]);
 
-  // Sweep stale persisted device IDs (mic/speaker/camera) on mount and whenever
-  // the device list changes (USB plug/unplug, permission unlock, etc.).
+  // Audio device hot-plug handler.
+  //
+  // Three jobs on every devicechange event:
+  //   (1) Prune persisted IDs that no longer exist (delegated to voiceStore).
+  //   (2) Force re-acquire the live mic stream when the user's chosen input is
+  //       'default' AND a stream is already live. Chromium does NOT migrate an
+  //       existing getUserMedia track to the new OS-default — it stays bound to
+  //       the device that was default at acquisition time. Setting the input
+  //       again with 'default' triggers a fresh getUserMedia, which picks up
+  //       the new OS default. The downstream syncMic effect republishes.
+  //   (3) Force re-apply setSinkId('') for output when 'default' is selected,
+  //       for the same reason on the output side.
+  //   (4) Toast on a *new* audioinput appearance (debounced + dedupe by groupId).
+  //       Removals do not toast — the user already knows they unplugged it.
   useEffect(() => {
     const prune = useVoiceStore.getState().pruneStaleDevices;
-    prune(); // initial sweep
-    const handler = () => prune();
+    let lastInputGroupIds = new Set<string>();
+    const recentToastByGroup = new Map<string, number>(); // groupId -> timestamp ms
+    const TOAST_DEBOUNCE_MS = 1000;
+    const TOAST_DEDUPE_WINDOW_MS = 30_000;
+    let pendingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const seedBaseline = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        lastInputGroupIds = new Set(
+          devices.filter(d => d.kind === 'audioinput' && d.groupId).map(d => d.groupId)
+        );
+      } catch { /* enumeration may be blocked pre-permission; baseline is empty */ }
+    };
+
+    const handleNewDeviceToasts = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const currentInputGroupIds = new Set(
+          devices.filter(d => d.kind === 'audioinput' && d.groupId).map(d => d.groupId)
+        );
+        const now = Date.now();
+        const newGroups: string[] = [];
+        for (const gid of currentInputGroupIds) {
+          if (lastInputGroupIds.has(gid)) continue;
+          const lastToast = recentToastByGroup.get(gid) ?? 0;
+          if (now - lastToast < TOAST_DEDUPE_WINDOW_MS) continue;
+          newGroups.push(gid);
+          recentToastByGroup.set(gid, now);
+        }
+        // GC dedupe map entries older than the window so it doesn't leak.
+        for (const [gid, ts] of recentToastByGroup) {
+          if (now - ts > TOAST_DEDUPE_WINDOW_MS) recentToastByGroup.delete(gid);
+        }
+        lastInputGroupIds = currentInputGroupIds;
+
+        if (newGroups.length > 0) {
+          const newest = devices.find(d =>
+            d.kind === 'audioinput' && d.groupId && newGroups.includes(d.groupId) && d.label,
+          );
+          const label = newest?.label || 'New audio device';
+          useUIStore.getState().addToast(
+            `${label} detected — choose it in Voice settings to switch`,
+            'info',
+            6000,
+          );
+        }
+      } catch { /* enumeration failure is non-fatal */ }
+    };
+
+    const reacquireLiveStream = async () => {
+      const am = AudioManager.getInstance();
+      const inputId = useVoiceStore.getState().inputDeviceId;
+      const outputId = useVoiceStore.getState().outputDeviceId;
+      // Re-acquire input only if user is on 'default' AND a stream is live.
+      // Anything else: persisted ID is concrete, stream stays bound correctly.
+      if (inputId === 'default' && am.hasActiveStream()) {
+        try { await am.setInputDevice('default'); } catch { /* serialized chain handles errors */ }
+      }
+      if (outputId === 'default') {
+        try { await am.setOutputDevice('default'); } catch { /* setSinkId may not exist on Safari */ }
+      }
+    };
+
+    const handler = async () => {
+      await prune();
+      await reacquireLiveStream();
+      // Debounce toast logic so a single plug event that emits multiple
+      // devicechange fires (Bluetooth re-pair storms) collapses to one toast.
+      if (pendingDebounceTimer) clearTimeout(pendingDebounceTimer);
+      pendingDebounceTimer = setTimeout(() => { handleNewDeviceToasts(); }, TOAST_DEBOUNCE_MS);
+    };
+
+    // Seed baseline so the first event after mount doesn't false-positive every
+    // existing device as "new".
+    seedBaseline().then(() => prune());
     navigator.mediaDevices.addEventListener('devicechange', handler);
-    return () => navigator.mediaDevices.removeEventListener('devicechange', handler);
+    return () => {
+      if (pendingDebounceTimer) clearTimeout(pendingDebounceTimer);
+      navigator.mediaDevices.removeEventListener('devicechange', handler);
+    };
   }, []);
 
   const { user, isLoading } = useAuth();
