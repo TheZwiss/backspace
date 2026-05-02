@@ -11,17 +11,53 @@ import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
 import { AttachmentRenderer } from './AttachmentRenderer';
+import { AttachmentProgress } from './AttachmentProgress';
 import { EmbedRenderer } from './EmbedRenderer';
 import { Username } from '../ui/Username';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
+import {
+  isPendingMessage,
+  usePendingMessageStore,
+  type PendingMessageView,
+  type PendingAttachmentView,
+} from '../../stores/pendingMessageStore';
+import { useTransferStore } from '../../stores/transferStore';
 
 interface MessageProps {
-  message: MessageWithUser;
+  message: MessageWithUser | PendingMessageView;
   isCompact: boolean;
   isFirstInGroup: boolean;
   previousMessageId: string | null;
+}
+
+interface PendingAttachmentTileProps {
+  transferId: string;
+}
+
+function PendingAttachmentTile({ transferId }: PendingAttachmentTileProps) {
+  const transfer = useTransferStore((s) => s.transfers.get(transferId));
+  const pauseUpload = useTransferStore((s) => s.pauseUpload);
+  const resumeUpload = useTransferStore((s) => s.resumeUpload);
+  const abortUpload = useTransferStore((s) => s.abortUpload);
+  if (!transfer) {
+    return <div className="w-[140px] h-[96px] rounded-lg bg-surface-channel" />;
+  }
+  return (
+    <div className="relative w-[140px] h-[96px] rounded-lg overflow-hidden bg-surface-channel">
+      <AttachmentProgress
+        loaded={transfer.progress.loaded}
+        total={transfer.progress.total}
+        state={transfer.state}
+        filename={transfer.file.name}
+        onPause={transfer.state === 'active' ? () => pauseUpload(transfer.id) : undefined}
+        onResume={transfer.state === 'paused' ? () => resumeUpload(transfer.id) : undefined}
+        onAbort={() => abortUpload(transfer.id)}
+        size="tile"
+      />
+    </div>
+  );
 }
 
 function formatTime(timestamp: number): string {
@@ -93,11 +129,18 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const members = useSpaceStore((s) => s.members);
   const openUserProfile = useUIStore((s) => s.openUserProfile);
 
-  const channelKey = message.channelId || (message as any).dmChannelId;
+  const pending = isPendingMessage(message) ? message.__pending : null;
+  const showInteractions = !pending;
+
+  const channelKey: string = isPendingMessage(message)
+    ? message.channelId || message.dmChannelId || ''
+    : message.channelId || (message as MessageWithUser & { dmChannelId?: string }).dmChannelId || '';
   const isAuthor = isSelf(message.user, currentUser);
   const channelPermissions = useSpaceStore((s) => s.channelPermissions);
   const myChPerms = channelPermissions.get(message.channelId);
-  const isDmMessage = !!(message as any).dmChannelId || !message.channelId;
+  const isDmMessage = isPendingMessage(message)
+    ? !!message.dmChannelId || !message.channelId
+    : !!(message as MessageWithUser & { dmChannelId?: string }).dmChannelId || !message.channelId;
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canSendMessages = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.SEND_MESSAGES);
   const canDelete = isAuthor || canManageMessages;
@@ -191,6 +234,11 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    if (pending) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const selectedText = window.getSelection()?.toString() ?? '';
@@ -416,14 +464,58 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
             {/* Attachments */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="mt-1 grid gap-2">
-                {message.attachments.map((att) => (
-                  <AttachmentRenderer key={att.id} attachment={att} />
-                ))}
+                {message.attachments.map((att) => {
+                  const pendingAtt = att as PendingAttachmentView;
+                  if (pending && pendingAtt.__transferId) {
+                    return <PendingAttachmentTile key={att.id} transferId={pendingAtt.__transferId} />;
+                  }
+                  return <AttachmentRenderer key={att.id} attachment={att} />;
+                })}
+              </div>
+            )}
+
+            {/* Failed-state retry/discard row */}
+            {pending?.state === 'failed' && (
+              <div className="mt-1 flex gap-2 px-2 py-1 rounded-md bg-accent-rose/15 text-xs">
+                <button
+                  onClick={async () => {
+                    const transfers = useTransferStore.getState().transfers;
+                    const failedIds = pending.transferIds.filter(
+                      (tid) => transfers.get(tid)?.state === 'failed',
+                    );
+                    for (const tid of failedIds) {
+                      await useTransferStore.getState().resumeUpload(tid);
+                    }
+                    usePendingMessageStore.getState().markSending(pending.clientId);
+                  }}
+                  className="text-accent-mint hover:text-accent-mint/80"
+                >
+                  Retry failed
+                </button>
+                <button
+                  onClick={() => {
+                    const transfers = useTransferStore.getState().transfers;
+                    for (const tid of pending.transferIds) {
+                      const t = transfers.get(tid);
+                      if (t && (t.state === 'active' || t.state === 'paused' || t.state === 'queued')) {
+                        useTransferStore.getState().abortUpload(tid);
+                      } else {
+                        useTransferStore.getState().remove(tid);
+                      }
+                    }
+                    if (channelKey) {
+                      usePendingMessageStore.getState().removeByClientId(channelKey, pending.clientId);
+                    }
+                  }}
+                  className="text-txt-tertiary hover:text-accent-rose"
+                >
+                  Discard
+                </button>
               </div>
             )}
 
             {/* Reactions */}
-            {Object.keys(reactionGroups).length > 0 && (
+            {showInteractions && Object.keys(reactionGroups).length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {Object.entries(reactionGroups).map(([emoji, { count, me }]) => (
                   <button
@@ -445,7 +537,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       </div>
 
       {/* Reaction emoji picker */}
-      {showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
+      {showInteractions && showReactionPicker && canAddReactions && reactionPickerBtnRef.current && (() => {
         const PICKER_HEIGHT = 400;
         const PICKER_WIDTH = 360;
         const MARGIN = 8;
@@ -475,7 +567,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       })()}
 
       {/* Action buttons on hover */}
-      {(isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
+      {showInteractions && (isHovered || showReactionPicker || confirmingDelete) && !isEditing && (
         <div className="absolute -top-[18px] right-4 flex items-center glass rounded-[10px] overflow-hidden z-10 h-8">
           {canAddReactions && (
             <div className="flex items-center px-1 border-r border-white/[0.06] h-full">
