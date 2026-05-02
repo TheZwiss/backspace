@@ -6,6 +6,13 @@ import { useChatStore } from '../../stores/chatStore';
 import { useSpaceStore, isDmChannel } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
+import {
+  usePendingMessageStore,
+  isPendingMessage,
+  type PendingMessageView,
+  type PendingAttachmentView,
+  type PendingBubble,
+} from '../../stores/pendingMessageStore';
 import { Avatar } from '../ui/Avatar';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
@@ -14,6 +21,7 @@ import type { MessageWithUser, SpaceInviteSystemPayload } from '@backspace/share
 import { SpaceInviteCard } from './SpaceInviteCard';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
+const EMPTY_PENDING_BUBBLES: PendingBubble[] = [];
 
 interface MessageListProps {
   channelId: string;
@@ -170,6 +178,65 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
   const isDm = isDmChannel(channelId);
   const canReadHistory = isDm || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
+
+  // Pending bubble interleaving — synthetic MessageWithUser-shaped objects
+  // representing optimistic sends. `Message.tsx` (Task 19) branches on the
+  // `__pending` sentinel to render upload progress instead of confirmed state.
+  // Note: per-byte transfer progress is intentionally NOT subscribed here.
+  // Each attachment carries only `__transferId`; Message.tsx subscribes to a
+  // single transfer in isolation so progress ticks don't re-render the list.
+  const pendingBubbles = usePendingMessageStore((s) => s.bubbles.get(channelId)) ?? EMPTY_PENDING_BUBBLES;
+  const currentUser = useAuthStore((s) => s.user);
+
+  // Map for O(1) replyTo lookup when synthesizing pending bubbles. Built once
+  // per `messages` change; per-bubble lookup is then constant-time.
+  const messagesById = useMemo(() => {
+    const m = new Map<string, MessageWithUser>();
+    for (const msg of messages) m.set(msg.id, msg);
+    return m;
+  }, [messages]);
+
+  const interleavedMessages: (MessageWithUser | PendingMessageView)[] = useMemo(() => {
+    if (!currentUser || pendingBubbles.length === 0) return messages;
+    // Synthesized DM messages keep the chatStore convention of channelId === ''
+    // (real DM messages have empty channelId — DM identity lives on dmChannelId).
+    const isDm = isDmChannel(channelId);
+    const synthChannelId = isDm ? '' : channelId;
+    const synthesized: PendingMessageView[] = pendingBubbles.map((b) => {
+      const synth: PendingMessageView = {
+        id: `pending-${b.clientId}`,
+        channelId: synthChannelId,
+        userId: currentUser.id,
+        content: b.content,
+        replyToId: b.replyToId,
+        type: 'user',
+        editedAt: null,
+        createdAt: b.createdAtLocal,
+        user: currentUser,
+        attachments: b.transferIds.map((tid): PendingAttachmentView => ({
+          id: `tx-${tid}`,                         // synthetic — no real attachmentId yet
+          messageId: '',
+          filename: '',                            // unknown until Message.tsx looks up the transfer
+          originalName: '',
+          mimetype: 'application/octet-stream',
+          size: 0,
+          thumbnailFilename: null,
+          width: null,
+          height: null,
+          duration: null,
+          createdAt: b.createdAtLocal,
+          __transferId: tid,
+        })),
+        embeds: [],
+        reactions: [],
+        replyTo: b.replyToId ? messagesById.get(b.replyToId) ?? null : null,
+        __pending: b,
+        ...(isDm ? { dmChannelId: channelId } : {}),
+      };
+      return synth;
+    });
+    return [...messages, ...synthesized].sort((a, b) => a.createdAt - b.createdAt);
+  }, [messages, pendingBubbles, messagesById, channelId, currentUser]);
 
   useEffect(() => {
     if (canReadHistory) {
@@ -545,10 +612,22 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         {!hasMore && <WelcomeHeader channelId={channelId} />}
 
         <div ref={contentRef} className="pt-4 pb-6 md:pb-20">
-          {messages.map((msg, i) => {
-            const prevMsg = messages[i - 1];
+          {interleavedMessages.map((msg, i) => {
+            const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
             const isFirstInGroup = !prevMsg || showDate || !isSameGroup(prevMsg, msg);
+
+            // Walk back to find the nearest non-pending neighbor for "Mark Unread".
+            // A `pending-${clientId}` ID would be rejected by the server, so we skip
+            // any pending entries when computing the previous-message reference.
+            let realPrevId: string | null = null;
+            for (let j = i - 1; j >= 0; j--) {
+              const candidate = interleavedMessages[j];
+              if (candidate && !isPendingMessage(candidate)) {
+                realPrevId = candidate.id;
+                break;
+              }
+            }
 
             return (
               <React.Fragment key={msg.id}>
@@ -568,7 +647,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
                     message={msg}
                     isCompact={!isFirstInGroup}
                     isFirstInGroup={isFirstInGroup}
-                    previousMessageId={messages[i - 1]?.id ?? null}
+                    previousMessageId={realPrevId}
                   />
                 )}
               </React.Fragment>

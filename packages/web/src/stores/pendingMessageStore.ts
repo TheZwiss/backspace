@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware';
+import type { MessageWithUser, Attachment } from '@backspace/shared';
 import { useTransferStore } from './transferStore';
 
 export type PendingBubbleState = 'sending' | 'failed';
@@ -227,3 +228,33 @@ export const usePendingMessageStore = create<PendingMessageStore>()(
     },
   ),
 );
+
+// ─── Synthesized view types for MessageList rendering ───────────────────────
+// Pending bubbles are interleaved into the chat message list as synthetic
+// MessageWithUser-shaped objects. The sentinel `__pending` field lets renderers
+// branch on pending vs. server-confirmed state, and `__transferId` on each
+// attachment lets renderers subscribe to a single transfer for live progress
+// (per-byte updates don't re-render the whole list).
+
+/** A synthesized "MessageWithUser" representing a pending optimistic bubble. */
+export interface PendingMessageView extends Omit<MessageWithUser, 'attachments'> {
+  attachments: PendingAttachmentView[];
+  /** Set when the bubble is for a DM; mirrors chatStore optimistic-temp convention. */
+  dmChannelId?: string;
+  __pending: PendingBubble;
+}
+
+/** A synthesized Attachment for a PendingMessageView. The optional `__transferId`
+ *  field references the in-flight upload; consumers (Message.tsx) subscribe to
+ *  the transfer individually so per-byte progress doesn't re-render the list. */
+export interface PendingAttachmentView extends Attachment {
+  __transferId?: string;
+}
+
+/** Type guard for PendingMessageView. */
+export function isPendingMessage(
+  m: MessageWithUser | PendingMessageView,
+): m is PendingMessageView {
+  const p = (m as PendingMessageView).__pending;
+  return typeof p === 'object' && p !== null && 'clientId' in p;
+}
