@@ -8,7 +8,9 @@ import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
-import { getApiForOrigin, getMyUserIdForOrigin } from '../../../stores/spaceStore';
+import { useTransferStore } from '../../../stores/transferStore';
+import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
+import { getMyUserIdForOrigin } from '../../../stores/spaceStore';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
 
 interface OverviewPanelProps {
@@ -112,9 +114,12 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     const file = new File([blob], 'icon.webp', { type: blob.type || 'image/webp' });
     setUploadingIcon(true);
     try {
-      const spaceApi = getApiForOrigin(space._instanceOrigin);
-      const attachment = await spaceApi.uploads.upload(file);
-      setIconFilename(attachment.filename);
+      const tid = await useTransferStore.getState().startUpload(file, {
+        tray: false,
+        origin: space._instanceOrigin || undefined,
+      });
+      const { filename } = await waitForTransferAttachment(tid);
+      setIconFilename(filename);
     } catch {
       setSaveError('Failed to upload icon');
       setIconPreview(null);
@@ -150,9 +155,12 @@ export function OverviewPanel({ spaceId }: OverviewPanelProps) {
     const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
-      const spaceApi = getApiForOrigin(space._instanceOrigin);
-      const attachment = await spaceApi.uploads.upload(file);
-      setBannerFilename(attachment.filename);
+      const tid = await useTransferStore.getState().startUpload(file, {
+        tray: false,
+        origin: space._instanceOrigin || undefined,
+      });
+      const { filename } = await waitForTransferAttachment(tid);
+      setBannerFilename(filename);
     } catch {
       setSaveError('Failed to upload banner');
       setBannerPreview(null);

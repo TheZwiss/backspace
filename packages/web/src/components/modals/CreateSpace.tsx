@@ -3,8 +3,9 @@ import { Modal } from '../ui/Modal';
 import { ImageCropModal } from '../ui/ImageCropModal';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useTransferStore } from '../../stores/transferStore';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../api/client';
+import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { SpaceVisibility, AvatarColor } from '@backspace/shared';
 import { SPACE_GRADIENT_MAP, getSpaceGradient } from '../../utils/gradients';
@@ -60,8 +61,9 @@ export function CreateSpaceModal() {
     const file = new File([blob], 'icon.png', { type: 'image/png' });
     setUploadingIcon(true);
     try {
-      const attachment = await api.uploads.upload(file);
-      setIconFilename(attachment.filename);
+      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const { filename } = await waitForTransferAttachment(tid);
+      setIconFilename(filename);
     } catch {
       setError('Failed to upload icon');
       setIconPreview(null);

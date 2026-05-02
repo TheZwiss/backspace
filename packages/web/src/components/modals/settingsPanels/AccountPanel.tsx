@@ -6,6 +6,8 @@ import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { DeleteAccountModal } from '../DeleteAccountModal';
 import { api } from '../../../api/client';
+import { useTransferStore } from '../../../stores/transferStore';
+import { waitForTransferAttachment } from '../../../utils/waitForTransfer';
 import { getAvatarGradient, adjustColor, mutedGradient, AVATAR_GRADIENT_MAP, BANNER_COLOR_PRESETS } from '../../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { User, UserStatus, AvatarColor } from '@backspace/shared';
@@ -140,8 +142,9 @@ export function AccountPanel() {
     const file = new File([blob], 'avatar.webp', { type: blob.type || 'image/webp' });
     setUploadingAvatar(true);
     try {
-      const attachment = await api.uploads.upload(file);
-      setAvatarFilename(attachment.filename);
+      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const { filename } = await waitForTransferAttachment(tid);
+      setAvatarFilename(filename);
     } catch {
       setError('Failed to upload avatar');
       setAvatarPreview(null);
@@ -159,8 +162,9 @@ export function AccountPanel() {
     const file = new File([blob], 'banner.webp', { type: blob.type || 'image/webp' });
     setUploadingBanner(true);
     try {
-      const attachment = await api.uploads.upload(file);
-      setBannerFilename(attachment.filename);
+      const tid = await useTransferStore.getState().startUpload(file, { tray: false });
+      const { filename } = await waitForTransferAttachment(tid);
+      setBannerFilename(filename);
     } catch {
       setError('Failed to upload banner');
       setBannerPreview(null);

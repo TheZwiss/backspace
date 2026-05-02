@@ -9,7 +9,6 @@ import type {
   ChannelCategory,
   MessageWithUser,
   MemberWithUser,
-  Attachment,
   DmChannel,
   DmMessageWithUser,
   CreateSpaceRequest,
@@ -160,8 +159,6 @@ export class BackspaceApiClient {
   };
 
   readonly uploads: {
-    upload: (file: File) => Promise<Attachment>;
-    uploadWithProgress: (file: File, onProgress: (loaded: number, total: number) => void) => Promise<Attachment>;
     url: (filename: string) => string;
   };
 
@@ -331,91 +328,6 @@ export class BackspaceApiClient {
       return response.json() as Promise<T>;
     }
 
-    async function uploadFile(file: File): Promise<Attachment> {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const token = getToken();
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      let response: Response;
-      try {
-        response = await fetch(`${baseUrl}/uploads`, {
-          method: 'POST',
-          headers,
-          body: formData,
-          signal: controller.signal,
-        });
-      } catch (err) {
-        clearTimeout(timeoutId);
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          throw new Error('Request timed out');
-        }
-        throw err;
-      }
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        if (response.status === 401 && onUnauthorized) {
-          onUnauthorized();
-        }
-        if (response.status === 429) {
-          const body = await response.json().catch(() => ({}));
-          const retryAfter = (body as { retryAfter?: number }).retryAfter
-            ?? (parseInt(response.headers.get('retry-after') || '', 10) || 60);
-          throw new RateLimitError(retryAfter);
-        }
-        const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-        throw new HttpError(response.status, (error as { error: string }).error || `HTTP ${response.status}`);
-      }
-
-      return response.json() as Promise<Attachment>;
-    }
-
-    function uploadFileWithProgress(file: File, onProgress: (loaded: number, total: number) => void): Promise<Attachment> {
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        const formData = new FormData();
-        formData.append('file', file);
-
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) onProgress(e.loaded, e.total);
-        });
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try { resolve(JSON.parse(xhr.responseText)); }
-            catch { reject(new Error('Invalid server response')); }
-          } else if (xhr.status === 401 && onUnauthorized) {
-            onUnauthorized();
-            reject(new Error('Unauthorized'));
-          } else if (xhr.status === 413) {
-            reject(new Error('File too large'));
-          } else {
-            try {
-              const body = JSON.parse(xhr.responseText);
-              reject(new Error(body.error || `Upload failed (${xhr.status})`));
-            } catch { reject(new Error(`Upload failed (${xhr.status})`)); }
-          }
-        });
-
-        xhr.addEventListener('error', () => reject(new Error('Upload failed — network error')));
-        xhr.addEventListener('timeout', () => reject(new Error('Upload timed out')));
-
-        xhr.open('POST', `${baseUrl}/uploads`);
-        xhr.timeout = 10 * 60 * 1000; // 10 minutes for large files
-        const token = getToken();
-        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        xhr.send(formData);
-      });
-    }
-
     this.auth = {
       register: (data: RegisterRequest) =>
         request<AuthResponse>('POST', '/auth/register', data, false),
@@ -544,8 +456,6 @@ export class BackspaceApiClient {
     };
 
     this.uploads = {
-      upload: uploadFile,
-      uploadWithProgress: uploadFileWithProgress,
       url: (filename: string) => `${baseUrl}/uploads/${filename}`,
     };
 

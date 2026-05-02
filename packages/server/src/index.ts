@@ -2,7 +2,6 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
-import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { getDb, getRawDb } from './db/index.js';
@@ -64,12 +63,6 @@ async function main(): Promise<void> {
   });
 
   await app.register(websocket);
-
-  await app.register(multipart, {
-    limits: {
-      fileSize: Number.MAX_SAFE_INTEGER, // No global cap — actual limit enforced per-request from DB
-    },
-  });
 
   // Serve built frontend in production
   const webDistPath = path.resolve(import.meta.dirname ?? '.', '../../web/dist');
