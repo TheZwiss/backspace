@@ -107,4 +107,36 @@ describe('pendingMessageStore', () => {
     expect(dropped).toEqual([]);
     expect(after).toBe(before); // same Map reference
   });
+
+  it('listFailedRetryable returns failed bubbles with retryCount=0 and all transfers complete', () => {
+    useTransferStore.setState({
+      transfers: new Map([
+        ['t-1', makeTransfer({ id: 't-1', state: 'completed', attachmentId: 'att-1' })],
+      ]),
+    });
+    usePendingMessageStore.getState().append(bubble({ clientId: 'fail-ready', transferIds: ['t-1'] }));
+    usePendingMessageStore.getState().markFailed('fail-ready');
+    expect(usePendingMessageStore.getState().listFailedRetryable().map((b) => b.clientId)).toEqual(['fail-ready']);
+  });
+
+  it('listFailedRetryable excludes bubbles already retried', () => {
+    useTransferStore.setState({
+      transfers: new Map([['t-1', makeTransfer({ id: 't-1', state: 'completed', attachmentId: 'att-1' })]]),
+    });
+    usePendingMessageStore.getState().append(bubble({ clientId: 'retried', transferIds: ['t-1'], retryCount: 1 }));
+    usePendingMessageStore.getState().markFailed('retried');
+    expect(usePendingMessageStore.getState().listFailedRetryable()).toEqual([]);
+  });
+
+  it('listFailedRetryable excludes bubbles whose transfers are not all complete', () => {
+    useTransferStore.setState({
+      transfers: new Map([
+        ['t-1', makeTransfer({ id: 't-1', state: 'completed', attachmentId: 'att-1' })],
+        ['t-2', makeTransfer({ id: 't-2', state: 'paused' })], // no attachmentId
+      ]),
+    });
+    usePendingMessageStore.getState().append(bubble({ clientId: 'partial', transferIds: ['t-1', 't-2'] }));
+    usePendingMessageStore.getState().markFailed('partial');
+    expect(usePendingMessageStore.getState().listFailedRetryable()).toEqual([]);
+  });
 });

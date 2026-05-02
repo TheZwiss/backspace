@@ -78,6 +78,15 @@ export class RateLimitError extends Error {
   }
 }
 
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
 export class BackspaceApiClient {
   readonly auth: {
     register: (data: RegisterRequest) => Promise<AuthResponse>;
@@ -316,7 +325,7 @@ export class BackspaceApiClient {
           throw new RateLimitError(retryAfter);
         }
         const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
+        throw new HttpError(response.status, (error as { error: string }).error || `HTTP ${response.status}`);
       }
 
       return response.json() as Promise<T>;
@@ -363,7 +372,7 @@ export class BackspaceApiClient {
           throw new RateLimitError(retryAfter);
         }
         const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-        throw new Error((error as { error: string }).error || `HTTP ${response.status}`);
+        throw new HttpError(response.status, (error as { error: string }).error || `HTTP ${response.status}`);
       }
 
       return response.json() as Promise<Attachment>;

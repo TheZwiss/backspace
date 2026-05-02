@@ -34,6 +34,7 @@ interface PendingMessageStoreActions {
   ) => PendingBubble | null;
   discardExpired: (now: number) => PendingBubble[];
   listReadyForDeferredSend: () => PendingBubble[];
+  listFailedRetryable: () => PendingBubble[];
 }
 
 type PendingMessageStore = PendingMessageStoreState & PendingMessageStoreActions;
@@ -199,6 +200,23 @@ export const usePendingMessageStore = create<PendingMessageStore>()(
           }
         }
         return ready;
+      },
+
+      listFailedRetryable: () => {
+        const transfers = useTransferStore.getState().transfers;
+        const out: PendingBubble[] = [];
+        for (const list of get().bubbles.values()) {
+          for (const b of list) {
+            if (b.state !== 'failed') continue;
+            if (b.retryCount > 0) continue;
+            const allDone = b.transferIds.every((tid) => {
+              const t = transfers.get(tid);
+              return t?.state === 'completed' && !!t.attachmentId;
+            });
+            if (allDone) out.push(b);
+          }
+        }
+        return out;
       },
     }),
     {
