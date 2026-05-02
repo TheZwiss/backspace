@@ -5,6 +5,7 @@ import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from '.
 import { useAuthStore } from './authStore';
 import { normalizeMessageAssets } from '../utils/assetUrls';
 import { sortDmChannels } from '../utils/dmSorting';
+import { usePendingMessageStore } from './pendingMessageStore';
 
 const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_CACHED_CHANNELS = 20;
@@ -364,6 +365,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const current = newMessages.get(channelId) ?? [];
       // Avoid duplicates
       if (current.find(m => m.id === normalizedMessage.id)) return state;
+      // Dedup against pendingMessageStore by (content, sortedAttachmentIds).
+      // No userId check — federation relays arrive with replicated user IDs.
+      const sortedAttIds = (normalizedMessage.attachments ?? []).map((a) => a.id).sort();
+      usePendingMessageStore.getState().matchAndRemove(channelId, normalizedMessage.content ?? '', sortedAttIds);
       // Remove any optimistic temp message with same content.
       // Don't require userId match — for federated messages the home user ID
       // differs from the replicated user ID, but content match is sufficient
@@ -397,6 +402,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if ('sourceMessageId' in normalizedMessage && normalizedMessage.sourceMessageId
         && current.find(m => m.id === normalizedMessage.sourceMessageId)) return state;
       if (current.find(m => 'sourceMessageId' in m && m.sourceMessageId === normalizedMessage.id)) return state;
+      // Dedup against pendingMessageStore by (content, sortedAttachmentIds).
+      // No userId check — federation relays arrive with replicated user IDs.
+      const sortedAttIds = (normalizedMessage.attachments ?? []).map((a) => a.id).sort();
+      usePendingMessageStore.getState().matchAndRemove(channelId, normalizedMessage.content ?? '', sortedAttIds);
       // Remove any optimistic temp message with same content (no userId check —
       // federated messages arrive with a different replicated user ID).
       // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
