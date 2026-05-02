@@ -2854,7 +2854,7 @@ export async function processRelayEvents(
     try {
       switch (event.eventType) {
         case 'create':
-          processCreateEvent(event, sourceInstance, peerOrigin, db, accepted, rejected);
+          await processCreateEvent(event, sourceInstance, peerOrigin, db, accepted, rejected);
           break;
         case 'update':
           processUpdateEvent(event, sourceInstance, db, accepted, rejected);
@@ -2878,7 +2878,7 @@ export async function processRelayEvents(
           processOwnershipTransferEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'friend_request_create':
-          processFriendRequestCreateEvent(event, sourceInstance, db, accepted, rejected);
+          await processFriendRequestCreateEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'friend_request_update':
           processFriendRequestUpdateEvent(event, sourceInstance, db, accepted, rejected);
@@ -2887,7 +2887,7 @@ export async function processRelayEvents(
           processFriendRequestCancelEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'friend_add':
-          processFriendAddEvent(event, sourceInstance, db, accepted, rejected);
+          await processFriendAddEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'friend_remove':
           processFriendRemoveEvent(event, sourceInstance, db, accepted, rejected);
@@ -3344,14 +3344,14 @@ function isUrlFromPeer(sourceUrl: string, peerOrigin: string): boolean {
   }
 }
 
-function processCreateEvent(
+async function processCreateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   peerOrigin: string,
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
-): void {
+): Promise<void> {
   if (!event.message) {
     rejected.push({ messageId: event.messageId, reason: 'missing_message_payload' });
     return;
@@ -3400,7 +3400,7 @@ function processCreateEvent(
     if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
     if (p.profile) {
-      localUser = hydrateReplicatedUserProfile(localUser, p.profile, db);
+      localUser = await hydrateReplicatedUserProfile(localUser, p.profile, db);
     }
     resolvedParticipants.push({ localUser, homeUserId: p.homeUserId });
   }
@@ -4468,22 +4468,28 @@ function processOwnershipTransferEvent(
  * Only updates fields that are currently null/empty on the local row,
  * so manually-set local values are preserved.
  */
-export function hydrateReplicatedUserProfile(
+export async function hydrateReplicatedUserProfile(
   user: typeof schema.users.$inferSelect,
   profile: FederationRelayProfileSnapshot | undefined,
   db: ReturnType<typeof getDb>,
-): typeof schema.users.$inferSelect {
+): Promise<typeof schema.users.$inferSelect> {
   if (!profile) return user;
   if (!user.homeInstance) return user; // Don't update native users
 
-  // Resolve bare filenames to absolute URLs pointing to the home instance.
-  // The home WS doesn't run normalizeUserAssets on replicated users' avatars,
-  // so they must be stored as absolute URLs to render correctly.
-  const baseUrl = user.homeInstance!.startsWith('http') ? user.homeInstance! : `https://${user.homeInstance}`;
-  const resolveUrl = (filename: string | null | undefined): string | null => {
-    if (!filename) return null;
-    if (filename.startsWith('http')) return filename;
-    return `${baseUrl}/api/uploads/${filename}`;
+  const baseUrl = user.homeInstance.startsWith('http') ? user.homeInstance : `https://${user.homeInstance}`;
+  const buildAbsoluteUrl = (value: string): string => {
+    if (value.startsWith('http')) return value;
+    const path = value.startsWith('/') ? value : `/api/uploads/${value}`;
+    return `${baseUrl}${path}`;
+  };
+
+  // Resolve a snapshot asset to a local filename (preferred) or, on download
+  // failure, fall back to the absolute URL so the avatar still renders while
+  // the home instance is reachable.
+  const resolveAsset = async (snapshot: string): Promise<string> => {
+    const absoluteUrl = buildAbsoluteUrl(snapshot);
+    const localFile = await downloadProfileAsset(absoluteUrl, baseUrl);
+    return localFile ?? absoluteUrl;
   };
 
   const updates: Record<string, string | null> = {};
@@ -4493,10 +4499,13 @@ export function hydrateReplicatedUserProfile(
   // "user@instance.example" federation username.
   const effectiveDisplayName = profile.displayName || profile.username || null;
   if (effectiveDisplayName && !user.displayName) updates.displayName = effectiveDisplayName;
-  // Overwrite avatar/banner if missing OR if it's a stale bare filename (not an absolute URL)
-  if (profile.avatar && (!user.avatar || !user.avatar.startsWith('http'))) updates.avatar = resolveUrl(profile.avatar);
+  // Hydrate is best-effort: only fill empty fields. Never overwrite existing
+  // avatar/banner values — that is exclusively processProfileUpdateEvent's job
+  // (which carries a monotonic version). In particular, locally-downloaded
+  // bare filenames produced by that path must not be clobbered back to URLs.
+  if (profile.avatar && !user.avatar) updates.avatar = await resolveAsset(profile.avatar);
   if (profile.avatarColor) updates.avatarColor = profile.avatarColor;
-  if (profile.banner && (!user.banner || !user.banner.startsWith('http'))) updates.banner = resolveUrl(profile.banner);
+  if (profile.banner && !user.banner) updates.banner = await resolveAsset(profile.banner);
   if (profile.bio && !user.bio) updates.bio = profile.bio;
 
   if (Object.keys(updates).length === 0) return user;
@@ -4509,13 +4518,13 @@ export function hydrateReplicatedUserProfile(
   return { ...user, ...updates };
 }
 
-function processFriendRequestCreateEvent(
+async function processFriendRequestCreateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
-): void {
+): Promise<void> {
   if (!event.friendship) {
     rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
     return;
@@ -4548,7 +4557,7 @@ function processFriendRequestCreateEvent(
     accepted.push(event.messageId);
     return;
   }
-  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
+  let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
 
   // Resolve the recipient — must be a local user on this instance
   const toUser = resolveLocalUser(to.homeUserId, db);
@@ -4778,13 +4787,13 @@ function processFriendRequestCancelEvent(
   accepted.push(event.messageId);
 }
 
-function processFriendAddEvent(
+async function processFriendAddEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
-): void {
+): Promise<void> {
   if (!event.friendship) {
     rejected.push({ messageId: event.messageId, reason: 'missing_friendship_payload' });
     return;
@@ -4806,13 +4815,13 @@ function processFriendAddEvent(
     accepted.push(event.messageId);
     return;
   }
-  let fromUser = hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
+  let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
   const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
   if (!toUserResolved) {
     accepted.push(event.messageId);
     return;
   }
-  let toUser = hydrateReplicatedUserProfile(toUserResolved, event.friendship.toProfile, db);
+  let toUser = await hydrateReplicatedUserProfile(toUserResolved, event.friendship.toProfile, db);
 
   // Idempotency: if friendship already exists, accept as no-op
   const existingFriend = db
@@ -5731,6 +5740,92 @@ async function processProfileUpdateEvent(
   }
 
   accepted.push(event.messageId);
+}
+
+// ─── Replicated Profile Asset Backfill ──────────────────────────────────────
+
+/**
+ * One-time / idempotent pass that converts existing absolute-URL avatars and
+ * banners on replicated users into local files via downloadProfileAsset.
+ *
+ * Why: hydrateReplicatedUserProfile historically wrote home-instance URLs into
+ * users.avatar / users.banner. When the home instance is offline those URLs
+ * 404, leaving sidebars (server activity, friend activity, DM list) showing
+ * letter fallbacks. processProfileUpdateEvent only re-downloads on the next
+ * profile edit, which most users don't do — so this worker cleans up the
+ * accumulated URL rows.
+ *
+ * Behavior: best-effort. Rows where the home instance can't be reached are
+ * left as URLs (they still render while the peer is up), and the worker is
+ * safe to re-run on every startup.
+ */
+export async function backfillReplicatedProfileAssets(): Promise<void> {
+  const db = getDb();
+  const rows = db
+    .select({
+      id: schema.users.id,
+      homeInstance: schema.users.homeInstance,
+      avatar: schema.users.avatar,
+      banner: schema.users.banner,
+    })
+    .from(schema.users)
+    .where(
+      and(
+        sql`${schema.users.homeInstance} IS NOT NULL`,
+        eq(schema.users.isDeleted, 0),
+        or(
+          sql`${schema.users.avatar} LIKE 'http%'`,
+          sql`${schema.users.banner} LIKE 'http%'`,
+        ),
+      ),
+    )
+    .all();
+
+  if (rows.length === 0) return;
+
+  let avatarOk = 0;
+  let bannerOk = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    if (!row.homeInstance) continue;
+    const baseUrl = row.homeInstance.startsWith('http')
+      ? row.homeInstance
+      : `https://${row.homeInstance}`;
+
+    const updates: Record<string, string | null> = {};
+
+    if (row.avatar && row.avatar.startsWith('http')) {
+      const localFile = await downloadProfileAsset(row.avatar, baseUrl);
+      if (localFile) {
+        updates.avatar = localFile;
+        avatarOk++;
+      } else {
+        skipped++;
+      }
+    }
+
+    if (row.banner && row.banner.startsWith('http')) {
+      const localFile = await downloadProfileAsset(row.banner, baseUrl);
+      if (localFile) {
+        updates.banner = localFile;
+        bannerOk++;
+      } else {
+        skipped++;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      db.update(schema.users)
+        .set(updates)
+        .where(eq(schema.users.id, row.id))
+        .run();
+    }
+  }
+
+  console.log(
+    `[federation] Replicated profile asset backfill: ${avatarOk} avatars, ${bannerOk} banners downloaded; ${skipped} unreachable (will retry next start)`,
+  );
 }
 
 function processReadStateUpdateEvent(

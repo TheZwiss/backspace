@@ -1095,8 +1095,11 @@ Profile sync uses **two mechanisms** that operate independently:
 When relay events carry `FederationRelayProfileSnapshot` data:
 - `processCreateEvent`: hydrates participant profiles on message relay
 - `processFriendRequestCreateEvent` / `processFriendAddEvent`: hydrates friend profiles
+- `social.ts` federated friend-request handler: hydrates the looked-up stub
 
-`hydrateReplicatedUserProfile` only fills null/empty fields. Avatar/banner are overwritten only if the current value is not an absolute URL (catches stale bare filenames).
+`hydrateReplicatedUserProfile` is **best-effort fill-empty only**: it never overwrites an existing avatar/banner/displayName/bio. This protects locally-downloaded bare filenames produced by `processProfileUpdateEvent` (which carries the monotonic `profileUpdatedAt` version) from being clobbered back to absolute URLs on the next DM/friend relay. Authoritative updates flow exclusively through the version-checked `profile_update` event.
+
+When the function does fill an empty avatar/banner, it calls `downloadProfileAsset` against the user's home instance and stores the resulting **local bare filename**. Only on download failure does it fall back to the absolute URL — matching the behavior of `processProfileUpdateEvent`.
 
 #### Profile Sync (S2S)
 
@@ -1130,7 +1133,7 @@ When a `profile_update` relay carries avatar or banner absolute URLs, the receiv
 
 **File cleanup:** When avatar/banner changes, the old local file is deleted via `deleteUploadFile()`. The check `!oldValue.startsWith('http')` ensures only locally-downloaded files are deleted, not absolute URL strings.
 
-**No migration:** Existing absolute URLs self-heal — the next profile change on the home instance triggers a relay and download.
+**Migration / backfill:** `backfillReplicatedProfileAssets` runs on server start (kicked off by `startFederationWorkers`, non-blocking). It scans `users` rows where `home_instance` is set and `avatar`/`banner` start with `http`, calls `downloadProfileAsset` against the home instance for each, and rewrites successful downloads to local filenames. Idempotent: rows whose home is unreachable are left as URLs (they still render while the peer is up) and retried on the next start. This handles both legacy data from before file replication shipped and any rows whose home was offline during a previous attempt.
 
 **Write protection:** Remote instances reject PATCH /users/@me profile field updates for replicated users (homeInstance set). Profile data is read-only on remote — only updated via S2S relay.
 
@@ -1138,7 +1141,7 @@ When a `profile_update` relay carries avatar or banner absolute URLs, the receiv
 
 **File handling:** Profile images are downloaded locally on relay receipt (see "Profile Image File Replication" above).
 
-**Replaces:** Client-driven `profileSync.ts` (deleted). `hydrateReplicatedUserProfile` still bootstraps null fields during DM/friend relay — it is not replaced.
+**Replaces:** Client-driven `profileSync.ts` (deleted). `hydrateReplicatedUserProfile` still bootstraps null fields during DM/friend relay — it now also runs the same local-download path so newly-created stubs end up with bare filenames, not URLs.
 
 ---
 

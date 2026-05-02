@@ -242,7 +242,7 @@ async function handleFederatedFriendRequest(
     // Tombstoned identity — refuse to resurrect.
     return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
   }
-  const stubHydrated = hydrateReplicatedUserProfile(stub, lookup.profile, db);
+  const stubHydrated = await hydrateReplicatedUserProfile(stub, lookup.profile, db);
 
   // 5a. Direction-aware idempotency
   const existingRequest = db.select().from(schema.friendRequests).where(and(

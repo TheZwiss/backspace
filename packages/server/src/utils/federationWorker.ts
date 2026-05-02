@@ -12,6 +12,7 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { onPeerActivated, startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
+import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -1221,6 +1222,13 @@ export function startFederationWorkers(): void {
   // Bootstrap sync for freshly-peered rows (async, non-blocking)
   startupBootstrapSync().catch((err) => {
     console.error('[federation-worker] Startup bootstrap sync error:', err);
+  });
+
+  // Backfill any replicated user avatars/banners still stored as absolute URLs
+  // (legacy data from before file replication, or rows whose home was offline
+  // on a previous attempt). Best-effort and idempotent — safe to re-run.
+  backfillReplicatedProfileAssets().catch((err) => {
+    console.error('[federation-worker] Replicated profile asset backfill error:', err);
   });
 }
 
