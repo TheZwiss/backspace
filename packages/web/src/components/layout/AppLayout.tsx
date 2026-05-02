@@ -113,6 +113,12 @@ export function AppLayout() {
     const TOAST_DEBOUNCE_MS = 1000;
     const TOAST_DEDUPE_WINDOW_MS = 30_000;
     let pendingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+    // Handler-level debounce: collapses devicechange storms (BT re-pair, USB
+    // hub enumeration can fire 5-10x/sec) into a single prune + reacquire pass.
+    // The toast logic has its own longer debounce (TOAST_DEBOUNCE_MS) layered
+    // on top so user-visible toasts collapse storms even more aggressively.
+    let pendingHandlerTimer: ReturnType<typeof setTimeout> | null = null;
+    const HANDLER_DEBOUNCE_MS = 250;
 
     const seedBaseline = async () => {
       try {
@@ -172,22 +178,35 @@ export function AppLayout() {
       }
     };
 
-    const handler = async () => {
-      await prune();
-      await reacquireLiveStream();
-      // Debounce toast logic so a single plug event that emits multiple
-      // devicechange fires (Bluetooth re-pair storms) collapses to one toast.
-      if (pendingDebounceTimer) clearTimeout(pendingDebounceTimer);
-      pendingDebounceTimer = setTimeout(() => { handleNewDeviceToasts(); }, TOAST_DEBOUNCE_MS);
+    const handler = () => {
+      if (pendingHandlerTimer) clearTimeout(pendingHandlerTimer);
+      pendingHandlerTimer = setTimeout(async () => {
+        await prune();
+        await reacquireLiveStream();
+        if (pendingDebounceTimer) clearTimeout(pendingDebounceTimer);
+        pendingDebounceTimer = setTimeout(() => { handleNewDeviceToasts(); }, TOAST_DEBOUNCE_MS);
+      }, HANDLER_DEBOUNCE_MS);
     };
 
     // Seed baseline so the first event after mount doesn't false-positive every
-    // existing device as "new".
-    seedBaseline().then(() => prune());
-    navigator.mediaDevices.addEventListener('devicechange', handler);
+    // existing device as "new". Register the listener only AFTER baseline is
+    // seeded so the first real event compares against a populated set.
+    let listenerRegistered = false;
+    let cancelled = false;
+    seedBaseline()
+      .then(() => prune())
+      .then(() => {
+        if (cancelled) return;
+        navigator.mediaDevices.addEventListener('devicechange', handler);
+        listenerRegistered = true;
+      });
     return () => {
+      cancelled = true;
+      if (pendingHandlerTimer) clearTimeout(pendingHandlerTimer);
       if (pendingDebounceTimer) clearTimeout(pendingDebounceTimer);
-      navigator.mediaDevices.removeEventListener('devicechange', handler);
+      if (listenerRegistered) {
+        navigator.mediaDevices.removeEventListener('devicechange', handler);
+      }
     };
   }, []);
 
