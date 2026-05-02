@@ -258,8 +258,11 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
         // bytes get cleaned by the storage janitor (per docs/systems/uploads.md).
         useTransferStore.getState().remove(transferId);
       } else {
-        // abortUpload sets state='aborted' and tears down the live tus instance.
+        // Tear down the live tus instance, then drop the transfer + free the
+        // retained File reference. (abortUpload alone leaves the record in the
+        // store for retry-after-abort; here the user is fully discarding.)
         abortUpload(transferId);
+        useTransferStore.getState().remove(transferId);
       }
       removeStaged(channelId, transferId);
     },

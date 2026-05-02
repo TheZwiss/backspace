@@ -200,6 +200,7 @@ export const useTransferStore = create<TransferStore>()(
         if (!s.transfers.has(id)) return s;
         const next = new Map(s.transfers);
         next.delete(id);
+        liveUploadFiles.delete(id);
         return { transfers: next };
       }),
 
@@ -287,7 +288,7 @@ export const useTransferStore = create<TransferStore>()(
           void u.abort(true).catch(() => { /* server may be unreachable; that's OK */ });
           liveUploads.delete(id);
         }
-        liveUploadFiles.delete(id);
+        // Keep liveUploadFiles entry — needed for retry-after-abort. Cleared by remove().
         get().setState_(id, 'aborted');
       },
 
@@ -304,14 +305,6 @@ export const useTransferStore = create<TransferStore>()(
       resumeUpload: async (id) => {
         const t = get().get(id);
         if (!t || t.type !== 'upload') return;
-        if (!t.tusUploadUrl) {
-          get().setError(id, { message: 'No tus URL — cannot resume', permanent: true });
-          return;
-        }
-        if (Date.now() > (t.tusExpiresAt ?? 0)) {
-          get().setError(id, { message: 'Upload expired', permanent: true });
-          return;
-        }
 
         const token = useAuthStore.getState().token;
         if (!token) {
@@ -320,7 +313,7 @@ export const useTransferStore = create<TransferStore>()(
         }
 
         // Try in-memory File (same-session resume — file picker, paste, browsers
-        // without getAsFileSystemHandle).
+        // without getAsFileSystemHandle, or retry after abort).
         let blob: Blob | undefined = liveUploadFiles.get(id);
 
         // Fall back to persisted FileSystemFileHandle (cross-reload resume on Chrome/Edge).
@@ -340,22 +333,67 @@ export const useTransferStore = create<TransferStore>()(
 
         if (!blob) {
           // No handle, no in-memory file — surface "re-pick to resume" to the user.
-          // (Cross-reload on Firefox/Safari or after MessageInput unmount that cleared
-          // its preview-URL ref will land here.)
+          // (Cross-reload on Firefox/Safari, or after MessageInput unmount cleared
+          // the in-memory File and the bubble survives without an FS handle.)
           get().setState_(id, 'paused');
           return;
         }
 
-        const upload = new Upload(blob as File, {
+        // Resume the existing tus session if we have a valid, non-expired URL and
+        // we weren't aborted. Otherwise start a fresh session reusing this transferId
+        // (retry-after-abort, retry-after-failure, retry-after-expiry).
+        const canResume =
+          !!t.tusUploadUrl &&
+          t.state !== 'aborted' &&
+          Date.now() <= (t.tusExpiresAt ?? 0);
+
+        if (!canResume) {
+          // Reset transient state so a fresh tus session starts cleanly.
+          set((s) => {
+            const cur = s.transfers.get(id);
+            if (!cur) return s;
+            const next = new Map(s.transfers);
+            next.set(id, {
+              ...cur,
+              tusUploadUrl: undefined,
+              tusExpiresAt: undefined,
+              attachmentId: undefined,
+              attachmentFilename: undefined,
+              error: undefined,
+              progress: { loaded: 0, total: blob!.size },
+            });
+            return { transfers: next };
+          });
+        }
+
+        get().setState_(id, 'queued');
+
+        const fileLike = blob instanceof File
+          ? { name: blob.name, mimetype: blob.type || 'application/octet-stream' }
+          : { name: t.file.name, mimetype: blob.type || t.file.mimetype };
+
+        const tusOpts: UploadOptions = {
           endpoint: t.origin ? `${t.origin}/api/files/` : '/api/files/',
-          uploadUrl: t.tusUploadUrl,
           retryDelays: [0, 1000, 3000, 5000, 10_000],
           chunkSize: 5 * 1024 * 1024,
           headers: { Authorization: `Bearer ${token}` },
+          ...(canResume
+            ? { uploadUrl: t.tusUploadUrl }
+            : { metadata: { filename: fileLike.name, filetype: fileLike.mimetype } }),
           onProgress: (loaded: number) => {
             get().updateProgress(id, loaded);
             const cur = get().get(id);
             if (cur?.state !== 'active') get().setState_(id, 'active');
+          },
+          onAfterResponse: (_req, res) => {
+            // Capture the new Location for fresh sessions; resume reuses the existing one.
+            if (canResume) return;
+            const location = res.getHeader('Location');
+            const expires = res.getHeader('Upload-Expires');
+            if (location && !get().get(id)?.tusUploadUrl) {
+              const expiresMs = expires ? new Date(expires).getTime() : Date.now() + 24 * 60 * 60 * 1000;
+              get().setTusUrl(id, location, expiresMs);
+            }
           },
           onSuccess: (payload) => {
             try {
@@ -363,8 +401,9 @@ export const useTransferStore = create<TransferStore>()(
               const att = JSON.parse(body) as Attachment;
               get().setAttachmentRef(id, att.id, att.filename);
               get().setState_(id, 'completed');
+              get().updateProgress(id, blob!.size);
             } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Resume completed but parse failed';
+              const msg = e instanceof Error ? e.message : 'Upload completed but parse failed';
               get().setError(id, { message: msg, permanent: true });
             } finally {
               liveUploads.delete(id);
@@ -372,12 +411,14 @@ export const useTransferStore = create<TransferStore>()(
             }
           },
           onError: (err: Error) => {
-            const msg = err.message ?? 'Resume error';
+            const msg = err.message ?? 'Upload error';
             const permanent = /\b4\d\d\b/.test(msg);
             get().setError(id, { message: msg, permanent });
             liveUploads.delete(id);
           },
-        });
+        };
+
+        const upload = new Upload(blob as File, tusOpts);
         liveUploads.set(id, upload);
         upload.start();
       },

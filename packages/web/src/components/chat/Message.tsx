@@ -522,13 +522,16 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                 <button
                   onClick={async () => {
                     const transfers = useTransferStore.getState().transfers;
-                    const failedIds = pending.transferIds.filter(
-                      (tid) => transfers.get(tid)?.state === 'failed',
-                    );
-                    for (const tid of failedIds) {
+                    const retryIds = pending.transferIds.filter((tid) => {
+                      const s = transfers.get(tid)?.state;
+                      return s === 'failed' || s === 'aborted';
+                    });
+                    // Flip the bubble back to 'sending' first so the orchestrator
+                    // re-evaluates after the resumed transfers complete.
+                    usePendingMessageStore.getState().markSending(pending.clientId);
+                    for (const tid of retryIds) {
                       await useTransferStore.getState().resumeUpload(tid);
                     }
-                    usePendingMessageStore.getState().markSending(pending.clientId);
                   }}
                   className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
                 >

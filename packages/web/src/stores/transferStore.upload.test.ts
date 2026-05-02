@@ -123,7 +123,7 @@ describe('transferStore.resumeUpload', () => {
     abortMock.mockClear();
   });
 
-  it('returns early when transfer has no tusUploadUrl', async () => {
+  it('stays paused when transfer has no tusUploadUrl and no available blob', async () => {
     const id = useTransferStore.getState().createTransfer({
       type: 'upload',
       file: { name: 'a.png', size: 100, mimetype: 'image/png' },
@@ -132,11 +132,12 @@ describe('transferStore.resumeUpload', () => {
     useTransferStore.getState().setState_(id, 'paused');
     await useTransferStore.getState().resumeUpload(id);
     const t = useTransferStore.getState().get(id)!;
-    expect(t.state).toBe('failed');
-    expect(t.error?.message).toMatch(/no tus url/i);
+    // No URL + no in-memory file + no handle → can neither resume nor restart;
+    // surface 'paused' to prompt the user to re-pick.
+    expect(t.state).toBe('paused');
   });
 
-  it('returns failed when tus URL has expired', async () => {
+  it('stays paused when tus URL has expired and no available blob', async () => {
     const id = useTransferStore.getState().createTransfer({
       type: 'upload',
       file: { name: 'a.png', size: 100, mimetype: 'image/png' },
@@ -145,8 +146,8 @@ describe('transferStore.resumeUpload', () => {
     useTransferStore.getState().setTusUrl(id, '/api/files/expired', Date.now() - 1000);
     useTransferStore.getState().setState_(id, 'paused');
     await useTransferStore.getState().resumeUpload(id);
-    expect(useTransferStore.getState().get(id)!.state).toBe('failed');
-    expect(useTransferStore.getState().get(id)!.error?.message).toMatch(/expired/i);
+    // Expired URL with no blob to restart → stay paused, user re-picks.
+    expect(useTransferStore.getState().get(id)!.state).toBe('paused');
   });
 
   it('stays paused when no FS handle is available (re-pick required)', async () => {
