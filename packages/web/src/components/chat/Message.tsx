@@ -511,7 +511,14 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
 
             {/* Failed-state retry/discard row */}
             {showRetryDiscardRow && pending && (
-              <div className="mt-1 flex gap-2 px-2 py-1 rounded-md bg-accent-rose/15 text-xs">
+              <div className="mt-2 inline-flex items-center self-start gap-2 px-2.5 py-1.5 rounded-lg bg-accent-rose/10 border border-accent-rose/25 shadow-sm">
+                <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-accent-rose">
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 4a.875.875 0 01.875.875v4a.875.875 0 11-1.75 0v-4A.875.875 0 0110 6zm0 8.25a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                  </svg>
+                  Upload failed
+                </span>
+                <span className="w-px h-3.5 bg-accent-rose/25" aria-hidden="true" />
                 <button
                   onClick={async () => {
                     const transfers = useTransferStore.getState().transfers;
@@ -523,9 +530,9 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                     }
                     usePendingMessageStore.getState().markSending(pending.clientId);
                   }}
-                  className="text-accent-mint hover:text-accent-mint/80"
+                  className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-accent-mint bg-accent-mint/10 hover:bg-accent-mint/20 transition-colors"
                 >
-                  Retry failed
+                  Retry
                 </button>
                 <button
                   onClick={() => {
@@ -542,7 +549,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
                       usePendingMessageStore.getState().removeByClientId(channelKey, pending.clientId);
                     }
                   }}
-                  className="text-txt-tertiary hover:text-accent-rose"
+                  className="px-2 py-0.5 rounded-md text-[11.5px] font-medium text-txt-secondary bg-surface-channel/50 hover:bg-accent-rose/15 hover:text-accent-rose transition-colors"
                 >
                   Discard
                 </button>
