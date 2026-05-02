@@ -97,3 +97,32 @@ export function getCachedUserIdForOrigin(origin: string): string | undefined {
 export function clearMyUserIdCache(): void {
   _myUserIdByOrigin.clear();
 }
+
+// ─── Token resolution (federation) ────────────────────────────────────────────
+// Registered by instanceStore on import; maps an origin to the local user's
+// JWT for that instance. Used by transferStore (tus uploads) and any other
+// path that constructs raw HTTP requests to a federated instance and needs to
+// pass an Authorization header.
+
+let _getTokenForOrigin: ((origin: string) => string | null) | null = null;
+
+export function setTokenForOriginResolver(
+  resolver: (origin: string) => string | null,
+): void {
+  _getTokenForOrigin = resolver;
+}
+
+/**
+ * Returns the JWT to use when calling APIs on the given origin.
+ * - Empty origin → home-instance token from authStore.
+ * - Connected remote → that instance's scoped token.
+ * - Unknown / not-yet-connected → null.
+ *
+ * Note: this module imports nothing from `./stores/*` to avoid TDZ cycles.
+ * The home-instance fallback is supplied by the caller via the resolver itself
+ * (instanceStore registers a resolver that knows how to read authStore for `''`).
+ */
+export function getTokenForOrigin(origin: string): string | null {
+  if (!_getTokenForOrigin) return null;
+  return _getTokenForOrigin(origin);
+}

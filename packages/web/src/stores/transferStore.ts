@@ -3,6 +3,7 @@ import { persist, type PersistStorage, type StorageValue } from 'zustand/middlew
 import { Upload, type UploadOptions } from 'tus-js-client';
 import type { Attachment } from '@backspace/shared';
 import { useAuthStore } from './authStore';
+import { getTokenForOrigin } from '../utils/crossStoreResolvers';
 
 export type TransferType = 'upload' | 'download';
 export type TransferState =
@@ -229,7 +230,7 @@ export const useTransferStore = create<TransferStore>()(
       },
 
       startUpload: async (file, opts) => {
-        const token = useAuthStore.getState().token;
+        const token = getTokenForOrigin(opts.origin ?? '');
         const user = useAuthStore.getState().user;
         if (!token) throw new Error('Cannot start upload — not authenticated');
 
@@ -317,7 +318,7 @@ export const useTransferStore = create<TransferStore>()(
           // No live instance, but server-side .tus state still exists (e.g., this
           // transfer failed mid-flight or was paused with a stored URL). Send DELETE
           // directly so the partial bytes don't sit on disk until the janitor sweeps.
-          const token = useAuthStore.getState().token;
+          const token = getTokenForOrigin(t.origin ?? '');
           if (token) {
             const fullUrl = t.tusUploadUrl.startsWith('http')
               ? t.tusUploadUrl
@@ -349,9 +350,9 @@ export const useTransferStore = create<TransferStore>()(
         const t = get().get(id);
         if (!t || t.type !== 'upload') return;
 
-        const token = useAuthStore.getState().token;
+        const token = getTokenForOrigin(t.origin ?? '');
         if (!token) {
-          get().setError(id, { message: 'Not authenticated', permanent: true });
+          get().setError(id, { message: 'Not authenticated for this instance', permanent: true });
           return;
         }
 

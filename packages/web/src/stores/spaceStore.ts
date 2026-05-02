@@ -976,6 +976,8 @@ export {
   setOriginFromHostnameResolver,
   setUserIdForOriginResolver,
   setMyUserIdForOrigin,
+  setTokenForOriginResolver,
+  getTokenForOrigin,
 } from '../utils/crossStoreResolvers';
 
 /**

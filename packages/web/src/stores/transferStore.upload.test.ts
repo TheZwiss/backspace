@@ -4,6 +4,14 @@ import 'fake-indexeddb/auto';
 // We mock tus-js-client to drive lifecycle synchronously without real network.
 const startMock = vi.fn();
 const abortMock = vi.fn().mockResolvedValue(undefined);
+// Captures every set of UploadOptions handed to `new Upload(...)`. Tests can
+// inspect `lastUploadOpts()` to assert on endpoint + Authorization header,
+// which is the only way we verify per-origin token routing without hitting
+// the network.
+const constructedOpts: any[] = [];
+function lastUploadOpts(): any {
+  return constructedOpts[constructedOpts.length - 1];
+}
 
 vi.mock('tus-js-client', () => {
   class MockUpload {
@@ -11,6 +19,7 @@ vi.mock('tus-js-client', () => {
     public url: string | null = null;
     constructor(_file: File, opts: any) {
       this.opts = opts;
+      constructedOpts.push(opts);
     }
     start() {
       startMock();
@@ -59,13 +68,27 @@ vi.mock('./authStore', () => ({
 }));
 
 import { useTransferStore } from './transferStore';
+import { setTokenForOriginResolver } from '../utils/crossStoreResolvers';
+import { useAuthStore as authStoreMod } from './authStore';
+
+// Default resolver mirrors prod wiring: empty origin → home authStore token,
+// any other origin → null (no federated instance is wired up in tests unless
+// the test explicitly registers a different resolver).
+function installDefaultTokenResolver(): void {
+  setTokenForOriginResolver((origin: string): string | null => {
+    if (origin) return null;
+    return authStoreMod.getState().token ?? null;
+  });
+}
 
 describe('transferStore.startUpload', () => {
   beforeEach(() => {
     useTransferStore.setState({ transfers: new Map(), hasInMemoryFile: new Set() });
     startMock.mockClear();
     abortMock.mockClear();
+    constructedOpts.length = 0;
     if (typeof localStorage !== 'undefined') localStorage.clear();
+    installDefaultTokenResolver();
   });
 
   it('drives a transfer through tus → completed with attachmentId + attachmentFilename', async () => {
@@ -114,6 +137,47 @@ describe('transferStore.startUpload', () => {
     useTransferStore.getState().pauseUpload(id);
     expect(useTransferStore.getState().get(id)!.state).toBe('paused');
   });
+
+  it('startUpload uses the per-origin token + endpoint for federated uploads', async () => {
+    // Register a resolver that returns a federated token for a specific origin
+    // and the home token (from the mocked authStore) for the empty origin.
+    setTokenForOriginResolver((origin: string): string | null => {
+      if (origin === 'https://remote.example.com') return 'federated-token-XYZ';
+      if (!origin) return authStoreMod.getState().token ?? null;
+      return null;
+    });
+    const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
+    const id = await useTransferStore.getState().startUpload(file, {
+      tray: true,
+      origin: 'https://remote.example.com',
+    });
+    const t = useTransferStore.getState().get(id);
+    expect(t).toBeDefined();
+    // The synchronous mock drives the full lifecycle, so we end completed.
+    expect(t!.state).toBe('completed');
+    // The transfer carries the remote origin so resume/abort route correctly.
+    expect(t!.origin).toBe('https://remote.example.com');
+    // The tus client was constructed with the federated bearer + remote endpoint —
+    // proves we did NOT fall back to the home authStore token.
+    const opts = lastUploadOpts();
+    expect(opts.endpoint).toBe('https://remote.example.com/api/files/');
+    expect(opts.headers.Authorization).toBe('Bearer federated-token-XYZ');
+  });
+
+  it('startUpload throws when no resolver is registered for the federated origin', async () => {
+    // Resolver returns null for unknown origin → no fallback to home token.
+    setTokenForOriginResolver((origin: string): string | null => {
+      if (!origin) return authStoreMod.getState().token ?? null;
+      return null;
+    });
+    const file = new File([new Uint8Array(10)], 'a.png', { type: 'image/png' });
+    await expect(
+      useTransferStore.getState().startUpload(file, {
+        tray: true,
+        origin: 'https://unknown.example.com',
+      }),
+    ).rejects.toThrow(/not authenticated/i);
+  });
 });
 
 describe('transferStore.resumeUpload', () => {
@@ -121,6 +185,7 @@ describe('transferStore.resumeUpload', () => {
     useTransferStore.setState({ transfers: new Map(), hasInMemoryFile: new Set() });
     startMock.mockClear();
     abortMock.mockClear();
+    installDefaultTokenResolver();
   });
 
   it('marks failed when transfer has no available blob to resume from', async () => {
@@ -177,6 +242,7 @@ describe('transferStore.hasInMemoryFile', () => {
     startMock.mockClear();
     abortMock.mockClear();
     if (typeof localStorage !== 'undefined') localStorage.clear();
+    installDefaultTokenResolver();
   });
 
   it('hasInMemoryFile tracks startUpload + remove lifecycle', async () => {

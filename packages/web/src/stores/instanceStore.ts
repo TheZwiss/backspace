@@ -6,6 +6,7 @@ import {
   setApiForOriginResolver,
   setUserIdForOriginResolver,
   setOriginFromHostnameResolver,
+  setTokenForOriginResolver,
 } from '../utils/crossStoreResolvers';
 import { useSpaceStore } from './spaceStore';
 import { connectInstance, disconnectInstance as disconnectWs, disconnectAllRemote } from '../hooks/useWebSocket';
@@ -1110,6 +1111,18 @@ setApiForOriginResolver((origin: string): BackspaceApiClient => {
 setUserIdForOriginResolver((origin: string): string | undefined => {
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
   return instance?.user.id;
+});
+
+// ─── Token resolution (federation) ────────────────────────────────────────────
+// Maps an origin to the JWT for that instance. Used by transferStore for tus
+// uploads and any other path that constructs raw HTTP requests to a federated
+// instance and needs to pass an Authorization header. Empty origin falls back
+// to the home-instance token from authStore.
+
+setTokenForOriginResolver((origin: string): string | null => {
+  if (!origin) return useAuthStore.getState().token;
+  const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
+  return instance?.token ?? null;
 });
 
 // ─── Electron: push connected-instance origins to main process ───────────────
