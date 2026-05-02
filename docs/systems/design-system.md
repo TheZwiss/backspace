@@ -55,6 +55,7 @@ Font: DM Sans (primary) with system fallbacks
 | Strip | `.glass-strip` | Persistent edge chrome (space sidebar) |
 | Bubble | `.glass-bubble` | Persistent floating controls (voice bar, input pill) |
 | Popover | `.glass` | Small floating surfaces (context menus, popovers, tooltips) |
+| Tray dropdown | `.glass` (popover) | `TransferIndicator` global panel — anchored under the channel-header icon. |
 | Modal | `.glass-modal` | Large center-screen dialogs |
 | Pill | `.glass-pill` | Inline decorations (reactions, tags) |
 | Pill (own) | `.glass-pill-mine` | User's own reaction (mint-tinted) |
@@ -143,3 +144,17 @@ Channel sidebar fully opaque with gradient at left edge feeding glass.
 - `.rounded-inherit` — Inherits border radius
 - `.titlebar-drag` / `.titlebar-no-drag` — Electron window drag
 - `.call-refraction` — Light shimmer overlay for call UI
+
+---
+
+## Primitives
+
+### Radial Progress Ring
+
+Used in `AttachmentProgress` overlays inside the optimistic bubble and the staged-files row. Implementation:
+
+```css
+background: conic-gradient(rgba(180, 220, 200, .85) <pct>%, rgba(255, 255, 255, .15) <pct>%);
+```
+
+Inner disk uses `bg-surface-overlay` to sit visually above the underlying tile thumbnail. Failed-state ring uses `bg-accent-rose/30`.
