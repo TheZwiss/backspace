@@ -389,6 +389,46 @@ export class AudioManager {
     return this.masterBoost!;
   }
 
+  /**
+   * Returns the deviceId of the currently active mic stream (the one being
+   * captured by getUserMedia). May differ from the persisted store value when
+   * the store says 'default' but Chromium has resolved that to a concrete ID.
+   */
+  getCurrentInputDeviceId(): string {
+    return this.currentInputDeviceId;
+  }
+
+  /**
+   * True if a live mic stream is currently captured. Used by the global
+   * devicechange handler to decide whether to force-reacquire on OS-default
+   * change.
+   */
+  hasActiveStream(): boolean {
+    return !!this.currentStream?.active;
+  }
+
+  /**
+   * Plays a short test tone through the master output bus, exercising the
+   * current setSinkId binding. Used by the "Test Sound" button in audio
+   * settings to confirm that audio is reaching the chosen output device.
+   */
+  async playTestTone(): Promise<void> {
+    await this.resumeContext();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    osc.frequency.value = 440;
+    const gain = this.ctx.createGain();
+    // Soft envelope to avoid pop on start/stop.
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+    gain.gain.linearRampToValueAtTime(0, now + 0.4);
+    osc.connect(gain);
+    gain.connect(this.masterBoost!);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  }
+
   getContext(): AudioContext | null {
     return this.ctx;
   }
