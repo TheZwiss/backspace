@@ -93,18 +93,19 @@ describe('transferStore basics', () => {
     expect(t.error).toEqual({ message: 'boom', permanent: true });
   });
 
-  it('setTusUrl + setAttachmentId stores the metadata', () => {
+  it('setTusUrl + setAttachmentRef stores the metadata', () => {
     const id = useTransferStore.getState().createTransfer({
       type: 'upload',
       file: { name: 'a', size: 1, mimetype: 'image/png' },
       tray: true,
     });
     useTransferStore.getState().setTusUrl(id, '/api/files/abc', 5_000);
-    useTransferStore.getState().setAttachmentId(id, 'att-9');
+    useTransferStore.getState().setAttachmentRef(id, 'att-9', 'server-name.png');
     const t = useTransferStore.getState().get(id)!;
     expect(t.tusUploadUrl).toBe('/api/files/abc');
     expect(t.tusExpiresAt).toBe(5_000);
     expect(t.attachmentId).toBe('att-9');
+    expect(t.attachmentFilename).toBe('server-name.png');
   });
 
   it('remove drops a transfer; idempotent on missing id', () => {

@@ -68,7 +68,7 @@ describe('transferStore.startUpload', () => {
     if (typeof localStorage !== 'undefined') localStorage.clear();
   });
 
-  it('drives a transfer through tus → completed with attachmentId', async () => {
+  it('drives a transfer through tus → completed with attachmentId + attachmentFilename', async () => {
     const file = new File([new Uint8Array(100)], 'a.png', { type: 'image/png' });
     const id = await useTransferStore.getState().startUpload(file, { channelId: 'ch-1', tray: true });
     expect(startMock).toHaveBeenCalledTimes(1);
@@ -76,6 +76,7 @@ describe('transferStore.startUpload', () => {
     expect(t).toBeDefined();
     expect(t!.state).toBe('completed');
     expect(t!.attachmentId).toBe('att-9');
+    expect(t!.attachmentFilename).toBe('a.png');
     expect(t!.tusUploadUrl).toBe('/api/files/abc-123');
     expect(t!.tusExpiresAt).toBeGreaterThan(Date.now());
   });

@@ -7,6 +7,8 @@ import { AVATAR_GRADIENT_MAP } from '../../utils/gradients';
 import { AVATAR_COLORS } from '@backspace/shared';
 import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@backspace/shared';
 import { api, RateLimitError } from '../../api/client';
+import { useTransferStore } from '../../stores/transferStore';
+import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 
 // Single-source regex for extracting a bare invite token from a pasted full URL.
 // Token format: 22 chars base64url ([A-Za-z0-9_-]).
@@ -355,8 +357,9 @@ export function RegisterPage() {
       let finalUser = response.user;
       if (!skip && avatarFile) {
         try {
-          const attachment = await api.uploads.upload(avatarFile);
-          finalUser = await api.users.update({ avatar: attachment.filename });
+          const tid = await useTransferStore.getState().startUpload(avatarFile, { tray: false });
+          const { filename } = await waitForTransferAttachment(tid);
+          finalUser = await api.users.update({ avatar: filename });
         } catch {
           // Avatar upload failed — user can set it later in settings
         }

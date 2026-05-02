@@ -29,6 +29,7 @@ export interface Transfer {
   tusExpiresAt?: number;
   fileHandleId?: string;
   attachmentId?: string;
+  attachmentFilename?: string;
   uploaderUserId?: string;
 
   // Download-specific
@@ -59,7 +60,7 @@ interface TransferStoreActions {
   updateProgress: (id: string, loaded: number) => void;
   setError: (id: string, error: TransferError) => void;
   setTusUrl: (id: string, url: string, expiresAt: number) => void;
-  setAttachmentId: (id: string, attachmentId: string) => void;
+  setAttachmentRef: (id: string, attachmentId: string, filename: string) => void;
   remove: (id: string) => void;
 
   startUpload: (file: Blob, opts: { channelId?: string; tray?: boolean; origin?: string; fileHandleId?: string }) => Promise<string>;
@@ -181,11 +182,11 @@ export const useTransferStore = create<TransferStore>()(
         return { transfers: next };
       }),
 
-      setAttachmentId: (id, attachmentId) => set((s) => {
+      setAttachmentRef: (id, attachmentId, filename) => set((s) => {
         const t = s.transfers.get(id);
         if (!t) return s;
         const next = new Map(s.transfers);
-        next.set(id, { ...t, attachmentId });
+        next.set(id, { ...t, attachmentId, attachmentFilename: filename });
         return { transfers: next };
       }),
 
@@ -245,7 +246,7 @@ export const useTransferStore = create<TransferStore>()(
             try {
               const body = payload.lastResponse?.getBody?.() ?? '';
               const att = JSON.parse(body) as Attachment;
-              get().setAttachmentId(id, att.id);
+              get().setAttachmentRef(id, att.id, att.filename);
               get().setState_(id, 'completed');
               get().updateProgress(id, fileLike.size);
             } catch (e) {
@@ -346,7 +347,7 @@ export const useTransferStore = create<TransferStore>()(
             try {
               const body = payload.lastResponse?.getBody?.() ?? '';
               const att = JSON.parse(body) as Attachment;
-              get().setAttachmentId(id, att.id);
+              get().setAttachmentRef(id, att.id, att.filename);
               get().setState_(id, 'completed');
             } catch (e) {
               const msg = e instanceof Error ? e.message : 'Resume completed but parse failed';
