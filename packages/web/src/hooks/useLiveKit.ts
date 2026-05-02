@@ -433,7 +433,7 @@ export function useLiveKit() {
       if (roomRef.current !== subscriberRoom || !subscriberRoom) return;
 
       const deviceId = useVoiceStore.getState().inputDeviceId;
-      let copy = 'Microphone unavailable';
+      let copy = 'Microphone could not be restored';
 
       try {
         const probe = await navigator.mediaDevices.getUserMedia({
@@ -449,7 +449,7 @@ export function useLiveKit() {
           await republishMicrophone(subscriberRoom, lastMicGenRef);
           return;
         } catch {
-          copy = 'Microphone could not be restored';
+          // copy already holds 'Microphone could not be restored'
         }
       } catch (err: any) {
         if (err?.name === 'NotAllowedError') {
@@ -464,6 +464,8 @@ export function useLiveKit() {
           } else {
             copy = 'Microphone disconnected';
           }
+        } else {
+          copy = 'Microphone could not be restored';
         }
       }
 
