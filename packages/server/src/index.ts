@@ -46,8 +46,37 @@ async function main(): Promise<void> {
   await app.register(cors, {
     origin: true,
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+    // Tus-* and Upload-* headers are required for federated tus uploads
+    // (cross-origin POST/HEAD/PATCH/DELETE on /api/files/*). Without them the
+    // browser preflight blocks the request before it ever reaches the server.
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Tus-Resumable',
+      'Upload-Length',
+      'Upload-Offset',
+      'Upload-Metadata',
+      'Upload-Defer-Length',
+      'Upload-Concat',
+      'Upload-Checksum',
+      'X-HTTP-Method-Override',
+    ],
+    // Expose tus response headers so tus-js-client can read them across origins
+    // (Location is the per-upload URL returned on POST; the rest are standard
+    // tus protocol headers).
+    exposedHeaders: [
+      'Location',
+      'Tus-Resumable',
+      'Tus-Version',
+      'Tus-Extension',
+      'Tus-Max-Size',
+      'Tus-Checksum-Algorithm',
+      'Upload-Offset',
+      'Upload-Length',
+      'Upload-Metadata',
+      'Upload-Expires',
+    ],
   });
 
   await app.register(rateLimit, {
