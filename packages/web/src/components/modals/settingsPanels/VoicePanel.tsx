@@ -1,6 +1,8 @@
 import { useVoiceStore } from '../../../stores/voiceStore';
 import { Toggle } from '../../ui/Toggle';
 import { VideoSection } from './VideoSection';
+import { AudioInputSection } from './AudioInputSection';
+import { AudioOutputSection } from './AudioOutputSection';
 
 export function VoicePanel() {
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
@@ -17,6 +19,10 @@ export function VoicePanel() {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">Voice &amp; Video</h2>
+
+      <AudioInputSection />
+      <AudioOutputSection />
+
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
           Volume
@@ -69,7 +75,7 @@ export function VoicePanel() {
           <div className="flex items-center justify-between py-2">
             <div>
               <div className="text-sm text-txt-primary">Echo Cancellation</div>
-              <div className="text-xs text-txt-tertiary">Removes echo when using speakers</div>
+              <div className="text-xs text-txt-tertiary">Cancels echo from your speakers feeding back into the mic. Always on for voice channels and calls.</div>
             </div>
             <Toggle enabled={echoCancellation} onChange={setEchoCancellation} />
           </div>
