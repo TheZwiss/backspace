@@ -79,13 +79,8 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
     }
 
     if (type === 'dm') {
-      // Home tile renders logo.png (full Element 1 badge with #000 bg)
-      // via object-cover; the badge IS the visible tile fill, so no
-      // separate button background is needed. The button's overflow-hidden
-      // + rounded-[20px → 13px] morph clips the opaque badge cleanly,
-      // giving the same hover/active feedback shape as space tiles with
-      // custom icons.
-      return undefined;
+      const lit = active || isHovered;
+      return { background: lit ? 'rgb(var(--accent-primary))' : 'rgb(var(--interactive-muted))' };
     }
 
     // Space type — if it has a custom icon image, no gradient needed
@@ -93,7 +88,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
 
     const spaceGrad = getSpaceGradient(id, name, avatarColor);
     return { background: spaceGrad.gradient };
-  }, [type, id, name, icon, avatarColor, isHovered]);
+  }, [type, id, name, icon, avatarColor, isHovered, active]);
 
   const getButtonClasses = () => {
     const base = 'w-10 h-10 flex items-center justify-center duration-200 overflow-hidden [transition:border-radius_0.2s,background_0.2s,color_0.2s]';
@@ -116,7 +111,7 @@ function SidebarItem({ id, name, icon, avatarColor, active, onClick, onContextMe
   const buttonContent = (
     <button onClick={onClick} className={`${getButtonClasses()} ${dimmed ? 'opacity-40 saturate-50' : ''}`} style={backgroundStyle} title={tooltipText ? undefined : name}>
       {type === 'dm' ? (
-        <img src="/icons/logo.png" alt="Backspace" className="w-full h-full object-cover" />
+        <img src="/icons/logo-mark.svg" alt="Backspace" className="w-[25px] h-auto" />
       ) : type === 'action' ? (
         actionType === 'add' ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
