@@ -878,23 +878,12 @@ if (!gotTheLock) {
       onQuit: () => requestQuit(),
     };
 
-    const appMenuActions = {
-      onChangeInstance: () => {
-        clearInstanceUrl();
-        mainWindow?.loadFile(getPickerPath());
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-      onCheckForUpdates: () => handleRecoveryAction('check-update'),
-      onRestartToInstall: () => handleRecoveryAction('install-update'),
-    };
-
     const applyMenusForState = (state: RecoveryState): void => {
       if (tray) {
         tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
       }
       if (process.platform === 'darwin') {
-        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, appMenuActions)));
+        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions)));
       }
       // Mode-gated push to renderer (recovery.html subscribes to this).
       if (state.mode === 'recovery' && mainWindow && !mainWindow.isDestroyed()) {
