@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootTwoInstances, type TwoInstanceHarness } from './helpers/twoInstanceHarness.js';
+import { bootTwoInstances, bootHomePlusRemotes, type TwoInstanceHarness, type MultiRemoteHarness, type SpawnedInstance } from './helpers/twoInstanceHarness.js';
 import { peerInstances } from './helpers/seedPeer.js';
 import type { TestUser } from './helpers/testUsers.js';
 import { connectWs } from './helpers/wsListener.js';
@@ -104,6 +104,128 @@ async function setupFullDeletionFixture(label: string): Promise<{
   if (!dmMsgRes.ok) throw new Error(`create dm message failed: ${dmMsgRes.status} ${await dmMsgRes.text()}`);
 
   return { homeUser, remoteUser, observerOnRemote, spaceId, channelId, authoredMessageIds, dmChannelId };
+}
+
+/**
+ * Multi-remote variant of {@link setupFullDeletionFixture}. Given a pre-existing
+ * home user, mirrors the federated identity onto a SPECIFIC remote, joins a
+ * fresh space there with 2 authored messages + reactions, and a 1-on-1 DM with
+ * a local observer. Does NOT touch the home registry — the caller is expected
+ * to PUT the registry exactly once with all remote entries combined.
+ *
+ * Why not reuse `setupFullDeletionFixture`: that helper closes over the
+ * single-remote `harness` global and registers a fresh home user every call.
+ * The all-remotes fan-out tests need one home user mirrored onto N remotes.
+ */
+async function mirrorOnRemote(
+  home: SpawnedInstance,
+  homeUser: TestUser,
+  remote: SpawnedInstance,
+  label: string,
+): Promise<{
+  remoteUser: TestUser;
+  observerOnRemote: TestUser;
+  spaceId: string;
+  channelId: string;
+  authoredMessageIds: string[];
+  dmChannelId: string;
+}> {
+  const { registerLocal } = await import('./helpers/testUsers.js');
+
+  const federatedUsername = `${homeUser.username}@${home.domain}`;
+  const regRes = await fetch(`${remote.origin}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: federatedUsername,
+      password: homeUser.password,
+      displayName: homeUser.username,
+      homeInstance: home.domain,
+      homeUserId: homeUser.id,
+    }),
+  });
+  if (!regRes.ok) throw new Error(`mirror register failed (${remote.origin}): ${regRes.status} ${await regRes.text()}`);
+  const data = await regRes.json() as { user: { id: string }; token: string };
+  const remoteUser: TestUser = {
+    id: data.user.id,
+    username: federatedUsername,
+    password: homeUser.password,
+    token: data.token,
+    origin: remote.origin,
+    homeUserId: homeUser.id,
+    homeInstance: home.domain,
+  };
+
+  const observerOnRemote = await registerLocal(remote, `${label}_obs`);
+
+  const spaceRes = await fetch(`${remote.origin}/api/spaces`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${observerOnRemote.token}` },
+    body: JSON.stringify({ name: `${label}-space` }),
+  });
+  if (!spaceRes.ok) throw new Error(`create space failed: ${spaceRes.status} ${await spaceRes.text()}`);
+  const { id: spaceId } = await spaceRes.json() as { id: string };
+
+  const inviteRes = await fetch(`${remote.origin}/api/spaces/${spaceId}/invite`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${observerOnRemote.token}` },
+  });
+  if (!inviteRes.ok) throw new Error(`invite failed: ${inviteRes.status} ${await inviteRes.text()}`);
+  const { inviteCode } = await inviteRes.json() as { inviteCode: string };
+
+  const joinRes = await fetch(`${remote.origin}/api/spaces/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remoteUser.token}` },
+    body: JSON.stringify({ inviteCode }),
+  });
+  if (!joinRes.ok) throw new Error(`join failed: ${joinRes.status} ${await joinRes.text()}`);
+
+  const detRes = await fetch(`${remote.origin}/api/spaces/${spaceId}`, {
+    headers: { Authorization: `Bearer ${remoteUser.token}` },
+  });
+  if (!detRes.ok) throw new Error(`get space details failed: ${detRes.status} ${await detRes.text()}`);
+  const det = await detRes.json() as { channels: { id: string }[] };
+  if (!det.channels?.length) throw new Error('space has no channels');
+  const channelId = det.channels[0].id;
+
+  const authoredMessageIds: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    const msgRes = await fetch(`${remote.origin}/api/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remoteUser.token}` },
+      body: JSON.stringify({ content: `msg-${i}` }),
+    });
+    if (!msgRes.ok) throw new Error(`create message failed: ${msgRes.status} ${await msgRes.text()}`);
+    const m = await msgRes.json() as { id: string };
+    authoredMessageIds.push(m.id);
+  }
+
+  const reactWs = await connectWs(remote.origin, remoteUser.token);
+  try {
+    for (const messageId of authoredMessageIds) {
+      reactWs.send({ type: 'reaction_add', messageId, emoji: '👍' });
+    }
+    await new Promise(r => setTimeout(r, 300));
+  } finally {
+    reactWs.close();
+  }
+
+  const dmRes = await fetch(`${remote.origin}/api/dm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remoteUser.token}` },
+    body: JSON.stringify({ userId: observerOnRemote.id }),
+  });
+  if (!dmRes.ok) throw new Error(`create dm failed: ${dmRes.status} ${await dmRes.text()}`);
+  const { id: dmChannelId } = await dmRes.json() as { id: string };
+
+  const dmMsgRes = await fetch(`${remote.origin}/api/dm/${dmChannelId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remoteUser.token}` },
+    body: JSON.stringify({ content: 'hello' }),
+  });
+  if (!dmMsgRes.ok) throw new Error(`create dm message failed: ${dmMsgRes.status} ${await dmMsgRes.text()}`);
+
+  return { remoteUser, observerOnRemote, spaceId, channelId, authoredMessageIds, dmChannelId };
 }
 
 beforeAll(async () => {
@@ -276,5 +398,251 @@ describe('Federation identity deletion — server suite', () => {
     // 1-on-1 DM with another live participant SURVIVES (other party still member)
     expect(remote.dmChannelExists(fx.dmChannelId)).toBe(true);
     remote.close();
+  });
+});
+
+let multiHarness: MultiRemoteHarness;
+
+describe('Federation identity deletion — all-remotes fan-out', () => {
+  beforeAll(async () => {
+    multiHarness = await bootHomePlusRemotes(2);
+    await peerInstances(multiHarness.home, multiHarness.remotes[0]);
+    await peerInstances(multiHarness.home, multiHarness.remotes[1]);
+  }, 90_000);
+
+  afterAll(async () => {
+    if (multiHarness) await multiHarness.cleanup();
+  });
+
+  it('#2 leave mode all-remotes: both registries cleaned, both remote rows untouched', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const { logMatched } = await import('./helpers/twoInstanceHarness.js');
+    const home = await registerLocal(multiHarness.home, 't2');
+
+    // Create federated identities on BOTH remotes for the same home user.
+    // Sequential awaits avoid any race on identical username inserts (the two
+    // remotes share neither DB nor port, but sequential is cheap and explicit).
+    const remoteUserIds: string[] = [];
+    for (const r of multiHarness.remotes) {
+      const resR = await fetch(`${r.origin}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: `${home.username}@${multiHarness.home.domain}`,
+          password: home.password,
+          displayName: home.username,
+          homeInstance: multiHarness.home.domain,
+          homeUserId: home.id,
+        }),
+      });
+      // /api/auth/register returns 201 Created (verified against auth.ts).
+      expect(resR.ok).toBe(true);
+      const data = await resR.json() as { user: { id: string }; token: string };
+      remoteUserIds.push(data.user.id);
+    }
+
+    // Seed home registry with BOTH remotes via a single PUT.
+    const now = Date.now();
+    const regRes = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: multiHarness.remotes.map((r, i) => ({
+          origin: r.origin,
+          label: r.domain,
+          username: `${home.username}@${multiHarness.home.domain}`,
+          remoteUserId: remoteUserIds[i],
+          status: 'connected',
+          addedAt: now,
+        })),
+      }),
+    });
+    expect(regRes.status).toBe(200);
+
+    // Snapshot remote users pre-delete.
+    const beforeRows = multiHarness.remotes.map((r, i) => {
+      const ins = openInspector(r);
+      const row = ins.user(remoteUserIds[i]);
+      ins.close();
+      return row;
+    });
+    for (const before of beforeRows) {
+      expect(before).toBeTruthy();
+      expect(before!.isDeleted).toBe(0);
+    }
+
+    // Fan out leave to BOTH origins.
+    const res = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({ origins: multiHarness.remotes.map(r => r.origin), mode: 'leave' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    for (const r of multiHarness.remotes) {
+      expect(body.results[r.origin]).toEqual({ success: true });
+    }
+
+    // No S2S call should have hit either remote.
+    for (const r of multiHarness.remotes) {
+      const sawS2S = await logMatched(r, /\/api\/federation\/identity/, 1_000);
+      expect(sawS2S).toBe(false);
+    }
+
+    // Both remote user rows UNCHANGED.
+    multiHarness.remotes.forEach((r, i) => {
+      const ins = openInspector(r);
+      const after = ins.user(remoteUserIds[i]);
+      expect(after).toMatchObject({
+        id: beforeRows[i]!.id,
+        username: beforeRows[i]!.username,
+        isDeleted: 0,
+      });
+      ins.close();
+    });
+
+    // Home registry rows for BOTH origins gone.
+    const homeIns = openInspector(multiHarness.home);
+    for (const r of multiHarness.remotes) {
+      expect(homeIns.registryRow(home.id, r.origin)).toBeUndefined();
+    }
+    homeIns.close();
+  });
+
+  it('#4 soft mode all-remotes: tombstone shape on each remote, messages retained, registries cleaned', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const homeUser = await registerLocal(multiHarness.home, 't4');
+
+    // Mirror sequentially: parallel mirrors are safe across separate remotes,
+    // but sequential keeps the boot log readable and avoids any cross-remote
+    // contention on the home user's connection (registry PUT comes later).
+    const fixtures: Awaited<ReturnType<typeof mirrorOnRemote>>[] = [];
+    for (let i = 0; i < multiHarness.remotes.length; i++) {
+      fixtures.push(await mirrorOnRemote(multiHarness.home, homeUser, multiHarness.remotes[i], `t4_${i}`));
+    }
+
+    // Single PUT on home registry with both remote entries.
+    const now = Date.now();
+    const regRes = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: multiHarness.remotes.map((r, i) => ({
+          origin: r.origin,
+          label: r.domain,
+          username: fixtures[i].remoteUser.username,
+          remoteUserId: fixtures[i].remoteUser.id,
+          status: 'connected',
+          addedAt: now,
+        })),
+      }),
+    });
+    expect(regRes.status).toBe(200);
+
+    // Fan out soft delete.
+    const res = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({ origins: multiHarness.remotes.map(r => r.origin), mode: 'soft' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    for (const r of multiHarness.remotes) {
+      expect(body.results[r.origin].success).toBe(true);
+    }
+
+    // Per-remote tombstone + content retention assertions (mirror of #3).
+    multiHarness.remotes.forEach((r, i) => {
+      const ins = openInspector(r);
+      const after = ins.user(fixtures[i].remoteUser.id);
+      expect(after).toBeTruthy();
+      expect(after!.isDeleted).toBe(1);
+      expect(after!.username).toBe(`!deleted:${fixtures[i].remoteUser.id}`);
+      expect(after!.passwordHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(after!.displayName).toBeNull();
+      expect(after!.replicatedInstances).toBe('[]');
+      expect(after!.status).toBe('offline');
+      expect(after!.isAdmin).toBe(0);
+
+      expect(ins.spaceMembersForUser(fixtures[i].remoteUser.id)).toEqual([]);
+      expect(ins.messagesAuthored(fixtures[i].remoteUser.id).length).toBe(2); // RETAINED
+      expect(ins.reactionsForUser(fixtures[i].remoteUser.id).length).toBe(2); // RETAINED
+      expect(ins.dmMembership(fixtures[i].remoteUser.id)).toEqual([]);
+      expect(ins.dmChannelExists(fixtures[i].dmChannelId)).toBe(true);
+      ins.close();
+    });
+
+    // Home registry rows for BOTH origins gone.
+    const home = openInspector(multiHarness.home);
+    for (const r of multiHarness.remotes) {
+      expect(home.registryRow(homeUser.id, r.origin)).toBeUndefined();
+    }
+    home.close();
+  });
+
+  it('#6 full mode all-remotes: tombstone + purge on each remote, registries cleaned', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const homeUser = await registerLocal(multiHarness.home, 't6');
+
+    const fixtures: Awaited<ReturnType<typeof mirrorOnRemote>>[] = [];
+    for (let i = 0; i < multiHarness.remotes.length; i++) {
+      fixtures.push(await mirrorOnRemote(multiHarness.home, homeUser, multiHarness.remotes[i], `t6_${i}`));
+    }
+
+    const now = Date.now();
+    const regRes = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: multiHarness.remotes.map((r, i) => ({
+          origin: r.origin,
+          label: r.domain,
+          username: fixtures[i].remoteUser.username,
+          remoteUserId: fixtures[i].remoteUser.id,
+          status: 'connected',
+          addedAt: now,
+        })),
+      }),
+    });
+    expect(regRes.status).toBe(200);
+
+    const res = await fetch(`${multiHarness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({ origins: multiHarness.remotes.map(r => r.origin), mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    for (const r of multiHarness.remotes) {
+      expect(body.results[r.origin].success).toBe(true);
+    }
+
+    // Per-remote tombstone + purge assertions (mirror of #5).
+    multiHarness.remotes.forEach((r, i) => {
+      const ins = openInspector(r);
+      const after = ins.user(fixtures[i].remoteUser.id);
+      expect(after).toBeTruthy();
+      expect(after!.isDeleted).toBe(1);
+      expect(after!.username).toBe(`!deleted:${fixtures[i].remoteUser.id}`);
+      expect(ins.messagesAuthored(fixtures[i].remoteUser.id).length).toBe(0); // PURGED
+      expect(ins.reactionsForUser(fixtures[i].remoteUser.id).length).toBe(0); // PURGED
+      expect(ins.dmMembership(fixtures[i].remoteUser.id)).toEqual([]);
+      // Observer remains a member, so DM channel survives.
+      expect(ins.dmChannelExists(fixtures[i].dmChannelId)).toBe(true);
+      ins.close();
+    });
+
+    // Home registry rows for BOTH origins gone.
+    const home = openInspector(multiHarness.home);
+    for (const r of multiHarness.remotes) {
+      expect(home.registryRow(homeUser.id, r.origin)).toBeUndefined();
+    }
+    home.close();
   });
 });
