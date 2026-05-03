@@ -399,6 +399,71 @@ describe('Federation identity deletion — server suite', () => {
     expect(remote.dmChannelExists(fx.dmChannelId)).toBe(true);
     remote.close();
   });
+
+  it('#7 owned-spaces 409: ownership prevents deletion, registry preserved', async () => {
+    const { createFederatedUser } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const { seedOwnedSpace } = await import('./helpers/seedSpaceWithStubOwner.js');
+    const { homeUser, remoteUser } = await createFederatedUser(harness.home, harness.remote, 't7');
+
+    // Direct DB seed: the federated user owns a space on the remote
+    const { spaceId } = seedOwnedSpace(harness.remote, remoteUser.id, 't7-space');
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin], mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[harness.remote.origin].success).toBe(false);
+    expect(body.results[harness.remote.origin].error).toBe('owns_spaces');
+    expect(body.results[harness.remote.origin].ownedSpaces).toEqual([
+      expect.objectContaining({ id: spaceId, name: 't7-space' }),
+    ]);
+
+    // Remote user UNCHANGED, home registry UNCHANGED
+    const remote = openInspector(harness.remote);
+    expect(remote.user(remoteUser.id)!.isDeleted).toBe(0);
+    remote.close();
+    const home = openInspector(harness.home);
+    expect(home.registryRow(homeUser.id, harness.remote.origin)).toBeTruthy();
+    home.close();
+  });
+
+  it('#8 owned-spaces resolved by transferring ownership, retry succeeds', async () => {
+    const { createFederatedUser, registerLocal } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const { seedOwnedSpace } = await import('./helpers/seedSpaceWithStubOwner.js');
+    const { homeUser, remoteUser } = await createFederatedUser(harness.home, harness.remote, 't8');
+    const newOwner = await registerLocal(harness.remote, 't8_newowner');
+    const { spaceId } = seedOwnedSpace(harness.remote, remoteUser.id, 't8-space');
+
+    // Transfer ownership via direct DB write — there is no production endpoint
+    // for a federated stub to transfer ownership (federated stubs aren't supposed
+    // to BE owners in the first place; we only got here via test seeding).
+    const Database = (await import('better-sqlite3')).default;
+    const db = new Database(harness.remote.dbPath);
+    try {
+      db.prepare('UPDATE spaces SET owner_id = ? WHERE id = ?').run(newOwner.id, spaceId);
+    } finally {
+      db.close();
+    }
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin], mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[harness.remote.origin].success).toBe(true);
+
+    const remote = openInspector(harness.remote);
+    expect(remote.user(remoteUser.id)!.isDeleted).toBe(1);
+    remote.close();
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
