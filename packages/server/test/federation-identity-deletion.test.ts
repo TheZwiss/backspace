@@ -562,6 +562,43 @@ describe('Federation identity deletion — server suite', () => {
     inspect.close();
   });
 
+  it('#14 idempotency: DELETE /api/federation/identity is idempotent', async () => {
+    const { createFederatedUser } = await import('./helpers/testUsers.js');
+    const { buildHeadersForOrigin } = await import('./helpers/hmacSign.js');
+    const { remoteUser } = await createFederatedUser(harness.home, harness.remote, 't14');
+
+    const body = JSON.stringify({
+      homeUserId: remoteUser.homeUserId,
+      homeInstance: harness.home.domain,
+      mode: 'full',
+    });
+
+    // The receiver looks up the peer row by X-Federation-Origin. peerInstances
+    // inserts an identity row keyed by `https://${home.domain}` (the DOMAIN-form),
+    // which is what the home's getOurOrigin() returns for inbound auth.
+    const claimedOrigin = `https://${harness.home.domain}`;
+
+    // First call — user exists and is live, should succeed
+    const r1 = await fetch(`${harness.remote.origin}/api/federation/identity`, {
+      method: 'DELETE',
+      headers: buildHeadersForOrigin(body, sharedHmacSecret, claimedOrigin),
+      body,
+    });
+    expect(r1.status).toBe(200);
+    const j1 = await r1.json();
+    expect(j1).toEqual({ success: true });
+
+    // Second call — user is already tombstoned; should be idempotent (200 success)
+    const r2 = await fetch(`${harness.remote.origin}/api/federation/identity`, {
+      method: 'DELETE',
+      headers: buildHeadersForOrigin(body, sharedHmacSecret, claimedOrigin),
+      body,
+    });
+    expect(r2.status).toBe(200);
+    const j2 = await r2.json();
+    expect(j2).toEqual({ success: true });
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
