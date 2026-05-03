@@ -59,3 +59,8 @@ tmp/
 
 # Local files
 Gemini Starter.rtf
+
+# Test harness scratch directories
+tests/.tmp/
+tests/reports/*
+!tests/reports/.gitkeep
