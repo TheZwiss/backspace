@@ -23,6 +23,9 @@ class ErrorBoundary extends React.Component<
     // Renderer is alive enough to show the fallback UI — disarm the boot timer.
     // Without this, the timer fires 20s after a caught render error and
     // overrides the in-app error UI with native recovery, which is wrong.
+    // Gated on VITE_FORCE_BOOT_STALL so the smoke harness can suppress both
+    // ping paths simultaneously when testing the renderer-stalled recovery path.
+    if (import.meta.env.VITE_FORCE_BOOT_STALL) return;
     if (typeof window.backspace?.rendererReady === 'function') {
       window.backspace.rendererReady();
     }

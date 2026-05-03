@@ -34,7 +34,12 @@ export function App() {
   // first commit; main owns "armed once" gating so duplicate calls (e.g.
   // ErrorBoundary path) are idempotent. Semantic: "renderer survived
   // render," NOT "data loaded." A spinner on screen counts as boot success.
+  //
+  // Gated on VITE_FORCE_BOOT_STALL so the smoke-test harness can build a
+  // variant that intentionally never pings, exercising the renderer-stalled
+  // recovery path without hand-editing source. Set 'true' / '1' to force stall.
   useEffect(() => {
+    if (import.meta.env.VITE_FORCE_BOOT_STALL) return;
     if (typeof window.backspace?.rendererReady === 'function') {
       window.backspace.rendererReady();
     }
