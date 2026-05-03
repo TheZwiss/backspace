@@ -355,4 +355,50 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(200).send({ success: true });
     },
   );
+
+  // Test-only: seed federation_peers row directly. STRICTLY gated by NODE_ENV='test'
+  // AND ENABLE_TEST_ROUTES='1'. Returns 404 in any other configuration. Used by
+  // the two-instance integration harness to wire up matching HMAC secrets between
+  // home and remote without running the multi-step approval flow.
+  app.post<{ Body: { origin: string; hmacSecret: string; status?: string; instanceName?: string } }>(
+    '/api/admin/test/seed-peer',
+    async (request, reply) => {
+      if (process.env.NODE_ENV !== 'test' || process.env.ENABLE_TEST_ROUTES !== '1') {
+        return reply.code(404).send({ error: 'Not Found', statusCode: 404 });
+      }
+      const { origin, hmacSecret, status, instanceName } = request.body;
+      if (typeof origin !== 'string' || !origin.startsWith('http')) {
+        return reply.code(400).send({ error: 'origin must be an http(s) URL', statusCode: 400 });
+      }
+      if (typeof hmacSecret !== 'string' || hmacSecret.length < 32) {
+        return reply.code(400).send({ error: 'hmacSecret must be a string ≥32 chars', statusCode: 400 });
+      }
+      const validStatuses = new Set(['active', 'pending', 'awaiting_approval', 'rejected', 'revoked', 'needs_attention', 'unreachable', 'accepted']);
+      if (status !== undefined && !validStatuses.has(status)) {
+        return reply.code(400).send({ error: `status must be one of ${[...validStatuses].join(', ')}`, statusCode: 400 });
+      }
+      const db = getDb();
+      const id = crypto.randomUUID();
+      db.insert(schema.federationPeers)
+        .values({
+          id,
+          origin,
+          instanceName: instanceName ?? null,
+          hmacSecret,
+          status: status ?? 'active',
+          consecutiveFailures: 0,
+          consecutiveAuthFailures: 0,
+          lastSyncedAt: 0,
+          nonceSupported: 1,
+          autoRotateIntervalDays: 90,
+          createdAt: Date.now(),
+        })
+        .onConflictDoUpdate({
+          target: schema.federationPeers.origin,
+          set: { hmacSecret, status: status ?? 'active', instanceName: instanceName ?? null },
+        })
+        .run();
+      return reply.code(200).send({ ok: true, id });
+    },
+  );
 }
