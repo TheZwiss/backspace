@@ -9,6 +9,8 @@ import {
   armBootTimer,
   clearBootTimer,
   isBootArmed,
+  handleRendererReady,
+  resetBootTimerStateForTest,
 } from './recovery';
 
 // Mock electron with isPackaged=true so the real arm path executes in all tests below.
@@ -272,7 +274,9 @@ function fakeWin(url: string): FakeWindow {
 
 describe('armBootTimer / clearBootTimer', () => {
   beforeEach(() => {
-    clearBootTimer();
+    // Reset all module-level boot-timer state including pingReceivedThisNav so
+    // tests that call handleRendererReady() don't pollute subsequent tests.
+    resetBootTimerStateForTest();
   });
 
   it('arms when URL is http://', () => {
@@ -301,6 +305,40 @@ describe('armBootTimer / clearBootTimer', () => {
     armBootTimer(fakeWin('http://localhost/') as never);
     expect(isBootArmed()).toBe(true);
     clearBootTimer();
+    expect(isBootArmed()).toBe(false);
+  });
+
+  it('does NOT arm if rendererReady arrived before armBootTimer (early-ping case)', () => {
+    // Simulate SPA timing: useEffect fires (microtask) before did-finish-load.
+    // The ping arrives when bootArmed=false, then armBootTimer is called by
+    // did-finish-load. Without the pingReceivedThisNav flag this would arm a
+    // 20s timer that nothing clears → false renderer-stalled recovery.
+    handleRendererReady();
+    armBootTimer(fakeWin('http://localhost:3005/') as never);
+    expect(isBootArmed()).toBe(false);
+  });
+
+  it('clears existing timer if rendererReady arrives after armBootTimer (late-ping case)', () => {
+    // Simulate the less-common ordering: did-finish-load fires first (arms timer),
+    // then the ping arrives. Preserved existing behavior — ping clears the timer.
+    armBootTimer(fakeWin('http://localhost:3005/') as never);
+    expect(isBootArmed()).toBe(true);
+    handleRendererReady();
+    expect(isBootArmed()).toBe(false);
+  });
+
+  it('flag is per-navigation: after clearBootTimer reset, a subsequent arm should still be blocked by the set flag', () => {
+    // Verify that pingReceivedThisNav persists across clearBootTimer calls until
+    // a real did-navigate resets it. The module-level flag is only reset by
+    // did-navigate (wired in attachRecoveryHandlers). Here we confirm the flag
+    // behaviour in isolation: ping → arm (blocked) → clear → arm again (still blocked).
+    // The per-nav reset is integration-tested by smoke scenario 4 + 13 together.
+    handleRendererReady();
+    armBootTimer(fakeWin('http://localhost:3005/') as never);
+    expect(isBootArmed()).toBe(false);
+    // clearBootTimer resets bootArmed but NOT pingReceivedThisNav
+    clearBootTimer();
+    armBootTimer(fakeWin('http://localhost:3005/') as never);
     expect(isBootArmed()).toBe(false);
   });
 });

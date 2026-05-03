@@ -215,6 +215,16 @@ let bootTimer: ReturnType<typeof setTimeout> | null = null;
 let bootArmed = false;
 let onBootStallCallback: (() => void) | null = null;
 
+// Tracks whether the renderer-ready ping has arrived for the current top-level
+// navigation. Reset on did-navigate (in attachRecoveryHandlers).
+//
+// Why this matters: in real SPAs, useEffect fires during document load
+// (microtask after bundle execution), which is BEFORE did-finish-load (which
+// fires after window.onload). Without this flag, the ping arrives when
+// bootArmed=false (no-op), then did-finish-load arms a fresh timer that
+// nothing clears → 20s later, false renderer-stalled recovery.
+let pingReceivedThisNav = false;
+
 /**
  * Register the callback fired when the boot timer expires.
  * Wired by main.ts to call enterRecoveryMode({ code: 'renderer-stalled', ... }).
@@ -234,6 +244,11 @@ export function armBootTimer(win: BrowserWindow): void {
   if (!app.isPackaged) return;
   const url = win.webContents.getURL();
   if (!url.startsWith('http://') && !url.startsWith('https://')) return;
+  // Critical: if the renderer-ready ping arrived before did-finish-load
+  // (typical SPA timing — useEffect runs in microtask before window.onload),
+  // do not arm. Otherwise the timer fires 20s later despite the renderer
+  // being healthy.
+  if (pingReceivedThisNav) return;
   clearBootTimer();
   bootArmed = true;
   bootTimer = setTimeout(() => {
@@ -251,6 +266,19 @@ export function clearBootTimer(): void {
   bootArmed = false;
 }
 
+/**
+ * Reset all module-level boot-timer state.
+ * Exported for test isolation only — do not call from production code.
+ * Production code resets pingReceivedThisNav exclusively via the
+ * did-navigate handler in attachRecoveryHandlers.
+ */
+export function resetBootTimerStateForTest(): void {
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = null;
+  bootArmed = false;
+  pingReceivedThisNav = false;
+}
+
 /** Returns true while the boot timer is armed and waiting for renderer-ready. */
 export function isBootArmed(): boolean {
   return bootArmed;
@@ -259,8 +287,12 @@ export function isBootArmed(): boolean {
 /**
  * Called from the renderer-ready IPC handler.
  * Disarms the boot timer — the renderer booted successfully.
+ * Sets pingReceivedThisNav so that if did-finish-load fires after the ping
+ * (typical SPA timing), armBootTimer will short-circuit rather than arming a
+ * timer that nothing will clear.
  */
 export function handleRendererReady(): void {
+  pingReceivedThisNav = true;
   if (bootArmed) clearBootTimer();
 }
 
@@ -435,6 +467,7 @@ export function attachRecoveryHandlers(win: BrowserWindow): void {
   win.webContents.on('did-navigate', () => {
     clearBootTimer();
     pendingArm = true;
+    pingReceivedThisNav = false;  // reset for new navigation
   });
 
   win.webContents.on('did-finish-load', () => {

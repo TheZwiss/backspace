@@ -317,9 +317,9 @@ The boot ping is **not a heartbeat** — it is a one-shot per-navigation signal.
 - `packages/web/src/App.tsx` — `useEffect` with `[]` deps, fires on first commit (semantic: "renderer survived render," not "data loaded")
 - `packages/web/src/main.tsx` — `ErrorBoundary.componentDidCatch`, fires when in-app error UI mounts (so the boot timer doesn't override the ErrorBoundary fallback 20s later)
 
-Main-side gating: `bootArmed` flag ensures only the first `renderer-ready` IPC matters; subsequent calls are no-ops.
+Main-side gating uses a per-navigation `pingReceivedThisNav` flag (reset on `did-navigate`, set in `handleRendererReady`). If the ping arrives BEFORE the timer is armed — the typical SPA case, because `useEffect` runs in a microtask after bundle execution + React render, which is before `window.onload` that `did-finish-load` waits on — `armBootTimer` checks the flag and short-circuits. If the ping arrives AFTER the timer is armed (less-common ordering), it clears the existing timer via `clearBootTimer`. Either path means a healthy renderer never trips false recovery. The `bootArmed` flag retains its role: it ensures a `clearBootTimer` call inside the timeout callback is a no-op if the timer was already disarmed by the ping.
 
-Navigation-aware arming: `did-navigate` (top-level non-same-document) clears any pending timer and queues a fresh arm for `did-finish-load`. `did-navigate-in-page` (SPA routing) is ignored, so React Router channel switches don't trip the timer.
+Navigation-aware arming: `did-navigate` (top-level non-same-document) clears any pending timer, resets `pingReceivedThisNav`, and queues a fresh arm for `did-finish-load`. `did-navigate-in-page` (SPA routing) is ignored, so React Router channel switches don't trip the timer.
 
 ### Recovery UI
 
