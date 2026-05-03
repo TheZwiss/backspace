@@ -3,34 +3,38 @@
 # Automated smoke tests for the Electron Recovery Mode subsystem.
 # Covers scenarios that don't require GUI interaction or sudo.
 #
-# Manual scenarios (run separately, see docs/superpowers/specs/...):
-#   1  network failure (needs sudo to toggle Wi-Fi)
-#   3  renderer crash via DevTools
-#   5,6  native notification visibility
-#   7  tray menu interaction
-#   8,9  recovery button clicks
+# Automated scenarios (this script):
+#   2   bad URL → load-failed recovery
+#   4   boot stall (static page that never pings) → renderer-stalled recovery
+#   13  positive control: rendererReady ping disarms boot timer (no recovery)
+#
+# Manual scenarios (run yourself in front of the UI — see spec §9):
+#   1   network failure (needs sudo to toggle Wi-Fi)
+#   3   renderer crash via DevTools (process.crash())
+#   5,6 native notification visible/not-visible (OS-level rendering)
+#   7   tray menu interaction
+#   8,9 recovery button clicks (Reload success / re-fail)
 #   10  corrupt recovery.html (requires asar manipulation)
-#   11  force-kill recovery
-#   12  hidden autostart
-#   14  SPA navigation
-#   15  real Windows-incident reproduction (needs Vite running)
+#   11  force-kill + recovery + Restart-to-Install (verify electron-updater behavior)
+#   12  hidden autostart + boot failure
+#   14  SPA navigation (logged-in session, channel switches don't trip timer)
+#   15  real Windows-incident reproduction (build N, edit web bundle, run Vite)
 #
-# Automated scenarios:
-#   2  bad URL → load-failed
-#   4  boot stall (VITE_FORCE_BOOT_STALL build) → renderer-stalled
-#   13  ErrorBoundary path doesn't trigger boot timer (negative test — see note below)
-#
-# Note on scenario 13: The VITE_FORCE_BOOT_STALL gate suppresses the ErrorBoundary
-# ping as well, so an isolated scenario-13 negative test (ErrorBoundary DOES ping
-# in normal builds) requires a separate non-stalled build run. This script covers
-# the stalled-build scenario; the positive scenario-13 case is tested manually.
+# Strategy notes:
+# - Scenarios 4 and 13 use a local Python http.server serving a tiny static page,
+#   pointed at via BACKSPACE_URL. This bypasses the need to build a stalled web
+#   bundle: scenario 4 omits the rendererReady call; scenario 13 includes it.
+# - Scenario 2 writes a bad URL to instance-url.json and lets the normal load
+#   path fail (did-fail-load → load-failed recovery).
+# - All scenarios grep stderr for [recovery] entered: ... lines emitted by
+#   enterRecoveryMode in recovery.ts.
 
 set -euo pipefail
 
 # ─── Config ──────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BINARY="$REPO_ROOT/packages/desktop/dist-electron/mac-arm64/Backspace.app/Contents/MacOS/Backspace"
-USER_DATA_DIR="$HOME/Library/Application Support/Backspace"
+USER_DATA_DIR="$HOME/Library/Application Support/@backspace/desktop"
 INSTANCE_URL_FILE="$USER_DATA_DIR/instance-url.json"
 INSTANCE_URL_BACKUP="$INSTANCE_URL_FILE.smoketest-backup"
 TMP_DIR="$(mktemp -d -t backspace-smoke.XXXXXX)"
@@ -100,6 +104,17 @@ wait_for_log() {
   done
 }
 
+# Returns 0 if the regex is NOT present in the log file (negative assertion),
+# 1 if it is present.
+assert_no_log() {
+  local logfile="$1"
+  local pattern="$2"
+  if grep -Eq "$pattern" "$logfile" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
 kill_app() {
   local pid="$1"
   kill "$pid" 2>/dev/null || true
@@ -142,47 +157,50 @@ scenario_2_bad_url() {
 }
 
 scenario_4_boot_stall() {
-  log "Scenario 4: Boot stall (VITE_FORCE_BOOT_STALL build) → recovery (renderer-stalled)"
-  log "Building stall-variant web bundle..."
+  log "Scenario 4: Boot stall → recovery (renderer-stalled)"
+  log "Strategy: serve a tiny static HTML page locally that has no window.backspace"
+  log "  integration → renderer loads but never pings → 20s → boot timer fires."
 
-  if (cd "$REPO_ROOT" && VITE_FORCE_BOOT_STALL=1 pnpm --filter @backspace/web build > "$TMP_DIR/web-build.log" 2>&1); then
-    log "  web build complete"
-  else
-    bad "Scenario 4: VITE_FORCE_BOOT_STALL web build failed (see $TMP_DIR/web-build.log)"
-    return
-  fi
+  # The desktop loads remote URLs via mainWindow.loadURL. Setting BACKSPACE_URL
+  # at launch overrides the saved instance URL. We serve a minimal HTML page
+  # that doesn't import the web bundle at all — guaranteed to never call
+  # rendererReady(). No web/desktop rebuilds needed.
+  local stall_dir="$TMP_DIR/stall-page"
+  mkdir -p "$stall_dir"
+  cat > "$stall_dir/index.html" <<'HTML'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Boot Stall Test</title></head>
+<body style="background:#13131a;color:#efefef;font-family:sans-serif;padding:2rem;">
+  <h1>Boot stall test page</h1>
+  <p>Renderer is alive but never calls window.backspace.rendererReady().
+     The main-process boot timer should fire after 20s and trigger recovery.</p>
+</body>
+</html>
+HTML
 
-  log "Rebuilding desktop app with stalled bundle..."
-  if (cd "$REPO_ROOT" && pnpm --filter @backspace/desktop build > "$TMP_DIR/desktop-build.log" 2>&1); then
-    log "  desktop build complete"
-  else
-    bad "Scenario 4: desktop rebuild failed (see $TMP_DIR/desktop-build.log)"
-    # Still rebuild the normal web bundle before returning
-    log "Rebuilding web bundle without VITE_FORCE_BOOT_STALL (cleanup)..."
-    (cd "$REPO_ROOT" && pnpm --filter @backspace/web build > "$TMP_DIR/web-rebuild-cleanup.log" 2>&1) || true
-    (cd "$REPO_ROOT" && pnpm --filter @backspace/desktop build > "$TMP_DIR/desktop-rebuild-cleanup.log" 2>&1) || true
-    return
-  fi
+  # Start a local HTTP server on a random high port to avoid collisions.
+  local port=8765
+  python3 -m http.server "$port" --bind 127.0.0.1 -d "$stall_dir" > "$TMP_DIR/httpd.log" 2>&1 &
+  local httpd_pid=$!
 
-  # Use the user's saved URL so we get past did-fail-load and into the
-  # actual boot-stall path. If none is saved, the scenario can't run.
-  backup_instance_url
-  if [[ -f "$INSTANCE_URL_BACKUP" ]]; then
-    cp "$INSTANCE_URL_BACKUP" "$INSTANCE_URL_FILE"
-  else
-    log "  No saved instance URL found — Scenario 4 needs a working URL to exercise"
-    log "  the boot stall path. Run the app once, pick an instance, then re-run."
-    bad "Scenario 4: no saved URL to test against"
-    # Rebuild normal bundle before returning
-    log "Rebuilding web bundle without VITE_FORCE_BOOT_STALL (cleanup)..."
-    (cd "$REPO_ROOT" && pnpm --filter @backspace/web build > "$TMP_DIR/web-rebuild-cleanup.log" 2>&1) || true
-    (cd "$REPO_ROOT" && pnpm --filter @backspace/desktop build > "$TMP_DIR/desktop-rebuild-cleanup.log" 2>&1) || true
+  # Poll for readiness (up to 5s).
+  local ready=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -sf "http://127.0.0.1:$port/" > /dev/null 2>&1; then
+      ready=1; break
+    fi
+    sleep 0.5
+  done
+  if [[ "$ready" != "1" ]]; then
+    bad "Scenario 4: local HTTP server failed to start on port $port"
+    kill "$httpd_pid" 2>/dev/null || true
     return
   fi
 
   local logfile="$TMP_DIR/scenario4.log"
-  local pid
-  pid=$(launch "$logfile")
+  BACKSPACE_URL="http://127.0.0.1:$port/" "$APP_BINARY" > "$logfile" 2>&1 &
+  local pid=$!
 
   log "  Waiting up to 25s for renderer-stalled timer to fire..."
   if wait_for_log "$logfile" '\[recovery\] entered: renderer-stalled' 25; then
@@ -194,27 +212,92 @@ scenario_4_boot_stall() {
   fi
 
   kill_app "$pid"
+  kill "$httpd_pid" 2>/dev/null || true
+  # Wait for httpd to actually exit so the port is free for re-runs.
+  wait "$httpd_pid" 2>/dev/null || true
+}
 
-  # Restore the user's instance-url.json
-  if [[ -f "$INSTANCE_URL_BACKUP" ]]; then
-    mv "$INSTANCE_URL_BACKUP" "$INSTANCE_URL_FILE"
-  else
-    rm -f "$INSTANCE_URL_FILE"
+scenario_13_ping_disarms_timer() {
+  log "Scenario 13 (positive control): rendererReady ping disarms the boot timer"
+  log "Strategy: serve a page that DOES call window.backspace.rendererReady() →"
+  log "  verify NO recovery entry within 25s (timer correctly disarmed)."
+
+  local ready_dir="$TMP_DIR/ready-page"
+  mkdir -p "$ready_dir"
+  cat > "$ready_dir/index.html" <<'HTML'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Boot Ready Test</title></head>
+<body style="background:#13131a;color:#efefef;font-family:sans-serif;padding:2rem;">
+  <h1>Boot ready test page</h1>
+  <p>Renderer calls window.backspace.rendererReady() — the main-process
+     boot timer should be disarmed; recovery must NOT enter.</p>
+  <script>
+    // Marker fetches let the smoke harness verify each branch via the http.server log.
+    fetch('/_marker_script_ran').catch(function(){});
+    function tryPing() {
+      if (typeof window.backspace !== 'undefined' &&
+          typeof window.backspace.rendererReady === 'function') {
+        window.backspace.rendererReady();
+        fetch('/_marker_ping_sent').catch(function(){});
+        return true;
+      }
+      return false;
+    }
+    if (!tryPing()) {
+      // Preload may attach window.backspace asynchronously in some configs;
+      // retry briefly before declaring it absent.
+      var attempts = 0;
+      var iv = setInterval(function() {
+        attempts++;
+        if (tryPing() || attempts > 20) {
+          clearInterval(iv);
+          if (attempts > 20) fetch('/_marker_no_bridge').catch(function(){});
+        }
+      }, 100);
+    }
+  </script>
+</body>
+</html>
+HTML
+
+  local port=8766
+  python3 -m http.server "$port" --bind 127.0.0.1 -d "$ready_dir" > "$TMP_DIR/httpd13.log" 2>&1 &
+  local httpd_pid=$!
+
+  local ready=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -sf "http://127.0.0.1:$port/" > /dev/null 2>&1; then
+      ready=1; break
+    fi
+    sleep 0.5
+  done
+  if [[ "$ready" != "1" ]]; then
+    bad "Scenario 13: local HTTP server failed to start on port $port"
+    kill "$httpd_pid" 2>/dev/null || true
+    return
   fi
 
-  # IMPORTANT: rebuild both bundles WITHOUT the env var so subsequent dev/test
-  # runs are not left permanently stalled.
-  log "Rebuilding web bundle without VITE_FORCE_BOOT_STALL (restoring normal build)..."
-  if (cd "$REPO_ROOT" && pnpm --filter @backspace/web build > "$TMP_DIR/web-rebuild.log" 2>&1); then
-    log "  web bundle restored"
+  local logfile="$TMP_DIR/scenario13.log"
+  BACKSPACE_URL="http://127.0.0.1:$port/" "$APP_BINARY" > "$logfile" 2>&1 &
+  local pid=$!
+
+  log "  Waiting 25s — boot timer must NOT fire (negative assertion)..."
+  sleep 25
+
+  if assert_no_log "$logfile" '\[recovery\] entered:'; then
+    ok "Scenario 13: boot timer correctly disarmed by rendererReady ping"
   else
-    log "  WARNING: web rebuild failed — run 'pnpm --filter @backspace/web build' manually"
+    bad "Scenario 13: recovery entered despite rendererReady ping (boot timer not disarmed)"
+    log "Diagnostic — what the page script did (from httpd.log):"
+    grep -E 'GET /_marker_' "$TMP_DIR/httpd13.log" 2>/dev/null || log "  (no markers — script did not run at all)"
+    log "Last 20 lines of app log:"
+    tail -n 20 "$logfile" || true
   fi
-  if (cd "$REPO_ROOT" && pnpm --filter @backspace/desktop build > "$TMP_DIR/desktop-rebuild.log" 2>&1); then
-    log "  desktop build restored"
-  else
-    log "  WARNING: desktop rebuild failed — run 'pnpm --filter @backspace/desktop build' manually"
-  fi
+
+  kill_app "$pid"
+  kill "$httpd_pid" 2>/dev/null || true
+  wait "$httpd_pid" 2>/dev/null || true
 }
 
 # ─── Main ───────────────────────────────────────────────────────────────
@@ -239,6 +322,7 @@ main() {
 
   scenario_2_bad_url
   scenario_4_boot_stall
+  scenario_13_ping_disarms_timer
 
   log "─── Summary ─────────────────────────────────────────────────────"
   local r
