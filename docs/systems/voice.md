@@ -292,6 +292,60 @@ The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `
 
 ---
 
+## Audio Device Selection (Microphone & Speakers)
+
+Users pick mic and speaker devices in two surfaces:
+1. **User Settings → Voice & Video** (`AudioInputSection.tsx`, `AudioOutputSection.tsx`) — full picker with input volume, live level meter, output volume, and a "Play test sound" button.
+2. **Bottom-left UserArea quick popups** (`ChannelSidebar.tsx UserAreaPanel`) — opened by the caret buttons next to mute (input picker) and deafen (output picker). Same picker UX, more compact.
+
+Both surfaces are backed by the shared `useAudioDevices()` hook. The store fields `inputDeviceId` and `outputDeviceId` (both `string`, default `'default'`) are persisted in `voiceStore`.
+
+### `useAudioDevices()` hook (canonical enumeration)
+- Mirrors `VideoSection.tsx`'s permission/enumeration/devicechange pattern.
+- Mount-time probe: `navigator.permissions.query({ name: 'microphone' })`. **Never auto-fires `getUserMedia`** — that requires an explicit user gesture via the returned `requestPermission()`.
+- States: `unknown` → `granted` | `prompt` | `denied`. Lists are populated only in `granted`.
+- Refreshes both `inputs` and `outputs` on every `devicechange` event.
+- Output devices are gated behind microphone permission (no separate output permission exists in browsers).
+- Returns `inputLabels` / `outputLabels` maps with disambiguation suffixes for duplicate names (e.g. `"USB Audio (1)"`, `"USB Audio (2)"`).
+
+### Output routing — `AudioContext.setSinkId`
+All audio (remote voice, screen-share audio, sound effects) flows through `AudioManager`'s master bus → `AudioContext.destination`. Output device switching is therefore done via `AudioContext.setSinkId(deviceId)`, NOT via LiveKit's `switchActiveDevice('audiooutput')` (which targets `<audio>` elements that are killed by `AppLayout`'s MutationObserver). Safari < 17 lacks `setSinkId` on AudioContext — `AudioOutputSection` detects this and falls back to OS default with an explanatory note.
+
+### Input pipeline — republish, never `switchActiveDevice`
+Input device changes flow through `AudioManager.setInputDevice(deviceId)` (serialized chain). The `useLiveKit syncMic` effect detects the bumped stream generation and unpublishes/republishes via `getFreshTrack()`. This asymmetry vs. the camera (which uses `room.switchActiveDevice('videoinput', …)`) is intentional and documented under "Architectural asymmetry" below — the published mic track is the output of a Web Audio graph (RNNoise, gain, AEC), not a raw `getUserMedia` track.
+
+### Hot-plug seamlessness
+The global `devicechange` handler in `AppLayout.tsx` does four things on every event:
+1. **Prune** persisted IDs that no longer exist (`pruneStaleDevices`).
+2. **Re-acquire** the live mic stream when `inputDeviceId === 'default'` AND `AudioManager.hasActiveStream()`. Chromium does NOT migrate an existing `getUserMedia` track to the new OS-default — calling `setInputDevice('default')` triggers a fresh `getUserMedia` which picks up the new default; `syncMic` then republishes.
+3. **Re-apply** `setSinkId('')` when `outputDeviceId === 'default'`, for the analogous reason.
+4. **Toast** on a *new* `audioinput` group appearing (debounced 1s, deduped by `groupId` for 30s). Removals do not toast — the user already knows they unplugged it. Toast is informational ("AirPods Pro detected — choose it in Voice settings to switch") — never auto-switches; auto-switch would be a privacy/UX regression for users who deliberately keep a non-default device selected.
+
+### Mic-track-loss recovery
+The published mic track is a *clone* of `AudioManager`'s `MediaStreamAudioDestinationNode` output (see `getFreshTrack()`), and a destination-node track does not end on upstream loss — it just outputs silence. So the published track's `onended` is the wrong signal. Instead, `AudioManager` installs `onended` on every track of the upstream `getUserMedia` stream and exposes a subscription API:
+
+- `AudioManager.onInputTrackEnded(cb)` — subscribers receive a `'unplug' | 'revoke' | 'unknown'` reason hint and probe `getUserMedia` themselves to classify.
+- Deliberate replacements (`setInputDevice`, `setRnnoiseEnabled`, `setVoiceProcessing` re-init) detach the per-track listener BEFORE calling `.stop()` and null `currentStream` immediately, so subscribers are never notified for non-loss events. A surviving listener (e.g. attached by a future external caller) bails via the `currentStream !== capturedStream` identity check.
+
+`useLiveKit` subscribes to this signal whenever a room is connected, captures `subscriberRoom = roomRef.current`, and on emission:
+1. Bail if the room has been replaced.
+2. Probe `getUserMedia({audio:{deviceId}})` to classify:
+   - Probe succeeds → `setInputDevice(deviceId)` to re-acquire AND call `republishMicrophone(subscriberRoom, lastMicGenRef)` directly (the syncMic dep array does not include `streamGeneration`, so we cannot rely on it to re-fire).
+   - `NotAllowedError` → `"Microphone permission was revoked"` (warning toast).
+   - `NotFoundError` with non-default device → set store to `'default'` and toast `"Microphone disconnected — switched to system default"`. The store change triggers `syncMic`, which re-acquires + republishes via the shared helper.
+   - `NotFoundError` on default → `"Microphone disconnected"`.
+   - Other → `"Microphone could not be restored"`.
+
+`republishMicrophone` is a module-level helper extracted from `syncMic` so both the normal device-change path and the recovery path share the staleness-check / unpublish / `getFreshTrack` / publish flow.
+
+### Privacy gate — never auto-fire `getUserMedia`
+The `useAudioDevices` hook only calls `getUserMedia` from the explicit `requestPermission()` action. The previous `ChannelSidebar.UserAreaPanel.loadDevices` implementation fired `getUserMedia({audio:true})` on every panel open as long as no `AudioContext` existed — which flashed the mic indicator even when permission had been previously granted in another session. That probe has been removed.
+
+### Resolved-default hint
+When `inputDeviceId === 'default'` and a stream is active, `AudioInputSection` shows a `Currently using: <label>` subline by reading `AudioManager.getCurrentInputDeviceId()` and looking up the label in `inputLabels`. This makes the "default → which device?" indirection visible to the user.
+
+---
+
 ## Camera Device Selection
 
 Users pick a camera in **User Settings → Voice & Video → Video**. Selection is persisted in `voiceStore.cameraDeviceId` (`string | null`; `null` = "let LiveKit/browser auto-pick on next fresh enable").

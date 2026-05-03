@@ -32,6 +32,12 @@ export class AudioManager {
   private rnnoiseReady = false;
   private keepAliveOscillator: OscillatorNode | null = null;
 
+  // Subscribers notified when the *upstream* getUserMedia track ends unexpectedly
+  // (hardware unplug, OS-level revoke, system audio service crash). Distinct from
+  // the published mic track's `onended` — the published track is a clone of the
+  // WebAudio destination node, which never ends on upstream loss.
+  private inputTrackEndedListeners: Set<(reason: 'unplug' | 'revoke' | 'unknown') => void> = new Set();
+
   private constructor() {}
 
   static getInstance(): AudioManager {
@@ -205,7 +211,17 @@ export class AudioManager {
 
     try {
       if (this.currentStream) {
-        this.currentStream.getTracks().forEach(t => t.stop());
+        // Detach our `onended` handlers BEFORE stopping. `.stop()` synchronously
+        // queues an `ended` event on each track; by clearing the listener first
+        // we guarantee the deliberate-replace path never notifies subscribers,
+        // regardless of microtask/task ordering.
+        const oldTracks = this.currentStream.getTracks();
+        oldTracks.forEach(t => { t.onended = null; });
+        oldTracks.forEach(t => t.stop());
+        // Drop the reference immediately so any stray handler that survived
+        // (e.g. attached by external code) sees `currentStream` no longer
+        // pointing to the old stream and bails out via the identity check.
+        this.currentStream = null;
       }
 
       // Chrome AEC stays on during screen share — headphone users unaffected,
@@ -231,9 +247,16 @@ export class AudioManager {
         } as any
       };
 
-      this.currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.currentStream = newStream;
       this.currentInputDeviceId = deviceId;
       this.streamGeneration++;
+
+      // Attach upstream-loss detection to every track in the new stream. If the
+      // OS / hardware ends a track (unplug, revoke, audio-service crash), the
+      // `ended` event fires and we notify subscribers — provided the stream is
+      // still the active one (identity check guards against later replacements).
+      this.attachInputEndedListeners(newStream);
 
       if (this.ctx && this.inputGain) {
         if (this.inputSource) {
@@ -248,6 +271,52 @@ export class AudioManager {
       console.error('[AudioManager] Failed to set input device:', err);
       throw err;
     }
+  }
+
+  /**
+   * Attaches an `onended` listener to every audio track in the supplied stream.
+   * The listener identity-checks against `this.currentStream` so it only fires
+   * for *unexpected* track loss — deliberate replacement clears the listener and
+   * nulls `currentStream` BEFORE stopping, so neither path can leak a false
+   * positive into subscribers.
+   */
+  private attachInputEndedListeners(stream: MediaStream): void {
+    for (const track of stream.getTracks()) {
+      track.onended = () => {
+        // Stream has been replaced (deliberate device change, RNNoise toggle,
+        // setVoiceProcessing reset) — this is not a hardware-loss event.
+        if (this.currentStream !== stream) return;
+        // Drop our reference so any subsequent `hasActiveStream()` check
+        // reflects reality, and so a downstream re-acquire attempt via
+        // `setInputDevice` does not short-circuit on the stale-but-non-null
+        // currentStream.
+        this.currentStream = null;
+        // Reason classification is the consumer's responsibility — they probe
+        // `getUserMedia` to distinguish unplug vs revoke vs unavailable. We
+        // emit `'unknown'` so the type is still informative if a future caller
+        // wires reason inference at this layer.
+        const reason: 'unplug' | 'revoke' | 'unknown' = 'unknown';
+        // Snapshot listeners before iteration: a subscriber that synchronously
+        // unsubscribes during notification (e.g. cleanup-on-disconnect) would
+        // otherwise mutate the set mid-iteration.
+        const snapshot = Array.from(this.inputTrackEndedListeners);
+        for (const cb of snapshot) {
+          try { cb(reason); } catch (err) {
+            console.error('[AudioManager] inputTrackEnded listener threw:', err);
+          }
+        }
+      };
+    }
+  }
+
+  /**
+   * Subscribe to upstream input-track-end events. Returns an unsubscribe.
+   * Callers should treat `reason` as a hint and probe `getUserMedia` themselves
+   * to distinguish unplug from revoke.
+   */
+  onInputTrackEnded(cb: (reason: 'unplug' | 'revoke' | 'unknown') => void): () => void {
+    this.inputTrackEndedListeners.add(cb);
+    return () => { this.inputTrackEndedListeners.delete(cb); };
   }
 
   private getInputTarget(): AudioNode {
@@ -307,7 +376,10 @@ export class AudioManager {
     // Force track re-publish so LiveKit picks up the new pipeline
     this.streamGeneration++;
     if (this.currentStream) {
-      this.currentStream.getTracks().forEach(t => t.stop());
+      // Detach listeners before stopping (see `_setInputDeviceImpl`).
+      const tracks = this.currentStream.getTracks();
+      tracks.forEach(t => { t.onended = null; });
+      tracks.forEach(t => t.stop());
       this.currentStream = null;
     }
   }
@@ -339,7 +411,10 @@ export class AudioManager {
       changed = true;
     }
     if (changed && this.currentStream) {
-      this.currentStream.getTracks().forEach(t => t.stop());
+      // Detach listeners before stopping (see `_setInputDeviceImpl`).
+      const tracks = this.currentStream.getTracks();
+      tracks.forEach(t => { t.onended = null; });
+      tracks.forEach(t => t.stop());
       this.currentStream = null;
     }
   }
@@ -387,6 +462,46 @@ export class AudioManager {
   getMasterOutput(): AudioNode {
     if (!this.ctx) this.initContext();
     return this.masterBoost!;
+  }
+
+  /**
+   * Returns the deviceId of the currently active mic stream (the one being
+   * captured by getUserMedia). May differ from the persisted store value when
+   * the store says 'default' but Chromium has resolved that to a concrete ID.
+   */
+  getCurrentInputDeviceId(): string {
+    return this.currentInputDeviceId;
+  }
+
+  /**
+   * True if a live mic stream is currently captured. Used by the global
+   * devicechange handler to decide whether to force-reacquire on OS-default
+   * change.
+   */
+  hasActiveStream(): boolean {
+    return !!this.currentStream?.active;
+  }
+
+  /**
+   * Plays a short test tone through the master output bus, exercising the
+   * current setSinkId binding. Used by the "Test Sound" button in audio
+   * settings to confirm that audio is reaching the chosen output device.
+   */
+  async playTestTone(): Promise<void> {
+    await this.resumeContext();
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    osc.frequency.value = 440;
+    const gain = this.ctx.createGain();
+    // Soft envelope to avoid pop on start/stop.
+    const now = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+    gain.gain.linearRampToValueAtTime(0, now + 0.4);
+    osc.connect(gain);
+    gain.connect(this.masterBoost!);
+    osc.start(now);
+    osc.stop(now + 0.45);
   }
 
   getContext(): AudioContext | null {

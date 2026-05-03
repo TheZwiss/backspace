@@ -21,6 +21,8 @@ import { DmSearchBar } from './DmSearchBar';
 import { DmListItem } from './DmListItem';
 import { useDragManager, type DropTarget, type LayoutItem } from '../../hooks/useDragManager';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+import { useAudioDevices } from '../../hooks/useAudioDevices';
+import { DropdownItem } from '../modals/settingsPanels/_shared/SettingsPickerPrimitives';
 
 export function ChannelSidebar() {
   const spaces = useSpaceStore((s) => s.spaces);
@@ -843,15 +845,20 @@ function UserAreaPanel({
   onSettingsClick: (tab?: string) => void;
 }) {
   const [openPanel, setOpenPanel] = useState<'input' | 'output' | null>(null);
-  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
-  const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
   const setInputDevice = useVoiceStore((s) => s.setInputDevice);
   const setOutputDevice = useVoiceStore((s) => s.setOutputDevice);
-  
-  const [selectedInputLabel, setSelectedInputLabel] = useState<string>('Default');
-  const [selectedOutputLabel, setSelectedOutputLabel] = useState<string>('Default');
+
+  // Shared hook drives lists, permission state, and live devicechange refresh.
+  const { permState, inputs: inputDevices, outputs: outputDevices, inputLabels, outputLabels, requestPermission } = useAudioDevices();
+
+  const selectedInputLabel = inputDeviceId === 'default'
+    ? 'System Default'
+    : inputLabels.get(inputDeviceId) ?? 'System Default';
+  const selectedOutputLabel = outputDeviceId === 'default'
+    ? 'System Default'
+    : outputLabels.get(outputDeviceId) ?? 'System Default';
 
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const storeSetInputVolume = useVoiceStore((s) => s.setInputVolume);
@@ -863,38 +870,6 @@ function UserAreaPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number>(0);
-
-  const loadDevices = useCallback(async () => {
-    try {
-      // Need to request permission first to get labels
-      if (!AudioManager.getInstance().getContext()) {
-        await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
-      }
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      // Deduplicate by deviceId — USB devices sharing the same audio chipset
-      // (e.g. C-Media 0d8c:0134) appear as multiple entries with identical IDs.
-      const dedup = (list: MediaDeviceInfo[]): MediaDeviceInfo[] => {
-        const seen = new Set<string>();
-        return list.filter(d => {
-          if (seen.has(d.deviceId)) return false;
-          seen.add(d.deviceId);
-          return true;
-        });
-      };
-      const inputs = dedup(devices.filter(d => d.kind === 'audioinput'));
-      const outputs = dedup(devices.filter(d => d.kind === 'audiooutput'));
-      setInputDevices(inputs);
-      setOutputDevices(outputs);
-      
-      const currentInput = inputs.find(d => d.deviceId === inputDeviceId);
-      if (currentInput) setSelectedInputLabel(currentInput.label || 'Default');
-      
-      const currentOutput = outputs.find(d => d.deviceId === outputDeviceId);
-      if (currentOutput) setSelectedOutputLabel(currentOutput.label || 'Default');
-    } catch {
-      // permission denied
-    }
-  }, [inputDeviceId, outputDeviceId]);
 
   // Start mic level monitoring when input panel opens
   useEffect(() => {
@@ -946,27 +921,24 @@ function UserAreaPanel({
     if (openPanel === panel) {
       setOpenPanel(null);
     } else {
-      loadDevices();
       setOpenPanel(panel);
       setShowInputDeviceList(false);
       setShowOutputDeviceList(false);
-      // Explicitly resume on interaction
+      // Resume the AudioContext so the mic-level meter starts measuring on open.
       AudioManager.getInstance().resumeContext();
     }
   };
 
-  const selectInput = (device: MediaDeviceInfo) => {
-    setInputDevice(device.deviceId); // Pure state update → triggers syncMic if in voice call
-    AudioManager.getInstance().setInputDevice(device.deviceId); // Immediate preview for mic level meter
-    setSelectedInputLabel(device.label || 'Default');
+  const selectInput = (deviceId: string) => {
+    setInputDevice(deviceId); // Pure state update → triggers syncMic if in voice call
+    AudioManager.getInstance().setInputDevice(deviceId).catch(() => {});
     setShowInputDeviceList(false);
   };
 
-  const selectOutput = (device: MediaDeviceInfo) => {
-    setOutputDevice(device.deviceId);
-    setSelectedOutputLabel(device.label || 'Default');
+  const selectOutput = (deviceId: string) => {
+    setOutputDevice(deviceId);
+    AudioManager.getInstance().setOutputDevice(deviceId).catch(() => {});
     setShowOutputDeviceList(false);
-    AudioManager.getInstance().setOutputDevice(device.deviceId);
   };
 
   // Generate mic level bars (20 bars like Discord)
@@ -993,23 +965,35 @@ function UserAreaPanel({
               </svg>
             </button>
             {showInputDeviceList && (
-              <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard">
-                {inputDevices.map(d => (
-                  <button
-                    key={d.deviceId}
-                    onClick={() => selectInput(d)}
-                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
-                      inputDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
-                    }`}
-                  >
-                    {inputDeviceId === d.deviceId && (
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-accent-primary flex-shrink-0">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                      </svg>
-                    )}
-                    <span className={inputDeviceId === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
-                  </button>
-                ))}
+              <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard max-h-64 overflow-y-auto">
+                {permState !== 'granted' && (
+                  <div className="px-3 py-2 text-[12px] text-txt-tertiary">
+                    Microphone permission needed.{' '}
+                    <button
+                      onClick={() => { requestPermission().catch(() => {}); }}
+                      className="underline text-accent-primary"
+                    >
+                      Enable
+                    </button>
+                  </div>
+                )}
+                {permState === 'granted' && (
+                  <>
+                    <DropdownItem
+                      label="System Default"
+                      active={inputDeviceId === 'default'}
+                      onClick={() => selectInput('default')}
+                    />
+                    {inputDevices.filter(d => d.deviceId !== 'default').map(d => (
+                      <DropdownItem
+                        key={d.deviceId}
+                        label={inputLabels.get(d.deviceId) ?? d.deviceId}
+                        active={inputDeviceId === d.deviceId}
+                        onClick={() => selectInput(d.deviceId)}
+                      />
+                    ))}
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1079,23 +1063,35 @@ function UserAreaPanel({
                           </svg>
                         </button>
                         {showOutputDeviceList && (
-                          <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard">
-                            {outputDevices.map(d => (
-                              <button
-                                key={d.deviceId}
-                                onClick={() => selectOutput(d)}
-                                className={`w-full px-3 py-2 text-left text-[13px] hover:bg-interactive-hover transition-colors flex items-center gap-2 ${
-                                  outputDeviceId === d.deviceId ? 'text-txt-primary' : 'text-txt-secondary'
-                                }`}
-                              >
-                                {outputDeviceId === d.deviceId && (
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-accent-primary flex-shrink-0">
-                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                                  </svg>
-                                )}
-                                <span className={outputDeviceId === d.deviceId ? '' : 'pl-6'}>{d.label || 'Default'}</span>
-                              </button>
-                            ))}
+                          <div className="bg-surface-base rounded-lg shadow-lg mx-2 mb-2 py-1 border border-border-hard max-h-64 overflow-y-auto">
+                            {permState !== 'granted' && (
+                              <div className="px-3 py-2 text-[12px] text-txt-tertiary">
+                                Audio permission needed.{' '}
+                                <button
+                                  onClick={() => { requestPermission().catch(() => {}); }}
+                                  className="underline text-accent-primary"
+                                >
+                                  Enable
+                                </button>
+                              </div>
+                            )}
+                            {permState === 'granted' && (
+                              <>
+                                <DropdownItem
+                                  label="System Default"
+                                  active={outputDeviceId === 'default'}
+                                  onClick={() => selectOutput('default')}
+                                />
+                                {outputDevices.filter(d => d.deviceId !== 'default').map(d => (
+                                  <DropdownItem
+                                    key={d.deviceId}
+                                    label={outputLabels.get(d.deviceId) ?? d.deviceId}
+                                    active={outputDeviceId === d.deviceId}
+                                    onClick={() => selectOutput(d.deviceId)}
+                                  />
+                                ))}
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
