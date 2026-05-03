@@ -393,3 +393,70 @@ export function handleRecoveryAction(action: RecoveryAction): void {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// webContents event handlers
+// ---------------------------------------------------------------------------
+// Attaches Electron BrowserWindow event listeners that feed into recovery mode.
+// All closure-local state (pendingArm, unresponsiveTimer) is scoped to the
+// function call so each window attachment gets its own independent instance.
+// ---------------------------------------------------------------------------
+
+const UNRESPONSIVE_GRACE_MS = 10_000;
+
+export function attachRecoveryHandlers(win: BrowserWindow): void {
+  let pendingArm = false;
+  let unresponsiveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // did-navigate fires only for top-level non-same-document navigation.
+  // SPA in-page routing (history.pushState, hash) fires did-navigate-in-page,
+  // which we deliberately ignore — keeps the boot timer from misfiring on
+  // every channel switch.
+  win.webContents.on('did-navigate', () => {
+    clearBootTimer();
+    pendingArm = true;
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    if (pendingArm) {
+      pendingArm = false;
+      armBootTimer(win);
+    }
+  });
+
+  win.webContents.on('did-fail-load',
+    (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return;       // ignore sub-resource failures (favicon, broken <img>)
+      if (errorCode === -3) return;   // ERR_ABORTED — intentional nav interruption
+      enterRecoveryMode({
+        code: 'load-failed',
+        detail: `${errorCode} ${errorDescription} @ ${validatedURL}`,
+      });
+    });
+
+  win.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return;  // normal quit, ignore
+    enterRecoveryMode({
+      code: 'render-gone',
+      detail: details.reason,  // crashed | killed | oom | launch-failed | integrity-failure
+    });
+  });
+
+  // unresponsive grace period — Chrome's own pattern. Renderers often recover
+  // from a long sync op or GC pause within seconds; only enter recovery if
+  // the renderer stays stuck for the full grace window.
+  win.webContents.on('unresponsive', () => {
+    if (unresponsiveTimer) return;
+    unresponsiveTimer = setTimeout(() => {
+      unresponsiveTimer = null;
+      enterRecoveryMode({ code: 'unresponsive', detail: `main thread blocked >${UNRESPONSIVE_GRACE_MS}ms` });
+    }, UNRESPONSIVE_GRACE_MS);
+  });
+
+  win.webContents.on('responsive', () => {
+    if (unresponsiveTimer) {
+      clearTimeout(unresponsiveTimer);
+      unresponsiveTimer = null;
+    }
+  });
+}
