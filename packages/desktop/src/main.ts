@@ -23,6 +23,18 @@ import {
   clearInstanceUrl,
   getPickerPath,
 } from './instanceUrl';
+import {
+  recoveryStore,
+  attachRecoveryHandlers,
+  setMainWindow,
+  setOnQuitRequested,
+  handleRendererReady,
+  handleRecoveryAction,
+  isValidRecoveryAction,
+  buildTrayMenuTemplate,
+  buildAppMenuTemplate,
+  type RecoveryState,
+} from './recovery';
 
 let mainWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
@@ -285,6 +297,8 @@ function createWindow(): void {
     },
   });
 
+  setMainWindow(mainWindow);
+  attachRecoveryHandlers(mainWindow);
   keybindManager.setWindow(mainWindow);
 
   if (savedState.isMaximized) {
@@ -354,6 +368,7 @@ function createWindow(): void {
   });
 
   mainWindow.on('closed', () => {
+    setMainWindow(null);
     mainWindow = null;
   });
 
@@ -390,41 +405,9 @@ function createTray(): void {
   const icon = loadTrayIcon();
   tray = new Tray(icon);
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show Backspace',
-      click: () => {
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    {
-      label: 'Hide',
-      click: () => {
-        mainWindow?.hide();
-      },
-    },
-    {
-      label: 'Change Instance',
-      click: () => {
-        clearInstanceUrl();
-        mainWindow?.loadFile(getPickerPath());
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-
   tray.setToolTip('Backspace');
-  tray.setContextMenu(contextMenu);
+  // Context menu is set by the recoveryStore subscriber in app.whenReady,
+  // which keeps the menu in sync with update/recovery state.
 
   tray.on('click', () => {
     if (mainWindow?.isVisible()) {
@@ -438,21 +421,14 @@ function createTray(): void {
 
 // ─── Notifications ──────────────────────────────────────────────────────────
 
-function showNotification(title: string, body: string): void {
-  if (Notification.isSupported()) {
-    const notification = new Notification({
-      title,
-      body,
-      silent: false,
-    });
-
-    notification.on('click', () => {
-      mainWindow?.show();
-      mainWindow?.focus();
-    });
-
-    notification.show();
-  }
+function showNotification(title: string, body: string, onClick?: () => void): void {
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({ title, body, silent: false });
+  notification.on('click', onClick ?? (() => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  }));
+  notification.show();
 }
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
@@ -638,6 +614,21 @@ function registerIpcHandlers(): void {
   ipcMain.handle('check-accessibility', () => {
     return keybindManager.checkAccessibility();
   });
+
+  // Recovery / boot-stall protocol
+  ipcMain.on('renderer-ready', () => {
+    handleRendererReady();
+  });
+
+  ipcMain.on('recovery-action', (_e, action: unknown) => {
+    if (!isValidRecoveryAction(action)) {
+      console.warn('[recovery] ignored unknown action:', action);
+      return;
+    }
+    handleRecoveryAction(action);
+  });
+
+  ipcMain.handle('get-recovery-state', () => recoveryStore.get());
 }
 
 // ─── Auto-Update ────────────────────────────────────────────────────────────
@@ -721,6 +712,23 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'PulseaudioLoopbackForScreenShare');
 }
 
+// Windows: AppUserModelId so toast notifications attribute correctly to Backspace
+// (without this, recovery / update notifications appear under "electron.exe").
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.backspace.desktop');
+}
+
+/**
+ * Request a clean app quit. Sets the isQuitting flag so the window 'close'
+ * handler doesn't intercept (which would just hide the window) and then
+ * triggers app.quit(). Exported so the recovery module can request a quit
+ * via setOnQuitRequested without reaching into private state.
+ */
+export function requestQuit(): void {
+  isQuitting = true;
+  app.quit();
+}
+
 // Set as default protocol handler
 app.setAsDefaultProtocolClient('backspace');
 
@@ -754,57 +762,11 @@ if (!gotTheLock) {
   // ─── App Lifecycle ──────────────────────────────────────────────────────────
 
   app.whenReady().then(async () => {
-    // macOS application menu with "Change Instance"
-    if (process.platform === 'darwin') {
-      const appMenu = Menu.buildFromTemplate([
-        {
-          label: app.name,
-          submenu: [
-            { role: 'about' },
-            { type: 'separator' },
-            {
-              label: 'Change Instance',
-              click: () => {
-                clearInstanceUrl();
-                mainWindow?.loadFile(getPickerPath());
-                mainWindow?.show();
-                mainWindow?.focus();
-              },
-            },
-            { type: 'separator' },
-            { role: 'hide' },
-            { role: 'hideOthers' },
-            { role: 'unhide' },
-            { type: 'separator' },
-            { role: 'quit' },
-          ],
-        },
-        {
-          label: 'Edit',
-          submenu: [
-            { role: 'undo' },
-            { role: 'redo' },
-            { type: 'separator' },
-            { role: 'cut' },
-            { role: 'copy' },
-            { role: 'paste' },
-            { role: 'selectAll' },
-          ],
-        },
-        {
-          label: 'Window',
-          submenu: [
-            { role: 'minimize' },
-            { role: 'zoom' },
-            { type: 'separator' },
-            { role: 'front' },
-          ],
-        },
-      ]);
-      Menu.setApplicationMenu(appMenu);
-    } else {
-      // Win/Linux: frameless window has no menu bar, but we still need an
-      // application menu so keyboard accelerators (Ctrl+C/V/X/Z/A) work.
+    // Win/Linux: frameless window has no menu bar, but we still need an
+    // application menu so keyboard accelerators (Ctrl+C/V/X/Z/A) work.
+    // The macOS app menu is owned by the recoveryStore subscriber below
+    // (so it can re-render with current update/recovery state).
+    if (process.platform !== 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         {
           label: 'Edit',
@@ -896,6 +858,53 @@ if (!gotTheLock) {
     registerIpcHandlers();
     createWindow();
     createTray();
+
+    // Wire the recovery module's quit callback to the local requestQuit.
+    setOnQuitRequested(() => requestQuit());
+
+    // Tray + macOS app-menu actions. Defined once so the subscriber and the
+    // initial-fire share one implementation (no drift on future menu changes).
+    const trayActions = {
+      onShow: () => { mainWindow?.show(); mainWindow?.focus(); },
+      onHide: () => mainWindow?.hide(),
+      onChangeInstance: () => {
+        clearInstanceUrl();
+        mainWindow?.loadFile(getPickerPath());
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+      onCheckForUpdates: () => handleRecoveryAction('check-update'),
+      onRestartToInstall: () => handleRecoveryAction('install-update'),
+      onQuit: () => requestQuit(),
+    };
+
+    const appMenuActions = {
+      onChangeInstance: () => {
+        clearInstanceUrl();
+        mainWindow?.loadFile(getPickerPath());
+        mainWindow?.show();
+        mainWindow?.focus();
+      },
+      onCheckForUpdates: () => handleRecoveryAction('check-update'),
+      onRestartToInstall: () => handleRecoveryAction('install-update'),
+    };
+
+    const applyMenusForState = (state: RecoveryState): void => {
+      if (tray) {
+        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
+      }
+      if (process.platform === 'darwin') {
+        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, appMenuActions)));
+      }
+      // Mode-gated push to renderer (recovery.html subscribes to this).
+      if (state.mode === 'recovery' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('recovery-state-changed', state);
+      }
+    };
+
+    recoveryStore.subscribe(applyMenusForState);
+    applyMenusForState(recoveryStore.get());  // initial fire — subscribers don't auto-fire on subscribe
+
     initAutoUpdater();
 
     // ─── Activity Detection ────────────────────────────────────────────────
