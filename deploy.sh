@@ -49,8 +49,12 @@ EXCLUDES=(
   --exclude='outdated trash'
   --exclude='docs/superpowers'
   --exclude='*.rtf'
+  --exclude='*.rtfd'
   --exclude='ARCHITECTURE_AUDIT.md'
   --exclude='Backspace-design-prototype.html'
+  --exclude='assets/brand'
+  --exclude='electronbuild.sh'
+  --exclude='multi-platform-roadmap.md'
 )
 
 # ── Deploy function ─────────────────────────────────────────
