@@ -1,5 +1,24 @@
 /** Type augmentation for the Electron IPC bridge exposed by preload.ts */
 
+// Recovery mode types (Task 11)
+type RecoveryReasonCode = 'load-failed' | 'render-gone' | 'unresponsive' | 'renderer-stalled';
+type UpdateState = 'idle' | 'checking' | 'downloading' | 'downloaded' | 'error';
+interface RecoveryState {
+  mode: 'normal' | 'recovery';
+  reason: { code: RecoveryReasonCode; detail: string } | null;
+  updateState: UpdateState;
+  updateVersion: string | null;
+  lastUpdateError: { message: string; code: string | null; at: number } | null;
+  lastCheckResult: 'up-to-date' | 'failed' | null;
+}
+type RecoveryAction =
+  | 'reload'
+  | 'check-update'
+  | 'install-update'
+  | 'change-instance'
+  | 'open-releases'
+  | 'quit';
+
 interface ElectronScreenSource {
   id: string;                      // "screen:0:0" or "window:12345:0"
   name: string;                    // "Entire Screen" or "Firefox"
@@ -63,6 +82,12 @@ interface BackspaceElectronAPI {
   onAccessibilityStatus: (callback: (status: { trusted: boolean }) => void) => (() => void);
   onKeybindHookError: (callback: (error: { message: string }) => void) => (() => void);
   checkAccessibility: () => Promise<boolean>;
+
+  // Recovery mode bridge (Task 11)
+  rendererReady: () => void;
+  getRecoveryState: () => Promise<RecoveryState>;
+  onRecoveryStateChanged: (cb: (state: RecoveryState) => void) => () => void;
+  recoveryAction: (action: RecoveryAction) => void;
 }
 
 interface Window {

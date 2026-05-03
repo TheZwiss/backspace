@@ -107,4 +107,23 @@ contextBridge.exposeInMainWorld('backspace', {
     return () => { ipcRenderer.removeListener('keybind-hook-error', handler); };
   },
   checkAccessibility: () => ipcRenderer.invoke('check-accessibility'),
+
+  // Recovery mode bridge (Task 11)
+  rendererReady: (): void => {
+    ipcRenderer.send('renderer-ready');
+  },
+
+  getRecoveryState: (): Promise<unknown> => {
+    return ipcRenderer.invoke('get-recovery-state');
+  },
+
+  onRecoveryStateChanged: (cb: (state: unknown) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, state: unknown) => cb(state);
+    ipcRenderer.on('recovery-state-changed', handler);
+    return () => { ipcRenderer.removeListener('recovery-state-changed', handler); };
+  },
+
+  recoveryAction: (action: string): void => {
+    ipcRenderer.send('recovery-action', action);
+  },
 });
