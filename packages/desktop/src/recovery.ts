@@ -1,5 +1,8 @@
-import { app } from 'electron';
+import { app, shell } from 'electron';
 import type { BrowserWindow, MenuItemConstructorOptions } from 'electron';
+import type { AppUpdater } from 'electron-updater';
+import path from 'path';
+import { loadInstanceUrl, clearInstanceUrl, getPickerPath } from './instanceUrl';
 
 export type RecoveryReasonCode =
   | 'load-failed'
@@ -255,4 +258,138 @@ export function isBootArmed(): boolean {
  */
 export function handleRendererReady(): void {
   if (bootArmed) clearBootTimer();
+}
+
+// ---------------------------------------------------------------------------
+// Reference setters
+// ---------------------------------------------------------------------------
+// recovery.ts holds its own refs to the live Electron objects it needs.
+// Setters are used instead of direct imports to keep recovery.ts free of
+// circular dependencies on main.ts.
+// ---------------------------------------------------------------------------
+
+let mainWindowRef: BrowserWindow | null = null;
+let autoUpdaterRef: AppUpdater | null = null;
+let onQuitRequestedCallback: (() => void) | null = null;
+
+export function setMainWindow(win: BrowserWindow | null): void {
+  mainWindowRef = win;
+}
+
+export function setAutoUpdater(au: AppUpdater | null): void {
+  autoUpdaterRef = au;
+}
+
+/**
+ * Wired by main.ts to call its own requestQuit() (which sets isQuitting + app.quit()).
+ * Kept as a callback so recovery.ts doesn't import from main.ts (would create a cycle).
+ */
+export function setOnQuitRequested(cb: (() => void) | null): void {
+  onQuitRequestedCallback = cb;
+}
+
+// ---------------------------------------------------------------------------
+// Recovery mode entry
+// ---------------------------------------------------------------------------
+
+export function enterRecoveryMode(reason: { code: RecoveryReasonCode; detail: string }): void {
+  recoveryStore.update({ mode: 'recovery', reason });
+
+  if (recoveryStore.isInRecoveryMode()) {
+    // Already in recovery — state.reason updated for display, no re-navigation.
+    // Loop prevention: if recovery.html itself fails to load, this guard keeps
+    // us from infinite re-loading. User-visible outcome is contained failure
+    // (blank window, escape via tray Quit) — acceptable because a corrupt
+    // recovery.html means a corrupt build.
+    return;
+  }
+  recoveryStore.markRecoveryEntered();
+
+  if (!mainWindowRef || mainWindowRef.isDestroyed()) return;
+
+  mainWindowRef.loadFile(path.join(__dirname, '..', 'resources', 'recovery.html'));
+  // Force-show even when launched hidden (--hidden via autostart) — recovery
+  // must be visible regardless of prior visibility state.
+  mainWindowRef.show();
+  mainWindowRef.focus();
+}
+
+// Wire the boot-stall callback at module load time. The setter pattern from
+// Task 6 exists to avoid a forward reference (armBootTimer is defined before
+// enterRecoveryMode and tests target it in isolation).
+setOnBootStall(() => {
+  enterRecoveryMode({
+    code: 'renderer-stalled',
+    detail: `no rendererReady within 20000ms`,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recovery action funnel
+// ---------------------------------------------------------------------------
+
+export type RecoveryAction =
+  | 'reload'
+  | 'check-update'
+  | 'install-update'
+  | 'change-instance'
+  | 'open-releases'
+  | 'quit';
+
+const VALID_ACTIONS: ReadonlySet<string> = new Set([
+  'reload',
+  'check-update',
+  'install-update',
+  'change-instance',
+  'open-releases',
+  'quit',
+]);
+
+export function isValidRecoveryAction(action: unknown): action is RecoveryAction {
+  return typeof action === 'string' && VALID_ACTIONS.has(action);
+}
+
+export function handleRecoveryAction(action: RecoveryAction): void {
+  switch (action) {
+    case 'reload': {
+      const url = loadInstanceUrl();
+      // Optimistic exit — clear recovery state BEFORE loading. If the load
+      // fails, did-fail-load re-enters recovery. If it stalls, boot timer fires.
+      recoveryStore.markRecoveryExited();
+      recoveryStore.update({ mode: 'normal', reason: null });
+      if (!url) {
+        mainWindowRef?.loadFile(getPickerPath());
+        return;
+      }
+      mainWindowRef?.loadURL(url);
+      return;
+    }
+    case 'check-update': {
+      recoveryStore.update({ updateState: 'checking', lastCheckResult: null });
+      autoUpdaterRef?.checkForUpdates().catch(() => { /* check-phase errors stay silent */ });
+      return;
+    }
+    case 'install-update': {
+      // Direct quitAndInstall — does NOT rely on autoInstallOnAppQuit.
+      // Force-kill-fix: if user reaches recovery and clicks here, install
+      // happens cleanly even if the on-quit hook would otherwise be bypassed.
+      autoUpdaterRef?.quitAndInstall();
+      return;
+    }
+    case 'change-instance': {
+      clearInstanceUrl();
+      recoveryStore.markRecoveryExited();
+      recoveryStore.update({ mode: 'normal', reason: null });
+      mainWindowRef?.loadFile(getPickerPath());
+      return;
+    }
+    case 'open-releases': {
+      shell.openExternal('https://github.com/TheZwiss/backspace/releases/latest');
+      return;
+    }
+    case 'quit': {
+      onQuitRequestedCallback?.();
+      return;
+    }
+  }
 }
