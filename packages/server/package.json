@@ -9,6 +9,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:federation-identity": "vitest run test/federation-identity-deletion.test.ts",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate"
   },

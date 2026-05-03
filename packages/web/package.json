@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e:identity-deletion": "playwright test e2e/identity-deletion.spec.ts"
   },
   "dependencies": {
     "@backspace/shared": "workspace:*",
