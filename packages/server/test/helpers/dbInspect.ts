@@ -38,8 +38,38 @@ export function openInspector(instance: SpawnedInstance): DbInspector {
   const db = new Database(instance.dbPath, { readonly: true, fileMustExist: true });
   db.pragma('journal_mode = WAL');
   return {
-    user: (uid) => db.prepare('SELECT * FROM users WHERE id = ?').get(uid) as UserRow | null,
-    userByUsername: (u) => db.prepare('SELECT * FROM users WHERE username = ?').get(u) as UserRow | null,
+    user: (uid) => db.prepare(`
+      SELECT id, username,
+        password_hash AS passwordHash,
+        display_name AS displayName,
+        avatar, banner, bio,
+        custom_status AS customStatus,
+        accent_color AS accentColor,
+        avatar_color AS avatarColor,
+        replicated_instances AS replicatedInstances,
+        is_deleted AS isDeleted,
+        status,
+        is_admin AS isAdmin,
+        home_instance AS homeInstance,
+        home_user_id AS homeUserId
+      FROM users WHERE id = ?
+    `).get(uid) as UserRow | null,
+    userByUsername: (u) => db.prepare(`
+      SELECT id, username,
+        password_hash AS passwordHash,
+        display_name AS displayName,
+        avatar, banner, bio,
+        custom_status AS customStatus,
+        accent_color AS accentColor,
+        avatar_color AS avatarColor,
+        replicated_instances AS replicatedInstances,
+        is_deleted AS isDeleted,
+        status,
+        is_admin AS isAdmin,
+        home_instance AS homeInstance,
+        home_user_id AS homeUserId
+      FROM users WHERE username = ?
+    `).get(u) as UserRow | null,
     spaceMembersForUser: (uid) =>
       db.prepare('SELECT space_id AS spaceId, user_id AS userId FROM space_members WHERE user_id = ?').all(uid) as { spaceId: string; userId: string }[],
     reactionsForUser: (uid) =>
