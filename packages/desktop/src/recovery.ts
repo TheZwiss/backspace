@@ -71,3 +71,11 @@ export class RecoveryStateStore {
 }
 
 export const recoveryStore = new RecoveryStateStore();
+
+export function extractErrorCode(err: unknown): string | null {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code: unknown }).code;
+    return typeof code === 'string' ? code : null;
+  }
+  return null;
+}

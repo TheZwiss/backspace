@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { RecoveryStateStore, type RecoveryState } from './recovery';
+import { RecoveryStateStore, extractErrorCode, type RecoveryState } from './recovery';
 
 describe('RecoveryStateStore', () => {
   it('returns the initial state', () => {
@@ -102,5 +102,33 @@ describe('RecoveryStateStore', () => {
     store.update({ updateState: 'checking' });
     const s = store.get();
     expect(Object.isFrozen(s)).toBe(true);
+  });
+});
+
+describe('extractErrorCode', () => {
+  it('extracts string code from Error-like object', () => {
+    const err = new Error('boom') as Error & { code: string };
+    err.code = 'ENOSPC';
+    expect(extractErrorCode(err)).toBe('ENOSPC');
+  });
+
+  it('returns null for Error without code', () => {
+    expect(extractErrorCode(new Error('boom'))).toBeNull();
+  });
+
+  it('returns null when code is non-string', () => {
+    const err = { code: 42 };
+    expect(extractErrorCode(err)).toBeNull();
+  });
+
+  it('returns null for null/undefined/primitives', () => {
+    expect(extractErrorCode(null)).toBeNull();
+    expect(extractErrorCode(undefined)).toBeNull();
+    expect(extractErrorCode('string')).toBeNull();
+    expect(extractErrorCode(42)).toBeNull();
+  });
+
+  it('handles plain objects with code', () => {
+    expect(extractErrorCode({ code: 'NET_FAIL' })).toBe('NET_FAIL');
   });
 });
