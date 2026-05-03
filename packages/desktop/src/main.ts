@@ -17,6 +17,12 @@ import os from 'os';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 import { KeybindManager } from './keybindManager';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
+import {
+  loadInstanceUrl,
+  saveInstanceUrl,
+  clearInstanceUrl,
+  getPickerPath,
+} from './instanceUrl';
 
 let mainWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
@@ -25,37 +31,6 @@ let isQuitting = false;
 let pendingDeepLink: string | null = null;
 
 const knownInstanceOrigins = new Set<string>();
-
-// ─── Instance URL Persistence ────────────────────────────────────────────────
-
-function getInstanceUrlPath(): string {
-  return path.join(app.getPath('userData'), 'instance-url.json');
-}
-
-function loadInstanceUrl(): string | null {
-  try {
-    const data = JSON.parse(fs.readFileSync(getInstanceUrlPath(), 'utf-8'));
-    return typeof data.url === 'string' ? data.url : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveInstanceUrl(url: string): void {
-  fs.writeFileSync(getInstanceUrlPath(), JSON.stringify({ url }));
-}
-
-function clearInstanceUrl(): void {
-  try {
-    fs.unlinkSync(getInstanceUrlPath());
-  } catch {
-    // File may not exist — ignore
-  }
-}
-
-function getPickerPath(): string {
-  return path.join(__dirname, '..', 'resources', 'instance-picker.html');
-}
 
 // ─── Window State Persistence ───────────────────────────────────────────────
 
