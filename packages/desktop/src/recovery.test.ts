@@ -4,6 +4,7 @@ import {
   RecoveryStateStore,
   extractErrorCode,
   buildTrayMenuTemplate,
+  buildAppMenuTemplate,
   type RecoveryState,
 } from './recovery';
 
@@ -209,5 +210,47 @@ describe('buildTrayMenuTemplate', () => {
     expect(downloadedItem).toBeDefined();
     expect(downloadedItem!.label).toBe('Restart to Install Update');
     expect(downloadedItem!.enabled).toBe(true);
+  });
+});
+
+describe('buildAppMenuTemplate', () => {
+  it('returns top-level menu with App, Edit, Window submenus', () => {
+    const template = buildAppMenuTemplate('Backspace', defaultState());
+    const [appMenu, editMenu, windowMenu] = template;
+    expect(template.length).toBeGreaterThanOrEqual(3);
+    expect(appMenu!.label).toBe('Backspace');
+    expect(editMenu!.label).toBe('Edit');
+    expect(windowMenu!.label).toBe('Window');
+  });
+
+  it('App submenu includes About and Change Instance', () => {
+    const template = buildAppMenuTemplate('Backspace', defaultState());
+    const [appMenu] = template;
+    const appSub = appMenu!.submenu as MenuItemConstructorOptions[];
+    const labels = appSub.map((i) => i.label).filter(Boolean);
+    expect(appSub.find((i) => i.role === 'about')).toBeDefined();
+    expect(labels).toContain('Change Instance');
+    expect(appSub.find((i) => i.role === 'quit')).toBeDefined();
+  });
+
+  it('App submenu includes Check for Updates with state-correct label', () => {
+    const template = buildAppMenuTemplate('Backspace', defaultState({ updateState: 'idle' }));
+    const [appMenu] = template;
+    const appSub = appMenu!.submenu as MenuItemConstructorOptions[];
+    const item = appSub.find((i) => i.id === 'check-for-updates');
+    expect(item).toBeDefined();
+    expect(item!.label).toBe('Check for Updates…');
+  });
+
+  it('App submenu inserts Restart to Install Update only when downloaded', () => {
+    const [idleAppMenu] = buildAppMenuTemplate('Backspace', defaultState({ updateState: 'idle' }));
+    const idleSub = idleAppMenu!.submenu as MenuItemConstructorOptions[];
+    expect(idleSub.find((i) => i.id === 'restart-to-install')).toBeUndefined();
+
+    const [dlAppMenu] = buildAppMenuTemplate('Backspace', defaultState({ updateState: 'downloaded' }));
+    const dlSub = dlAppMenu!.submenu as MenuItemConstructorOptions[];
+    const restartItem = dlSub.find((i) => i.id === 'restart-to-install');
+    expect(restartItem).toBeDefined();
+    expect(restartItem!.label).toBe('Restart to Install Update');
   });
 });

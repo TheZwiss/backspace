@@ -136,3 +136,60 @@ export function buildTrayMenuTemplate(
 
   return items;
 }
+
+export function buildAppMenuTemplate(
+  appName: string,
+  state: RecoveryState,
+  actions?: Partial<MenuActions>,
+): MenuItemConstructorOptions[] {
+  const appSubmenu: MenuItemConstructorOptions[] = [
+    { role: 'about' },
+    { type: 'separator' },
+    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+  ];
+
+  if (state.updateState === 'downloaded') {
+    appSubmenu.push({
+      id: 'restart-to-install',
+      label: 'Restart to Install Update',
+      enabled: true,
+      click: actions?.onRestartToInstall,
+    });
+  }
+
+  appSubmenu.push(
+    { type: 'separator' },
+    { label: 'Change Instance', click: actions?.onChangeInstance },
+    { type: 'separator' },
+    { role: 'hide' },
+    { role: 'hideOthers' },
+    { role: 'unhide' },
+    { type: 'separator' },
+    { role: 'quit' },
+  );
+
+  return [
+    { label: appName, submenu: appSubmenu },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
+  ];
+}
