@@ -1,9 +1,25 @@
-import { buildFederationHeaders } from '../../src/utils/federationAuth.js';
+import { createHmac, randomUUID } from 'node:crypto';
 
 /**
- * Wrapper exposed for the malicious-peer test (#13). Builds the same headers
- * production code uses, but lets the test pass an arbitrary X-Federation-Origin.
+ * Build federation headers for a raw S2S request. Replicates production
+ * `buildFederationHeaders` from src/utils/federationAuth.ts inline — avoids
+ * importing that module directly (it pulls in config.ts which requires
+ * JWT_SECRET at module-load time, breaking the test process).
+ *
+ * Used by tests that bypass the home endpoint and hit DELETE /api/federation/identity
+ * on the remote directly (#13 attribution guard, #14 idempotency).
  */
 export function buildHeadersForOrigin(body: string, secret: string, claimedOrigin: string): Record<string, string> {
-  return buildFederationHeaders(body, secret, claimedOrigin);
+  const timestamp = Date.now();
+  const nonce = randomUUID();
+  const payload = `${timestamp}.${nonce}.${body}`;
+  const sig = createHmac('sha256', secret).update(payload).digest('hex');
+
+  return {
+    'X-Federation-Signature': `sha256=${sig}`,
+    'X-Federation-Origin': claimedOrigin,
+    'X-Federation-Timestamp': String(timestamp),
+    'X-Federation-Nonce': nonce,
+    'Content-Type': 'application/json',
+  };
 }

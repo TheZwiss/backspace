@@ -519,6 +519,49 @@ describe('Federation identity deletion — server suite', () => {
     const body = await res.json();
     expect(body.results[ghostOrigin].error).toBe('no_active_peer');
   });
+
+  it('#13 attribution guard: peer cannot delete users whose homeInstance differs', async () => {
+    const { createFederatedUser } = await import('./helpers/testUsers.js');
+    const { buildHeadersForOrigin } = await import('./helpers/hmacSign.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const { remoteUser } = await createFederatedUser(harness.home, harness.remote, 't13');
+
+    // Seed an "evil" peer row on the remote with a known secret so HMAC verification
+    // passes — we want to test the attribution guard, not HMAC failure.
+    // The evil peer claims to be `http://evil.test` but the user's homeInstance is
+    // `home.test.local`, so extractDomain('http://evil.test') !== extractDomain(homeInstance)
+    // and the attribution guard fires with 403.
+    const evilSecret = 'a'.repeat(64);
+    const seedRes = await fetch(`${harness.remote.origin}/api/admin/test/seed-peer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        origin: 'http://evil.test',
+        hmacSecret: evilSecret,
+        status: 'active',
+      }),
+    });
+    expect(seedRes.ok).toBe(true);
+
+    const body = JSON.stringify({
+      homeUserId: remoteUser.homeUserId,
+      homeInstance: harness.home.domain,
+      mode: 'full',
+    });
+    const headers = buildHeadersForOrigin(body, evilSecret, 'http://evil.test');
+
+    const res = await fetch(`${harness.remote.origin}/api/federation/identity`, {
+      method: 'DELETE',
+      headers,
+      body,
+    });
+    expect(res.status).toBe(403);
+
+    const inspect = openInspector(harness.remote);
+    expect(inspect.user(remoteUser.id)!.isDeleted).toBe(0);
+    inspect.close();
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
