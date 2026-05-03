@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { LoginPage } from './components/auth/LoginPage';
 import { RegisterPage } from './components/auth/RegisterPage';
@@ -29,6 +29,17 @@ function AuthRedirect({ children }: { children: React.ReactNode }) {
 }
 
 export function App() {
+  // Boot-completion ping — disarms the main-process boot timer.
+  // MUST be first hook on the unconditional render path. Single fire on
+  // first commit; main owns "armed once" gating so duplicate calls (e.g.
+  // ErrorBoundary path) are idempotent. Semantic: "renderer survived
+  // render," NOT "data loaded." A spinner on screen counts as boot success.
+  useEffect(() => {
+    if (typeof window.backspace?.rendererReady === 'function') {
+      window.backspace.rendererReady();
+    }
+  }, []);
+
   const showTitleBar = isElectron();
 
   return (

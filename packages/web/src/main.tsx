@@ -20,6 +20,12 @@ class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo.componentStack);
+    // Renderer is alive enough to show the fallback UI — disarm the boot timer.
+    // Without this, the timer fires 20s after a caught render error and
+    // overrides the in-app error UI with native recovery, which is wrong.
+    if (typeof window.backspace?.rendererReady === 'function') {
+      window.backspace.rendererReady();
+    }
   }
 
   render() {
