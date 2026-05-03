@@ -139,7 +139,11 @@ export function useAudioDevices(): UseAudioDevicesResult {
 
   // Enumerate when permission grants; refresh on devicechange.
   useEffect(() => {
-    if (permState !== 'granted') return;
+    if (permState !== 'granted') {
+      setInputs([]);
+      setOutputs([]);
+      return;
+    }
     enumerate();
     const onChange = () => { enumerate(); };
     navigator.mediaDevices.addEventListener('devicechange', onChange);

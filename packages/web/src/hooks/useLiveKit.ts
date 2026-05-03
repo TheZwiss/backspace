@@ -436,6 +436,10 @@ export function useLiveKit() {
       let copy = 'Microphone could not be restored';
 
       try {
+        // Probe is intentionally constraint-free — we want to know whether the
+        // device is reachable, not whether full voice constraints succeed. Adding
+        // constraints here would create probe-vs-acquire skew (probe might fail
+        // for a constraint that AudioManager would have negotiated around).
         const probe = await navigator.mediaDevices.getUserMedia({
           audio: deviceId === 'default' ? true : { deviceId: { exact: deviceId } },
         });
