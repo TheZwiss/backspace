@@ -71,4 +71,36 @@ describe('RecoveryStateStore', () => {
     store.markRecoveryExited();
     expect(store.isInRecoveryMode()).toBe(false);
   });
+
+  it('a throwing listener does not stop other listeners', () => {
+    const store = new RecoveryStateStore();
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const a = vi.fn(() => { throw new Error('boom'); });
+    const b = vi.fn();
+    store.subscribe(a);
+    store.subscribe(b);
+    expect(() => store.update({ updateState: 'checking' })).not.toThrow();
+    expect(a).toHaveBeenCalledTimes(1);
+    expect(b).toHaveBeenCalledTimes(1);
+    errSpy.mockRestore();
+  });
+
+  it('a listener can unsubscribe itself during notification without breaking the pass', () => {
+    const store = new RecoveryStateStore();
+    const b = vi.fn();
+    let unsubA: (() => void) | null = null;
+    unsubA = store.subscribe(() => { unsubA?.(); });
+    store.subscribe(b);
+    expect(() => store.update({ updateState: 'checking' })).not.toThrow();
+    // Second update: the self-unsubscribed listener should be gone, b still fires
+    store.update({ updateState: 'idle' });
+    expect(b).toHaveBeenCalledTimes(2);
+  });
+
+  it('returned state is frozen — accidental external mutation throws in strict mode', () => {
+    const store = new RecoveryStateStore();
+    store.update({ updateState: 'checking' });
+    const s = store.get();
+    expect(Object.isFrozen(s)).toBe(true);
+  });
 });

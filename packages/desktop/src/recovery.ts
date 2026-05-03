@@ -30,7 +30,7 @@ const INITIAL_STATE: RecoveryState = {
 };
 
 export class RecoveryStateStore {
-  private state: RecoveryState = { ...INITIAL_STATE };
+  private state: RecoveryState = Object.freeze({ ...INITIAL_STATE }) as RecoveryState;
   private listeners = new Set<(s: RecoveryState) => void>();
   private inRecoveryMode = false;
 
@@ -39,8 +39,17 @@ export class RecoveryStateStore {
   }
 
   update(partial: Partial<RecoveryState>): void {
-    this.state = { ...this.state, ...partial };
-    for (const cb of this.listeners) cb(this.state);
+    this.state = Object.freeze({ ...this.state, ...partial }) as RecoveryState;
+    // Snapshot before iterating: a listener can subscribe/unsubscribe others
+    // (or itself) during notification without affecting the current notify pass.
+    const snapshot = Array.from(this.listeners);
+    for (const cb of snapshot) {
+      try {
+        cb(this.state);
+      } catch (err) {
+        console.error('[recovery] listener threw:', err);
+      }
+    }
   }
 
   subscribe(cb: (s: RecoveryState) => void): () => void {
