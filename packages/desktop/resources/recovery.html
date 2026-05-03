@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Backspace — Recovery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #13131a;
+      color: #efefef;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    body { display: flex; flex-direction: column; }
+
+    .titlebar {
+      height: 32px;
+      min-height: 32px;
+      background: #0b0b10;
+      -webkit-app-region: drag;
+      position: relative;
+      z-index: 100;
+    }
+
+    .content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 2rem 2rem;
+    }
+
+    .container {
+      -webkit-app-region: no-drag;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .card {
+      background: #1a1a23;
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .hint {
+      font-size: 0.875rem;
+      color: #a0a0aa;
+      margin: 0 0 1.5rem 0;
+      line-height: 1.5;
+    }
+
+    .check-result {
+      font-size: 0.8125rem;
+      margin: 0.5rem 0 0 0;
+      min-height: 1em;
+    }
+    .check-result.up-to-date { color: #84cc8b; }
+    .check-result.failed { color: #f0a05a; }
+
+    .actions { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    button.action {
+      width: 100%;
+      padding: 0.625rem 1rem;
+      background: #2a2a33;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      color: #efefef;
+      font-family: inherit;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    button.action:hover:not(:disabled) { background: #34343f; }
+    button.action:disabled { opacity: 0.5; cursor: default; }
+    button.action.primary { background: #7c6cf6; border-color: transparent; }
+    button.action.primary:hover { background: #8a7df8; }
+    button.action.subtle {
+      background: transparent;
+      color: #a0a0aa;
+      border: none;
+      padding-top: 0.375rem;
+      padding-bottom: 0.375rem;
+      font-size: 0.8125rem;
+    }
+    button.action.subtle:hover { color: #efefef; background: transparent; }
+
+    .divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.06);
+      margin: 1.25rem 0;
+    }
+
+    details {
+      font-size: 0.8125rem;
+      color: #a0a0aa;
+    }
+    details summary {
+      cursor: pointer;
+      user-select: none;
+      padding: 0.25rem 0;
+    }
+    details pre {
+      margin: 0.5rem 0 0 0;
+      padding: 0.75rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="titlebar"></div>
+  <div class="content">
+    <div class="container">
+      <div class="card">
+        <h1>Backspace couldn't load.</h1>
+        <p class="hint" id="hint">Loading…</p>
+
+        <div class="actions">
+          <button class="action primary" id="btn-reload">Reload</button>
+          <button class="action" id="btn-restart" style="display:none">Restart to Install Update</button>
+          <button class="action" id="btn-check">Check for Updates</button>
+          <p class="check-result" id="check-result"></p>
+          <button class="action" id="btn-change">Change Instance</button>
+          <button class="action" id="btn-releases" style="display:none">Open Releases Page</button>
+        </div>
+
+        <div class="divider"></div>
+
+        <details>
+          <summary>Diagnostic info</summary>
+          <pre id="diagnostic">loading…</pre>
+        </details>
+
+        <button class="action subtle" id="btn-quit">Quit Backspace</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    const $ = (id) => document.getElementById(id);
+
+    function hintFor(reasonCode, updateState) {
+      if (reasonCode === 'load-failed') {
+        return "Couldn't reach your instance. Check your connection or try a different instance.";
+      }
+      if (reasonCode === 'render-gone' || reasonCode === 'unresponsive') {
+        if (updateState === 'downloaded') {
+          return 'Something inside the app failed. An update is ready — click Restart to Install.';
+        }
+        if (updateState === 'downloading') {
+          return 'Something inside the app failed. An update is downloading — wait for it to finish, then restart.';
+        }
+        return 'Something inside the app failed. Try reloading or check for an update.';
+      }
+      if (reasonCode === 'renderer-stalled') {
+        if (updateState === 'downloaded') {
+          return "The app didn't finish loading. An update is ready — click Restart to Install.";
+        }
+        if (updateState === 'downloading') {
+          return "The app didn't finish loading. An update is downloading — wait for it to finish, then restart.";
+        }
+        return "The app didn't finish loading in time. Try reloading, or check for an update if reloading doesn't help.";
+      }
+      return 'Something went wrong. Try reloading.';
+    }
+
+    function checkButtonLabel(updateState) {
+      switch (updateState) {
+        case 'checking': return 'Checking…';
+        case 'downloading': return 'Downloading Update…';
+        case 'downloaded': return 'Update Ready';
+        case 'error': return 'Check for Updates';
+        case 'idle':
+        default: return 'Check for Updates';
+      }
+    }
+
+    function checkButtonEnabled(updateState) {
+      return updateState !== 'checking' && updateState !== 'downloading' && updateState !== 'downloaded';
+    }
+
+    function checkResultText(lastCheckResult) {
+      if (lastCheckResult === 'up-to-date') return "You're up to date";
+      if (lastCheckResult === 'failed') return 'Update check failed';
+      return '';
+    }
+
+    async function getVersion() {
+      try {
+        if (typeof window.backspace?.getVersion === 'function') {
+          return await window.backspace.getVersion();
+        }
+      } catch {}
+      return 'unknown';
+    }
+
+    let cachedVersion = 'loading…';
+    getVersion().then((v) => { cachedVersion = v; });
+
+    function render(state) {
+      const reasonCode = state.reason?.code ?? null;
+      $('hint').textContent = hintFor(reasonCode, state.updateState);
+
+      // Check for Updates button
+      $('btn-check').textContent = checkButtonLabel(state.updateState);
+      $('btn-check').disabled = !checkButtonEnabled(state.updateState);
+
+      // Restart visibility
+      $('btn-restart').style.display = state.updateState === 'downloaded' ? '' : 'none';
+
+      // Open Releases visibility
+      $('btn-releases').style.display = state.updateState === 'error' ? '' : 'none';
+
+      // Inline check result
+      const cr = $('check-result');
+      cr.textContent = checkResultText(state.lastCheckResult);
+      cr.className = 'check-result' + (state.lastCheckResult ? ' ' + state.lastCheckResult : '');
+
+      // Diagnostic info
+      const lines = [];
+      lines.push('Version: ' + cachedVersion);
+      if (state.reason) lines.push('Reason: ' + state.reason.code + ' (' + state.reason.detail + ')');
+      if (state.updateVersion) lines.push('Update version: ' + state.updateVersion);
+      if (state.lastUpdateError) {
+        lines.push('Last update error: ' + state.lastUpdateError.message);
+        if (state.lastUpdateError.code) lines.push('Error code: ' + state.lastUpdateError.code);
+      }
+      $('diagnostic').textContent = lines.join('\n');
+    }
+
+    function dispatch(action) {
+      if (typeof window.backspace?.recoveryAction === 'function') {
+        window.backspace.recoveryAction(action);
+      }
+    }
+
+    $('btn-reload').onclick = () => dispatch('reload');
+    $('btn-restart').onclick = () => dispatch('install-update');
+    $('btn-check').onclick = () => dispatch('check-update');
+    $('btn-change').onclick = () => dispatch('change-instance');
+    $('btn-releases').onclick = () => dispatch('open-releases');
+    $('btn-quit').onclick = () => dispatch('quit');
+
+    // Cmd/Ctrl+R as keyboard shortcut for Reload
+    window.addEventListener('keydown', (e) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        dispatch('reload');
+      }
+    });
+
+    async function init() {
+      if (!window.backspace) {
+        $('hint').textContent = 'Recovery bridge unavailable. Please quit and reinstall Backspace.';
+        return;
+      }
+      try {
+        const initial = await window.backspace.getRecoveryState();
+        render(initial);
+      } catch (err) {
+        $('hint').textContent = 'Failed to load recovery state: ' + (err && err.message ? err.message : String(err));
+        return;
+      }
+      window.backspace.onRecoveryStateChanged((state) => {
+        render(state);
+      });
+    }
+    init();
+  </script>
+</body>
+</html>
