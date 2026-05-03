@@ -372,6 +372,11 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     setMainWindow(null);
     mainWindow = null;
+    // Clear recovery state so macOS dock-activate (which calls createWindow again)
+    // gets a clean slate. Without this, the new window inherits inRecoveryMode=true
+    // and the recovery surface is silently lost.
+    recoveryStore.markRecoveryExited();
+    recoveryStore.update({ mode: 'normal', reason: null });
   });
 
   // Window focus IPC for notification suppression
@@ -895,23 +900,22 @@ if (!gotTheLock) {
     });
 
     registerIpcHandlers();
+    // Wire the recovery module's quit callback to the local requestQuit BEFORE
+    // createWindow so a synchronous did-fail-load on first load finds a wired
+    // Quit handler. requestQuit is a function declaration and is hoisted.
+    setOnQuitRequested(() => requestQuit());
     createWindow();
     createTray();
-
-    // Wire the recovery module's quit callback to the local requestQuit.
-    setOnQuitRequested(() => requestQuit());
 
     // Tray + macOS app-menu actions. Defined once so the subscriber and the
     // initial-fire share one implementation (no drift on future menu changes).
     const trayActions = {
       onShow: () => { mainWindow?.show(); mainWindow?.focus(); },
       onHide: () => mainWindow?.hide(),
-      onChangeInstance: () => {
-        clearInstanceUrl();
-        mainWindow?.loadFile(getPickerPath());
-        mainWindow?.show();
-        mainWindow?.focus();
-      },
+      // Delegate to handleRecoveryAction so both the tray and the recovery
+      // surface share one implementation path (avoids drift and ensures
+      // recovery state is always cleared on a Change Instance action).
+      onChangeInstance: () => handleRecoveryAction('change-instance'),
       onCheckForUpdates: () => handleRecoveryAction('check-update'),
       onRestartToInstall: () => handleRecoveryAction('install-update'),
       onQuit: () => requestQuit(),

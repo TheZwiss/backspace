@@ -36,6 +36,7 @@ const INITIAL_STATE: RecoveryState = {
 };
 
 export class RecoveryStateStore {
+  // Freeze so the initial get() return cannot be mutated by callers.
   private state: RecoveryState = Object.freeze({ ...INITIAL_STATE }) as RecoveryState;
   private listeners = new Set<(s: RecoveryState) => void>();
   private inRecoveryMode = false;
@@ -45,6 +46,9 @@ export class RecoveryStateStore {
   }
 
   update(partial: Partial<RecoveryState>): void {
+    // Freeze so consumers (incl. subscribers, IPC-cloned renderer reads via
+    // get-recovery-state) cannot mutate the shared state through the live
+    // reference returned by get(). Compile-time Readonly<> is a hint only.
     this.state = Object.freeze({ ...this.state, ...partial }) as RecoveryState;
     // Snapshot before iterating: a listener can subscribe/unsubscribe others
     // (or itself) during notification without affecting the current notify pass.
@@ -370,6 +374,10 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       return;
     }
     case 'install-update': {
+      // Defense in depth: only act when an update is actually downloaded. The
+      // recovery.html UI hides the Restart button unless updateState='downloaded',
+      // but a buggy/malicious renderer could send this action at any time.
+      if (recoveryStore.get().updateState !== 'downloaded') return;
       // Direct quitAndInstall — does NOT rely on autoInstallOnAppQuit.
       // Force-kill-fix: if user reaches recovery and clicks here, install
       // happens cleanly even if the on-quit hook would otherwise be bypassed.
@@ -381,6 +389,12 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       recoveryStore.markRecoveryExited();
       recoveryStore.update({ mode: 'normal', reason: null });
       mainWindowRef?.loadFile(getPickerPath());
+      // Ensure visible — tray clicks may happen with window hidden, and the
+      // recovery surface should also remain visible during the navigation.
+      // When invoked from recovery.html (window already showing), these are
+      // idempotent no-ops.
+      mainWindowRef?.show();
+      mainWindowRef?.focus();
       return;
     }
     case 'open-releases': {
