@@ -1,3 +1,5 @@
+import type { MenuItemConstructorOptions } from 'electron';
+
 export type RecoveryReasonCode =
   | 'load-failed'
   | 'render-gone'
@@ -78,4 +80,59 @@ export function extractErrorCode(err: unknown): string | null {
     return typeof code === 'string' ? code : null;
   }
   return null;
+}
+
+interface MenuActions {
+  onShow: () => void;
+  onHide: () => void;
+  onChangeInstance: () => void;
+  onCheckForUpdates: () => void;
+  onRestartToInstall: () => void;
+  onQuit: () => void;
+}
+
+function checkForUpdatesItem(state: RecoveryState, click: () => void): MenuItemConstructorOptions {
+  switch (state.updateState) {
+    case 'checking':
+      return { id: 'check-for-updates', label: 'Checking for Updates…', enabled: false };
+    case 'downloading':
+      return { id: 'check-for-updates', label: 'Downloading Update…', enabled: false };
+    case 'downloaded':
+      return { id: 'check-for-updates', label: 'Update Ready', enabled: false };
+    case 'error':
+      return { id: 'check-for-updates', label: 'Check for Updates… (last attempt failed)', enabled: true, click };
+    case 'idle':
+    default:
+      return { id: 'check-for-updates', label: 'Check for Updates…', enabled: true, click };
+  }
+}
+
+export function buildTrayMenuTemplate(
+  state: RecoveryState,
+  actions?: Partial<MenuActions>,
+): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [
+    { label: 'Show Backspace', click: actions?.onShow },
+    { label: 'Hide', click: actions?.onHide },
+    { type: 'separator' },
+    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+  ];
+
+  if (state.updateState === 'downloaded') {
+    items.push({
+      id: 'restart-to-install',
+      label: 'Restart to Install Update',
+      enabled: true,
+      click: actions?.onRestartToInstall,
+    });
+  }
+
+  items.push(
+    { type: 'separator' },
+    { label: 'Change Instance', click: actions?.onChangeInstance },
+    { type: 'separator' },
+    { label: 'Quit', click: actions?.onQuit },
+  );
+
+  return items;
 }

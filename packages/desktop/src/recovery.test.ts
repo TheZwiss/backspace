@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { RecoveryStateStore, extractErrorCode, type RecoveryState } from './recovery';
+import type { MenuItemConstructorOptions } from 'electron';
+import {
+  RecoveryStateStore,
+  extractErrorCode,
+  buildTrayMenuTemplate,
+  type RecoveryState,
+} from './recovery';
 
 describe('RecoveryStateStore', () => {
   it('returns the initial state', () => {
@@ -130,5 +136,78 @@ describe('extractErrorCode', () => {
 
   it('handles plain objects with code', () => {
     expect(extractErrorCode({ code: 'NET_FAIL' })).toBe('NET_FAIL');
+  });
+});
+
+function defaultState(overrides?: Partial<RecoveryState>): RecoveryState {
+  return {
+    mode: 'normal',
+    reason: null,
+    updateState: 'idle',
+    updateVersion: null,
+    lastUpdateError: null,
+    lastCheckResult: null,
+    ...overrides,
+  };
+}
+
+describe('buildTrayMenuTemplate', () => {
+  it('includes Show/Hide/Change Instance/Quit base items', () => {
+    const items = buildTrayMenuTemplate(defaultState());
+    const labels = items.map((i) => i.label);
+    expect(labels).toContain('Show Backspace');
+    expect(labels).toContain('Hide');
+    expect(labels).toContain('Change Instance');
+    expect(labels).toContain('Quit');
+  });
+
+  it('includes Check for Updates with idle label when updateState=idle', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'idle' }));
+    const item = items.find((i) => i.id === 'check-for-updates');
+    expect(item).toBeDefined();
+    expect(item!.label).toBe('Check for Updates…');
+    expect(item!.enabled).toBe(true);
+  });
+
+  it('disables Check for Updates while checking', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'checking' }));
+    const item = items.find((i) => i.id === 'check-for-updates');
+    expect(item!.label).toBe('Checking for Updates…');
+    expect(item!.enabled).toBe(false);
+  });
+
+  it('disables Check for Updates while downloading', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'downloading' }));
+    const item = items.find((i) => i.id === 'check-for-updates');
+    expect(item!.label).toBe('Downloading Update…');
+    expect(item!.enabled).toBe(false);
+  });
+
+  it('shows Update Ready label when downloaded, with Check disabled (Restart is the action)', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'downloaded' }));
+    const item = items.find((i) => i.id === 'check-for-updates');
+    expect(item!.label).toBe('Update Ready');
+    expect(item!.enabled).toBe(false);
+  });
+
+  it('shows error suffix on Check for Updates label when updateState=error', () => {
+    const items = buildTrayMenuTemplate(defaultState({ updateState: 'error' }));
+    const item = items.find((i) => i.id === 'check-for-updates');
+    expect(item!.label).toBe('Check for Updates… (last attempt failed)');
+    expect(item!.enabled).toBe(true);
+  });
+
+  it('inserts Restart to Install Update only when updateState=downloaded', () => {
+    expect(
+      buildTrayMenuTemplate(defaultState({ updateState: 'idle' })).find((i) => i.id === 'restart-to-install'),
+    ).toBeUndefined();
+    expect(
+      buildTrayMenuTemplate(defaultState({ updateState: 'downloading' })).find((i) => i.id === 'restart-to-install'),
+    ).toBeUndefined();
+    const downloadedItem = buildTrayMenuTemplate(defaultState({ updateState: 'downloaded' }))
+      .find((i) => i.id === 'restart-to-install');
+    expect(downloadedItem).toBeDefined();
+    expect(downloadedItem!.label).toBe('Restart to Install Update');
+    expect(downloadedItem!.enabled).toBe(true);
   });
 });
