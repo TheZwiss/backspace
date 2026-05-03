@@ -1435,6 +1435,10 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 
 `POST /api/admin/test/seed-peer` directly inserts a `federation_peers` row, skipping the multi-step peer handshake. Strictly gated: `NODE_ENV='test'` AND `ENABLE_TEST_ROUTES='1'` together; returns 404 in any other configuration. Used exclusively by the two-instance integration harness in `packages/server/test/`. Validates `origin` (must be http(s) URL), `hmacSecret` (≥32 chars), and `status` (must be one of `'active'`, `'pending'`, `'awaiting_approval'`, `'rejected'`, `'revoked'`, `'needs_attention'`, `'unreachable'`, `'accepted'`).
 
+### Rate-limit bypass (test only)
+
+`DISABLE_RATE_LIMITS=1` bypasses all `@fastify/rate-limit` enforcement at boot (envBool semantics: `'1'` or `'true'`). Used by integration test harnesses where many tests share the loopback IP and would otherwise exhaust per-IP buckets across unrelated tests. Defaults to enforced rate limits in production. The two-instance harness sets this in every spawned instance's env; tests that need to assert rate-limit behaviour (e.g. Test #15) use `bootTwoInstancesWithRateLimits()` which omits the env var.
+
 ---
 
 ## 15. Settings Cache

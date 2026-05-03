@@ -83,10 +83,9 @@ async function main(): Promise<void> {
     max: 200,
     timeWindow: '1 minute',
     keyGenerator: (request) => (request as any).userId || request.ip,
-    // In test environments every request originates from 127.0.0.1, so
-    // per-IP rate limits would exhaust across unrelated tests. Bypass all
-    // rate limiting (both global and per-route) when NODE_ENV=test.
-    allowList: () => process.env.NODE_ENV === 'test',
+    // Test harnesses set DISABLE_RATE_LIMITS=1 to bypass per-IP exhaustion when
+    // many tests share the loopback IP. Default unset; production unchanged.
+    allowList: () => process.env.DISABLE_RATE_LIMITS === '1' || process.env.DISABLE_RATE_LIMITS === 'true',
     errorResponseBuilder: (_request, context) => ({
       statusCode: 429,
       error: 'Too Many Requests',
