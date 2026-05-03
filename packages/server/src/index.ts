@@ -164,8 +164,17 @@ async function main(): Promise<void> {
   // Register WS-layer call relay hooks (ring-timeout fan-out).
   registerCallRelayHooks();
 
-  // Start federation background workers (outbox delivery, file download, health check)
-  startFederationWorkers();
+  // Start federation background workers (outbox delivery, file download, health check,
+  // storage janitor, federated-call sentinel). Skip when DISABLE_FEDERATION_WORKERS is
+  // set to '1' or 'true' (matches envBool semantics in config.ts; used by integration
+  // tests to keep two-instance harnesses quiet).
+  const disableWorkers = process.env.DISABLE_FEDERATION_WORKERS === '1'
+    || process.env.DISABLE_FEDERATION_WORKERS === 'true';
+  if (disableWorkers) {
+    console.log('[startup] federation workers disabled via DISABLE_FEDERATION_WORKERS');
+  } else {
+    startFederationWorkers();
+  }
 
   const shutdown = async () => {
     console.log('Shutting down...');
