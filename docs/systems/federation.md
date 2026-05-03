@@ -1427,6 +1427,10 @@ DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk 
 
 `startFederationWorkers()` in `utils/federationWorker.ts:1211` starts: outbox-delivery tick, federated-call sentinel, file-replication ticks, health-check ticks, and the storage janitor. The whole bundle is gated by `process.env.DISABLE_FEDERATION_WORKERS` matching `'1'` or `'true'` at `index.ts:171-176` (envBool semantics). Tests set `DISABLE_FEDERATION_WORKERS=1` to silence cross-instance background traffic during setup.
 
+### Public Origin Override
+
+`PUBLIC_ORIGIN` env (read via `config.publicOrigin`, consumed by `getOurOrigin()` in `utils/federationAuth.ts`) overrides the federation transport URL verbatim, taking precedence over the default `https://${DOMAIN}`. When unset, behaviour is unchanged. Intended for reverse-proxy / dev-without-TLS deployments where the public origin must be advertised explicitly (typically `http://...`) and differs from the bare `DOMAIN` value used for federated identity. The integration test harness does NOT use this override — see `seedPeer.ts` for why localhost-port instances cannot collapse to a single peer row.
+
 ### Test-Only Routes
 
 `POST /api/admin/test/seed-peer` directly inserts a `federation_peers` row, skipping the multi-step peer handshake. Strictly gated: `NODE_ENV='test'` AND `ENABLE_TEST_ROUTES='1'` together; returns 404 in any other configuration. Used exclusively by the two-instance integration harness in `packages/server/test/`. Validates `origin` (must be http(s) URL), `hmacSecret` (≥32 chars), and `status` (must be one of `'active'`, `'pending'`, `'awaiting_approval'`, `'rejected'`, `'revoked'`, `'needs_attention'`, `'unreachable'`, `'accepted'`).

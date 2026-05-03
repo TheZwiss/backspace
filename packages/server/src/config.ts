@@ -34,12 +34,27 @@ function envBool(key: string, defaultValue: boolean): boolean {
   return value === 'true' || value === '1';
 }
 
+// PUBLIC_ORIGIN overrides the federation transport URL returned by getOurOrigin().
+// Used by integration test harnesses that bind to 127.0.0.1:<ephemeral> and by
+// reverse-proxy setups where federation must advertise an http:// origin (the
+// proxy terminates TLS upstream). When unset, getOurOrigin() falls back to
+// https://${DOMAIN} for production safety.
+const publicOrigin = envOptional('PUBLIC_ORIGIN');
+if (publicOrigin !== undefined) {
+  if (!/^https?:\/\//i.test(publicOrigin)) {
+    throw new Error(
+      `PUBLIC_ORIGIN must start with http:// or https:// — got: ${publicOrigin}`
+    );
+  }
+}
+
 export const config = {
   port: envInt('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
   jwtSecret: env('JWT_SECRET'),
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
   domain: envOptional('DOMAIN'),
+  publicOrigin,
 
   livekit: {
     url: envOptional('LIVEKIT_URL'),

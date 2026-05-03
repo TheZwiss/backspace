@@ -174,9 +174,21 @@ export function parseFederationHeaders(
 
 /**
  * Return the canonical origin URL for this instance.
- * Uses DOMAIN env var for production, falls back to localhost for dev.
+ *
+ * Resolution order:
+ *   1. `PUBLIC_ORIGIN` env (verbatim, trailing slash stripped) — overrides everything.
+ *      Used by integration test harnesses that bind to 127.0.0.1:<ephemeral> and by
+ *      reverse-proxy / dev-without-TLS setups where federation must advertise an
+ *      explicit origin distinct from the public DOMAIN. The override is the URL
+ *      transport layer; identity (homeInstance) still derives from DOMAIN.
+ *   2. `https://${DOMAIN}` — production default.
+ *   3. `http://localhost:${PORT}` — dev fallback when DOMAIN is unset.
  */
 export function getOurOrigin(): string {
+  const override = config.publicOrigin;
+  if (override && override.trim()) {
+    return override.trim().replace(/\/$/, '');
+  }
   if (config.domain) {
     return `https://${config.domain}`;
   }
