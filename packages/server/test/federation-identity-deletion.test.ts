@@ -703,6 +703,28 @@ describe('Federation identity deletion — server suite', () => {
     remote.close();
   });
 
+  it('#18 deleting one federated user does not affect another on the same remote', async () => {
+    const { createFederatedUser } = await import('./helpers/testUsers.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const a = await createFederatedUser(harness.home, harness.remote, 't18a');
+    const b = await createFederatedUser(harness.home, harness.remote, 't18b');
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin], mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[harness.remote.origin].success).toBe(true);
+
+    const remote = openInspector(harness.remote);
+    expect(remote.user(a.remoteUser.id)!.isDeleted).toBe(1);
+    expect(remote.user(b.remoteUser.id)!.isDeleted).toBe(0);
+    expect(remote.user(b.remoteUser.id)!.username).toBe(b.remoteUser.username);
+    remote.close();
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
