@@ -213,7 +213,7 @@
     }
 
     let cachedVersion = 'loading…';
-    getVersion().then((v) => { cachedVersion = v; });
+    // Populated in init() via Promise.all alongside getRecoveryState.
 
     function render(state) {
       const reasonCode = state.reason?.code ?? null;
@@ -274,7 +274,13 @@
         return;
       }
       try {
-        const initial = await window.backspace.getRecoveryState();
+        // Resolve both in parallel so the first render has the version string
+        // (otherwise the diagnostic block briefly shows "Version: loading…").
+        const [initial, version] = await Promise.all([
+          window.backspace.getRecoveryState(),
+          getVersion(),
+        ]);
+        cachedVersion = version;
         render(initial);
       } catch (err) {
         $('hint').textContent = 'Failed to load recovery state: ' + (err && err.message ? err.message : String(err));
