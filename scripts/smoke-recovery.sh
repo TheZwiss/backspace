@@ -34,7 +34,7 @@ set -euo pipefail
 # ─── Config ──────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BINARY="$REPO_ROOT/packages/desktop/dist-electron/mac-arm64/Backspace.app/Contents/MacOS/Backspace"
-USER_DATA_DIR="$HOME/Library/Application Support/@backspace/desktop"
+USER_DATA_DIR="$HOME/Library/Application Support/Backspace"
 INSTANCE_URL_FILE="$USER_DATA_DIR/instance-url.json"
 INSTANCE_URL_BACKUP="$INSTANCE_URL_FILE.smoketest-backup"
 TMP_DIR="$(mktemp -d -t backspace-smoke.XXXXXX)"

@@ -937,6 +937,24 @@ GitHub releases are the update source. The `electron-updater` library handles ch
 
 ## Persisted Files (userData)
 
+### userData Folder Location
+
+The runtime userData folder is named `Backspace` on every platform:
+
+| Platform | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Backspace/` |
+| Linux | `~/.config/Backspace/` |
+| Windows | `%APPDATA%\Backspace\` |
+
+Electron's default `app.getName()` reads `package.json`'s `name`, which in this monorepo is `@backspace/desktop` — that would land userData under a nested `@backspace/desktop/` folder. To prevent the monorepo's internal package name from leaking into a user-facing filesystem path, `main.ts` calls `app.setName('Backspace')` at module load, before any `app.getPath('userData')` consumer runs. electron-builder's `productName: Backspace` only renames the bundle metadata (`Backspace.app`, executable, installer, app menu) — it does not affect runtime userData.
+
+### One-Time Migration
+
+Earlier builds wrote to `<appData>/@backspace/desktop/`. On first launch after the rename, `migrateUserData()` (in `userDataMigration.ts`) atomically moves that folder to `<appData>/Backspace/` and removes the now-empty `@backspace/` parent. The migration is conservative: if the new folder already exists and is non-empty, it skips the move rather than clobbering existing state. Failures are logged, not thrown — a failed migration leaves the user with a fresh-install state, which is degraded but not broken.
+
+### Files
+
 | File | Content | Purpose |
 |------|---------|---------|
 | `instance-url.json` | `{ url: string }` | Saved instance URL |

@@ -37,6 +37,29 @@ import {
   buildAppMenuTemplate,
   type RecoveryState,
 } from './recovery';
+import { migrateUserData } from './userDataMigration';
+
+// Override Electron's package.json-derived app name so userData lives at
+// "<appData>/Backspace" instead of leaking the monorepo's "@backspace/desktop"
+// package name. Must run before any app.getPath('userData') consumer.
+app.setName('Backspace');
+
+// One-time migration from the historical scoped path. After the move the old
+// folder is gone, so subsequent launches hit the old-missing no-op branch.
+{
+  const appDataDir = app.getPath('appData');
+  const oldParent = path.join(appDataDir, '@backspace');
+  const result = migrateUserData({
+    oldDir: path.join(oldParent, 'desktop'),
+    newDir: path.join(appDataDir, 'Backspace'),
+    oldParent,
+  });
+  if (result.kind === 'migrated') {
+    console.log(`[userData] migrated ${result.from} → ${result.to}`);
+  } else if (result.kind === 'failed') {
+    console.error('[userData] migration failed:', result.error);
+  }
+}
 
 let mainWindow: BrowserWindow | null = null;
 const keybindManager = new KeybindManager();
