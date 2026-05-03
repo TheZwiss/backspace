@@ -136,6 +136,29 @@
     }
 
     /* ── Button — accent-primary with white text (matches login) ── */
+    .cancel-btn {
+      width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.625rem;
+      background: transparent;
+      color: #a0a0aa;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .cancel-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.04);
+      color: #efefef;
+    }
+    .cancel-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .connect-btn {
       width: 100%;
       padding: 0.625rem;
@@ -264,6 +287,7 @@
             />
           </div>
           <button type="submit" class="connect-btn" id="connect-btn">Connect</button>
+          <button type="button" class="cancel-btn" id="cancel-btn" style="display: none;">Cancel</button>
         </form>
 
         <div id="instance-info" class="instance-info" style="display: none;">
@@ -289,6 +313,8 @@
     const infoEl = document.getElementById('instance-info');
     const nameEl = document.getElementById('instance-name');
     const versionEl = document.getElementById('instance-version');
+    const cancelBtn = document.getElementById('cancel-btn');
+    let savedUrl = null;
 
     function normalizeUrl(raw) {
       let url = raw.trim();
@@ -315,11 +341,38 @@
     function setLoading(loading) {
       input.disabled = loading;
       btn.disabled = loading;
+      cancelBtn.disabled = loading;
       loadingEl.style.display = loading ? 'block' : 'none';
       if (loading) {
         hideError();
       }
     }
+
+    async function init() {
+      if (window.backspace && window.backspace.getInstanceUrl) {
+        try {
+          savedUrl = await window.backspace.getInstanceUrl();
+        } catch { savedUrl = null; }
+      }
+      if (savedUrl) {
+        input.value = savedUrl;
+        cancelBtn.style.display = 'block';
+        // Update header copy to reflect the "switch" intent rather than the
+        // first-run "welcome" framing.
+        document.querySelector('.header h1').textContent = 'Switch instance';
+        document.querySelector('.header p').textContent = 'Connect to a different Backspace instance, or cancel to stay.';
+      }
+    }
+    init();
+
+    cancelBtn.addEventListener('click', async () => {
+      if (!savedUrl) return;
+      cancelBtn.disabled = true;
+      btn.disabled = true;
+      if (window.backspace && window.backspace.setInstanceUrl) {
+        await window.backspace.setInstanceUrl(savedUrl);
+      }
+    });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();

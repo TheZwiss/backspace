@@ -298,6 +298,7 @@ export function setOnQuitRequested(cb: (() => void) | null): void {
 
 export function enterRecoveryMode(reason: { code: RecoveryReasonCode; detail: string }): void {
   recoveryStore.update({ mode: 'recovery', reason });
+  console.log(`[recovery] entered: ${reason.code} — ${reason.detail}`);
 
   if (recoveryStore.isInRecoveryMode()) {
     // Already in recovery — state.reason updated for display, no re-navigation.
@@ -361,6 +362,7 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       // fails, did-fail-load re-enters recovery. If it stalls, boot timer fires.
       recoveryStore.markRecoveryExited();
       recoveryStore.update({ mode: 'normal', reason: null });
+      console.log('[recovery] exited (reload)');
       if (!url) {
         mainWindowRef?.loadFile(getPickerPath());
         return;
@@ -385,9 +387,13 @@ export function handleRecoveryAction(action: RecoveryAction): void {
       return;
     }
     case 'change-instance': {
-      clearInstanceUrl();
+      // Non-destructive: don't clear the saved URL here. The picker pre-fills it
+      // and offers Cancel — the URL is only overwritten when the user explicitly
+      // Connects to a different one. (clearInstanceUrl IPC remains for explicit
+      // "disconnect" operations from the web settings UI.)
       recoveryStore.markRecoveryExited();
       recoveryStore.update({ mode: 'normal', reason: null });
+      console.log('[recovery] exited (change-instance)');
       mainWindowRef?.loadFile(getPickerPath());
       // Ensure visible — tray clicks may happen with window hidden, and the
       // recovery surface should also remain visible during the navigation.

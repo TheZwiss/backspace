@@ -105,7 +105,17 @@ When no instance URL is configured, the app loads `resources/instance-picker.htm
 
 After navigation (both to an instance URL and back to the picker), the main process forces Electron to re-evaluate drag regions by momentarily resizing the window (+1px then back).
 
-The tray menu and macOS app menu both include a "Change Instance" option that clears the saved URL and reloads the picker.
+### Non-destructive "Change Instance" navigation
+
+The tray menu, macOS app menu, and recovery surface all include a "Change Instance" option. This navigation is **non-destructive**: the saved instance URL is preserved when navigating to the picker. The picker's `init()` function reads the current saved URL via `getInstanceUrl()` IPC and, if one exists:
+
+- Pre-fills the URL input with the current value.
+- Shows a Cancel button (hidden by default; only shown when a saved URL exists).
+- Switches the header copy from "Welcome to Backspace / Connect to your instance" to "Switch instance / Connect to a different Backspace instance, or cancel to stay."
+
+**Cancel button behavior:** Clicking Cancel re-saves the existing URL via `setInstanceUrl` (idempotent) and navigates back to it. The saved URL is only overwritten when the user explicitly clicks Connect on a *different* URL. This means the user can always back out of an accidental "Change Instance" click.
+
+**Loading state:** `setLoading(true)` — invoked when Connect is clicked — disables both the Connect button and the Cancel button to prevent a race between the `setInstanceUrl` calls.
 
 ---
 
@@ -185,7 +195,7 @@ All four assets are produced by `scripts/gen-icons.mjs` from `assets/brand/{mark
 |------|--------|
 | Show Backspace | `window.show()` + `focus()` |
 | Hide | `window.hide()` |
-| Change Instance | Clear saved URL, load picker, show + focus |
+| Change Instance | Load picker (non-destructive — saved URL preserved), show + focus |
 | Quit | Set `isQuitting = true`, `app.quit()` |
 
 Tray click toggles window visibility (show/hide).
@@ -326,11 +336,25 @@ Page reads initial state via `getRecoveryState()` IPC and subscribes to `recover
 | Open Releases Page | `updateState === 'error'` | always when visible |
 | Quit Backspace | always | always |
 
+**Change Instance from recovery is non-destructive.** The saved URL is not cleared when navigating to the picker; see the Instance Picker section above for the full behavior (pre-filled input, Cancel button, header copy update).
+
 Hint text is computed as a function of `(reason.code, updateState)` — see code in `recovery.html`. The `renderer-stalled` text intentionally avoids claiming an update is the cause (slow Pi/cold cache could also trigger it).
 
 `lastCheckResult` provides transient inline feedback ("You're up to date" / "Update check failed") with 5s auto-decay. Without this, the user has no signal that a Check for Updates click ran when the result is no-update.
 
 Cmd/Ctrl+R is wired as a keyboard shortcut for Reload.
+
+### Observability Logging
+
+`recovery.ts` emits structured `console.log` lines on entry and exit so smoke-test scripts can grep stderr without UI introspection:
+
+| Event | Log line |
+|-------|----------|
+| Recovery entered | `[recovery] entered: <code> — <detail>` |
+| Exited via Reload | `[recovery] exited (reload)` |
+| Exited via Change Instance | `[recovery] exited (change-instance)` |
+
+The enter log fires after the state update but before the re-entry guard, so repeated entry (reason update with no re-navigation) also logs — useful for diagnostics.
 
 ### Loop Prevention / Contained Failure
 
