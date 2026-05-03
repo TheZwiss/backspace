@@ -599,6 +599,60 @@ describe('Federation identity deletion — server suite', () => {
     expect(j2).toEqual({ success: true });
   });
 
+  it('#16 WS member_left fires for space members on full delete', async () => {
+    const { createFederatedUser, registerLocal } = await import('./helpers/testUsers.js');
+    const { connectWs } = await import('./helpers/wsListener.js');
+    const { homeUser, remoteUser } = await createFederatedUser(harness.home, harness.remote, 't16');
+    const observer = await registerLocal(harness.remote, 't16_obs');
+
+    // observer creates space + invite, federated user joins
+    const sp = await fetch(`${harness.remote.origin}/api/spaces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${observer.token}` },
+      body: JSON.stringify({ name: 't16-space' }),
+    }).then(r => r.json()) as { id: string };
+
+    const inv = await fetch(`${harness.remote.origin}/api/spaces/${sp.id}/invite`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${observer.token}` },
+    }).then(r => r.json()) as { inviteCode: string };
+
+    const joinRes = await fetch(`${harness.remote.origin}/api/spaces/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${remoteUser.token}` },
+      body: JSON.stringify({ inviteCode: inv.inviteCode }),
+    });
+    expect(joinRes.ok).toBe(true);
+
+    // Connect observer's WS to the REMOTE (where the deletion broadcast originates),
+    // wait for ready, then trigger the delete from home.
+    const ws = await connectWs(harness.remote.origin, observer.token);
+    try {
+      // Fire the delete and the WS wait simultaneously — production may emit
+      // member_left before the home endpoint's response returns.
+      const deletePromise = fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+        body: JSON.stringify({ origins: [harness.remote.origin], mode: 'full' }),
+      });
+
+      const memberLeftEvent = await ws.waitForEvent('member_left', 5_000);
+      // Verified payload shape: flat { type, spaceId, userId } (federation.ts:2127-2131)
+      expect(memberLeftEvent).toMatchObject({
+        type: 'member_left',
+        spaceId: sp.id,
+        userId: remoteUser.id,
+      });
+
+      const deleteRes = await deletePromise;
+      expect(deleteRes.status).toBe(200);
+      const body = await deleteRes.json();
+      expect(body.results[harness.remote.origin].success).toBe(true);
+    } finally {
+      ws.close();
+    }
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
