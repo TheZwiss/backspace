@@ -255,17 +255,127 @@ Check-phase errors (network, auth, 404) are silently ignored — nothing actiona
 
 `install-update` IPC triggers `autoUpdater.quitAndInstall()`.
 
+### Recovery Integration
+
+All `autoUpdater` events update the `RecoveryStateStore` (drives tray + macOS menu UI dynamically). Existing renderer IPC channels (`update-available`, `update-downloaded`, `update-error`) are preserved unchanged.
+
+On `update-downloaded`, a native OS notification fires **only when `mainWindow?.isFocused()` is false** — symmetric suppression across normal and recovery modes (the in-app banner / Restart button is visible to a focused user; the notification covers minimized/tray/background-desktop cases). Notification click calls `autoUpdater.quitAndInstall()` directly (force-kill fix path — see Recovery Mode section).
+
+Win32 only: `app.setAppUserModelId('com.backspace.desktop')` is set early in startup so notifications attribute to "Backspace" instead of "Electron" in Windows Action Center.
+
+`extractErrorCode(err)` in `recovery.ts` extracts the `code` field from `electron-updater` errors when present (string only); used to populate `RecoveryState.lastUpdateError.code`.
+
+---
+
+## Recovery Mode
+
+When the renderer fails to load or boot, the main process surfaces a native recovery UI (`resources/recovery.html`) loaded into the existing main window. Recovery is the escape hatch for failure modes that the in-app `ErrorBoundary` cannot catch — pre-render module-init throws, JS bundle/Electron incompatibility, network failures, renderer process crashes, and unrecoverable hangs.
+
+Source files:
+- `packages/desktop/src/recovery.ts` — state store, event handlers, action funnel, menu builders
+- `packages/desktop/src/instanceUrl.ts` — shared instance-URL helpers (used by main.ts and recovery.ts)
+- `packages/desktop/resources/recovery.html` — UI page, vanilla HTML/CSS/JS
+
+### State Model
+
+`RecoveryStateStore` (singleton in `recovery.ts`) owns:
+
+```typescript
+interface RecoveryState {
+  mode: 'normal' | 'recovery';
+  reason: { code: 'load-failed' | 'render-gone' | 'unresponsive' | 'renderer-stalled'; detail: string } | null;
+  updateState: 'idle' | 'checking' | 'downloading' | 'downloaded' | 'error';
+  updateVersion: string | null;
+  lastUpdateError: { message: string; code: string | null; at: number } | null;
+  lastCheckResult: 'up-to-date' | 'failed' | null;  // transient, 5s decay
+}
+```
+
+Two flags not in the public state: `inRecoveryMode` (private to the store, guards `loadFile(recovery.html)` re-entry / loop prevention) and `updateConfirmed` (local to `main.ts:initAutoUpdater`, controls whether updater errors get pushed to the renderer).
+
+### Detection Paths
+
+| Mechanism | Catches | Notes |
+|-----------|---------|-------|
+| `did-fail-load` | Network/HTTP transport failures (DNS, refused, TLS, transport-level) | Filtered by `isMainFrame`; ignores `errorCode === -3` (ERR_ABORTED). 5xx with body does NOT fire — falls through to boot timer. |
+| `render-process-gone` | Renderer process termination | Filtered by reason; `clean-exit` ignored. Triggers on `crashed`, `killed`, `oom`, `launch-failed`, `integrity-failure`. |
+| `unresponsive` | Main thread blocked >10s | 10s grace period; cancelled by `responsive` event. Matches Chrome's "page not responding" pattern. |
+| Boot-completion ping | JS exceptions during boot, module-init throws, broken preload calls — failures the other events don't catch | `window.backspace.rendererReady()` from web side; main-side timer (20s, packaged builds only, http(s):// URLs only) |
+
+The boot ping is **not a heartbeat** — it is a one-shot per-navigation signal. Web-side call sites:
+
+- `packages/web/src/App.tsx` — `useEffect` with `[]` deps, fires on first commit (semantic: "renderer survived render," not "data loaded")
+- `packages/web/src/main.tsx` — `ErrorBoundary.componentDidCatch`, fires when in-app error UI mounts (so the boot timer doesn't override the ErrorBoundary fallback 20s later)
+
+Main-side gating: `bootArmed` flag ensures only the first `renderer-ready` IPC matters; subsequent calls are no-ops.
+
+Navigation-aware arming: `did-navigate` (top-level non-same-document) clears any pending timer and queues a fresh arm for `did-finish-load`. `did-navigate-in-page` (SPA routing) is ignored, so React Router channel switches don't trip the timer.
+
+### Recovery UI
+
+`recovery.html` is loaded into the existing `mainWindow` via `loadFile()`. Mirrors `instance-picker.html` drag-region pattern (32px titlebar with `-webkit-app-region: drag`, content container with `no-drag`).
+
+Page reads initial state via `getRecoveryState()` IPC and subscribes to `recovery-state-changed` events for live updates. All button clicks dispatch through a single `recovery-action` IPC channel with strict allowlist validation in main.
+
+| Button | Visible | Enabled |
+|--------|---------|---------|
+| Reload | always | always |
+| Restart to Install Update | `updateState === 'downloaded'` | always when visible |
+| Check for Updates | always | not in `'checking'` / `'downloading'` / `'downloaded'` |
+| Change Instance | always | always |
+| Open Releases Page | `updateState === 'error'` | always when visible |
+| Quit Backspace | always | always |
+
+Hint text is computed as a function of `(reason.code, updateState)` — see code in `recovery.html`. The `renderer-stalled` text intentionally avoids claiming an update is the cause (slow Pi/cold cache could also trigger it).
+
+`lastCheckResult` provides transient inline feedback ("You're up to date" / "Update check failed") with 5s auto-decay. Without this, the user has no signal that a Check for Updates click ran when the result is no-update.
+
+Cmd/Ctrl+R is wired as a keyboard shortcut for Reload.
+
+### Loop Prevention / Contained Failure
+
+If `recovery.html` itself fails to load (corrupt resources, packaging bug), `did-fail-load` re-fires inside the recovery context. The `isInRecoveryMode` guard prevents infinite reload loops — `state.reason` updates for display purposes but no second `loadFile()` is issued. User-visible outcome is a blank window with tray-only escape (Quit). This is **contained failure**, not graceful failure: a corrupt `recovery.html` means a corrupt build that requires a fresh install.
+
+### Hidden-Launch Override
+
+When the app is launched with `--hidden` (autostart), `enterRecoveryMode()` always force-shows + focuses the main window. Without this, a silent boot failure during autostart would never surface to the user.
+
+### Force-Kill Fix
+
+The recovery surface's "Restart to Install Update" button — and the native notification's click handler — both call `autoUpdater.quitAndInstall()` **directly**. They do not rely on `autoInstallOnAppQuit`'s on-quit hook.
+
+Why this matters: a user who Task-Manager-kills a broken app never triggers the on-quit hook; the downloaded update sits on disk. On next launch, the app loads the same broken old version. With recovery active, the user lands in recovery → clicks Restart → install applies cleanly via the direct call. The on-quit hook bypass is no longer fatal.
+
+### Inter-Module Wiring
+
+`recovery.ts` cannot import from `main.ts` (would create a cycle). Wiring is contract-based:
+
+| Concern | Mechanism |
+|---------|-----------|
+| Shared instance URL helpers | Both files import from `instanceUrl.ts` |
+| `mainWindow` reference | `recovery.ts` holds its own ref via `setMainWindow(win)` setter; `main.ts` calls on `createWindow()` and `closed` |
+| `autoUpdater` reference | `setAutoUpdater(au)` setter on `recovery.ts`; main calls inside `initAutoUpdater()` success path |
+| Quit invariant | `main.ts` exports `requestQuit()` (sets `isQuitting + app.quit()`); recovery uses callback registered via `setOnQuitRequested(cb)` |
+| Tray + macOS menu | `recovery.ts` exports pure `buildTrayMenuTemplate` / `buildAppMenuTemplate`; subscriber in `main.ts` calls them and applies via `Menu.buildFromTemplate` |
+| Boot-stall callback | `setOnBootStall(cb)` on `recovery.ts`; `main.ts` does not need to wire this (recovery.ts wires it to its own `enterRecoveryMode` at module load) |
+
+### Manual Smoke Checklist
+
+Executed before each release. See `docs/superpowers/specs/2026-05-03-electron-recovery-mode-design.md` §9 for the 14-scenario checklist (plus scenario 15 added during implementation).
+
 ---
 
 ## Notifications
 
-`main.ts:showNotification()` — uses Electron's `Notification` API.
+`main.ts:showNotification(title, body, onClick?)` — uses Electron's `Notification` API.
 
 - Checks `Notification.isSupported()` before showing
 - `silent: false` (plays system sound)
-- Click handler: shows + focuses the main window
+- Click handler: defaults to show + focus the main window; an optional `onClick` parameter overrides this (used by the update-ready notification to call `autoUpdater.quitAndInstall()` directly)
 
 Badge count: `set-badge-count` IPC calls `app.setBadgeCount()` (macOS dock badge, Windows taskbar overlay).
+
+**Win32 attribution:** `app.setAppUserModelId('com.backspace.desktop')` set early in startup so notifications attribute to "Backspace" in Windows Action Center.
 
 ---
 
@@ -344,6 +454,8 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `screen-share-selected` | R->M | `sourceId, shareAudio?` | Safety net (actual handler is `ipcMain.once` in display media flow) |
 | `keybinds-sync` | R->M | `KeybindConfig[]` | `keybindManager.updateKeybinds()` |
 | `set-connected-origins` | R->M | `string[]` | Update `knownInstanceOrigins` set (used by in-instance `/join/` interception) |
+| `renderer-ready` | R->M | — | Boot-completion ping; disarms boot timer |
+| `recovery-action` | R->M | `RecoveryAction` enum | Recovery page button dispatcher (allowlist-validated) |
 
 ### Request/Response (`ipcMain.handle`)
 
@@ -357,6 +469,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `set-auto-launch-settings` | R->M | `{ openAtLogin, startMinimized }` | Save + apply to OS |
 | `get-current-activity` | R->M | `Activity \| null` | Current detected game activity |
 | `check-accessibility` | R->M | `boolean` | macOS accessibility permission check |
+| `get-recovery-state` | R->M | `RecoveryState` | Recovery page reads initial state on mount |
 
 ### Main -> Renderer Events
 
@@ -373,6 +486,7 @@ All handlers registered in `main.ts:registerIpcHandlers()`.
 | `accessibility-status` | `{ trusted }` | macOS accessibility check result |
 | `keybind-hook-error` | `{ message }` | uIOhook start failure |
 | `open-internal-route` | `string` (path) | In-instance `/join/` interception: renderer navigates to `path` instead of opening externally |
+| `recovery-state-changed` | `RecoveryState` | Store subscriber, mode-gated to `mode === 'recovery'` |
 
 ---
 
@@ -416,6 +530,10 @@ Detection: `typeof window.backspace !== 'undefined'` (see `platform.ts:isElectro
 | `checkAccessibility()` | invoke | R->M | Returns `Promise<boolean>` |
 | `setConnectedOrigins(origins)` | fire | R->M | Push connected-instance origin list to main (in-instance `/join/` interception) |
 | `onOpenInternalRoute(cb)` | listen | M->R | Returns cleanup function; `cb` receives a path string to navigate in-app |
+| `rendererReady()` | fire | R->M | Boot-completion ping; semantic: "renderer survived render" |
+| `getRecoveryState()` | invoke | R->M | Returns `Promise<RecoveryState>` |
+| `onRecoveryStateChanged(cb)` | listen | M->R | Returns cleanup function; recovery.html subscribes |
+| `recoveryAction(action)` | fire | R->M | Single channel for all recovery button clicks |
 
 Direction legend: **fire** = `ipcRenderer.send` (no response), **invoke** = `ipcRenderer.invoke` (returns Promise), **listen** = `ipcRenderer.on` (event subscription).
 
@@ -768,11 +886,17 @@ output: dist-electron
 
 ### Icon Generation
 
-All desktop and web brand assets are generated by `scripts/gen-icons.mjs` from three SVG sources in `assets/brand/` (`app-icon.svg`, `mark.svg`, `mark-mono-dark.svg`). Run via `pnpm gen-icons` after artwork changes; commit the diff. The generator uses `sharp` (SVG → PNG), `png-to-ico` (multi-size `.ico`), and `png2icons` (`.icns`). Output is byte-stable for a given lockfile.
+All desktop and web brand assets are generated by `scripts/gen-icons.mjs` from sources in `assets/brand/`. Run via `pnpm gen-icons` after artwork changes; commit the diff. The generator uses `sharp` (resize / SVG → PNG / squircle composite), `png-to-ico` (multi-size `.ico`), and `png2icons` (`.icns`). Output is byte-stable for a given lockfile.
+
+**Sources:**
+- `app-icon.svg` — flat-vector B-badge. Drives app-icon outputs <128 px (favicons, small `.ico` reps, small Linux launcher reps) where pixel-grid alignment beats 3D detail.
+- `app-icon-x1.png` (149) / `app-icon-x2.png` (294) / `app-icon-x3.png` (440) / `app-icon-1024.png` (1024) — 3D-rendered B-badge at four native resolutions. Drives app-icon outputs ≥128 px (PWA, dock, launcher, homescreen, in-app sidebar logo). The generator picks the smallest source whose dimension is ≥ the target output size, so every output is a downscale (no upscale anywhere). After resize, a 22 %-radius rounded-square mask clips the corners to transparent — matches Apple's macOS template ratio and the existing `app-icon.svg` geometry, so launchers/docks/homescreens that render the icon as-is produce the rounded silhouette they expect.
+- `mark.svg` — bare gradient B. Drives the PWA maskable inner (60 % scale on `#1d1d1b`) and the Win/Linux tray icons.
+- `mark-mono-dark.svg` — solid-black B. Drives the macOS menu-bar template tray icon (alpha + black; OS recolours).
 
 The `dev` script copies the committed `build/icon.icns` into Electron's bundled `Resources/electron.icns` so the macOS dev dock shows the Backspace mark instead of the default Electron logo. This dev-only patch is independent of how `.icns` is generated.
 
-See [the icon system spec](../superpowers/specs/2026-04-27-icon-system-design.md) for the full output matrix and `scripts/gen-icons.README.md` for the regeneration workflow and version-bump caveat.
+See `scripts/gen-icons.README.md` for the regeneration workflow and version-bump caveat (sharp / png-to-ico / png2icons upgrades change encoder output, requiring a follow-up regen+commit).
 
 ### Auto-Update Publishing
 
@@ -808,11 +932,14 @@ GitHub releases are the update source. The `electron-updater` library handles ch
 3. Register `setDisplayMediaRequestHandler` for screen share
 4. Register all IPC handlers
 5. Create main window (with state restoration)
+   - After the BrowserWindow is constructed, `setMainWindow(mainWindow)` and `attachRecoveryHandlers(mainWindow)` are called. The `closed` event handler calls `setMainWindow(null)`.
 6. Create tray icon
 7. Initialize auto-updater (10s delayed first check)
-8. Start activity detection (immediate first poll, 15s interval, background remote sync)
-9. Linux/AppImage path-refresh: re-apply autostart entry if `$APPIMAGE` path changed (conditional; no-op on Windows/macOS)
-10. Check for deep link in launch args
+8. Wire recovery store subscriber (rebuilds tray + macOS menu on every state change; pushes `recovery-state-changed` to renderer when in recovery mode)
+9. `setOnQuitRequested(requestQuit)` so recovery's Quit button uses the same `isQuitting + app.quit()` pattern as the tray
+10. Start activity detection (immediate first poll, 15s interval, background remote sync)
+11. Linux/AppImage path-refresh: re-apply autostart entry if `$APPIMAGE` path changed (conditional; no-op on Windows/macOS)
+12. Check for deep link in launch args
 
 ### Shutdown Sequence (`before-quit`)
 
