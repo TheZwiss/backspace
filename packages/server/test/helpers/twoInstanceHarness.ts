@@ -89,8 +89,9 @@ async function spawnInstance(opts: {
   storagePath: string;
   jwtSecret: string;
   logPath: string;
+  disableRateLimits?: boolean;
 }): Promise<SpawnedInstance> {
-  const env = {
+  const env: Record<string, string> = {
     ...process.env,
     NODE_ENV: 'test',
     ENABLE_TEST_ROUTES: '1',
@@ -105,6 +106,12 @@ async function spawnInstance(opts: {
     LIVEKIT_API_KEY: '',
     LIVEKIT_API_SECRET: '',
   };
+  // Default: bypass rate limits so unrelated tests don't exhaust the per-IP
+  // bucket on 127.0.0.1. Test #15 (rate-limit assertion) opts out via
+  // bootTwoInstancesWithRateLimits().
+  if (opts.disableRateLimits !== false) {
+    env.DISABLE_RATE_LIMITS = '1';
+  }
   // From packages/server/test/helpers → packages/server is up two levels.
   const serverDir = path.resolve(__dirname, '../../');
   const proc = spawn('pnpm', ['exec', 'tsx', 'src/index.ts'], {
@@ -129,9 +136,22 @@ async function spawnInstance(opts: {
   };
 }
 
+export interface BootOptions {
+  /**
+   * If true, spawned instances do NOT receive `DISABLE_RATE_LIMITS=1`, so
+   * `@fastify/rate-limit` enforces real per-IP/per-user buckets. Used only by
+   * tests that assert rate-limit behaviour (Test #15). Default: false (bypass on).
+   */
+  enableRateLimits?: boolean;
+}
+
 /** Boot home + N remotes. All instances ready before the function returns. */
-export async function bootHomePlusRemotes(remoteCount: number): Promise<MultiRemoteHarness> {
+export async function bootHomePlusRemotes(
+  remoteCount: number,
+  options: BootOptions = {},
+): Promise<MultiRemoteHarness> {
   if (remoteCount < 1) throw new Error('remoteCount must be >= 1');
+  const disableRateLimits = !options.enableRateLimits;
   const runId = crypto.randomBytes(4).toString('hex');
   // From packages/server/test/helpers → repo root is up four levels: helpers → test → server → packages → repo-root.
   const runDir = path.resolve(__dirname, `../../../../tests/.tmp/${runId}`);
@@ -145,6 +165,7 @@ export async function bootHomePlusRemotes(remoteCount: number): Promise<MultiRem
     storagePath: `${runDir}/home-uploads`,
     jwtSecret: crypto.randomBytes(32).toString('hex'),
     logPath: `${runDir}/home.log`,
+    disableRateLimits,
   });
 
   const remotes: SpawnedInstance[] = [];
@@ -158,6 +179,7 @@ export async function bootHomePlusRemotes(remoteCount: number): Promise<MultiRem
       storagePath: `${runDir}/remote${i}-uploads`,
       jwtSecret: crypto.randomBytes(32).toString('hex'),
       logPath: `${runDir}/remote${i}.log`,
+      disableRateLimits,
     });
     remotes.push(r);
   }
@@ -180,8 +202,8 @@ export async function bootHomePlusRemotes(remoteCount: number): Promise<MultiRem
 }
 
 /** Convenience: 1 home + 1 remote. Exposes both `remote` (singular) and `remotes` (array). */
-export async function bootTwoInstances(): Promise<TwoInstanceHarness> {
-  const m = await bootHomePlusRemotes(1);
+export async function bootTwoInstances(options: BootOptions = {}): Promise<TwoInstanceHarness> {
+  const m = await bootHomePlusRemotes(1, options);
   return {
     home: m.home,
     remote: m.remotes[0],
@@ -189,6 +211,17 @@ export async function bootTwoInstances(): Promise<TwoInstanceHarness> {
     runDir: m.runDir,
     cleanup: m.cleanup,
   };
+}
+
+/**
+ * Variant of `bootTwoInstances` that does NOT set `DISABLE_RATE_LIMITS`, so the
+ * spawned instances enforce real `@fastify/rate-limit` buckets. Used by Test #15
+ * (rate-limit assertion) ONLY — every other test should use `bootTwoInstances` /
+ * `bootHomePlusRemotes` so unrelated tests don't exhaust the shared loopback IP
+ * bucket. Same shape as `bootTwoInstances`, just with a different env profile.
+ */
+export async function bootTwoInstancesWithRateLimits(): Promise<TwoInstanceHarness> {
+  return bootTwoInstances({ enableRateLimits: true });
 }
 
 /**
