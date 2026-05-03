@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MenuItemConstructorOptions } from 'electron';
 import {
   RecoveryStateStore,
@@ -6,7 +6,15 @@ import {
   buildTrayMenuTemplate,
   buildAppMenuTemplate,
   type RecoveryState,
+  armBootTimer,
+  clearBootTimer,
+  isBootArmed,
 } from './recovery';
+
+// Mock electron with isPackaged=true so the real arm path executes in all tests below.
+vi.mock('electron', () => ({
+  app: { isPackaged: true },
+}));
 
 describe('RecoveryStateStore', () => {
   it('returns the initial state', () => {
@@ -252,5 +260,47 @@ describe('buildAppMenuTemplate', () => {
     const restartItem = dlSub.find((i) => i.id === 'restart-to-install');
     expect(restartItem).toBeDefined();
     expect(restartItem!.label).toBe('Restart to Install Update');
+  });
+});
+
+interface FakeWebContents { getURL: () => string }
+interface FakeWindow { webContents: FakeWebContents; isDestroyed: () => boolean }
+
+function fakeWin(url: string): FakeWindow {
+  return { webContents: { getURL: () => url }, isDestroyed: () => false };
+}
+
+describe('armBootTimer / clearBootTimer', () => {
+  beforeEach(() => {
+    clearBootTimer();
+  });
+
+  it('arms when URL is http://', () => {
+    armBootTimer(fakeWin('http://localhost:3005/') as never);
+    expect(isBootArmed()).toBe(true);
+    clearBootTimer();
+  });
+
+  it('arms when URL is https://', () => {
+    armBootTimer(fakeWin('https://example.com/') as never);
+    expect(isBootArmed()).toBe(true);
+    clearBootTimer();
+  });
+
+  it('skips file:// URLs', () => {
+    armBootTimer(fakeWin('file:///path/to/recovery.html') as never);
+    expect(isBootArmed()).toBe(false);
+  });
+
+  it('skips empty URLs', () => {
+    armBootTimer(fakeWin('') as never);
+    expect(isBootArmed()).toBe(false);
+  });
+
+  it('clearBootTimer disarms', () => {
+    armBootTimer(fakeWin('http://localhost/') as never);
+    expect(isBootArmed()).toBe(true);
+    clearBootTimer();
+    expect(isBootArmed()).toBe(false);
   });
 });

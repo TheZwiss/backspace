@@ -1,4 +1,5 @@
-import type { MenuItemConstructorOptions } from 'electron';
+import { app } from 'electron';
+import type { BrowserWindow, MenuItemConstructorOptions } from 'electron';
 
 export type RecoveryReasonCode =
   | 'load-failed'
@@ -192,4 +193,66 @@ export function buildAppMenuTemplate(
       ],
     },
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Boot-completion timer
+// ---------------------------------------------------------------------------
+// Arms when the renderer navigates to an http(s) URL in a packaged build.
+// If the renderer does not call rendererReady() within BOOT_TIMEOUT_MS, the
+// onBootStallCallback fires and main.ts triggers recovery mode.
+// ---------------------------------------------------------------------------
+
+const BOOT_TIMEOUT_MS = 20_000;
+let bootTimer: ReturnType<typeof setTimeout> | null = null;
+let bootArmed = false;
+let onBootStallCallback: (() => void) | null = null;
+
+/**
+ * Register the callback fired when the boot timer expires.
+ * Wired by main.ts to call enterRecoveryMode({ code: 'renderer-stalled', ... }).
+ * Kept as a setter to avoid a forward-reference cycle: the setter shape mirrors
+ * setMainWindow/setAutoUpdater and keeps the timer logic independently testable.
+ */
+export function setOnBootStall(cb: (() => void) | null): void {
+  onBootStallCallback = cb;
+}
+
+/**
+ * Arm the boot-completion timer for the given window.
+ * Only arms in packaged builds (no-ops in dev) and only for http(s):// URLs
+ * (so file:// picker/recovery pages do not trip the timer).
+ */
+export function armBootTimer(win: BrowserWindow): void {
+  if (!app.isPackaged) return;
+  const url = win.webContents.getURL();
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return;
+  clearBootTimer();
+  bootArmed = true;
+  bootTimer = setTimeout(() => {
+    bootTimer = null;
+    if (!bootArmed) return;
+    bootArmed = false;
+    onBootStallCallback?.();
+  }, BOOT_TIMEOUT_MS);
+}
+
+/** Disarm and clear the boot timer. Called on renderer-ready or window destroy. */
+export function clearBootTimer(): void {
+  if (bootTimer) clearTimeout(bootTimer);
+  bootTimer = null;
+  bootArmed = false;
+}
+
+/** Returns true while the boot timer is armed and waiting for renderer-ready. */
+export function isBootArmed(): boolean {
+  return bootArmed;
+}
+
+/**
+ * Called from the renderer-ready IPC handler.
+ * Disarms the boot timer — the renderer booted successfully.
+ */
+export function handleRendererReady(): void {
+  if (bootArmed) clearBootTimer();
 }
