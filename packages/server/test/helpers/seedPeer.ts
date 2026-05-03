@@ -6,20 +6,34 @@ import type { SpawnedInstance } from './twoInstanceHarness.js';
  * with a single shared HMAC secret. Returns the secret for tests that need to sign
  * raw S2S requests directly.
  *
- * IMPORTANT — dual-origin reality in tests:
+ * Why two rows per direction (transport row + identity row):
  * Production code stores `peer.origin` as a single string and uses it for BOTH
- *   (a) outbound URL: `fetch(${peer.origin}/api/...)`, AND
- *   (b) inbound auth: `WHERE origin = X-Federation-Origin` claim from inbound headers.
- * In production with `DOMAIN=example.com`, both reduce to `https://example.com`.
+ *   (a) outbound URL: `fetch(${peer.origin}/api/...)` — wants the transport URL, AND
+ *   (b) inbound auth: `WHERE origin = X-Federation-Origin` — wants `getOurOrigin()`.
+ * In production with `DOMAIN=example.com`, both reduce to `https://example.com`,
+ * so a single row satisfies both. In a localhost integration harness the two
+ * forms cannot be collapsed:
+ *   - The transport URL is `http://127.0.0.1:<ephemeral-port>` (per-instance unique).
+ *   - `getOurOrigin()` defaults to `https://${DOMAIN}` (= `https://home.test.local`),
+ *     and even with the `PUBLIC_ORIGIN` env override the receiver's attribution
+ *     guard `extractDomain(user.homeInstance) === extractDomain(fedHeaders.origin)`
+ *     forces `homeInstance` to match the URL's hostname. `extractDomain` strips
+ *     the port (`new URL().hostname`), so unique-port localhost instances all
+ *     share the hostname `127.0.0.1` and attribution becomes ambiguous in
+ *     multi-remote setups. And the `homeInstance` validator regex
+ *     (`/^[a-zA-Z0-9._-]+$/` in `auth.ts`) rejects `:` — so we cannot encode
+ *     port into `homeInstance` to disambiguate.
  *
- * In our test harness, the URL is `http://127.0.0.1:<ephemeral>` but `getOurOrigin()`
- * returns `https://${DOMAIN}` (= `https://home.test.local`). These two values are
- * DIFFERENT, so we cannot satisfy both with one `peer.origin` row.
+ * Therefore the harness keeps `DOMAIN` as a per-instance human label
+ * (`home.test.local` / `remoteN.test.local`) for stable identity (federated
+ * usernames, attribution domain), and inserts TWO peer rows per direction:
+ * one keyed by the transport URL (outbound lookup) and one keyed by the
+ * `getOurOrigin()` URL (inbound auth lookup). The schema's UNIQUE(origin)
+ * permits both because the strings differ.
  *
- * Workaround: insert TWO rows per direction — one with the URL form (for outbound
- * lookup on the sender) and one with the DOMAIN-claim form (for inbound auth on
- * the receiver). The schema has a UNIQUE constraint on `origin`, but the two
- * rows have distinct origins so there is no conflict.
+ * Eliminating the second row would require a production refactor of either
+ * `extractDomain` (port-preserving), the attribution check (decouple from
+ * URL), or the `homeInstance` validator (allow `:`). Out of scope here.
  */
 export async function peerInstances(
   a: SpawnedInstance,
@@ -44,14 +58,12 @@ export async function peerInstances(
     }
   };
 
-  // Outbound lookup form (URL) — what users.ts / federation.ts use to find the
-  // hmacSecret given a body-supplied or DB-stored origin URL.
+  // Transport row — outbound URL lookup (`fetch(peer.origin)`).
   await seedOn(a, b.origin, b.domain);
   await seedOn(b, a.origin, a.domain);
 
-  // Inbound auth form (DOMAIN claim) — what the receiver uses to look up the
-  // peer when validating the X-Federation-Origin header from a sender whose
-  // `getOurOrigin()` returns `https://${DOMAIN}`.
+  // Identity row — inbound HMAC `X-Federation-Origin` claim, which equals the
+  // sender's `getOurOrigin()` (= `https://${DOMAIN}` by default).
   await seedOn(a, `https://${b.domain}`, b.domain);
   await seedOn(b, `https://${a.domain}`, a.domain);
 
