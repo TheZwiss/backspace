@@ -306,7 +306,7 @@ Allows a home instance to remove a user's replicated identity from a remote inst
 - **Attribution guard:** Rejects with `403` if the user's `homeInstance` doesn't match the `X-Federation-Origin` of the signing peer. Prevents one instance from deleting another instance's users.
 - **Idempotent:** Returns `{ success: true }` for already-deleted or nonexistent users (no error).
 - **Owned spaces check:** Returns `409` with `{ ownedSpaces: string[] }` if the user owns any spaces on the remote. The user must transfer or delete those spaces before identity removal proceeds.
-- **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes memberships, but skips reaction deletion and orphaned DM purge.
+- **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes the user from spaces, friends, DM membership (`dm_members`), and read-states. The `purgeContent: false` flag skips only `reactions`, `dm_reactions`, and the user's space `messages` (with attachments + embeds); DM membership cleanup and orphaned-DM purge always run in both modes (per `userDeletion.ts:121-126, 169-202`) because zero-member DM channels are unreachable garbage regardless of authorship retention.
 - **Mode `"full"`:** Calls `tombstoneUser(uid, { purgeContent: true })` — full tombstone including reactions and orphaned DM cleanup.
 - **Post-deletion:** Broadcasts `member_left` WS events for all spaces the user belonged to before removal.
 
@@ -1422,6 +1422,14 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | `dm_channels` (soft-deleted) | `deletedAt < (now - 24h)` | 24-hour grace period |
 
 DM channel hard-delete cascades: reactions, embeds, attachments (DB rows + disk files), messages, members, outbox entries, mutation log entries, file queue entries.
+
+### Worker Startup Gate
+
+`startFederationWorkers()` in `utils/federationWorker.ts:1211` starts: outbox-delivery tick, federated-call sentinel, file-replication ticks, health-check ticks, and the storage janitor. The whole bundle is gated by `process.env.DISABLE_FEDERATION_WORKERS` matching `'1'` or `'true'` at `index.ts:171-176` (envBool semantics). Tests set `DISABLE_FEDERATION_WORKERS=1` to silence cross-instance background traffic during setup.
+
+### Test-Only Routes
+
+`POST /api/admin/test/seed-peer` directly inserts a `federation_peers` row, skipping the multi-step peer handshake. Strictly gated: `NODE_ENV='test'` AND `ENABLE_TEST_ROUTES='1'` together; returns 404 in any other configuration. Used exclusively by the two-instance integration harness in `packages/server/test/`. Validates `origin` (must be http(s) URL), `hmacSecret` (≥32 chars), and `status` (must be one of `'active'`, `'pending'`, `'awaiting_approval'`, `'rejected'`, `'revoked'`, `'needs_attention'`, `'unreachable'`, `'accepted'`).
 
 ---
 

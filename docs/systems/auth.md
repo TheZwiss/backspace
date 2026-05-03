@@ -448,8 +448,8 @@ interface TombstoneOptions { purgeContent?: boolean }
 function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
 ```
 
-- **`purgeContent: true`** (default / omitted): full tombstone — existing behavior including reaction deletion and orphaned DM cleanup.
-- **`purgeContent: false`**: soft tombstone — skips `reactions`, `dmReactions` deletion and orphaned DM channel purge. Used by the federation identity soft-delete endpoint so remote message history is retained.
+- **`purgeContent: true`** (default / omitted): full tombstone — removes the user from spaces, friends, DM membership, and read-states; then also deletes `reactions`, `dmReactions`, and the user's space `messages` with their attachments and embeds.
+- **`purgeContent: false`**: soft tombstone — removes the user from spaces, friends, DM membership (`dm_members`), and read-states. The `purgeContent: false` flag skips only `reactions`, `dm_reactions`, and the user's space `messages` (with attachments + embeds); DM membership cleanup and orphaned-DM purge always run in both modes (per `userDeletion.ts:121-126, 169-202`) because zero-member DM channels are unreachable garbage regardless of authorship retention. Used by the federation identity soft-delete endpoint so remote message history is retained.
 
 ### `resolveOrCreateReplicatedUser` and Deleted Users
 
