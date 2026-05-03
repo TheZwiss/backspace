@@ -26,6 +26,8 @@ import {
 import {
   recoveryStore,
   attachRecoveryHandlers,
+  extractErrorCode,
+  setAutoUpdater,
   setMainWindow,
   setOnQuitRequested,
   handleRendererReady,
@@ -639,49 +641,86 @@ function initAutoUpdater(): void {
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
 
-    // Track whether an update was confirmed to exist — only show error toast
-    // if the download fails after we know an update is available. Errors from
-    // the check itself (e.g. private repo, no releases, network) are silent.
+    setAutoUpdater(autoUpdater);
+
     let updateConfirmed = false;
+
+    autoUpdater.on('checking-for-update', () => {
+      recoveryStore.update({ updateState: 'checking', lastCheckResult: null });
+      updateConfirmed = false;
+    });
 
     autoUpdater.on('update-available', (info: { version: string }) => {
       updateConfirmed = true;
+      recoveryStore.update({ updateState: 'downloading', updateVersion: info.version });
       mainWindow?.webContents.send('update-available', { version: info.version });
     });
 
     autoUpdater.on('update-not-available', () => {
       updateConfirmed = false;
+      recoveryStore.update({ updateState: 'idle', lastCheckResult: 'up-to-date' });
+      setTimeout(() => {
+        if (recoveryStore.get().lastCheckResult === 'up-to-date') {
+          recoveryStore.update({ lastCheckResult: null });
+        }
+      }, 5_000);
     });
 
     autoUpdater.on('update-downloaded', (info: { version: string }) => {
-      mainWindow?.webContents.send('update-downloaded', { version: info.version });
+      const version = info.version.slice(0, 32);
+      recoveryStore.update({ updateState: 'downloaded', updateVersion: version });
+      mainWindow?.webContents.send('update-downloaded', { version });
+
+      // Symmetric focus-based suppression: if the user is looking at the
+      // window, the in-app banner (normal mode) or recovery Restart button
+      // (recovery mode) is visible — no need to also fire a native toast.
+      if (!mainWindow?.isFocused()) {
+        showNotification(
+          'Backspace update ready',
+          `Click to restart and install version ${version}.`,
+          () => autoUpdater.quitAndInstall(),
+        );
+      }
     });
 
-    autoUpdater.on('error', (err: Error) => {
-      // Only notify renderer if we already confirmed an update exists but the
-      // download/install failed. Check-phase errors (auth, 404, network) are
-      // silently ignored — there's nothing actionable for the user.
+    autoUpdater.on('error', (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      const code = extractErrorCode(err);
+      recoveryStore.update({
+        updateState: 'error',
+        lastUpdateError: { message, code, at: Date.now() },
+        lastCheckResult: 'failed',
+      });
+      setTimeout(() => {
+        if (recoveryStore.get().lastCheckResult === 'failed') {
+          recoveryStore.update({ lastCheckResult: null });
+        }
+      }, 5_000);
+      // Existing behavior preserved: only push renderer error IPC after
+      // confirmed update. Check-phase errors stay silent.
       if (updateConfirmed) {
         mainWindow?.webContents.send('update-error', {
-          message: err.message,
+          message,
           releaseUrl: 'https://github.com/TheZwiss/backspace/releases/latest',
         });
       }
     });
 
-    // Initial check with 10s delay
+    // Initial check with 10s delay (existing behavior)
     setTimeout(() => {
       updateConfirmed = false;
       autoUpdater.checkForUpdates().catch(() => {});
     }, 10_000);
 
-    // Periodic check every 4 hours
+    // Periodic check every 4 hours (existing behavior)
     setInterval(() => {
       updateConfirmed = false;
       autoUpdater.checkForUpdates().catch(() => {});
     }, 4 * 60 * 60 * 1000);
   } catch {
-    // Graceful degradation — no update URL configured or electron-updater not available
+    // Auto-updater unavailable — recovery surface still functions, just
+    // without update affordances. autoUpdaterRef stays null; recovery action
+    // handlers no-op on update-related actions.
   }
 }
 
