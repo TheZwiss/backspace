@@ -653,6 +653,56 @@ describe('Federation identity deletion — server suite', () => {
     }
   });
 
+  it('#17 mixed result fan-out: success + unreachable in same response', async () => {
+    const { createFederatedUser } = await import('./helpers/testUsers.js');
+    const { seedUnreachablePeer } = await import('./helpers/seedPeer.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const { homeUser, remoteUser } = await createFederatedUser(harness.home, harness.remote, 't17');
+
+    const fakeOrigin = await seedUnreachablePeer(harness.home);
+
+    // Read the current registry, then PUT a merged registry with both real-remote
+    // and fake entries. The LWW guard requires updatedAt > stored, so use Date.now() + 1
+    // (createFederatedUser already wrote a timestamp).
+    const existing = await fetch(`${harness.home.origin}/api/users/@me/federation-registry`, {
+      headers: { Authorization: `Bearer ${homeUser.token}` },
+    }).then(r => r.json()) as { registry?: unknown[] };
+
+    const now = Date.now() + 1;
+    const putRes = await fetch(`${harness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: [
+          ...(existing.registry ?? []),
+          { origin: fakeOrigin, label: 'unreachable', username: 'x', remoteUserId: '', status: 'connected', addedAt: now },
+        ],
+      }),
+    });
+    expect(putRes.ok).toBe(true);
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin, fakeOrigin], mode: 'soft' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[harness.remote.origin].success).toBe(true);
+    expect(body.results[fakeOrigin].success).toBe(false);
+    expect(body.results[fakeOrigin].error).toBe('unreachable');
+
+    const inspect = openInspector(harness.home);
+    expect(inspect.registryRow(homeUser.id, harness.remote.origin)).toBeUndefined();
+    expect(inspect.registryRow(homeUser.id, fakeOrigin)).toBeTruthy();
+    inspect.close();
+
+    const remote = openInspector(harness.remote);
+    expect(remote.user(remoteUser.id)!.isDeleted).toBe(1);
+    remote.close();
+  });
+
 });
 
 let multiHarness: MultiRemoteHarness;
