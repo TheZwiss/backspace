@@ -464,6 +464,61 @@ describe('Federation identity deletion — server suite', () => {
     remote.close();
   });
 
+  it('#9 unreachable origin: error=unreachable, registry preserved', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const { seedUnreachablePeer } = await import('./helpers/seedPeer.js');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+    const home = await registerLocal(harness.home, 't9');
+    const fakeOrigin = await seedUnreachablePeer(harness.home);
+
+    const now = Date.now();
+    await fetch(`${harness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: [{ origin: fakeOrigin, label: 'fake', username: 'x', remoteUserId: '', status: 'connected', addedAt: now }],
+      }),
+    });
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({ origins: [fakeOrigin], mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[fakeOrigin].success).toBe(false);
+    expect(body.results[fakeOrigin].error).toBe('unreachable');
+
+    const inspect = openInspector(harness.home);
+    expect(inspect.registryRow(home.id, fakeOrigin)).toBeTruthy();
+    inspect.close();
+  });
+
+  it('#10 no active peer: error=no_active_peer', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const home = await registerLocal(harness.home, 't10');
+    const ghostOrigin = 'http://ghost.test.local:9999';
+    const now = Date.now();
+    await fetch(`${harness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: [{ origin: ghostOrigin, label: 'ghost', username: 'x', remoteUserId: '', status: 'connected', addedAt: now }],
+      }),
+    });
+
+    const res = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({ origins: [ghostOrigin], mode: 'full' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results[ghostOrigin].error).toBe('no_active_peer');
+  });
 });
 
 let multiHarness: MultiRemoteHarness;
