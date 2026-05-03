@@ -846,3 +846,62 @@ describe('Federation identity deletion — all-remotes fan-out', () => {
     home.close();
   });
 });
+
+let rateLimitHarness: TwoInstanceHarness;
+
+describe('Federation identity deletion — rate limit', () => {
+  beforeAll(async () => {
+    const { bootTwoInstancesWithRateLimits } = await import('./helpers/twoInstanceHarness.js');
+    rateLimitHarness = await bootTwoInstancesWithRateLimits();
+    // No peer setup needed — leave-mode tests skip S2S calls anyway, and
+    // the test only exercises the home endpoint's rate-limit hook.
+  }, 60_000);
+
+  afterAll(async () => {
+    if (rateLimitHarness) await rateLimitHarness.cleanup();
+  });
+
+  it('#15 rate limit: 6th call within 15min returns 429', async () => {
+    const { registerLocal } = await import('./helpers/testUsers.js');
+    const home = await registerLocal(rateLimitHarness.home, 't15');
+    const now = Date.now();
+    const fakeOrigins = Array.from({ length: 5 }, (_, i) => `http://ratelimit-${i}.test:99`);
+
+    // Seed 5 ephemeral registry entries on home (no peer rows needed — leave skips S2S)
+    const regRes = await fetch(`${rateLimitHarness.home.origin}/api/users/@me/federation-registry`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({
+        updatedAt: now,
+        registry: fakeOrigins.map(o => ({
+          origin: o,
+          label: o,
+          username: 'x',
+          remoteUserId: '',
+          status: 'connected',
+          addedAt: now,
+        })),
+      }),
+    });
+    expect(regRes.ok).toBe(true);
+
+    // 5 successful leave calls (each targets a different fake origin)
+    for (const origin of fakeOrigins) {
+      const res = await fetch(`${rateLimitHarness.home.origin}/api/users/@me/federation-identity/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+        body: JSON.stringify({ origins: [origin], mode: 'leave' }),
+      });
+      expect(res.status).toBe(200);
+    }
+
+    // 6th attempt should be rate-limited
+    const res6 = await fetch(`${rateLimitHarness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${home.token}` },
+      body: JSON.stringify({ origins: ['http://does-not-matter.test'], mode: 'leave' }),
+    });
+    expect(res6.status).toBe(429);
+    expect(res6.headers.get('retry-after')).toBeTruthy();
+  });
+});
