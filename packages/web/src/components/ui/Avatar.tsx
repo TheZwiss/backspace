@@ -120,7 +120,7 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
         ) : null}
         <div
           className={`avatar-fallback w-full h-full rounded-full flex items-center justify-center font-bold text-white ${src ? 'hidden' : 'flex'}`}
-          style={src ? { display: 'none' } : { background: gradient.gradient, fontSize: fontPx }}
+          style={{ background: gradient.gradient, fontSize: fontPx, ...(src ? { display: 'none' } : {}) }}
         >
           {initials}
         </div>
