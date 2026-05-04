@@ -569,24 +569,16 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     );
   }
 
-  if (showInitialSkeleton) {
-    return (
-      <div className="flex-1 flex flex-col justify-end px-4 pb-6" role="status" aria-label="Loading messages">
-        {Array.from({ length: 7 }, (_, i) => (
-          <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
-            <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
-            <div className="flex-1 space-y-2 pt-1">
-              <div className="skeleton skeleton-bar" style={{ width: `${20 + (i * 7) % 20}%`, animationDelay: `${i * 0.15}s` }} />
-              <div className="skeleton skeleton-bar h-2.5" style={{ width: `${50 + (i * 13) % 40}%`, animationDelay: `${i * 0.15}s` }} />
-              {i % 2 === 0 && (
-                <div className="skeleton skeleton-bar h-2.5" style={{ width: `${30 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
+  // The initial-load skeleton is rendered as an absolutely-positioned overlay
+  // (NOT an early return) so that the scroll container below — and its
+  // `containerRef` / `contentRef` — stay mounted across the loading transition.
+  // Auto-scroll effects (initial snap, ResizeObserver, load-handler, scrollend)
+  // are keyed on `[messages.length, channelId]` / `[hasMessages, channelId]`,
+  // and each commits its only re-fire signal during the load window. If the
+  // refs were null at that moment (which they are if the skeleton replaces the
+  // container via early-return), every effect bails on its null guard and never
+  // re-attaches once the skeleton clears, leaving the user scrolled to the top.
+  // See docs/systems/message-list.md "ContainerRef invariant".
 
   return (
     <div className="flex-1 relative min-h-0">
@@ -657,6 +649,27 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
         <div ref={bottomRef} />
       </div>
+
+      {showInitialSkeleton && (
+        <div
+          className="absolute inset-0 z-10 bg-surface-chat flex flex-col justify-end px-4 pb-6 pointer-events-none"
+          role="status"
+          aria-label="Loading messages"
+        >
+          {Array.from({ length: 7 }, (_, i) => (
+            <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
+              <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="skeleton skeleton-bar" style={{ width: `${20 + (i * 7) % 20}%`, animationDelay: `${i * 0.15}s` }} />
+                <div className="skeleton skeleton-bar h-2.5" style={{ width: `${50 + (i * 13) % 40}%`, animationDelay: `${i * 0.15}s` }} />
+                {i % 2 === 0 && (
+                  <div className="skeleton skeleton-bar h-2.5" style={{ width: `${30 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!isNearBottom && messages.length > 0 && (
         <button
