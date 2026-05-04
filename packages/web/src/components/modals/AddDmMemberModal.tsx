@@ -5,9 +5,76 @@ import { Avatar } from '../ui/Avatar';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useSocialStore } from '../../stores/socialStore';
+import { useSocialStore, type TaggedFriend } from '../../stores/socialStore';
 import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import type { User } from '@backspace/shared';
+
+function AddDmFriendRow({
+  friend,
+  isInDm,
+  isSelected,
+  atCapacity,
+  isAdding,
+  onToggle,
+}: {
+  friend: TaggedFriend;
+  isInDm: boolean;
+  isSelected: boolean;
+  atCapacity: boolean;
+  isAdding: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const friendDisplayName = canonical.displayName ?? baseName;
+  return (
+    <button
+      onClick={() => onToggle(friend.id)}
+      disabled={isInDm || isAdding || atCapacity}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
+        isInDm
+          ? 'opacity-40 cursor-not-allowed'
+          : isSelected
+            ? 'bg-accent-mint/[0.08]'
+            : 'hover:bg-interactive-hover'
+      } ${atCapacity && !isInDm ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={friendDisplayName}
+        size={30}
+        status={canonical.status as any}
+        userId={canonical.homeUserId ?? canonical.id}
+        avatarColor={canonical.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-txt-primary truncate">
+          {friendDisplayName}
+        </div>
+        <div className="text-[11px] text-txt-tertiary truncate">
+          {isInDm ? 'Already in this DM' : `@${canonical.username}`}
+        </div>
+      </div>
+      {!isInDm && (
+        <div
+          className={`w-[18px] h-[18px] rounded flex-shrink-0 flex items-center justify-center ${
+            isSelected
+              ? 'bg-accent-mint'
+              : 'border-2 border-border-hard'
+          }`}
+        >
+          {isSelected && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-surface-base">
+              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
 
 export function AddDmMemberModal() {
   const [query, setQuery] = useState('');
@@ -197,54 +264,16 @@ export function AddDmMemberModal() {
             const isInDm = currentMemberIds.has(friend.id);
             const isSelected = selected.has(friend.id);
             const atCapacity = !isSelected && selected.size >= remainingSlots;
-            const { baseName, domain } = parseFederatedUsername(friend.username);
-            const friendDisplayName = friend.displayName ?? baseName;
-
             return (
-              <button
+              <AddDmFriendRow
                 key={friend.id}
-                onClick={() => toggleFriend(friend.id)}
-                disabled={isInDm || isAdding || atCapacity}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
-                  isInDm
-                    ? 'opacity-40 cursor-not-allowed'
-                    : isSelected
-                      ? 'bg-accent-mint/[0.08]'
-                      : 'hover:bg-interactive-hover'
-                } ${atCapacity && !isInDm ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                <Avatar
-                  src={friend.avatar}
-                  name={friendDisplayName}
-                  size={30}
-                  status={friend.status as any}
-                  userId={friend.homeUserId ?? friend.id}
-                  avatarColor={friend.avatarColor}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-txt-primary truncate">
-                    {friendDisplayName}
-                  </div>
-                  <div className="text-[11px] text-txt-tertiary truncate">
-                    {isInDm ? 'Already in this DM' : `@${friend.username}`}
-                  </div>
-                </div>
-                {!isInDm && (
-                  <div
-                    className={`w-[18px] h-[18px] rounded flex-shrink-0 flex items-center justify-center ${
-                      isSelected
-                        ? 'bg-accent-mint'
-                        : 'border-2 border-border-hard'
-                    }`}
-                  >
-                    {isSelected && (
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-surface-base">
-                        <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                )}
-              </button>
+                friend={friend}
+                isInDm={isInDm}
+                isSelected={isSelected}
+                atCapacity={atCapacity}
+                isAdding={isAdding}
+                onToggle={toggleFriend}
+              />
             );
           })}
         </div>

@@ -5,7 +5,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useSocialStore } from '../stores/socialStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity } from '@backspace/shared';
+import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
 import { sortDmChannels } from '../utils/dmSorting';
@@ -128,7 +128,7 @@ const HOME_ORIGIN = '';
 function handleEvent(origin: string, event: ServerEvent): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
-  const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel } = useSpaceStore.getState();
+  const { populateFromReady, loadSpaceDetail, currentSpaceId, updateMemberPresence, addMember, removeMember, addDmChannel, removeDmChannel, upsertUserView } = useSpaceStore.getState();
   const { addMessage, addRealtimeMessage, updateMessage, removeMessage, setTyping, clearTyping, onReactionAdded, onReactionRemoved } = useChatStore.getState();
   const { addVoiceUser, removeVoiceUser, clearVoiceUsersForOrigin, setVoiceUsers, setVoiceUserStatus, clearVoiceUserStatus } = useVoiceStore.getState();
 
@@ -456,6 +456,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+      if (event.message.user) upsertUserView(event.message.user, origin);
+      if (event.message.replyTo?.user) upsertUserView(event.message.replyTo.user, origin);
       addRealtimeMessage(event.message.channelId, event.message);
       {
         const { currentChannelId, markChannelUnread } = useChatStore.getState();
@@ -479,6 +481,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+      if (event.message.user) upsertUserView(event.message.user, origin);
+      if (event.message.replyTo?.user) upsertUserView(event.message.replyTo.user, origin);
       updateMessage(event.message);
       break;
 
@@ -505,6 +509,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'user_updated': {
       if (!isHome) normalizeUserAssets(event.user, origin);
+      upsertUserView(event.user, origin);
       useSpaceStore.getState().updateUserEverywhere(event.user);
       useSocialStore.getState().updateFriendProfile(event.user);
       useChatStore.getState().updateUserInMessages(event.user);
@@ -608,6 +613,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'member_joined':
       if (!isHome) normalizeUserAssets(event.member.user, origin);
+      upsertUserView(event.member.user, origin);
       addMember(event.member);
       break;
 
@@ -642,6 +648,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+      if ((event.message as any).user) upsertUserView((event.message as any).user, origin);
+      if ((event.message as any).replyTo?.user) upsertUserView((event.message as any).replyTo.user, origin);
       const { dmChannels: currentDmChannels, setDmChannels: setDms, addDmChannel: addDmCh } = useSpaceStore.getState();
       const knownDm = currentDmChannels.find(dm => dm.id === event.message.dmChannelId);
 
@@ -732,6 +740,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
           }
         }
       }
+      if ((event.message as any).user) upsertUserView((event.message as any).user, origin);
+      if ((event.message as any).replyTo?.user) upsertUserView((event.message as any).replyTo.user, origin);
       updateMessage(event.message as any);
       break;
 
@@ -885,6 +895,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'friend_request_received': {
       if (!isHome && event.request.user) normalizeUserAssets(event.request.user, origin);
+      if (event.request.user) upsertUserView(event.request.user, origin);
       const { addIncomingRequest } = useSocialStore.getState();
       addIncomingRequest(event.request, origin);
       break;
@@ -893,6 +904,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'friend_request_sent': {
       // Multi-tab sync: another tab/device of the same user just created an outbound request.
       if (!isHome && event.request.user) normalizeUserAssets(event.request.user, origin);
+      if (event.request.user) upsertUserView(event.request.user, origin);
       const { addOutboundRequest } = useSocialStore.getState();
       addOutboundRequest(event.request, origin);
       break;
@@ -913,6 +925,8 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'friend_request_accepted': {
       if (!isHome) normalizeUserAssets(event.friend, origin);
+      // Friend carries the identity fields the cache needs; cast to User for upsert.
+      upsertUserView(event.friend as unknown as User, origin);
       const { addFriendFromAccepted } = useSocialStore.getState();
       addFriendFromAccepted(event.friend, event.requestId, origin);
       import('../stores/discoverStore').then(({ useDiscoverStore }) => {
@@ -1062,6 +1076,9 @@ function handleEvent(origin: string, event: ServerEvent): void {
           normalizeUserAssets(m, origin);
         }
       }
+      for (const m of event.dmChannel.members) {
+        upsertUserView(m, origin);
+      }
       // Dedup: skip if a channel with the same federatedId already exists
       const fid = event.dmChannel.federatedId;
       if (fid) {
@@ -1080,6 +1097,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'dm_member_added': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
       if (!isHome) normalizeUserAssets(event.user, origin);
+      upsertUserView(event.user, origin);
       const { addDmMember } = useSpaceStore.getState();
       addDmMember(event.dmChannelId, event.user);
       break;

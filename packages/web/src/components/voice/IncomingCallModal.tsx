@@ -3,7 +3,9 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore, getChannelOrigin } from '../../stores/spaceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
+import type { User } from '@backspace/shared';
 
 export function IncomingCallModal() {
   const incomingCall = useVoiceStore((s) => s.incomingCall);
@@ -31,11 +33,18 @@ export function IncomingCallModal() {
 
   const dmChannels = useSpaceStore((s) => s.dmChannels);
 
+  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  // Look up caller member before the early return so useCanonicalUserView is always called
+  const _rawCallerMember = (() => {
+    if (!incomingCall) return null;
+    const dmChannel = dmChannels.find(d => d.id === incomingCall.dmChannelId);
+    return dmChannel?.members.find(m => m.id === incomingCall.callerId) ?? null;
+  })();
+  const _canonicalCaller = useCanonicalUserView((_rawCallerMember as User | null) ?? _FALLBACK_USER);
+  const callerMember = _rawCallerMember ? _canonicalCaller : null;
+
   if (!incomingCall) return null;
 
-  // Look up the caller in DM channel members for homeUserId
-  const dmChannel = dmChannels.find(d => d.id === incomingCall.dmChannelId);
-  const callerMember = dmChannel?.members.find(m => m.id === incomingCall.callerId);
   const callerAvatarId = callerMember?.homeUserId ?? incomingCall.callerId;
   const { baseName: callerBaseName } = parseFederatedUsername(incomingCall.callerName);
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DiscoverUser } from '@backspace/shared';
+import type { DiscoverUser, User } from '@backspace/shared';
 import { api } from '../api/client';
 import { useInstanceStore } from './instanceStore';
 import { normalizeUserAssets } from '../utils/assetUrls';
@@ -52,6 +52,10 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
       });
     }
 
+    // Lazy import — avoids pulling spaceStore's transitive dependency chain
+    // (voiceStore → AudioManager) into test environments.
+    const { useSpaceStore } = await import('./spaceStore');
+
     try {
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
@@ -84,6 +88,8 @@ export const useDiscoverStore = create<DiscoverState>((set) => ({
           seen.add(key);
           if (origin) normalizeUserAssets(user as unknown as { avatar?: string | null; banner?: string | null }, origin);
           allUsers.push({ ...user, _instanceOrigin: origin });
+          // DiscoverUser carries the identity/avatar fields the cache needs; cast to User.
+          useSpaceStore.getState().upsertUserView(user as unknown as User, origin);
         }
       }
 

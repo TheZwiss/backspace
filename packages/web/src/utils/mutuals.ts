@@ -52,6 +52,10 @@ export async function loadFederatedMutuals(
     });
   }
 
+  // Lazy import — avoids pulling spaceStore's transitive dependency chain into
+  // test environments that don't set up AudioWorkletNode.
+  const { useSpaceStore } = await import('../stores/spaceStore');
+
   const instances = useInstanceStore.getState().instances;
   const connectedInstances = instances.filter(i => i.status === 'connected');
 
@@ -82,6 +86,7 @@ export async function loadFederatedMutuals(
       seenFriends.add(canonicalId);
       if (origin) normalizeUserAssets(friend, origin);
       allFriends.push({ ...friend, _instanceOrigin: origin });
+      useSpaceStore.getState().upsertUserView(friend, origin);
     }
 
     // Spaces on different instances are distinct — deduplicate within same origin

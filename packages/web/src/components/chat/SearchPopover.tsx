@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
 import { isDmChannel, getChannelOrigin, getApiForOrigin } from '../../stores/spaceStore';
 import { Avatar } from '../ui/Avatar';
-import type { MessageWithUser, DmMessageWithUser } from '@backspace/shared';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import type { MessageWithUser, DmMessageWithUser, User } from '@backspace/shared';
 
 type AnyMessage = MessageWithUser | DmMessageWithUser;
 
@@ -37,6 +38,58 @@ function highlightMatch(text: string, query: string): React.ReactNode {
     part.toLowerCase() === query.toLowerCase()
       ? <mark key={i} className="bg-accent-primary/30 text-txt-primary rounded-sm px-0.5">{part}</mark>
       : part
+  );
+}
+
+const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+
+function SearchResultRow({
+  msg,
+  query,
+  onJumpToMessage,
+}: {
+  msg: AnyMessage;
+  query: string;
+  onJumpToMessage: (id: string) => void;
+}) {
+  const canonical = useCanonicalUserView(msg.user ?? _FALLBACK_USER);
+  const displayName = canonical.displayName ?? canonical.username ?? '?';
+  const avatar = msg.user ? canonical.avatar : undefined;
+  return (
+    <button
+      onClick={() => onJumpToMessage(msg.id)}
+      className="w-full px-3 py-2.5 hover:bg-interactive-hover transition-colors text-left flex items-start gap-2.5 group/result"
+    >
+      <div className="flex-shrink-0 mt-0.5">
+        <Avatar
+          src={avatar}
+          name={displayName}
+          size={28}
+          user={msg.user ? canonical : undefined}
+        />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[13px] font-semibold text-txt-primary truncate">
+            {displayName}
+          </span>
+          <span className="text-[10px] text-txt-tertiary flex-shrink-0">
+            {formatTime(msg.createdAt)}
+          </span>
+        </div>
+        <div className="text-[13px] text-txt-secondary leading-[1.4] line-clamp-2 mt-0.5">
+          {highlightMatch(msg.content ?? '', query)}
+        </div>
+        {msg.attachments && msg.attachments.length > 0 && (
+          <div className="flex items-center gap-1 mt-1 text-[11px] text-txt-tertiary">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H9v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S6 2.79 6 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z" />
+            </svg>
+            {msg.attachments.length} attachment{msg.attachments.length !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -277,41 +330,12 @@ export function SearchPopover({ open, onClose, anchorRef, channelId, isDm, onJum
               {totalCount} result{totalCount !== 1 ? 's' : ''}
             </div>
             {results.map((msg) => (
-              <button
+              <SearchResultRow
                 key={msg.id}
-                onClick={() => onJumpToMessage(msg.id)}
-                className="w-full px-3 py-2.5 hover:bg-interactive-hover transition-colors text-left flex items-start gap-2.5 group/result"
-              >
-                <div className="flex-shrink-0 mt-0.5">
-                  <Avatar
-                    src={msg.user?.avatar}
-                    name={msg.user?.displayName ?? msg.user?.username ?? '?'}
-                    size={28}
-                    user={msg.user ?? undefined}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-[13px] font-semibold text-txt-primary truncate">
-                      {msg.user?.displayName ?? msg.user?.username ?? 'Unknown'}
-                    </span>
-                    <span className="text-[10px] text-txt-tertiary flex-shrink-0">
-                      {formatTime(msg.createdAt)}
-                    </span>
-                  </div>
-                  <div className="text-[13px] text-txt-secondary leading-[1.4] line-clamp-2 mt-0.5">
-                    {highlightMatch(msg.content ?? '', query)}
-                  </div>
-                  {msg.attachments && msg.attachments.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1 text-[11px] text-txt-tertiary">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H9v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S6 2.79 6 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z" />
-                      </svg>
-                      {msg.attachments.length} attachment{msg.attachments.length !== 1 ? 's' : ''}
-                    </div>
-                  )}
-                </div>
-              </button>
+                msg={msg}
+                query={query}
+                onJumpToMessage={onJumpToMessage}
+              />
             ))}
             {results.length < totalCount && (
               <div className="px-3 py-2 border-t border-white/[0.07]">

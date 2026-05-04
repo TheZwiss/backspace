@@ -1,9 +1,33 @@
 import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Tooltip } from '../ui/Tooltip';
-import { parseFederatedUsername, isSelf } from '../../utils/identity';
+import { parseFederatedUsername, isSelf, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmTimestamp, formatDmSidebarPreview } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
+
+/**
+ * Renders a single avatar slot in the group DM avatar pair.
+ * Extracted as a component so useCanonicalUserView can be called per-slot
+ * (hooks must not be called inside a variable-length .map()).
+ */
+function DmGroupAvatarSlot({ member, index }: { member: User; index: number }) {
+  const canonical = useCanonicalUserView(member);
+  const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
+  return (
+    <div
+      className="absolute rounded-full overflow-hidden border-2 border-surface-channel"
+      style={{
+        width: 22, height: 22,
+        left: index * 10,
+        top: index * 6,
+        zIndex: 2 - index,
+      }}
+    >
+      <Avatar src={canonical.avatar} name={displayName} size={22} userId={canonical.homeUserId ?? canonical.id} user={canonical} />
+    </div>
+  );
+}
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
   if (!homeInstance) return false;
@@ -33,8 +57,15 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   const isGroup = !!dm.ownerId;
   if (otherMembers.length === 0 && !isGroup) return null;
 
-  const firstOther = isGroup ? null : otherMembers[0];
-  const { baseName, domain } = parseFederatedUsername(firstOther?.username ?? '');
+  // Route the 1-on-1 partner through the canonical view cache. Group member
+  // avatars are handled per-slot in DmGroupAvatarSlot (hook-in-loop safety).
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const rawFirstOther = isGroup ? null : (otherMembers[0] ?? null);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const firstOtherCanonical = useCanonicalUserView(rawFirstOther ?? user);
+  const firstOther = rawFirstOther ? firstOtherCanonical : null;
+
+  const { baseName } = parseFederatedUsername(firstOther?.username ?? '');
   const displayName = isGroup
     ? (otherMembers.length > 0
       ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
@@ -126,22 +157,11 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
       {isGroup ? (
         <div className="relative w-8 h-8 flex-shrink-0">
           {otherMembers.slice(0, 2).map((m, i) => (
-            <div
-              key={m.id}
-              className="absolute rounded-full overflow-hidden border-2 border-surface-channel"
-              style={{
-                width: 22, height: 22,
-                left: i * 10,
-                top: i * 6,
-                zIndex: 2 - i,
-              }}
-            >
-              <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={22} userId={m.homeUserId ?? m.id} user={m} />
-            </div>
+            <DmGroupAvatarSlot key={m.id} member={m} index={i} />
           ))}
         </div>
       ) : (
-        <Avatar src={otherMembers[0]?.avatar} name={otherMembers[0]?.displayName ?? parseFederatedUsername(otherMembers[0]?.username ?? '').baseName} size={32} status={otherMembers[0]?.status as any} userId={otherMembers[0]?.homeUserId ?? otherMembers[0]?.id} user={otherMembers[0]} />
+        <Avatar src={firstOther?.avatar} name={firstOther?.displayName ?? parseFederatedUsername(firstOther?.username ?? '').baseName} size={32} status={firstOther?.status as any} userId={firstOther?.homeUserId ?? firstOther?.id} user={firstOther ?? undefined} />
       )}
 
       {/* Content */}
@@ -150,8 +170,8 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
           <span className={nameClass}>
             {displayName}
           </span>
-          {!isGroup && domain && (
-            <Tooltip content={firstOther?.username ?? ''} position="top">
+          {!isGroup && firstOther && isFederationGlobeApplicable(firstOther) && (
+            <Tooltip content={firstOther.username} position="top">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={fedBadgeClass}>
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
               </svg>

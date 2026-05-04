@@ -81,6 +81,10 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       // Wait for all remote connections to establish before fanning out
       await waitForAutoConnect();
 
+      // Lazy import — avoids pulling spaceStore's transitive chain (voiceStore →
+      // AudioManager) into test environments that mock only instanceStore.
+      const { useSpaceStore } = await import('./spaceStore');
+
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
 
@@ -113,6 +117,9 @@ export const useSocialStore = create<SocialState>((set, get) => ({
             if (isNative) {
               if (origin) normalizeUserAssets(friend, origin);
               allFriends[existingIdx] = { ...friend, _instanceOrigin: origin };
+              // Upsert the upgraded (native) view into the userViews cache.
+              // Friend carries all identity/avatar fields the cache needs.
+              useSpaceStore.getState().upsertUserView(friend as unknown as User, origin);
             }
             continue;
           }
@@ -120,6 +127,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           seen.set(canonicalId, allFriends.length);
           if (origin) normalizeUserAssets(friend, origin);
           allFriends.push({ ...friend, _instanceOrigin: origin });
+          useSpaceStore.getState().upsertUserView(friend as unknown as User, origin);
         }
       }
 
@@ -138,6 +146,9 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     try {
       // Wait for all remote connections to establish before fanning out
       await waitForAutoConnect();
+
+      // Lazy import — same pattern as loadFriends; avoids AudioManager TDZ in tests.
+      const { useSpaceStore } = await import('./spaceStore');
 
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
@@ -172,6 +183,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
             if (otherIsNativeHere) {
               if (origin && request.user) normalizeUserAssets(request.user, origin);
               allRequests[existingIdx] = { ...request, _instanceOrigin: origin };
+              if (request.user) useSpaceStore.getState().upsertUserView(request.user, origin);
             }
             continue;
           }
@@ -179,6 +191,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           if (otherCanonicalId) seen.set(otherCanonicalId, allRequests.length);
           if (origin && request.user) normalizeUserAssets(request.user, origin);
           allRequests.push({ ...request, _instanceOrigin: origin });
+          if (request.user) useSpaceStore.getState().upsertUserView(request.user, origin);
         }
       }
 
@@ -278,6 +291,9 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
   searchUsers: async (query: string) => {
     try {
+      // Lazy import — avoids AudioManager TDZ in test environments.
+      const { useSpaceStore } = await import('./spaceStore');
+
       const instances = useInstanceStore.getState().instances;
       const connectedInstances = instances.filter(i => i.status === 'connected');
 
@@ -316,6 +332,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
             if (isNative) {
               if (origin) normalizeUserAssets(user, origin);
               allUsers[existingIdx] = { ...user, _instanceOrigin: origin };
+              useSpaceStore.getState().upsertUserView(user, origin);
             }
             continue;
           }
@@ -323,6 +340,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           seen.set(canonicalId, allUsers.length);
           if (origin) normalizeUserAssets(user, origin);
           allUsers.push({ ...user, _instanceOrigin: origin });
+          useSpaceStore.getState().upsertUserView(user, origin);
         }
       });
 

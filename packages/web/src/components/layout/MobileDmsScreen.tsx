@@ -9,8 +9,147 @@ import { Avatar } from '../ui/Avatar';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable, isSelf } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmSidebarPreview } from '../../utils/dmFormatters';
+import type { DmChannel, User } from '@backspace/shared';
+import type { TaggedFriend } from '../../stores/socialStore';
+
+const FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+
+function MobileFriendBubble({
+  friend,
+  dmChannels,
+  onTap,
+}: {
+  friend: TaggedFriend;
+  dmChannels: DmChannel[];
+  onTap: (dmId: string) => void;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  // _instanceOrigin lives on TaggedFriend, not on the canonical User. Use the
+  // canonical avatar value but source the origin from the original friend.
+  const avatarUrl = canonical.avatar
+    ? resolveAssetUrl(canonical.avatar, friend._instanceOrigin) ?? `/api/uploads/${canonical.avatar}`
+    : null;
+  const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
+
+  return (
+    <button
+      onClick={() => {
+        const existingDm = dmChannels.find(dm =>
+          !dm.ownerId && dm.members.some(m => m.id === friend.id)
+        );
+        if (existingDm) {
+          onTap(existingDm.id);
+        }
+      }}
+      className="flex flex-col items-center gap-1 shrink-0 w-14"
+    >
+      <div className="relative">
+        <Avatar
+          src={avatarUrl}
+          name={displayName}
+          avatarColor={canonical.avatarColor}
+          size={40}
+        />
+        <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-base ${
+          friend.status === 'online' ? 'bg-status-online' :
+          friend.status === 'idle' ? 'bg-status-idle' :
+          'bg-status-dnd'
+        }`} />
+      </div>
+      <span className="text-[10px] text-txt-secondary truncate w-full text-center">
+        {displayName}
+      </span>
+    </button>
+  );
+}
+
+function MobileDmRow({
+  dm,
+  authUser,
+  readStates,
+  onTap,
+  onContextMenu,
+  formatTimestamp,
+}: {
+  dm: DmChannel;
+  authUser: User | null;
+  readStates: Map<string, string>;
+  onTap: (id: string) => void;
+  onContextMenu: (e: React.MouseEvent, id: string, isGroup: boolean) => void;
+  formatTimestamp: (ts: number) => string;
+}) {
+  const otherMembers = dm.members.filter(m => authUser ? !isSelf(m, authUser) : m.id !== authUser);
+  const isGroup = !!dm.ownerId;
+  const rawMainUser = otherMembers[0] ?? null;
+  const canonicalMainUser = useCanonicalUserView(rawMainUser ?? FALLBACK_USER);
+  const mainUser = rawMainUser ? canonicalMainUser : null;
+
+  const name = isGroup
+    ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+    : mainUser?.displayName ?? (parseFederatedUsername(mainUser?.username ?? '').baseName || 'Unknown');
+
+  const lastMsgId = dm.lastMessage?.id;
+  const readState = readStates.get(dm.id);
+  const isUnread = lastMsgId && (!readState || readState < lastMsgId);
+
+  const preview = formatDmSidebarPreview(dm, authUser ?? null);
+  const previewTime = dm.lastMessage?.createdAt;
+
+  const avatarUrl = mainUser?.avatar ? `/api/uploads/${mainUser.avatar}` : null;
+
+  return (
+    <button
+      key={dm.id}
+      data-context-menu
+      onClick={() => onTap(dm.id)}
+      onContextMenu={(e) => onContextMenu(e, dm.id, isGroup)}
+      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-interactive-hover text-left transition-colors"
+    >
+      <div className="relative shrink-0">
+        {isGroup ? (
+          <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
+            <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+            </svg>
+          </div>
+        ) : (
+          <Avatar
+            src={avatarUrl}
+            name={name}
+            avatarColor={mainUser?.avatarColor}
+            size={40}
+          />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : 'text-txt-primary'}`}>
+            {name}
+          </span>
+          {previewTime && (
+            <span className="text-[11px] text-txt-tertiary shrink-0">
+              {formatTimestamp(previewTime)}
+            </span>
+          )}
+        </div>
+        {!isGroup && mainUser && isFederationGlobeApplicable(mainUser) && (
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">
+            @{parseFederatedUsername(mainUser.username).domain}
+          </div>
+        )}
+        {preview && (
+          <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-txt-secondary font-medium' : 'text-txt-tertiary'}`}>
+            {preview}
+          </p>
+        )}
+      </div>
+      {isUnread && <span className="w-2.5 h-2.5 rounded-full bg-accent-primary shrink-0" />}
+    </button>
+  );
+}
 
 export function MobileDmsScreen() {
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
@@ -98,122 +237,31 @@ export function MobileDmsScreen() {
       {onlineFriends.length > 0 && (
         <div className="px-4 py-3 border-b border-border-soft">
           <div className="flex gap-3 overflow-x-auto no-scrollbar">
-            {onlineFriends.map(friend => {
-              const avatarUrl = friend.avatar
-                ? resolveAssetUrl(friend.avatar, friend._instanceOrigin) ?? `/api/uploads/${friend.avatar}`
-                : null;
-              return (
-                <button
-                  key={friend.id}
-                  onClick={() => {
-                    // Find or create DM with this friend
-                    const existingDm = dmChannels.find(dm =>
-                      !dm.ownerId && dm.members.some(m => m.id === friend.id)
-                    );
-                    if (existingDm) {
-                      handleDmTap(existingDm.id);
-                    }
-                  }}
-                  className="flex flex-col items-center gap-1 shrink-0 w-14"
-                >
-                  <div className="relative">
-                    <Avatar
-                      src={avatarUrl}
-                      name={friend.displayName ?? parseFederatedUsername(friend.username).baseName}
-                      avatarColor={friend.avatarColor}
-                      size={40}
-                    />
-                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-base ${
-                      friend.status === 'online' ? 'bg-status-online' :
-                      friend.status === 'idle' ? 'bg-status-idle' :
-                      'bg-status-dnd'
-                    }`} />
-                  </div>
-                  <span className="text-[10px] text-txt-secondary truncate w-full text-center">
-                    {friend.displayName ?? parseFederatedUsername(friend.username).baseName}
-                  </span>
-                </button>
-              );
-            })}
+            {onlineFriends.map(friend => (
+              <MobileFriendBubble
+                key={friend.id}
+                friend={friend}
+                dmChannels={dmChannels}
+                onTap={handleDmTap}
+              />
+            ))}
           </div>
         </div>
       )}
 
       {/* DM list */}
       <div className="flex-1 overflow-y-auto">
-        {sortedDms.map(dm => {
-          const otherMembers = dm.members.filter(m => m.id !== authUser?.id);
-          const isGroup = !!dm.ownerId;
-          const name = isGroup
-            ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-            : otherMembers[0]?.displayName ?? (parseFederatedUsername(otherMembers[0]?.username ?? '').baseName || 'Unknown');
-
-          const lastMsgId = dm.lastMessage?.id;
-          const readState = readStates.get(dm.id);
-          const isUnread = lastMsgId && (!readState || readState < lastMsgId);
-
-          // formatDmSidebarPreview returns the full preview line (system messages
-          // get human-readable text; group user-messages get the "Sender: " prefix).
-          const preview = formatDmSidebarPreview(dm, authUser ?? null);
-          const previewTime = dm.lastMessage?.createdAt;
-
-          const mainUser = otherMembers[0];
-          const avatarUrl = mainUser?.avatar
-            ? `/api/uploads/${mainUser.avatar}`
-            : null;
-
-          return (
-            <button
-              key={dm.id}
-              data-context-menu
-              onClick={() => handleDmTap(dm.id)}
-              onContextMenu={(e) => handleDmContextMenu(e, dm.id, isGroup)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-interactive-hover text-left transition-colors"
-            >
-              <div className="relative shrink-0">
-                {isGroup ? (
-                  <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
-                    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-                    </svg>
-                  </div>
-                ) : (
-                  <Avatar
-                    src={avatarUrl}
-                    name={name}
-                    avatarColor={mainUser?.avatarColor}
-                    size={40}
-                  />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : 'text-txt-primary'}`}>
-                    {name}
-                  </span>
-                  {previewTime && (
-                    <span className="text-[11px] text-txt-tertiary shrink-0">
-                      {formatTimestamp(previewTime)}
-                    </span>
-                  )}
-                </div>
-                {(() => {
-                  const mainUser = otherMembers[0];
-                  if (!mainUser) return null;
-                  const { domain } = parseFederatedUsername(mainUser.username);
-                  if (!domain) return null;
-                  return <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>;
-                })()}
-                {preview && (
-                  <p className={`text-xs truncate mt-0.5 ${isUnread ? 'text-txt-secondary font-medium' : 'text-txt-tertiary'}`}>
-                    {preview}
-                  </p>
-                )}
-              </div>
-              {isUnread && <span className="w-2.5 h-2.5 rounded-full bg-accent-primary shrink-0" />}
-            </button>
-          );
-        })}
+        {sortedDms.map(dm => (
+          <MobileDmRow
+            key={dm.id}
+            dm={dm}
+            authUser={authUser ?? null}
+            readStates={readStates}
+            onTap={handleDmTap}
+            onContextMenu={handleDmContextMenu}
+            formatTimestamp={formatTimestamp}
+          />
+        ))}
 
         {sortedDms.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 opacity-80">

@@ -9,6 +9,7 @@ import { api } from '../../api/client';
 import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradients';
 import { parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
 
 interface UserProfilePopoutProps {
@@ -17,10 +18,17 @@ interface UserProfilePopoutProps {
   position?: { top: number; left: number };
 }
 
-export function UserProfilePopout({ user, onClose, position }: UserProfilePopoutProps) {
+export function UserProfilePopout({ user: propUser, onClose, position }: UserProfilePopoutProps) {
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const openModal = useUIStore((s) => s.openModal);
+  // Resolve to the best-known view of this user from the userViews cache.
+  // The prop frequently arrives as a federated stub (when the carrying DM
+  // came from a sibling instance that won the populateFromReady dedup race);
+  // routing through the cache surfaces the home view when one is loaded.
+  // Identity fields (id, homeUserId, homeInstance) are preserved across
+  // canonicalization, so write-payload code paths below remain correct.
+  const user = useCanonicalUserView(propUser);
   const { baseName, domain } = parseFederatedUsername(user.username);
   const displayName = user.displayName ?? baseName;
 

@@ -16,7 +16,9 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
-import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
 import { joinVoiceChannel } from '../../utils/voice';
 import { SearchPopover } from '../chat/SearchPopover';
@@ -47,6 +49,14 @@ export function MainContent() {
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [jumpToMessageId, setJumpToMessageId] = useState<string | null>(null);
+
+  // Resolve the DM header's "first other" member through the canonical view
+  // cache. The hook must be called unconditionally at the component top, so we
+  // pass a fallback when there is no current DM channel or 1-on-1 partner.
+  const _dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
+  const _rawFirstOther = _dmChannel?.members.filter(m => !isSelf(m, authUser))[0] ?? null;
+  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  const _canonicalFirstOther = useCanonicalUserView(_rawFirstOther ?? _FALLBACK_USER);
 
   // Reset search when channel changes
   useEffect(() => {
@@ -85,8 +95,10 @@ export function MainContent() {
     const dmChannel = dmChannels.find(dm => dm.id === currentChannelId);
     const otherMembers = dmChannel?.members.filter(m => !isSelf(m, authUser)) ?? [];
     const isGroupDm = !!dmChannel?.ownerId;
-    const firstOther = otherMembers[0];
-    const { baseName: firstBaseName, domain: firstDomain } = parseFederatedUsername(firstOther?.username ?? '');
+    // Use the canonicalized view of the 1-on-1 partner (resolved above the
+    // conditional so the hook is called unconditionally).
+    const firstOther = _rawFirstOther ? _canonicalFirstOther : (otherMembers[0] ?? null);
+    const { baseName: firstBaseName } = parseFederatedUsername(firstOther?.username ?? '');
     const dmName = isGroupDm
       ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
       : firstOther?.displayName ?? (firstBaseName || 'Direct Message');
@@ -173,8 +185,8 @@ export function MainContent() {
               <path d="M12.5 2A6.5 6.5 0 0 0 6 8.5c0 1.82.75 3.47 1.95 4.65A10.02 10.02 0 0 0 2 22h2c0-4.42 3.58-8 8-8 .35 0 .69.03 1.03.07A6.49 6.49 0 0 0 19 8.5 6.5 6.5 0 0 0 12.5 2Zm0 11A4.5 4.5 0 1 1 17 8.5a4.5 4.5 0 0 1-4.5 4.5Z" />
             </svg>
             <span className="font-bold text-[15px] tracking-[-0.02em] text-txt-primary truncate">{dmName}</span>
-            {!isGroupDm && firstDomain && (
-              <Tooltip content={firstOther?.username ?? ''} position="bottom">
+            {!isGroupDm && firstOther && isFederationGlobeApplicable(firstOther) && (
+              <Tooltip content={firstOther.username} position="bottom">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-txt-tertiary/80 flex-shrink-0">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                 </svg>

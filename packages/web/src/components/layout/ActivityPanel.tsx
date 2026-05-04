@@ -5,9 +5,66 @@ import { useActivityStore } from '../../stores/activityStore';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
-import type { Friend } from '@backspace/shared';
+import type { Friend, Activity, User } from '@backspace/shared';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+
+function ActivityFriendRow({
+  friend,
+  isOffline,
+  activities,
+  isRichActivity,
+  accentClass,
+  onClickFriend,
+}: {
+  friend: Friend;
+  isOffline: boolean;
+  activities: Activity[];
+  isRichActivity: boolean;
+  accentClass: string;
+  onClickFriend: (e: React.MouseEvent, friend: Friend) => void;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const friendDisplayName = canonical.displayName ?? baseName;
+
+  const rowClass = isRichActivity
+    ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
+    : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors';
+
+  return (
+    <div
+      onClick={(e) => onClickFriend(e, friend)}
+      className={rowClass}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={friendDisplayName}
+        size={32}
+        status={isOffline ? 'offline' : canonical.status}
+        className={isOffline ? 'opacity-60' : undefined}
+        userId={canonical.homeUserId ?? canonical.id}
+        avatarColor={canonical.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <Username
+          username={friendDisplayName}
+          className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
+        />
+        {!isOffline && isFederationGlobeApplicable(canonical) && (
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+        )}
+        {!isOffline && (
+          <ActivityCard
+            activities={activities}
+            fallbackCustomStatus={canonical.customStatus}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function ActivityPanel() {
   const friends = useSocialStore((s) => s.friends);
@@ -74,48 +131,20 @@ export function ActivityPanel() {
   };
 
   const renderFriend = (friend: Friend, isOffline = false) => {
-    const { baseName, domain } = parseFederatedUsername(friend.username);
-    const friendDisplayName = friend.displayName ?? baseName;
     const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
     const accentClass = primary ? getActivityAccentClass(primary.type) : '';
-
-    const rowClass = isRichActivity
-      ? `flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
-      : 'flex items-center gap-2.5 px-2 py-1.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer group transition-colors';
-
     return (
-      <div
+      <ActivityFriendRow
         key={friend.id}
-        onClick={(e) => handleFriendClick(e, friend)}
-        className={rowClass}
-      >
-        <Avatar
-          src={friend.avatar}
-          name={friendDisplayName}
-          size={32}
-          status={isOffline ? 'offline' : friend.status}
-          className={isOffline ? 'opacity-60' : undefined}
-          userId={friend.homeUserId ?? friend.id}
-          avatarColor={friend.avatarColor}
-        />
-        <div className="flex-1 min-w-0">
-          <Username
-            username={friendDisplayName}
-            className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
-          />
-          {domain && !isOffline && (
-            <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
-          )}
-          {!isOffline && (
-            <ActivityCard
-              activities={activities}
-              fallbackCustomStatus={friend.customStatus}
-            />
-          )}
-        </div>
-      </div>
+        friend={friend}
+        isOffline={isOffline}
+        activities={activities}
+        isRichActivity={isRichActivity}
+        accentClass={accentClass}
+        onClickFriend={handleFriendClick}
+      />
     );
   };
 

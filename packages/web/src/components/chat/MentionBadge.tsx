@@ -1,6 +1,8 @@
 import React from 'react';
+import type { User } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useUIStore } from '../../stores/uiStore';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 
 interface MentionBadgeProps {
   userId: string;
@@ -16,11 +18,15 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
   const space = spaces.find((s) => s.id === currentSpaceId);
   const ownerId = space?.ownerId;
 
+  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  const canonicalMemberUser = useCanonicalUserView(member?.user ?? _FALLBACK_USER);
+  const memberUser = member ? canonicalMemberUser : null;
+
   let displayName: string;
   let color: string;
 
-  if (member) {
-    displayName = member.user.displayName ?? member.user.username;
+  if (member && memberUser) {
+    displayName = memberUser.displayName ?? memberUser.username;
     if (member.roles && member.roles.length > 0) {
       const sorted = [...member.roles].sort((a, b) => b.position - a.position);
       color = sorted[0]!.color;
@@ -35,10 +41,10 @@ export const MentionBadge = React.memo(function MentionBadge({ userId }: Mention
   }
 
   const handleClick = (e: React.MouseEvent) => {
-    if (!member) return;
+    if (!member || !memberUser) return;
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    openUserProfile(member.user, {
+    openUserProfile(memberUser, {
       top: Math.min(rect.top, window.innerHeight - 450),
       left: rect.right + 8,
     });

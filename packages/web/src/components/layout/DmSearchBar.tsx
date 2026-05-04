@@ -8,7 +8,122 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+
+/**
+ * Single slot in the group-avatar stack for the DM search bar dropdown.
+ * Extracted as a component so useCanonicalUserView is called per-slot (hooks
+ * must not be called inside a variable-length .map()).
+ */
+function DmSearchGroupAvatarSlot({ member, index }: { member: User; index: number }) {
+  const canonical = useCanonicalUserView(member);
+  const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
+  return (
+    <div
+      className="absolute rounded-full overflow-hidden border-[1.5px] border-surface-channel"
+      style={{
+        width: 18, height: 18,
+        left: index * 8,
+        top: index * 4,
+        zIndex: 2 - index,
+      }}
+    >
+      <Avatar src={canonical.avatar} name={displayName} size={18} userId={canonical.homeUserId ?? canonical.id} user={canonical} />
+    </div>
+  );
+}
+
+/**
+ * Avatar + display-name row for a user result in the DM search bar.
+ * Extracted as a component so useCanonicalUserView can be called at the top
+ * of a stable component rather than inside a variable-length .map().
+ */
+function DmSearchUserRow({ user, isSelected, selectedRef, onClick }: {
+  user: User;
+  isSelected: boolean;
+  selectedRef?: React.Ref<HTMLDivElement>;
+  onClick: () => void;
+}) {
+  const canonical = useCanonicalUserView(user);
+  const displayName = canonical.displayName ?? canonical.username;
+  return (
+    <div
+      ref={isSelected ? selectedRef : undefined}
+      onClick={onClick}
+      className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
+        isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
+      }`}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={displayName}
+        size={24}
+        status={canonical.status as 'online' | 'idle' | 'dnd' | 'offline' | undefined}
+        userId={canonical.homeUserId ?? canonical.id}
+      />
+      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+        <span className="text-[14px] text-txt-primary truncate">
+          {displayName}
+        </span>
+        {canonical.displayName && (
+          <span className="text-[12px] text-txt-tertiary truncate">
+            @{canonical.username}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Full row for a DM conversation item in the DM search bar dropdown.
+ * For 1-on-1 DMs, routes the partner through useCanonicalUserView.
+ * For group DMs, delegates per-slot to DmSearchGroupAvatarSlot.
+ */
+function DmSearchDmRow({ item, isSelected, selectedRef, onClick }: {
+  item: DmItem;
+  isSelected: boolean;
+  selectedRef?: React.Ref<HTMLDivElement>;
+  onClick: () => void;
+}) {
+  // For 1-on-1 DMs: canonicalize the single partner. For groups: pass through
+  // unchanged (DmSearchGroupAvatarSlot handles per-slot canonicalization).
+  const rawPartner = !item.isGroup ? (item.otherMembers[0] ?? null) : null;
+  // Call the hook unconditionally — pass a stable fallback (empty User shape)
+  // for group DMs so hooks are always called the same number of times.
+  const FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  const canonicalPartner = useCanonicalUserView(rawPartner ?? FALLBACK_USER);
+  const partner = rawPartner ? canonicalPartner : null;
+
+  return (
+    <div
+      ref={isSelected ? selectedRef : undefined}
+      onClick={onClick}
+      className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
+        isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
+      }`}
+    >
+      {item.isGroup ? (
+        <div className="relative w-6 h-6 flex-shrink-0">
+          {item.otherMembers.slice(0, 2).map((m, idx) => (
+            <DmSearchGroupAvatarSlot key={m.id} member={m} index={idx} />
+          ))}
+        </div>
+      ) : (
+        <Avatar
+          src={partner?.avatar}
+          name={partner?.displayName ?? parseFederatedUsername(partner?.username ?? '').baseName}
+          size={24}
+          status={partner?.status as 'online' | 'idle' | 'dnd' | 'offline' | undefined}
+          userId={partner?.homeUserId ?? partner?.id}
+          user={partner ?? undefined}
+        />
+      )}
+      <span className="text-[14px] text-txt-primary truncate">{item.displayName}</span>
+    </div>
+  );
+}
 
 const MAX_RECENT = 8;
 const SEARCH_DEBOUNCE = 300;
@@ -265,43 +380,13 @@ export function DmSearchBar() {
               const globalIndex = i;
               const isSelected = globalIndex === selectedIndex;
               return (
-                <div
+                <DmSearchDmRow
                   key={item.dm.id}
-                  ref={isSelected ? selectedRef : undefined}
+                  item={item}
+                  isSelected={isSelected}
+                  selectedRef={isSelected ? selectedRef : undefined}
                   onClick={() => selectItem(item)}
-                  className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
-                    isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
-                  }`}
-                >
-                  {item.isGroup ? (
-                    <div className="relative w-6 h-6 flex-shrink-0">
-                      {item.otherMembers.slice(0, 2).map((m, idx) => (
-                        <div
-                          key={m.id}
-                          className="absolute rounded-full overflow-hidden border-[1.5px] border-surface-channel"
-                          style={{
-                            width: 18, height: 18,
-                            left: idx * 8,
-                            top: idx * 4,
-                            zIndex: 2 - idx,
-                          }}
-                        >
-                          <Avatar src={m.avatar} name={m.displayName ?? parseFederatedUsername(m.username).baseName} size={18} userId={m.homeUserId ?? m.id} user={m} />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <Avatar
-                      src={item.otherMembers[0]?.avatar}
-                      name={item.otherMembers[0]?.displayName ?? parseFederatedUsername(item.otherMembers[0]?.username ?? '').baseName}
-                      size={24}
-                      status={item.otherMembers[0]?.status as 'online' | 'idle' | 'dnd' | 'offline' | undefined}
-                      userId={item.otherMembers[0]?.homeUserId ?? item.otherMembers[0]?.id}
-                      user={item.otherMembers[0]}
-                    />
-                  )}
-                  <span className="text-[14px] text-txt-primary truncate">{item.displayName}</span>
-                </div>
+                />
               );
             })}
           </>
@@ -320,32 +405,13 @@ export function DmSearchBar() {
               const globalIndex = dmItems.length + i;
               const isSelected = globalIndex === selectedIndex;
               return (
-                <div
+                <DmSearchUserRow
                   key={item.user.id}
-                  ref={isSelected ? selectedRef : undefined}
+                  user={item.user}
+                  isSelected={isSelected}
+                  selectedRef={isSelected ? selectedRef : undefined}
                   onClick={() => selectItem(item)}
-                  className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
-                    isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
-                  }`}
-                >
-                  <Avatar
-                    src={item.user.avatar}
-                    name={item.user.displayName ?? item.user.username}
-                    size={24}
-                    status={item.user.status as 'online' | 'idle' | 'dnd' | 'offline' | undefined}
-                    userId={item.user.homeUserId ?? item.user.id}
-                  />
-                  <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                    <span className="text-[14px] text-txt-primary truncate">
-                      {item.user.displayName ?? item.user.username}
-                    </span>
-                    {item.user.displayName && (
-                      <span className="text-[12px] text-txt-tertiary truncate">
-                        @{item.user.username}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                />
               );
             })}
           </>

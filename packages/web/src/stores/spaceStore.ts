@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Space, Channel, ChannelCategory, MemberWithUser, SpaceWithChannelsAndMembers, Role, SpaceFolder, SpaceLayoutItem, DmChannel, User, UpdateSpaceRequest, CreateSpaceRequest } from '@backspace/shared';
 import { api, BackspaceApiClient } from '../api/client';
 import { resolveAssetUrl, normalizeUserAssets } from '../utils/assetUrls';
-import { isSelf } from '../utils/identity';
+import { isSelf, canonicalUserKey, isDeliveryFromHome } from '../utils/identity';
 import { sortDmChannels } from '../utils/dmSorting';
 import {
   getApiForOrigin,
@@ -29,6 +29,31 @@ export class NotConnectedError extends Error {
   }
 }
 
+// ─── User-view cache types ────────────────────────────────────────────────────
+
+/**
+ * A single cached view of a user, populated from one delivering origin.
+ *
+ * The userViews cache stores the best-known view of each canonical identity
+ * across every connected instance, regardless of whether the carrying channel
+ * survived dedup. Mirrors `dmAlternatives` philosophy: information from
+ * skipped ready payloads is still load-bearing for rendering.
+ *
+ * - `deliveredBy`: the origin string used at insert time. Required for
+ *   lifecycle pruning (drop entries whose delivering origin is removed from
+ *   Connections) — the user's declared `homeInstance` is NOT a substitute,
+ *   because a stub view delivered by orbit has homeInstance=nova.
+ * - `isHome`: cached at insert time so the preference rule does not need to
+ *   re-normalize on every write.
+ * - `updatedAt`: same-tier freshness tiebreaker.
+ */
+export interface UserViewEntry {
+  user: User;
+  deliveredBy: string;
+  isHome: boolean;
+  updatedAt: number;
+}
+
 // ─── Store interface ──────────────────────────────────────────────────────────
 
 interface SpaceState {
@@ -50,6 +75,16 @@ interface SpaceState {
   categoryOriginMap: Map<string, string>; // categoryId → instance origin ('' = home)
   /** federatedId → (origin → localChannelId). Every DM from every origin's ready payload is recorded here regardless of dedup outcome, so failover can re-point to an alternate origin's local channel ID. */
   dmAlternatives: Map<string, Map<string, string>>;
+  /**
+   * canonicalUserKey → best-known view of that user. Populated from every wire
+   * surface that delivers a User object (DM members, message authors, friends,
+   * space members, profile updates). Pruned only on full instance removal
+   * (`removeInstanceSpaces`) and `reset`, never on transient WS disconnect —
+   * mirrors `dmAlternatives`' no-flapping invariant. Render sites read through
+   * `getCanonicalUserView` / `useCanonicalUserView` to surface the home view
+   * even when the carrying channel was deduped away.
+   */
+  userViews: Map<string, UserViewEntry>;
   loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
@@ -90,6 +125,16 @@ interface SpaceState {
   setSpaceLayout: (layout: SpaceLayoutItem[] | null) => void;
   updateSpaceLayout: (items: SpaceLayoutItem[], folders: Record<string, { name: string | null; color: string | null; spaceIds: string[] }>) => Promise<void>;
   populateFromReady: (origin: string, spaces: SpaceWithChannelsAndMembers[], folders?: SpaceFolder[], dmChannels?: DmChannel[], spaceLayout?: SpaceLayoutItem[] | null, layoutUpdatedAt?: number) => void;
+  /**
+   * Upsert a User into the userViews cache under the preference rule:
+   *   - if no entry: insert
+   *   - if existing is home view and incoming is stub: ignore
+   *   - if existing is stub and incoming is home view: overwrite (upgrade)
+   *   - same tier (both home or both stub): freshness wins (incoming overwrites)
+   * Origin is REQUIRED to derive the home/stub tier and to enable pruning by
+   * delivering origin on instance removal.
+   */
+  upsertUserView: (user: User, deliveringOrigin: string) => void;
   addSpaceFromReady: (origin: string, space: SpaceWithChannelsAndMembers) => void;
   removeInstanceSpaces: (origin: string) => void;
   transferOwnership: (spaceId: string, newOwnerId: string) => Promise<void>;
@@ -142,6 +187,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   voiceChannelIds: new Set(),
   categoryOriginMap: new Map(),
   dmAlternatives: new Map(),
+  userViews: new Map(),
   loadingSpaceId: null,
   _layoutUpdatedAt: 0,
 
@@ -165,6 +211,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       voiceChannelIds: new Set(),
       categoryOriginMap: new Map(),
       dmAlternatives: new Map(),
+      userViews: new Map(),
       loadingSpaceId: null,
       _layoutUpdatedAt: 0,
     });
@@ -187,6 +234,24 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       dmChannels: [channel, ...state.dmChannels.filter(c => c.id !== channel.id)],
       channelOriginMap,
     };
+  }),
+
+  upsertUserView: (user, deliveringOrigin) => set((state) => {
+    const key = canonicalUserKey(user);
+    const incomingIsHome = isDeliveryFromHome(user, deliveringOrigin);
+    const existing = state.userViews.get(key);
+
+    // Stub view never overwrites a home view.
+    if (existing && existing.isHome && !incomingIsHome) return state;
+
+    const next = new Map(state.userViews);
+    next.set(key, {
+      user,
+      deliveredBy: deliveringOrigin,
+      isHome: incomingIsHome,
+      updatedAt: Date.now(),
+    });
+    return { userViews: next };
   }),
 
   removeDmChannel: (id) => {
@@ -264,6 +329,11 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         for (const member of detail.members) {
           normalizeUserAssets(member.user, origin);
         }
+      }
+      // Upsert every member into the userViews cache (home or remote).
+      // Assets are already normalized above for the remote case.
+      for (const member of detail.members) {
+        get().upsertUserView(member.user, origin);
       }
 
       // Populate permission maps from REST response
@@ -662,6 +732,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
           categoryOriginMap.set(cat.id, origin);
         }
       }
+      // Upsert every space member into the userViews cache. Assets for remote
+      // origins were normalized by the ready handler in useWebSocket before
+      // populateFromReady was called, so the user objects are already clean here.
+      if (srv.members) {
+        const { upsertUserView } = get();
+        for (const member of srv.members) {
+          upsertUserView(member.user, origin);
+        }
+      }
     }
 
     // Accept DMs from all origins. Each instance serves its own DM data.
@@ -672,6 +751,19 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       for (const dm of incomingDms) {
         for (const member of dm.members) {
           normalizeUserAssets(member, origin);
+        }
+      }
+    }
+
+    // Upsert every DM member from every origin into the userViews cache.
+    // This runs unconditionally (home + remote) and BEFORE the dedup pass so
+    // members of DMs that are about to be discarded still land in the cache.
+    // Assets are already normalized above for the remote case.
+    {
+      const { upsertUserView } = get();
+      for (const dm of incomingDms) {
+        for (const member of dm.members) {
+          upsertUserView(member, origin);
         }
       }
     }
@@ -890,6 +982,16 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         if (nextInner.size > 0) dmAlternatives.set(fid, nextInner);
       }
 
+      // Prune userViews: drop entries delivered by this origin. Symmetrical
+      // with dmAlternatives — full removal evicts; transient disconnect leaves
+      // the last-known view in place. If the surviving cache no longer holds
+      // a home view for some user, render falls back to whatever the carrying
+      // payload supplies (no crash; just degrades to stub view).
+      const userViews = new Map<string, UserViewEntry>();
+      for (const [key, entry] of state.userViews) {
+        if (entry.deliveredBy !== origin) userViews.set(key, entry);
+      }
+
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -898,6 +1000,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelOriginMap,
         spacePermissions,
         dmAlternatives,
+        userViews,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
           : null,

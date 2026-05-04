@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { MessageWithUser, Embed } from '@backspace/shared';
+import type { MessageWithUser, Embed, User } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MentionBadge } from './MentionBadge';
 import { Avatar } from '../ui/Avatar';
@@ -17,6 +17,7 @@ import { Username } from '../ui/Username';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import {
   isPendingMessage,
   usePendingMessageStore,
@@ -169,6 +170,12 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const markUnread = useChatStore((s) => s.markUnread);
+
+  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  const _rawMsgUser = message.user ?? null;
+  const _canonicalMsgUser = useCanonicalUserView(_rawMsgUser ?? _FALLBACK_USER);
+  const _rawReplyUser = (!isPendingMessage(message) && message.replyTo?.user) ? message.replyTo.user : null;
+  const _canonicalReplyUser = useCanonicalUserView(_rawReplyUser ?? _FALLBACK_USER);
 
   const isOwnReaction = (r: { userId: string; user?: { id: string; username: string; homeInstance?: string | null } | null }) =>
     r.user ? isSelf(r.user, currentUser) : r.userId === currentUser?.id;
@@ -339,8 +346,13 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     }
   };
 
-  // Resolve display identity: replicated-self messages show home user's avatar/name
-  const displayIdentity = resolveDisplayIdentity(message.user, currentUser);
+  // Resolve display identity: replicated-self messages show home user's avatar/name.
+  // For non-self messages, further route through canonical user view cache so stale
+  // federated stubs are replaced with the best-known profile data.
+  const _resolvedIdentity = resolveDisplayIdentity(message.user, currentUser);
+  const displayIdentity = (!isSelf(_resolvedIdentity, currentUser) && _rawMsgUser)
+    ? _canonicalMsgUser
+    : _resolvedIdentity;
   const displayName = displayIdentity.displayName ?? displayIdentity.username;
 
   const spaces = useSpaceStore((s) => s.spaces);
@@ -409,7 +421,10 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       {/* Content */}
       <div className="flex-1 min-w-0">
         {message.replyTo && (() => {
-          const replyIdentity = resolveDisplayIdentity(message.replyTo.user, currentUser);
+          const _rawReply = resolveDisplayIdentity(message.replyTo.user, currentUser);
+          const replyIdentity = (!isSelf(_rawReply, currentUser) && _rawReplyUser)
+            ? _canonicalReplyUser
+            : _rawReply;
           const replyDisplayName = replyIdentity.displayName ?? replyIdentity.username;
           return (
             <div className="flex items-center gap-1 mb-1 ml-[-4px] opacity-80 hover:opacity-100 cursor-pointer group/reply">

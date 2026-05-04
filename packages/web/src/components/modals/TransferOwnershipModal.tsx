@@ -5,7 +5,43 @@ import { useSpaceStore, getApiForOrigin, type TaggedSpace } from '../../stores/s
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { normalizeUserAssets } from '../../utils/assetUrls';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Avatar } from '../ui/Avatar';
+
+function TransferMemberRow({
+  member,
+  onSelect,
+}: {
+  member: MemberWithUser;
+  onSelect: (userId: string) => void;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const displayName = canonical.displayName || canonical.username;
+  return (
+    <button
+      onClick={() => onSelect(member.userId)}
+      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={displayName}
+        size={32}
+        user={canonical}
+        userId={member.userId}
+      />
+      <div className="flex flex-col items-start min-w-0">
+        <span className="text-sm text-txt-primary truncate max-w-full">
+          {displayName}
+        </span>
+        {canonical.displayName && (
+          <span className="text-[11px] text-txt-tertiary truncate max-w-full">
+            {canonical.username}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; onClose: () => void }) {
   const modalRef = useRef<HTMLDivElement>(null);
@@ -29,8 +65,9 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
         const client = getApiForOrigin(origin);
         const fetched = await client.spaces.members(spaceId);
         if (cancelled) return;
-        if (origin) {
-          for (const m of fetched) normalizeUserAssets(m.user, origin);
+        for (const m of fetched) {
+          if (origin) normalizeUserAssets(m.user, origin);
+          useSpaceStore.getState().upsertUserView(m.user, origin);
         }
         setMembers(fetched);
       } catch {
@@ -156,33 +193,13 @@ export function TransferOwnershipModal({ spaceId, onClose }: { spaceId: string; 
               ) : filteredMembers.length === 0 ? (
                 <p className="text-xs text-txt-tertiary text-center py-4">No members found</p>
               ) : (
-                filteredMembers.map((member) => {
-                  return (
-                    <button
-                      key={member.userId}
-                      onClick={() => setSelectedUserId(member.userId)}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md hover:bg-white/[0.06] transition-colors"
-                    >
-                      <Avatar
-                        src={member.user.avatar}
-                        name={member.user.displayName || member.user.username}
-                        size={32}
-                        user={member.user}
-                        userId={member.userId}
-                      />
-                      <div className="flex flex-col items-start min-w-0">
-                        <span className="text-sm text-txt-primary truncate max-w-full">
-                          {member.user.displayName || member.user.username}
-                        </span>
-                        {member.user.displayName && (
-                          <span className="text-[11px] text-txt-tertiary truncate max-w-full">
-                            {member.user.username}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
+                filteredMembers.map((member) => (
+                  <TransferMemberRow
+                    key={member.userId}
+                    member={member}
+                    onSelect={setSelectedUserId}
+                  />
+                ))
               )}
             </div>
           </>

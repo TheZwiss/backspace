@@ -59,6 +59,114 @@ export function resolveDisplayIdentity(user: User, homeUser: User | null): User 
   return user;
 }
 
+// ─── Cross-instance origin / canonical-identity helpers ─────────────────────
+// Used by the userViews cache (spaceStore) and any code that needs to compare
+// a user's home instance against a delivering connection's origin. Bare-domain
+// `users.home_instance` and full-URL connection origins must always agree
+// through these helpers — never via ad-hoc string comparisons.
+
+/**
+ * Extract the bare host from a delivering-origin string.
+ *
+ *   ''                       → ''   (the empty-origin sentinel for "home connection")
+ *   null / undefined         → ''
+ *   'https://nova.ddns.net' → 'nova.ddns.net'
+ *   'http://localhost:3000'  → 'localhost:3000'
+ *   'nova.ddns.net'         → 'nova.ddns.net'
+ *
+ * Empty inputs return `''`. Use {@link deliveringHost} when you need the
+ * concrete host that an origin represents (which substitutes
+ * `window.location.host` for the empty sentinel).
+ */
+export function normalizeOriginToHost(input: string | null | undefined): string {
+  if (!input) return '';
+  if (input.includes('://')) {
+    try {
+      return new URL(input).host;
+    } catch {
+      return '';
+    }
+  }
+  return input;
+}
+
+/**
+ * Resolve a delivering origin to its concrete host. Substitutes
+ * `window.location.host` for the empty-origin sentinel (`''` = our home
+ * connection). All other inputs are normalized via {@link normalizeOriginToHost}.
+ */
+function deliveringHost(origin: string): string {
+  if (origin === '') return typeof window === 'undefined' ? '' : window.location.host;
+  return normalizeOriginToHost(origin);
+}
+
+/**
+ * Stable cross-instance cache key for a user.
+ *
+ * Federated user: `<homeInstanceHost>:<homeUserId>` — same key for the same
+ * person regardless of which instance's local stub we're holding.
+ *
+ * Purely local user: `:<id>` (homeInstance and homeUserId are null) — local
+ * users never collide with federated keys because the host segment is empty.
+ *
+ * Defensive fallback: if homeInstance is set but homeUserId is missing
+ * (legacy stubs from before homeUserId was populated), the local id is used
+ * as the identifier portion. This is rare and self-corrects when fresh
+ * profile data arrives.
+ */
+export function canonicalUserKey(
+  user: { id: string; homeUserId?: string | null; homeInstance?: string | null },
+): string {
+  const host = normalizeOriginToHost(user.homeInstance);
+  const ident = user.homeUserId ?? user.id;
+  return `${host}:${ident}`;
+}
+
+/**
+ * True iff the delivering origin is the user's home — i.e. the receiving
+ * payload contains the authoritative view of this user.
+ *
+ * Cases:
+ *  - `user.homeInstance` is null/empty: the user is native to whatever
+ *    instance delivered them. Always a home view.
+ *  - `user.homeInstance` is set: home view iff the delivering host equals
+ *    the user's home host (with `''` resolving to `window.location.host`).
+ *
+ * Used as the "isHome" tier in the userViews preference rule. Stub views
+ * never overwrite home views; home views always upgrade stubs.
+ */
+export function isDeliveryFromHome(
+  user: { homeInstance?: string | null },
+  deliveringOrigin: string,
+): boolean {
+  const dh = deliveringHost(deliveringOrigin);
+  const uh = user.homeInstance ? normalizeOriginToHost(user.homeInstance) : dh;
+  return uh === dh;
+}
+
+/**
+ * Should the federation-globe indicator render for this user, from the
+ * current client's perspective?
+ *
+ * True iff the user is genuinely remote: their username carries an `@domain`
+ * suffix AND that domain is NOT our own host. Catches the bug where a stub
+ * delivered by a sibling instance (e.g. orbit-side `axel@nova.ddns.net`
+ * viewed from a session logged in to nova) would otherwise show the globe.
+ *
+ * Compose with {@link useCanonicalUserView} at render sites: resolve the
+ * canonical view first, then run this predicate so the answer reflects the
+ * best-known view of the user, not whichever stub the carrying channel
+ * happened to land on.
+ */
+export function isFederationGlobeApplicable(
+  user: { username: string },
+): boolean {
+  const { domain } = parseFederatedUsername(user.username);
+  if (!domain) return false;
+  if (typeof window === 'undefined') return true; // SSR fallback
+  return domain !== window.location.host;
+}
+
 /**
  * Federation-safe check: do two user-like objects represent the same person?
  * Uses cascading strategies to handle missing homeUserId on old replicated users.

@@ -4,8 +4,55 @@ import type { MemberWithUser } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useFloatingPosition } from '../../hooks/useFloatingPosition';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 
 const MAX_RESULTS = 8;
+
+function MentionMemberRow({
+  member,
+  isSelected,
+  selectedRef,
+  onSelect,
+  roleColor,
+}: {
+  member: MemberWithUser;
+  isSelected: boolean;
+  selectedRef: React.RefObject<HTMLDivElement>;
+  onSelect: (member: MemberWithUser) => void;
+  roleColor: string | undefined;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const displayName = canonical.displayName ?? canonical.username;
+  return (
+    <div
+      ref={isSelected ? selectedRef : undefined}
+      onClick={() => onSelect(member)}
+      className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
+        isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
+      }`}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={displayName}
+        size={24}
+        status={canonical.status}
+        userId={canonical.homeUserId ?? canonical.id}
+        user={canonical}
+      />
+      <span
+        className="text-[14px] font-medium truncate"
+        style={roleColor ? { color: roleColor } : undefined}
+      >
+        {displayName}
+      </span>
+      {canonical.displayName && (
+        <span className="text-[12px] text-txt-tertiary truncate">
+          @{canonical.username}
+        </span>
+      )}
+    </div>
+  );
+}
 
 interface MentionPopoverProps {
   query: string;
@@ -62,42 +109,16 @@ export function MentionPopover({ query, selectedIndex, onSelect, anchorRef }: Me
         <div className="px-2 py-1.5 text-[11px] font-bold text-txt-tertiary uppercase tracking-wider">
           Members
         </div>
-        {filtered.map((member, i) => {
-          const displayName = member.user.displayName ?? member.user.username;
-          const roleColor = getMemberColor(member);
-          const isSelected = i === selectedIndex;
-
-          return (
-            <div
-              key={member.userId}
-              ref={isSelected ? selectedRef : undefined}
-              onClick={() => onSelect(member)}
-              className={`flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded cursor-pointer transition-colors ${
-                isSelected ? 'bg-interactive-selected' : 'hover:bg-interactive-hover'
-              }`}
-            >
-              <Avatar
-                src={member.user.avatar}
-                name={displayName}
-                size={24}
-                status={member.user.status}
-                userId={member.user.homeUserId ?? member.user.id}
-                user={member.user}
-              />
-              <span
-                className="text-[14px] font-medium truncate"
-                style={roleColor ? { color: roleColor } : undefined}
-              >
-                {displayName}
-              </span>
-              {member.user.displayName && (
-                <span className="text-[12px] text-txt-tertiary truncate">
-                  @{member.user.username}
-                </span>
-              )}
-            </div>
-          );
-        })}
+        {filtered.map((member, i) => (
+          <MentionMemberRow
+            key={member.userId}
+            member={member}
+            isSelected={i === selectedIndex}
+            selectedRef={selectedRef}
+            onSelect={onSelect}
+            roleColor={getMemberColor(member)}
+          />
+        ))}
       </div>
     </div>,
     document.body,

@@ -189,6 +189,57 @@ When a remote instance's WebSocket drops mid-session, every DM pinned to that or
 
 Source: `utils/dmOriginFailover.ts` + extensions in `stores/spaceStore.ts`, `stores/chatStore.ts`, `stores/instanceStore.ts`, `hooks/useWebSocket.ts`. Design spec: `docs/superpowers/specs/2026-04-23-dm-origin-failover-design.md`.
 
+### User View Cache
+
+The DM dedup pass at `populateFromReady` is first-wins by `federatedId` and skips the duplicate channel **as a whole**, including its `members` array. When a user is connected to multiple instances and a sibling instance's `ready` arrives first, the home instance's view of the same federated DM is dropped. Without further machinery, render sites would only ever see the sibling-stub view of every member — wrong username (`name@homeHost`), stale or 404-ing avatar URL, wrong `avatarColor`, and a globe icon for users whose home IS our currently-logged-in instance.
+
+`userViews` is a parallel cache that mirrors the philosophy of `dmAlternatives`: information from skipped ready payloads is still load-bearing — for rendering, not for routing. Render sites read through it to surface the home view of every user the client has ever heard about, regardless of which carrying channel survived dedup.
+
+**State:**
+
+- `userViews: Map<canonicalUserKey, UserViewEntry>` on `spaceStore`. Each entry is `{ user: User, deliveredBy: string, isHome: boolean, updatedAt: number }`.
+- `canonicalUserKey(user)` (in `utils/identity.ts`) returns `<homeInstanceHost>:<homeUserId>` for federated users and `:<id>` for purely-local users — same key across instances for the same person.
+- `isDeliveryFromHome(user, deliveringOrigin)` (in `utils/identity.ts`) decides whether a delivery is "home view" or "stub view": the user is delivered from their home iff their `homeInstance` matches the delivering origin's host (with `''` resolving to `window.location.host`).
+
+**Preference rule on upsert (`upsertUserView(user, deliveringOrigin)`):**
+
+- If no entry exists: insert.
+- If existing is home view and incoming is stub: ignore.
+- If existing is stub and incoming is home view: overwrite (upgrade).
+- Same tier (both home or both stub): freshness wins; incoming overwrites.
+
+`deliveringOrigin` is a REQUIRED parameter — never default it. The user's declared `homeInstance` is NOT a substitute, because a stub view delivered by orbit has `homeInstance=nova`; pruning by declared home would evict the wrong entries.
+
+**Wire surfaces that upsert** (every place a `User` lands on the client from a connection):
+
+- `populateFromReady` walks `incomingDms[].members` BEFORE the `federatedId` dedup pass — load-bearing — and walks every space's `members[].user`. `loadSpaceDetail` upserts each member after asset normalization.
+- WS handlers in `useWebSocket.ts`: `ready` (space members), `dm_message_created` / `dm_message_updated` / `message_created` / `message_updated` (`message.user` and `message.replyTo?.user`), `user_updated`, `member_joined`, `friend_request_received` / `friend_request_sent` / `friend_request_accepted`, `dm_channel_created`, `dm_member_added`.
+- REST hydrators: `socialStore.loadFriends` / `loadRequests` / `searchUsers`, `discoverStore.fetchUsers`, `utils/mutuals.loadFederatedMutuals`. Each upserts with the load's origin.
+- Modals that fetch a profile via REST (`UserProfileModal`, `TransferOwnershipModal`) call `useSpaceStore.getState().upsertUserView(fetchedUser, fetchOrigin)` after the fetch returns.
+
+**Render-side lookup:**
+
+- `useCanonicalUserView(user)` in `utils/userViewLookup.ts` is a Zustand selector hook that subscribes to the cache entry for `canonicalUserKey(user)`. Render sites call this before reading `username` / `displayName` / `avatar` / `avatarColor` / `homeInstance` / `homeUserId`. The hook returns the input on cache miss; the component falls back to current best information until the cache fills.
+- `getCanonicalUserView(user)` is the synchronous getter for non-React paths (event handlers, helpers like `useVoiceParticipantMeta`).
+- `isFederationGlobeApplicable(user)` in `utils/identity.ts` is the predicate used at three globe-icon sites (`DmListItem`, `MainContent`, `MobileDmsScreen`). It gates the globe on `parseFederatedUsername(username).domain && domain !== window.location.host` — no globe for users whose home is us, even when only a stub is loaded.
+
+**Render reactivity is structural, not coincidental.** Subscribers receive cache updates via the Zustand selector, regardless of whether legacy update paths (`updateUserEverywhere`, `updateFriendProfile`) also fired. That coupling was deliberately avoided so that future contributors who add a new wire surface and only call `upsertUserView` do not silently break render propagation.
+
+**Composition with `isSelf` / `resolveDisplayIdentity`.** Self-rendering continues to flow through the existing identity helpers — `isSelf` for filtering, `resolveDisplayIdentity` for substituting the home identity into a replicated alias of self. The cache lookup composes alongside, not inside: render sites filter via `isSelf`, then pass non-self users through `useCanonicalUserView`. Self-as-member (e.g. in a group DM) goes through the cache like any other member; the cache holds the home view of self anyway.
+
+**Lifecycle:**
+
+- Pruned in `removeInstanceSpaces(origin)` — drops every entry whose `deliveredBy === origin`. Mirrors the `dmAlternatives` prune in the same function.
+- `reset()` clears the cache.
+- **NOT pruned on transient WS disconnect.** Last-known view persists across blips, matching `dmAlternatives`' no-flapping invariant. If the surviving cache no longer holds a home view for some user (because the home origin was fully removed), render falls back to whatever the carrying payload supplies — degrades to the stub view, no crash.
+
+**Out of scope by design:**
+
+- The cache is render-only. It does NOT feed identity-resolution or write paths. API write payloads (e.g. `api.dm.create`, `api.friend.add`) continue to source identity from the original prop or click-site state, where the user explicitly nominated `homeUserId`/`homeInstance`.
+- The cache stores `User`-shaped fields. Extended profile data (`bio`, `banner`, `pronouns`) fetched via REST in profile modals lives in those modals' local state; `upsertUserView` is called from modals only to seed the home view of the cache, not to mirror extended profile data.
+
+Source: `stores/spaceStore.ts` (state, `upsertUserView`, prune in `removeInstanceSpaces`), `utils/identity.ts` (`normalizeOriginToHost`, `canonicalUserKey`, `isDeliveryFromHome`, `isFederationGlobeApplicable`), `utils/userViewLookup.ts` (`getCanonicalUserView`, `useCanonicalUserView`).
+
 ### API Client Resolution
 
 ```typescript

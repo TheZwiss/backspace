@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useSpaceStore } from '../stores/spaceStore';
 import { parseFederatedUsername } from '../utils/identity';
+import { getCanonicalUserView } from '../utils/userViewLookup';
 import type { ParticipantInfo } from './useLiveKit';
 import type { User } from '@backspace/shared';
 
@@ -18,11 +19,12 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
     // 1. Try space members (primary — covers space voice channels)
     const member = members.find(m => m.userId === participant.userId);
     if (member?.user) {
-      const { baseName } = parseFederatedUsername(member.user.username);
+      const canonical = getCanonicalUserView(member.user as User);
+      const { baseName } = parseFederatedUsername(canonical.username);
       return {
-        displayName: member.user.displayName ?? baseName,
-        avatar: member.user.avatar ?? null,
-        user: member.user as User,
+        displayName: canonical.displayName ?? baseName,
+        avatar: canonical.avatar ?? null,
+        user: canonical,
       };
     }
 
@@ -30,22 +32,26 @@ export function useVoiceParticipantMeta(participant: ParticipantInfo) {
     for (const dm of dmChannels) {
       const dmMember = dm.members?.find(m => m.id === participant.userId);
       if (dmMember) {
-        const { baseName } = parseFederatedUsername(dmMember.username);
+        const canonical = getCanonicalUserView(dmMember as User);
+        const { baseName } = parseFederatedUsername(canonical.username);
         return {
-          displayName: dmMember.displayName ?? baseName,
-          avatar: dmMember.avatar ?? null,
-          user: dmMember as User,
+          displayName: canonical.displayName ?? baseName,
+          avatar: canonical.avatar ?? null,
+          user: canonical,
         };
       }
     }
 
-    // 3. Fallback to cached user from ParticipantInfo (federation carry-forward)
+    // 3. Fallback to cached user from ParticipantInfo (federation carry-forward).
+    // Route through the userViews cache: a User captured from federation handoff
+    // can be a stale stub view, and the cache may hold a fresher home view.
     if (participant.cachedUser) {
-      const { baseName } = parseFederatedUsername(participant.cachedUser.username);
+      const canonical = getCanonicalUserView(participant.cachedUser);
+      const { baseName } = parseFederatedUsername(canonical.username);
       return {
-        displayName: participant.cachedUser.displayName ?? baseName,
-        avatar: participant.cachedUser.avatar ?? null,
-        user: participant.cachedUser,
+        displayName: canonical.displayName ?? baseName,
+        avatar: canonical.avatar ?? null,
+        user: canonical,
       };
     }
 

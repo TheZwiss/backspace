@@ -3,9 +3,168 @@ import { Avatar } from '../../ui/Avatar';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
 import { useAuthStore } from '../../../stores/authStore';
-import { parseFederatedUsername } from '../../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../utils/identity';
+import { useCanonicalUserView } from '../../../utils/userViewLookup';
 import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
-import type { MemberWithUser } from '@backspace/shared';
+import type { MemberWithUser, Role } from '@backspace/shared';
+
+function MembersPanelRow({
+  member,
+  spaceId,
+  ownerId,
+  isExpanded,
+  expandable,
+  canKick,
+  canBan,
+  currentUserId,
+  assignableRoles,
+  memberRoleIds,
+  hasPendingChanges,
+  onToggleExpand,
+  onRoleToggle,
+  onSaveRoles,
+  onCancelRoleChange,
+  onPendingAction,
+}: {
+  member: MemberWithUser;
+  spaceId: string;
+  ownerId: string | undefined;
+  isExpanded: boolean;
+  expandable: boolean;
+  canKick: boolean;
+  canBan: boolean;
+  currentUserId: string | undefined;
+  assignableRoles: Role[];
+  memberRoleIds: Set<string>;
+  hasPendingChanges: boolean;
+  onToggleExpand: (userId: string) => void;
+  onRoleToggle: (userId: string, roleId: string, currentRoleIds: Set<string>) => void;
+  onSaveRoles: (userId: string) => void;
+  onCancelRoleChange: (userId: string) => void;
+  onPendingAction: (action: { type: 'kick' | 'ban'; userId: string; displayName: string }) => void;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const isOwner = member.userId === ownerId;
+  const displayName = canonical.displayName ?? canonical.username;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center justify-between p-2 rounded transition-colors ${
+          expandable ? 'cursor-pointer hover:bg-interactive-hover' : ''
+        } ${isExpanded ? 'bg-interactive-hover' : ''}`}
+        onClick={() => {
+          if (expandable) onToggleExpand(member.userId);
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Avatar
+            src={canonical.avatar}
+            name={displayName}
+            size={32}
+            status={canonical.status}
+            user={canonical}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">
+              {displayName}
+              {isFederationGlobeApplicable(canonical) && (
+                <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{parseFederatedUsername(canonical.username).domain}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              {isOwner && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
+                  Owner
+                </span>
+              )}
+              {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
+                <span
+                  key={r.id}
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ backgroundColor: `${r.color}20`, color: r.color }}
+                >
+                  {r.name}
+                </span>
+              ))}
+              {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
+                <span className="text-[10px] text-txt-tertiary">No roles</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {canBan && member.userId !== currentUserId && !isOwner && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
+              className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+            >
+              Ban
+            </button>
+          )}
+          {canKick && member.userId !== currentUserId && !isOwner && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
+              className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+            >
+              Kick
+            </button>
+          )}
+          {expandable && (
+            <svg
+              className={`w-4 h-4 text-txt-tertiary transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          )}
+        </div>
+      </div>
+
+      {/* Role checkboxes — only shown when expanded */}
+      {isExpanded && expandable && (
+        <div className="mt-1 mb-1 ml-10 space-y-1">
+          {assignableRoles.map((role) => (
+            <label key={role.id} className="flex items-center gap-2 cursor-pointer group/role">
+              <input
+                type="checkbox"
+                checked={memberRoleIds.has(role.id)}
+                onChange={() => onRoleToggle(member.userId, role.id, memberRoleIds)}
+                className="w-3.5 h-3.5 rounded border-txt-tertiary accent-accent-primary"
+              />
+              <span
+                className="text-xs font-medium"
+                style={{ color: role.color !== '#9ca3af' ? role.color : undefined }}
+              >
+                {role.name}
+              </span>
+            </label>
+          ))}
+          {hasPendingChanges && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <button
+                onClick={() => onSaveRoles(member.userId)}
+                className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => onCancelRoleChange(member.userId)}
+                className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface MembersPanelProps {
   spaceId: string;
@@ -112,135 +271,27 @@ export function MembersPanel({ spaceId }: MembersPanelProps) {
         </div>
         <div className="rounded-lg bg-white/[0.02] p-2">
           <div className="space-y-0.5">
-            {members.map((member) => {
-              const { domain } = parseFederatedUsername(member.user.username);
-              const displayName = member.user.displayName ?? member.user.username;
-              const isOwner = member.userId === space.ownerId;
-              const memberRoleIds = getMemberRoleIds(member);
-              const hasPendingChanges = pendingRoleChanges.has(member.userId);
-              const isExpanded = expandedMemberId === member.userId;
-              const expandable = canExpandMember(member);
-
-              return (
-                <div key={member.userId}>
-                  <div
-                    className={`flex items-center justify-between p-2 rounded transition-colors ${
-                      expandable ? 'cursor-pointer hover:bg-interactive-hover' : ''
-                    } ${isExpanded ? 'bg-interactive-hover' : ''}`}
-                    onClick={() => {
-                      if (expandable) {
-                        setExpandedMemberId(isExpanded ? null : member.userId);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Avatar
-                        src={member.user.avatar}
-                        name={displayName}
-                        size={32}
-                        status={member.user.status}
-                        user={member.user}
-                      />
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {displayName}
-                          {domain && (
-                            <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{domain}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {isOwner && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
-                              Owner
-                            </span>
-                          )}
-                          {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
-                            <span
-                              key={r.id}
-                              className="text-[10px] px-1.5 py-0.5 rounded font-medium"
-                              style={{ backgroundColor: `${r.color}20`, color: r.color }}
-                            >
-                              {r.name}
-                            </span>
-                          ))}
-                          {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
-                            <span className="text-[10px] text-txt-tertiary">No roles</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {canBan && member.userId !== currentUser?.id && !isOwner && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
-                          className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
-                        >
-                          Ban
-                        </button>
-                      )}
-                      {canKick && member.userId !== currentUser?.id && !isOwner && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
-                          className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
-                        >
-                          Kick
-                        </button>
-                      )}
-                      {expandable && (
-                        <svg
-                          className={`w-4 h-4 text-txt-tertiary transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Role checkboxes — only shown when expanded */}
-                  {isExpanded && expandable && (
-                    <div className="mt-1 mb-1 ml-10 space-y-1">
-                      {assignableRoles.map((role) => (
-                        <label key={role.id} className="flex items-center gap-2 cursor-pointer group/role">
-                          <input
-                            type="checkbox"
-                            checked={memberRoleIds.has(role.id)}
-                            onChange={() => handleRoleToggle(member.userId, role.id, memberRoleIds)}
-                            className="w-3.5 h-3.5 rounded border-txt-tertiary accent-accent-primary"
-                          />
-                          <span
-                            className="text-xs font-medium"
-                            style={{ color: role.color !== '#9ca3af' ? role.color : undefined }}
-                          >
-                            {role.name}
-                          </span>
-                        </label>
-                      ))}
-                      {hasPendingChanges && (
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <button
-                            onClick={() => handleSaveRoles(member.userId)}
-                            className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => handleCancelRoleChange(member.userId)}
-                            className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {members.map((member) => (
+              <MembersPanelRow
+                key={member.userId}
+                member={member}
+                spaceId={spaceId}
+                ownerId={space.ownerId}
+                isExpanded={expandedMemberId === member.userId}
+                expandable={canExpandMember(member)}
+                canKick={canKick}
+                canBan={canBan}
+                currentUserId={currentUser?.id}
+                assignableRoles={assignableRoles}
+                memberRoleIds={getMemberRoleIds(member)}
+                hasPendingChanges={pendingRoleChanges.has(member.userId)}
+                onToggleExpand={(uid) => setExpandedMemberId(expandedMemberId === uid ? null : uid)}
+                onRoleToggle={handleRoleToggle}
+                onSaveRoles={handleSaveRoles}
+                onCancelRoleChange={handleCancelRoleChange}
+                onPendingAction={setPendingAction}
+              />
+            ))}
           </div>
         </div>
       </div>

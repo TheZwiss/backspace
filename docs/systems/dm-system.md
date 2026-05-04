@@ -609,16 +609,18 @@ const isLocalMember = (u: { homeInstance?: string | null }) =>
 | `closeDm(id)` | Calls `api.dm.close(id)` via origin-aware API client, removes from state |
 | `leaveDm(id)` | Calls `api.dm.leave(id)` via origin-aware API client, removes from state |
 | `findExistingDmForUser(targetUser)` | Scans `dmChannels` for a 2-member DM where the other member's `homeUserId` matches the target's `homeUserId` |
+| `upsertUserView(user, deliveringOrigin)` | Inserts/updates the user-view cache under the home-wins preference rule. Called for every DM member surface (kept AND skipped channels) so render sites surface the home view even when first-wins channel dedup discarded the home payload. See `client-federation.md` §3 "User View Cache" |
 
 ### WebSocket Event Handlers (`useWebSocket.ts`)
 
 | WS Event | Handler |
 |----------|---------|
-| `dm_channel_created` | Normalize remote user assets, call `addDmChannel(channel, origin)` |
+| `dm_channel_created` | Normalize remote user assets, upsert each member into `userViews`, call `addDmChannel(channel, origin)` |
 | `dm_channel_closed` | Call `removeDmChannel(dmChannelId)` |
-| `dm_member_added` | Normalize remote user assets, call `addDmMember(dmChannelId, user)` |
+| `dm_member_added` | Normalize remote user assets, upsert into `userViews`, call `addDmMember(dmChannelId, user)` |
 | `dm_member_removed` | Call `removeDmMember(dmChannelId, userId)` |
 | `dm_owner_updated` | Call `updateDmOwner(dmChannelId, newOwnerId)` |
+| `dm_message_created` / `dm_message_updated` | Normalize message assets, upsert `message.user` and `message.replyTo?.user` into `userViews` |
 
 ### New DM Modal (`NewDmModal.tsx`)
 

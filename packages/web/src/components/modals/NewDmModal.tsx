@@ -7,6 +7,33 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { api } from '../../api/client';
 import type { User } from '@backspace/shared';
 import { parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+
+function NewDmUserRow({
+  user,
+  onSelect,
+}: {
+  user: User;
+  onSelect: (user: User) => void;
+}) {
+  const canonical = useCanonicalUserView(user);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const displayName = canonical.displayName ?? baseName;
+  return (
+    <button
+      onClick={() => onSelect(user)}
+      className="w-full flex items-center gap-3 px-3 py-2 rounded-[4px] hover:bg-interactive-hover transition-colors text-left"
+    >
+      <Avatar src={canonical.avatar} name={displayName} size={36} status={canonical.status as any} userId={canonical.homeUserId ?? canonical.id} avatarColor={canonical.avatarColor} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] font-medium text-txt-primary truncate">
+          {displayName}
+        </div>
+        <div className="text-[12px] text-txt-tertiary truncate">@{canonical.username}</div>
+      </div>
+    </button>
+  );
+}
 
 export function NewDmModal() {
   const [query, setQuery] = useState('');
@@ -106,25 +133,13 @@ export function NewDmModal() {
             <div className="py-4 text-center text-txt-tertiary text-[14px]">No users found</div>
           )}
 
-          {results.map((user) => {
-            const { baseName } = parseFederatedUsername(user.username);
-            const displayName = user.displayName ?? baseName;
-            return (
-              <button
-                key={user.id}
-                onClick={() => handleSelectUser(user)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-[4px] hover:bg-interactive-hover transition-colors text-left"
-              >
-                <Avatar src={user.avatar} name={displayName} size={36} status={user.status as any} userId={user.homeUserId ?? user.id} avatarColor={user.avatarColor} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-txt-primary truncate">
-                    {displayName}
-                  </div>
-                  <div className="text-[12px] text-txt-tertiary truncate">@{user.username}</div>
-                </div>
-              </button>
-            );
-          })}
+          {results.map((user) => (
+            <NewDmUserRow
+              key={user.id}
+              user={user}
+              onSelect={handleSelectUser}
+            />
+          ))}
         </div>
       </div>
     </Modal>

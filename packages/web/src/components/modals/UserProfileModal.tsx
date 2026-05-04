@@ -87,6 +87,7 @@ export function UserProfileModal() {
       const targetApi = getApiForOrigin(origin);
       const u = await targetApi.users.get(id);
       setUser(u);
+      useSpaceStore.getState().upsertUserView(u, origin);
     } catch {
       // User not found
     }

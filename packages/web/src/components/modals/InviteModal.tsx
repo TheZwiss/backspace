@@ -7,7 +7,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
-import type { Friend, MemberWithUser, SpaceInviteRequest } from '@backspace/shared';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import type { Friend, MemberWithUser, SpaceInviteRequest, User } from '@backspace/shared';
 
 type SendStatus =
   | { kind: 'pending' }
@@ -38,6 +39,101 @@ function reasonForError(error: unknown): string {
     }
   }
   return "Couldn't send (server error)";
+}
+
+function InviteResultFriendRow({
+  friend,
+  status,
+}: {
+  friend: Friend;
+  status: SendStatus | undefined;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const dn = canonical.displayName ?? baseName;
+  return (
+    <div className="flex items-center gap-3 px-3 py-2 rounded-[4px]">
+      <Avatar
+        src={canonical.avatar}
+        name={dn}
+        size={30}
+        userId={canonical.homeUserId ?? canonical.id}
+        avatarColor={canonical.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
+        <div className="text-[11px] text-txt-tertiary truncate">@{canonical.username}</div>
+      </div>
+      {status?.kind === 'success' && (
+        <span className="text-[12px] text-accent-mint flex-shrink-0">✓ Sent</span>
+      )}
+      {status?.kind === 'failure' && (
+        <span className="text-[12px] text-txt-danger flex-shrink-0">✗ {status.reason}</span>
+      )}
+      {status?.kind === 'pending' && (
+        <span className="text-[12px] text-txt-tertiary flex-shrink-0">...</span>
+      )}
+    </div>
+  );
+}
+
+function InviteSelectFriendRow({
+  friend,
+  isSelected,
+  alreadyMember,
+  sending,
+  onToggle,
+}: {
+  friend: Friend;
+  isSelected: boolean;
+  alreadyMember: boolean;
+  sending: boolean;
+  onToggle: (id: string, friend: Friend) => void;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const dn = canonical.displayName ?? baseName;
+  return (
+    <button
+      onClick={() => onToggle(friend.id, friend)}
+      disabled={alreadyMember || sending}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
+        alreadyMember
+          ? 'opacity-40 cursor-not-allowed'
+          : isSelected
+            ? 'bg-accent-mint/[0.08]'
+            : 'hover:bg-interactive-hover'
+      }`}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={dn}
+        size={30}
+        status={canonical.status as any}
+        userId={canonical.homeUserId ?? canonical.id}
+        avatarColor={canonical.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-medium text-txt-primary truncate">{dn}</div>
+        <div className="text-[11px] text-txt-tertiary truncate">
+          {alreadyMember ? 'Already in space' : `@${canonical.username}`}
+        </div>
+      </div>
+      {!alreadyMember && (
+        <div
+          className={`w-[18px] h-[18px] rounded flex-shrink-0 flex items-center justify-center ${
+            isSelected ? 'bg-accent-mint' : 'border-2 border-border-hard'
+          }`}
+        >
+          {isSelected && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-surface-base">
+              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+      )}
+    </button>
+  );
 }
 
 export function InviteModal() {
@@ -278,48 +374,13 @@ export function InviteModal() {
         {/* Friend list / Results view */}
         <div className="max-h-[280px] overflow-y-auto space-y-[2px]">
           {inResultsView ? (
-            selectedFriends.map((f) => {
-              const status = results.get(f.id);
-              const { baseName } = parseFederatedUsername(f.username);
-              const dn = f.displayName ?? baseName;
-              return (
-                <div
-                  key={f.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-[4px]"
-                >
-                  <Avatar
-                    src={f.avatar}
-                    name={dn}
-                    size={30}
-                    userId={f.homeUserId ?? f.id}
-                    avatarColor={f.avatarColor}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-medium text-txt-primary truncate">
-                      {dn}
-                    </div>
-                    <div className="text-[11px] text-txt-tertiary truncate">
-                      @{f.username}
-                    </div>
-                  </div>
-                  {status?.kind === 'success' && (
-                    <span className="text-[12px] text-accent-mint flex-shrink-0">
-                      ✓ Sent
-                    </span>
-                  )}
-                  {status?.kind === 'failure' && (
-                    <span className="text-[12px] text-txt-danger flex-shrink-0">
-                      ✗ {status.reason}
-                    </span>
-                  )}
-                  {status?.kind === 'pending' && (
-                    <span className="text-[12px] text-txt-tertiary flex-shrink-0">
-                      ...
-                    </span>
-                  )}
-                </div>
-              );
-            })
+            selectedFriends.map((f) => (
+              <InviteResultFriendRow
+                key={f.id}
+                friend={f}
+                status={results.get(f.id)}
+              />
+            ))
           ) : (
             <>
               {filteredFriends.length === 0 && (
@@ -329,72 +390,16 @@ export function InviteModal() {
                     : 'No friends yet'}
                 </div>
               )}
-              {filteredFriends.map((friend) => {
-                const alreadyMember = isFriendAlreadyMember(friend);
-                const isSelected = selected.has(friend.id);
-                const { baseName } = parseFederatedUsername(friend.username);
-                const dn = friend.displayName ?? baseName;
-                return (
-                  <button
-                    key={friend.id}
-                    onClick={() => toggleFriend(friend.id, friend)}
-                    disabled={alreadyMember || sending}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-colors text-left ${
-                      alreadyMember
-                        ? 'opacity-40 cursor-not-allowed'
-                        : isSelected
-                          ? 'bg-accent-mint/[0.08]'
-                          : 'hover:bg-interactive-hover'
-                    }`}
-                  >
-                    <Avatar
-                      src={friend.avatar}
-                      name={dn}
-                      size={30}
-                      status={friend.status as any}
-                      userId={friend.homeUserId ?? friend.id}
-                      avatarColor={friend.avatarColor}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-txt-primary truncate">
-                        {dn}
-                      </div>
-                      <div className="text-[11px] text-txt-tertiary truncate">
-                        {alreadyMember
-                          ? 'Already in space'
-                          : `@${friend.username}`}
-                      </div>
-                    </div>
-                    {!alreadyMember && (
-                      <div
-                        className={`w-[18px] h-[18px] rounded flex-shrink-0 flex items-center justify-center ${
-                          isSelected
-                            ? 'bg-accent-mint'
-                            : 'border-2 border-border-hard'
-                        }`}
-                      >
-                        {isSelected && (
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 12 12"
-                            fill="none"
-                            className="text-surface-base"
-                          >
-                            <path
-                              d="M2.5 6L5 8.5L9.5 3.5"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
+              {filteredFriends.map((friend) => (
+                <InviteSelectFriendRow
+                  key={friend.id}
+                  friend={friend}
+                  isSelected={selected.has(friend.id)}
+                  alreadyMember={isFriendAlreadyMember(friend)}
+                  sending={sending}
+                  onToggle={toggleFriend}
+                />
+              ))}
             </>
           )}
         </div>

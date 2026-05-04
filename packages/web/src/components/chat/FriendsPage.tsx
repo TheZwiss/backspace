@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { User } from '@backspace/shared';
 import { useSocialStore, type TaggedFriend, type TaggedFriendRequest, type TaggedUser } from '../../stores/socialStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useDiscoverStore, type TaggedDiscoverUser } from '../../stores/discoverStore';
@@ -17,11 +18,78 @@ import { Mascot } from '../ui/Mascot';
 import { useActivityStore } from '../../stores/activityStore';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { Username } from '../ui/Username';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 const statusLabel: Record<string, string> = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', offline: 'Offline' };
+
+function ActivityFriendItem({
+  friend,
+  isOffline,
+  activities,
+  isRichActivity,
+  accentClass,
+  mobile,
+  onMobileClick,
+  onDmClick,
+}: {
+  friend: TaggedFriend;
+  isOffline: boolean;
+  activities: import('@backspace/shared').Activity[];
+  isRichActivity: boolean;
+  accentClass: string;
+  mobile?: boolean;
+  onMobileClick: (userId: string) => void;
+  onDmClick: (id: string, homeUserId?: string, homeInstance?: string | null) => void;
+}) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const friendDisplayName = canonical.displayName ?? baseName;
+
+  const rowClass = isRichActivity
+    ? `flex items-center gap-3 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
+    : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer transition-colors active:bg-interactive-hover';
+
+  return (
+    <div
+      onClick={() => {
+        if (mobile) {
+          onMobileClick(friend.id);
+        } else {
+          onDmClick(friend.id, friend.homeUserId ?? undefined, friend.homeInstance);
+        }
+      }}
+      className={rowClass}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={friendDisplayName}
+        size={36}
+        status={isOffline ? 'offline' : canonical.status}
+        className={isOffline ? 'opacity-60' : undefined}
+        userId={canonical.homeUserId ?? canonical.id}
+        avatarColor={canonical.avatarColor}
+      />
+      <div className="flex-1 min-w-0">
+        <Username
+          username={friendDisplayName}
+          className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
+        />
+        {!isOffline && isFederationGlobeApplicable(canonical) && (
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+        )}
+        {!isOffline && (
+          <ActivityCard
+            activities={activities}
+            fallbackCustomStatus={canonical.customStatus}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Tab = 'online' | 'all' | 'pending' | 'add' | 'activity';
 
@@ -199,54 +267,22 @@ export function FriendsPage({ mobile }: FriendsPageProps) {
         }
 
         const renderActivityFriend = (friend: TaggedFriend, isOffline = false) => {
-          const { baseName, domain } = parseFederatedUsername(friend.username);
-          const friendDisplayName = friend.displayName ?? baseName;
           const activities = userActivities.get(friend.homeUserId ?? friend.id) ?? [];
           const isRichActivity = !isOffline && hasRichActivity(activities);
           const primary = getPrimaryActivity(activities);
           const accentClass = primary ? getActivityAccentClass(primary.type) : '';
-
-          const rowClass = isRichActivity
-            ? `flex items-center gap-3 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass}`
-            : 'flex items-center gap-3 px-4 py-2.5 rounded-[4px] hover:bg-interactive-hover cursor-pointer transition-colors active:bg-interactive-hover';
-
           return (
-            <div
+            <ActivityFriendItem
               key={friend.id}
-              onClick={() => {
-                if (mobile) {
-                  pushMobileScreen('user-profile', { userId: friend.id });
-                } else {
-                  handleOpenDm(friend.id, friend.homeUserId ?? undefined, friend.homeInstance);
-                }
-              }}
-              className={rowClass}
-            >
-              <Avatar
-                src={friend.avatar}
-                name={friendDisplayName}
-                size={36}
-                status={isOffline ? 'offline' : friend.status}
-                className={isOffline ? 'opacity-60' : undefined}
-                userId={friend.homeUserId ?? friend.id}
-                avatarColor={friend.avatarColor}
-              />
-              <div className="flex-1 min-w-0">
-                <Username
-                  username={friendDisplayName}
-                  className={`text-sm leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : 'text-txt-primary'}`}
-                />
-                {domain && !isOffline && (
-                  <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
-                )}
-                {!isOffline && (
-                  <ActivityCard
-                    activities={activities}
-                    fallbackCustomStatus={friend.customStatus}
-                  />
-                )}
-              </div>
-            </div>
+              friend={friend}
+              isOffline={isOffline}
+              activities={activities}
+              isRichActivity={isRichActivity}
+              accentClass={accentClass}
+              mobile={mobile}
+              onMobileClick={(userId) => pushMobileScreen('user-profile', { userId })}
+              onDmClick={handleOpenDm}
+            />
           );
         };
 
@@ -863,13 +899,14 @@ function TabButton({ children, active, onClick }: { children: React.ReactNode, a
 }
 
 function FriendItem({ friend, onRemove, onDm }: { friend: TaggedFriend, onRemove: () => void, onDm: () => void }) {
+  const canonical = useCanonicalUserView(friend as unknown as User);
   const instanceLabel = friend._instanceOrigin ? (() => { try { return new URL(friend._instanceOrigin).host; } catch { return friend._instanceOrigin; } })() : '';
-  const { baseName: friendBaseName } = parseFederatedUsername(friend.username);
-  const friendDisplayName = friend.displayName ?? friendBaseName;
+  const { baseName: friendBaseName } = parseFederatedUsername(canonical.username);
+  const friendDisplayName = canonical.displayName ?? friendBaseName;
   return (
     <div className="flex items-center justify-between px-3 h-[62px] rounded-[8px] hover:bg-interactive-hover group transition-colors border-t border-interactive-muted mx-2">
       <div className="flex items-center gap-3">
-        <Avatar src={friend.avatar} name={friendDisplayName} size={32} status={friend.status} userId={friend.homeUserId ?? friend.id} avatarColor={friend.avatarColor} />
+        <Avatar src={canonical.avatar} name={friendDisplayName} size={32} status={canonical.status} userId={canonical.homeUserId ?? canonical.id} avatarColor={canonical.avatarColor} />
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-1.5">
             <span className="text-txt-primary font-semibold text-[15px]">{friendDisplayName}</span>
@@ -914,7 +951,10 @@ function RequestItem({ request, type, onAccept, onDecline, onCancel }: {
   onDecline?: () => void;
   onCancel?: () => void;
 }) {
-  const user = request.user;
+  const rawUser = request.user;
+  const _FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
+  const canonicalUser = useCanonicalUserView((rawUser as unknown as User | null) ?? _FALLBACK_USER);
+  const user = rawUser ? canonicalUser : null;
   if (!user) return null;
   const instanceLabel = request._instanceOrigin ? (() => { try { return new URL(request._instanceOrigin).host; } catch { return request._instanceOrigin; } })() : '';
   const { baseName: reqBaseName } = parseFederatedUsername(user.username);

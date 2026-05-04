@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { MemberWithUser } from '@backspace/shared';
+import type { MemberWithUser, Activity } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useActivityStore } from '../../stores/activityStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -7,7 +7,8 @@ import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
 import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
 import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
-import { parseFederatedUsername } from '../../utils/identity';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { MobileScreenHeader } from './MobileScreenHeader';
 
 /**
@@ -40,6 +41,64 @@ function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
     color: undefined,
     position: -1,
   };
+}
+
+function MobileMemberRow({
+  member,
+  isOffline,
+  colorStyle,
+  activities,
+  isRichActivity,
+  accentClass,
+  onClickMember,
+}: {
+  member: MemberWithUser;
+  isOffline: boolean;
+  colorStyle: React.CSSProperties | undefined;
+  activities: Activity[];
+  isRichActivity: boolean;
+  accentClass: string;
+  onClickMember: (userId: string) => void;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const displayName = canonical.displayName ?? baseName;
+
+  const rowClass = isRichActivity
+    ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
+    : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] cursor-pointer transition-colors active:bg-interactive-hover';
+
+  return (
+    <div
+      onClick={() => onClickMember(member.userId)}
+      className={rowClass}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={displayName}
+        size={36}
+        status={isOffline ? 'offline' : canonical.status}
+        className={isOffline ? 'opacity-60' : undefined}
+        user={canonical}
+      />
+      <div className="flex-1 min-w-0">
+        <Username
+          username={displayName}
+          className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
+          style={colorStyle}
+        />
+        {!isOffline && isFederationGlobeApplicable(canonical) && (
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+        )}
+        {!isOffline && (
+          <ActivityCard
+            activities={activities}
+            fallbackCustomStatus={canonical.customStatus}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
 interface MobileMembersScreenProps {
@@ -95,49 +154,22 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
   };
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {
-    const { baseName, domain } = parseFederatedUsername(member.user.username);
-    const displayName = member.user.displayName ?? baseName;
     const colorStyle = isOffline ? undefined : getMemberColor(member);
     const activities = userActivities.get(member.userId) ?? [];
     const isRichActivity = !isOffline && hasRichActivity(activities);
     const primary = getPrimaryActivity(activities);
     const accentClass = primary ? getActivityAccentClass(primary.type) : '';
-
-    const rowClass = isRichActivity
-      ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
-      : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] cursor-pointer transition-colors active:bg-interactive-hover';
-
     return (
-      <div
+      <MobileMemberRow
         key={member.userId}
-        onClick={() => handleMemberClick(member.userId)}
-        className={rowClass}
-      >
-        <Avatar
-          src={member.user.avatar}
-          name={displayName}
-          size={36}
-          status={isOffline ? 'offline' : member.user.status}
-          className={isOffline ? 'opacity-60' : undefined}
-          user={member.user}
-        />
-        <div className="flex-1 min-w-0">
-          <Username
-            username={displayName}
-            className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
-            style={colorStyle}
-          />
-          {domain && !isOffline && (
-            <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{domain}</div>
-          )}
-          {!isOffline && (
-            <ActivityCard
-              activities={activities}
-              fallbackCustomStatus={member.user.customStatus}
-            />
-          )}
-        </div>
-      </div>
+        member={member}
+        isOffline={isOffline}
+        colorStyle={colorStyle}
+        activities={activities}
+        isRichActivity={isRichActivity}
+        accentClass={accentClass}
+        onClickMember={handleMemberClick}
+      />
     );
   };
 
