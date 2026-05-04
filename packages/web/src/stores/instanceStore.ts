@@ -173,6 +173,10 @@ interface InstanceState {
   pendingSyncOrigins: string[];
   registry: Map<string, FederationRegistryEntry>;
   registryUpdatedAt: number;
+  // True once we've successfully fetched the authoritative registry from the
+  // home server at least once this session. Until then, syncRegistry() must
+  // not PUT — our local view is incomplete and would clobber server state.
+  _registrySyncReady: boolean;
   syncRegistry: () => Promise<void>;
   deleteIdentity: (origins: string[], mode?: 'leave' | 'soft' | 'full') => Promise<Record<string, { success: boolean; error?: string; ownedSpaces?: { id: string; name: string }[] }>>;
   forceRemoveEntry: (origin: string) => void;
@@ -200,6 +204,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
   pendingSyncOrigins: [],
   registry: new Map(),
   registryUpdatedAt: 0,
+  _registrySyncReady: false,
 
   probeInstance: async (url: string) => {
     const origin = normalizeOrigin(url);
@@ -706,6 +711,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
   syncRegistry: async () => {
     if (!get()._autoConnectDone) return;
+    // Block PUT until we've successfully read the authoritative server registry
+    // at least once. Otherwise a transient GET failure during autoConnectAll
+    // would let us push an empty/incomplete registry with a fresh timestamp,
+    // wiping legitimate server-side entries via LWW.
+    if (!get()._registrySyncReady) return;
 
     const { registry, registryUpdatedAt, instances } = get();
     const currentUser = useAuthStore.getState().user;
@@ -784,10 +794,12 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     // Fetch server-side registry (source of truth for entry list)
     let serverRegistry: FederationRegistryEntry[] = [];
     let serverRegistryUpdatedAt = 0;
+    let serverRegistryFetched = false;
     try {
       const res = await api.users.getFederationRegistry();
       serverRegistry = res.registry;
       serverRegistryUpdatedAt = res.updatedAt;
+      serverRegistryFetched = true;
     } catch (err) {
       console.warn('Failed to fetch federation registry from home:', err);
     }
@@ -796,6 +808,29 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     const registry = new Map<string, FederationRegistryEntry>();
     for (const entry of serverRegistry) {
       registry.set(entry.origin, entry);
+    }
+
+    // Seed any replicatedInstances that aren't yet in the registry. This covers
+    // (a) accounts whose remotes were added before the federation registry table
+    // existed, and (b) the GET-failed degraded mode where we still want the user
+    // to see their known connections (as auth_expired) instead of an empty list.
+    // These synthesized entries are display-only until the next successful GET
+    // — we never PUT while _registrySyncReady is false.
+    for (const ri of currentUser.replicatedInstances) {
+      const origin = ri.origin || `https://${ri.domain}`;
+      if (isSelfOrigin(origin)) continue;
+      if (registry.has(origin)) continue;
+      registry.set(origin, {
+        origin,
+        label: new URL(origin).host,
+        username: ri.username || '',
+        remoteUserId: '',
+        status: 'auth_expired',
+        addedAt: Date.now(),
+        lastConnectedAt: null,
+        disconnectedAt: null,
+        errorMessage: 'Re-authenticate to connect',
+      });
     }
 
     // Migration: promote localStorage-only entries to registry
@@ -1066,12 +1101,21 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       .filter(([, v]) => v.pendingPasswordSync)
       .map(([origin]) => origin);
 
-    // Persist reconciled registry
+    // Persist reconciled registry. _registrySyncReady gates outbound PUTs:
+    // only flip true when we've authoritatively read from the home server.
     const registryUpdatedAt = serverRegistryUpdatedAt > 0 ? Math.max(serverRegistryUpdatedAt, Date.now()) : Date.now();
-    set({ _autoConnectDone: true, pendingSyncOrigins: pendingOrigins, registry, registryUpdatedAt });
+    set({
+      _autoConnectDone: true,
+      pendingSyncOrigins: pendingOrigins,
+      registry,
+      registryUpdatedAt,
+      _registrySyncReady: serverRegistryFetched,
+    });
 
-    // Sync reconciled registry to all instances
-    get().syncRegistry().catch(() => {});
+    // Sync reconciled registry to all instances (no-ops if fetch failed)
+    if (serverRegistryFetched) {
+      get().syncRegistry().catch(() => {});
+    }
   },
 
   reset: () => {
@@ -1086,7 +1130,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
     clearPasswordSyncTimers();
 
-    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [], registry: new Map(), registryUpdatedAt: 0 });
+    set({ instances: [], isLoading: false, error: null, _autoConnectDone: false, pendingSyncOrigins: [], registry: new Map(), registryUpdatedAt: 0, _registrySyncReady: false });
     // Token cache preserved — scoped per user, survives logout for seamless reconnect
   },
 }));

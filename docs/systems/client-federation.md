@@ -347,7 +347,20 @@ Client-driven LWW whole-registry push (same pattern as `profileSync.ts`):
 1. User mutates registry → `registryUpdatedAt = Date.now()`
 2. Client calls `PUT /api/users/@me/federation-registry` on all connected instances
 3. Server rejects if `updatedAt <= stored` (409 Conflict)
-4. On startup, client fetches registry from home via `GET`, merges with localStorage tokens
+4. On startup, client fetches registry from home via `GET`, merges with localStorage tokens, and seeds any `replicatedInstances` entries that aren't yet in the registry (with status `auth_expired`) so users with pre-feature data — or whose initial GET failed — still see their connections in the UI
+
+### Sync-Ready Gate
+
+`PUT` is gated behind an in-memory `_registrySyncReady` flag that is set true **only after a successful initial GET** in `autoConnectAll`. Until that flag flips, `syncRegistry()` is a no-op (and `autoConnectAll` does not call it).
+
+**Why:** without this gate, a transient GET failure would leave the local Map empty/incomplete, but `set()` would still compute `registryUpdatedAt = Date.now()` (since `serverRegistryUpdatedAt = 0`). The trailing `syncRegistry()` would PUT the empty payload with a fresh-now timestamp; the server's LWW guard (`updatedAt > stored`) accepts it, and legitimate registry rows are wiped — including remote-instance entries the user never explicitly removed.
+
+**Degraded mode (GET failed):**
+- Registry Map is populated locally from `replicatedInstances` synthesis (display-only) so the UI still shows the user's known remotes as `auth_expired`.
+- Mutations (`connectToRemote`, `disconnectInstance`, `reconnectInstance`, etc.) still update the local Map but **do not push** to home — `syncRegistry()` short-circuits.
+- On the next session where GET succeeds, `localStorage` cached tokens reseed the registry and `syncRegistry()` pushes the merged authoritative state. No data is lost; sync is just deferred until we have a complete picture to merge against.
+
+`reset()` (logout/account switch) clears `_registrySyncReady` along with the registry Map.
 
 ### API
 
