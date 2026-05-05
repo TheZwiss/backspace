@@ -23,16 +23,22 @@ export function AudioInputSection() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
 
-  // Click-outside-to-close.
+  // Click-outside-to-close. iOS Safari does not synthesize `mousedown` from
+  // touch reliably, so we listen for `touchstart` alongside `mousedown` to
+  // make the popover dismissable with a single tap on touch devices.
   useEffect(() => {
     if (!listOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setListOpen(false);
       }
     };
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
   }, [listOpen]);
 
   // Listen for AudioContext resume events so dependent effects re-trigger

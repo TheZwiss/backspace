@@ -7,6 +7,11 @@ import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TypingIndicator } from '../chat/TypingIndicator';
 import { TransferIndicator } from './TransferIndicator';
+import { parseFederatedUsername } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import type { User } from '@backspace/shared';
+
+const FALLBACK_USER = { id: '', username: '', createdAt: 0, isAdmin: false, replicatedInstances: [] } as unknown as User;
 
 interface MobileChatScreenProps {
   params?: Record<string, string>;
@@ -32,16 +37,31 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
     loadMessages(channelId);
   }, [channelId, setCurrentChannel, loadMessages]);
 
+  // Resolve the "main other member" of a 1:1 DM up-front so we can route it
+  // through useCanonicalUserView (hook, must run unconditionally). Group DMs
+  // don't get the cache treatment in the header — the comma-joined title falls
+  // back to per-member parseFederatedUsername normalization, matching the
+  // pattern in MobileDmsScreen.
+  const dm = isDm && channelId ? dmChannels.find(d => d.id === channelId) : undefined;
+  const otherMembers = dm ? dm.members.filter(m => m.id !== authUser?.id) : [];
+  const isGroup = !!dm?.ownerId;
+  const rawMainOther = !isGroup ? otherMembers[0] : undefined;
+  const canonicalMainOther = useCanonicalUserView((rawMainOther as unknown as User) ?? FALLBACK_USER);
+
   // Resolve channel/DM name
   let channelName = 'Channel';
-  if (isDm && channelId) {
-    const dm = dmChannels.find(d => d.id === channelId);
-    if (dm) {
-      const otherMembers = dm.members.filter(m => m.id !== authUser?.id);
-      const isGroup = !!dm.ownerId;
-      channelName = isGroup
-        ? otherMembers.map(m => m.displayName ?? m.username).join(', ')
-        : otherMembers[0]?.displayName ?? otherMembers[0]?.username ?? 'Direct Message';
+  if (isDm && dm) {
+    if (isGroup) {
+      channelName = otherMembers
+        .map(m => m.displayName ?? parseFederatedUsername(m.username).baseName)
+        .join(', ');
+    } else if (rawMainOther) {
+      channelName =
+        canonicalMainOther.displayName ??
+        parseFederatedUsername(canonicalMainOther.username).baseName ??
+        'Direct Message';
+    } else {
+      channelName = 'Direct Message';
     }
   } else if (!isDm && channelId) {
     const ch = channels.find(c => c.id === channelId);

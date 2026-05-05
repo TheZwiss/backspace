@@ -120,16 +120,23 @@ export function VideoSection() {
     if (videoEl) videoEl.srcObject = null;
   };
 
-  // Close the dropdown when the user clicks outside it.
+  // Close the dropdown when the user clicks outside it. Listens for both
+  // mousedown and touchstart so the popover dismisses with a single tap on
+  // touch devices (iOS Safari does not synthesize mousedown reliably from
+  // touch).
   useEffect(() => {
     if (!listOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setListOpen(false);
       }
     };
-    document.addEventListener('mousedown', onMouseDown);
-    return () => document.removeEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
   }, [listOpen]);
 
   // Tab-visibility cleanup: release the camera light when the tab is hidden.
@@ -508,6 +515,7 @@ export function VideoSection() {
             ref={previewVideoRef}
             muted
             playsInline
+            autoPlay
             className={`w-full h-full object-cover ${isDormant ? 'invisible' : ''}`}
             style={{ transform: 'scaleX(-1)' }}
           />
@@ -528,7 +536,11 @@ export function VideoSection() {
             <button
               type="button"
               onClick={stopPreviewFromUser}
-              className="absolute top-2 right-2 text-[11px] px-2 py-1 rounded-md bg-black/60 hover:bg-black/75 text-white/90 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              // Mobile: always visible (no hover state) and 44 px tap target
+              // per iOS HIG. Desktop: original hover-reveal compact pill.
+              className="absolute top-2 right-2 rounded-md bg-black/60 hover:bg-black/75 text-white/90 transition-colors focus-visible:opacity-100
+                         min-h-[44px] min-w-[44px] px-3 py-2 text-xs flex items-center justify-center
+                         md:min-h-0 md:min-w-0 md:text-[11px] md:px-2 md:py-1 md:opacity-0 md:group-hover:opacity-100"
             >
               Stop preview
             </button>

@@ -12,7 +12,7 @@ interface MobileSettingsScreenProps {
 
 const panelConfig: Record<string, { title: string; component: React.ReactNode }> = {
   account: { title: 'Account', component: <AccountPanel /> },
-  voice: { title: 'Voice & Audio', component: <VoicePanel /> },
+  voice: { title: 'Voice & Video', component: <VoicePanel /> },
   privacy: { title: 'Privacy', component: <PrivacyPanel /> },
   connections: { title: 'Connections', component: <ConnectionsPanel /> },
 };
@@ -76,7 +76,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   // Settings section list
   const sections = [
     { id: 'account', label: 'Account' },
-    { id: 'voice', label: 'Voice & Audio' },
+    { id: 'voice', label: 'Voice & Video' },
     { id: 'privacy', label: 'Privacy' },
     { id: 'connections', label: 'Connections' },
     ...(isAdmin ? [{ id: 'instance', label: 'Instance' }] : []),
