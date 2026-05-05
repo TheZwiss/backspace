@@ -108,11 +108,6 @@ vi.mock('../../stores/activityStore', () => ({
   ),
 }));
 
-// Mock ConnectInstanceModal
-vi.mock('../modals/ConnectInstanceModal', () => ({
-  ConnectInstanceModal: () => null,
-}));
-
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
