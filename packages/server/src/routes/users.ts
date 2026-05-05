@@ -362,6 +362,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             homeUserId: preUpdateUser.id,
             homeInstance: origin,
             profileUpdatedAt: preUpdateUser.profileUpdatedAt ?? Date.now(),
+            username: preUpdateUser.username,
             displayName: preUpdateUser.displayName,
             avatar: preUpdateUser.avatar && !preUpdateUser.avatar.startsWith('http')
               ? `${origin}/api/uploads/${preUpdateUser.avatar}`
@@ -435,17 +436,26 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.setUserShowActivity(request.userId, showActivity);
       if (!showActivity) {
         connectionManager.clearUserActivities(request.userId);
-        const userSpaces = connectionManager.getUserSpaces(request.userId);
         const clearPayload = {
           type: 'presence_update' as const,
           userId: request.userId,
           status: connectionManager.getUserStatus(request.userId),
           activities: [] as Activity[],
         };
-        for (const spaceId of userSpaces) {
-          connectionManager.sendToSpace(spaceId, clearPayload, request.userId);
-        }
+        const clearTargets = collectProfileBroadcastTargetIds(request.userId);
+        for (const uid of clearTargets) connectionManager.sendToUser(uid, clearPayload);
         connectionManager.sendToUser(request.userId, clearPayload);
+
+        // S2S: project the cleared-activities snapshot to all active peers.
+        void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+          try {
+            queuePresenceRelay(
+              request.userId,
+              (connectionManager.getUserStatus(request.userId) ?? 'online') as 'online' | 'idle' | 'dnd' | 'offline',
+              [],
+            );
+          } catch (e) { console.warn('[users] queuePresenceRelay(showActivity-clear) failed', e); }
+        });
       }
     }
 
@@ -486,19 +496,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     // Broadcast presence update if status changed
     if (status !== undefined) {
-      const userSpaces = connectionManager.getUserSpaces(sanitized.id);
-      for (const spaceId of userSpaces) {
-        connectionManager.sendToSpace(spaceId, {
-          type: 'presence_update',
-          userId: sanitized.id,
-          status: status,
-        }, sanitized.id);
-      }
-      connectionManager.sendToUser(sanitized.id, {
-        type: 'presence_update',
+      const statusPayload = {
+        type: 'presence_update' as const,
         userId: sanitized.id,
         status: status,
-      });
+      };
+      const statusTargets = collectProfileBroadcastTargetIds(sanitized.id);
+      for (const uid of statusTargets) connectionManager.sendToUser(uid, statusPayload);
+      connectionManager.sendToUser(sanitized.id, statusPayload);
     }
 
     // Broadcast user_updated for profile field changes
@@ -524,6 +529,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           homeUserId: updatedUser!.id,
           homeInstance: origin,
           profileUpdatedAt: updatedUser!.profileUpdatedAt ?? Date.now(),
+          username: updatedUser!.username,
           displayName: updatedUser!.displayName,
           avatar: updatedUser!.avatar && !updatedUser!.avatar.startsWith('http')
             ? `${origin}/api/uploads/${updatedUser!.avatar}`

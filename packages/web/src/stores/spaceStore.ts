@@ -568,11 +568,29 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   updateMemberPresence: (userId: string, status: string) => {
-    set((state) => ({
-      members: state.members.map(m =>
-        m.userId === userId ? { ...m, user: { ...m.user, status: status as 'online' | 'idle' | 'dnd' | 'offline' } } : m
-      ),
-    }));
+    set((state) => {
+      const typedStatus = status as 'online' | 'idle' | 'dnd' | 'offline';
+      // Mirror the status into the userViews cache so any component reading via
+      // useCanonicalUserView (e.g. the FriendItem avatar dot) re-renders with
+      // fresh status — not just spaceStore.members which only feeds space UIs.
+      // Match by user.id and user.homeUserId to catch both native rows and
+      // replicated stubs whose canonicalUserKey resolves to the canonical id.
+      let nextUserViews = state.userViews;
+      for (const [key, entry] of state.userViews) {
+        const u = entry.user;
+        if (u.id === userId || u.homeUserId === userId) {
+          if (nextUserViews === state.userViews) nextUserViews = new Map(state.userViews);
+          nextUserViews.set(key, { ...entry, user: { ...u, status: typedStatus } });
+        }
+      }
+
+      return {
+        members: state.members.map(m =>
+          m.userId === userId ? { ...m, user: { ...m.user, status: typedStatus } } : m
+        ),
+        userViews: nextUserViews,
+      };
+    });
   },
 
   updateUserEverywhere: (user: User) => {

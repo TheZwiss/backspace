@@ -882,7 +882,7 @@ export interface FederationRelayEvent {
     | 'friend_add' | 'friend_remove' | 'file_rejected'
     | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
     | 'dm_typing_start' | 'dm_typing_stop'
-    | 'profile_update'
+    | 'profile_update' | 'presence_update'
     | 'read_state_update'
     | 'dm_close' | 'dm_reopen';
   contextType?: 'dm' | 'friend' | 'profile';
@@ -922,6 +922,7 @@ export interface FederationRelayEvent {
     username: string;
   };
   profileUpdate?: FederationProfileUpdatePayload;
+  presenceUpdate?: FederationPresenceUpdatePayload;
   readState?: {
     user: { homeUserId: string; homeInstance: string };
     messageRef: { sourceInstance: string; sourceMessageId: string };
@@ -966,18 +967,47 @@ export interface FederationRelayProfileSnapshot {
   avatarColor?: string | null;
   banner?: string | null;
   bio?: string | null;
+  // Current presence at the moment the snapshot was built. Optional for
+  // backwards compatibility with peers that pre-date the field. Receivers use
+  // this to seed the stub's status at creation time, so a freshly-friended
+  // remote user shows their actual current state instead of defaulting to
+  // 'offline' until the next presence_update arrives. presence_update is
+  // ephemeral and fires only on transitions, so without this field an
+  // already-online remote stays stuck at 'offline' on the receiver until they
+  // next change status.
+  status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
 
 export interface FederationProfileUpdatePayload {
   homeUserId: string;
   homeInstance: string;
   profileUpdatedAt: number;
+  // Home user's canonical username (without @domain suffix). Receivers apply
+  // `displayName ?? username` so stubs whose home user has no displayName show
+  // the real handle instead of getting clobbered to null. Username itself is
+  // immutable on the home instance — receivers do NOT rewrite the stub's
+  // username column on profile_update.
+  username: string;
   displayName: string | null;
   avatar: string | null;
   banner: string | null;
   accentColor: string | null;
   avatarColor: string | null;
   bio: string | null;
+}
+
+/**
+ * Presence projection from a home instance to peers. Carries the user's current
+ * online status and (optionally) rich activities. Outbox-only on the wire — never
+ * written to federation_mutation_log; presence is ephemeral and stale replays on
+ * peer activation are wrong (the activation hook re-emits a fresh snapshot).
+ */
+export interface FederationPresenceUpdatePayload {
+  homeUserId: string;
+  homeInstance: string;
+  status: 'online' | 'idle' | 'dnd' | 'offline';
+  activities?: Activity[];
+  ts: number; // emitter clock; receiver may use for last-write-wins
 }
 
 export interface FederationFriendshipPayload {
@@ -1056,6 +1086,9 @@ export interface FederationUserLookupProfile {
   avatarColor: AvatarColor | null;
   banner: string | null;
   bio: string | null;
+  // Carried so the requester can seed the stub's status at creation time.
+  // Optional for backwards compat with peers that pre-date the field.
+  status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
 
 export type FederationUserLookupResponse =

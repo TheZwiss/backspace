@@ -346,6 +346,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       displayName: schema.users.displayName,
       avatar: schema.users.avatar,
       avatarColor: schema.users.avatarColor,
+      status: schema.users.status,
     })
     .from(schema.dmMembers)
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
@@ -362,6 +363,9 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       displayName: m.displayName ?? null,
       avatar: m.avatar ?? null,
       avatarColor: m.avatarColor ?? null,
+      // Only carry presence for native participants — replicated stubs hold
+      // stale status owned by their home; emitting it would flap remote UIs.
+      status: !m.homeInstance ? (m.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
     },
   }));
 }

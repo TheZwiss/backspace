@@ -21,6 +21,11 @@ import type {
 import { sanitizeUser } from '../utils/sanitize.js';
 
 function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
+  // Only meaningful for native users (us). Replicated stubs carry stale status
+  // their home owns — emitting it would flap remote UIs on relay receipt.
+  const status = !user.homeInstance && user.status
+    ? (user.status as 'online' | 'idle' | 'dnd' | 'offline')
+    : null;
   return {
     username: user.username ?? null,
     displayName: user.displayName ?? null,
@@ -28,6 +33,7 @@ function buildProfileSnapshot(user: typeof schema.users.$inferSelect): Federatio
     avatarColor: user.avatarColor ?? null,
     banner: user.banner ?? null,
     bio: user.bio ?? null,
+    status,
   };
 }
 
@@ -237,7 +243,7 @@ async function handleFederatedFriendRequest(
   }
 
   // 5. Resolve / hydrate stub
-  const stub = resolveOrCreateReplicatedUser(lookup.homeUserId, targetDomain, db, { username: lookup.username });
+  const stub = resolveOrCreateReplicatedUser(lookup.homeUserId, targetDomain, db, { username: lookup.username, status: lookup.profile.status });
   if (!stub) {
     // Tombstoned identity — refuse to resurrect.
     return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
@@ -308,6 +314,7 @@ async function handleFederatedFriendRequest(
         avatarColor: lookup.profile.avatarColor,
         banner: lookup.profile.banner,
         bio: lookup.profile.bio,
+        status: lookup.profile.status ?? null,
       },
       status: 'pending',
       createdAt: now,

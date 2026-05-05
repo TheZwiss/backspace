@@ -144,7 +144,7 @@ UPDATE users
 
 Three guards on the WHERE clause:
 
-1. **`home_instance IS NULL`** — replicated user stubs (federated identities homed elsewhere) have their status projected to us by the home instance via `presence_update` relays, not by our local WS state. Their status must not be touched on our boot.
+1. **`home_instance IS NULL`** — replicated user stubs (federated identities homed elsewhere) have their status projected to us by the home instance via S2S `presence_update` relay events (see `federation.md` §10 — Presence Sync). Their status must not be touched on our boot. On peer deactivation, `markPeerStubsOffline` flips them to `offline`; on peer (re)activation, the home instance re-emits a fresh snapshot for relationship-related online natives.
 2. **`is_deleted = 0`** — tombstoned users are excluded from presence broadcasts already; their stored status is left alone as a maintenance courtesy (no behavioral effect either way, but avoids silent rewrites).
 3. **`status != 'offline'`** — keeps the operation a no-op once steady-state is reached; `changes` is logged only when non-zero.
 
@@ -153,10 +153,10 @@ Because the in-memory `ConnectionManager` is empty at boot by construction, no l
 ### Connect/Disconnect Flow
 
 1. **Server boot** → `resetStalePresenceOnBoot()` flips any locally-homed, non-deleted `online`/`idle`/`dnd` rows to `offline`. Federated rows untouched.
-2. **Auth succeeds** → `status` set to `'online'` in DB → `presence_update` broadcast to all user's spaces (excludes self; self gets `ready` payload)
-3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect
-4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts `presence_update` with `status: 'offline'` and `activities: []` to all spaces
-5. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally
+2. **Auth succeeds** → `status` set to `'online'` in DB → local `presence_update` broadcast to friends + DM members + space co-members via `collectProfileBroadcastTargetIds` → S2S `presence_update` queued to all active peers via `queuePresenceRelay` (mirrors profile_update fanout).
+3. **Last socket closes** → 5-second grace period (`scheduleDisconnect`) to allow tab refresh/reconnect.
+4. **Grace period expires** → `finalizeDisconnect`: sets DB status to `'offline'`, clears in-memory activities, broadcasts local `presence_update` to friends/DM/space co-members, queues S2S `presence_update` to peers.
+5. **Reconnect during grace** → `cancelDisconnect` prevents offline broadcast; new connection proceeds normally.
 
 ### Presence Broadcast Scope
 

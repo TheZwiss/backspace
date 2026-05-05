@@ -52,6 +52,29 @@ export async function onPeerActivated(
       resetOutboxBackoff(peerId);
       await syncPeerMutationLog(peerId, reason);
       await fanoutOutboundSubscribers(peerId);
+
+      // Look up the peer's origin once for the post-sync invariants.
+      const peerRow = getDb()
+        .select({ origin: schema.federationPeers.origin })
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, peerId))
+        .get();
+      if (peerRow?.origin) {
+        const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+        await backfillStubUsernamesForPeer(peerRow.origin).catch((e) => {
+          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${peerRow.origin}) failed`, e);
+        });
+
+        // Re-emit a fresh presence snapshot to the activating peer so its stubs
+        // of our online natives reflect current reality. Necessary because
+        // presence is outbox-only (no mutation-log replay), and any prior
+        // markPeerStubsOffline ran on our side too.
+        const { snapshotPresenceForPeer } = await import('./federationPresence.js');
+        try { snapshotPresenceForPeer(peerRow.origin); } catch (e) {
+          console.warn(`[onPeerActivated] snapshotPresenceForPeer(${peerRow.origin}) failed`, e);
+        }
+      }
+
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     } catch (err) {
@@ -274,14 +297,30 @@ export async function startupBootstrapSync(): Promise<void> {
   if (!isFederationRelayEnabled()) return;
 
   const db = getDb();
-  const peers = db.select().from(schema.federationPeers)
+  const firstTimePeers = db.select().from(schema.federationPeers)
     .where(and(
       eq(schema.federationPeers.status, 'active'),
       eq(schema.federationPeers.lastSyncedAt, 0),
     )).all();
 
-  for (const peer of peers) {
+  for (const peer of firstTimePeers) {
     await onPeerActivated(peer.id, 'startup_bootstrap');
+  }
+
+  // One-shot stub-username backfill for ALL currently-active peers (including
+  // those with lastSyncedAt > 0). Heals legacy snowflake-named stubs created
+  // before resolveOrCreateReplicatedUser used the realname scheme. Idempotent;
+  // skips stubs already migrated. Non-blocking — failures retry on next
+  // onPeerActivated for that origin.
+  const allActivePeers = db.select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'active'))
+    .all();
+  const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+  for (const peer of allActivePeers) {
+    backfillStubUsernamesForPeer(peer.origin).catch((err) => {
+      console.warn(`[startup] stub-backfill ${peer.origin} failed`, err);
+    });
   }
 }
 
@@ -353,6 +392,17 @@ export async function onPeerDeactivated(
         console.log(
           `[federation] onPeerDeactivated(${peerId}, ${reason}) evicted ${evicted} FederatedCallEntry object${evicted === 1 ? '' : 's'} for ${peer.origin}`,
         );
+      }
+
+      // Mark every stub whose home is this peer as offline locally, and
+      // broadcast a presence_update WS event to friends/DM-mates/space-co-members
+      // so connected users see them go offline immediately, instead of seeing
+      // stale 'online' until the peer recovers.
+      try {
+        const { markPeerStubsOffline } = await import('./federationPresence.js');
+        await markPeerStubsOffline(peer.origin);
+      } catch (e) {
+        console.warn(`[onPeerDeactivated] markPeerStubsOffline(${peer.origin}) failed`, e);
       }
 
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });

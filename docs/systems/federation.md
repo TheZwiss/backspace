@@ -6,6 +6,9 @@ Source files:
 - `packages/server/src/routes/federation.ts` -- API endpoints (peer handshake, relay, sync) + all inbound event processors + identity resolution functions
 - `packages/server/src/utils/federationAuth.ts` -- HMAC signing, verification, header parsing, `getOurOrigin()`
 - `packages/server/src/utils/federationOutbox.ts` -- Event queuing, coalescing, relay payload construction, mutation log, participant/target resolution
+- `packages/server/src/utils/federationLookup.ts` -- HMAC-signed remote-user lookups: `lookupRemoteUser` (by username) and `lookupRemoteUserByHomeId` (reverse lookup, used by stub backfill)
+- `packages/server/src/utils/federationPresence.ts` -- S2S presence relay: `queuePresenceRelay`, `snapshotPresenceForPeer` (relationship-scoped), `markPeerStubsOffline`
+- `packages/server/src/utils/federationStubBackfill.ts` -- Heals legacy snowflake-named replicated-user stubs by reverse-looking-up the canonical username via the peer
 - `packages/server/src/utils/federationWorker.ts` -- Background workers: outbox delivery, file download, health check, janitor, initial sync
 - `packages/server/src/utils/storageJanitor.ts` -- Federation GC: outbox expiry, mutation log retention, file queue cleanup, DM channel purge
 - `packages/server/src/routes/social.ts` -- Friend request/accept/cancel/remove endpoints that queue federation events
@@ -1107,8 +1110,9 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 **Event:** `profile_update` (contextType: `profile`)
 
-**Payload:** `FederationProfileUpdatePayload` — full snapshot of 6 durable fields:
+**Payload:** `FederationProfileUpdatePayload`:
 - `homeUserId`, `homeInstance`, `profileUpdatedAt` (monotonic version)
+- `username` — the home user's canonical handle (without `@domain`). Receivers apply `displayName ?? username` when writing the stub's displayName, so stubs whose home user has no displayName show the real handle instead of getting clobbered to null. Username itself is immutable on the home instance, so the receiver does NOT rewrite the stub's username column on profile_update.
 - `displayName`, `avatar` (absolute URL or null), `banner` (absolute URL or null)
 - `accentColor`, `avatarColor`, `bio`
 
@@ -1116,7 +1120,7 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 
 **Coalescing:** `entityId = homeUserId`. Rapid successive edits coalesce to one delivery per peer.
 
-**Processing:** Remote overwrites all 6 fields unconditionally. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
+**Processing:** Remote overwrites all 6 mutable fields unconditionally; `displayName` falls back to `payload.displayName ?? payload.username`. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
 
 #### Profile Image File Replication
 
@@ -1142,6 +1146,52 @@ When a `profile_update` relay carries avatar or banner absolute URLs, the receiv
 **File handling:** Profile images are downloaded locally on relay receipt (see "Profile Image File Replication" above).
 
 **Replaces:** Client-driven `profileSync.ts` (deleted). `hydrateReplicatedUserProfile` still bootstraps null fields during DM/friend relay — it now also runs the same local-download path so newly-created stubs end up with bare filenames, not URLs.
+
+#### Presence Sync (S2S)
+
+Native users' status (and optional rich activities) is projected to peers via the `presence_update` relay event. Closes the doc/code gap previously documented in `activity-presence.md` — replicated stubs now have their status maintained by the home instance over S2S, not derived from absent local WS state.
+
+**Event:** `presence_update` (contextType: `profile`)
+
+**Payload:** `FederationPresenceUpdatePayload`:
+- `homeUserId`, `homeInstance`
+- `status: 'online' | 'idle' | 'dnd' | 'offline'`
+- `activities?: Activity[]` (omitted when empty)
+- `ts: number` — emitter clock (last-write-wins per stub if needed)
+
+**Outbox-only — never written to mutation log.** Presence is ephemeral. Replaying old presence on peer activation would be wrong (stale state). The outbox queues directly without `appendMutationLog`. Stale entries that fail delivery beyond retry budget are dropped.
+
+**Sender call sites** (all in `utils/federationPresence.ts:queuePresenceRelay`):
+- `ws/handler.ts` (auth path) — `online`
+- `ws/handler.ts` (`finalizeDisconnect`) — `offline`
+- `ws/events.ts` (`handlePresenceUpdate`) — manual `online`/`idle`/`dnd`
+- `ws/events.ts` (`handleActivityUpdate`) — when activities change
+- `routes/users.ts` (showActivity-toggle clear) — cleared activities
+
+No-op for replicated users (we don't own their presence).
+
+**Targeting:** broadcast to all active peers (mirrors `profile_update`). Peers without a stub silently no-op. Privacy: status is already public to anyone authorized to see the user via friend/DM/space relationships, so broadcast-fanout adds no new disclosure surface.
+
+**Coalescing:** `entityId = userId`, `contextId = userId`. Rapid status flaps coalesce to the latest queued event per peer.
+
+**Receiver:** `processPresenceUpdateEvent` (`routes/federation.ts`). Strict attribution — `payload.homeInstance` domain MUST equal source peer's domain. Resolves the local stub by `homeUserId`, validates the stub's `homeInstance` matches the payload's domain, updates the stub's `status`, and broadcasts a WS `presence_update` to local users via `collectProfileBroadcastTargetIds(stub.id)` — friends, DM members, and space co-members.
+
+**Peer lifecycle hooks** (`utils/federationPresence.ts`):
+- **`onPeerActivated`** invokes `snapshotPresenceForPeer(origin)` — emits a `presence_update` only for online natives that have an S2S relationship with the peer (friend/DM with a peer-stub, or `replicatedInstances` opt-in for the peer origin). Snapshot work scales with relationship count, not native count.
+- **`onPeerDeactivated`** invokes `markPeerStubsOffline(origin)` — flips every stub from that peer to `offline` and broadcasts a local `presence_update` so users see them go offline immediately.
+- **Flap recovery semantics:** `onPeerActivated` re-runs on every transition into `active`, including the 15-minute health-check `unreachable → active` recovery. This is load-bearing for correctness: `markPeerStubsOffline` ran on the prior deactivation, presence is not in the mutation log, so a fresh snapshot is the only signal that re-establishes truth. The relationship-scoped query bounds the cost.
+
+#### Stub Username Backfill
+
+Legacy stubs (created before the realname scheme shipped) used `${homeUserId}@${domain}` as the local username. The current scheme uses `${realname}@${domain}` (`hints.username` in `resolveOrCreateReplicatedUser`). Backfill heals existing legacy rows.
+
+**Worker:** `utils/federationStubBackfill.ts:backfillStubUsernamesForPeer(peerOrigin)`. Enumerates legacy-shaped stubs whose `home_instance` matches the peer's domain, asks the peer for the canonical username via `lookupRemoteUserByHomeId`, rewrites the stub's username and (if displayName is null) seeds displayName from the same fallback. Idempotent and collision-safe.
+
+**Hook points:**
+- `onPeerActivated` — runs per-peer on every transition to `active` (catches stubs whose home was unreachable on a prior pass).
+- `startupBootstrapSync` — one-shot pass at boot for ALL currently-active peers (not just `lastSyncedAt = 0` first-time peers).
+
+**New endpoint: `POST /api/federation/users/by-home-id`** (HMAC-authenticated, rate-limited 60/min/peer). Body: `{ homeUserId: string }`. Response: `{ found: false }` or `{ found: true, user: { homeUserId, username, profile: { displayName, avatar, avatarColor, banner, bio } } }`. Native non-deleted users only.
 
 ---
 

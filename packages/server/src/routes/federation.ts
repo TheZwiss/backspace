@@ -2330,6 +2330,96 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             avatarColor: user.avatarColor,
             banner: user.banner,
             bio: user.bio,
+            status: user.status as 'online' | 'idle' | 'dnd' | 'offline' | null,
+          },
+        },
+      });
+    },
+  );
+
+  // ─── POST /api/federation/users/by-home-id ──────────────────────────────────
+  // Server-to-server: reverse-lookup a homeUserId to its canonical username +
+  // profile snapshot. Used by the stub-username backfill worker on peers that
+  // hold legacy snowflake-named replicas of users now visible by their real
+  // handle. Same auth+rate-limit shape as /users/lookup.
+  app.post<{ Body: { homeUserId?: unknown } }>(
+    '/api/federation/users/by-home-id',
+    { bodyLimit: 4 * 1024 },
+    async (request, reply) => {
+      const db = getDb();
+
+      // 1. Verify HMAC headers
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      if (isLookupRateLimited(peer.origin)) {
+        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // Replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      }
+
+      // 2. Validate body
+      const rawId = (request.body as { homeUserId?: unknown } | null)?.homeUserId;
+      if (typeof rawId !== 'string' || rawId.trim().length === 0) {
+        return reply.code(400).send({ error: 'homeUserId is required (string)', statusCode: 400 });
+      }
+      const homeUserId = rawId.trim();
+
+      // 3. Native-only lookup. Match by id (canonical native id) OR home_user_id
+      // (backfilled column natives carry to satisfy tier-1 lookups). Excludes
+      // tombstoned and replicated stubs.
+      const user = db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.isDeleted, 0),
+            isNull(schema.users.homeInstance),
+            or(eq(schema.users.id, homeUserId), eq(schema.users.homeUserId, homeUserId)),
+          ),
+        )
+        .get();
+
+      if (!user) {
+        return reply.code(200).send({ found: false });
+      }
+
+      return reply.code(200).send({
+        found: true,
+        user: {
+          homeUserId: user.homeUserId ?? user.id,
+          username: user.username,
+          profile: {
+            displayName: user.displayName,
+            avatar: user.avatar,
+            avatarColor: user.avatarColor,
+            status: user.status as 'online' | 'idle' | 'dnd' | 'offline' | null,
+            banner: user.banner,
+            bio: user.bio,
           },
         },
       });
@@ -2916,6 +3006,9 @@ export async function processRelayEvents(
         case 'profile_update':
           await processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'presence_update':
+          processPresenceUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         case 'read_state_update':
           processReadStateUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
@@ -3162,7 +3255,7 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
-  hints?: { username?: string | null },
+  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null },
 ): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
@@ -3181,9 +3274,13 @@ export function resolveOrCreateReplicatedUser(
     return null;
   }
 
-  // Use the snowflake-style homeUserId as the local part; append the
-  // domain so the username is globally unique and human-readable.
-  const baseUsername = `${homeUserId}@${domain}`.toLowerCase();
+  // Use the home user's real username when the caller passes a hint (the wire
+  // profile snapshot from friend_request_create / friend_add / DM relay carries
+  // it). This makes the local stub's `username` human-readable, so client-side
+  // `parseFederatedUsername(username).baseName` returns the real handle. Falls
+  // back to the snowflake-id scheme when no hint is available (legacy paths).
+  const localPart = (hints?.username ?? homeUserId).toLowerCase();
+  const baseUsername = `${localPart}@${domain}`.toLowerCase();
 
   // Guard against the (unlikely) case where this username already
   // exists — e.g. a prior partial replication or manual creation.
@@ -3192,11 +3289,11 @@ export function resolveOrCreateReplicatedUser(
   let attempt = 0;
   while (collision) {
     attempt++;
-    username = `${homeUserId}_${attempt}@${domain}`.toLowerCase();
+    username = `${localPart}_${attempt}@${domain}`.toLowerCase();
     collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
     if (attempt > 10) {
       // Extremely unlikely; use a random suffix to break out
-      username = `${homeUserId}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
+      username = `${localPart}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
       break;
     }
   }
@@ -3204,12 +3301,18 @@ export function resolveOrCreateReplicatedUser(
   const userId = generateSnowflake();
   const now = Date.now();
 
+  // Seed status from the wire snapshot when available — without this, a
+  // freshly-created stub for an already-online remote sticks at 'offline'
+  // until the home next emits a presence transition (presence_update only
+  // fires on changes, not on stub creation). Falls back to 'offline'.
+  const initialStatus = hints?.status ?? 'offline';
+
   db.insert(schema.users).values({
     id: userId,
     username,
     displayName: null,
     passwordHash: '!federation-replicated',  // Cannot be used to log in (bcrypt never produces this)
-    status: 'offline',
+    status: initialStatus,
     isAdmin: 0,
     homeInstance: domain,  // Normalized to bare domain
     homeUserId,
@@ -3395,7 +3498,7 @@ async function processCreateEvent(
   }> = [];
 
   for (const p of event.participants) {
-    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username });
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status });
     // Skip deleted identities — don't include tombstoned users in the DM
     if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
@@ -3990,7 +4093,7 @@ function processMemberAddEvent(
     // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username });
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status });
       ownerId = ownerLocal?.id ?? null;
     }
 
@@ -4008,7 +4111,7 @@ function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status });
       // Skip deleted identities — tombstoned users can't be added to a DM
       if (!rosterUser) continue;
       const existing = db.select().from(schema.dmMembers)
@@ -4062,7 +4165,7 @@ function processMemberAddEvent(
     event.membership.user.homeUserId,
     event.membership.user.homeInstance,
     db,
-    { username: event.membership.user.profile?.username },
+    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status },
   );
   if (!localUser) {
     // The user's identity has been deleted — don't add a tombstoned user to the DM
@@ -4101,7 +4204,7 @@ function processMemberAddEvent(
   // would otherwise find the channel already present and fall through to the incremental path,
   // creating spurious system messages (the exact bug this fixes).
   const actorUser = event.membership.addedBy
-    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username })
+    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
   const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
@@ -4392,7 +4495,7 @@ function processOwnershipTransferEvent(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
-    { username: event.ownership.newOwner.profile?.username },
+    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status },
   );
   if (!newOwnerLocal) {
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
@@ -4551,7 +4654,7 @@ async function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
   if (!fromUserResolved) {
     // Sender's identity has been deleted — silently accept to drop the event
     accepted.push(event.messageId);
@@ -4669,7 +4772,7 @@ function processFriendRequestUpdateEvent(
   }
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
   if (!toUser) {
     // Recipient's identity has been deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
@@ -4809,14 +4912,14 @@ async function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
   if (!fromUserResolved) {
     // One party's identity is deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
     return;
   }
   let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
-  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
   if (!toUserResolved) {
     accepted.push(event.messageId);
     return;
@@ -5621,7 +5724,7 @@ async function downloadProfileAsset(
   }
 }
 
-async function processProfileUpdateEvent(
+export async function processProfileUpdateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
@@ -5713,10 +5816,17 @@ async function processProfileUpdateEvent(
     deleteUploadFile(oldBanner);
   }
 
-  // Authoritative overwrite — home instance is always right
+  // Authoritative overwrite — home instance is always right.
+  // displayName falls back to the home user's canonical username when null,
+  // mirroring hydrateReplicatedUserProfile so stubs whose home user has no
+  // displayName show the real handle instead of getting clobbered to null.
+  // (The username field on the wire is the home's canonical handle, not the
+  // stub's local-part; usernames are immutable on the home instance, so we
+  // never rewrite the stub's username column here.)
+  const effectiveDisplayName = payload.displayName ?? payload.username ?? null;
   db.update(schema.users)
     .set({
-      displayName: payload.displayName,
+      displayName: effectiveDisplayName,
       avatar: resolvedAvatar,
       banner: resolvedBanner,
       accentColor: payload.accentColor,
@@ -5737,6 +5847,90 @@ async function processProfileUpdateEvent(
     for (const uid of targetUserIds) {
       connectionManager.sendToUser(uid, userUpdatedEvent);
     }
+  }
+
+  accepted.push(event.messageId);
+}
+
+/**
+ * Inbound presence_update relay handler.
+ *
+ * Authority: home instance is exclusive. payload.homeInstance domain MUST equal
+ * the source peer's domain (attribution check, mirrors profile_update).
+ *
+ * Effect on success:
+ *   1. Update the local stub's status column.
+ *   2. Broadcast a WS presence_update to local users via collectProfileBroadcastTargetIds
+ *      (friends + DM members + space co-members), so the green dot updates without a
+ *      page refresh on every connected client that knows this user.
+ *
+ * Edge cases:
+ *   - No local replica → silently accept (peer broadcasts presence to all peers,
+ *     not all peers have a stub).
+ *   - homeInstance domain mismatch on the existing stub → ignore (collision against
+ *     a stub of a different identity).
+ *   - Invalid status string → reject; sender is buggy, surface for diagnosis.
+ */
+export function processPresenceUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  const payload = event.presenceUpdate;
+  if (!payload) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_presence_update_payload' });
+    return;
+  }
+
+  const payloadDomain = extractDomain(payload.homeInstance);
+  const sourceDomain = extractDomain(sourceInstance);
+  if (payloadDomain !== sourceDomain) {
+    console.warn(`[federation] Attribution mismatch in presence_update: homeInstance=${payloadDomain} source=${sourceDomain}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  if (!payload.status || !['online', 'idle', 'dnd', 'offline'].includes(payload.status)) {
+    rejected.push({ messageId: event.messageId, reason: 'invalid_status' });
+    return;
+  }
+
+  const localUser = db
+    .select()
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.homeUserId, payload.homeUserId),
+      eq(schema.users.isDeleted, 0),
+    ))
+    .get();
+
+  if (!localUser) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  db.update(schema.users)
+    .set({ status: payload.status })
+    .where(eq(schema.users.id, localUser.id))
+    .run();
+
+  // Broadcast presence_update WS event to local users who care.
+  const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
+  const wsPayload = {
+    type: 'presence_update' as const,
+    userId: localUser.id,
+    status: payload.status,
+    ...(payload.activities && payload.activities.length > 0 ? { activities: payload.activities } : {}),
+  };
+  for (const uid of targetUserIds) {
+    connectionManager.sendToUser(uid, wsPayload);
   }
 
   accepted.push(event.messageId);

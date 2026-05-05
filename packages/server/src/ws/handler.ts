@@ -21,6 +21,7 @@ import type {
   Activity,
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 
 // ─── Heartbeat State ──────────────────────────────────────────────────────────
 const wsIsAlive: WeakMap<WebSocket, boolean> = new WeakMap();
@@ -296,16 +297,24 @@ class ConnectionManager {
     this.userStatuses.delete(userId);
     this.lastActivityUpdate.delete(userId);
 
-    // Broadcast offline to all spaces
-    const userSpaces = this.getUserSpaces(userId);
-    for (const spaceId of userSpaces) {
-      this.sendToSpace(spaceId, {
-        type: 'presence_update',
-        userId: userId,
-        status: 'offline',
-        activities: [] as Activity[],
-      });
-    }
+    // Broadcast offline to friends + DM co-members + space co-members.
+    // Mirrors collectProfileBroadcastTargetIds (the recipient set used by
+    // user_updated). Two locally-friended users with no shared space now see
+    // each other's offline transitions live, instead of being space-only.
+    const offlinePayload = {
+      type: 'presence_update' as const,
+      userId,
+      status: 'offline' as const,
+      activities: [] as Activity[],
+    };
+    const offlineTargets = collectProfileBroadcastTargetIds(userId);
+    for (const uid of offlineTargets) this.sendToUser(uid, offlinePayload);
+
+    // S2S: project offline to all active peers (mirrors profile_update fanout).
+    // Imported lazily to avoid circular import (federationPresence → db → ws/handler).
+    void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+      try { queuePresenceRelay(userId, 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(offline) failed', e); }
+    });
 
     // Clean up userSpaces (re-populated on next connect via setUserSpaces)
     this.userSpaces.delete(userId);
@@ -1663,15 +1672,16 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
             ...readyData,
           }));
 
-          // Broadcast presence update to all spaces
-          const userSpaces = connectionManager.getUserSpaces(userId);
-          for (const spaceId of userSpaces) {
-            connectionManager.sendToSpace(spaceId, {
-              type: 'presence_update',
-              userId,
-              status: 'online',
-            }, userId);
-          }
+          // Broadcast online to friends + DM co-members + space co-members.
+          const onlinePayload = { type: 'presence_update' as const, userId, status: 'online' as const };
+          const onlineTargets = collectProfileBroadcastTargetIds(userId);
+          for (const uid of onlineTargets) connectionManager.sendToUser(uid, onlinePayload);
+
+          // S2S: project online to all active peers (mirrors profile_update fanout).
+          const _uid = userId;
+          void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+            try { queuePresenceRelay(_uid, 'online', []); } catch (e) { console.warn('[ws] queuePresenceRelay(online) failed', e); }
+          });
         } catch {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
           ws.close();
