@@ -262,31 +262,33 @@ export function StoragePanel() {
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Upload Limit</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">Max file size</label>
-            <input
-              type="number"
-              min={uploadUnit === 'GB' ? 0.001 : 1}
-              step={uploadUnit === 'GB' ? 0.5 : 1}
-              value={uploadLimitInput}
-              onChange={(e) => setUploadLimitInput(e.target.value)}
-              className="input-standard w-24 px-2 py-1 text-sm text-center"
-            />
-            <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
-              {(['MB', 'GB'] as const).map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  onClick={() => handleUploadUnitChange(u)}
-                  className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
-                    uploadUnit === u
-                      ? 'bg-accent-primary text-white'
-                      : 'text-txt-tertiary hover:text-txt-primary'
-                  }`}
-                >
-                  {u}
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={uploadUnit === 'GB' ? 0.001 : 1}
+                step={uploadUnit === 'GB' ? 0.5 : 1}
+                value={uploadLimitInput}
+                onChange={(e) => setUploadLimitInput(e.target.value)}
+                className="input-standard w-24 px-2 py-1 text-sm text-center"
+              />
+              <div className="flex items-center gap-0.5 rounded-lg bg-surface-input p-0.5">
+                {(['MB', 'GB'] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => handleUploadUnitChange(u)}
+                    className={`px-2.5 py-1 rounded text-[12px] font-medium transition-colors ${
+                      uploadUnit === u
+                        ? 'bg-accent-primary text-white'
+                        : 'text-txt-tertiary hover:text-txt-primary'
+                    }`}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
             </div>
             <button
               onClick={handleUploadLimitSave}
@@ -308,7 +310,7 @@ export function StoragePanel() {
           )}
 
           {hasOrphans && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleCleanup(true)}
                 disabled={cleaning}
@@ -358,7 +360,7 @@ export function StoragePanel() {
           <div className="text-xs text-txt-tertiary">
             Abandoned tus upload sessions in <code className="text-txt-secondary">.tus/</code> (paused/crashed without DELETE). Auto-expire runs every 24 hours; this lets you sweep proactively.
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">Max age (hours)</label>
             <input
               type="number"
@@ -375,7 +377,7 @@ export function StoragePanel() {
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleTusCleanup(true)}
               disabled={tusCleaning || tusMaxAgeHours <= 0}
@@ -418,19 +420,21 @@ export function StoragePanel() {
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">Media Retention</div>
         <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-3">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <label className="text-sm text-txt-secondary whitespace-nowrap">Delete chat media older than</label>
-            <input
-              type="number"
-              min={1}
-              value={mediaAgeDays}
-              onChange={(e) => { setMediaAgeDays(Number(e.target.value)); setMediaPreviewDone(false); setMediaCleanupResult(null); }}
-              className="input-standard w-20 px-2 py-1 text-sm text-center"
-            />
-            <span className="text-sm text-txt-tertiary">days</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={1}
+                value={mediaAgeDays}
+                onChange={(e) => { setMediaAgeDays(Number(e.target.value)); setMediaPreviewDone(false); setMediaCleanupResult(null); }}
+                className="input-standard w-20 px-2 py-1 text-sm text-center"
+              />
+              <span className="text-sm text-txt-tertiary">days</span>
+            </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => handleMediaCleanup(true)}
               disabled={mediaCleaning || mediaAgeDays < 1}
