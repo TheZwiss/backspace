@@ -1160,11 +1160,19 @@ setUserIdForOriginResolver((origin: string): string | undefined => {
 // ─── Token resolution (federation) ────────────────────────────────────────────
 // Maps an origin to the JWT for that instance. Used by transferStore for tus
 // uploads and any other path that constructs raw HTTP requests to a federated
-// instance and needs to pass an Authorization header. Empty origin falls back
-// to the home-instance token from authStore.
+// instance and needs to pass an Authorization header.
+//
+// Empty origin reads from localStorage, mirroring the home `api` client
+// (api/client.ts). authStore.token is the React-state mirror of the same value
+// and is written together with localStorage by initSession/logout — but the
+// register page intentionally writes localStorage *before* initSession (so
+// AuthRedirect doesn't yank the user off /register while the avatar is still
+// uploading). Reading authStore.token here would return null in that window
+// and the upload would silently fail. Aligning with the api client closes the
+// gap and gives one source of truth for the home JWT.
 
 setTokenForOriginResolver((origin: string): string | null => {
-  if (!origin) return useAuthStore.getState().token;
+  if (!origin) return localStorage.getItem('backspace_token');
   const instance = useInstanceStore.getState().instances.find(i => i.origin === origin);
   return instance?.token ?? null;
 });

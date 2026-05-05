@@ -561,6 +561,8 @@ Called by `useAuth()` hook when token exists but user object is null:
   3. `initSession(token, finalUser)` -- activates Zustand state, triggers redirect
   4. Navigate to redirect param or `/channels/@me`
 
+  **Auth-token source of truth.** During the step-2 avatar upload, the JWT lives in `localStorage` only -- `authStore.token` (Zustand) is still null because step 3 hasn't fired. Both the home `api` client (`api/client.ts`) and the home-origin branch of `setTokenForOriginResolver` in `instanceStore.ts` therefore read the home JWT from `localStorage.getItem('backspace_token')`, never from `authStore.token`. This keeps `transferStore.startUpload` (and any other path that resolves a home-origin bearer) authenticated during the registration window. The two stores are written together everywhere else (`initSession`/`logout`), so the divergence only matters between steps 1 and 3 here.
+
 ---
 
 ## 8. Federation-Aware Identity Utilities
