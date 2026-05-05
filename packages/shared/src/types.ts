@@ -882,7 +882,7 @@ export interface FederationRelayEvent {
     | 'friend_add' | 'friend_remove' | 'file_rejected'
     | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
     | 'dm_typing_start' | 'dm_typing_stop'
-    | 'profile_update'
+    | 'profile_update' | 'presence_update'
     | 'read_state_update'
     | 'dm_close' | 'dm_reopen';
   contextType?: 'dm' | 'friend' | 'profile';
@@ -922,6 +922,7 @@ export interface FederationRelayEvent {
     username: string;
   };
   profileUpdate?: FederationProfileUpdatePayload;
+  presenceUpdate?: FederationPresenceUpdatePayload;
   readState?: {
     user: { homeUserId: string; homeInstance: string };
     messageRef: { sourceInstance: string; sourceMessageId: string };
@@ -984,6 +985,20 @@ export interface FederationProfileUpdatePayload {
   accentColor: string | null;
   avatarColor: string | null;
   bio: string | null;
+}
+
+/**
+ * Presence projection from a home instance to peers. Carries the user's current
+ * online status and (optionally) rich activities. Outbox-only on the wire — never
+ * written to federation_mutation_log; presence is ephemeral and stale replays on
+ * peer activation are wrong (the activation hook re-emits a fresh snapshot).
+ */
+export interface FederationPresenceUpdatePayload {
+  homeUserId: string;
+  homeInstance: string;
+  status: 'online' | 'idle' | 'dnd' | 'offline';
+  activities?: Activity[];
+  ts: number; // emitter clock; receiver may use for last-write-wins
 }
 
 export interface FederationFriendshipPayload {

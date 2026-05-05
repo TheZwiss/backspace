@@ -307,6 +307,12 @@ class ConnectionManager {
       });
     }
 
+    // S2S: project offline to all active peers (mirrors profile_update fanout).
+    // Imported lazily to avoid circular import (federationPresence → db → ws/handler).
+    void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+      try { queuePresenceRelay(userId, 'offline', []); } catch (e) { console.warn('[ws] queuePresenceRelay(offline) failed', e); }
+    });
+
     // Clean up userSpaces (re-populated on next connect via setUserSpaces)
     this.userSpaces.delete(userId);
 
@@ -1672,6 +1678,12 @@ export async function registerWebSocket(app: FastifyInstance): Promise<void> {
               status: 'online',
             }, userId);
           }
+
+          // S2S: project online to all active peers (mirrors profile_update fanout).
+          const _uid = userId;
+          void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+            try { queuePresenceRelay(_uid, 'online', []); } catch (e) { console.warn('[ws] queuePresenceRelay(online) failed', e); }
+          });
         } catch {
           ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }));
           ws.close();

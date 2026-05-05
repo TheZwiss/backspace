@@ -511,6 +511,11 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
 
   // Also send to self (other tabs)
   connectionManager.sendToUser(userId, payload);
+
+  // S2S: project to all active peers
+  void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(manual) failed', e); }
+  });
 }
 
 function handleActivityUpdate(event: Record<string, unknown>, userId: string): void {
@@ -535,6 +540,11 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
     connectionManager.sendToSpace(spaceId, payload, userId);
   }
   connectionManager.sendToUser(userId, payload);
+
+  // S2S: project to all active peers (activities + current status).
+  void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+    try { queuePresenceRelay(userId, status as 'online' | 'idle' | 'dnd' | 'offline', activities); } catch (e) { console.warn('[ws] queuePresenceRelay(activity) failed', e); }
+  });
 }
 
 // ─── Voice Handlers (Unified Room API) ─────────────────────────────────────

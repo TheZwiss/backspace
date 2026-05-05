@@ -447,6 +447,17 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           connectionManager.sendToSpace(spaceId, clearPayload, request.userId);
         }
         connectionManager.sendToUser(request.userId, clearPayload);
+
+        // S2S: project the cleared-activities snapshot to all active peers.
+        void import('../utils/federationPresence.js').then(({ queuePresenceRelay }) => {
+          try {
+            queuePresenceRelay(
+              request.userId,
+              (connectionManager.getUserStatus(request.userId) ?? 'online') as 'online' | 'idle' | 'dnd' | 'offline',
+              [],
+            );
+          } catch (e) { console.warn('[users] queuePresenceRelay(showActivity-clear) failed', e); }
+        });
       }
     }
 
