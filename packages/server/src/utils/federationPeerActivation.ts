@@ -52,6 +52,20 @@ export async function onPeerActivated(
       resetOutboxBackoff(peerId);
       await syncPeerMutationLog(peerId, reason);
       await fanoutOutboundSubscribers(peerId);
+
+      // Look up the peer's origin once for the post-sync invariants.
+      const peerRow = getDb()
+        .select({ origin: schema.federationPeers.origin })
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, peerId))
+        .get();
+      if (peerRow?.origin) {
+        const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+        await backfillStubUsernamesForPeer(peerRow.origin).catch((e) => {
+          console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${peerRow.origin}) failed`, e);
+        });
+      }
+
       const { connectionManager } = await import('../ws/handler.js');
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
     } catch (err) {
@@ -274,14 +288,30 @@ export async function startupBootstrapSync(): Promise<void> {
   if (!isFederationRelayEnabled()) return;
 
   const db = getDb();
-  const peers = db.select().from(schema.federationPeers)
+  const firstTimePeers = db.select().from(schema.federationPeers)
     .where(and(
       eq(schema.federationPeers.status, 'active'),
       eq(schema.federationPeers.lastSyncedAt, 0),
     )).all();
 
-  for (const peer of peers) {
+  for (const peer of firstTimePeers) {
     await onPeerActivated(peer.id, 'startup_bootstrap');
+  }
+
+  // One-shot stub-username backfill for ALL currently-active peers (including
+  // those with lastSyncedAt > 0). Heals legacy snowflake-named stubs created
+  // before resolveOrCreateReplicatedUser used the realname scheme. Idempotent;
+  // skips stubs already migrated. Non-blocking — failures retry on next
+  // onPeerActivated for that origin.
+  const allActivePeers = db.select({ origin: schema.federationPeers.origin })
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'active'))
+    .all();
+  const { backfillStubUsernamesForPeer } = await import('./federationStubBackfill.js');
+  for (const peer of allActivePeers) {
+    backfillStubUsernamesForPeer(peer.origin).catch((err) => {
+      console.warn(`[startup] stub-backfill ${peer.origin} failed`, err);
+    });
   }
 }
 
