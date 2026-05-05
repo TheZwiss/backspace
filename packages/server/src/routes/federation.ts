@@ -3181,9 +3181,13 @@ export function resolveOrCreateReplicatedUser(
     return null;
   }
 
-  // Use the snowflake-style homeUserId as the local part; append the
-  // domain so the username is globally unique and human-readable.
-  const baseUsername = `${homeUserId}@${domain}`.toLowerCase();
+  // Use the home user's real username when the caller passes a hint (the wire
+  // profile snapshot from friend_request_create / friend_add / DM relay carries
+  // it). This makes the local stub's `username` human-readable, so client-side
+  // `parseFederatedUsername(username).baseName` returns the real handle. Falls
+  // back to the snowflake-id scheme when no hint is available (legacy paths).
+  const localPart = (hints?.username ?? homeUserId).toLowerCase();
+  const baseUsername = `${localPart}@${domain}`.toLowerCase();
 
   // Guard against the (unlikely) case where this username already
   // exists — e.g. a prior partial replication or manual creation.
@@ -3192,11 +3196,11 @@ export function resolveOrCreateReplicatedUser(
   let attempt = 0;
   while (collision) {
     attempt++;
-    username = `${homeUserId}_${attempt}@${domain}`.toLowerCase();
+    username = `${localPart}_${attempt}@${domain}`.toLowerCase();
     collision = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
     if (attempt > 10) {
       // Extremely unlikely; use a random suffix to break out
-      username = `${homeUserId}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
+      username = `${localPart}_${randomBytes(4).toString('hex')}@${domain}`.toLowerCase();
       break;
     }
   }
