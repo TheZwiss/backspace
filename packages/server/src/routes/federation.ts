@@ -3004,6 +3004,9 @@ export async function processRelayEvents(
         case 'profile_update':
           await processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'presence_update':
+          processPresenceUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         case 'read_state_update':
           processReadStateUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
@@ -5836,6 +5839,90 @@ export async function processProfileUpdateEvent(
     for (const uid of targetUserIds) {
       connectionManager.sendToUser(uid, userUpdatedEvent);
     }
+  }
+
+  accepted.push(event.messageId);
+}
+
+/**
+ * Inbound presence_update relay handler.
+ *
+ * Authority: home instance is exclusive. payload.homeInstance domain MUST equal
+ * the source peer's domain (attribution check, mirrors profile_update).
+ *
+ * Effect on success:
+ *   1. Update the local stub's status column.
+ *   2. Broadcast a WS presence_update to local users via collectProfileBroadcastTargetIds
+ *      (friends + DM members + space co-members), so the green dot updates without a
+ *      page refresh on every connected client that knows this user.
+ *
+ * Edge cases:
+ *   - No local replica → silently accept (peer broadcasts presence to all peers,
+ *     not all peers have a stub).
+ *   - homeInstance domain mismatch on the existing stub → ignore (collision against
+ *     a stub of a different identity).
+ *   - Invalid status string → reject; sender is buggy, surface for diagnosis.
+ */
+export function processPresenceUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): void {
+  const payload = event.presenceUpdate;
+  if (!payload) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_presence_update_payload' });
+    return;
+  }
+
+  const payloadDomain = extractDomain(payload.homeInstance);
+  const sourceDomain = extractDomain(sourceInstance);
+  if (payloadDomain !== sourceDomain) {
+    console.warn(`[federation] Attribution mismatch in presence_update: homeInstance=${payloadDomain} source=${sourceDomain}`);
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  if (!payload.status || !['online', 'idle', 'dnd', 'offline'].includes(payload.status)) {
+    rejected.push({ messageId: event.messageId, reason: 'invalid_status' });
+    return;
+  }
+
+  const localUser = db
+    .select()
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.homeUserId, payload.homeUserId),
+      eq(schema.users.isDeleted, 0),
+    ))
+    .get();
+
+  if (!localUser) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  db.update(schema.users)
+    .set({ status: payload.status })
+    .where(eq(schema.users.id, localUser.id))
+    .run();
+
+  // Broadcast presence_update WS event to local users who care.
+  const targetUserIds = collectProfileBroadcastTargetIds(localUser.id);
+  const wsPayload = {
+    type: 'presence_update' as const,
+    userId: localUser.id,
+    status: payload.status,
+    ...(payload.activities && payload.activities.length > 0 ? { activities: payload.activities } : {}),
+  };
+  for (const uid of targetUserIds) {
+    connectionManager.sendToUser(uid, wsPayload);
   }
 
   accepted.push(event.messageId);
