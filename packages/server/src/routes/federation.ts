@@ -2330,6 +2330,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             avatarColor: user.avatarColor,
             banner: user.banner,
             bio: user.bio,
+            status: user.status as 'online' | 'idle' | 'dnd' | 'offline' | null,
           },
         },
       });
@@ -2416,6 +2417,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             displayName: user.displayName,
             avatar: user.avatar,
             avatarColor: user.avatarColor,
+            status: user.status as 'online' | 'idle' | 'dnd' | 'offline' | null,
             banner: user.banner,
             bio: user.bio,
           },
@@ -3253,7 +3255,7 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
-  hints?: { username?: string | null },
+  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null },
 ): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
@@ -3299,12 +3301,18 @@ export function resolveOrCreateReplicatedUser(
   const userId = generateSnowflake();
   const now = Date.now();
 
+  // Seed status from the wire snapshot when available — without this, a
+  // freshly-created stub for an already-online remote sticks at 'offline'
+  // until the home next emits a presence transition (presence_update only
+  // fires on changes, not on stub creation). Falls back to 'offline'.
+  const initialStatus = hints?.status ?? 'offline';
+
   db.insert(schema.users).values({
     id: userId,
     username,
     displayName: null,
     passwordHash: '!federation-replicated',  // Cannot be used to log in (bcrypt never produces this)
-    status: 'offline',
+    status: initialStatus,
     isAdmin: 0,
     homeInstance: domain,  // Normalized to bare domain
     homeUserId,
@@ -3490,7 +3498,7 @@ async function processCreateEvent(
   }> = [];
 
   for (const p of event.participants) {
-    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username });
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status });
     // Skip deleted identities — don't include tombstoned users in the DM
     if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
@@ -4085,7 +4093,7 @@ function processMemberAddEvent(
     // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username });
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status });
       ownerId = ownerLocal?.id ?? null;
     }
 
@@ -4103,7 +4111,7 @@ function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username });
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status });
       // Skip deleted identities — tombstoned users can't be added to a DM
       if (!rosterUser) continue;
       const existing = db.select().from(schema.dmMembers)
@@ -4157,7 +4165,7 @@ function processMemberAddEvent(
     event.membership.user.homeUserId,
     event.membership.user.homeInstance,
     db,
-    { username: event.membership.user.profile?.username },
+    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status },
   );
   if (!localUser) {
     // The user's identity has been deleted — don't add a tombstoned user to the DM
@@ -4196,7 +4204,7 @@ function processMemberAddEvent(
   // would otherwise find the channel already present and fall through to the incremental path,
   // creating spurious system messages (the exact bug this fixes).
   const actorUser = event.membership.addedBy
-    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username })
+    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
   const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
@@ -4487,7 +4495,7 @@ function processOwnershipTransferEvent(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
-    { username: event.ownership.newOwner.profile?.username },
+    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status },
   );
   if (!newOwnerLocal) {
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
@@ -4646,7 +4654,7 @@ async function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
   if (!fromUserResolved) {
     // Sender's identity has been deleted — silently accept to drop the event
     accepted.push(event.messageId);
@@ -4764,7 +4772,7 @@ function processFriendRequestUpdateEvent(
   }
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
   if (!toUser) {
     // Recipient's identity has been deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
@@ -4904,14 +4912,14 @@ async function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
   if (!fromUserResolved) {
     // One party's identity is deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
     return;
   }
   let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
-  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username });
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
   if (!toUserResolved) {
     accepted.push(event.messageId);
     return;

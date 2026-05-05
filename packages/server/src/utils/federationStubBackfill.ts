@@ -74,9 +74,16 @@ export async function backfillStubUsernamesForPeer(peerOrigin: string): Promise<
 
     // Fill displayName from result.profile if the stub has none, mirroring the
     // displayName ?? username fallback applied at hydrate / profile_update time.
-    const updates: { username: string; displayName?: string } = { username: newUsername };
+    const updates: { username: string; displayName?: string; status?: 'online' | 'idle' | 'dnd' | 'offline' } = { username: newUsername };
     if (!stub.displayName) {
       updates.displayName = result.profile.displayName ?? result.username;
+    }
+    // Heal status too — same root issue (stub was seeded offline at creation
+    // because the wire snapshot pre-dated the status field). Only overwrite
+    // when the lookup tells us something specific; keep the stub's current
+    // value otherwise.
+    if (result.profile.status && result.profile.status !== stub.status) {
+      updates.status = result.profile.status;
     }
 
     db.update(schema.users)

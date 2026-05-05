@@ -967,6 +967,15 @@ export interface FederationRelayProfileSnapshot {
   avatarColor?: string | null;
   banner?: string | null;
   bio?: string | null;
+  // Current presence at the moment the snapshot was built. Optional for
+  // backwards compatibility with peers that pre-date the field. Receivers use
+  // this to seed the stub's status at creation time, so a freshly-friended
+  // remote user shows their actual current state instead of defaulting to
+  // 'offline' until the next presence_update arrives. presence_update is
+  // ephemeral and fires only on transitions, so without this field an
+  // already-online remote stays stuck at 'offline' on the receiver until they
+  // next change status.
+  status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
 
 export interface FederationProfileUpdatePayload {
@@ -1077,6 +1086,9 @@ export interface FederationUserLookupProfile {
   avatarColor: AvatarColor | null;
   banner: string | null;
   bio: string | null;
+  // Carried so the requester can seed the stub's status at creation time.
+  // Optional for backwards compat with peers that pre-date the field.
+  status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
 }
 
 export type FederationUserLookupResponse =
