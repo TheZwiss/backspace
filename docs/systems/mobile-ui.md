@@ -11,7 +11,7 @@ Source files:
 - `packages/web/src/components/layout/MobileSpacesScreen.tsx` — Space strip + channel list (split-pane), folder support, voice user rows
 - `packages/web/src/components/layout/MobileYouScreen.tsx` — User profile card, action rows, logout
 - `packages/web/src/components/layout/MobileSettingsScreen.tsx` — Settings hub and direct-panel rendering via `initialPanel` prop
-- `packages/web/src/components/layout/MobileInstancePanel.tsx` — Admin-only instance settings hub (General, Streaming, Storage, Users)
+- `packages/web/src/components/layout/MobileInstancePanel.tsx` — Admin-only instance settings hub (General, Registration, Federation, Streaming, Storage, Users; surfaces federation approval-count badge)
 - `packages/web/src/components/layout/MobileMembersScreen.tsx` — Space member list grouped by role, with activity cards
 - `packages/web/src/components/layout/MobileVoiceFullScreen.tsx` — Full-screen voice call view with participant grid and control bar
 - `packages/web/src/components/layout/MobileVoiceMiniBar.tsx` — Persistent mini-bar overlay during voice calls
@@ -110,17 +110,40 @@ This means the hardware/browser back button pops the mobile screen stack. `popMo
 
 ### Deep Link Reconstruction
 
-On mount, `MobileShell` checks `location.pathname` for `/channels/:spaceId/:channelId` and pushes a `channel-chat` screen if the stack is empty:
+`MobileShell` watches `location.pathname` for `/channels/:spaceId/:channelId` and pushes a `channel-chat` screen when the URL changes to a channel route — both on mount (deep link / refresh) and on subsequent programmatic navigations (e.g. SpaceInviteCard Join button, joinByCode flows, any `useNavigate(...)` call).
 
 ```ts
 useEffect(() => {
   const path = location.pathname;
   const match = path.match(/^\/channels\/([^/]+)\/([^/]+)$/);
-  if (match && mobileStack.length === 0) {
-    pushMobileScreen('channel-chat', { channelId, spaceId });
+  if (!match) return;
+  const spaceId = match[1] ?? '';
+  const channelId = match[2] ?? '';
+  const normalizedSpaceId = spaceId === '@me' ? '@me' : spaceId;
+
+  // Idempotency guard — read stack imperatively to avoid re-firing on stack changes
+  const currentStack = useUIStore.getState().mobileStack;
+  const top = currentStack[currentStack.length - 1];
+  if (
+    top &&
+    top.screen === 'channel-chat' &&
+    top.params?.channelId === channelId &&
+    top.params?.spaceId === normalizedSpaceId
+  ) {
+    return;
   }
-}, []); // Mount only
+
+  pushMobileScreen('channel-chat', { channelId, spaceId: normalizedSpaceId });
+}, [location.pathname, pushMobileScreen]);
 ```
+
+**Why these dependencies and the idempotency guard exist:**
+
+- The dep array intentionally excludes `mobileStack`. The current stack is read imperatively via `useUIStore.getState()` so that pushing an unrelated screen (e.g. `settings`) does not re-trigger this effect — otherwise we would re-push `channel-chat` on top of every newly pushed screen because pathname is still `/channels/...`.
+- The guard catches the common in-app case where `MobileSpacesScreen` calls both `pushMobileScreen('channel-chat', …)` AND `navigate('/channels/…')`. The push happens first (no pathname change since `pushMobileScreen` calls `history.pushState` with no URL), then `navigate` mutates pathname → this effect re-runs → top already matches → skip.
+- The guard also catches the popstate path: browser back pops both the history entry and the mobile stack; if the new pathname is a channel route already represented by the new top entry, we skip.
+
+In-app navigation that lands on a different channel (e.g. tapping a `SpaceInviteCard` Join button while inside another chat) stacks the new `channel-chat` on top so back returns to the originating chat.
 
 ### User Profile Mobile Override
 
@@ -280,6 +303,8 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `settings-connections` | `MobileSettingsScreen` | `initialPanel="connections"` |
 | `settings-instance` | `MobileInstancePanel` | — |
 | `settings-instance-general` | `GeneralPanel` (wrapped) | — |
+| `settings-instance-registration` | `RegistrationPanel` (wrapped) | — |
+| `settings-instance-federation` | `FederationPanel` (wrapped, forwards `onApprovalCountChange` → `uiStore.setFederationApprovalCount`) | — |
 | `settings-instance-streaming` | `StreamingPanel` (wrapped) | — |
 | `settings-instance-storage` | `StoragePanel` (wrapped) | — |
 | `settings-instance-users` | `UsersPanel` (wrapped) | — |
@@ -335,7 +360,7 @@ Split-pane layout: 60px `glass-strip` space strip on the left + channel list on 
 
 - Settings gear in header (pushes `settings`)
 - Profile card: banner/accent background, avatar (-10 overlap), display name, username, custom status, bio
-- Action rows (each pushes a settings sub-screen): Edit Profile, Friends, Connections, Voice & Audio
+- Action rows (each pushes a settings sub-screen): Edit Profile, Friends, Connections, Voice & Video
 - Log Out button with `ConfirmDialog`
 
 ---
@@ -356,12 +381,19 @@ Params: `{ channelId, spaceId }`
 
 Two modes controlled by `initialPanel` prop:
 
-1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Voice & Audio, Privacy, Connections, Instance for admins). Each pushes `settings-{id}`.
+1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Voice & Video, Privacy, Connections, Instance for admins). Each pushes `settings-{id}`.
 2. **Direct panel mode** (`initialPanel` set): Renders the corresponding panel component (AccountPanel, VoicePanel, PrivacyPanel, ConnectionsPanel) directly with a back header.
 
 ### MobileInstancePanel
 
-Admin-only instance settings hub. Pre-fetches instance settings and streaming limits on mount. Lists four sub-sections (General, Streaming, Storage, Users), each pushing `settings-instance-{id}`.
+Admin-only instance settings hub. Pre-fetches instance settings and streaming limits on mount. Lists six sub-sections (General, Registration, Federation, Streaming, Storage, Users), each pushing `settings-instance-{id}`. Mirrors the desktop `InstancePanel` exactly.
+
+The Federation row carries a numeric badge driven by `uiStore.federationApprovalCount` (capped at `99+`, styled like the unread-DM badge in `MobileBottomNav`). The badge source has two paths:
+
+1. **Initial / standalone fetch:** `MobileInstancePanel` calls `api.federation.approvalRequests()` on mount and re-fetches when `onFederationPeersChanged` fires (mirrors what `FederationPanel`'s internal `PendingApprovals` component does). This makes the badge accurate before the admin enters the Federation panel.
+2. **Live updates while inside the panel:** the wrapper around `FederationPanel` in `MobileShell.tsx` forwards the panel's `onApprovalCountChange` callback into `uiStore.setFederationApprovalCount`. As the admin approves/denies requests inside the panel, the count drops and the badge in the parent hub stays in sync.
+
+`MobileInstancePanel` is rendered behind a top-level `isAdmin` guard from `MobileSettingsScreen` — non-admin users cannot reach it.
 
 ### MobileMembersScreen
 

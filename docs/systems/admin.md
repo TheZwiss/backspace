@@ -467,7 +467,7 @@ Owns the two independent registration gates and the admin invite-link CRUD surfa
 - **Active rows:** `Copy link`, `Edit`, `Revoke`, kebab → `Delete permanently`, `View redemptions`.
 - **Archived rows:** `Reinstate`, kebab → `Delete permanently`, `View redemptions`.
 
-**Modals:**
+**Modals:** Create / Edit / Reinstate / Redemptions all use the shared [`Modal`](../../packages/web/src/components/ui/Modal.tsx) component with `mobileStyle="fullscreen"`, portaled to `document.body` (the parent settings dialog uses `glass-modal`'s `backdrop-filter`, which establishes a containing block — portaling escapes it so the child modal renders viewport-relative). On desktop they appear as the standard centered dialog with `max-w-md` (Redemptions: `max-w-lg`); on mobile they slide in fullscreen with the Modal's standard close button + safe-area padding. The decorative lavender/sky icon chip and helper paragraph live inside `children` (Modal's `title` prop renders the heading + close X).
 
 - **Create Invite** — Name (1-64 chars), Max uses (radio: Unlimited / `[N >= 1]`), Expires (preset: `1 hour` / `24 hours` / `7 days` / `30 days` / `Never` / `Custom…`). Defaults: `maxUses: null`, `expiresAt: now + 7 days`. On success the URL is auto-copied to clipboard and the new row animates in at the top of the active list.
 - **Edit Invite** — same shape as Create, pre-filled. Hidden for `revoked` rows (Reinstate is the only path back).

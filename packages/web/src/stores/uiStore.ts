@@ -72,6 +72,12 @@ interface UIState {
   setMobileTab: (tab: 'spaces' | 'dms' | 'you') => void;
   pushMobileScreen: (screen: string, params?: Record<string, string>) => void;
   popMobileScreen: () => void;
+
+  // Federation approval-count badge (surfaced by MobileInstancePanel; kept fresh
+  // by the FederationPanel via `onApprovalCountChange` whenever an admin
+  // approves/denies a request from inside the panel)
+  federationApprovalCount: number;
+  setFederationApprovalCount: (count: number) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -172,6 +178,9 @@ export const useUIStore = create<UIState>()(
         // Note: do NOT call history.back() here if triggered by popstate event.
         // The MobileShell popstate handler manages this — see Task 5.
       },
+
+      federationApprovalCount: 0,
+      setFederationApprovalCount: (count) => set({ federationApprovalCount: count }),
     }),
     {
       name: 'backspace-ui-settings',

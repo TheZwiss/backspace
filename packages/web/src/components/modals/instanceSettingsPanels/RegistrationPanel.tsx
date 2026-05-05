@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { Modal } from '../../ui/Modal';
 
 interface RegistrationDraft {
   registrationOpen: boolean;
@@ -394,16 +395,11 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
     nameInputRef.current?.focus();
   }, []);
 
-  // Escape closes the modal (capture phase so it fires before parent handlers)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => document.removeEventListener('keydown', handleKey, true);
+  // Block close (Escape / backdrop click) while a submit is in flight; the shared
+  // Modal wires Escape + backdrop-click to onClose, so we gate them here rather
+  // than in a separate keydown listener.
+  const handleClose = useCallback(() => {
+    if (!submitting) onClose();
   }, [onClose, submitting]);
 
   const handleCreate = async () => {
@@ -455,138 +451,131 @@ function CreateInviteModal({ onClose, onCreated }: CreateInviteModalProps) {
   };
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
-      onClick={!submitting ? onClose : undefined}
+    <Modal
+      isOpen
+      onClose={handleClose}
+      title="Create invite link"
+      mobileStyle="fullscreen"
+      maxWidth="max-w-md"
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" />
+      {/* Decorative icon + helper text — kept inside children so the visual
+          identity (lavender icon chip + descriptive paragraph) is preserved
+          across desktop and mobile fullscreen. */}
+      <div className="flex items-start gap-3 -mt-1 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </div>
+        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+          Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.
+        </p>
+      </div>
 
-      {/* Modal panel — stop propagation so backdrop click doesn't fire inside */}
-      <div
-        className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleCreate();
+        }}
+        className="space-y-5"
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-[16px] font-bold text-txt-primary">Create invite link</h3>
-            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
-              Generate a shareable link that lets people register on this instance. You'll set how many times it can be used and when it expires.
-            </p>
+        {/* Name */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <input
+            ref={nameInputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={64}
+            placeholder="e.g. Friends batch 1"
+            className="input-standard w-full"
+            disabled={submitting}
+          />
+        </div>
+
+        {/* Max uses */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Max uses</div>
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="maxUsesMode"
+                checked={unlimited}
+                onChange={() => setUnlimited(true)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <span className="text-txt-primary">Unlimited</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="maxUsesMode"
+                checked={!unlimited}
+                onChange={() => setUnlimited(false)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <input
+                type="number"
+                min={1}
+                value={maxUses}
+                onChange={(e) => {
+                  setMaxUses(e.target.value);
+                  setUnlimited(false);
+                }}
+                onClick={() => setUnlimited(false)}
+                disabled={submitting}
+                className="input-standard w-16 text-center disabled:opacity-50"
+              />
+              <span className="text-txt-secondary">uses</span>
+            </label>
           </div>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleCreate();
-          }}
-          className="px-5 pt-4 pb-5 space-y-5"
-        >
-          {/* Name */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={64}
-              placeholder="e.g. Friends batch 1"
-              className="input-standard w-full"
+        {/* Expiry */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <ExpirySelector
+            value={expiryId}
+            customDateTime={customDateTime}
+            onChange={(v, dt) => {
+              // Create's expiryId state is the narrower ExpiryPresetId; 'keep' cannot
+              // be returned because <ExpirySelector showKeep={false}> never renders it.
+              if (v === 'keep') return;
+              setExpiryId(v);
+              setCustomDateTime(dt);
+            }}
+            showKeep={false}
+            disabled={submitting}
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-center pt-2">
+          <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+            <button
+              type="button"
+              onClick={onClose}
               disabled={submitting}
-            />
-          </div>
-
-          {/* Max uses */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Max uses</div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="maxUsesMode"
-                  checked={unlimited}
-                  onChange={() => setUnlimited(true)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <span className="text-txt-primary">Unlimited</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="maxUsesMode"
-                  checked={!unlimited}
-                  onChange={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  value={maxUses}
-                  onChange={(e) => {
-                    setMaxUses(e.target.value);
-                    setUnlimited(false);
-                  }}
-                  onClick={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="input-standard w-16 text-center disabled:opacity-50"
-                />
-                <span className="text-txt-secondary">uses</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Expiry */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
-            <ExpirySelector
-              value={expiryId}
-              customDateTime={customDateTime}
-              onChange={(v, dt) => {
-                // Create's expiryId state is the narrower ExpiryPresetId; 'keep' cannot
-                // be returned because <ExpirySelector showKeep={false}> never renders it.
-                if (v === 'keep') return;
-                setExpiryId(v);
-                setCustomDateTime(dt);
-              }}
-              showKeep={false}
+              className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
               disabled={submitting}
-            />
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+            >
+              {submitting ? 'Creating…' : 'Create link'}
+            </button>
           </div>
-
-          {/* Actions */}
-          <div className="flex justify-center pt-2">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={submitting}
-                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {submitting ? 'Creating…' : 'Create link'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>,
+        </div>
+      </form>
+    </Modal>,
     document.body,
   );
 }
@@ -617,16 +606,10 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
     nameInputRef.current?.focus();
   }, []);
 
-  // Escape closes the modal (capture phase so it fires before the parent settings modal handler)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => document.removeEventListener('keydown', handleKey, true);
+  // Block close (Escape / backdrop click) while a save is in flight; the shared
+  // Modal wires both to onClose for us.
+  const handleClose = useCallback(() => {
+    if (!submitting) onClose();
   }, [onClose, submitting]);
 
   const handleSave = async () => {
@@ -693,134 +676,126 @@ function EditInviteModal({ invite, onClose, onUpdated }: EditInviteModalProps) {
   const maxUsesMin = Math.max(1, invite.usedCount);
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
-      onClick={!submitting ? onClose : undefined}
+    <Modal
+      isOpen
+      onClose={handleClose}
+      title={`Edit "${invite.name}"`}
+      mobileStyle="fullscreen"
+      maxWidth="max-w-md"
     >
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="flex items-start gap-3 -mt-1 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </div>
+        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+          Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.
+        </p>
+      </div>
 
-      <div
-        className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSave();
+        }}
+        className="space-y-5"
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
+        {/* Name */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
+          <input
+            ref={nameInputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={64}
+            className="input-standard w-full"
+            disabled={submitting}
+          />
+        </div>
+
+        {/* Max uses */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+            Max uses <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} used)</span>
           </div>
-          <div className="min-w-0">
-            <h3 className="text-[16px] font-bold text-txt-primary">Edit "{invite.name}"</h3>
-            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
-              Adjust the limits on this invite link. The URL stays the same — anyone who already has it can still redeem under the new constraints.
-            </p>
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="editMaxUsesMode"
+                checked={unlimited}
+                onChange={() => setUnlimited(true)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <span className="text-txt-primary">Unlimited</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="editMaxUsesMode"
+                checked={!unlimited}
+                onChange={() => setUnlimited(false)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <input
+                type="number"
+                min={maxUsesMin}
+                value={maxUses}
+                onChange={(e) => {
+                  setMaxUses(e.target.value);
+                  setUnlimited(false);
+                }}
+                onClick={() => setUnlimited(false)}
+                disabled={submitting}
+                className="input-standard w-16 text-center disabled:opacity-50"
+              />
+              <span className="text-txt-secondary">uses</span>
+            </label>
           </div>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }}
-          className="px-5 pt-4 pb-5 space-y-5"
-        >
-          {/* Name */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Name</div>
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={64}
-              className="input-standard w-full"
+        {/* Expiry */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <ExpirySelector
+            value={expiryId}
+            customDateTime={customDateTime}
+            onChange={(v, dt) => {
+              setExpiryId(v);
+              setCustomDateTime(dt);
+            }}
+            showKeep={true}
+            disabled={submitting}
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-center pt-2">
+          <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+            <button
+              type="button"
+              onClick={onClose}
               disabled={submitting}
-            />
-          </div>
-
-          {/* Max uses */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-              Max uses <span className="normal-case font-normal text-txt-tertiary">({invite.usedCount} used)</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="editMaxUsesMode"
-                  checked={unlimited}
-                  onChange={() => setUnlimited(true)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <span className="text-txt-primary">Unlimited</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="editMaxUsesMode"
-                  checked={!unlimited}
-                  onChange={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <input
-                  type="number"
-                  min={maxUsesMin}
-                  value={maxUses}
-                  onChange={(e) => {
-                    setMaxUses(e.target.value);
-                    setUnlimited(false);
-                  }}
-                  onClick={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="input-standard w-16 text-center disabled:opacity-50"
-                />
-                <span className="text-txt-secondary">uses</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Expiry */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
-            <ExpirySelector
-              value={expiryId}
-              customDateTime={customDateTime}
-              onChange={(v, dt) => {
-                setExpiryId(v);
-                setCustomDateTime(dt);
-              }}
-              showKeep={true}
+              className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
               disabled={submitting}
-            />
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+            >
+              {submitting ? 'Saving…' : 'Save changes'}
+            </button>
           </div>
-
-          {/* Actions */}
-          <div className="flex justify-center pt-2">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={submitting}
-                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {submitting ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>,
+        </div>
+      </form>
+    </Modal>,
     document.body,
   );
 }
@@ -858,16 +833,10 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
   const [customDateTime, setCustomDateTime] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Escape closes (capture phase to avoid bubbling into parent settings modal)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => document.removeEventListener('keydown', handleKey, true);
+  // Block close (Escape / backdrop click) while reinstate is in flight; the
+  // shared Modal wires both to onClose.
+  const handleClose = useCallback(() => {
+    if (!submitting) onClose();
   }, [onClose, submitting]);
 
   const maxUsesMin = invite.usedCount + 1;
@@ -931,130 +900,122 @@ function ReinstateInviteModal({ invite, onClose, onReinstated }: ReinstateInvite
     : 'This invite has lapsed. Reinstating reactivates the same URL — anyone who saved it will be able to use it again.';
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
-      onClick={!submitting ? onClose : undefined}
+    <Modal
+      isOpen
+      onClose={handleClose}
+      title={`Reinstate "${invite.name}"`}
+      mobileStyle="fullscreen"
+      maxWidth="max-w-md"
     >
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="flex items-start gap-3 -mt-1 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </div>
+        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">{subtitle}</p>
+      </div>
 
-      <div
-        className="relative w-full max-w-md mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleReinstate();
+        }}
+        className="space-y-5"
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-lavender/15 flex items-center justify-center flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-lavender">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
+        {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
+        {isRevoked && (
+          <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
+            A new link will be generated. Anyone who had the old URL will not be able to use it.
           </div>
-          <div className="min-w-0">
-            <h3 className="text-[16px] font-bold text-txt-primary">Reinstate "{invite.name}"</h3>
-            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">{subtitle}</p>
+        )}
+
+        {/* Max uses */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
+            Max uses <span className="normal-case font-normal text-txt-tertiary">(current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})</span>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="reinstateMaxUsesMode"
+                checked={unlimited}
+                onChange={() => setUnlimited(true)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <span className="text-txt-primary">Unlimited</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="reinstateMaxUsesMode"
+                checked={!unlimited}
+                onChange={() => setUnlimited(false)}
+                disabled={submitting}
+                className="accent-accent-primary"
+              />
+              <input
+                type="number"
+                min={maxUsesMin}
+                value={maxUses}
+                onChange={(e) => {
+                  setMaxUses(e.target.value);
+                  setUnlimited(false);
+                }}
+                onClick={() => setUnlimited(false)}
+                disabled={submitting}
+                className="input-standard w-16 text-center disabled:opacity-50"
+              />
+              <span className="text-txt-secondary">uses</span>
+            </label>
           </div>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleReinstate();
-          }}
-          className="px-5 pt-4 pb-5 space-y-5"
-        >
-          {/* Amber callout — only for revoked variant to reinforce the "new URL" consequence */}
-          {isRevoked && (
-            <div className="p-3 rounded-lg bg-accent-amber/10 border border-accent-amber/20 text-[13px] text-accent-amber">
-              A new link will be generated. Anyone who had the old URL will not be able to use it.
-            </div>
-          )}
+        {/* Expiry */}
+        <div>
+          <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
+          <ExpirySelector
+            value={expiryId}
+            customDateTime={customDateTime}
+            onChange={(v, dt) => {
+              if (v === 'keep') return; // unreachable: showKeep={false}
+              setExpiryId(v);
+              setCustomDateTime(dt);
+            }}
+            showKeep={false}
+            disabled={submitting}
+          />
+        </div>
 
-          {/* Max uses */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">
-              Max uses <span className="normal-case font-normal text-txt-tertiary">(current: {invite.maxUses ?? '∞'}, used: {invite.usedCount})</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="reinstateMaxUsesMode"
-                  checked={unlimited}
-                  onChange={() => setUnlimited(true)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <span className="text-txt-primary">Unlimited</span>
-              </label>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="reinstateMaxUsesMode"
-                  checked={!unlimited}
-                  onChange={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="accent-accent-primary"
-                />
-                <input
-                  type="number"
-                  min={maxUsesMin}
-                  value={maxUses}
-                  onChange={(e) => {
-                    setMaxUses(e.target.value);
-                    setUnlimited(false);
-                  }}
-                  onClick={() => setUnlimited(false)}
-                  disabled={submitting}
-                  className="input-standard w-16 text-center disabled:opacity-50"
-                />
-                <span className="text-txt-secondary">uses</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Expiry */}
-          <div>
-            <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-2">Expires</div>
-            <ExpirySelector
-              value={expiryId}
-              customDateTime={customDateTime}
-              onChange={(v, dt) => {
-                if (v === 'keep') return; // unreachable: showKeep={false}
-                setExpiryId(v);
-                setCustomDateTime(dt);
-              }}
-              showKeep={false}
+        {/* Actions */}
+        <div className="flex justify-center pt-2">
+          <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
+            <button
+              type="button"
+              onClick={onClose}
               disabled={submitting}
-            />
+              className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
+            >
+              {submitting
+                ? 'Reinstating…'
+                : isRevoked
+                  ? 'Reinstate with new link'
+                  : 'Reinstate'}
+            </button>
           </div>
-
-          {/* Actions */}
-          <div className="flex justify-center pt-2">
-            <div className="glass-bubble rounded-full px-4 py-2 flex items-center gap-3 animate-slide-up">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={submitting}
-                className="px-3 py-1 text-sm text-txt-secondary hover:text-txt-primary transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-sm font-medium rounded-full transition-colors disabled:opacity-50"
-              >
-                {submitting
-                  ? 'Reinstating…'
-                  : isRevoked
-                    ? 'Reinstate with new link'
-                    : 'Reinstate'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>,
+        </div>
+      </form>
+    </Modal>,
     document.body,
   );
 }
@@ -1080,18 +1041,6 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
   const [redemptions, setRedemptions] = useState<InviteRedemption[] | null>(null);
   const [error, setError] = useState(false);
 
-  // Escape closes (capture phase to avoid bubbling into parent settings modal)
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKey, true);
-    return () => document.removeEventListener('keydown', handleKey, true);
-  }, [onClose]);
-
   useEffect(() => {
     let cancelled = false;
     api.invites
@@ -1111,96 +1060,86 @@ function RedemptionsModal({ invite, onClose }: RedemptionsModalProps) {
   }, [invite.id, addToast]);
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[210] flex items-center justify-center animate-fade-in"
-      onClick={onClose}
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Redemptions for "${invite.name}"`}
+      mobileStyle="fullscreen"
+      maxWidth="max-w-lg"
     >
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="flex items-start gap-3 -mt-1 mb-4">
+        <div className="w-10 h-10 rounded-lg bg-accent-sky/15 flex items-center justify-center flex-shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-accent-sky">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          </svg>
+        </div>
+        <p className="text-[13px] text-txt-secondary leading-snug min-w-0">
+          Users who registered using this invite link, in the order they signed up.
+        </p>
+      </div>
 
+      {/* Sticky summary band — pins at top of scroll area so the count + revoked
+          warning stay visible while the list scrolls under them. The negative
+          horizontal margin + padding compensates the body's `p-4` so the
+          background can extend edge-to-edge. */}
       <div
-        className="relative w-full max-w-lg mx-4 glass-modal rounded-lg animate-slide-up overflow-hidden flex flex-col max-h-[80vh]"
-        onClick={(e) => e.stopPropagation()}
+        className="sticky top-0 z-10 -mx-4 px-4 pb-3 space-y-3 bg-[var(--glass-modal-bg)] backdrop-blur-md"
       >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-white/[0.06] flex items-start gap-3 flex-shrink-0">
-          <div className="w-10 h-10 rounded-lg bg-accent-sky/15 flex items-center justify-center flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-accent-sky">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-            </svg>
+        {invite.status === 'revoked' && (
+          <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
+            This invite was revoked
+            {invite.revokedAt
+              ? ` ${new Date(invite.revokedAt).toLocaleDateString()}`
+              : ''}
+            . The redemptions below represent users who registered before revocation.
           </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[16px] font-bold text-txt-primary">Redemptions for "{invite.name}"</h3>
-            <p className="text-[13px] text-txt-secondary leading-snug mt-0.5">
-              Users who registered using this invite link, in the order they signed up.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="w-8 h-8 rounded-md text-txt-tertiary hover:text-txt-primary hover:bg-white/[0.06] flex items-center justify-center flex-shrink-0 transition-colors"
-          >
-            ×
-          </button>
-        </div>
+        )}
 
-        <div className="px-5 pt-4 pb-3 space-y-3">
-          {invite.status === 'revoked' && (
-            <div className="bg-accent-rose/10 border border-accent-rose/30 rounded p-2.5 text-xs text-accent-rose leading-relaxed">
-              This invite was revoked
-              {invite.revokedAt
-                ? ` ${new Date(invite.revokedAt).toLocaleDateString()}`
-                : ''}
-              . The redemptions below represent users who registered before revocation.
-            </div>
-          )}
-
-          <div className="text-sm text-txt-tertiary">
-            {invite.usedCount}
-            {invite.maxUses !== null ? ` of ${invite.maxUses}` : ''} use
-            {invite.usedCount === 1 ? '' : 's'}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-3 pb-4">
-          {redemptions === null ? (
-            <div className="text-sm text-txt-tertiary px-3 py-2">Loading…</div>
-          ) : redemptions.length === 0 ? (
-            <div className="text-sm text-txt-tertiary px-3 py-2">
-              {error ? 'Could not load redemptions.' : 'No redemptions yet.'}
-            </div>
-          ) : (
-            <div className="space-y-0.5">
-              {redemptions.map((r) => {
-                const showCurrent =
-                  !r.isDeleted &&
-                  r.currentUsername !== null &&
-                  r.currentUsername !== r.registrantUsername;
-                return (
-                  <div
-                    key={r.id}
-                    className="flex items-center justify-between gap-3 py-1.5 px-3 rounded hover:bg-surface-input cursor-default"
-                  >
-                    <span className="text-sm text-txt-primary truncate">
-                      {r.registrantUsername}
-                      {(r.isDeleted || showCurrent) && (
-                        <span className="text-txt-tertiary">
-                          {' '}
-                          (now {r.isDeleted ? 'Deleted User' : r.currentUsername})
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-xs text-txt-tertiary shrink-0">
-                      {new Date(r.redeemedAt).toLocaleString()}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        <div className="text-sm text-txt-tertiary">
+          {invite.usedCount}
+          {invite.maxUses !== null ? ` of ${invite.maxUses}` : ''} use
+          {invite.usedCount === 1 ? '' : 's'}
         </div>
       </div>
-    </div>,
+
+      <div className="-mx-1">
+        {redemptions === null ? (
+          <div className="text-sm text-txt-tertiary px-3 py-2">Loading…</div>
+        ) : redemptions.length === 0 ? (
+          <div className="text-sm text-txt-tertiary px-3 py-2">
+            {error ? 'Could not load redemptions.' : 'No redemptions yet.'}
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {redemptions.map((r) => {
+              const showCurrent =
+                !r.isDeleted &&
+                r.currentUsername !== null &&
+                r.currentUsername !== r.registrantUsername;
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 py-1.5 px-3 rounded hover:bg-surface-input cursor-default"
+                >
+                  <span className="text-sm text-txt-primary truncate">
+                    {r.registrantUsername}
+                    {(r.isDeleted || showCurrent) && (
+                      <span className="text-txt-tertiary">
+                        {' '}
+                        (now {r.isDeleted ? 'Deleted User' : r.currentUsername})
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs text-txt-tertiary shrink-0">
+                    {new Date(r.redeemedAt).toLocaleString()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>,
     document.body,
   );
 }
