@@ -20,8 +20,17 @@ export function useDelayedLoading(
   useEffect(() => {
     if (isLoading) {
       thresholdRef.current = setTimeout(() => {
-        displayStartRef.current = Date.now();
-        setShow(true);
+        // Only stamp displayStart on the first false→true transition. Re-firing
+        // the threshold while `show` is already true (which happens when
+        // `isLoading` cycles true→false→true with each `true` segment ≥ threshold)
+        // must not refresh the deadline — otherwise the next `false` reschedules
+        // minDisplay from a fresh start and the skeleton never reaches its real
+        // hide point. setShow's functional form lets us read the latest value
+        // without a closure-stale `show`.
+        setShow((prev) => {
+          if (!prev) displayStartRef.current = Date.now();
+          return true;
+        });
       }, threshold);
     } else {
       // Loading finished — clear threshold timer if it hasn't fired yet

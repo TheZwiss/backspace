@@ -103,6 +103,30 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   // the new prop), which would let the guard mis-fire during that single-frame window.
   const currentChannelIdRef = useRef(channelId);
   currentChannelIdRef.current = channelId;
+  // Suppress the first scroll event after a channel switch from triggering
+  // pagination. When the new channel's content is shorter than the outgoing
+  // channel's, the browser clamps `scrollTop` to its new max and dispatches a
+  // synthetic scroll event. That event lands in `handleScroll` with
+  // `scrollTop < 50`, and for any channel where `hasMore` is `true` (default
+  // for unvisited channels per the `?? true` fallback at the `hasMore`
+  // selector) it would fire `loadMoreMessages` even though the user never
+  // scrolled. The flag is armed in Effect 3 on every channel change and
+  // consumed by the load-more block on the next scroll event. A 250 ms
+  // setTimeout disarms it as a fallback in case no clamp event fires (new
+  // channel's content fit without clamping), so a real user scroll-to-top
+  // shortly after a channel switch isn't permanently suppressed.
+  const suppressNextLoadMoreRef = useRef(false);
+  const suppressNextLoadMoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Unmount cleanup — clear the disarm timer so its callback doesn't run after
+  // the component is gone. Refs survive unmount, so the callback would still
+  // execute harmlessly, but explicit cleanup is the convention used by sibling
+  // timer refs in this file (`smoothScrollFallbackTimerRef`).
+  useEffect(() => () => {
+    if (suppressNextLoadMoreTimerRef.current) {
+      clearTimeout(suppressNextLoadMoreTimerRef.current);
+      suppressNextLoadMoreTimerRef.current = null;
+    }
+  }, []);
 
   // Final defensive pin after a bottom-bound smooth scroll completes.
   // Runs from either the native `scrollend` handler (preferred) or the timeout fallback
@@ -288,6 +312,19 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     // render a phantom pagination skeleton. Resetting here costs nothing and covers
     // the never-resolves case. Idempotent w.r.t. the finally block.
     setIsLoadingMore(false);
+
+    // Arm the clamp-scroll suppression flag. See `suppressNextLoadMoreRef`
+    // declaration for rationale. The 250 ms fallback timer disarms it in case
+    // no clamp event fires (new content fit without clamping) so legitimate
+    // user scrolls aren't silently dropped.
+    suppressNextLoadMoreRef.current = true;
+    if (suppressNextLoadMoreTimerRef.current) {
+      clearTimeout(suppressNextLoadMoreTimerRef.current);
+    }
+    suppressNextLoadMoreTimerRef.current = setTimeout(() => {
+      suppressNextLoadMoreRef.current = false;
+      suppressNextLoadMoreTimerRef.current = null;
+    }, 250);
 
     // If we have a saved position for the incoming channel, don't mark as near/at-bottom
     // — this prevents the ResizeObserver from snapping to bottom before the restore rAF fires
@@ -535,7 +572,24 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
     // throws (defense in depth — `chatStore.loadMoreMessages` currently catches and returns
     // false, but we don't want a future refactor to leak the flag). The Effect-3 reset on
     // channel switch is the third safety net for the "await never resolves" case.
-    if (container.scrollTop < 50 && hasMore && !isLoadingMore) {
+    // Consume the post-channel-switch suppression flag. The first scroll event
+    // after a channel change is almost always the browser-clamp event (when
+    // the new channel's content is shorter than the outgoing channel's
+    // scrollTop) and must NOT be treated as a user scroll-to-top. We only
+    // skip the load-more block — the at-bottom/near-bottom recomputation and
+    // the visible-message tracking above must still run (the clamp event
+    // genuinely changes scroll position, and the new value should be reflected).
+    let suppressLoadMore = false;
+    if (suppressNextLoadMoreRef.current) {
+      suppressNextLoadMoreRef.current = false;
+      if (suppressNextLoadMoreTimerRef.current) {
+        clearTimeout(suppressNextLoadMoreTimerRef.current);
+        suppressNextLoadMoreTimerRef.current = null;
+      }
+      suppressLoadMore = true;
+    }
+
+    if (!suppressLoadMore && container.scrollTop < 50 && hasMore && !isLoadingMore) {
       const requestChannelId = channelId;
       setIsLoadingMore(true);
       const prevScrollHeight = container.scrollHeight;
