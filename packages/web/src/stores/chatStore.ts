@@ -179,12 +179,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // The remote WS ready handler will call loadMessages once the map is populated.
     if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
 
-    // Parallel-call dedup: if a non-forced load for this channel is already in
-    // flight, return that Promise instead of starting a second fetch. `force`
-    // bypasses the dedup because callers using it (WS reconnect) explicitly
-    // want a fresh fetch even if one is already pending. See `inFlightLoads`
-    // declaration for the full rationale.
-    if (!force) {
+    // Parallel-call dedup: if a load for this channel is already in flight,
+    // return that Promise instead of starting a second fetch. Applies to
+    // force=true callers as well — `useWebSocket`'s ready handler invokes
+    // `loadMessages(currentChannelId, true)` from two adjacent code paths
+    // (one for remote-instance space refresh, one for cache clearing) on every
+    // WS-ready event, and there's no value in two parallel fetches for the
+    // same channel: they hit the same endpoint with the same params and
+    // return the same data. Coalescing is safe; the force caller still gets a
+    // fresh result via the in-flight Promise.
+    {
       const existing = inFlightLoads.get(channelId);
       if (existing) return existing;
     }
