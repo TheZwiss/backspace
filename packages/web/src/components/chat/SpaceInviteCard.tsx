@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../ui/Avatar';
 import { getApiForOrigin } from '../../stores/spaceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useUIStore } from '../../stores/uiStore';
 import type { SpaceInviteSystemPayload } from '@backspace/shared';
 
 type LiveState =
@@ -45,6 +46,22 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
   const memberCount = live.kind === 'confirmed' ? live.memberCount : payload.snapshot.memberCount;
   const isRevoked = live.kind === 'revoked';
 
+  // Land the user at the space's channel sidebar after a successful join.
+  // On mobile this means switching to the Spaces tab (which clears the chat
+  // screen stack the invite was tapped from); on desktop it's just a route
+  // change since AppLayout's auto-channel-redirect handles the rest. The
+  // `setCurrentSpace` call seeds spaceStore synchronously so MobileSpacesScreen
+  // mounts with the right space already selected, before AppLayout's URL effect
+  // catches up.
+  const landOnSpace = (spaceId: string) => {
+    const ui = useUIStore.getState();
+    if (ui.isMobile) {
+      useSpaceStore.getState().setCurrentSpace(spaceId);
+      ui.setMobileTab('spaces');
+    }
+    navigate(`/channels/${spaceId}`);
+  };
+
   const onJoin = async () => {
     if (joining || isRevoked) return;
     setJoining(true);
@@ -54,14 +71,14 @@ export function SpaceInviteCard({ payload, senderName }: Props) {
       // the DM transport origin nor window.location.origin. Empty string maps
       // to undefined so joinByCode follows its local-instance branch.
       const space = await joinByCode(payload.inviteCode, payload.spaceInstanceOrigin || undefined);
-      navigate(`/channels/${space.id}`);
+      landOnSpace(space.id);
     } catch (err) {
       const msg = (err as Error)?.message ?? '';
       if (msg.toLowerCase().includes('already a member')) {
         // Already a member is a successful state — just navigate to the space.
         // Look up the space in the store by id; if not found (rare race), stay
         // silent rather than block the user with a noisy error.
-        navigate(`/channels/${payload.spaceId}`);
+        landOnSpace(payload.spaceId);
         return;
       }
       setJoinError(msg || 'Failed to join');

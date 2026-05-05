@@ -295,8 +295,13 @@ export function AppLayout() {
     }
   }, [channelId, spaceId, setCurrentChannel, loadMessages]);
 
-  // Auto-select last visited (or first) channel when opening a server without a channelId
+  // Auto-select last visited (or first) channel when opening a server without a channelId.
+  // Desktop-only: on mobile, `/channels/<spaceId>` should leave the user at the channel
+  // sidebar overview (MobileSpacesScreen), not auto-jump into a text channel — otherwise
+  // joining a space via SpaceInviteCard or tapping the Spaces bottom-nav tab catapults the
+  // user past the sidebar straight into a chat screen, with no clean back path.
   useEffect(() => {
+    if (useUIStore.getState().isMobile) return;
     if (!spaceId || spaceId === '@me' || channelId) return;
     if (channels.length === 0) return;
 

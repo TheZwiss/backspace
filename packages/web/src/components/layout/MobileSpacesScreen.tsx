@@ -83,6 +83,16 @@ export function MobileSpacesScreen() {
     }
   }, [selectedSpaceId, setCurrentSpace, loadSpaceDetail]);
 
+  // Sync local selection from store when external code changes the current
+  // space (e.g. SpaceInviteCard's join handler seeding currentSpaceId before
+  // routing to the Spaces tab). Without this, useState(currentSpaceId) is only
+  // captured on mount and the strip stays on the previously-selected space.
+  useEffect(() => {
+    if (currentSpaceId && currentSpaceId !== selectedSpaceId) {
+      setSelectedSpaceId(currentSpaceId);
+    }
+  }, [currentSpaceId, selectedSpaceId]);
+
   // Auto-select first space if none selected
   useEffect(() => {
     if (!selectedSpaceId && spaces.length > 0 && spaces[0]) {
