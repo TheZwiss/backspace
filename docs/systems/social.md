@@ -500,7 +500,7 @@ All handlers also update `discoverStore` relationship state via lazy import.
 
 | WS Event | Store Method | Effect |
 |----------|-------------|--------|
-| `presence_update` | `updateFriendPresence(userId, status)` | Updates `status` field on matching friend by ID (all origins) |
+| `presence_update` | `updateFriendPresence(userId, status)` | Updates `status` on matching friend by ID (all origins). Server broadcasts to friends + DM co-members + space co-members (`collectProfileBroadcastTargetIds`). For federated friends, status is projected by the home instance via S2S `presence_update` relay (see `federation.md` §10 — Presence Sync) and broadcast to the same recipient set on the receiving instance. |
 | `user_updated` | `updateFriendProfile(user)` | Updates displayName, avatar, banner, accentColor, avatarColor, bio, customStatus, status on matching friend by ID |
 
 ---

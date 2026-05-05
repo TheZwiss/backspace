@@ -12,7 +12,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 2. Client sends `{ type: 'auth', token: '<jwt>' }` within 10 seconds
 3. Server validates token (rejects deleted users, tokens issued before `passwordChangedAt`)
 4. Server responds with `ready` event containing full client state
-5. Server updates user status to `online`, broadcasts `presence_update` to all user's spaces
+5. Server updates user status to `online`, broadcasts `presence_update` to friends + DM co-members + space co-members (via `collectProfileBroadcastTargetIds`); for native users, also queues a S2S `presence_update` relay to all active peers
 6. Heartbeat: server pings every 30s (RFC 6455 ping frames), dead connections detected after ~65s
 
 ---
@@ -123,7 +123,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 ### Presence & Activity
 | type | fields | scope |
 |------|--------|-------|
-| `presence_update` | userId, status, activities? | space (all members) |
+| `presence_update` | userId, status, activities? | friends + DM co-members + space co-members of the user (via `collectProfileBroadcastTargetIds`), plus self for multi-tab sync. For federated stubs, the local instance receives status via S2S `presence_update` relay from the home (see `federation.md` §10 — Presence Sync) and re-broadcasts to the same recipient set. |
 | `user_updated` | user | user |
 
 ### Space / Channel Management
