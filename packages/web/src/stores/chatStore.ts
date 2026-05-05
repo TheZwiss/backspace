@@ -11,6 +11,23 @@ const MAX_MESSAGES_PER_CHANNEL = 200;
 const MAX_CACHED_CHANNELS = 20;
 const EVICT_TO_CHANNELS = 15;
 
+// In-flight Promise dedup. The store has multiple call sites that may invoke
+// `loadMessages` / `loadMoreMessages` for the same channel in parallel before
+// the first call's awaited result has populated `hasMore`/`messages` (which is
+// the only state-based dedup the original guards relied on):
+//   - `AppLayout` and `MessageList` BOTH fire `loadMessages` on channel mount
+//     because `MessageList` is also rendered by surfaces that don't have the
+//     `AppLayout` chrome (`VoiceChatPanel`).
+//   - `MessageList.handleScroll`'s load-more block can fire multiple times in
+//     a single fast-scroll burst before React commits the `isLoadingMore=true`
+//     state update, sharing one closure with `!isLoadingMore` still true.
+// Without dedup, each parallel call opens its own federated fetch — on a NAT
+// hairpin'd LAN this means N hung TCP connections per channel mount, and the
+// pagination skeleton (driven by component-level `isLoadingMore`) sticks while
+// any of them are still waiting on the 30 s api-client timeout.
+const inFlightLoads = new Map<string, Promise<void>>();
+const inFlightLoadMores = new Map<string, Promise<boolean>>();
+
 interface TypingUser {
   userId: string;
   username: string;
@@ -161,30 +178,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // For server channels, bail if we don't know which instance owns this channel yet.
     // The remote WS ready handler will call loadMessages once the map is populated.
     if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
-    set({ isLoading: true, loadError: null });
-    try {
-      const origin = getChannelOrigin(channelId);
-      const client = getApiForOrigin(origin);
-      const messages = isDm
-        ? await client.dm.messages(channelId)
-        : await client.channels.messages(channelId);
 
-      // Normalize remote asset URLs (avatars, attachment filenames)
-      if (origin) {
-        for (const msg of messages) normalizeMessageAssets(msg, origin);
+    // Parallel-call dedup: if a non-forced load for this channel is already in
+    // flight, return that Promise instead of starting a second fetch. `force`
+    // bypasses the dedup because callers using it (WS reconnect) explicitly
+    // want a fresh fetch even if one is already pending. See `inFlightLoads`
+    // declaration for the full rationale.
+    if (!force) {
+      const existing = inFlightLoads.get(channelId);
+      if (existing) return existing;
+    }
+
+    const promise = (async () => {
+      set({ isLoading: true, loadError: null });
+      try {
+        const origin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(origin);
+        const messages = isDm
+          ? await client.dm.messages(channelId)
+          : await client.channels.messages(channelId);
+
+        // Normalize remote asset URLs (avatars, attachment filenames)
+        if (origin) {
+          for (const msg of messages) normalizeMessageAssets(msg, origin);
+        }
+
+        set((state) => {
+          const newMessages = new Map(state.messages);
+          newMessages.set(channelId, messages as MessageWithUser[]);
+          const newHasMore = new Map(state.hasMore);
+          newHasMore.set(channelId, messages.length >= 50);
+          const newAccessTimes = new Map(state.channelAccessTimes);
+          newAccessTimes.set(channelId, Date.now());
+          return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, isLoading: false, loadError: null };
+        });
+      } catch (err) {
+        set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
       }
+    })();
 
-      set((state) => {
-        const newMessages = new Map(state.messages);
-        newMessages.set(channelId, messages as MessageWithUser[]);
-        const newHasMore = new Map(state.hasMore);
-        newHasMore.set(channelId, messages.length >= 50);
-        const newAccessTimes = new Map(state.channelAccessTimes);
-        newAccessTimes.set(channelId, Date.now());
-        return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, isLoading: false, loadError: null };
-      });
-    } catch (err) {
-      set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
+    inFlightLoads.set(channelId, promise);
+    try {
+      await promise;
+    } finally {
+      // Only clear the entry if it still points at our Promise — a force-reload
+      // scheduled while we were in flight may have replaced it, and we don't
+      // want to drop the newer entry.
+      if (inFlightLoads.get(channelId) === promise) {
+        inFlightLoads.delete(channelId);
+      }
     }
   },
 
@@ -196,30 +238,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const oldestMessage = existing[0];
     if (!oldestMessage) return false;
 
-    try {
-      const isDm = isDmChannel(channelId);
-      const origin = getChannelOrigin(channelId);
-      const client = getApiForOrigin(origin);
-      const olderMessages = isDm
-        ? await client.dm.messages(channelId, oldestMessage.id)
-        : await client.channels.messages(channelId, oldestMessage.id);
+    // Parallel-call dedup. `MessageList.handleScroll`'s load-more block can
+    // fire several times in one fast-scroll burst before React commits the
+    // `isLoadingMore=true` setState — every call sees the same closure with
+    // `!isLoadingMore` still true. Without dedup, each spawns its own
+    // federated fetch, and on a NAT hairpin'd LAN that means N hung TCP
+    // connections per scroll burst, each independently waiting on the 30 s
+    // api-client timeout. Dedup collapses them to one, and every caller's
+    // `await` resolves together.
+    const existingPromise = inFlightLoadMores.get(channelId);
+    if (existingPromise) return existingPromise;
 
-      // Normalize remote asset URLs (avatars, attachment filenames)
-      if (origin) {
-        for (const msg of olderMessages) normalizeMessageAssets(msg, origin);
+    const promise = (async () => {
+      try {
+        const isDm = isDmChannel(channelId);
+        const origin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(origin);
+        const olderMessages = isDm
+          ? await client.dm.messages(channelId, oldestMessage.id)
+          : await client.channels.messages(channelId, oldestMessage.id);
+
+        // Normalize remote asset URLs (avatars, attachment filenames)
+        if (origin) {
+          for (const msg of olderMessages) normalizeMessageAssets(msg, origin);
+        }
+
+        set((state) => {
+          const newMessages = new Map(state.messages);
+          const current = newMessages.get(channelId) ?? [];
+          newMessages.set(channelId, [...(olderMessages as MessageWithUser[]), ...current]);
+          const newHasMore = new Map(state.hasMore);
+          newHasMore.set(channelId, olderMessages.length >= 50);
+          return { messages: newMessages, hasMore: newHasMore };
+        });
+        return olderMessages.length > 0;
+      } catch {
+        return false;
       }
+    })();
 
-      set((state) => {
-        const newMessages = new Map(state.messages);
-        const current = newMessages.get(channelId) ?? [];
-        newMessages.set(channelId, [...(olderMessages as MessageWithUser[]), ...current]);
-        const newHasMore = new Map(state.hasMore);
-        newHasMore.set(channelId, olderMessages.length >= 50);
-        return { messages: newMessages, hasMore: newHasMore };
-      });
-      return olderMessages.length > 0;
-    } catch {
-      return false;
+    inFlightLoadMores.set(channelId, promise);
+    try {
+      return await promise;
+    } finally {
+      if (inFlightLoadMores.get(channelId) === promise) {
+        inFlightLoadMores.delete(channelId);
+      }
     }
   },
 
