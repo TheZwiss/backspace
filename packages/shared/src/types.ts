@@ -972,6 +972,12 @@ export interface FederationProfileUpdatePayload {
   homeUserId: string;
   homeInstance: string;
   profileUpdatedAt: number;
+  // Home user's canonical username (without @domain suffix). Receivers apply
+  // `displayName ?? username` so stubs whose home user has no displayName show
+  // the real handle instead of getting clobbered to null. Username itself is
+  // immutable on the home instance — receivers do NOT rewrite the stub's
+  // username column on profile_update.
+  username: string;
   displayName: string | null;
   avatar: string | null;
   banner: string | null;

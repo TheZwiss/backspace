@@ -362,6 +362,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             homeUserId: preUpdateUser.id,
             homeInstance: origin,
             profileUpdatedAt: preUpdateUser.profileUpdatedAt ?? Date.now(),
+            username: preUpdateUser.username,
             displayName: preUpdateUser.displayName,
             avatar: preUpdateUser.avatar && !preUpdateUser.avatar.startsWith('http')
               ? `${origin}/api/uploads/${preUpdateUser.avatar}`
@@ -524,6 +525,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
           homeUserId: updatedUser!.id,
           homeInstance: origin,
           profileUpdatedAt: updatedUser!.profileUpdatedAt ?? Date.now(),
+          username: updatedUser!.username,
           displayName: updatedUser!.displayName,
           avatar: updatedUser!.avatar && !updatedUser!.avatar.startsWith('http')
             ? `${origin}/api/uploads/${updatedUser!.avatar}`

@@ -5625,7 +5625,7 @@ async function downloadProfileAsset(
   }
 }
 
-async function processProfileUpdateEvent(
+export async function processProfileUpdateEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
@@ -5717,10 +5717,17 @@ async function processProfileUpdateEvent(
     deleteUploadFile(oldBanner);
   }
 
-  // Authoritative overwrite — home instance is always right
+  // Authoritative overwrite — home instance is always right.
+  // displayName falls back to the home user's canonical username when null,
+  // mirroring hydrateReplicatedUserProfile so stubs whose home user has no
+  // displayName show the real handle instead of getting clobbered to null.
+  // (The username field on the wire is the home's canonical handle, not the
+  // stub's local-part; usernames are immutable on the home instance, so we
+  // never rewrite the stub's username column here.)
+  const effectiveDisplayName = payload.displayName ?? payload.username ?? null;
   db.update(schema.users)
     .set({
-      displayName: payload.displayName,
+      displayName: effectiveDisplayName,
       avatar: resolvedAvatar,
       banner: resolvedBanner,
       accentColor: payload.accentColor,
