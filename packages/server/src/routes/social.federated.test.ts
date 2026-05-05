@@ -169,9 +169,12 @@ describe('POST /api/social/requests — federated branch (happy path)', () => {
     expect(sentEvent).toBeDefined();
     expect(sentEvent![0]).toBe(CALLER_ID);
     expect(sentEvent![1].request.id).toBe(body.requestId);
-    // homeUserId identifies the target; username is the canonical stub form (<homeUserId>@<host>).
+    // homeUserId identifies the target; username is the realname-based stub form
+    // (<lookup.username>@<host>) since resolveOrCreateReplicatedUser now uses the
+    // username hint from the wire profile snapshot. Falls back to <homeUserId>@<host>
+    // only when no hint is available.
     expect(sentEvent![1].request.user.homeUserId).toBe('remote-alice');
-    expect(sentEvent![1].request.user.username).toBe('remote-alice@orbit.test');
+    expect(sentEvent![1].request.user.username).toBe('alice@orbit.test');
   });
 });
 

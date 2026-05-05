@@ -11,6 +11,7 @@ import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutb
 import { mapCallReasonToEventReason } from '../utils/federationOutbox.js';
 import { ACTIVITY_LIMITS } from '@backspace/shared/src/activities.js';
 import { sanitizeUser } from '../utils/sanitize.js';
+import { collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
 import { resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import { appendMutationLog, queueOutboxEvent, queueDmRelay, getGroupDmTargetOrigins, sendCallRelay, computeFederatedId, sendTypingRelay, queueReadStateRelay } from '../utils/federationOutbox.js';
@@ -497,17 +498,15 @@ function handlePresenceUpdate(event: Record<string, unknown>, userId: string): v
   connectionManager.setUserStatus(userId, status);
   const activities = connectionManager.getUserActivities(userId);
 
-  // Broadcast to all spaces user is in
-  const userSpaces = connectionManager.getUserSpaces(userId);
+  // Broadcast to friends + DM co-members + space co-members.
   const payload = {
     type: 'presence_update' as const,
     userId,
     status,
     ...(activities.length > 0 ? { activities } : {}),
   };
-  for (const spaceId of userSpaces) {
-    connectionManager.sendToSpace(spaceId, payload, userId);
-  }
+  const targets = collectProfileBroadcastTargetIds(userId);
+  for (const uid of targets) connectionManager.sendToUser(uid, payload);
 
   // Also send to self (other tabs)
   connectionManager.sendToUser(userId, payload);
@@ -534,11 +533,9 @@ function handleActivityUpdate(event: Record<string, unknown>, userId: string): v
   connectionManager.setUserActivities(userId, activities);
   const status = connectionManager.getUserStatus(userId);
 
-  const userSpaces = connectionManager.getUserSpaces(userId);
   const payload = { type: 'presence_update' as const, userId, status, activities };
-  for (const spaceId of userSpaces) {
-    connectionManager.sendToSpace(spaceId, payload, userId);
-  }
+  const targets = collectProfileBroadcastTargetIds(userId);
+  for (const uid of targets) connectionManager.sendToUser(uid, payload);
   connectionManager.sendToUser(userId, payload);
 
   // S2S: project to all active peers (activities + current status).
