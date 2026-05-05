@@ -57,6 +57,9 @@ tmp/
 # Superpowers brainstorm artifacts
 .superpowers/
 
+# Playwright MCP session artifacts (snapshots, console logs, screenshots)
+.playwright-mcp/
+
 # Local files
 Gemini Starter.rtf
 
