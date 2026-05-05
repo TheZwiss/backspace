@@ -64,6 +64,15 @@ export async function onPeerActivated(
         await backfillStubUsernamesForPeer(peerRow.origin).catch((e) => {
           console.warn(`[onPeerActivated] backfillStubUsernamesForPeer(${peerRow.origin}) failed`, e);
         });
+
+        // Re-emit a fresh presence snapshot to the activating peer so its stubs
+        // of our online natives reflect current reality. Necessary because
+        // presence is outbox-only (no mutation-log replay), and any prior
+        // markPeerStubsOffline ran on our side too.
+        const { snapshotPresenceForPeer } = await import('./federationPresence.js');
+        try { snapshotPresenceForPeer(peerRow.origin); } catch (e) {
+          console.warn(`[onPeerActivated] snapshotPresenceForPeer(${peerRow.origin}) failed`, e);
+        }
       }
 
       const { connectionManager } = await import('../ws/handler.js');
@@ -383,6 +392,17 @@ export async function onPeerDeactivated(
         console.log(
           `[federation] onPeerDeactivated(${peerId}, ${reason}) evicted ${evicted} FederatedCallEntry object${evicted === 1 ? '' : 's'} for ${peer.origin}`,
         );
+      }
+
+      // Mark every stub whose home is this peer as offline locally, and
+      // broadcast a presence_update WS event to friends/DM-mates/space-co-members
+      // so connected users see them go offline immediately, instead of seeing
+      // stale 'online' until the peer recovers.
+      try {
+        const { markPeerStubsOffline } = await import('./federationPresence.js');
+        await markPeerStubsOffline(peer.origin);
+      } catch (e) {
+        console.warn(`[onPeerDeactivated] markPeerStubsOffline(${peer.origin}) failed`, e);
       }
 
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
