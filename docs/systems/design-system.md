@@ -96,6 +96,14 @@ All defined in `globals.css`. No resting border — sunken `surface-input` backg
 
 Override padding/size with utilities: `input-standard w-full py-2.5`
 
+### iOS Auto-Zoom Suppression
+
+iOS Safari auto-zooms (and shifts the viewport right) on input focus when the computed `font-size` is below 16px. The `@media (max-width: 767px)` block in `globals.css` bumps every input tier — and bare `<input>`/`<textarea>`/`<select>` plus `[contenteditable]` — to `font-size: 16px !important`.
+
+`!important` is required because Tailwind utilities like `text-[15px]` (used on the chat composer textarea) and `text-sm` (used on form fields) are emitted in the `@layer utilities` block, which comes after `@layer components` in the cascade and would otherwise override the input-tier rules. There is no legitimate reason to use a `<16px` font-size on a mobile input, so the override is universally correct.
+
+When introducing a new input or contenteditable surface, no extra work is needed — the global rule covers it.
+
 ---
 
 ## Layout

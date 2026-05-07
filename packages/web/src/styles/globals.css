@@ -244,6 +244,36 @@
            focus:ring-2 focus:ring-accent-rose focus:border-accent-rose/30
            transition-colors;
   }
+
+  /* iOS Safari auto-zooms on input focus when computed font-size is below
+     16px. Bumping every input tier (and bare <input>/<textarea>/<select>)
+     to 16px on mobile prevents the zoom without changing desktop sizing.
+     `!important` is required because Tailwind utilities (e.g. `text-[15px]`
+     on the chat composer textarea, `text-sm` on form fields) are emitted in
+     the @layer utilities block — which comes after @layer components in the
+     cascade — so they would otherwise override these rules.
+     There is no legitimate reason to use a <16px font-size on a mobile
+     input; the override is universally correct. */
+  @media (max-width: 767px) {
+    .input-standard,
+    .input-search,
+    .input-embedded,
+    .input-danger,
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="datetime-local"],
+    textarea,
+    select,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"] {
+      font-size: 16px !important;
+    }
+  }
 }
 
 /* Accessibility: fall back to solid surfaces when transparency is reduced */
