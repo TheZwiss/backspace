@@ -224,7 +224,13 @@ export function MobileSpacesScreen() {
     const connectFn = useVoiceStore.getState().connectFn;
     joinVoiceChannel(chId, connectFn ?? undefined);
     setVoiceJoinChannelId(null);
-    pushMobileScreen('voice');
+    // Push the canonical mobile voice screen key. Previously this passed
+    // 'voice', which has no entry in MobileShell.screenMap — the renderer
+    // returned null while the root screen sat under `visibility: hidden`,
+    // exposing the desktop PictureInPicture popup as the only visible UI
+    // (the "PiP-style grey view" bug). The screen key must match
+    // MobileShell.tsx:91 ('voice-full').
+    pushMobileScreen('voice-full');
   }, [pushMobileScreen]);
 
   const toggleCategory = (categoryId: string) => {

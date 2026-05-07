@@ -406,7 +406,13 @@ export function AppLayout() {
         <UserProfileModal />
         <IncomingCallModal />
         <ImagePreview />
-        <PictureInPicture />
+        {/* PictureInPicture is desktop-only. Mobile has its own purpose-built
+            voice chrome (MobileVoiceMiniBar + MobileVoiceFullScreen) mounted
+            inside MobileShell. Mounting PiP here too caused a "PiP-style grey
+            view" to appear on top of the mobile shell whenever a voice call
+            was connected but the voice-full screen was not on the stack
+            (e.g. immediately after Join, or after popping voice-full back to
+            the root). */}
         <SoundController />
         <GlobalAudioRenderer />
         <NotificationController />

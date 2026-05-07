@@ -453,6 +453,19 @@ interface MobileScreenHeaderProps {
 
 ## Voice Overlay
 
+**Mobile is the sole owner of voice overlay chrome.** `<PictureInPicture />` is a desktop-only component; `AppLayout`'s mobile branch does NOT mount it. The mobile equivalents are `MobileVoiceMiniBar` (always-visible call-active overlay between the screen stack and bottom nav) and `MobileVoiceFullScreen` (pushed-screen full takeover). Mounting PiP on mobile would render its 320×180 floating box on top of the mobile shell whenever `currentVoiceChannelId` was set but `voice-full` was not on the stack — the symptom that triggered this split was a "PiP-style grey view" appearing immediately after `MobileVoiceJoinSheet`'s Join button (compounded by a misnamed screen key — see "Voice Join Flow" below).
+
+### Voice Join Flow (Mobile)
+
+`MobileSpacesScreen.handleVoiceJoin` is the single entry point on mobile:
+
+1. Apply pre-mute if requested (`voiceStore.setMuted(true)`).
+2. Call `joinVoiceChannel(channelId, connectFn)` (which sends `voice_join` WS, gets a LiveKit token, and connects the room).
+3. Close the join sheet (`setVoiceJoinChannelId(null)`).
+4. `pushMobileScreen('voice-full')` — must match the canonical key in `MobileShell.screenMap`. A historical bug passed `'voice'`, which had no entry; the renderer returned null while the root screen sat under `visibility: hidden`, making the (incorrectly mounted) desktop PiP the only visible UI. Both have been root-fixed.
+
+The user lands directly in `MobileVoiceFullScreen` — there is no intermediate "connecting" screen. While LiveKit handshakes, the participant grid renders with whatever the WS `voice_users` map already contains (typically just the local user) and updates as remote participants arrive.
+
 ### MobileVoiceMiniBar
 
 File: `MobileVoiceMiniBar.tsx`
