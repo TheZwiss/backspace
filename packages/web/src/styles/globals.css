@@ -320,6 +320,19 @@
   max-height: 400px;
 }
 
+/* Mobile bottom-sheet variant: stretch the custom element to fill the
+   sheet's width (so `dynamicWidth: true` can recompute the grid against
+   the real container). Height is left to emoji-mart's own layout — the
+   picker manages its internal scroll region against its measured height
+   and forcing `height: 100%` here would collapse its category nav off-
+   screen because the custom element doesn't propagate flex sizing into
+   its shadow root. The 400px desktop cap is fine for mobile too; the
+   sheet's `max-height: min(60dvh, 60vh)` gives us ~440-500px to play
+   with on common phone viewports. */
+.emoji-picker-wrapper--mobile em-emoji-picker {
+  width: 100%;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }

@@ -398,9 +398,16 @@ export function RegisterPage() {
     (inviteRequired && !inviteValid);
 
   return (
-    <div className="min-h-full flex items-center justify-center bg-surface-base relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)]" />
-      <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-8 shadow-elevation-high relative z-10 overflow-hidden">
+    // Outer scroll container — root is `h-full overflow-hidden`, so this page must own
+    // its own scroll. Without it, mobile users with the keyboard up cannot reach the
+    // submit button on Step 2 (avatar + color picker + display name + buttons exceeds
+    // the visible viewport once the iOS keyboard claims ~300 px). `h-full` (rather than
+    // `min-h-full`) makes this element exactly viewport-height; the inner flex wrapper
+    // uses `min-h-full` so short content still centers vertically.
+    <div className="h-full overflow-y-auto bg-surface-base relative">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)] pointer-events-none" />
+      <div className="min-h-full flex items-center justify-center px-4 py-6 md:py-10 relative z-10">
+        <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-6 md:p-8 shadow-elevation-high overflow-hidden">
         {/* Progress dots */}
         <div className="flex justify-center gap-2 mb-5">
           <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${step === 1 ? 'bg-accent-primary' : 'bg-txt-tertiary/30'}`} />
@@ -432,7 +439,9 @@ export function RegisterPage() {
                     value={manualInviteToken}
                     onChange={(e) => setManualInviteToken(e.target.value)}
                     placeholder="Invite code or link"
-                    className="input-standard w-full px-3 py-2 text-sm"
+                    // text-base on mobile prevents iOS Safari from auto-zooming
+                    // when the field is focused (any <input> with font-size <16px triggers zoom).
+                    className="input-standard w-full px-3 py-2 text-base md:text-sm"
                     aria-label="Invite code or link"
                     autoComplete="off"
                   />
@@ -458,30 +467,33 @@ export function RegisterPage() {
               )}
 
               {/* URL-token chip — shown only when registration is closed AND a URL token was provided.
-                  Per spec §4.4: open-registration instances silently ignore the ?invite= param. */}
+                  Per spec §4.4: open-registration instances silently ignore the ?invite= param.
+                  Layout: inline pill on desktop, full-width banner on mobile so the longer
+                  error copy ("Invalid invite link — please request a new one") wraps cleanly
+                  inside a 360 px viewport instead of forcing a single-line pill that overflows. */}
               {urlInviteToken && instanceInfo && !instanceInfo.registrationOpen && (
-                <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent-primary/10 text-accent-primary text-xs">
+                <div className="mb-4 flex md:inline-flex items-start md:items-center gap-2 px-3 py-1.5 rounded-md md:rounded-full bg-accent-primary/10 text-accent-primary text-xs">
                   {inviteChecking ? (
                     <>
-                      <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <svg className="w-3 h-3 animate-spin flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 24 24" fill="none">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Validating invite...
+                      <span>Validating invite...</span>
                     </>
                   ) : inviteCheck?.valid === true ? (
                     <>
-                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                      <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      Using invite: {inviteCheck.name}
+                      <span className="break-all">Using invite: {inviteCheck.name}</span>
                     </>
                   ) : inviteCheck?.valid === false ? (
                     <>
-                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                      <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
-                      Invalid invite link — please request a new one
+                      <span>Invalid invite link — please request a new one</span>
                     </>
                   ) : (
                     <>Validating invite...</>
@@ -497,7 +509,8 @@ export function RegisterPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase())}
-                  className="input-standard w-full py-2.5"
+                  // text-base on mobile prevents iOS Safari zoom-on-focus (<16px triggers it).
+                  className="input-standard w-full py-2.5 text-base md:text-sm"
                   autoFocus
                   autoComplete="username"
                 />
@@ -536,7 +549,7 @@ export function RegisterPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input-standard w-full py-2.5"
+                  className="input-standard w-full py-2.5 text-base md:text-sm"
                   autoComplete="new-password"
                 />
               </div>
@@ -549,7 +562,7 @@ export function RegisterPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-standard w-full py-2.5"
+                  className="input-standard w-full py-2.5 text-base md:text-sm"
                   autoComplete="new-password"
                 />
               </div>
@@ -557,7 +570,9 @@ export function RegisterPage() {
               <button
                 type="submit"
                 disabled={continueDisabled}
-                className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                // py-3 on mobile yields ≥44 px tap target (Apple HIG); py-2.5 keeps the
+                // tighter desktop look from before.
+                className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue
               </button>
@@ -643,7 +658,7 @@ export function RegisterPage() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={username.trim() || 'Display name'}
-                className="input-standard w-full py-2.5"
+                className="input-standard w-full py-2.5 text-base md:text-sm"
                 autoComplete="name"
               />
             </div>
@@ -653,7 +668,10 @@ export function RegisterPage() {
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
                 Avatar Color
               </label>
-              <div className="flex gap-2.5 justify-center">
+              {/* Color swatch row: gap tightens on narrow viewports so the 7 swatches
+                  fit inside a 360 px viewport (p-6 inner content area is ~280 px;
+                  7×32 + 6×10 = 284 px would overflow with gap-2.5). */}
+              <div className="flex gap-2 md:gap-2.5 justify-center">
                 {AVATAR_COLORS.map((key) => {
                   const entry = AVATAR_GRADIENT_MAP[key];
                   return (
@@ -679,7 +697,7 @@ export function RegisterPage() {
               type="button"
               onClick={() => handleRegister(false)}
               disabled={isDisabled}
-              className="w-full py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retryAfter > 0
                 ? `Try again in ${retryAfter}s`
@@ -693,7 +711,8 @@ export function RegisterPage() {
                 type="button"
                 onClick={() => { setError(''); setRetryAfter(0); setDirection('back'); setStep(1); }}
                 disabled={isRegistering}
-                className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+                // py-2 px-1 widens the tap area on mobile while keeping the visual link style.
+                className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
                 Back
               </button>
@@ -701,13 +720,14 @@ export function RegisterPage() {
                 type="button"
                 onClick={() => handleRegister(true)}
                 disabled={isDisabled}
-                className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50"
+                className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
                 Skip for now
               </button>
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Image Crop Modal */}

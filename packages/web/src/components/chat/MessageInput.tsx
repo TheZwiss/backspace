@@ -710,12 +710,12 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           </div>
         )}
 
-        <div className="flex items-center pl-[10px] pr-1">
+        <div className="flex items-center gap-1 md:gap-0 pl-2 md:pl-[10px] pr-2 md:pr-1">
           {/* File attach button */}
           {canAttachFiles && (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
+              className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] text-txt-tertiary hover:text-txt-secondary transition-colors flex-shrink-0"
               title="Attach file"
               aria-label="Attach file"
             >
@@ -783,7 +783,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           {gifEnabled && (
             <button
               onClick={() => togglePopover('gif')}
-              className={`w-[34px] h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+              className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
                 activePopover === 'gif' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
               }`}
               title="GIF"
@@ -798,7 +798,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
           {/* Emoji button */}
           <button
             onClick={() => togglePopover('emoji')}
-            className={`w-[34px] h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
+            className={`w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] transition-colors flex-shrink-0 ${
               activePopover === 'emoji' ? 'text-accent-primary' : 'text-txt-tertiary hover:text-txt-secondary'
             }`}
             title="Emoji"
@@ -814,7 +814,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             <button
               onClick={() => void handleSubmit()}
               disabled={anyUnshippable}
-              className="w-[34px] h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
+              className="w-10 h-10 md:w-[34px] md:h-[34px] flex items-center justify-center rounded-[6px] bg-accent-primary hover:bg-accent-primary-hover text-white transition-all duration-150 flex-shrink-0 disabled:opacity-50"
               aria-label="Send message"
               title="Send"
             >

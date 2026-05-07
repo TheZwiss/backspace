@@ -203,6 +203,18 @@ When a user sets an avatar/banner or a space sets an icon/banner:
 
 The attachment record for profile images is intentionally deleted -- the authoritative reference moves to the `users.avatar`/`users.banner` or `spaces.icon`/`spaces.banner` column.
 
+### Mobile Transfer-Chrome Surfaces
+
+In-flight transfers (chat attachments, profile/banner uploads) are surfaced via the shared `TransferIndicator` component. Mount points:
+
+- **Chat header (desktop):** every `MainContent.tsx` header variant — DM, group DM, space text channel, voice.
+- **Chat header (mobile):** `MobileChatScreen.tsx` mounts `<TransferIndicator />` in its custom header.
+- **Settings/Instance screens (mobile):** mounted via `MobileScreenHeader.tsx`'s `rightActions` slot on every settings screen — `MobileSettingsScreen` (hub + each direct panel), `MobileInstancePanel`, and the six `settings-instance-*` sub-panel wrappers in `MobileShell.tsx`. This guarantees that a profile-picture or banner upload triggered from settings has visible progress chrome and an abort affordance regardless of the user's current screen.
+
+The component is lightweight when idle — the underlying `transferStore` Map subscription is a single `useMemo` over `Array.from(...).filter(t => t.tray)`, and the rendered button is a small icon (no badge) until at least one transfer is active. Safe to mount on every settings screen without performance impact.
+
+The dropdown panel uses `touchstart` + `mousedown` listeners for click-outside dismissal so a single tap on iOS Safari closes the tray. Panel width is `min(300px, calc(100vw - 16px))` to prevent right-edge clipping on narrow viewports while keeping the desktop panel size unchanged.
+
 ---
 
 ## 5. Thumbnail Generation Details

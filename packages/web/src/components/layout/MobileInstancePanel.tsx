@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { MobileScreenHeader } from './MobileScreenHeader';
+import { TransferIndicator } from './TransferIndicator';
 import { api } from '../../api/client';
 import { onFederationPeersChanged } from '../../hooks/useWebSocket';
 
@@ -135,7 +136,7 @@ export function MobileInstancePanel() {
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Instance" />
+      <MobileScreenHeader title="Instance" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => {
           const badge = section.id === 'federation' && approvalCount > 0 ? approvalCount : null;

@@ -4,9 +4,14 @@ import type { GifResult } from '@backspace/shared';
 
 interface GifPickerProps {
   onGifSelect: (url: string) => void;
+  /**
+   * Mobile rendering: drop the desktop fixed dimensions and let the picker
+   * fill its parent (a bottom sheet that controls width + max-height).
+   */
+  mobile?: boolean;
 }
 
-export function GifPicker({ onGifSelect }: GifPickerProps) {
+export function GifPicker({ onGifSelect, mobile = false }: GifPickerProps) {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [results, setResults] = useState<GifResult[]>([]);
@@ -78,17 +83,25 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
     e.stopPropagation();
   };
 
+  // Mobile: fill parent (sheet sets width + max-height). Desktop: fixed dims
+  // matching the legacy popover footprint.
+  const rootClass = mobile
+    ? 'flex flex-col flex-1 min-h-0 w-full'
+    : 'flex flex-col h-[390px] w-[390px]';
+
   return (
-    <div className="flex flex-col h-[390px] w-[390px]" onKeyDown={handleKeyDown}>
+    <div className={rootClass} onKeyDown={handleKeyDown}>
       {/* Search */}
-      <div className="px-3 pt-2 pb-1.5">
+      <div className="px-3 pt-2 pb-1.5 shrink-0">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search GIFs"
           className="input-search w-full"
-          autoFocus
+          // Auto-focus only on desktop. On mobile this would force the OS
+          // keyboard up the moment the sheet opens, hiding most of the grid.
+          autoFocus={!mobile}
         />
       </div>
 
@@ -141,7 +154,7 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
       </div>
 
       {/* Attribution */}
-      <div className="px-3 py-1 text-[10px] text-txt-tertiary text-right">
+      <div className="px-3 py-1 text-[10px] text-txt-tertiary text-right shrink-0">
         Powered by Klipy
       </div>
     </div>

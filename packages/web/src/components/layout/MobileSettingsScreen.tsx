@@ -5,6 +5,8 @@ import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
 import { VoicePanel } from '../modals/settingsPanels/VoicePanel';
 import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
 import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
+import { MobileScreenHeader } from './MobileScreenHeader';
+import { TransferIndicator } from './TransferIndicator';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
@@ -46,7 +48,6 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
-  const popMobileScreen = useUIStore((s) => s.popMobileScreen);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
 
@@ -58,14 +59,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
     return (
       <div className="flex flex-col h-full bg-surface-base">
-        <header className="h-12 flex items-center gap-2 px-3 border-b border-border-soft shrink-0">
-          <button onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-            </svg>
-          </button>
-          <h1 className="text-sm font-semibold text-txt-primary">{panel.title}</h1>
-        </header>
+        <MobileScreenHeader title={panel.title} rightActions={<TransferIndicator />} />
         <div className="flex-1 overflow-y-auto p-4">
           {panel.component}
         </div>
@@ -84,14 +78,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <header className="h-12 flex items-center gap-2 px-3 border-b border-border-soft shrink-0">
-        <button onClick={popMobileScreen} className="w-8 h-8 flex items-center justify-center text-txt-secondary hover:text-txt-primary">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
-        <h1 className="text-sm font-semibold text-txt-primary">Settings</h1>
-      </header>
+      <MobileScreenHeader title="Settings" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => (
           <button

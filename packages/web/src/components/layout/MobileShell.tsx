@@ -13,6 +13,7 @@ import { MobileChatScreen } from './MobileChatScreen';
 import { MobileSettingsScreen } from './MobileSettingsScreen';
 import { MobileInstancePanel } from './MobileInstancePanel';
 import { MobileScreenHeader } from './MobileScreenHeader';
+import { TransferIndicator } from './TransferIndicator';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
 import { MobileMembersScreen } from './MobileMembersScreen';
@@ -36,7 +37,7 @@ function MobileFederationPanelWrapper() {
   const setApprovalCount = useUIStore((s) => s.setFederationApprovalCount);
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Federation" />
+      <MobileScreenHeader title="Federation" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4">
         <FederationPanel onApprovalCountChange={setApprovalCount} />
       </div>
@@ -55,32 +56,32 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'settings-instance': () => <MobileInstancePanel />,
   'settings-instance-general': () => (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="General" />
+      <MobileScreenHeader title="General" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><GeneralPanel /></div>
     </div>
   ),
   'settings-instance-registration': () => (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Registration" />
+      <MobileScreenHeader title="Registration" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><RegistrationPanel /></div>
     </div>
   ),
   'settings-instance-federation': () => <MobileFederationPanelWrapper />,
   'settings-instance-streaming': () => (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Streaming" />
+      <MobileScreenHeader title="Streaming" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><StreamingPanel /></div>
     </div>
   ),
   'settings-instance-storage': () => (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Storage" />
+      <MobileScreenHeader title="Storage" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><StoragePanel /></div>
     </div>
   ),
   'settings-instance-users': () => (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Users" />
+      <MobileScreenHeader title="Users" rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto p-4"><UsersPanel /></div>
     </div>
   ),

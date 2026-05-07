@@ -30,13 +30,21 @@ export function TransferIndicator() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // Click-outside-to-close. iOS Safari does not synthesize `mousedown` from
+  // touch reliably, so we listen for `touchstart` alongside `mousedown` so the
+  // panel dismisses on the first tap on touch devices. Mirrors the pattern
+  // used in AudioInputSection.tsx.
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
   }, [open]);
 
   const active = visible.filter(
@@ -69,7 +77,15 @@ export function TransferIndicator() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[300px] max-w-[calc(100vw-1rem)] glass z-50 rounded-lg overflow-hidden">
+        // Desktop: anchor below the trigger via `absolute right-0 top-full`.
+        // Mobile (<768px): switch to `fixed` so the panel pins to the viewport
+        // right edge with an 8px margin instead of inheriting the trigger's
+        // x-position. This prevents left-edge clipping on narrow viewports
+        // (e.g. 320px) where the trigger sits well to the left of the
+        // viewport's right edge — `right-0` would otherwise anchor the
+        // panel to the trigger's right and let the 300px panel extend off
+        // the left of the viewport.
+        <div className="fixed right-2 top-14 md:absolute md:right-0 md:top-full md:mt-2 w-[min(300px,calc(100vw-16px))] glass z-50 rounded-lg overflow-hidden">
           <div className="px-3 py-2 border-b border-border-soft text-xs flex justify-between items-center">
             <span className="text-txt-secondary">
               {visible.length} transfer{visible.length === 1 ? '' : 's'}
