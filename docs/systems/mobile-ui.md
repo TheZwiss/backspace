@@ -238,11 +238,22 @@ Badge caps at `99+` for numeric badges.
 
 | Tab | Navigation |
 |-----|------------|
-| Spaces | Navigates to last known space route, or `/` |
+| Spaces | Navigates to `/channels/<currentSpaceId ?? lastSelectedSpaceId>` if either is set, otherwise `/` (which redirects to `/channels/@me`) |
 | DMs | Navigates to `/channels/@me` |
 | You | No navigation (stays on current route) |
 
 All tabs call `setMobileTab(tab)` which clears the mobile stack.
+
+The Spaces tab prefers `useSpaceStore.getState().currentSpaceId` — the canonical "currently selected space" — and falls back to `lastSelectedSpaceId`, a sticky memory in `useSpaceStore` that survives `@me` navigation. `currentSpaceId` is the canonical answer when available (URL routing, the space strip, SpaceInviteCard joins all set it), but `AppLayout`'s URL effect clears `currentSpaceId` to null whenever the URL is `/channels/@me`. Without the sticky fallback, returning to Spaces after a DMs/Friends/Settings detour would have nothing to anchor to and `MobileSpacesScreen`'s auto-select would fall back to `spaces[0]`. The previous `Object.keys(lastChannelPerSpace)[0]` approach was wrong for a different reason (it returned the first-inserted key, locking the tab to whichever space the user opened first in their session); `lastChannelPerSpace` is still used by `MobileSpacesScreen.setLastChannel` for the per-space last-channel-jump-on-channel-tap feature — that remains a separate concern.
+
+`MobileSpacesScreen` mirrors the same fallback at mount: `useState(currentSpaceId ?? lastSelectedSpaceId)`. After a DM detour the screen remounts with `currentSpaceId === null` (cleared by AppLayout) but the sticky memory still resolves to the previously-selected space. The local `setCurrentSpace(selectedSpaceId)` effect then restores `currentSpaceId` to that value, so the rest of the app sees a consistent selection.
+
+`lastSelectedSpaceId` lifecycle (defined in `useSpaceStore`):
+
+- Updated on every `setCurrentSpace(non-null)` call and on `loadSpaceDetail` success.
+- NOT cleared by `setCurrentSpace(null)` — that's the whole point.
+- Cleared to null only when the remembered space is actually removed: `deleteSpace`, `leaveSpace`, `removeSpace` (kicked / WS event), `removeInstanceSpaces` (instance disconnect/removal), `reset` (logout).
+- Ephemeral — not persisted to localStorage. On page reload the URL drives initial state; the sticky memory only matters within a session, between tab cycles.
 
 ### Styling
 
@@ -412,7 +423,7 @@ Member group resolution (`getMemberGroup`):
 
 ### MobileScreenHeader
 
-Reusable header component used by `MobileInstancePanel`, `MobileMembersScreen`, and inline in screenMap wrappers.
+Reusable header component used by `MobileInstancePanel`, `MobileMembersScreen`, `MobileSettingsScreen`, and inline in screenMap wrappers.
 
 ```ts
 interface MobileScreenHeaderProps {
@@ -425,6 +436,10 @@ interface MobileScreenHeaderProps {
 - Back button calls `popMobileScreen()`
 - Bottom border: `border-border-soft`
 - Background: `bg-surface-base`
+
+**Canonical pattern — TransferIndicator in `rightActions`:** every settings/instance screen mounts `<TransferIndicator />` via the `rightActions` slot so an in-flight profile/banner upload (or any transfer initiated before navigating into settings) remains visible and controllable from the screen the user is currently on. Wired in: `MobileSettingsScreen` (hub + each direct panel mode), `MobileInstancePanel`, all six `settings-instance-*` wrappers in `MobileShell.tsx` (general / registration / federation / streaming / storage / users). The indicator is idle-cheap — a single Map subscription + small icon button when no transfers are active — so mounting it on every settings screen has no measurable performance cost. See `docs/systems/uploads.md` for the transfer-chrome surface inventory.
+
+`MobileChatScreen` uses its own inline header (not `MobileScreenHeader`) and mounts `TransferIndicator` directly. The dropdown panel renders below the trigger via `absolute right-0 top-full mt-2` and is width-capped at `min(300px, calc(100vw - 16px))` to avoid clipping on narrow viewports. Click-outside dismissal listens to both `mousedown` and `touchstart` so iOS Safari closes the tray on a single tap.
 
 ---
 
@@ -571,4 +586,4 @@ partialize: (state) => ({
 
 Only `memberListOpen` and `lastChannelPerSpace` persist. Mobile navigation state (`mobileScreen`, `mobileStack`) is ephemeral and resets on page reload.
 
-`lastChannelPerSpace` is used by `MobileBottomNav` to navigate to the last-viewed channel when the Spaces tab is tapped, and by `MobileSpacesScreen` when a text channel is opened (via `setLastChannel`).
+`lastChannelPerSpace` is used by `MobileSpacesScreen` to remember the most-recent text channel for each space (via `setLastChannel`), and by `AppLayout`'s desktop auto-select effect to land on that channel when the user opens a space without a channelId. It is NOT what the mobile Spaces bottom-nav tap reads — that reads `useSpaceStore`'s `currentSpaceId ?? lastSelectedSpaceId` (see "Tab Tap Behavior" above). `lastSelectedSpaceId` itself lives in `useSpaceStore` and is intentionally NOT persisted — only the in-session sticky-memory semantic matters.

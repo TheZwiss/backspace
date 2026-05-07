@@ -29,6 +29,7 @@ export function MobileSpacesScreen() {
   const channels = useSpaceStore((s) => s.channels);
   const categories = useSpaceStore((s) => s.categories);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const lastSelectedSpaceId = useSpaceStore((s) => s.lastSelectedSpaceId);
   const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
   const channelToSpaceMap = useSpaceStore((s) => s.channelToSpaceMap);
@@ -65,7 +66,14 @@ export function MobileSpacesScreen() {
   const user = useAuthStore((s) => s.user);
 
   // Local state
-  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(currentSpaceId);
+  // Initial value: prefer `currentSpaceId` if set (the user is currently in a
+  // space's URL), otherwise fall back to the sticky `lastSelectedSpaceId`.
+  // This handles the remount-after-DM-detour case: AppLayout's URL effect has
+  // cleared `currentSpaceId` to null on `/channels/@me`, but the user's
+  // intent — the most-recently-selected space — is still recorded.
+  const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(
+    currentSpaceId ?? lastSelectedSpaceId,
+  );
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [leaveConfirmSpaceId, setLeaveConfirmSpaceId] = useState<string | null>(null);
@@ -87,11 +95,16 @@ export function MobileSpacesScreen() {
   // space (e.g. SpaceInviteCard's join handler seeding currentSpaceId before
   // routing to the Spaces tab). Without this, useState(currentSpaceId) is only
   // captured on mount and the strip stays on the previously-selected space.
+  //
+  // selectedSpaceId is intentionally NOT in the dep array: including it caused
+  // a render loop because handleSpaceSelect briefly leaves selectedSpaceId !==
+  // currentSpaceId until the existing effect below propagates the local pick
+  // to the store. Functional setState makes the update idempotent — if the
+  // store already matches, React bails and skips the re-render.
   useEffect(() => {
-    if (currentSpaceId && currentSpaceId !== selectedSpaceId) {
-      setSelectedSpaceId(currentSpaceId);
-    }
-  }, [currentSpaceId, selectedSpaceId]);
+    if (!currentSpaceId) return;
+    setSelectedSpaceId((prev) => (currentSpaceId !== prev ? currentSpaceId : prev));
+  }, [currentSpaceId]);
 
   // Auto-select first space if none selected
   useEffect(() => {

@@ -59,6 +59,19 @@ export interface UserViewEntry {
 interface SpaceState {
   spaces: TaggedSpace[];
   currentSpaceId: string | null;
+  /**
+   * Sticky memory of the most-recently-selected space. Updated on every
+   * `setCurrentSpace(non-null)` and when `loadSpaceDetail` lands. Crucially, it
+   * is NOT cleared by `setCurrentSpace(null)` (the @me / DMs navigation case)
+   * so mobile callers can answer "which space should the Spaces tab return to
+   * after a side trip through DMs?" — `currentSpaceId` is wiped on @me by
+   * AppLayout's URL effect, which would otherwise force a fallback to
+   * `spaces[0]`. Cleared only when the remembered space is actually removed
+   * (deleteSpace / leaveSpace / removeSpaceFromState / removeInstanceSpaces /
+   * reset). Ephemeral — not persisted, since URL drives initial state on
+   * reload.
+   */
+  lastSelectedSpaceId: string | null;
   channels: Channel[];
   categories: ChannelCategory[];
   members: MemberWithUser[];
@@ -172,6 +185,7 @@ async function pushLayoutToOrigin(
 export const useSpaceStore = create<SpaceState>((set, get) => ({
   spaces: [],
   currentSpaceId: null,
+  lastSelectedSpaceId: null,
   channels: [],
   categories: [],
   members: [],
@@ -196,6 +210,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set({
       spaces: [],
       currentSpaceId: null,
+      lastSelectedSpaceId: null,
       channels: [],
       categories: [],
       members: [],
@@ -218,7 +233,14 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   },
 
   setSpaces: (spaces) => set({ spaces }),
-  setCurrentSpace: (spaceId) => set({ currentSpaceId: spaceId }),
+  setCurrentSpace: (spaceId) =>
+    set((state) => ({
+      currentSpaceId: spaceId,
+      // Only update sticky memory when actually selecting a space. Clearing
+      // currentSpaceId (e.g. on @me navigation) must NOT wipe the memory —
+      // that's the whole point of this slot.
+      lastSelectedSpaceId: spaceId !== null ? spaceId : state.lastSelectedSpaceId,
+    })),
   setChannels: (channels) => set({ channels }),
   setCategories: (categories) => set({ categories }),
   setMembers: (members) => set({ members }),
@@ -351,6 +373,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       set({
         loadingSpaceId: null,
         currentSpaceId: spaceId,
+        lastSelectedSpaceId: spaceId,
         channels: detail.channels.sort((a, b) => a.position - b.position),
         categories: (detail.categories || []).sort((a, b) => a.position - b.position),
         members: detail.members,
@@ -392,6 +415,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set((state) => ({
       spaces: state.spaces.filter(s => s.id !== spaceId),
       currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+      lastSelectedSpaceId:
+        state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
     }));
   },
 
@@ -405,6 +430,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     set((state) => ({
       spaces: state.spaces.filter(s => s.id !== spaceId),
       currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+      lastSelectedSpaceId:
+        state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
     }));
   },
 
@@ -553,6 +580,8 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       return {
         spaces: state.spaces.filter(s => s.id !== spaceId),
         currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+        lastSelectedSpaceId:
+          state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
         channelToSpaceMap,
         channelPermissions,
         channelOriginMap,
@@ -1021,6 +1050,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         userViews,
         currentSpaceId: remainingSpaces.find(s => s.id === state.currentSpaceId)
           ? state.currentSpaceId
+          : null,
+        lastSelectedSpaceId: remainingSpaces.find(s => s.id === state.lastSelectedSpaceId)
+          ? state.lastSelectedSpaceId
           : null,
       };
     });

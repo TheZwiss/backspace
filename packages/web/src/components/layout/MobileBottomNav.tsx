@@ -10,7 +10,6 @@ export function MobileBottomNav() {
   const mobileScreen = useUIStore((s) => s.mobileScreen);
   const mobileStack = useUIStore((s) => s.mobileStack);
   const setMobileTab = useUIStore((s) => s.setMobileTab);
-  const lastChannelPerSpace = useUIStore((s) => s.lastChannelPerSpace);
   const navigate = useNavigate();
 
   // Badge data
@@ -41,8 +40,17 @@ export function MobileBottomNav() {
     setMobileTab(tab);
     if (tab === 'dms') navigate('/channels/@me');
     if (tab === 'spaces') {
-      const lastSpace = Object.keys(lastChannelPerSpace)[0];
-      if (lastSpace) navigate(`/channels/${lastSpace}`);
+      // Prefer `currentSpaceId` (the canonical "currently selected space" —
+      // updated by URL routing, the space strip, SpaceInviteCard joins, etc.).
+      // Fall back to `lastSelectedSpaceId`, the sticky memory that survives
+      // navigating to `/channels/@me`. AppLayout's URL effect clears
+      // `currentSpaceId` to null whenever the URL is `@me`; without the
+      // sticky memory, returning to Spaces from a DM/Friends/Settings detour
+      // would have nothing to anchor to and `MobileSpacesScreen`'s auto-select
+      // would fall back to `spaces[0]`.
+      const { currentSpaceId, lastSelectedSpaceId } = useSpaceStore.getState();
+      const target = currentSpaceId ?? lastSelectedSpaceId;
+      if (target) navigate(`/channels/${target}`);
       else navigate('/');
     }
   };
