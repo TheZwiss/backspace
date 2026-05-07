@@ -312,6 +312,8 @@ Event options: `touchstart` is `{ passive: true }`, `touchmove` is `{ passive: f
 | `settings-voice` | `MobileSettingsScreen` | `initialPanel="voice"` |
 | `settings-privacy` | `MobileSettingsScreen` | `initialPanel="privacy"` |
 | `settings-connections` | `MobileSettingsScreen` | `initialPanel="connections"` |
+| `settings-keybinds` | `MobileSettingsScreen` | `initialPanel="keybinds"` (Electron-only entry; map row always present) |
+| `settings-desktop` | `MobileSettingsScreen` | `initialPanel="desktop"` (Electron-only entry; map row always present) |
 | `settings-instance` | `MobileInstancePanel` | — |
 | `settings-instance-general` | `GeneralPanel` (wrapped) | — |
 | `settings-instance-registration` | `RegistrationPanel` (wrapped) | — |
@@ -392,8 +394,14 @@ Params: `{ channelId, spaceId }`
 
 Two modes controlled by `initialPanel` prop:
 
-1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Voice & Video, Privacy, Connections, Instance for admins). Each pushes `settings-{id}`.
-2. **Direct panel mode** (`initialPanel` set): Renders the corresponding panel component (AccountPanel, VoicePanel, PrivacyPanel, ConnectionsPanel) directly with a back header.
+1. **Hub mode** (`initialPanel` undefined): List of setting sections (Account, Voice & Video, Privacy, Connections, Keybinds + Desktop when in Electron, Instance for admins). Each pushes `settings-{id}`.
+2. **Direct panel mode** (`initialPanel` set): Renders the corresponding panel component (AccountPanel, VoicePanel, PrivacyPanel, ConnectionsPanel, KeybindsPanel, DesktopPanel) directly with a back header.
+
+**Electron-only entries.** The Keybinds and Desktop sections appear in the hub list only when `isElectron() === true` (mirrors the desktop `UserSettings` modal's gate on `DesktopPanel`). Rationale:
+- `DesktopPanel` exposes auto-launch, app-version + update check, and "Change Instance" — all of which call `window.backspace.*` IPC and are meaningless on web/iOS PWA.
+- `KeybindsPanel`'s value comes from the desktop app's `uiohook-napi`-backed global keybind manager. The web fallback (only-when-tab-focused, no global hooks, no recording flow on touch keyboards) has no useful surface for a phone-shaped viewport. Showing the panel anyway would mislead a mobile-web user into recording a binding that can never fire.
+
+Both panels are mobile-fit at 360-390px viewports (single-column rows with `flex justify-between`, `min-w-0` on labels, small tap-target buttons). The gate is therefore a list-visibility decision, not a layout decision — once a desktop user happens to be on a narrow viewport (split-window, dock, etc.), the panels render correctly.
 
 ### MobileInstancePanel
 
@@ -568,8 +576,29 @@ The root MobileShell uses `height: 100dvh` (dynamic viewport height) to account 
 | MobileNav backdrop | `z-[35]` | MobileNav sidebar overlay |
 | MobileNav hamburger | `z-[120]` | MobileNav toggle button |
 | DMs FAB | `z-20` | MobileDmsScreen new DM button |
+| Toast container | `z-[300]` | ToastContainer (positioning differs by mobile state — see Toast Positioning) |
 | Bottom sheets (backdrop) | `z-[300]` | MobileFolderSheet, Add Space sheet, ContextMenu |
 | Bottom sheets (content) | `z-[301]` | MobileFolderSheet, Add Space sheet, ContextMenu |
+
+---
+
+## Toast Positioning
+
+`packages/web/src/components/ui/ToastContainer.tsx` is a single shared component. On desktop it renders at `bottom-6 right-6` (anchored bottom-right). On mobile the container is repositioned to clear the bottom chrome and center horizontally so toasts don't get cropped against narrow viewports or hidden behind voice/nav controls.
+
+The mobile bottom offset is computed via `resolveMobileBottomOffset(hasStack, topScreen, inVoice)` and added to `env(safe-area-inset-bottom)`:
+
+| Mobile State | Bottom Offset (above `safe-area-inset-bottom`) | Rationale |
+|---|---|---|
+| `topScreen === 'voice-full'` | `72px + 12px` | Clears `MobileVoiceFullScreen` control bar (5 round buttons in `glass-bubble` with `mb-2`); bottom nav + mini-bar hidden in this mode |
+| Stack non-empty + in voice | `64px + 12px` | Clears `MobileVoiceMiniBar` (sits above the stacked screen since the bottom nav is hidden when stack non-empty) |
+| Stack non-empty + no voice | `12px` | Pushed screens have no bottom nav and no mini-bar |
+| Root tab + in voice | `56px + 64px + 12px` | Clears `MobileBottomNav` (56px) + `MobileVoiceMiniBar` (~64px) stacked above |
+| Root tab + no voice | `56px + 12px` | Clears `MobileBottomNav` only |
+
+On mobile the container also uses `left-3 right-3` + `items-center` instead of `right-6` so toasts center horizontally with `max-w-[320px]`. This avoids horizontal overlap with bottom-bar controls (which span the full mobile width via `mx-2`) and stays inside the safe-tap zone on narrow screens.
+
+The container subscribes to `useUIStore.isMobile`, `useUIStore.mobileStack`, and `useVoiceStore.currentVoiceChannelId`, so the offset re-computes reactively whenever any of those change — no manual repositioning needed when the user enters/exits voice or pushes/pops a screen while a toast is on screen.
 
 ---
 

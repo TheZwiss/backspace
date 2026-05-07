@@ -53,6 +53,8 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
+  'settings-keybinds': () => <MobileSettingsScreen initialPanel="keybinds" />,
+  'settings-desktop': () => <MobileSettingsScreen initialPanel="desktop" />,
   'settings-instance': () => <MobileInstancePanel />,
   'settings-instance-general': () => (
     <div className="flex flex-col h-full bg-surface-base">

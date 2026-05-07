@@ -5,8 +5,11 @@ import { AccountPanel } from '../modals/settingsPanels/AccountPanel';
 import { VoicePanel } from '../modals/settingsPanels/VoicePanel';
 import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
 import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
+import { KeybindsPanel } from '../modals/settingsPanels/KeybindsPanel';
+import { DesktopPanel } from '../modals/settingsPanels/DesktopPanel';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
+import { isElectron } from '../../platform/platform';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
@@ -17,6 +20,8 @@ const panelConfig: Record<string, { title: string; component: React.ReactNode }>
   voice: { title: 'Voice & Video', component: <VoicePanel /> },
   privacy: { title: 'Privacy', component: <PrivacyPanel /> },
   connections: { title: 'Connections', component: <ConnectionsPanel /> },
+  keybinds: { title: 'Keybinds', component: <KeybindsPanel /> },
+  desktop: { title: 'Desktop', component: <DesktopPanel /> },
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -45,6 +50,16 @@ const sectionIcons: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
     </svg>
   ),
+  keybinds: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 01-1.125-1.125v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" />
+    </svg>
+  ),
+  desktop: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a9 9 0 01-9 9m0 0a9 9 0 01-9-9" />
+    </svg>
+  ),
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
@@ -67,12 +82,18 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
     );
   }
 
-  // Settings section list
+  // Settings section list. Desktop and Keybinds are Electron-only — global
+  // shortcuts and auto-launch/update controls are meaningless on the iOS PWA
+  // and on web mobile. The desktop UserSettings modal also gates Desktop on
+  // isElectron(); we mirror that here, plus apply the same gate to Keybinds
+  // since the panel's only-when-tab-focused web fallback isn't a useful
+  // mobile feature (no global hooks, no recording flow on touch keyboards).
   const sections = [
     { id: 'account', label: 'Account' },
     { id: 'voice', label: 'Voice & Video' },
     { id: 'privacy', label: 'Privacy' },
     { id: 'connections', label: 'Connections' },
+    ...(isElectron() ? [{ id: 'keybinds', label: 'Keybinds' }, { id: 'desktop', label: 'Desktop' }] : []),
     ...(isAdmin ? [{ id: 'instance', label: 'Instance' }] : []),
   ];
 
