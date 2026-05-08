@@ -14,6 +14,7 @@ import { useComposerStore } from '../../stores/composerStore';
 import { useTransferStore, type Transfer } from '../../stores/transferStore';
 import { usePendingMessageStore } from '../../stores/pendingMessageStore';
 import { putHandle, supportsFsHandles, supportsDnDHandles } from '../../utils/idbHandles';
+import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 
 interface MessageInputProps {
   channelId: string;
@@ -60,7 +61,13 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
-  const popoverAnchorRef = useRef<HTMLDivElement>(null);
+  // Note: this ref is intentionally typed `HTMLDivElement | null` (mutable
+  // ref shape) rather than the more restrictive `RefObject<HTMLDivElement>`
+  // because we assign to `.current` from a callback ref below — the
+  // callback ref bridges the imperative `popoverAnchorRef` consumers
+  // (InputPopover / mention-popover anchoring) and the state-backed
+  // `composerEl` slot used by the clearance-measuring effect.
+  const popoverAnchorRef = useRef<HTMLDivElement | null>(null);
 
   // Object URLs for current-session image previews. transferStore doesn't hold
   // the raw File, so previews only exist for files picked in this session
@@ -566,12 +573,148 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     !isOverLimit &&
     !anyUnshippable;
 
+  // Composer positioning model — IDENTICAL across desktop and mobile.
+  // ─────────────────────────────────────────────────────────────────
+  // The composer is a floating glass-bubble (`glass-bubble rounded-[14px]`)
+  // pinned to the bottom of the chat region with `position: absolute`. The
+  // MessageList sibling fills the entire chat area; the last messages scroll
+  // *behind* the translucent bubble. MessageList content carries a dynamic
+  // `paddingBottom` (CSS variable `--composer-clearance`, set by the
+  // ResizeObserver effect below) so the last message clears the bubble's
+  // top edge with a 12 px breathing gap regardless of bubble height.
+  //
+  // Vertical positioning differs only in the `bottom` value:
+  // - Desktop: `bottom: 12px` (the historical `md:bottom-3` constant).
+  // - Mobile, keyboard closed: `bottom: env(safe-area-inset-bottom) + 6px`
+  //   so the bubble clears the iOS home indicator with a small breathing gap.
+  // - Mobile, keyboard open: `bottom: 0`. `MobileShell` shrinks its container
+  //   to `visualViewport.height` (see `MobileShell.tsx`), so the chat region's
+  //   bottom edge already sits on the keyboard's top edge. The composer then
+  //   lands flush with the keyboard regardless of how reliably
+  //   `visualViewport` event delivery is on iOS PWA — the shell's height
+  //   shrinking is the load-bearing mechanism, not the inset arithmetic
+  //   here. This dodges the long-standing iOS-standalone bug where
+  //   `visualViewport.resize` fires late or not at all when the soft
+  //   keyboard opens. The hook's `focusin` polling fallback covers the
+  //   remaining gap by re-reading `vv.height` for ~600 ms after a text
+  //   input gains focus, even when no resize event ever lands.
+  //
+  // The horizontal inset is symmetric: `left-2 right-2` on mobile (matches
+  // `MobileVoiceMiniBar`'s `mx-2` and the `MobileBottomNav` spacing tier);
+  // `md:left-3 md:right-3` on desktop (the historical 12 px inset).
+  //
+  // `z-[110]` keeps the bubble above any in-chat overlays (mention popover,
+  // staged-attachment tiles) but below modals (`z-[300]+`).
+  const isMobile = useUIStore((s) => s.isMobile);
+  const { keyboardOpen } = useVisualViewportInset();
+  const composerStyle: React.CSSProperties | undefined = isMobile
+    ? { bottom: keyboardOpen ? '0px' : 'calc(env(safe-area-inset-bottom) + 6px)' }
+    : undefined;
+  const composerClass =
+    'absolute left-2 right-2 z-[110] glass-bubble rounded-[14px]' +
+    ' md:left-3 md:right-3 md:bottom-3';
+
+  // Dynamic message-list bottom padding ("composer clearance"):
+  //
+  // The composer is `position: absolute` and overlays the bottom of the
+  // chat region. The MessageList scroll content needs enough bottom padding
+  // that the last message can be scrolled fully into view above the bubble
+  // with a visible gap — otherwise the last message sticks flush to the
+  // bubble's top edge (the bug user reported on iOS PWA: a static `pb-20`
+  // = 80 px is smaller than `composer-bottom-offset (env safe-area + 6) +
+  // composer-height (~50–100 px depending on staged attachments / multi-
+  // line text)` on iPhone).
+  //
+  // Strategy: a single CSS custom property `--composer-clearance` is
+  // written to the nearest scrollable ancestor on every composer-size or
+  // composer-bottom-offset change. `MessageList` reads that variable as
+  // its content's `paddingBottom`, falling back to a static 80 px when
+  // unset (e.g. when no composer is mounted, or before the first measure).
+  // The 12 px constant below is the desired breathing-room gap between the
+  // last message's bottom edge and the composer's top edge.
+  //
+  // Why a CSS variable on the parent rather than a global:
+  //   - One MessageInput per chat region; the variable scopes to that
+  //     region so multi-pane layouts (DM list + chat in a future split
+  //     view, voice channel side-panel, etc.) don't cross-talk.
+  //   - The MessageList content already lives inside the same parent
+  //     subtree, so a CSS variable inheritance just works.
+  // We track the live composer DOM element via a state-backed ref. A plain
+  // ref isn't enough because the component renders different JSX when
+  // `canSendMessages` flips (the early-return permission-denied path doesn't
+  // attach the ref), and a useEffect on the ref's value would not re-fire on
+  // those re-renders. Channel permissions arrive asynchronously, so the
+  // initial mount renders the no-permission JSX first, then re-renders with
+  // the full composer once permissions resolve — we need to (re-)attach the
+  // ResizeObserver at that moment.
+  const [composerEl, setComposerEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!composerEl) return;
+    const target = composerEl.parentElement;
+    if (!target) return;
+    const el = composerEl;
+
+    const sync = () => {
+      // Total clearance = composer height + bottom offset + 12 px gap.
+      // We measure the bubble's visual height (including replyTo banner +
+      // staged-attachment tiles + textarea autosize) plus the distance from
+      // the parent's bottom edge to the bubble's bottom edge (which folds
+      // in `env(safe-area-inset-bottom) + 6` on mobile or `12 px` on
+      // desktop, whichever the composer's `bottom` resolves to).
+      const composerRect = el.getBoundingClientRect();
+      const parentRect = target.getBoundingClientRect();
+      const bottomOffset = Math.max(0, parentRect.bottom - composerRect.bottom);
+      const clearance = Math.round(composerRect.height + bottomOffset + 12);
+      target.style.setProperty('--composer-clearance', `${clearance}px`);
+    };
+
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    // Also re-sync when the parent itself resizes (keyboard open/close
+    // collapses the chat region's height; MobileShell drives this via
+    // visualViewport.height).
+    ro.observe(target);
+
+    // Re-sync on visual viewport changes — the parent's `getBoundingClientRect`
+    // updates with the layout, but if `MobileShell`'s height attribute
+    // updates between paints, we want a same-frame re-measure.
+    const vv = window.visualViewport;
+    const onVv = () => sync();
+    if (vv) {
+      vv.addEventListener('resize', onVv);
+      vv.addEventListener('scroll', onVv);
+    }
+
+    return () => {
+      ro.disconnect();
+      if (vv) {
+        vv.removeEventListener('resize', onVv);
+        vv.removeEventListener('scroll', onVv);
+      }
+      target.style.removeProperty('--composer-clearance');
+    };
+    // Re-arm the observer / listeners when keyboard transitions or the
+    // composer's content materially changes — the dependency list is the
+    // set of inputs that can change the bubble's height or its bottom
+    // offset between renders. The ResizeObserver itself is what catches
+    // continuous textarea-autosize growth; these deps just ensure we're
+    // attached to the live element after a remount.
+  }, [composerEl, isMobile, keyboardOpen, chatReplyTo, stagedTransfers.length]);
+
+  // Combined ref: keep `popoverAnchorRef` populated (InputPopover / mention
+  // popover anchor + scroll-into-view targets) AND notify the
+  // `composerEl` state slot so the clearance-measuring effect can re-run
+  // when the element materializes / changes between conditional render
+  // branches.
+  const setComposerRef = useCallback((node: HTMLDivElement | null) => {
+    popoverAnchorRef.current = node;
+    setComposerEl(node);
+  }, []);
+
   if (!canSendMessages) {
     return (
-      <div
-        data-pip-obstacle="bottom"
-        className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]"
-      >
+      <div ref={setComposerRef} data-pip-obstacle="bottom" className={composerClass} style={composerStyle}>
         <div className="flex items-center justify-center py-[14px] px-4">
           <span className="text-txt-tertiary text-[14px]">
             You do not have permission to send messages in this channel
@@ -583,9 +726,10 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
 
   return (
     <div
-      ref={popoverAnchorRef}
+      ref={setComposerRef}
       data-pip-obstacle="bottom"
-      className="relative px-3 pb-3 flex-shrink-0 md:absolute md:bottom-3 md:left-3 md:right-3 md:z-[110] md:px-0 md:pb-0 md:glass-bubble md:rounded-[14px]"
+      className={composerClass}
+      style={composerStyle}
     >
       <TypingIndicator channelId={channelId} />
 
@@ -623,7 +767,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
       )}
       <div
         ref={inputContainerRef}
-        className={`relative bg-surface-input md:bg-transparent ${chatReplyTo ? 'rounded-b-lg' : 'rounded-lg md:rounded-none'} overflow-visible`}
+        className={`relative ${chatReplyTo ? 'rounded-b-lg' : ''} overflow-visible`}
         onDrop={canAttachFiles ? handleDrop : undefined}
         onDragOver={canAttachFiles ? handleDragOver : undefined}
       >

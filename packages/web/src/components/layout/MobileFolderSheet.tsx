@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { SpaceFolder } from '@backspace/shared';
 import { useSpaceStore } from '../../stores/spaceStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
+import { useDragToClose } from '../../hooks/useDragToClose';
 import { getSpaceGradient } from '../../utils/gradients';
 
 const FOLDER_COLORS = [
@@ -84,17 +85,31 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
     ]);
   };
 
+  // Drag-down-to-close. Touches on the handle pill or the folder-header row
+  // initiate the gesture; the scrollable space-list is unaffected.
+  // `hasInteracted` flips on the first touchstart and stays true so the
+  // open keyframe doesn't re-run during snap-back / close-out.
+  const { sheetStyle: dragStyle, handleProps: dragHandleProps, hasInteracted } =
+    useDragToClose({ onClose });
+
   return (
     <>
       <div className="fixed inset-0 z-[300] bg-black/50" onClick={onClose} />
       <div
-        className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal animate-slide-up-sheet max-h-[60vh] flex flex-col"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className={`fixed bottom-0 left-0 right-0 z-[301] rounded-t-2xl glass-modal max-h-[60vh] flex flex-col ${
+          hasInteracted ? '' : 'animate-slide-up-sheet'
+        }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)', ...dragStyle }}
       >
-        <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1 shrink-0" />
+        {/* Drag handle + folder header — both belong to the drag-to-close
+            region. The folder-header row keeps its right-click → context menu
+            (`onContextMenu`); only vertical drag past the dead-zone is
+            captured by the gesture. */}
+        <div {...dragHandleProps} className="shrink-0 touch-none">
+          <div className="w-10 h-1 bg-txt-tertiary/30 rounded-full mx-auto mt-2 mb-1" />
 
         {/* Folder header */}
-        <div className="px-4 py-2 flex items-center gap-2 shrink-0" data-context-menu onContextMenu={handleFolderContextMenu}>
+        <div className="px-4 py-2 flex items-center gap-2" data-context-menu onContextMenu={handleFolderContextMenu}>
           <div
             className="w-5 h-5 rounded"
             style={{ background: folder.color || 'rgb(var(--text-tertiary))' }}
@@ -114,6 +129,7 @@ export function MobileFolderSheet({ folder, onClose, onSelectSpace, onUpdateFold
             </h3>
           )}
           <span className="text-xs text-txt-tertiary">{folderSpaces.length} spaces</span>
+        </div>
         </div>
 
         {/* Folder spaces */}

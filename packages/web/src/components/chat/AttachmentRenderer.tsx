@@ -162,6 +162,16 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
     );
   }
 
+  // Generic-file chip (PDF / .zip / .exe / unknown mimetypes).
+  //
+  // Width contract: the chip must fit inside the message column on every
+  // viewport. We cap at 400 px on roomy layouts but `max-w-full` keeps it
+  // inside narrow columns (mobile, narrow desktop window, threaded reply
+  // contexts). `min-w-0` is the critical bit on the inner flex children — the
+  // outer button is a flex container with a fixed-size icon and a flexible
+  // text block; without `min-w-0` the long-filename child would refuse to
+  // shrink (flex children's min-content size defaults to their intrinsic
+  // content) and would push the entire chip past the parent's right edge.
   return (
     <button
       type="button"
@@ -173,9 +183,9 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
           tray: true,
         });
       }}
-      className="mt-1 max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att text-left w-full"
+      className="mt-1 max-w-full sm:max-w-[400px] flex items-center gap-3 p-4 bg-surface-channel/50 rounded-lg border border-border-hard hover:bg-interactive-hover transition-all group/att text-left w-full min-w-0"
     >
-      <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors">
+      <div className="p-2 bg-surface-base rounded text-txt-tertiary group-hover/att:text-txt-primary transition-colors flex-shrink-0">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
@@ -185,9 +195,9 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
           />
         </svg>
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-txt-link text-[15px] font-medium truncate hover:underline">{originalName}</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <p className="text-[12px] text-txt-tertiary font-medium">{formatFileSize(size)}</p>
           {federationInlineBadge}
         </div>

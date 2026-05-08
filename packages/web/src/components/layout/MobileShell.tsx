@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom';
 import { MobileScreenStack } from './MobileScreenStack';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useSwipeGesture } from '../../hooks/useSwipeGesture';
+import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 
 import { MobileSpacesScreen } from './MobileSpacesScreen';
 import { MobileDmsScreen } from './MobileDmsScreen';
@@ -182,8 +183,19 @@ export function MobileShell() {
     you: <MobileYouScreen />,
   };
 
+  // Size the shell to the visual viewport when the iOS soft keyboard is open
+  // so a `position: absolute; bottom: 0` child (the chat composer) lands on
+  // the keyboard's top edge — independent of how reliably the
+  // `visualViewport.resize` event fires in standalone PWA mode. When the
+  // keyboard is closed we use `100dvh` so the shell extends through the
+  // home-indicator safe area as designed. See `useVisualViewportInset` for
+  // the iOS-PWA-specific fallback (focusin polling) that updates `height`
+  // even when no `resize` event ever lands.
+  const { keyboardOpen, height: vvHeight } = useVisualViewportInset();
+  const shellHeight = keyboardOpen && vvHeight !== null ? `${vvHeight}px` : '100dvh';
+
   return (
-    <div className="flex flex-col" style={{ height: '100dvh' }}>
+    <div className="flex flex-col" style={{ height: shellHeight }}>
       <MobileScreenStack
         rootScreen={rootScreens[mobileScreen]}
         screenMap={screenMap}

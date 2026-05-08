@@ -53,7 +53,7 @@ Font: DM Sans (primary) with system fallbacks
 |------|-------|-------------|
 | Structural | `bg-surface-*` | Permanent layout (sidebars, chat, member list) |
 | Strip | `.glass-strip` | Persistent edge chrome (space sidebar) |
-| Bubble | `.glass-bubble` | Persistent floating controls (voice bar, input pill) |
+| Bubble | `.glass-bubble` | Persistent floating controls (voice bar, **chat composer**, voice mini-bar). Chat composer is a floating bubble on **both** desktop and mobile (`position: absolute`, sits above the message-list scroll area; messages scroll behind it). On mobile, its `bottom` value is driven by `useVisualViewportInset()` so it lifts above the iOS soft keyboard when one is open. See `docs/systems/mobile-ui.md` "Floating Composer" for the full pattern. |
 | Popover | `.glass` | Small floating surfaces (context menus, popovers, tooltips) |
 | Tray dropdown | `.glass` (popover) | `TransferIndicator` global panel — anchored under the channel-header icon. |
 | Modal | `.glass-modal` | Large center-screen dialogs |

@@ -11,6 +11,12 @@ The chat message list (`packages/web/src/components/chat/MessageList.tsx`) is re
 | `packages/web/src/components/chat/embeds/*.tsx` | Embed renderers — must obey the dimension reservation contract below. |
 | `packages/web/src/components/chat/AttachmentRenderer.tsx` | Reference for the dimension reservation pattern (`AttachmentRenderer.tsx:81-100`). |
 
+## Bottom clearance — `--composer-clearance`
+
+The MessageList content's `paddingBottom` is dynamic — it reads the CSS variable `var(--composer-clearance, 80px)` written to the chat region's wrapper element by `MessageInput` via a `ResizeObserver`. The variable's value is `composer.height + composer.bottom-offset + 12 px` so the last message always lands 12 px above the composer's top edge regardless of (a) composer height (reply banner, staged-attachment tile row, multi-line autosize), (b) the composer's own `bottom` style (desktop 12 px / mobile-keyboard-closed `env(safe-area-inset-bottom) + 6` / mobile-keyboard-open 0).
+
+The 80 px fallback is sized for the desktop case during the brief mount window before the first ResizeObserver tick — it matches the previous static `pb-20`. See `docs/systems/mobile-ui.md` "Floating Composer" for the full rationale; the short version is that any static value is wrong on iPhone (composer height + safe-area + 6 already exceeds 80 px) and wrong when the composer grows (replies, attachments).
+
 ## ContainerRef invariant
 
 `containerRef.current` (and `contentRef.current`) MUST be non-null for the entire lifetime of any chat view where messages may arrive or scroll-affecting effects can run. Every effect in this file (initial snap A, ResizeObserver B, capture-phase load handler C, scrollend final-pin D, jump-to-message) reads these refs and bails on a null guard. Each of those effects is keyed on `[messages.length, channelId]` or `[hasMessages, channelId]`, and the inbound transition (`0 → N` / `false → true`) is the *only* re-fire signal during a channel-load lifecycle. If a ref is null at the moment that signal fires, the effect bails — and no later dep change will retry it, leaving the channel permanently broken (initial scroll never lands at bottom, ResizeObserver never observes, scrollend never registers, saved-anchor restore never happens).

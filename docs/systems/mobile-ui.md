@@ -17,6 +17,8 @@ Source files:
 - `packages/web/src/components/layout/MobileVoiceMiniBar.tsx` — Persistent mini-bar overlay during voice calls
 - `packages/web/src/components/layout/MobileFolderSheet.tsx` — Bottom sheet for space folder contents, rename, color, ungroup
 - `packages/web/src/hooks/useSwipeGesture.ts` — Edge swipe-back touch gesture hook
+- `packages/web/src/hooks/useDragToClose.ts` — Bottom-sheet drag-down-to-dismiss gesture hook (shared by `InputPopover.MobileSheet`, `MobileVoiceJoinSheet`, `MobileFolderSheet`)
+- `packages/web/src/hooks/useVisualViewportInset.ts` — Returns the bottom inset that floating overlays must use to sit above the iOS soft keyboard (when open) or above the home-indicator safe area (when closed). Used by `MessageInput` for the floating composer-bubble's `bottom` value.
 - `packages/web/src/stores/uiStore.ts` — Mobile navigation state (mobileScreen, mobileStack, push/pop actions)
 
 Cross-references:
@@ -580,8 +582,147 @@ Several mobile components respect the iOS safe area inset:
 | MobileVoiceFullScreen control bar | `marginBottom: calc(0.5rem + env(safe-area-inset-bottom))` |
 | MobileFolderSheet | `paddingBottom: env(safe-area-inset-bottom)` |
 | MobileSpacesScreen add sheet | `paddingBottom: env(safe-area-inset-bottom)` |
+| MessageInput | `bottom: calc(env(safe-area-inset-bottom) + 6px)` (keyboard closed) / `0px` (keyboard open) — see "Floating Composer" below |
 
-The root MobileShell uses `height: 100dvh` (dynamic viewport height) to account for mobile browser chrome.
+The root `MobileShell` normally uses `height: 100dvh` (dynamic viewport height) to account for mobile browser chrome. **When the iOS soft keyboard is open** (detected via `useVisualViewportInset().keyboardOpen`), the shell switches to `height: ${visualViewport.height}px` so the visible region of the shell is exactly the area above the keyboard. This is the load-bearing mechanism for the floating composer landing flush against the keyboard top — see "Floating Composer" below.
+
+---
+
+## Floating Composer (Chat MessageInput)
+
+The chat composer (`MessageInput.tsx`) is a `glass-bubble` floating overlay on **both** desktop and mobile — there is no flow-positioned mobile branch. The pattern is shared so feature parity is automatic.
+
+### Layout model
+
+```
+┌──────────────────────────────────────────────┐
+│  MobileChatScreen / MainContent              │  ← `relative flex flex-col`
+│  ┌────────────────────────────────────────┐  │
+│  │ <MessageList />                        │  │  ← fills the chat region
+│  │   (scrolls; content's `paddingBottom`  │  │
+│  │   = `var(--composer-clearance, 80px)`  │  │
+│  │   so the last message always clears    │  │
+│  │   the bubble with a 12px breathing gap)│  │
+│  └────────────────────────────────────────┘  │
+│  ┌────────────────────────────────────────┐  │
+│  │ <MessageInput />                       │  │  ← `position: absolute`
+│  │  glass-bubble, translucent             │  │     `left-2 right-2 z-[110]`
+│  │  bottom = 0 (kbd open) / safe+6 (kbd   │  │     (mobile) / `md:left-3 md:right-3 md:bottom-3` (desktop)
+│  │  closed). Writes --composer-clearance  │  │
+│  │  on its parent via ResizeObserver.     │  │
+│  └────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
+```
+
+The MessageList scroll region fills the entire chat area. The composer is `position: absolute` and overlays the bottom; messages scroll *behind* the translucent bubble. **Containers must declare `position: relative`** for the composer's absolute positioning to resolve correctly — `MainContent` does this on its outermost flex column; `MobileChatScreen` does this on the inner messages-and-composer wrapper.
+
+### Last-message clearance — the `--composer-clearance` CSS variable
+
+The MessageList content's `paddingBottom` is **dynamic**, driven by a CSS variable named `--composer-clearance` written to the chat region's wrapper element by `MessageInput` via a `ResizeObserver`:
+
+```
+--composer-clearance = composer.height + composer.bottom-offset + 12 px
+```
+
+Where `bottom-offset` is the gap between the wrapper's bottom edge and the composer's bottom edge (i.e. the resolved value of the composer's `bottom` style — `12 px` on desktop, `env(safe-area-inset-bottom) + 6` ≈ `40 px` on iPhone with keyboard closed, `0` on mobile with keyboard open). The `+12 px` constant is the desired breathing-room gap between the last message's bottom edge and the composer's top edge.
+
+`MessageList` reads `var(--composer-clearance, 80px)` as `paddingBottom`. The `80px` fallback covers the brief mount window before the first measurement, plus any future surface that mounts a `MessageList` without a sibling `MessageInput`.
+
+**Why dynamic?** The previous static `pb-20` (80 px) was sized for the desktop case (composer ≈ 50 px tall + 12 px bottom = 62 px, leaving 18 px of gap). On iPhone with the keyboard closed, the composer's bottom-offset is `env(safe-area-inset-bottom) + 6` ≈ 40 px, so `composer-height + bottom-offset` ≈ `44 + 40` = `84 px` — already exceeding the 80 px `pb-20`, with **negative** breathing room. The composer also grows when the user replies to a message (banner adds 36 px) or stages attachments (tile row adds 184 px), so any static value is wrong for some configurations. The ResizeObserver-driven CSS variable is the only correct model.
+
+The variable is scoped to the chat region's wrapper rather than `:root` so future multi-pane layouts (e.g. side-by-side DM list + chat, voice chat side-panel) don't cross-talk; a wrapper-scoped variable inherits naturally to its `MessageList` descendant.
+
+### `useVisualViewportInset()` — keyboard-aware geometry
+
+iOS Safari's `env(safe-area-inset-bottom)` is defined relative to the **layout** viewport (full screen), not the **visual** viewport (the visible region above the soft keyboard). When the iOS soft keyboard slides up, the layout viewport stays the same height and `safe-area-inset-bottom` still reports ~34 px (the home-indicator inset). A composer pinned to `bottom: env(safe-area-inset-bottom) + 6 px` therefore ends up `~40 px` above the layout-bottom, which on iPhone 14 Pro is `300+ px` above the keyboard — there is a huge empty gap between the composer and the keyboard top.
+
+The hook subscribes to `window.visualViewport.resize` / `scroll` and computes:
+
+```
+keyboardOcclusion = window.innerHeight - (visualViewport.offsetTop + visualViewport.height)
+```
+
+It returns `{ value, keyboardOpen, height, offsetTop }`:
+- `value` — `'<n>px'` when the keyboard is open (the occlusion), or the literal `'env(safe-area-inset-bottom)'` string when it is not. Provided for legacy / fallback use.
+- `keyboardOpen` — `true` when `keyboardOcclusion > 1`.
+- `height` — live `visualViewport.height` in pixels (or `null` if `visualViewport` is unavailable).
+- `offsetTop` — live `visualViewport.offsetTop` in pixels.
+
+#### iOS PWA standalone — the load-bearing mechanism
+
+`MobileShell` consumes `{ keyboardOpen, height }` and sets its own `style.height` to `${vv.height}px` whenever the keyboard is open. The chat region's `bottom` edge is therefore exactly the keyboard's top edge, and `<MessageInput style={{ bottom: 0 }}>` lands flush. **This is the primary mechanism, not the inset arithmetic** — sizing the container is far more robust than arithmetic on a `bottom` value, because the math depends on `vv.resize` events firing reliably (which they do not in iOS standalone PWA on several iOS versions). The composer's `bottom` is a simple binary toggle: `0` when keyboard open, `env(safe-area-inset-bottom) + 6 px` when closed.
+
+To cover the case where `vv.resize` fails to fire on iOS PWA (a long-standing standalone-mode bug), the hook **also** listens to `focusin` / `focusout` on `window` for any text-entry element and **polls** `vv.height` at 32 ms intervals for up to 600 ms after the focus change. Polling exits early once the height is stable for two consecutive ticks. This catches the case where iOS silently updates `vv.height` without dispatching a `resize` event — the polling just re-reads the value and re-derives `keyboardOpen`, which then triggers the shell-height update.
+
+When the keyboard is closed, `MobileShell` reverts to `height: 100dvh` so the shell again extends through the home-indicator safe area, and the composer reverts to `bottom: env(safe-area-inset-bottom) + 6 px` so it sits 6 px above the home indicator.
+
+#### Viewport meta hint
+
+`packages/web/index.html`'s viewport `<meta>` includes `interactive-widget=resizes-content`. Chrome (Android) honors this by resizing the layout viewport when the soft keyboard opens, which is the cleaner native equivalent of what `MobileShell` does manually. Safari iOS does not honor it, but it's harmless there.
+
+### MessageInput's mobile vs. desktop class split
+
+The component declares one `composerClass` shared by both modes. Differences:
+
+- Mobile inline `style={{ bottom: keyboardOpen ? '0px' : 'calc(env(safe-area-inset-bottom) + 6px)' }}` — applied only when `useUIStore.isMobile === true`. The hook is safe to call on desktop (no-ops), but the `style` is only emitted on mobile so desktop's CSS-driven `md:bottom-3` (12 px) constant is unaffected by the inline override.
+- Tailwind: `absolute left-2 right-2 z-[110] glass-bubble rounded-[14px] md:left-3 md:right-3 md:bottom-3`. The `left-2/right-2` 8 px inset is mobile; `md:left-3/right-3/bottom-3` overrides to 12 px on desktop. `bottom` is intentionally NOT in the Tailwind class on mobile — the inline `style.bottom` provides the dynamic value.
+
+`TypingIndicator` is rendered inside `MessageInput` (anchored `absolute bottom-full` to the bubble) so it appears just above the composer. Mobile chat screens must NOT render an additional `TypingIndicator` themselves.
+
+#### Composer-element ref shape
+
+`MessageInput` tracks the live composer DOM element via a callback ref that fans out to (a) the existing imperative `popoverAnchorRef` (consumed by `InputPopover` and the mention popover for anchor positioning) AND (b) a state-backed `composerEl` slot that drives the `--composer-clearance` ResizeObserver effect. The state-backed slot is required because the component renders different JSX when `canSendMessages` is false (the no-permission early-return path) vs. true (the full composer): a plain `useEffect` keyed only on stable deps would not re-fire when the ref attaches as the JSX flips, leaving the CSS variable unset until the next dep change. Channel permissions arrive asynchronously, so the initial mount renders the no-permission JSX first and re-renders the full composer once permissions resolve — the callback ref's `setComposerEl` call re-fires the effect at that moment.
+
+---
+
+## Bottom-Sheet Drag-to-Close (`useDragToClose`)
+
+File: `packages/web/src/hooks/useDragToClose.ts`
+
+Three hand-rolled bottom sheets share this gesture hook so each surface gets identical iOS-native-feeling dismissal without depending on a third-party gesture library:
+
+| Sheet | File | Drag-handle area |
+|---|---|---|
+| Emoji / GIF picker | `packages/web/src/components/chat/InputPopover.tsx` (`MobileSheet`) | Visible pill + tab bar |
+| Voice-channel join sheet | `packages/web/src/components/voice/MobileVoiceJoinSheet.tsx` | Visible pill + title row |
+| Space-folder sheet | `packages/web/src/components/layout/MobileFolderSheet.tsx` | Visible pill + folder header row |
+
+### Hook contract
+
+```ts
+const { sheetStyle, handleProps, isDragging, isClosing, hasInteracted } = useDragToClose({
+  onClose,                  // required
+  closeThreshold = 100,     // px below resting → commits to close on release
+  velocityThreshold = 0.5,  // px/ms downward → commits to close on release
+  closeAnimationMs = 200,   // close-out transition duration (matches the open keyframe)
+  enabled = true,
+});
+```
+
+- `sheetStyle` — spread onto the sheet container's inline `style`. While dragging, applies `transform: translateY(<dy>px)` with `transition: none` so the sheet follows the finger 1:1. On release, `transition: transform <closeAnimationMs>ms cubic-bezier(0.22, 1, 0.36, 1)` engages and the inline `transform` glides smoothly. If the close gate is met, `dragOffset` is **animated from the current offset directly to viewport height** (no intermediate snap-back to 0), and `onClose` fires after the animation completes.
+- `handleProps` — `{ onTouchStart }`. Spread onto the **drag-handle area** (the visible pill + the sheet's header row, never the scrollable content). Scrollable regions and tappable buttons inside the body are unaffected because the document-level `touchmove` / `touchend` listeners are only installed once a drag is in flight.
+- `isDragging` — true between `touchstart` and `touchend`.
+- `isClosing` — true during the close-out animation phase (after the threshold/velocity gate fires, until `onClose` fires).
+- `hasInteracted` — flips `true` on the first touchstart and stays `true` for the lifetime of the consumer mount. **Consumers MUST gate their open-animation classes on `!hasInteracted`** (e.g. `${hasInteracted ? '' : 'animate-slide-up-sheet'}`) so the open keyframe doesn't re-run during snap-back / close-out and fight the inline `transform` driven by `sheetStyle`. Using `isDragging` alone is insufficient — once `isDragging` flips back to false (release), the keyframe re-applies on the next render and the `translateY(100%) → translateY(0)` ramp visually overrides the glide.
+
+### Gesture behaviour
+
+| Phase | Behaviour |
+|---|---|
+| Touch start on handle | Captures finger Y + `performance.now()`. No visible change yet. `hasInteracted` flips to `true`. |
+| Move dy < 6 px | Dead-zone — ignored, native scrolling/pull-to-refresh still possible. |
+| Move dy ≥ 6 px | Commits to drag. `e.preventDefault()` blocks scroll/pull-to-refresh. Sheet follows finger. |
+| Release dy < 100 px and v < 0.5 px/ms | Snap back: `dragOffset → 0` via inline `transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1)`. Sheet stays open. |
+| Release dy ≥ 100 px **or** v > 0.5 px/ms (and dy > 16 px) | Snap close: `isClosing` flips on, transition engages, `dragOffset` ramps from current value to `window.innerHeight` over `closeAnimationMs`, then `onClose()` fires. **No intermediate snap to 0.** |
+| Touch cancel | Snap back to 0 with the same transition (consistent with release-without-commit). |
+
+### Coexistence with other patterns
+
+- **Tap-outside-to-close** stays wired via the existing backdrop `<div>` — independent code path, unaffected by the gesture hook.
+- **Tap-on-handle** is treated as a no-op (touch starts and ends inside the dead-zone → no offset → no commit). `hasInteracted` does flip true, but with `dragOffset === 0` the inline transform stays at `translateY(0)` and the visible state matches the open state.
+- **iOS pull-to-refresh** is blocked because `touchmove` is non-passive and calls `preventDefault()` once we cross the dead-zone.
+- **Internal scrolling** (e.g. emoji grid, GIF results, folder space list) is **untouched** — `handleProps.onTouchStart` is bound to the header element only, so scroll containers below it never enter drag mode.
+- **Open animation** (`animate-slide-up-sheet` for `MobileFolderSheet` / `InputPopover.MobileSheet`, the `translate-y-full → translate-y-0` flip for `MobileVoiceJoinSheet`) is gated by `!hasInteracted`. After the first touch, the open class never re-applies for the rest of the sheet's lifetime — the inline `transform` + transition becomes the sole animator for both snap-back and close-out.
 
 ---
 

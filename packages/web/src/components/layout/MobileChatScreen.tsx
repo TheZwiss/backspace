@@ -5,7 +5,6 @@ import { useSpaceStore } from '../../stores/spaceStore';
 import { useAuthStore } from '../../stores/authStore';
 import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
-import { TypingIndicator } from '../chat/TypingIndicator';
 import { TransferIndicator } from './TransferIndicator';
 import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
@@ -95,14 +94,21 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
         )}
       </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+      {/* Messages + floating composer.
+          Mirrors the desktop pattern in `MainContent.tsx`: a single relative
+          flex-1 region holds both `<MessageList>` (filling the area) and
+          `<MessageInput>` (floating glass-bubble at the bottom). The bubble
+          is `position: absolute` and is positioned from `MessageInput.tsx`
+          via the `useVisualViewportInset` hook so it lifts above the iOS
+          soft keyboard when one is open and rests above the home-indicator
+          safe-area when not. MessageList content carries `pb-20` so the last
+          message can scroll fully into view above the bubble.
+          TypingIndicator is rendered inside MessageInput itself (anchored
+          `absolute bottom-full` to the bubble), so we don't render it here. */}
+      <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
         {channelId && <MessageList channelId={channelId} />}
+        {channelId && <MessageInput channelId={channelId} channelName={channelName} />}
       </div>
-
-      {/* Typing indicator + Input */}
-      {channelId && <TypingIndicator channelId={channelId} />}
-      {channelId && <MessageInput channelId={channelId} channelName={channelName} />}
     </div>
   );
 }

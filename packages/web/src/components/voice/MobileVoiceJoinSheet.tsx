@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useDragToClose } from '../../hooks/useDragToClose';
 import { VoiceUserRow } from './VoiceUserRow';
 
 /**
@@ -319,6 +320,19 @@ export function MobileVoiceJoinSheet({
     onClose();
   }, [onClose]);
 
+  // Drag-down-to-close. The handle + header region owns the gesture; touches
+  // on the camera tile / user list / action bar are unaffected so internal
+  // scrolling and button taps still work.
+  // `hasInteracted` stays true after the first touchstart so we never re-
+  // apply the open-animation classes (`translate-y-full → translate-y-0`)
+  // mid-drag or mid-close — those classes would otherwise fight the inline
+  // transform the hook drives.
+  const {
+    sheetStyle: dragStyle,
+    handleProps: dragHandleProps,
+    hasInteracted,
+  } = useDragToClose({ onClose });
+
   // Explicit user gesture: open getUserMedia for the selected camera.
   const startPreviewFromUser = useCallback(async () => {
     setPreviewError(null);
@@ -384,19 +398,32 @@ export function MobileVoiceJoinSheet({
         onClick={handleBackdropClick}
       />
 
-      {/* Sheet container */}
+      {/* Sheet container.
+          Open animation: when `visible` is false we sit at translateY(100%);
+          flipping it true triggers the existing 300 ms slide-in.
+          Drag-to-close: while the user drags, `dragStyle.transform` overrides
+          the open transform with the live finger offset. Releasing past the
+          threshold extends the offset to off-screen and calls `onClose`. */}
       <div
-        className={`glass-bubble fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl transition-transform duration-300 ease-out ${
-          visible ? 'translate-y-0' : 'translate-y-full'
+        className={`glass-bubble fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl ${
+          hasInteracted
+            ? ''
+            : `transition-transform duration-300 ease-out ${visible ? 'translate-y-0' : 'translate-y-full'}`
         }`}
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          ...dragStyle,
+        }}
       >
-        {/* Drag handle */}
-        <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mt-3 mb-4" />
+        {/* Drag handle + header — both belong to the drag-to-close region.
+            The user can grab the visible pill OR the title row to drag down. */}
+        <div {...dragHandleProps} className="touch-none">
+          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mt-3 mb-4" />
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 mb-2">
-          <h2 className="text-base font-bold text-txt-primary truncate">{channelName}</h2>
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 mb-2">
+            <h2 className="text-base font-bold text-txt-primary truncate">{channelName}</h2>
+          </div>
         </div>
 
         {/* User count */}

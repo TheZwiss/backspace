@@ -657,7 +657,11 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
 
         {!hasMore && <WelcomeHeader channelId={channelId} />}
 
-        <div ref={contentRef} className="pt-4 pb-6 md:pb-20">
+        <div
+          ref={contentRef}
+          className="pt-4"
+          style={{ paddingBottom: 'var(--composer-clearance, 80px)' }}
+        >
           {interleavedMessages.map((msg, i) => {
             const prevMsg = interleavedMessages[i - 1];
             const showDate = shouldShowDateDivider(prevMsg, msg);
