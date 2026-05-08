@@ -19,6 +19,7 @@ import { VoiceUserRow } from '../voice/VoiceUserRow';
 import { MobileVoiceJoinSheet } from '../voice/MobileVoiceJoinSheet';
 import { buildVoiceModMenuItems, VolumeSliderItem } from '../voice/voiceMenuItems';
 import { joinVoiceChannel } from '../../utils/voice';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 type ResolvedItem =
   | { type: 'space'; space: TaggedSpace }
@@ -39,6 +40,8 @@ export function MobileSpacesScreen() {
   const folders = useSpaceStore((s) => s.folders);
   const spaceLayout = useSpaceStore((s) => s.spaceLayout);
   const updateSpaceLayout = useSpaceStore((s) => s.updateSpaceLayout);
+  const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
+  const loadedSpaceIds = useSpaceStore((s) => s.loadedSpaceIds);
 
   const unreadChannels = useChatStore((s) => s.unreadChannels);
   const currentChannelId = useChatStore((s) => s.currentChannelId);
@@ -508,6 +511,37 @@ export function MobileSpacesScreen() {
   const canInvite = hasPermissionBit(myPerms, PermissionBits.CREATE_INVITE);
   const canManageSpace = hasPermissionBit(myPerms, PermissionBits.MANAGE_SPACE);
 
+  // Show skeleton while the selected space's channels/members are being fetched.
+  // Mirrors desktop ChannelSidebar's `showChannelSkeleton` (gated by
+  // useDelayedLoading to avoid flicker on cached/fast loads).
+  const isLoadingSelectedSpace = !!loadingSpaceId && loadingSpaceId === selectedSpaceId;
+  const showChannelSkeleton = useDelayedLoading(isLoadingSelectedSpace);
+  // Render-branch gating for the channel-list area:
+  //
+  // Render order is: skeleton (loading) → mascot (loaded but empty) → real list.
+  //
+  // The mascot empty state must be gated on a SETTLED state: a load has
+  // completed at least once for this space AND no load is currently in flight.
+  // Without the settled gate, the mascot flashed for the pre-skeleton window
+  // (< 200 ms threshold of `useDelayedLoading`) on every space switch — for
+  // any space whose channels weren't already in `state.channels`, which is
+  // every fresh space switch since `state.channels` only ever holds the most
+  // recently loaded space's channels (`loadSpaceDetail` replaces them).
+  //
+  // Desktop `ChannelSidebar` has no empty-state branch, so this asymmetry
+  // never affected it; mobile's "No channels yet." mascot is the differential
+  // surface that needed the settle gate.
+  //
+  // `loadedSpaceIds` is added by `loadSpaceDetail` on success only, so a
+  // failed load won't falsely trigger the empty state. When the gate is
+  // false (loading or never loaded), we render nothing in the gap between
+  // pre-skeleton and skeleton — preferable to flashing a misleading mascot.
+  const isSpaceSettledEmpty =
+    !isLoadingSelectedSpace &&
+    !!selectedSpaceId &&
+    loadedSpaceIds.has(selectedSpaceId) &&
+    spaceChannels.length === 0;
+
   const handleVoiceUserContextMenu = useCallback(
     (e: React.MouseEvent, userId: string, channelId: string) => {
       if (userId === user?.id) return;
@@ -783,44 +817,94 @@ export function MobileSpacesScreen() {
 
         {/* Channel list */}
         <div className="flex-1 overflow-y-auto px-2 py-2">
-          {/* Uncategorized channels */}
-          {uncategorizedChannels.map(renderChannelItem)}
-
-          {/* Categorized channels */}
-          {sortedCategories.map(category => {
-            const catChannels = channelsByCategory.get(category.id) || [];
-            if (catChannels.length === 0) return null;
-            const isCollapsed = collapsedCategories.has(category.id);
-
-            return (
-              <div key={category.id} className="mt-3">
-                <button
-                  data-context-menu
-                  onClick={() => toggleCategory(category.id)}
-                  onContextMenu={(e) => handleCategoryContextMenu(e, category.id)}
-                  className="flex items-center gap-1 px-1 py-1 w-full text-left"
+          {showChannelSkeleton ? (
+            <div className="px-1 pt-1" role="status" aria-label="Loading channels">
+              {/* Uncategorized group — 3 channel rows. Sized to match the real
+                  channel rows (`px-3 py-2 rounded-lg` with `text-sm`/`w-4 h-4`
+                  icon → ~36px height per row). */}
+              {Array.from({ length: 3 }, (_, i) => (
+                <div
+                  key={`u-${i}`}
+                  className="flex items-center gap-2 px-3 py-2 mb-1"
+                  style={{ animationDelay: `${i * 0.1}s` }}
                 >
-                  <svg
-                    className={`w-3 h-3 text-txt-tertiary transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                  <div
+                    className="skeleton w-4 h-4 rounded-sm flex-shrink-0"
+                    style={{ animationDelay: `${i * 0.1}s` }}
+                  />
+                  <div
+                    className="skeleton skeleton-bar flex-1"
+                    style={{ width: `${50 + (i * 17) % 30}%`, animationDelay: `${i * 0.1}s` }}
+                  />
+                </div>
+              ))}
+              {/* Category group */}
+              <div className="mt-4">
+                <div
+                  className="skeleton skeleton-bar h-2 w-[42%] ml-1 mb-2"
+                  style={{ animationDelay: '0.3s' }}
+                />
+                {Array.from({ length: 4 }, (_, i) => (
+                  <div
+                    key={`c-${i}`}
+                    className="flex items-center gap-2 px-3 py-2 mb-1"
+                    style={{ animationDelay: `${(i + 3) * 0.1}s` }}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-txt-tertiary truncate">
-                    {category.name}
-                  </span>
-                </button>
-                {!isCollapsed && catChannels.map(renderChannelItem)}
+                    <div
+                      className="skeleton w-4 h-4 rounded-sm flex-shrink-0"
+                      style={{ animationDelay: `${(i + 3) * 0.1}s` }}
+                    />
+                    <div
+                      className="skeleton skeleton-bar flex-1"
+                      style={{ width: `${45 + (i * 13) % 35}%`, animationDelay: `${(i + 3) * 0.1}s` }}
+                    />
+                  </div>
+                ))}
               </div>
-            );
-          })}
-
-          {/* Empty state */}
-          {spaceChannels.length === 0 && selectedSpaceId && (
-            <div className="flex flex-col items-center justify-center h-32 opacity-80">
-              <Mascot state="idle" className="w-20 h-20 mb-2" />
-              <p className="text-txt-tertiary text-sm">No channels yet.</p>
             </div>
+          ) : (
+            <>
+              {/* Uncategorized channels */}
+              {uncategorizedChannels.map(renderChannelItem)}
+
+              {/* Categorized channels */}
+              {sortedCategories.map(category => {
+                const catChannels = channelsByCategory.get(category.id) || [];
+                if (catChannels.length === 0) return null;
+                const isCollapsed = collapsedCategories.has(category.id);
+
+                return (
+                  <div key={category.id} className="mt-3">
+                    <button
+                      data-context-menu
+                      onClick={() => toggleCategory(category.id)}
+                      onContextMenu={(e) => handleCategoryContextMenu(e, category.id)}
+                      className="flex items-center gap-1 px-1 py-1 w-full text-left"
+                    >
+                      <svg
+                        className={`w-3 h-3 text-txt-tertiary transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-txt-tertiary truncate">
+                        {category.name}
+                      </span>
+                    </button>
+                    {!isCollapsed && catChannels.map(renderChannelItem)}
+                  </div>
+                );
+              })}
+
+              {/* Empty state — gated on settled (not loading) so the mascot
+                  never flashes during the pre-skeleton load window. */}
+              {isSpaceSettledEmpty && (
+                <div className="flex flex-col items-center justify-center h-32 opacity-80">
+                  <Mascot state="idle" className="w-20 h-20 mb-2" />
+                  <p className="text-txt-tertiary text-sm">No channels yet.</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

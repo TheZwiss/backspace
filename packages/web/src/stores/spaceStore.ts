@@ -99,6 +99,23 @@ interface SpaceState {
    */
   userViews: Map<string, UserViewEntry>;
   loadingSpaceId: string | null; // non-null while loadSpaceDetail is fetching
+  /**
+   * Set of spaceIds whose `loadSpaceDetail` has completed at least once this
+   * session. Distinct from `currentSpaceId` (which moves with selection) and
+   * from `loadingSpaceId` (which only marks in-flight). Render sites use this
+   * to differentiate "load not yet attempted" from "loaded with empty result"
+   * — see `MobileSpacesScreen`'s mascot empty state, which must not appear
+   * during the pre-skeleton load window.
+   *
+   * Lifecycle:
+   *  - Added on successful `loadSpaceDetail` completion.
+   *  - Cleared per-space when the space is removed (`deleteSpace`,
+   *    `leaveSpace`, `removeSpace`, `removeInstanceSpaces`).
+   *  - Wiped entirely on `reset` (logout).
+   *
+   * Not persisted (ephemeral).
+   */
+  loadedSpaceIds: Set<string>;
   _layoutUpdatedAt: number;
   setSpaces: (spaces: TaggedSpace[]) => void;
   setCurrentSpace: (spaceId: string | null) => void;
@@ -203,6 +220,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
   dmAlternatives: new Map(),
   userViews: new Map(),
   loadingSpaceId: null,
+  loadedSpaceIds: new Set(),
   _layoutUpdatedAt: 0,
 
   reset: () => {
@@ -228,6 +246,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       dmAlternatives: new Map(),
       userViews: new Map(),
       loadingSpaceId: null,
+      loadedSpaceIds: new Set(),
       _layoutUpdatedAt: 0,
     });
   },
@@ -370,16 +389,21 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         }
       }
 
-      set({
-        loadingSpaceId: null,
-        currentSpaceId: spaceId,
-        lastSelectedSpaceId: spaceId,
-        channels: detail.channels.sort((a, b) => a.position - b.position),
-        categories: (detail.categories || []).sort((a, b) => a.position - b.position),
-        members: detail.members,
-        roles: detail.roles.sort((a, b) => b.position - a.position),
-        spacePermissions,
-        channelPermissions,
+      set((state) => {
+        const loadedSpaceIds = new Set(state.loadedSpaceIds);
+        loadedSpaceIds.add(spaceId);
+        return {
+          loadingSpaceId: null,
+          currentSpaceId: spaceId,
+          lastSelectedSpaceId: spaceId,
+          channels: detail.channels.sort((a, b) => a.position - b.position),
+          categories: (detail.categories || []).sort((a, b) => a.position - b.position),
+          members: detail.members,
+          roles: detail.roles.sort((a, b) => b.position - a.position),
+          spacePermissions,
+          channelPermissions,
+          loadedSpaceIds,
+        };
       });
     } catch {
       set({ loadingSpaceId: null });
@@ -412,12 +436,17 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
 
   deleteSpace: async (spaceId: string) => {
     await api.spaces.delete(spaceId);
-    set((state) => ({
-      spaces: state.spaces.filter(s => s.id !== spaceId),
-      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
-      lastSelectedSpaceId:
-        state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
-    }));
+    set((state) => {
+      const loadedSpaceIds = new Set(state.loadedSpaceIds);
+      loadedSpaceIds.delete(spaceId);
+      return {
+        spaces: state.spaces.filter(s => s.id !== spaceId),
+        currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+        lastSelectedSpaceId:
+          state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
+        loadedSpaceIds,
+      };
+    });
   },
 
   leaveSpace: async (spaceId: string) => {
@@ -427,12 +456,17 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const userId = getMyUserIdForOrigin(origin);
     if (!userId) return;
     await targetApi.spaces.removeMember(spaceId, userId);
-    set((state) => ({
-      spaces: state.spaces.filter(s => s.id !== spaceId),
-      currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
-      lastSelectedSpaceId:
-        state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
-    }));
+    set((state) => {
+      const loadedSpaceIds = new Set(state.loadedSpaceIds);
+      loadedSpaceIds.delete(spaceId);
+      return {
+        spaces: state.spaces.filter(s => s.id !== spaceId),
+        currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
+        lastSelectedSpaceId:
+          state.lastSelectedSpaceId === spaceId ? null : state.lastSelectedSpaceId,
+        loadedSpaceIds,
+      };
+    });
   },
 
   joinSpace: async (spaceId: string, inviteCode: string) => {
@@ -577,6 +611,9 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       }
       spacePermissions.delete(spaceId);
 
+      const loadedSpaceIds = new Set(state.loadedSpaceIds);
+      loadedSpaceIds.delete(spaceId);
+
       return {
         spaces: state.spaces.filter(s => s.id !== spaceId),
         currentSpaceId: state.currentSpaceId === spaceId ? null : state.currentSpaceId,
@@ -587,6 +624,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         channelOriginMap,
         channelLastMessageIds,
         spacePermissions,
+        loadedSpaceIds,
       };
     });
 
@@ -1039,6 +1077,15 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         if (entry.deliveredBy !== origin) userViews.set(key, entry);
       }
 
+      // Drop loadedSpaceIds entries for spaces removed by this instance teardown
+      const removedSpaceIds = new Set(
+        state.spaces.filter(s => s._instanceOrigin === origin).map(s => s.id)
+      );
+      const loadedSpaceIds = new Set<string>();
+      for (const id of state.loadedSpaceIds) {
+        if (!removedSpaceIds.has(id)) loadedSpaceIds.add(id);
+      }
+
       return {
         spaces: remainingSpaces,
         channelToSpaceMap,
@@ -1054,6 +1101,7 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
         lastSelectedSpaceId: remainingSpaces.find(s => s.id === state.lastSelectedSpaceId)
           ? state.lastSelectedSpaceId
           : null,
+        loadedSpaceIds,
       };
     });
 

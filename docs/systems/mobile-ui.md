@@ -352,6 +352,8 @@ Split-pane layout: 60px `glass-strip` space strip on the left + channel list on 
 - Voice channel tap opens `MobileVoiceJoinSheet` (not direct join)
 - Text channel tap: navigates via router + pushes `channel-chat` screen
 - Channel/category context menus for management (guarded by `MANAGE_CHANNELS` permission)
+- **Loading skeleton:** while `useSpaceStore.loadingSpaceId === selectedSpaceId`, the channel-list area renders a shimmer skeleton (uncategorized rows + category header + categorized rows). Gated through `useDelayedLoading` so cached/fast loads don't flash the placeholder. Mirrors desktop `ChannelSidebar`'s `showChannelSkeleton`. Skeleton row geometry matches the real channel rows (`px-3 py-2` with `w-4 h-4` icon → ~36px row).
+- **Empty-state mascot — settle gate:** the "No channels yet." mascot must NOT render during the pre-skeleton load window (the < 200 ms threshold of `useDelayedLoading`). Without a settle gate, every space switch flashes the mascot for ~50–200 ms because `state.channels` only ever holds the most-recently loaded space's channels — `spaceChannels` filters to `[]` immediately on selection change while `loadSpaceDetail` is still in flight. The mascot is gated on `isSpaceSettledEmpty = !isLoadingSelectedSpace && loadedSpaceIds.has(selectedSpaceId) && spaceChannels.length === 0`. `loadedSpaceIds` is a `Set<string>` on `useSpaceStore`, populated only on successful `loadSpaceDetail` completion (not on failed loads), and pruned on `deleteSpace` / `leaveSpace` / `removeSpace` / `removeInstanceSpaces` / `reset`. Render order is therefore: skeleton (loading, > threshold) → blank (loading, < threshold) → mascot (settled empty) → real channel list. Desktop `ChannelSidebar` has no empty-state branch, so this asymmetry is mobile-only.
 
 **Layout resolution:**
 - `spaceLayout` array items can be `{ t: 's', id }` (space) or `{ t: 'f', id }` (folder)
@@ -428,6 +430,8 @@ Member group resolution (`getMemberGroup`):
 1. Owner: `{ key: '__owner__', label: 'OWNER', position: Infinity }`
 2. Has roles: top role by position `{ key: roleId, label: ROLE_NAME, position }`
 3. No roles: `{ key: '__online__', label: 'ONLINE', position: -1 }`
+
+**Loading skeleton:** while `useSpaceStore.loadingSpaceId === spaceId` (the same flag that gates `MobileSpacesScreen`'s channel-list skeleton — `loadSpaceDetail` populates members alongside channels), the screen renders a shimmer skeleton (two role-section headers + circular avatar placeholders + name bars). Gated through `useDelayedLoading` so cached/fast loads don't flash the placeholder. Mirrors desktop `MemberSidebar`'s `showMemberSkeleton`. Skeleton row geometry matches the real member rows (`gap-2.5 px-2 py-2.5` with `w-9 h-9` avatar → ~52px row).
 
 ### MobileScreenHeader
 
@@ -612,6 +616,26 @@ The mobile bottom offset is computed via `resolveMobileBottomOffset(hasStack, to
 On mobile the container also uses `left-3 right-3` + `items-center` instead of `right-6` so toasts center horizontally with `max-w-[320px]`. This avoids horizontal overlap with bottom-bar controls (which span the full mobile width via `mx-2`) and stays inside the safe-tap zone on narrow screens.
 
 The container subscribes to `useUIStore.isMobile`, `useUIStore.mobileStack`, and `useVoiceStore.currentVoiceChannelId`, so the offset re-computes reactively whenever any of those change — no manual repositioning needed when the user enters/exits voice or pushes/pops a screen while a toast is on screen.
+
+---
+
+## Loading Skeletons (Mobile Inventory)
+
+Mobile uses the same `.skeleton` / `.skeleton-bar` / `.skeleton-circle` / `.skeleton-block` CSS primitives as desktop (see `docs/systems/design-system.md`) plus the shared `useDelayedLoading` hook (200 ms threshold + 300 ms minimum display time). All skeleton placements are content-plane elements rendered on the matte surface — never glass.
+
+| Site | Loading source | Status |
+|---|---|---|
+| App boot (root layout pre-`useAuth.user`) | `useAuth.isLoading` (gated by `useDelayedLoading` in `AppLayout`) | Shared with desktop — `AppLayout` returns the boot skeleton before the mobile/desktop branch split, so both paths show it during cold start |
+| `MessageList` initial + pagination | `chatStore` per-channel `isLoading` / `isLoadingMore` | Shared with desktop — `MessageList` is rendered inside both `MainContent` (desktop) and `MobileChatScreen` (mobile) |
+| `MobileSpacesScreen` channel list | `useSpaceStore.loadingSpaceId === selectedSpaceId` | Mobile-specific render, mirrors desktop `ChannelSidebar`. Empty-state mascot is settle-gated on `loadedSpaceIds` to avoid flashing during the pre-skeleton load window (see "Empty-state mascot — settle gate" above) |
+| `MobileMembersScreen` member list | `useSpaceStore.loadingSpaceId === spaceId` | Mobile-specific render, mirrors desktop `MemberSidebar` |
+| `FriendsPage` (mobile) | `socialStore.isLoading && friends.length === 0 && requests.length === 0` | Shared component; renders `LoadingSpinner` (no skeleton) — used unchanged on mobile |
+| `ExplorePage` (mobile) | `exploreStore.isLoading && spaces.length === 0` | Shared component; renders `LoadingSpinner` — used unchanged on mobile |
+| `GifPicker` (mobile sheet) | per-fetch local state | Shared component; uses `animate-pulse` placeholder tiles — used unchanged on mobile |
+
+**Sizing rule:** mobile skeleton rows must match the row geometry of the real content for that screen so the populate is smooth and no layout shift occurs. The `MobileSpacesScreen` channel-row skeleton is `px-3 py-2` with a `w-4 h-4` icon (~36 px row); the `MobileMembersScreen` row skeleton is `gap-2.5 px-2 py-2.5` with a `w-9 h-9` avatar (~52 px row). Both use staggered `animationDelay` so the shimmer cascades across rows rather than pulsing in lockstep.
+
+**Why no shared `<Skeleton />` primitive:** the project's established pattern composes the existing CSS classes inline at each site (see `AppLayout.tsx`, `ChannelSidebar.tsx`, `MemberSidebar.tsx`, `MessageList.tsx`). Each site needs row geometry that matches its specific layout, so a parameterized component would either over-abstract (`<Row count={N} avatarSize={S} ...>`) or duplicate the inline approach. Adding a JSX wrapper over `<div className="skeleton">` would also obscure the visual diff between the placeholder and the real row it replaces.
 
 ---
 

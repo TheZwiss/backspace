@@ -10,6 +10,7 @@ import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { MobileScreenHeader } from './MobileScreenHeader';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 
 /**
  * Derives the display group for a member based on their highest-positioned role
@@ -109,12 +110,18 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
   const members = useSpaceStore((s) => s.members);
   const spaces = useSpaceStore((s) => s.spaces);
   const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
   const userActivities = useActivityStore((s) => s.userActivities);
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
 
   const spaceId = params?.spaceId || currentSpaceId;
   const space = spaces.find(s => s.id === spaceId);
   const ownerId = space?.ownerId;
+
+  // Mirror desktop MemberSidebar's `showMemberSkeleton`: gate the skeleton
+  // behind useDelayedLoading so cached / fast loads don't flash the placeholder.
+  const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === spaceId;
+  const showMemberSkeleton = useDelayedLoading(isLoadingSpace);
 
   const { roleGroups, offlineMembers } = useMemo(() => {
     const online = members.filter(m => m.user.status !== 'offline');
@@ -179,7 +186,57 @@ export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
     <div className="flex flex-col h-full bg-surface-base">
       <MobileScreenHeader title={totalCount > 0 ? `Members — ${totalCount}` : 'Members'} />
       <div className="flex-1 overflow-y-auto p-3">
-        {onlineCount === 0 && offlineMembers.length === 0 ? (
+        {showMemberSkeleton ? (
+          <div className="px-2 pt-2" role="status" aria-label="Loading members">
+            {/* Role group 1 — match real row geometry: w-9 h-9 avatar +
+                gap-2.5 + py-2.5 → ~52px row height. */}
+            <div
+              className="skeleton skeleton-bar h-2 w-[35%] mb-2"
+              style={{ animationDelay: '0s' }}
+            />
+            {Array.from({ length: 2 }, (_, i) => (
+              <div
+                key={`g1-${i}`}
+                className="flex items-center gap-2.5 px-2 py-2.5 mb-1"
+                style={{ animationDelay: `${i * 0.12}s` }}
+              >
+                <div
+                  className="skeleton skeleton-circle w-9 h-9 flex-shrink-0"
+                  style={{ animationDelay: `${i * 0.12}s` }}
+                />
+                <div className="flex-1 space-y-1.5">
+                  <div
+                    className="skeleton skeleton-bar"
+                    style={{ width: `${50 + (i * 19) % 30}%`, animationDelay: `${i * 0.12}s` }}
+                  />
+                </div>
+              </div>
+            ))}
+            {/* Role group 2 */}
+            <div
+              className="skeleton skeleton-bar h-2 w-[45%] mb-2 mt-4"
+              style={{ animationDelay: '0.25s' }}
+            />
+            {Array.from({ length: 5 }, (_, i) => (
+              <div
+                key={`g2-${i}`}
+                className="flex items-center gap-2.5 px-2 py-2.5 mb-1"
+                style={{ animationDelay: `${(i + 2) * 0.12}s` }}
+              >
+                <div
+                  className="skeleton skeleton-circle w-9 h-9 flex-shrink-0"
+                  style={{ animationDelay: `${(i + 2) * 0.12}s` }}
+                />
+                <div className="flex-1 space-y-1.5">
+                  <div
+                    className="skeleton skeleton-bar"
+                    style={{ width: `${42 + (i * 15) % 35}%`, animationDelay: `${(i + 2) * 0.12}s` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : onlineCount === 0 && offlineMembers.length === 0 ? (
           <div className="flex items-center justify-center h-40 text-txt-tertiary text-sm">
             No members found
           </div>

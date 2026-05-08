@@ -711,3 +711,16 @@ Remote space icons, banners, and member avatars are resolved via `resolveAssetUr
 - `loadSpaceDetail` loads a remote space
 - `joinByCode` returns a remote space
 - `exploreStore.fetchSpaces` processes remote explore results
+
+### Client Load State (`useSpaceStore`)
+
+Two distinct flags track per-space load progress:
+
+- `loadingSpaceId: string | null` — non-null while a `loadSpaceDetail` call is in flight. Drives the channel-list and member-list skeletons (gated through `useDelayedLoading`).
+- `loadedSpaceIds: Set<string>` — populated only on successful `loadSpaceDetail` completion. Used to differentiate "load not yet attempted" from "loaded with empty result." Required by mobile UI to gate the empty-state mascot — without it, the mascot flashes during the pre-skeleton load window because `state.channels` is overwritten on each `loadSpaceDetail` and a fresh space switch leaves `spaceChannels` momentarily filtered to `[]`.
+
+`loadedSpaceIds` lifecycle:
+- Added on `loadSpaceDetail` success (the same `set()` that replaces `channels`/`categories`/`members`).
+- Pruned per-space on `deleteSpace`, `leaveSpace`, `removeSpace`, `removeInstanceSpaces`.
+- Wiped entirely on `reset` (logout).
+- Ephemeral — not persisted.
