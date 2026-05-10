@@ -940,6 +940,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
               homeInstance: callerUser?.homeInstance || domainOrigin,
             },
             members: allParticipants,
+            name: null,                  // safe default — Phase 4 task 4.3 replaces with channel.name
+            icon: null,                  // safe default — Phase 4 task 4.3 replaces with normalized URL
+            metadataUpdatedAt: 0,        // safe default — Phase 4 task 4.3 replaces with channel.metadataUpdatedAt
           },
         };
 
@@ -1233,6 +1236,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             homeInstance: dmChannel.ownerHomeInstance || domainOrigin,
           },
           members: allParticipants,
+          name: null,                  // safe default — Phase 4 task 4.3 replaces with channel.name
+          icon: null,                  // safe default — Phase 4 task 4.3 replaces with normalized URL
+          metadataUpdatedAt: 0,        // safe default — Phase 4 task 4.3 replaces with channel.metadataUpdatedAt
         },
       };
 

@@ -307,9 +307,14 @@ export interface DmChannel {
   id: string;
   federatedId?: string | null;
   ownerId?: string | null;
+  ownerHomeUserId?: string | null;
+  ownerHomeInstance?: string | null;
   createdAt: number;
   members: User[];
   lastMessage?: DmLastMessagePreview | DmMessageWithUser | null;
+  name?: string | null;
+  icon?: string | null;
+  metadataUpdatedAt?: number;
 }
 
 export interface DmMessage {
@@ -439,6 +444,7 @@ export type ServerEvent =
   | { type: 'voice_status_update'; userId: string; channelId: string; isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }
   | { type: 'dm_channel_created'; dmChannel: DmChannel }
   | { type: 'dm_channel_closed'; dmChannelId: string }
+  | { type: 'dm_channel_updated'; dmChannelId: string; name: string | null; icon: string | null }
   | { type: 'dm_member_added'; dmChannelId: string; user: User }
   | { type: 'dm_member_removed'; dmChannelId: string; userId: string }
   | { type: 'friend_removed'; userId: string }
@@ -877,7 +883,7 @@ export interface FederationRelayParticipant {
 
 export interface FederationRelayEvent {
   eventType: 'create' | 'update' | 'delete' | 'reaction_add' | 'reaction_remove'
-    | 'member_add' | 'member_remove' | 'ownership_transfer'
+    | 'member_add' | 'member_remove' | 'ownership_transfer' | 'group_metadata_update'
     | 'friend_request_create' | 'friend_request_update' | 'friend_request_cancel'
     | 'friend_add' | 'friend_remove' | 'file_rejected'
     | 'dm_call_start' | 'dm_call_accept' | 'dm_call_reject' | 'dm_call_end'
@@ -921,6 +927,7 @@ export interface FederationRelayEvent {
     homeInstance: string;
     username: string;
   };
+  metadata?: FederationGroupMetadataPayload;
   profileUpdate?: FederationProfileUpdatePayload;
   presenceUpdate?: FederationPresenceUpdatePayload;
   readState?: {
@@ -958,6 +965,18 @@ export interface FederationOwnershipPayload {
 export interface FederationGroupPayload {
   owner: FederationRelayParticipant;
   members: FederationRelayParticipant[];
+  // Group metadata snapshot — used by bootstrap path on a fresh peer.
+  // Mirrors current owner-instance values at the moment of the member_add event.
+  name: string | null;
+  icon: string | null;            // absolute URL
+  metadataUpdatedAt: number;
+}
+
+export interface FederationGroupMetadataPayload {
+  name: string | null;     // explicit null = cleared
+  icon: string | null;     // absolute URL on the wire; null = cleared
+  metadataUpdatedAt: number;
+  actor: FederationRelayParticipant; // == owner by authority invariant; used for system-message rendering
 }
 
 export interface FederationRelayProfileSnapshot {
