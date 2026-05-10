@@ -264,12 +264,6 @@ export function MainContent() {
                 <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z" />
               </svg>
             </button>
-            <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Pinned Messages">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" transform="rotate(45 12 12)" />
-                <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
-              </svg>
-            </button>
             <button
               onClick={() => openModal('addDmMember', { dmChannelId: currentChannelId })}
               className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover"
@@ -417,11 +411,6 @@ export function MainContent() {
           <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Notification Settings">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-            </svg>
-          </button>
-          <button className="w-8 h-8 flex items-center justify-center text-txt-tertiary hover:text-txt-primary transition-colors rounded-[6px] hover:bg-interactive-hover" title="Pinned Messages">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
             </svg>
           </button>
           <button
