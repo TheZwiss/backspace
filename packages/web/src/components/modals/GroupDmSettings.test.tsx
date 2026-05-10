@@ -13,6 +13,47 @@ vi.mock('../../audio/AudioManager', () => ({
   },
 }));
 
+// Mock ImageCropModal so tests can deterministically drive the
+// `onCropComplete(blob)` path. The real `react-easy-crop` widget doesn't fire
+// its `onCropComplete` callback reliably under jsdom (no real layout), so the
+// production cropper is replaced with a minimal dialog that exposes a
+// "Confirm Crop" button which immediately hands a synthetic Blob back to the
+// parent — exercising the same staged-icon state transition as production.
+vi.mock('../ui/ImageCropModal', () => ({
+  ImageCropModal: ({
+    isOpen,
+    onCropComplete,
+    onClose,
+  }: {
+    isOpen: boolean;
+    imageSrc: string;
+    onCropComplete: (blob: Blob) => void;
+    onClose: () => void;
+    title?: string;
+    cropShape?: 'rect' | 'round';
+    aspectRatio?: number;
+    maxOutputDimension?: number;
+  }) => {
+    if (!isOpen) return null;
+    return (
+      <div role="dialog" aria-label="cropper-mock">
+        <button
+          type="button"
+          data-testid="cropper-mock-confirm"
+          onClick={() =>
+            onCropComplete(new Blob(['fake-image-bytes'], { type: 'image/webp' }))
+          }
+        >
+          Confirm Crop
+        </button>
+        <button type="button" data-testid="cropper-mock-cancel" onClick={onClose}>
+          Cancel Crop
+        </button>
+      </div>
+    );
+  },
+}));
+
 // Mock the api client — assert call counts on uploads + updateMetadata.
 const mockUpdateMetadata = vi.fn();
 const mockLeave = vi.fn();
@@ -223,35 +264,31 @@ describe('GroupDmSettings — owner overview', () => {
 });
 
 describe('GroupDmSettings — icon staging', () => {
-  // Helper: drive a crop blob into the staged-icon state without going through
-  // the full file-picker → ImageCropModal pipeline. We simulate the same effect
-  // by firing a change event on the hidden file input, then completing the
-  // cropper's onCropComplete via the rendered button.
+  // Helper: drive a crop blob into the staged-icon state by exercising the
+  // production pipeline end-to-end:
+  //   1. Fire a change event on the hidden file input (simulates file picker).
+  //   2. Wait for the (mocked) ImageCropModal dialog to appear once
+  //      FileReader.onload resolves and `cropSrc` becomes non-null.
+  //   3. Click "Confirm Crop" on the mock — this fires the real
+  //      `onCropComplete(blob)` callback synchronously, which causes
+  //      GroupDmSettings to transition iconState → 'staged'.
+  //   4. Wait for the cropper dialog to disappear (parent setCropSrc(null)).
+  // After this helper resolves, the component is in the staged-icon state
+  // and Save will exercise the upload + PATCH path.
   async function stageIcon(user: ReturnType<typeof userEvent.setup>) {
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(fileInput).not.toBeNull();
     const file = new File(['raw'], 'pick.png', { type: 'image/png' });
-    // FileReader runs async. Fire the change, then poll for the cropper modal.
     await act(async () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
     });
-    // The cropper opens once the FileReader resolves. Wait for its Apply button.
-    const applyBtn = await screen.findByRole('button', { name: /apply/i });
-
-    // react-easy-crop emits its onCropComplete with a real Area asynchronously.
-    // To avoid depending on cropper internals, we directly stub `cropImage`
-    // (mocked above) and just click Apply — but the component only invokes
-    // cropImage when `croppedAreaPixels` is non-null. Force the state by
-    // briefly inserting a Cropper crop event. In practice react-easy-crop
-    // fires onCropComplete on mount with the default frame, so wait for the
-    // Apply button to become clickable then click it.
-    // If the button is still disabled (no crop event yet), advance microtasks.
-    await waitFor(() => {
-      // No-op wait; this gives react-easy-crop a tick to fire its initial event.
-      return true;
-    });
-    // Click via fireEvent.click (bypasses pointer-events check if any).
-    await user.click(applyBtn).catch(() => fireEvent.click(applyBtn));
+    // Cropper opens once FileReader.onload resolves cropSrc.
+    const confirmBtn = await screen.findByTestId('cropper-mock-confirm');
+    await user.click(confirmBtn);
+    // After confirm, the parent clears cropSrc → cropper unmounts.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'cropper-mock' })).toBeNull(),
+    );
   }
 
   it('Cancel discards a staged icon — no upload fires', async () => {
@@ -260,20 +297,20 @@ describe('GroupDmSettings — icon staging', () => {
     setStoreState({ dmChannel: dm, authUser: makeUser({ id: 'user-self' }) });
     renderModal();
 
-    // Stage an icon via the file picker → cropper round-trip.
-    // If the cropper integration can't be driven from jsdom, fall through to
-    // the deterministic state-driven path: simulate Cancel without staging.
-    try {
-      await stageIcon(user);
-    } catch {
-      // Cropper couldn't be driven in jsdom — that's fine; Cancel-with-nothing
-      // also satisfies "no upload fires." Continue.
-    }
+    // Stage an icon via the file picker → cropper round-trip. The mock
+    // guarantees onCropComplete fires synchronously on click — if this throws
+    // it's a real test failure (no graceful fallback).
+    await stageIcon(user);
+
+    // Sanity: staging marks the form dirty → Save becomes enabled.
+    const saveBtn = document.querySelector('[data-group-dm-save]') as HTMLButtonElement;
+    await waitFor(() => expect(saveBtn.disabled).toBe(false));
 
     const cancelBtn = document.querySelector('[data-group-dm-cancel]') as HTMLButtonElement;
     await user.click(cancelBtn);
 
-    // No upload should have fired regardless of whether a blob was staged.
+    // Cancel must close the modal and NOT fire any upload or PATCH.
+    await waitFor(() => expect(useUIStore.getState().activeModal).toBeNull());
     expect(mockStartUpload).not.toHaveBeenCalled();
     expect(mockUpdateMetadata).not.toHaveBeenCalled();
     // Direct /api/uploads POSTs (legacy paths) also must not have happened.
@@ -289,36 +326,11 @@ describe('GroupDmSettings — icon staging', () => {
     setStoreState({ dmChannel: dm, authUser: makeUser({ id: 'user-self' }) });
     renderModal();
 
-    // Drive the cropper to produce a blob. If we can't, simulate the staged
-    // state directly via a controlled child render bypass — the component
-    // contract is: a staged blob in state means Save uploads it.
-    let staged = false;
-    try {
-      await stageIcon(user);
-      staged = true;
-    } catch {
-      // Fall back: directly trigger the file pick + skip the cropper. We
-      // can't reach Save with a dirty icon without staging, so if cropper
-      // isn't drivable we mark the test as skipped via early return.
-    }
+    // Stage an icon via the cropper-mock — this hands a real Blob to the
+    // component's handleCropComplete, transitioning iconState to 'staged'.
+    await stageIcon(user);
 
-    if (!staged) {
-      // The cropper isn't drivable in this jsdom — instead, force the
-      // dirty state via a name change AND assert that an icon-less Save
-      // still doesn't trigger an upload, which is also a valid contract test.
-      const input = screen.getByLabelText('Group name') as HTMLInputElement;
-      await user.clear(input);
-      await user.type(input, 'Renamed');
-      const saveBtn = document.querySelector('[data-group-dm-save]') as HTMLButtonElement;
-      await user.click(saveBtn);
-
-      await waitFor(() => expect(mockUpdateMetadata).toHaveBeenCalled());
-      expect(mockUpdateMetadata).toHaveBeenCalledWith('dm-1', { name: 'Renamed' });
-      expect(mockStartUpload).not.toHaveBeenCalled();
-      return;
-    }
-
-    // Cropper succeeded → an icon blob is staged. Save should upload + PATCH.
+    // Save should now trigger startUpload (the staged-icon code path).
     const saveBtn = document.querySelector('[data-group-dm-save]') as HTMLButtonElement;
     await waitFor(() => expect(saveBtn.disabled).toBe(false));
     await user.click(saveBtn);
