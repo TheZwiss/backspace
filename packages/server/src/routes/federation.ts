@@ -21,6 +21,7 @@ import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/f
 import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent, ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
+import { GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH } from '@backspace/shared/src/constants.js';
 
 /** Fields safe to expose to admin callers (everything except hmacSecret). */
 interface SanitizedPeer {
@@ -3006,6 +3007,9 @@ export async function processRelayEvents(
         case 'profile_update':
           await processProfileUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
+        case 'group_metadata_update':
+          await processGroupMetadataUpdateEvent(event, sourceInstance, db, accepted, rejected);
+          break;
         case 'presence_update':
           processPresenceUpdateEvent(event, sourceInstance, db, accepted, rejected);
           break;
@@ -5665,7 +5669,7 @@ function processDmTypingStopEvent(
  * Returns the local filename on success, or null on failure.
  * On failure, the caller stores the absolute URL as a display fallback.
  */
-async function downloadProfileAsset(
+export async function downloadProfileAsset(
   url: string,
   sourceInstance: string,
 ): Promise<string | null> {
@@ -5847,6 +5851,268 @@ export async function processProfileUpdateEvent(
     for (const uid of targetUserIds) {
       connectionManager.sendToUser(uid, userUpdatedEvent);
     }
+  }
+
+  accepted.push(event.messageId);
+}
+
+/**
+ * Inbound group_metadata_update relay handler.
+ *
+ * Authority: only the group's owner instance may mutate name/icon. We compare
+ * `extractDomain(sourceInstance)` with `extractDomain(channel.ownerHomeInstance)`;
+ * any other peer relaying this event is treated as an attribution mismatch
+ * (mirrors the strict check in processProfileUpdateEvent).
+ *
+ * Receiver hardening: never trust the wire payload's bounds — re-validate name
+ * length and icon URL scheme. A malicious or buggy peer cannot push us past
+ * the same constraints we enforce in PATCH /api/dm/:id.
+ *
+ * Side-effects on success:
+ *   1. dm_channels.{name,icon,metadataUpdatedAt} updated in a single tx.
+ *   2. One or two `dm_messages` system rows inserted (name_changed / icon_changed),
+ *      each tagged with `(sourceInstance, sourceMessageId)` using the dedup-suffix
+ *      scheme `${event.messageId}:name` / `${event.messageId}:icon`. This mirrors
+ *      processMemberAddEvent's idempotency contract — a retry of the same wire
+ *      event must not insert a second row.
+ *   3. dm_channel_updated WS broadcast to local members.
+ *   4. dm_message_created WS broadcast for each new system message.
+ *   5. Old local icon file is unlinked from disk if it changed away from a local
+ *      filename (same precedent as the local PATCH endpoint).
+ */
+export async function processGroupMetadataUpdateEvent(
+  event: FederationRelayEvent,
+  sourceInstance: string,
+  db: ReturnType<typeof getDb>,
+  accepted: string[],
+  rejected: Array<{ messageId: string; reason: string }>,
+): Promise<void> {
+  if (!event.federatedId) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_federated_id' });
+    return;
+  }
+
+  // Lookup channel by federated_id. Missing → idempotent accept (this peer has
+  // no replica of the channel, nothing to update).
+  const channel = db
+    .select()
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.federatedId, event.federatedId))
+    .get();
+
+  if (!channel) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Authority: only the owner's home instance can mutate group metadata.
+  if (extractDomain(sourceInstance) !== extractDomain(channel.ownerHomeInstance ?? '')) {
+    rejected.push({ messageId: event.messageId, reason: 'attribution_mismatch' });
+    return;
+  }
+
+  // Receiver hardening — payload validation. Don't trust remote peers to
+  // respect our bounds; a peer bug or malicious actor must not be able to
+  // push values our local PATCH endpoint would have rejected.
+  const metadata = event.metadata;
+  if (!metadata) {
+    rejected.push({ messageId: event.messageId, reason: 'missing_metadata_payload' });
+    return;
+  }
+
+  if (metadata.name !== null) {
+    const trimmedLength = metadata.name.trim().length;
+    if (trimmedLength < GROUP_DM_NAME_MIN_LENGTH || trimmedLength > GROUP_DM_NAME_MAX_LENGTH) {
+      rejected.push({ messageId: event.messageId, reason: 'invalid_payload' });
+      return;
+    }
+  }
+
+  if (metadata.icon !== null && !(metadata.icon.startsWith('http://') || metadata.icon.startsWith('https://'))) {
+    rejected.push({ messageId: event.messageId, reason: 'invalid_payload' });
+    return;
+  }
+
+  // Version check: stale or duplicate timestamp → silent accept.
+  if (metadata.metadataUpdatedAt <= (channel.metadataUpdatedAt ?? 0)) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Diff against stored row — if neither field actually changed, no-op.
+  const nameChanged = metadata.name !== channel.name;
+  const iconChanged = metadata.icon !== channel.icon;
+  if (!nameChanged && !iconChanged) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Idempotency pre-check: if either system message already exists under
+  // `(sourceInstance, sourceMessageId)`, this event was already processed.
+  // Mirrors processMemberAddEvent's dedup contract — outbox retries and
+  // initial-sync replay must not double-insert.
+  const nameMessageId = `${event.messageId}:name`;
+  const iconMessageId = `${event.messageId}:icon`;
+  const existingNameRow = nameChanged
+    ? db
+      .select({ id: schema.dmMessages.id })
+      .from(schema.dmMessages)
+      .where(and(
+        eq(schema.dmMessages.sourceInstance, sourceInstance),
+        eq(schema.dmMessages.sourceMessageId, nameMessageId),
+      ))
+      .get()
+    : null;
+  const existingIconRow = iconChanged
+    ? db
+      .select({ id: schema.dmMessages.id })
+      .from(schema.dmMessages)
+      .where(and(
+        eq(schema.dmMessages.sourceInstance, sourceInstance),
+        eq(schema.dmMessages.sourceMessageId, iconMessageId),
+      ))
+      .get()
+    : null;
+  // If every changed field already has its corresponding system row, the
+  // entire event has been applied — accept silently.
+  if (
+    (!nameChanged || existingNameRow)
+    && (!iconChanged || existingIconRow)
+  ) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // ── Resolve icon: download to local upload dir, fall back to absolute URL ──
+  let resolvedIcon: string | null = metadata.icon;
+  if (iconChanged && metadata.icon !== null) {
+    const localFile = await downloadProfileAsset(metadata.icon, sourceInstance);
+    resolvedIcon = localFile ?? metadata.icon;
+  }
+
+  // Resolve actor → local user id for the system-message foreign key.
+  // Falls back to channel.ownerId if the actor stub can't be created (e.g.
+  // tombstoned identity); the system message still has to render somewhere.
+  const actorParticipant = metadata.actor;
+  let actorUserId: string | null = null;
+  if (actorParticipant) {
+    const actorUser = resolveOrCreateReplicatedUser(
+      actorParticipant.homeUserId,
+      actorParticipant.homeInstance,
+      db,
+      { username: actorParticipant.profile?.username, status: actorParticipant.profile?.status },
+    );
+    actorUserId = actorUser?.id ?? null;
+  }
+  if (!actorUserId) {
+    actorUserId = channel.ownerId;
+  }
+  if (!actorUserId) {
+    // No owner user row to attach a system message to — extremely unusual,
+    // bail out cleanly without persisting anything.
+    rejected.push({ messageId: event.messageId, reason: 'actor_not_found' });
+    return;
+  }
+
+  const oldName = channel.name;
+  const oldIcon = channel.icon;
+
+  type SystemMessageRow = { id: string; sourceMessageId: string; content: string; createdAt: number };
+  const sysMessageRows: SystemMessageRow[] = [];
+
+  // Single transaction: channel update + system message insert(s).
+  db.transaction((tx) => {
+    tx.update(schema.dmChannels)
+      .set({
+        name: metadata.name,
+        icon: resolvedIcon,
+        metadataUpdatedAt: metadata.metadataUpdatedAt,
+      })
+      .where(eq(schema.dmChannels.id, channel.id))
+      .run();
+
+    if (nameChanged && !existingNameRow) {
+      const sysId = generateSnowflake();
+      const content = JSON.stringify({ event: 'name_changed', oldName, newName: metadata.name });
+      tx.insert(schema.dmMessages).values({
+        id: sysId,
+        dmChannelId: channel.id,
+        userId: actorUserId,
+        content,
+        type: 'system',
+        sourceInstance,
+        sourceMessageId: nameMessageId,
+        createdAt: metadata.metadataUpdatedAt,
+      }).run();
+      sysMessageRows.push({
+        id: sysId,
+        sourceMessageId: nameMessageId,
+        content,
+        createdAt: metadata.metadataUpdatedAt,
+      });
+    }
+
+    if (iconChanged && !existingIconRow) {
+      const sysId = generateSnowflake();
+      const content = JSON.stringify({ event: 'icon_changed' });
+      tx.insert(schema.dmMessages).values({
+        id: sysId,
+        dmChannelId: channel.id,
+        userId: actorUserId,
+        content,
+        type: 'system',
+        sourceInstance,
+        sourceMessageId: iconMessageId,
+        createdAt: metadata.metadataUpdatedAt,
+      }).run();
+      sysMessageRows.push({
+        id: sysId,
+        sourceMessageId: iconMessageId,
+        content,
+        createdAt: metadata.metadataUpdatedAt,
+      });
+    }
+  });
+
+  // ── Broadcast channel update to local members ──
+  connectionManager.sendToDmMembers(channel.id, {
+    type: 'dm_channel_updated',
+    dmChannelId: channel.id,
+    name: metadata.name,
+    icon: resolvedIcon,
+  });
+
+  // ── Broadcast each new system message ──
+  const actorRow = db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
+  const sanitizedActor = actorRow ? sanitizeUser(actorRow) : undefined;
+  for (const sys of sysMessageRows) {
+    connectionManager.sendToDmMembers(channel.id, {
+      type: 'dm_message_created',
+      message: {
+        id: sys.id,
+        dmChannelId: channel.id,
+        userId: actorUserId,
+        content: sys.content,
+        type: 'system',
+        createdAt: sys.createdAt,
+        sourceInstance,
+        sourceMessageId: sys.sourceMessageId,
+        editedAt: null,
+        replyToId: null,
+        user: sanitizedActor,
+        attachments: [],
+        embeds: [],
+        reactions: [],
+      } as DmMessageWithUser,
+    });
+  }
+
+  // ── Cleanup old local icon file ──
+  // Mirrors the local PATCH precedent (dm.ts:1595): only unlink when the
+  // previous icon was a bare local filename (i.e. we own the file on disk).
+  // Absolute URLs point at remote files we never owned.
+  if (iconChanged && oldIcon && !oldIcon.startsWith('http://') && !oldIcon.startsWith('https://') && oldIcon !== resolvedIcon) {
+    deleteUploadFile(oldIcon);
   }
 
   accepted.push(event.messageId);
