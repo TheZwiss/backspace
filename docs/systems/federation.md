@@ -743,6 +743,7 @@ Body limit: 10 MB. Max 50 events per batch. Rate-limited to 90 requests/min per 
 | `dm_typing_stop` | `processDmTypingStopEvent` | dm (fire-and-forget, no outbox) |
 | `dm_close` | `processDmCloseEvent` | dm |
 | `dm_reopen` | `processDmReopenEvent` | dm |
+| `group_metadata_update` | `processGroupMetadataUpdateEvent` | dm |
 
 After processing all events, the relay endpoint updates the peer's `lastSeenAt` and resets `consecutiveFailures`, then returns accepted/rejected arrays plus `maxUploadSize`.
 
@@ -757,11 +758,29 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 **Two paths:**
 
 **Bootstrap path** (channel does not exist locally by `federatedId`):
-1. Requires `event.group` metadata (owner + full member roster)
-2. Creates `dm_channels` row with `federatedId`, `ownerId` (resolved via `resolveOrCreateReplicatedUser`), `ownerHomeUserId`, `ownerHomeInstance`
-3. Adds ALL roster members from `event.group.members` (each resolved via `resolveOrCreateReplicatedUser`)
-4. Sends `dm_channel_created` to **local-only members** (home instance matches `getOurOrigin()`, with normalization for bare domain)
-5. Sets `bootstrapped = true` to skip redundant system messages and member_add broadcasts below
+1. Requires `event.group` metadata (owner + full member roster + group metadata snapshot)
+2. Creates `dm_channels` row with `federatedId`, `ownerId` (resolved via `resolveOrCreateReplicatedUser`), `ownerHomeUserId`, `ownerHomeInstance`, plus the bootstrap `name`, `icon`, and `metadataUpdatedAt` from `event.group`
+3. When `event.group.icon` is non-null, mirrors `processGroupMetadataUpdateEvent` and calls `downloadProfileAsset(icon, sourceInstance)` — stores the local bare filename on success or the absolute URL on failure
+4. Adds ALL roster members from `event.group.members` (each resolved via `resolveOrCreateReplicatedUser`)
+5. Sends `dm_channel_created` to **local-only members** (home instance matches `getOurOrigin()`, with normalization for bare domain)
+6. Sets `bootstrapped = true` to skip redundant system messages and member_add broadcasts below
+
+#### `FederationGroupPayload` (extended)
+
+The `event.group` payload that bootstraps a brand-new replica carries the current metadata snapshot, so a peer that has never seen the channel materializes it with the right name and icon — no separate `group_metadata_update` round-trip needed:
+
+```typescript
+interface FederationGroupPayload {
+  owner: FederationRelayParticipant;
+  members: FederationRelayParticipant[];
+  // Extended for the polish pass:
+  name: string | null;            // explicit null = no custom name
+  icon: string | null;            // absolute URL on the wire; null = no custom icon
+  metadataUpdatedAt: number;      // 0 for legacy/unset rows
+}
+```
+
+Older peers that omit these fields fall back to safe defaults (null name/icon, `metadataUpdatedAt = 0`). Receivers never re-relay these fields — only the owner's home instance authors `group_metadata_update` events.
 
 **Incremental path** (channel already exists):
 1. Validates authority: any HMAC-verified peer is accepted (relaxed — the `sourceInstance === channel.ownerHomeInstance` check was removed to support cross-instance access). The per-user attribution check (`verifyAttribution`) still applies.
@@ -790,6 +809,62 @@ After processing all events, the relay endpoint updates the peer's `lastSeenAt` 
 5. Broadcast `dm_owner_updated` WebSocket event
 6. Insert system message with previous owner as actor
 
+Triggered by both auto-transfer-on-leave and the manual `POST /api/dm/:id/transfer` endpoint — the receiver path is the same.
+
+### group_metadata_update (`processGroupMetadataUpdateEvent`)
+
+Owner-authored update of a group DM's `name` and/or `icon`. Mirrors the `profile_update` shape — every payload carries both fields (`null` is unambiguously "cleared"), and a server-side version vector handles dedup; there is no partial-update wire form.
+
+**Payload:** `FederationGroupMetadataPayload`:
+- `name: string | null` — trimmed, length-checked at the owner instance and re-checked by the receiver
+- `icon: string | null` — absolute http(s) URL on the wire (the owner instance normalizes its bare-filename storage via `normalizeIconForWire`); receivers download and store a bare filename, or fall back to the absolute URL on download failure
+- `metadataUpdatedAt: number` — captured at the moment of the owner-instance DB write
+- `actor: FederationRelayParticipant` — owner by authority invariant; used only for system-message rendering
+
+**Authority:** `extractDomain(sourceInstance) === extractDomain(channel.ownerHomeInstance)`. Otherwise rejected as `attribution_mismatch`. Receivers never re-relay this event — the owner instance is the only emitter.
+
+**Targeting:** `getGroupDmTargetOrigins(channelId)` — every peer that hosts a member of the channel.
+
+**Coalescing:** queued via `queueGroupMetadataRelay`; rapid edits coalesce per peer with `entityId = channelId`.
+
+**Receiver flow (`processGroupMetadataUpdateEvent`):**
+1. Lookup channel by `event.federatedId`. If missing → accepted (idempotent — no replica to update).
+2. Authority: domain match against `channel.ownerHomeInstance`. Mismatch → rejected as `attribution_mismatch`.
+3. Receiver hardening (don't trust remote peers):
+   - missing `event.metadata` → rejected as `missing_metadata_payload`
+   - `payload.name` non-null with trimmed length outside `[GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH]` → rejected as `invalid_payload`
+   - `payload.icon` non-null without `http://` or `https://` prefix → rejected as `invalid_payload`
+4. Version check: `payload.metadataUpdatedAt > channel.metadataUpdatedAt`. Stale or duplicate → accepted silently (no side effects).
+5. Diff against the stored row. If neither `name` nor `icon` actually changed → accepted; no system message; no broadcast.
+6. Idempotency dedup pre-check on `(sourceInstance, sourceMessageId)` for both suffixes (see below). If every changed field already has its corresponding system row → accepted silently (outbox retry / initial-sync replay path).
+7. Resolve icon: when `iconChanged` and `payload.icon !== null`, `downloadProfileAsset(payload.icon, sourceInstance)`. Local filename on success; absolute URL fallback on failure (mirrors `processProfileUpdateEvent`).
+8. Resolve actor → local user id via `resolveOrCreateReplicatedUser`. On failure (e.g. tombstoned identity), fall back to `channel.ownerId`. If both are null → rejected as `actor_not_found`.
+9. Single transaction: update `dm_channels.{name, icon, metadataUpdatedAt}`; insert one or two system messages tagged with `(sourceInstance, sourceMessageId)` using the suffix scheme `${event.messageId}:name` / `${event.messageId}:icon` so two changes in a single event yield two distinct dedup keys.
+10. Broadcast `dm_channel_updated` to local members via `sendToDmMembers`.
+11. Broadcast each new system message via `dm_message_created`.
+12. Cleanup old local icon file when the icon changed away from a bare filename (matches the avatar precedent at `users.ts:463-466`).
+
+**Wire dump (illustrative):**
+
+```json
+{
+  "messageId": "1840000000000000123",
+  "eventType": "group_metadata_update",
+  "federatedId": "9b8c2f4e-1a2b-4c3d-9e8f-0a1b2c3d4e5f",
+  "metadata": {
+    "name": "weekend plans",
+    "icon": "https://nova.ddns.net/api/uploads/abc123.png",
+    "metadataUpdatedAt": 1746864000000,
+    "actor": {
+      "userId": "...",
+      "homeUserId": "...",
+      "homeInstance": "https://nova.ddns.net",
+      "profile": { "username": "jannis" }
+    }
+  }
+}
+```
+
 ### Local-Only Broadcast Principle
 
 Users connected to multiple instances must see each DM channel exactly once (from their home instance). All structural broadcasts (`dm_channel_created`, system messages) filter to **local members only**:
@@ -812,6 +887,10 @@ System messages (`type = 'system'` in `dm_messages`) are **instance-local** -- t
 | `member_added` | `{event, targetUserId, targetDisplayName}` | User who added them |
 | `member_removed` | `{event, targetUserId, targetDisplayName, reason}` | User who left/was removed |
 | `owner_changed` | `{event, newOwnerId, newOwnerDisplayName}` | Previous owner |
+| `name_changed` | `{event, oldName, newName}` | Owner who renamed |
+| `icon_changed` | `{event}` | Owner who set/cleared the icon |
+
+The `name_changed` and `icon_changed` rows are created by both `PATCH /api/dm/:id` (origin instance) and `processGroupMetadataUpdateEvent` (receivers). On receivers they are dedup-tagged with `(sourceInstance, ${event.messageId}:name)` and `(sourceInstance, ${event.messageId}:icon)` so retries and initial-sync replay don't double-insert.
 
 ### Outbound Queuing (Origin Instance -- `dm.ts`)
 
@@ -831,8 +910,13 @@ When a group DM is created or modified locally, the origin instance queues feder
 - Computes `fedTargetOrigins` **before** deleting the member (so the leaving user's peer is still included)
 - Queues `member_remove` event with `reason: 'leave'`
 
-**Ownership transfer** (`PATCH /api/dm/:id`):
+**Ownership transfer** (auto-on-leave; manual via `POST /api/dm/:id/transfer`):
 - Queues `ownership_transfer` event with `previousOwner` and `newOwner`
+
+**Group metadata update** (`PATCH /api/dm/:id`):
+- Owner-only. Queues `group_metadata_update` via `queueGroupMetadataRelay(channelId, { name, icon, metadataUpdatedAt, actor })` after the local DB write
+- `targetOrigins = getGroupDmTargetOrigins(channelId)` — every peer hosting a member
+- Receivers re-validate name length / icon URL scheme on inbound (see `processGroupMetadataUpdateEvent` above)
 
 ---
 
