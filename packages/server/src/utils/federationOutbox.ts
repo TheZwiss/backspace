@@ -48,6 +48,23 @@ function fetchSettings(): CachedSettings {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
+ * Normalize a stored icon value (bare filename, absolute http(s) URL, or null)
+ * to an absolute URL suitable for federation wire payloads. Bare filenames are
+ * resolved against `ourOrigin`; absolute URLs pass through unchanged; null
+ * short-circuits.
+ *
+ * @param icon Either a bare filename (e.g. "1234567890.png"), an
+ *   already-absolute http(s) URL, or null.
+ * @param ourOrigin Owner-instance origin (e.g. "https://nova.ddns.net").
+ * @returns Absolute URL or null.
+ */
+export function normalizeIconForWire(icon: string | null, ourOrigin: string): string | null {
+  if (!icon) return null;
+  if (icon.startsWith('http://') || icon.startsWith('https://')) return icon;
+  return `${ourOrigin}/api/uploads/${icon}`;
+}
+
+/**
  * Returns true if the federation relay feature is enabled in instance settings.
  * Result is cached for 30 seconds to avoid repeated DB reads.
  */
@@ -884,9 +901,7 @@ export function queueGroupMetadataRelay(
   }
 
   const ourOrigin = getOurOrigin();
-  const wireIcon = payload.icon
-    ? ((payload.icon.startsWith('http://') || payload.icon.startsWith('https://')) ? payload.icon : `${ourOrigin}/api/uploads/${payload.icon}`)
-    : null;
+  const wireIcon = normalizeIconForWire(payload.icon, ourOrigin);
 
   // Resolve actor's full FederationRelayParticipant. Mirrors the participant
   // construction in getDmParticipants() / buildRelayPayload() so receivers

@@ -44,6 +44,7 @@ import {
   isFederationRelayEnabled,
   computeFederatedId,
   sendTypingRelay,
+  normalizeIconForWire,
 } from '../utils/federationOutbox.js';
 import { getOurOrigin } from '../utils/federationAuth.js';
 import type { FederationRelayEvent } from '@backspace/shared';
@@ -1301,11 +1302,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       // relay) stay correct without touching this site.
       const channelRow = db.select().from(schema.dmChannels)
         .where(eq(schema.dmChannels.id, dmChannelId)).get();
-      const wireIcon = channelRow?.icon
-        ? (channelRow.icon.startsWith('http://') || channelRow.icon.startsWith('https://')
-            ? channelRow.icon
-            : `${domainOrigin}/api/uploads/${channelRow.icon}`)
-        : null;
+      const wireIcon = normalizeIconForWire(channelRow?.icon ?? null, domainOrigin);
 
       for (const targetUser of targetUsers) {
         if (!targetUser.homeInstance || targetUser.homeInstance === domainOrigin) continue;
@@ -1864,11 +1861,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       // patched between the start of this handler and now.
       const channelRow = db.select().from(schema.dmChannels)
         .where(eq(schema.dmChannels.id, id)).get();
-      const wireIcon = channelRow?.icon
-        ? (channelRow.icon.startsWith('http://') || channelRow.icon.startsWith('https://')
-            ? channelRow.icon
-            : `${domainOrigin}/api/uploads/${channelRow.icon}`)
-        : null;
+      const wireIcon = normalizeIconForWire(channelRow?.icon ?? null, domainOrigin);
 
       const memberAddPayload: FederationRelayEvent = {
         eventType: 'member_add',
