@@ -17,8 +17,8 @@ import { Avatar } from '../ui/Avatar';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
-import type { MessageWithUser, SpaceInviteSystemPayload } from '@backspace/shared';
-import { SpaceInviteCard } from './SpaceInviteCard';
+import type { MessageWithUser } from '@backspace/shared';
+import { SystemMessage } from './SystemMessage';
 
 const EMPTY_MESSAGES: MessageWithUser[] = [];
 const EMPTY_PENDING_BUBBLES: PendingBubble[] = [];
@@ -202,6 +202,11 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const channelPerms = useSpaceStore((s) => s.channelPermissions.get(channelId));
   const isDm = isDmChannel(channelId);
   const canReadHistory = isDm || hasPermissionBit(channelPerms, PermissionBits.READ_MESSAGE_HISTORY);
+
+  // Channel-specific DM record (if applicable). Passed to SystemMessage so it
+  // can resolve actor display names from the channel roster — needed for
+  // events that don't embed the actor (name_changed, icon_changed, owner_changed).
+  const currentDm = useSpaceStore((s) => isDm ? s.dmChannels.find(d => d.id === channelId) : undefined);
 
   // Pending bubble interleaving — synthetic MessageWithUser-shaped objects
   // representing optimistic sends. `Message.tsx` (Task 19) branches on the
@@ -691,7 +696,7 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
                   </div>
                 )}
                 {msg.type === 'system' ? (
-                  <SystemMessage message={msg} />
+                  <SystemMessage message={msg} dm={currentDm ?? null} />
                 ) : (
                   <Message
                     message={msg}
@@ -743,55 +748,6 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
           <span className="text-[13px] font-medium">Jump to Present</span>
         </button>
       )}
-    </div>
-  );
-}
-
-function SystemMessage({ message }: { message: MessageWithUser }) {
-  let data: Record<string, unknown> = {};
-  try { data = JSON.parse(message.content ?? '{}'); } catch { /* fall through */ }
-
-  const actorName = message.user?.displayName ?? message.user?.username ?? 'Someone';
-
-  if (data.event === 'space_invite') {
-    return (
-      <div className="px-4 py-1">
-        <SpaceInviteCard payload={data as unknown as SpaceInviteSystemPayload} senderName={actorName} />
-      </div>
-    );
-  }
-
-  // Legacy inline-text events
-  let text = '';
-  let icon = '';
-  switch (data.event) {
-    case 'member_added':
-      icon = '\u2192'; // →
-      text = `${actorName} added ${data.targetDisplayName} to the group`;
-      break;
-    case 'member_removed':
-      if (data.reason === 'leave') {
-        icon = '\u2190'; // ←
-        text = `${data.targetDisplayName} left the group`;
-      } else {
-        icon = '\u2190';
-        text = `${actorName} removed ${data.targetDisplayName} from the group`;
-      }
-      break;
-    case 'owner_changed':
-      icon = '\u265B'; // ♛
-      text = `${data.newOwnerDisplayName} is now the group owner`;
-      break;
-    default:
-      text = message.content ?? '';
-  }
-
-  return (
-    <div className="flex items-center justify-center py-1 px-4 select-none">
-      <span className="text-xs text-txt-tertiary">
-        <span className="mr-1.5">{icon}</span>
-        {text}
-      </span>
     </div>
   );
 }

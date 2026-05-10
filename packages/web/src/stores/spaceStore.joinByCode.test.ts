@@ -49,6 +49,7 @@ vi.mock('../utils/crossStoreResolvers', () => ({
   resolveUserIdFromInstances: vi.fn(),
   getCachedUserIdForOrigin: vi.fn(),
   clearMyUserIdCache: vi.fn(),
+  setOwnerInstanceForDmResolver: vi.fn(),
 }));
 
 // Import after mocks so we get the mocked versions
