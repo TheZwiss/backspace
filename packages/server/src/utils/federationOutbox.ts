@@ -831,6 +831,125 @@ export function queueDmCloseRelay(
 }
 
 /**
+ * Queue a group_metadata_update relay event for cross-instance sync of a
+ * group DM's name/icon. Owner-authority only — callers must verify the actor
+ * is the channel owner before invoking this helper.
+ *
+ * The icon param is the bare local filename (or null on cleared/owner side).
+ * It is normalized to an absolute URL for the wire payload so peers can
+ * download it via the file replication queue.
+ *
+ * No-op for channels with no remote participants.
+ */
+export function queueGroupMetadataRelay(
+  channelId: string,
+  payload: {
+    name: string | null;
+    icon: string | null;        // bare filename or null on the owner's side
+    metadataUpdatedAt: number;
+    actor: { userId: string; homeUserId: string; homeInstance: string };
+  },
+): void {
+  if (!isFederationRelayEnabled()) return;
+
+  const db = getDb();
+
+  // Look up channel to retrieve federatedId. Group DMs created post-federation
+  // always carry one; if it's missing, log and skip — we have no way to address
+  // the channel on the wire.
+  const channel = db
+    .select({ federatedId: schema.dmChannels.federatedId })
+    .from(schema.dmChannels)
+    .where(eq(schema.dmChannels.id, channelId))
+    .get();
+
+  if (!channel) {
+    console.warn(`[federation-outbox] queueGroupMetadataRelay: channel ${channelId} not found`);
+    return;
+  }
+  if (!channel.federatedId) {
+    console.warn(`[federation-outbox] queueGroupMetadataRelay: channel ${channelId} has no federatedId; skipping relay`);
+    return;
+  }
+
+  const targetOrigins = getGroupDmTargetOrigins(channelId);
+  if (!targetOrigins || targetOrigins.length === 0) {
+    // No remote participants — nothing to relay.
+    return;
+  }
+
+  const ourOrigin = getOurOrigin();
+  const wireIcon = payload.icon
+    ? (payload.icon.startsWith('http') ? payload.icon : `${ourOrigin}/api/uploads/${payload.icon}`)
+    : null;
+
+  // Resolve actor's full FederationRelayParticipant. Mirrors the participant
+  // construction in getDmParticipants() / buildRelayPayload() so receivers
+  // can hydrate replicated stubs uniformly.
+  const actorRow = db
+    .select({
+      id: schema.users.id,
+      homeUserId: schema.users.homeUserId,
+      homeInstance: schema.users.homeInstance,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      avatar: schema.users.avatar,
+      avatarColor: schema.users.avatarColor,
+      status: schema.users.status,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, payload.actor.userId))
+    .get();
+
+  if (!actorRow) {
+    console.warn(`[federation-outbox] queueGroupMetadataRelay: actor user ${payload.actor.userId} not found`);
+    return;
+  }
+
+  const actorParticipant: FederationRelayParticipant = {
+    homeUserId: actorRow.homeUserId || actorRow.id,
+    homeInstance: actorRow.homeInstance || ourOrigin,
+    profile: {
+      username: actorRow.username ?? null,
+      displayName: actorRow.displayName ?? null,
+      avatar: actorRow.avatar ?? null,
+      avatarColor: actorRow.avatarColor ?? null,
+      // Only carry presence for native participants — replicated stubs hold
+      // stale status owned by their home; emitting it would flap remote UIs.
+      status: !actorRow.homeInstance ? (actorRow.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
+    },
+  };
+
+  const metadataPayload = {
+    name: payload.name,
+    icon: wireIcon,
+    metadataUpdatedAt: payload.metadataUpdatedAt,
+    actor: actorParticipant,
+  };
+
+  // Stable entityId per channel+timestamp so retries coalesce correctly with
+  // the existing per-peer entityId index in the outbox table.
+  const entityId = `group_metadata:${channel.federatedId}:${payload.metadataUpdatedAt}`;
+
+  appendMutationLog(
+    entityId,
+    channelId,
+    'group_metadata_update',
+    JSON.stringify(metadataPayload),
+  );
+  queueOutboxEvent(
+    entityId,
+    channelId,
+    'group_metadata_update',
+    JSON.stringify({
+      federatedId: channel.federatedId,
+      metadata: metadataPayload,
+    }),
+    targetOrigins,
+  );
+}
+
+/**
  * Send typing indicator events directly to remote peers (bypasses outbox).
  * Fire-and-forget — typing is ephemeral, lost packets are acceptable.
  */

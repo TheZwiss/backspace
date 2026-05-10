@@ -219,6 +219,7 @@ export async function processOutboxTick(): Promise<void> {
       if (parsed.rejectionReason) evt.rejectionReason = parsed.rejectionReason;
       if (parsed.rejectionLimit != null) evt.rejectionLimit = parsed.rejectionLimit;
       if (parsed.affectedUserIds) evt.affectedUserIds = parsed.affectedUserIds;
+      if (parsed.metadata) evt.metadata = parsed.metadata;
       if (parsed.profileUpdate) evt.profileUpdate = parsed.profileUpdate;
       if (parsed.presenceUpdate) evt.presenceUpdate = parsed.presenceUpdate;
       if (parsed.readState) evt.readState = parsed.readState;
