@@ -445,6 +445,173 @@ function evictUserFromDmVoiceRoom(channelId: string, userId: string): void {
   }
 }
 
+/**
+ * Transfers group-DM ownership from `previousOwnerId` to `newOwnerId`.
+ *
+ * Shared by the leave-path's auto-transfer (when an owner leaves a non-empty group)
+ * and the manual `POST /api/dm/:id/transfer` endpoint. Performs:
+ *
+ *   1. Channel UPDATE (ownerId + ownerHomeUserId + ownerHomeInstance)
+ *   2. owner_changed system-message INSERT (authored by `actorUserId`)
+ *   3. appendMutationLog + queueOutboxEvent for the `ownership_transfer` federation event
+ *
+ * Steps 1–3 run inside a single `db.transaction(...)` for atomicity. Broadcasts
+ * (`dm_owner_updated` and `dm_message_created`) are side-effects and run AFTER
+ * the transaction commits.
+ *
+ * Caller responsibilities (NOT done here):
+ *   - Validation (membership, 1-on-1 rejection, self-transfer rejection, etc.)
+ *   - Voice-room eviction
+ *   - Member-row deletion (the leave-path handles this separately)
+ *
+ * `actorUserId` controls the `userId` on the inserted system message — i.e., who
+ * appears as having performed the change. In both current call sites the actor IS
+ * the previous owner (the leaver, or the owner calling the transfer endpoint), so
+ * it defaults to `previousOwnerId`. The option is parameterizable for future paths
+ * that may transfer ownership on behalf of someone else (e.g., admin tooling).
+ */
+function transferGroupDmOwnership(
+  channelId: string,
+  previousOwnerId: string,
+  newOwnerId: string,
+  options?: { actorUserId?: string },
+): void {
+  const db = getDb();
+  const actorUserId = options?.actorUserId ?? previousOwnerId;
+
+  // Pre-flight: fetch the channel + user rows the helper needs.
+  const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, channelId)).get();
+  if (!dmChannel) {
+    // Caller validates; defensive no-op.
+    return;
+  }
+
+  const previousOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, previousOwnerId)).get();
+  const newOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, newOwnerId)).get();
+  const actorUserRow = actorUserId === previousOwnerId
+    ? previousOwnerRow
+    : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
+
+  const newOwnerBaseName = newOwnerRow?.username?.includes('@')
+    ? newOwnerRow.username.split('@')[0]
+    : (newOwnerRow?.username ?? 'Unknown');
+  const newOwnerDisplayName = newOwnerRow?.displayName ?? newOwnerBaseName;
+
+  // Federation targets must be computed BEFORE the channel update so we use the
+  // current home-identity columns; membership doesn't change in a transfer, so a
+  // post-transaction snapshot would also be valid, but pre-computing here keeps
+  // the federation gate close to the data it depends on.
+  let fedTargetOrigins: string[] | undefined;
+  const federationActive = isFederationRelayEnabled() && !!dmChannel.federatedId;
+  if (federationActive) {
+    fedTargetOrigins = getGroupDmTargetOrigins(channelId);
+  }
+
+  const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
+  const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
+  const newOwnerHomeInstance = newOwnerRow?.homeInstance || domainOrigin || '';
+
+  const ownerSysMsgId = generateSnowflake();
+  const ownerNow = Date.now();
+  const ownerSysContent = JSON.stringify({
+    event: 'owner_changed',
+    newOwnerId,
+    newOwnerDisplayName,
+  });
+
+  const transferPayload: FederationRelayEvent | null = federationActive
+    ? {
+        eventType: 'ownership_transfer',
+        dmChannelId: channelId,
+        messageId: `ownership_transfer:${newOwnerId}:${ownerNow}`,
+        federatedId: dmChannel.federatedId!,
+        encryptionVersion: 0,
+        timestamp: ownerNow,
+        ownership: {
+          newOwner: {
+            homeUserId: newOwnerHomeUserId,
+            homeInstance: newOwnerHomeInstance || (domainOrigin ?? ''),
+          },
+          previousOwner: {
+            homeUserId: previousOwnerRow?.homeUserId || previousOwnerId,
+            homeInstance: previousOwnerRow?.homeInstance || (domainOrigin ?? ''),
+          },
+        },
+      }
+    : null;
+
+  // Atomic: channel UPDATE + system message INSERT + mutation log + outbox queue.
+  db.transaction((tx) => {
+    tx.update(schema.dmChannels)
+      .set({
+        ownerId: newOwnerId,
+        ownerHomeUserId: newOwnerHomeUserId,
+        ownerHomeInstance: newOwnerHomeInstance || null,
+      })
+      .where(eq(schema.dmChannels.id, channelId))
+      .run();
+
+    tx.insert(schema.dmMessages).values({
+      id: ownerSysMsgId,
+      dmChannelId: channelId,
+      userId: actorUserId,
+      content: ownerSysContent,
+      type: 'system',
+      createdAt: ownerNow,
+    }).run();
+
+    if (transferPayload) {
+      appendMutationLog(
+        transferPayload.messageId,
+        channelId,
+        'ownership_transfer',
+        JSON.stringify(transferPayload),
+      );
+      queueOutboxEvent(
+        transferPayload.messageId,
+        channelId,
+        'ownership_transfer',
+        JSON.stringify(transferPayload),
+        fedTargetOrigins,
+      );
+    }
+  });
+
+  // Snapshot the post-update member list for broadcasts (membership unchanged by transfer).
+  const members = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channelId))
+    .all();
+
+  // Broadcast dm_owner_updated to local members.
+  for (const member of members) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_owner_updated',
+      dmChannelId: channelId,
+      newOwnerId,
+    });
+  }
+
+  // Broadcast the owner_changed system message to local members.
+  for (const member of members) {
+    connectionManager.sendToUser(member.userId, {
+      type: 'dm_message_created',
+      message: {
+        id: ownerSysMsgId,
+        dmChannelId: channelId,
+        userId: actorUserId,
+        content: ownerSysContent,
+        type: 'system',
+        createdAt: ownerNow,
+        user: actorUserRow ? sanitizeUser(actorUserRow) : undefined,
+        attachments: [],
+        embeds: [],
+        reactions: [],
+      } as any,
+    });
+  }
+}
+
 function removeDmMember(
   channelId: string,
   actorUserId: string,
@@ -572,109 +739,10 @@ function removeDmMember(
   if (remainingMembers.length > 0) {
     // Ownership transfer only fires on self-leave when the leaver was the owner.
     // Kicks cannot orphan a group: the owner is still in the channel.
-    if (isSelfLeave) {
+    if (isSelfLeave && dmChannel.ownerId === actorUserId) {
       const nextOwner = remainingMembers[0];
-      if (dmChannel && dmChannel.ownerId === actorUserId && nextOwner) {
-        db.update(schema.dmChannels)
-          .set({ ownerId: nextOwner.userId })
-          .where(eq(schema.dmChannels.id, channelId))
-          .run();
-
-        for (const member of remainingMembers) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_owner_updated',
-            dmChannelId: channelId,
-            newOwnerId: nextOwner.userId,
-          });
-        }
-
-        const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
-        const newOwnerBaseName = newOwnerUser?.username?.includes('@')
-          ? newOwnerUser.username.split('@')[0]
-          : (newOwnerUser?.username ?? 'Unknown');
-        const ownerSysMsgId = generateSnowflake();
-        const ownerNow = Date.now();
-
-        db.insert(schema.dmMessages).values({
-          id: ownerSysMsgId,
-          dmChannelId: channelId,
-          userId: actorUserId,
-          content: JSON.stringify({
-            event: 'owner_changed',
-            newOwnerId: nextOwner.userId,
-            newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
-          }),
-          type: 'system',
-          createdAt: ownerNow,
-        }).run();
-
-        for (const member of remainingMembers) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_message_created',
-            message: {
-              id: ownerSysMsgId,
-              dmChannelId: channelId,
-              userId: actorUserId,
-              content: JSON.stringify({
-                event: 'owner_changed',
-                newOwnerId: nextOwner.userId,
-                newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
-              }),
-              type: 'system',
-              createdAt: ownerNow,
-              user: actorUserRow ? sanitizeUser(actorUserRow) : undefined,
-              attachments: [],
-              embeds: [],
-              reactions: [],
-            } as any,
-          });
-        }
-
-        // Federation: relay ownership transfer
-        if (isFederationRelayEnabled() && dmChannel.federatedId) {
-          const domainOrigin = getOurOrigin();
-
-          db.update(schema.dmChannels)
-            .set({
-              ownerHomeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
-              ownerHomeInstance: newOwnerUser?.homeInstance || domainOrigin,
-            })
-            .where(eq(schema.dmChannels.id, channelId))
-            .run();
-
-          const transferPayload: FederationRelayEvent = {
-            eventType: 'ownership_transfer',
-            dmChannelId: channelId,
-            messageId: `ownership_transfer:${nextOwner.userId}:${Date.now()}`,
-            federatedId: dmChannel.federatedId,
-            encryptionVersion: 0,
-            timestamp: Date.now(),
-            ownership: {
-              newOwner: {
-                homeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
-                homeInstance: newOwnerUser?.homeInstance || domainOrigin,
-              },
-              previousOwner: {
-                homeUserId: actorUserRow?.homeUserId || actorUserId,
-                homeInstance: actorUserRow?.homeInstance || domainOrigin,
-              },
-            },
-          };
-
-          appendMutationLog(
-            transferPayload.messageId,
-            channelId,
-            'ownership_transfer',
-            JSON.stringify(transferPayload),
-          );
-          queueOutboxEvent(
-            transferPayload.messageId,
-            channelId,
-            'ownership_transfer',
-            JSON.stringify(transferPayload),
-            fedTargetOrigins,
-          );
-        }
+      if (nextOwner) {
+        transferGroupDmOwnership(channelId, actorUserId, nextOwner.userId, { actorUserId });
       }
     }
 
@@ -1967,122 +2035,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const previousOwnerId = dmChannel.ownerId;
-    const previousOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, previousOwnerId)).get();
-    const newOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, newOwnerId)).get();
-
-    // Federation targets must be computed BEFORE any state mutation so we use the
-    // current member set (which includes the previous owner — they remain a member).
-    let fedTargetOrigins: string[] | undefined;
-    if (isFederationRelayEnabled() && dmChannel.federatedId) {
-      fedTargetOrigins = getGroupDmTargetOrigins(id);
-    }
-
-    const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
-    const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
-    const newOwnerHomeInstance = newOwnerRow?.homeInstance || domainOrigin || '';
-
-    // Update ownership row — including the home identity so the receiver path can
-    // verify subsequent S2S authority against the correct origin.
-    db.update(schema.dmChannels)
-      .set({
-        ownerId: newOwnerId,
-        ownerHomeUserId: newOwnerHomeUserId,
-        ownerHomeInstance: newOwnerHomeInstance || null,
-      })
-      .where(eq(schema.dmChannels.id, id))
-      .run();
-
-    // Snapshot the post-update member list for broadcasts
-    const members = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, id))
-      .all();
-
-    // Broadcast dm_owner_updated to local members
-    for (const member of members) {
-      connectionManager.sendToUser(member.userId, {
-        type: 'dm_owner_updated',
-        dmChannelId: id,
-        newOwnerId,
-      });
-    }
-
-    // Insert + broadcast owner_changed system message
-    const newOwnerBaseName = newOwnerRow?.username?.includes('@')
-      ? newOwnerRow.username.split('@')[0]
-      : (newOwnerRow?.username ?? 'Unknown');
-    const ownerSysMsgId = generateSnowflake();
-    const ownerNow = Date.now();
-    const ownerSysContent = JSON.stringify({
-      event: 'owner_changed',
-      newOwnerId,
-      newOwnerDisplayName: newOwnerRow?.displayName ?? newOwnerBaseName,
-    });
-
-    db.insert(schema.dmMessages).values({
-      id: ownerSysMsgId,
-      dmChannelId: id,
-      userId: previousOwnerId,
-      content: ownerSysContent,
-      type: 'system',
-      createdAt: ownerNow,
-    }).run();
-
-    for (const member of members) {
-      connectionManager.sendToUser(member.userId, {
-        type: 'dm_message_created',
-        message: {
-          id: ownerSysMsgId,
-          dmChannelId: id,
-          userId: previousOwnerId,
-          content: ownerSysContent,
-          type: 'system',
-          createdAt: ownerNow,
-          user: previousOwnerRow ? sanitizeUser(previousOwnerRow) : undefined,
-          attachments: [],
-          embeds: [],
-          reactions: [],
-        } as any,
-      });
-    }
-
-    // Federation: relay ownership transfer
-    if (isFederationRelayEnabled() && dmChannel.federatedId) {
-      const origin = domainOrigin ?? getOurOrigin();
-
-      const transferPayload: FederationRelayEvent = {
-        eventType: 'ownership_transfer',
-        dmChannelId: id,
-        messageId: `ownership_transfer:${newOwnerId}:${Date.now()}`,
-        federatedId: dmChannel.federatedId,
-        encryptionVersion: 0,
-        timestamp: Date.now(),
-        ownership: {
-          newOwner: {
-            homeUserId: newOwnerHomeUserId,
-            homeInstance: newOwnerHomeInstance || origin,
-          },
-          previousOwner: {
-            homeUserId: previousOwnerRow?.homeUserId || previousOwnerId,
-            homeInstance: previousOwnerRow?.homeInstance || origin,
-          },
-        },
-      };
-
-      appendMutationLog(
-        transferPayload.messageId,
-        id,
-        'ownership_transfer',
-        JSON.stringify(transferPayload),
-      );
-      queueOutboxEvent(
-        transferPayload.messageId,
-        id,
-        'ownership_transfer',
-        JSON.stringify(transferPayload),
-        fedTargetOrigins,
-      );
-    }
+    transferGroupDmOwnership(id, previousOwnerId, newOwnerId);
 
     return reply.code(200).send({ success: true });
   });
