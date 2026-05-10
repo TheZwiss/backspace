@@ -6,6 +6,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSocialStore } from '../../stores/socialStore';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { Avatar } from '../ui/Avatar';
+import { AvatarStack } from '../ui/AvatarStack';
 import { Mascot } from '../ui/Mascot';
 import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
@@ -87,9 +88,19 @@ function MobileDmRow({
   const canonicalMainUser = useCanonicalUserView(rawMainUser ?? FALLBACK_USER);
   const mainUser = rawMainUser ? canonicalMainUser : null;
 
+  // Group DMs use `dm.name` when set, else fall back to a comma-joined member
+  // list (matches `MobileChatScreen` + `DmListItem`). 1:1 DMs use the
+  // canonical view of the single other member.
   const name = isGroup
-    ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
+    ? (dm.name && dm.name.length > 0
+        ? dm.name
+        : otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', '))
     : mainUser?.displayName ?? (parseFederatedUsername(mainUser?.username ?? '').baseName || 'Unknown');
+
+  // Show a single federation globe next to the group name when any non-self
+  // member is federated. No tooltip on mobile — the new `group-dm-info` screen
+  // surfaces federation identity per-member.
+  const groupHasFederatedMember = isGroup && otherMembers.some((m) => isFederationGlobeApplicable(m));
 
   const lastMsgId = dm.lastMessage?.id;
   const readState = readStates.get(dm.id);
@@ -110,11 +121,16 @@ function MobileDmRow({
     >
       <div className="relative shrink-0">
         {isGroup ? (
-          <div className="w-10 h-10 rounded-full bg-surface-elevated flex items-center justify-center">
-            <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-            </svg>
-          </div>
+          // Reuse the shared AvatarStack so group rows match the rest of the
+          // group-DM surface (chat header, DmListItem, GroupDmSettings hero).
+          // size 40 matches the 1:1 Avatar above it; border="chat" picks the
+          // surface-chat border color used elsewhere on the messages list.
+          <AvatarStack
+            members={otherMembers}
+            size={40}
+            border="chat"
+            iconUrl={dm.icon}
+          />
         ) : (
           <Avatar
             src={avatarUrl}
@@ -126,8 +142,23 @@ function MobileDmRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className={`text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : 'text-txt-primary'}`}>
-            {name}
+          <span className="flex items-center gap-1 min-w-0">
+            <span className={`text-sm truncate ${isUnread ? 'font-semibold text-txt-primary' : 'text-txt-primary'}`}>
+              {name}
+            </span>
+            {groupHasFederatedMember && (
+              <svg
+                data-dm-row-globe
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="text-txt-tertiary/80 flex-shrink-0"
+                aria-hidden="true"
+              >
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+            )}
           </span>
           {previewTime && (
             <span className="text-[11px] text-txt-tertiary shrink-0">
