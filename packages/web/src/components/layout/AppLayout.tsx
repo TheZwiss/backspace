@@ -452,6 +452,7 @@ export function AppLayout() {
       <CategorySettingsModal />
       <NewDmModal />
       <AddDmMemberModal />
+      <GroupDmSettings />
       <UserProfileModal />
       <IncomingCallModal />
       <ImagePreview />
