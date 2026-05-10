@@ -166,3 +166,45 @@ background: conic-gradient(rgba(180, 220, 200, .85) <pct>%, rgba(255, 255, 255, 
 ```
 
 Inner disk uses `bg-surface-overlay` to sit visually above the underlying tile thumbnail. Failed-state ring uses `bg-accent-rose/30`.
+
+### AvatarStack
+
+Reusable group-DM identity widget at `packages/web/src/components/ui/AvatarStack.tsx`. Replaces the bespoke inline avatar logic that previously lived in `DmListItem`. Single source of truth for any rendered group-DM identity slot — sidebar rows, chat header, welcome header, settings modal hero, and mobile equivalents all consume it.
+
+```ts
+interface AvatarStackProps {
+  members: User[];                        // already filtered to "other" members
+  size: number;                           // outer box edge length in px (24, 32, 40, 56, 80)
+  border: 'channel' | 'chat' | 'modal';   // surface tier the stack sits on; controls tile border color
+  iconUrl?: string | null;                // when set, renders the icon as a single image and ignores the stack
+}
+```
+
+**Layout rules** (chosen by `members.length`, ignored entirely when `iconUrl` is set):
+
+| Member count | Layout |
+|---|---|
+| 0 | Empty placeholder + small 12×12 group badge bottom-right |
+| 1 | Single avatar centered in the box + 12×12 group badge bottom-right (distinguishes a 1-other-member group from a 1-on-1 DM) |
+| 2 | Two avatars at 70% size with a 30% offset overlap (z-stacked) |
+| 3 | 2×2 grid: three avatar tiles + one empty bottom-right slot |
+| 4-10 | 2×2 grid: three avatar tiles + a `+N` overflow tile, where `N = members.length - 3` |
+
+`iconUrl` accepts a bare filename (resolved to `/api/uploads/<filename>`) or an absolute URL (`http`, `blob:`, `data:`, or `/`-prefixed) — passed through unchanged. When set, the entire box renders as a single rounded `<img>` filling the box.
+
+**Status dots are deliberately omitted** regardless of member count — a group is a group. The 1-on-1 path keeps its presence dot via the direct `Avatar` component.
+
+**Hooks-in-loop safety:** each rendered slot is its own `<AvatarTile>` component so `useCanonicalUserView` is called exactly once per slot, never inside a variable-length `.map()`.
+
+**Border tiers:** the surface tier the stack sits on determines the tile border color (so the tiles cleanly separate from the panel they overlap). `channel` → `border-surface-channel` (sidebar); `chat` → `border-surface-chat` (chat area / welcome header / chat header); `modal` → `border-surface-elevated` (modal hero, mobile info-screen hero — there is no `surface-modal` token in `tailwind.config.js`).
+
+**Usage sites** (all six call sites in the codebase):
+
+| Site | Size | Border | Notes |
+|---|---|---|---|
+| `DmListItem.tsx` (sidebar row) | 32 | `channel` | Pinned to the DM sidebar; `iconUrl={dm.icon}` |
+| `MessageList.tsx` `WelcomeHeader` (group-DM branch) | 80 | `chat` | Large hero on the empty-state header |
+| `MainContent.tsx` chat header (group-DM branch) | 32 | `chat` | Replaces the people-icon for group DMs |
+| `GroupDmSettings.tsx` (modal hero + member-row previews) | varies | `modal` | Modal Overview tab |
+| `MobileGroupDmInfo.tsx` (pushed-screen hero) | 80 | `modal` | Mobile info screen hero |
+| `MobileDmsScreen.tsx` (DM list rows) | 40 | `channel` | Mobile sidebar parity with desktop `DmListItem` |
