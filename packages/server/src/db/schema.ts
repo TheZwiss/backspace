@@ -139,6 +139,9 @@ export const dmChannels = sqliteTable('dm_channels', {
   ownerHomeInstance: text('owner_home_instance'),
   deletedAt: integer('deleted_at'),
   createdAt: integer('created_at').notNull(),
+  name: text('name'),
+  icon: text('icon'),
+  metadataUpdatedAt: integer('metadata_updated_at').default(0).notNull(),
 }, (table) => ({
   federatedIdx: uniqueIndex('idx_dm_federated')
     .on(table.federatedId)
