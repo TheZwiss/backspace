@@ -17,7 +17,7 @@ import { extractDomain } from './federation.js';
 import path from 'path';
 
 /** Validates that a URL is a safe asset URL (relative upload path, bare filename, or http/https) */
-function isValidAssetUrl(url: string | null | undefined): boolean {
+export function isValidAssetUrl(url: string | null | undefined): boolean {
   if (!url || url.trim().length === 0) return true; // empty/null = clearing
   const trimmed = url.trim();
   if (trimmed.startsWith('/api/uploads/')) return true;

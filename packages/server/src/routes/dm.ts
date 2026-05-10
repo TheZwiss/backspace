@@ -24,13 +24,21 @@ import {
 } from '@backspace/shared';
 import { fetchSpaceInviteSnapshot, getLocalInviteSnapshot } from '../utils/spaceInviteSnapshot.js';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { deleteAttachmentFiles } from '../utils/fileCleanup.js';
+import { deleteAttachmentFiles, deleteUploadFile, deleteAttachmentByFilename } from '../utils/fileCleanup.js';
+import { isValidAssetUrl } from './users.js';
+import {
+  GROUP_DM_NAME_MIN_LENGTH,
+  GROUP_DM_NAME_MAX_LENGTH,
+  GROUP_DM_ICON_MAX_BYTES,
+  GROUP_DM_ICON_MIME_PREFIX,
+} from '@backspace/shared/src/constants.js';
 import { fetchDmEmbedsForMessages, resolveEmbeds, reResolveEmbeds, embedRowToEmbed } from '../utils/embedResolver.js';
 import {
   appendMutationLog,
   queueOutboxEvent,
   queueDmRelay,
   queueDmCloseRelay,
+  queueGroupMetadataRelay,
   getDmParticipants,
   getGroupDmTargetOrigins,
   isFederationRelayEnabled,
@@ -971,6 +979,258 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     return reply.code(201).send(result);
+  });
+
+  // PATCH /api/dm/:id — Update group DM metadata (name + icon). Owner-only.
+  // Body: { name?: string | null, icon?: string | null }
+  // - name: trimmed; empty → cleared (null); otherwise length must be in
+  //   [GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH].
+  // - icon: null/empty → cleared; bare filename → must be an attachment
+  //   uploaded by the caller, image/* mimetype, ≤ GROUP_DM_ICON_MAX_BYTES;
+  //   absolute http(s) URL → accepted as-is (federated rebroadcast path).
+  app.patch<{ Params: { id: string }; Body: { name?: string | null; icon?: string | null } }>('/api/dm/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body ?? {};
+    const db = getDb();
+
+    // Fetch channel
+    const dmChannel = db.select()
+      .from(schema.dmChannels)
+      .where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt)))
+      .get();
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+
+    // 1-on-1 DMs (ownerId=NULL) cannot have metadata
+    if (!dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot update metadata on a 1-on-1 DM', statusCode: 400 });
+    }
+
+    // Caller must be a member
+    if (!isDmMember(id, request.userId)) {
+      return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
+    }
+
+    // Caller must be the owner
+    if (dmChannel.ownerId !== request.userId) {
+      return reply.code(403).send({ error: 'Only the group owner can update metadata', statusCode: 403 });
+    }
+
+    const nameProvided = Object.prototype.hasOwnProperty.call(body, 'name');
+    const iconProvided = Object.prototype.hasOwnProperty.call(body, 'icon');
+
+    if (!nameProvided && !iconProvided) {
+      // No fields to update — return the channel unchanged.
+      return reply.code(200).send({ id: dmChannel.id, name: dmChannel.name, icon: dmChannel.icon, metadataUpdatedAt: dmChannel.metadataUpdatedAt });
+    }
+
+    const oldName = dmChannel.name ?? null;
+    const oldIcon = dmChannel.icon ?? null;
+
+    // ---- Resolve next name (with no-op short-circuit) ----
+    let nextName: string | null = oldName;
+    let nameChanged = false;
+    if (nameProvided) {
+      const raw = body.name;
+      let candidate: string | null;
+      if (raw === null || raw === undefined) {
+        candidate = null;
+      } else if (typeof raw !== 'string') {
+        return reply.code(400).send({ error: 'name must be a string or null', statusCode: 400 });
+      } else {
+        const trimmed = raw.trim();
+        candidate = trimmed.length === 0 ? null : trimmed;
+      }
+      // Validate length only if the value is actually changing — a no-op repeat
+      // of the stored value (even one that wouldn't pass current validation,
+      // e.g. legacy data) must not 400.
+      if (candidate !== oldName) {
+        if (candidate !== null) {
+          if (candidate.length < GROUP_DM_NAME_MIN_LENGTH || candidate.length > GROUP_DM_NAME_MAX_LENGTH) {
+            return reply.code(400).send({
+              error: `Group DM name must be between ${GROUP_DM_NAME_MIN_LENGTH} and ${GROUP_DM_NAME_MAX_LENGTH} characters`,
+              statusCode: 400,
+            });
+          }
+        }
+        nextName = candidate;
+        nameChanged = true;
+      }
+    }
+
+    // ---- Resolve next icon (with no-op short-circuit) ----
+    let nextIcon: string | null = oldIcon;
+    let iconChanged = false;
+    if (iconProvided) {
+      const raw = body.icon;
+      let candidate: string | null;
+      if (raw === null || raw === undefined) {
+        candidate = null;
+      } else if (typeof raw !== 'string') {
+        return reply.code(400).send({ error: 'icon must be a string or null', statusCode: 400 });
+      } else {
+        const trimmed = raw.trim();
+        if (trimmed.length === 0) {
+          candidate = null;
+        } else if (!isValidAssetUrl(trimmed)) {
+          return reply.code(400).send({ error: 'Invalid icon URL', statusCode: 400 });
+        } else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          candidate = trimmed;
+        } else {
+          // Bare filename or `/api/uploads/<filename>` — normalize to bare filename.
+          candidate = trimmed.startsWith('/api/uploads/') ? trimmed.slice('/api/uploads/'.length) : trimmed;
+        }
+      }
+      // Only validate attachment ownership/mimetype/size when the icon is
+      // actually changing AND the new value is a local filename (not an
+      // absolute URL or null clear).
+      if (candidate !== oldIcon) {
+        if (candidate !== null
+            && !candidate.startsWith('http://')
+            && !candidate.startsWith('https://')) {
+          const attachment = db.select()
+            .from(schema.attachments)
+            .where(eq(schema.attachments.filename, candidate))
+            .get();
+
+          if (!attachment) {
+            return reply.code(400).send({ error: 'Icon attachment not found', statusCode: 400 });
+          }
+          if (attachment.uploaderId !== request.userId) {
+            return reply.code(403).send({ error: 'You do not own this icon attachment', statusCode: 403 });
+          }
+          if (!attachment.mimetype.startsWith(GROUP_DM_ICON_MIME_PREFIX)) {
+            return reply.code(400).send({ error: 'Icon must be an image', statusCode: 400 });
+          }
+          if (attachment.size > GROUP_DM_ICON_MAX_BYTES) {
+            return reply.code(400).send({
+              error: `Icon must be smaller than ${Math.floor(GROUP_DM_ICON_MAX_BYTES / (1024 * 1024))} MB`,
+              statusCode: 400,
+            });
+          }
+        }
+        nextIcon = candidate;
+        iconChanged = true;
+      }
+    }
+
+    // ---- No-op short-circuit ----
+    if (!nameChanged && !iconChanged) {
+      return reply.code(200).send({
+        id: dmChannel.id,
+        name: dmChannel.name,
+        icon: dmChannel.icon,
+        metadataUpdatedAt: dmChannel.metadataUpdatedAt,
+      });
+    }
+
+    // Caller user row — needed for federation actor identity
+    const callerUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+
+    // Single eventMessageId so name/icon system messages share a federation correlation root.
+    const eventMessageId = generateSnowflake();
+    const sysMessageRows: Array<{
+      id: string;
+      sourceMessageId: string;
+      content: string;
+    }> = [];
+
+    // ---- Transaction: persist channel update + system message rows ----
+    let metadataUpdatedAt = 0;
+    db.transaction((tx) => {
+      metadataUpdatedAt = Date.now();
+      tx.update(schema.dmChannels)
+        .set({ name: nextName, icon: nextIcon, metadataUpdatedAt })
+        .where(eq(schema.dmChannels.id, id))
+        .run();
+
+      if (nameChanged) {
+        const sysId = generateSnowflake();
+        const content = JSON.stringify({ event: 'name_changed', oldName, newName: nextName });
+        tx.insert(schema.dmMessages).values({
+          id: sysId,
+          dmChannelId: id,
+          userId: request.userId,
+          content,
+          type: 'system',
+          sourceMessageId: `${eventMessageId}:name`,
+          createdAt: metadataUpdatedAt,
+        }).run();
+        sysMessageRows.push({ id: sysId, sourceMessageId: `${eventMessageId}:name`, content });
+      }
+
+      if (iconChanged) {
+        const sysId = generateSnowflake();
+        const content = JSON.stringify({ event: 'icon_changed' });
+        tx.insert(schema.dmMessages).values({
+          id: sysId,
+          dmChannelId: id,
+          userId: request.userId,
+          content,
+          type: 'system',
+          sourceMessageId: `${eventMessageId}:icon`,
+          createdAt: metadataUpdatedAt,
+        }).run();
+        sysMessageRows.push({ id: sysId, sourceMessageId: `${eventMessageId}:icon`, content });
+      }
+    });
+
+    // ---- Broadcast channel update to local members ----
+    connectionManager.sendToDmMembers(id, {
+      type: 'dm_channel_updated',
+      dmChannelId: id,
+      name: nextName,
+      icon: nextIcon,
+    });
+
+    // ---- Broadcast each new system message ----
+    const sanitizedActor = callerUser ? sanitizeUser(callerUser) : undefined;
+    for (const sys of sysMessageRows) {
+      connectionManager.sendToDmMembers(id, {
+        type: 'dm_message_created',
+        message: {
+          id: sys.id,
+          dmChannelId: id,
+          userId: request.userId,
+          content: sys.content,
+          type: 'system',
+          createdAt: metadataUpdatedAt,
+          user: sanitizedActor,
+          attachments: [],
+          embeds: [],
+          reactions: [],
+        } as DmMessageWithUser,
+      });
+    }
+
+    // ---- Federation relay ----
+    if (isFederationRelayEnabled()) {
+      const domainOrigin = getOurOrigin();
+      queueGroupMetadataRelay(id, {
+        name: nextName,
+        icon: nextIcon,
+        metadataUpdatedAt,
+        actor: {
+          userId: request.userId,
+          homeUserId: callerUser?.homeUserId ?? request.userId,
+          homeInstance: callerUser?.homeInstance ?? domainOrigin,
+        },
+      });
+    }
+
+    // ---- Old icon cleanup (mirror users.ts:463-466 precedent) ----
+    if (iconChanged && oldIcon && !oldIcon.startsWith('http')) {
+      deleteUploadFile(oldIcon);
+      deleteAttachmentByFilename(oldIcon);
+    }
+
+    return reply.code(200).send({
+      id,
+      name: nextName,
+      icon: nextIcon,
+      metadataUpdatedAt,
+    });
   });
 
   // DELETE /api/dm/:id - Close (hide) a DM channel for the requesting user
