@@ -5669,7 +5669,7 @@ function processDmTypingStopEvent(
  * Returns the local filename on success, or null on failure.
  * On failure, the caller stores the absolute URL as a display fallback.
  */
-export async function downloadProfileAsset(
+async function downloadProfileAsset(
   url: string,
   sourceInstance: string,
 ): Promise<string | null> {
