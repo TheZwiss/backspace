@@ -4299,7 +4299,7 @@ function processMemberAddEvent(
   accepted.push(event.messageId);
 }
 
-function processMemberRemoveEvent(
+export function processMemberRemoveEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
