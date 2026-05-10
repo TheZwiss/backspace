@@ -85,17 +85,27 @@ describe('AvatarStack', () => {
     expect(container.querySelector('[data-avatar-stack-overflow]')).toBeFalsy();
   });
 
-  it('renders 2x2 grid with three tiles and no +N for three members', () => {
+  it('renders triangular layout with three tiles and no +N for three members', () => {
     const { container } = render(
       <AvatarStack members={makeUsers(3)} size={40} border="channel" />
     );
     const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
     expect(tiles.length).toBe(3);
-    expect(container.querySelector('[data-avatar-stack-layout="grid"]')).toBeTruthy();
+    expect(container.querySelector('[data-avatar-stack-layout="triangle"]')).toBeTruthy();
     expect(container.querySelector('[data-avatar-stack-overflow]')).toBeFalsy();
   });
 
-  it('renders three tiles + "+2" overflow for five members', () => {
+  it('renders diamond layout with four tiles and no +N for four members', () => {
+    const { container } = render(
+      <AvatarStack members={makeUsers(4)} size={40} border="channel" />
+    );
+    const tiles = container.querySelectorAll('[data-avatar-stack-tile]');
+    expect(tiles.length).toBe(4);
+    expect(container.querySelector('[data-avatar-stack-layout="diamond"]')).toBeTruthy();
+    expect(container.querySelector('[data-avatar-stack-overflow]')).toBeFalsy();
+  });
+
+  it('renders three tiles + "+2" overflow in diamond layout for five members', () => {
     const { container } = render(
       <AvatarStack members={makeUsers(5)} size={40} border="channel" />
     );
@@ -104,10 +114,10 @@ describe('AvatarStack', () => {
     const overflow = container.querySelector('[data-avatar-stack-overflow]');
     expect(overflow).toBeTruthy();
     expect(overflow!.textContent).toBe('+2');
-    expect(container.querySelector('[data-avatar-stack-layout="grid"]')).toBeTruthy();
+    expect(container.querySelector('[data-avatar-stack-layout="diamond"]')).toBeTruthy();
   });
 
-  it('renders three tiles + "+7" overflow for ten members (cap)', () => {
+  it('renders three tiles + "+7" overflow in diamond layout for ten members (cap)', () => {
     const { container } = render(
       <AvatarStack members={makeUsers(10)} size={40} border="channel" />
     );
@@ -116,6 +126,42 @@ describe('AvatarStack', () => {
     const overflow = container.querySelector('[data-avatar-stack-overflow]');
     expect(overflow).toBeTruthy();
     expect(overflow!.textContent).toBe('+7');
+    expect(container.querySelector('[data-avatar-stack-layout="diamond"]')).toBeTruthy();
+  });
+
+  it('places tiles on the correct radial slots (3-member triangle)', () => {
+    const { container } = render(
+      <AvatarStack members={makeUsers(3)} size={40} border="channel" />,
+    );
+    const tiles = Array.from(
+      container.querySelectorAll('[data-avatar-stack-tile]'),
+    ) as HTMLElement[];
+    // Triangle: top, bottom-right (~+30°), bottom-left (~+150° from -90 start)
+    // Top tile must have the smallest `top` value.
+    const tops = tiles.map((t) => parseInt(t.style.top, 10));
+    const minTop = Math.min(...tops);
+    expect(tops.filter((t) => t === minTop).length).toBe(1);
+    // The two non-top tiles share roughly the same `top` (bottom row of triangle).
+    const others = tops.filter((t) => t !== minTop).sort((a, b) => a - b);
+    expect(others.length).toBe(2);
+    expect(Math.abs(others[0]! - others[1]!)).toBeLessThanOrEqual(1);
+  });
+
+  it('places overflow tile in the bottom slot of the diamond', () => {
+    const { container } = render(
+      <AvatarStack members={makeUsers(5)} size={40} border="channel" />,
+    );
+    const overflow = container.querySelector(
+      '[data-avatar-stack-overflow]',
+    ) as HTMLElement;
+    const tiles = Array.from(
+      container.querySelectorAll('[data-avatar-stack-tile]'),
+    ) as HTMLElement[];
+    const overflowTop = parseInt(overflow.style.top, 10);
+    // Overflow sits at bottom of diamond — its `top` should be the
+    // largest among all four positioned elements.
+    const tileTops = tiles.map((t) => parseInt(t.style.top, 10));
+    expect(overflowTop).toBeGreaterThan(Math.max(...tileTops) - 1);
   });
 
   it('renders icon override and ignores the stack', () => {

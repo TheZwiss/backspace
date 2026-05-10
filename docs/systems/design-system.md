@@ -182,13 +182,16 @@ interface AvatarStackProps {
 
 **Layout rules** (chosen by `members.length`, ignored entirely when `iconUrl` is set):
 
-| Member count | Layout |
-|---|---|
-| 0 | Empty placeholder + small 12×12 group badge bottom-right |
-| 1 | Single avatar centered in the box + 12×12 group badge bottom-right (distinguishes a 1-other-member group from a 1-on-1 DM) |
-| 2 | Two avatars at 70% size with a 30% offset overlap (z-stacked) |
-| 3 | 2×2 grid: three avatar tiles + one empty bottom-right slot |
-| 4-10 | 2×2 grid: three avatar tiles + a `+N` overflow tile, where `N = members.length - 3` |
+| Member count | Layout | `data-avatar-stack-layout` |
+|---|---|---|
+| 0 | Empty placeholder + small 12×12 group badge bottom-right | — |
+| 1 | Single avatar centered in the box + 12×12 group badge bottom-right (distinguishes a 1-other-member group from a 1-on-1 DM) | — |
+| 2 | Two avatars at 70% size with a 30% offset overlap (z-stacked) | `overlap` |
+| 3 | Equilateral-triangle huddle: three 62%-size tiles arranged radially (top, bottom-right, bottom-left), neighbors overlap | `triangle` |
+| 4 | Diamond huddle: four 58%-size tiles at the four cardinal points (top, right, bottom, left), neighbors overlap | `diamond` |
+| 5-10 | Diamond huddle: three 58%-size tiles at the top/right/left points + a `+N` overflow tile occupying the bottom point, where `N = members.length - 3` | `diamond` |
+
+**3+ member geometry.** Tiles are positioned radially around the box center on a circle of radius `R = (S − T) / 2`, where `S` is the box edge length and `T` is the tile size (`0.62·S` for 3 members, `0.58·S` for 4+). The first slot starts at `−90°` (top) and remaining slots are evenly spaced clockwise (`360° / slotCount` apart). This makes the farthest edges of each tile graze the box's bounding rect — no clipping, no wasted whitespace — and produces the same "huddle of overlapping faces" aesthetic as the 2-member overlap pattern at every member count. Z-index descends clockwise from the top slot so each tile tucks slightly under its clockwise neighbor (mirrors the 2-member case where the first tile sits on top of the second). The `+N` overflow tile always occupies the bottom diamond slot — reads as "more members behind these three" rather than "+N is one of the people".
 
 `iconUrl` accepts a bare filename (resolved to `/api/uploads/<filename>`) or an absolute URL (`http`, `blob:`, `data:`, or `/`-prefixed) — passed through unchanged. When set, the entire box renders as a single rounded `<img>` filling the box.
 

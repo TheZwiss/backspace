@@ -14,8 +14,16 @@ import { parseFederatedUsername } from '../../utils/identity';
  *   - 0 members      → empty placeholder + group badge
  *   - 1 member       → centered avatar + group badge (12×12, bottom-right)
  *   - 2 members      → equal-size offset overlap
- *   - 3 members      → 2×2 grid, three tiles
- *   - 4+ members     → 2×2 grid, three tiles + `+N` overflow tile
+ *   - 3 members      → equilateral triangle of overlapping tiles (top/bl/br)
+ *   - 4 members      → diamond of overlapping tiles (top/right/bottom/left)
+ *   - 5-10 members   → diamond with `+N` overflow occupying the bottom slot
+ *
+ * The 3+ layouts deliberately mirror the 2-member overlap aesthetic:
+ * tiles are positioned radially around the box center so neighboring
+ * circles overlap by roughly the same amount as the 2-member case. This
+ * keeps the "huddle of overlapping faces" look consistent across all
+ * member counts and avoids the cramped 2×2-grid look that the previous
+ * implementation produced at small sizes.
  *
  * Status dots are never rendered — group identity wins regardless of
  * member count.
@@ -209,36 +217,90 @@ export function AvatarStack({ members, size, border, iconUrl }: AvatarStackProps
     );
   }
 
-  // ─── 3+ members: 2×2 grid (three avatar tiles, fourth slot empty or +N) ─
-  const tileSize = Math.round((size - 2) / 2); // half the box, with a 2px gutter
-  const tileGap = size - tileSize * 2;
-  // Four grid positions: top-left, top-right, bottom-left, bottom-right.
-  const positions = [
-    { left: 0, top: 0 },
-    { left: tileSize + tileGap, top: 0 },
-    { left: 0, top: tileSize + tileGap },
-    { left: tileSize + tileGap, top: tileSize + tileGap },
-  ];
+  // ─── 3 members: equilateral triangle of overlapping tiles ───────────────
+  // ─── 4-10 members: diamond of overlapping tiles (+N in bottom slot) ─────
+  //
+  // Math: each tile has size T = ratio · S. Tile centers sit on a circle of
+  // radius R around the box center; we choose R = (S - T) / 2 so the
+  // farthest edges of the tiles graze the box's bounding box (no clipping,
+  // no wasted whitespace). Angles are spaced evenly, starting at -90° (top)
+  // so the layout always has a tile pointing up — visually anchors the
+  // composition the same way the 2-member case anchors top-left.
+  //
+  // Ratio choice:
+  //   • 3 tiles at 0.62 → adjacent tiles overlap by ~12% of S edge-to-edge
+  //     (visually similar to the 2-member 30% offset overlap once you
+  //     account for the triangular spacing being larger than diagonal).
+  //   • 4 tiles at 0.58 → cardinal positions, neighbors overlap by ~16% of S.
+  //
+  // Both ratios keep the tiles large enough to read at size 32 while
+  // leaving enough gap for the 2px borders to read clearly.
+  const isTriangle = members.length === 3;
+  const tileRatio = isTriangle ? 0.62 : 0.58;
+  const tileSize = Math.round(size * tileRatio);
+  const radius = (size - tileSize) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
 
-  const visibleMembers = members.slice(0, 3);
-  const overflow = members.length > 3 ? members.length - 3 : 0;
-  const overflowFontSize = Math.max(9, Math.round(tileSize * 0.45));
+  // Angles in radians, -90° (top) start. For triangle: 3 evenly spaced.
+  // For diamond: 4 cardinal points (top, right, bottom, left).
+  const slotCount = isTriangle ? 3 : 4;
+  const startAngle = -Math.PI / 2;
+  const angles = Array.from({ length: slotCount }, (_, i) =>
+    startAngle + (i * 2 * Math.PI) / slotCount,
+  );
+  const positions = angles.map((a) => ({
+    left: Math.round(cx + radius * Math.cos(a) - tileSize / 2),
+    top: Math.round(cy + radius * Math.sin(a) - tileSize / 2),
+  }));
+
+  // Visible avatar tiles + overflow slot logic:
+  //   • 3 members → 3 tiles, no overflow
+  //   • 4 members → 4 tiles, no overflow
+  //   • 5+ members → 3 tiles + `+N` in the 4th (bottom) slot
+  // Overflow lives in the bottom slot of the diamond so it reads as
+  // "more behind these three" rather than "+N is one of the people".
+  const overflow = members.length > 4 ? members.length - 3 : 0;
+  const visibleCount = overflow > 0 ? 3 : members.length;
+  const visibleMembers = members.slice(0, visibleCount);
+  // Bottom slot of diamond is index 2 (top, right, bottom, left).
+  const overflowSlot = 2;
+  const overflowFontSize = Math.max(9, Math.round(tileSize * 0.42));
+
+  // Z-stack: top tile sits highest so the upward-pointing avatar is fully
+  // visible; remaining tiles descend by angle so each one tucks slightly
+  // under its clockwise neighbor — mirrors the 2-member case where the
+  // first tile sits on top of the second.
+  const zIndexFor = (slotIndex: number) => slotCount - slotIndex;
 
   return (
     <div
-      data-avatar-stack-layout="grid"
+      data-avatar-stack-layout={isTriangle ? 'triangle' : 'diamond'}
       className="relative flex-shrink-0"
       style={{ width: size, height: size }}
     >
-      {visibleMembers.map((m, i) => (
-        <AvatarTile
-          key={m.id}
-          member={m}
-          size={tileSize}
-          borderClass={borderClass}
-          style={positions[i]}
-        />
-      ))}
+      {visibleMembers.map((m, i) => {
+        // Skip the overflow slot when rendering visible tiles in the
+        // overflow case — only relevant when overflow > 0 and i would
+        // collide with overflowSlot. With visibleCount=3 and overflowSlot=2
+        // (bottom), this never collides because i ∈ {0,1,2} maps to
+        // slotIndex ∈ {0,1,3} — see assignment below.
+        const slotIndex = overflow > 0 && i >= overflowSlot ? i + 1 : i;
+        const pos = positions[slotIndex]!;
+        return (
+          <AvatarTile
+            key={m.id}
+            member={m}
+            size={tileSize}
+            borderClass={borderClass}
+            style={{
+              left: pos.left,
+              top: pos.top,
+              zIndex: zIndexFor(slotIndex),
+            }}
+          />
+        );
+      })}
       {overflow > 0 && (
         <div
           data-avatar-stack-overflow="true"
@@ -246,12 +308,16 @@ export function AvatarStack({ members, size, border, iconUrl }: AvatarStackProps
           style={{
             width: tileSize,
             height: tileSize,
-            left: positions[3]!.left,
-            top: positions[3]!.top,
+            left: positions[overflowSlot]!.left,
+            top: positions[overflowSlot]!.top,
             fontSize: overflowFontSize,
+            // Overflow sits on top of all visible tiles so its `+N` text is
+            // always fully readable, even when neighboring slot circles
+            // would otherwise clip the right/left edge of the digit.
+            zIndex: slotCount + 1,
           }}
         >
-          {`+${members.length - 3}`}
+          {`+${overflow}`}
         </div>
       )}
     </div>
