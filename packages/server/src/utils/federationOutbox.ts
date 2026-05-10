@@ -835,17 +835,22 @@ export function queueDmCloseRelay(
  * group DM's name/icon. Owner-authority only — callers must verify the actor
  * is the channel owner before invoking this helper.
  *
- * The icon param is the bare local filename (or null on cleared/owner side).
- * It is normalized to an absolute URL for the wire payload so peers can
- * download it via the file replication queue.
+ * The icon param is normalized to an absolute URL for the wire payload so
+ * peers can download it via the file replication queue.
  *
  * No-op for channels with no remote participants.
+ *
+ * @param payload.icon Either null (clear), a snowflake-form bare filename
+ *   (e.g. "1234567890.png" — relative to `/api/uploads/`), or an
+ *   already-absolute http(s) URL. Other forms (data: URIs, paths containing
+ *   `..`, other schemes, etc.) are rejected by the validator at the PATCH
+ *   endpoint and must not reach this helper.
  */
 export function queueGroupMetadataRelay(
   channelId: string,
   payload: {
     name: string | null;
-    icon: string | null;        // bare filename or null on the owner's side
+    icon: string | null;        // bare filename, absolute http(s) URL, or null
     metadataUpdatedAt: number;
     actor: { userId: string; homeUserId: string; homeInstance: string };
   },
@@ -880,7 +885,7 @@ export function queueGroupMetadataRelay(
 
   const ourOrigin = getOurOrigin();
   const wireIcon = payload.icon
-    ? (payload.icon.startsWith('http') ? payload.icon : `${ourOrigin}/api/uploads/${payload.icon}`)
+    ? ((payload.icon.startsWith('http://') || payload.icon.startsWith('https://')) ? payload.icon : `${ourOrigin}/api/uploads/${payload.icon}`)
     : null;
 
   // Resolve actor's full FederationRelayParticipant. Mirrors the participant
