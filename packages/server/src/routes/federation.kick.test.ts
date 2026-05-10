@@ -287,6 +287,40 @@ describe('processMemberRemoveEvent — kick authority', () => {
     expect(vi.mocked(connectionManager.sendToDmMembers)).not.toHaveBeenCalled();
   });
 
+  it('accepts a kick when ownerHomeInstance is BARE and sourceInstance is FULL (bare-vs-full normalization)', async () => {
+    // Regression: pre-fix, `processMemberRemoveEvent` compared
+    // `sourceInstance` (full URL, from outbox worker) to `ownerHomeInstance`
+    // verbatim. After an `ownership_transfer` to a federated user, the
+    // column would be written as a bare host (`users.homeInstance`), causing
+    // legitimate downstream kicks to be rejected with `unauthorized_source`.
+    //
+    // The fix normalizes both sides via `normalizeOriginForCompare`. This
+    // test re-seeds the channel with a bare `ownerHomeInstance` to lock in
+    // the new behavior. Mirrors the ownership-transfer authority test.
+    seedChannelAndMembers();
+    // Overwrite ownerHomeInstance to the legacy bare form.
+    testDb.update(schema.dmChannels)
+      .set({ ownerHomeInstance: 'owner.test' })
+      .where(eq(schema.dmChannels.id, CHANNEL_ID))
+      .run();
+
+    const fed = await import('./federation.js');
+    const event = buildKickEvent('evt-kick-bare-owner');
+
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    fed.processMemberRemoveEvent(event, OWNER_ORIGIN, testDb, accepted, rejected);
+
+    expect(rejected).toEqual([]);
+    expect(accepted).toEqual([event.messageId]);
+
+    // Victim's dm_members row was deleted (kick applied)
+    const victimRow = testDb.select().from(schema.dmMembers)
+      .where(and(eq(schema.dmMembers.dmChannelId, CHANNEL_ID), eq(schema.dmMembers.userId, VICTIM_USER_ID)))
+      .get();
+    expect(victimRow).toBeUndefined();
+  });
+
   it('accepts a self-leave from any source instance (not the owner instance) and removes the leaver', async () => {
     seedChannelAndMembers();
     const fed = await import('./federation.js');

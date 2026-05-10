@@ -6,7 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { eq, and, or, isNull, inArray, sql, desc } from 'drizzle-orm';
 import { authenticate, requireAdmin } from '../utils/auth.js';
-import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders, normalizeOriginForCompare } from '../utils/federationAuth.js';
+import { generateHmacSecret, getOurOrigin, parseFederationHeaders, verifySignature, verifyPeerSignature, buildFederationHeaders, normalizeOriginForCompare, canonicalizeHomeInstance } from '../utils/federationAuth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { config } from '../config.js';
@@ -4120,7 +4120,10 @@ export async function processMemberAddEvent(
         federatedId: event.federatedId,
         ownerId,
         ownerHomeUserId: event.group.owner?.homeUserId ?? null,
-        ownerHomeInstance: event.group.owner?.homeInstance ?? null,
+        // Canonicalize on storage so future authority comparisons against
+        // `sourceInstance` (always a full URL) match cleanly. Defensive: older
+        // peers may have sent a bare host on the wire.
+        ownerHomeInstance: canonicalizeHomeInstance(event.group.owner?.homeInstance) ?? null,
         createdAt: now,
         name: bootstrapName,
         icon: bootstrapResolvedIcon,
@@ -4362,8 +4365,20 @@ export function processMemberRemoveEvent(
     return;
   }
 
-  // Validate authority: owner's instance for kicks, any instance for self-leave
-  if (event.membership.reason !== 'leave' && channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
+  // Validate authority: owner's instance for kicks, any instance for self-leave.
+  //
+  // `sourceInstance` arrives as a full URL from `federationWorker.ts` (always
+  // `getOurOrigin()` on the sender). `channel.ownerHomeInstance`, however, can be
+  // stored either as a bare host (from `users.homeInstance`, written by
+  // `resolveOrCreateReplicatedUser` and by group DM ownership transfers to a
+  // federated user) OR as a full URL (group DM creation / transfers to a local
+  // user, which fall back to `domainOrigin = getOurOrigin()`). Strict equality
+  // here mis-fires for the bare-vs-full mismatch — see the historical bug entry
+  // in `docs/systems/dm-system.md`. Always compare through
+  // `normalizeOriginForCompare`, matching the established pattern for federation
+  // authority checks.
+  if (event.membership.reason !== 'leave' && channel.ownerHomeInstance &&
+      normalizeOriginForCompare(sourceInstance) !== normalizeOriginForCompare(channel.ownerHomeInstance)) {
     rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
     return;
   }
@@ -4456,7 +4471,7 @@ export function processMemberRemoveEvent(
   accepted.push(event.messageId);
 }
 
-function processOwnershipTransferEvent(
+export function processOwnershipTransferEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
@@ -4502,8 +4517,14 @@ function processOwnershipTransferEvent(
     return;
   }
 
-  // Validate authority: only the current owner's instance can transfer ownership
-  if (channel.ownerHomeInstance && sourceInstance !== channel.ownerHomeInstance) {
+  // Validate authority: only the current owner's instance can transfer ownership.
+  //
+  // See the matching note in `processMemberRemoveEvent`: `sourceInstance` is
+  // always a full URL but `channel.ownerHomeInstance` can be bare or full.
+  // Normalize both sides through `normalizeOriginForCompare` so we don't reject
+  // legitimate back-and-forth transfers that wrote a bare host into the column.
+  if (channel.ownerHomeInstance &&
+      normalizeOriginForCompare(sourceInstance) !== normalizeOriginForCompare(channel.ownerHomeInstance)) {
     rejected.push({ messageId: event.messageId, reason: 'unauthorized_source' });
     return;
   }
@@ -4522,11 +4543,19 @@ function processOwnershipTransferEvent(
     return;
   }
 
+  // Canonicalize to a full origin URL on storage so future authority checks
+  // can compare cleanly against `sourceInstance` (also a full URL). Mirrors
+  // the canonicalization performed in `transferGroupDmOwnership` on the
+  // sender side. Falls back to the wire value if normalization yields null
+  // (shouldn't happen for valid events; defensive).
+  const canonicalOwnerHome =
+    canonicalizeHomeInstance(event.ownership.newOwner.homeInstance) ?? event.ownership.newOwner.homeInstance;
+
   db.update(schema.dmChannels)
     .set({
       ownerId: newOwnerLocal.id,
       ownerHomeUserId: event.ownership.newOwner.homeUserId,
-      ownerHomeInstance: event.ownership.newOwner.homeInstance,
+      ownerHomeInstance: canonicalOwnerHome,
     })
     .where(eq(schema.dmChannels.id, channel.id))
     .run();
@@ -4535,6 +4564,8 @@ function processOwnershipTransferEvent(
     type: 'dm_owner_updated',
     dmChannelId: channel.id,
     newOwnerId: newOwnerLocal.id,
+    newOwnerHomeUserId: event.ownership.newOwner.homeUserId,
+    newOwnerHomeInstance: canonicalOwnerHome,
   });
 
   const prevOwnerLocal = event.ownership.previousOwner

@@ -46,7 +46,7 @@ import {
   sendTypingRelay,
   normalizeIconForWire,
 } from '../utils/federationOutbox.js';
-import { getOurOrigin } from '../utils/federationAuth.js';
+import { getOurOrigin, canonicalizeHomeInstance } from '../utils/federationAuth.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser, resolveOrCreateReplicatedUser } from './federation.js';
 
@@ -510,7 +510,16 @@ function transferGroupDmOwnership(
 
   const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
   const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
-  const newOwnerHomeInstance = newOwnerRow?.homeInstance || domainOrigin || '';
+  // Canonicalize to a full origin URL. `users.homeInstance` is stored as a
+  // bare host (e.g. `orbit.ddns.net`) for federated users, but
+  // `dm_channels.ownerHomeInstance` is compared against `sourceInstance`
+  // (always a full URL) in S2S authority checks. Storing the bare form here
+  // caused legitimate `ownership_transfer` events to be rejected with
+  // `unauthorized_source` after back-and-forth transfers — see the historical
+  // bug entry in `docs/systems/dm-system.md`.
+  const newOwnerHomeInstance = canonicalizeHomeInstance(
+    newOwnerRow?.homeInstance || domainOrigin || '',
+  );
 
   const ownerSysMsgId = generateSnowflake();
   const ownerNow = Date.now();
@@ -520,6 +529,11 @@ function transferGroupDmOwnership(
     newOwnerDisplayName,
   });
 
+  // Wire homeInstance values are canonicalized to full URLs so receivers store
+  // the canonical form too. Future authority checks then compare full-URL to
+  // full-URL without needing defensive normalization at every site.
+  const previousOwnerHomeInstanceWire =
+    canonicalizeHomeInstance(previousOwnerRow?.homeInstance || domainOrigin || '') ?? '';
   const transferPayload: FederationRelayEvent | null = federationActive
     ? {
         eventType: 'ownership_transfer',
@@ -531,11 +545,11 @@ function transferGroupDmOwnership(
         ownership: {
           newOwner: {
             homeUserId: newOwnerHomeUserId,
-            homeInstance: newOwnerHomeInstance || (domainOrigin ?? ''),
+            homeInstance: newOwnerHomeInstance ?? (domainOrigin ?? ''),
           },
           previousOwner: {
             homeUserId: previousOwnerRow?.homeUserId || previousOwnerId,
-            homeInstance: previousOwnerRow?.homeInstance || (domainOrigin ?? ''),
+            homeInstance: previousOwnerHomeInstanceWire,
           },
         },
       }
@@ -584,12 +598,17 @@ function transferGroupDmOwnership(
     .where(eq(schema.dmMembers.dmChannelId, channelId))
     .all();
 
-  // Broadcast dm_owner_updated to local members.
+  // Broadcast dm_owner_updated to local members. Include the new owner's
+  // home identity so receiving clients can update `dm.ownerHomeInstance`
+  // (and thus keep `getOwnerInstanceForDm` correct for the next owner-only
+  // request) without waiting for a fresh `ready` payload on reconnect.
   for (const member of members) {
     connectionManager.sendToUser(member.userId, {
       type: 'dm_owner_updated',
       dmChannelId: channelId,
       newOwnerId,
+      newOwnerHomeUserId,
+      newOwnerHomeInstance: newOwnerHomeInstance ?? null,
     });
   }
 
@@ -1211,7 +1230,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .set({
             federatedId,
             ownerHomeUserId: callerUser?.homeUserId || request.userId,
-            ownerHomeInstance: callerUser?.homeInstance || domainOrigin,
+            // Canonicalize for federation-authority parity (see
+            // `transferGroupDmOwnership` for the full rationale).
+            ownerHomeInstance: canonicalizeHomeInstance(callerUser?.homeInstance || domainOrigin),
           })
           .where(eq(schema.dmChannels.id, dmChannelId))
           .run();
@@ -1754,7 +1775,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           .set({
             federatedId: newFederatedId,
             ownerHomeUserId: ownerUser?.homeUserId || dmChannel.ownerId!,
-            ownerHomeInstance: ownerUser?.homeInstance || domainOrigin,
+            // Canonicalize for federation-authority parity (see
+            // `transferGroupDmOwnership` for the full rationale).
+            ownerHomeInstance: canonicalizeHomeInstance(ownerUser?.homeInstance || domainOrigin),
           })
           .where(eq(schema.dmChannels.id, id))
           .run();
@@ -1763,7 +1786,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
           ...dmChannel,
           federatedId: newFederatedId,
           ownerHomeUserId: ownerUser?.homeUserId || dmChannel.ownerId!,
-          ownerHomeInstance: ownerUser?.homeInstance || domainOrigin,
+          ownerHomeInstance: canonicalizeHomeInstance(ownerUser?.homeInstance || domainOrigin),
         };
       }
     }

@@ -803,10 +803,10 @@ Older peers that omit these fields fall back to safe defaults (null name/icon, `
 ### ownership_transfer (`processOwnershipTransferEvent` -- `federation.ts:1938`)
 
 1. Find channel by `federatedId` -- if not found, accept idempotently
-2. Validate authority: `sourceInstance === channel.ownerHomeInstance`
+2. Validate authority: `normalizeOriginForCompare(sourceInstance) === normalizeOriginForCompare(channel.ownerHomeInstance)`. Both sides are normalized to handle the bare-vs-full storage convention (see `dm-system.md` historical bugs for why this matters).
 3. Resolve new owner via `resolveOrCreateReplicatedUser` (**never** `resolveLocalUser` -- must guarantee valid ID)
-4. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`
-5. Broadcast `dm_owner_updated` WebSocket event
+4. Update `dm_channels`: `ownerId`, `ownerHomeUserId`, `ownerHomeInstance` (canonicalized to full URL on storage via `canonicalizeHomeInstance` so future authority checks stay stable)
+5. Broadcast `dm_owner_updated` WebSocket event with `newOwnerHomeUserId` + `newOwnerHomeInstance` so local clients can refresh their owner-routing cache without reconnecting
 6. Insert system message with previous owner as actor
 
 Triggered by both auto-transfer-on-leave and the manual `POST /api/dm/:id/transfer` endpoint — the receiver path is the same.

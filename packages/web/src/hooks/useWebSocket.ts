@@ -1113,7 +1113,18 @@ function handleEvent(origin: string, event: ServerEvent): void {
     case 'dm_owner_updated': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
       const { updateDmOwner } = useSpaceStore.getState();
-      updateDmOwner(event.dmChannelId, event.newOwnerId);
+      // Pass the federation routing fields so the DM's `ownerHomeInstance`
+      // stays in sync with the server. Without this, `getOwnerInstanceForDm`
+      // routes the next owner-only API call (rename, icon, kick, transfer)
+      // through the PREVIOUS owner's home instance and the receiving peer
+      // rejects it as `unauthorized_source`. Older servers omit these fields
+      // — the store leaves the existing values untouched in that case.
+      updateDmOwner(
+        event.dmChannelId,
+        event.newOwnerId,
+        event.newOwnerHomeUserId ?? undefined,
+        event.newOwnerHomeInstance ?? undefined,
+      );
       break;
     }
 

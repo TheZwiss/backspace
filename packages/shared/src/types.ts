@@ -481,7 +481,20 @@ export type ServerEvent =
   | { type: 'federation_approval_request_received'; origin: string; instanceName?: string }
   | { type: 'peering_subscription_changed' }
   | { type: 'peering_notification_received'; kind: PeeringNotificationKind }
-  | { type: 'dm_owner_updated'; dmChannelId: string; newOwnerId: string }
+  | {
+      type: 'dm_owner_updated';
+      dmChannelId: string;
+      newOwnerId: string;
+      // Federation routing fields. Required for the client to keep
+      // `dmChannel.ownerHomeInstance` in sync after a transfer — otherwise
+      // owner-only API calls (`updateMetadata`, `kickMember`, `transferOwnership`)
+      // continue to route through the previous owner's home instance via
+      // `getOwnerInstanceForDm` until the user reconnects and receives a fresh
+      // `ready` payload. Always populated on new emissions; tolerated as
+      // optional for receivers connected to an older sender.
+      newOwnerHomeUserId?: string | null;
+      newOwnerHomeInstance?: string | null;
+    }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 

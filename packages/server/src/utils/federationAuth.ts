@@ -222,3 +222,28 @@ export function normalizeOriginForCompare(value: string | null | undefined): str
   if (!s) return null;
   return s.toLowerCase();
 }
+
+/**
+ * Canonicalize a homeInstance value to a full origin URL
+ * (e.g. `https://nova.ddns.net`) for storage on columns whose authority
+ * checks compare against `sourceInstance` (which is always a full URL).
+ *
+ * Accepts bare host (`nova.ddns.net`), scheme-prefixed (`https://...`), or
+ * `null` / empty / whitespace (returns `null`). `localhost`-style values keep
+ * `http://` if already present; otherwise the canonical default is `https://`.
+ *
+ * Use this at every write site that persists `dm_channels.ownerHomeInstance`
+ * so that S2S authority checks aren't broken by a bare-vs-full mismatch.
+ * Read paths should still normalize via `normalizeOriginForCompare` for
+ * defensive parity with legacy rows.
+ */
+export function canonicalizeHomeInstance(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const s = value.trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) {
+    // Strip trailing slashes only — preserve the explicit scheme.
+    return s.replace(/\/+$/, '');
+  }
+  return `https://${s.replace(/\/+$/, '')}`;
+}

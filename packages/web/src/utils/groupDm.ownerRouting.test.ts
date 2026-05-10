@@ -209,6 +209,58 @@ describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
     });
   });
 
+  it('updateDmOwner keeps ownerHomeInstance in sync so the next owner-only op routes correctly', () => {
+    // Regression: the `dm_owner_updated` WS handler used to call
+    // updateDmOwner(channelId, newOwnerId) without the home-identity fields.
+    // After a manual back-and-forth transfer, `getOwnerInstanceForDm` then
+    // returned the PREVIOUS owner's home origin — the next owner-only call
+    // routed to the wrong instance and the receiver rejected the resulting
+    // federation event with `unauthorized_source`.
+    //
+    // The fix: WS event carries `newOwnerHomeUserId` + `newOwnerHomeInstance`
+    // and the store writes them. This test pins that behavior down.
+    const { updateDmOwner } = useSpaceStore.getState();
+    useSpaceStore.setState({
+      dmChannels: [{
+        ...baseDm,
+        ownerId: 'old-owner',
+        ownerHomeUserId: 'old-owner-home',
+        ownerHomeInstance: 'https://nova.test',
+      }],
+    });
+
+    updateDmOwner('dm-1', 'new-owner', 'new-owner-home', 'https://orbit.test');
+
+    const dm = useSpaceStore.getState().dmChannels.find(d => d.id === 'dm-1');
+    expect(dm?.ownerId).toBe('new-owner');
+    expect(dm?.ownerHomeUserId).toBe('new-owner-home');
+    expect(dm?.ownerHomeInstance).toBe('https://orbit.test');
+    expect(getOwnerInstanceForDm('dm-1')).toBe('https://orbit.test');
+  });
+
+  it('updateDmOwner does NOT clear existing federation routing fields when called without them (legacy server)', () => {
+    // An older server that hasn't shipped the WS payload extension yet would
+    // call updateDmOwner with only (channelId, newOwnerId). The store must
+    // not blank out the existing home fields, or `getOwnerInstanceForDm`
+    // would silently fall back to '' (home) — re-introducing the bug.
+    const { updateDmOwner } = useSpaceStore.getState();
+    useSpaceStore.setState({
+      dmChannels: [{
+        ...baseDm,
+        ownerId: 'old-owner',
+        ownerHomeUserId: 'old-owner-home',
+        ownerHomeInstance: 'https://nova.test',
+      }],
+    });
+
+    updateDmOwner('dm-1', 'new-owner');
+
+    const dm = useSpaceStore.getState().dmChannels.find(d => d.id === 'dm-1');
+    expect(dm?.ownerId).toBe('new-owner');
+    expect(dm?.ownerHomeUserId).toBe('old-owner-home');
+    expect(dm?.ownerHomeInstance).toBe('https://nova.test');
+  });
+
   it('non-owner-only op (sendMessage) is unaffected by ownerHomeInstance', async () => {
     // Owner routing is opt-in per method — sendMessage on the singleton api
     // must NOT consult ownerHomeInstance. It uses the channel's pinned origin

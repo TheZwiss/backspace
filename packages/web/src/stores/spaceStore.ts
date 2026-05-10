@@ -129,7 +129,12 @@ interface SpaceState {
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
-  updateDmOwner: (dmChannelId: string, newOwnerId: string) => void;
+  updateDmOwner: (
+    dmChannelId: string,
+    newOwnerId: string,
+    newOwnerHomeUserId?: string,
+    newOwnerHomeInstance?: string,
+  ) => void;
   updateDmMetadata: (dmChannelId: string, patch: { name?: string | null; icon?: string | null }) => void;
   closeDm: (id: string) => Promise<void>;
   leaveDm: (id: string) => Promise<void>;
@@ -321,10 +326,19 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     ),
   })),
 
-  updateDmOwner: (dmChannelId, newOwnerId) => set((state) => ({
-    dmChannels: state.dmChannels.map(dm =>
-      dm.id === dmChannelId ? { ...dm, ownerId: newOwnerId } : dm
-    ),
+  updateDmOwner: (dmChannelId, newOwnerId, newOwnerHomeUserId, newOwnerHomeInstance) => set((state) => ({
+    dmChannels: state.dmChannels.map(dm => {
+      if (dm.id !== dmChannelId) return dm;
+      const next = { ...dm, ownerId: newOwnerId };
+      // Only overwrite the federation routing fields when the caller supplies
+      // them. Older servers that omit these fields must not blank out the
+      // existing values — the DM would otherwise lose its owner-routing data
+      // and `getOwnerInstanceForDm` would silently fall back to '' (home),
+      // re-introducing the bug this WS extension fixes.
+      if (newOwnerHomeUserId !== undefined) next.ownerHomeUserId = newOwnerHomeUserId;
+      if (newOwnerHomeInstance !== undefined) next.ownerHomeInstance = newOwnerHomeInstance;
+      return next;
+    }),
   })),
 
   // Patches the group DM's display metadata (name + icon). Idempotent: a

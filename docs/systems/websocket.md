@@ -149,7 +149,7 @@ Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
 | `dm_channel_closed` | dmChannelId | user |
 | `dm_member_added` | dmChannelId, user | DM members |
 | `dm_member_removed` | dmChannelId, userId | DM members |
-| `dm_owner_updated` | dmChannelId, newOwnerId | DM members |
+| `dm_owner_updated` | dmChannelId, newOwnerId, newOwnerHomeUserId?, newOwnerHomeInstance? | DM members |
 
 ### Voice
 | type | fields | scope |
