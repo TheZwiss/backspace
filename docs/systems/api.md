@@ -122,14 +122,23 @@ DELETE /messages/:id                                      → { success }  [auth
 ```
 POST   /dm                     { targetUserId, targetUsername? }     → { dmChannel }
 POST   /dm/group               { name, memberUserIds[] }            → { dmChannel }
+PATCH  /dm/:id                 { name?, icon? }                     → { id, name, icon, metadataUpdatedAt } [owner; group only]
 DELETE /dm/:id                                                      → { success } (soft-close)
 POST   /dm/:id/members         { userIds[] }                        → { dmChannel } [owner, max 10]
 DELETE /dm/:id/members                                              → { success } (leave)
+DELETE /dm/:id/members/:targetUserId                                → { success } [owner kick; cannot self-kick; group only]
+POST   /dm/:id/transfer        { newOwnerId }                       → { success } [owner; member must be in channel; not self]
 GET    /dm/:id/messages        ?before=&limit=50                    → { messages[] }
 POST   /dm/:id/messages        { content, attachments?, replyToId? } → { message }
 PATCH  /dm/messages/:id        { content }                          → { message } [author]
 DELETE /dm/messages/:id                                             → { success } [author]
 ```
+
+**`PATCH /dm/:id`** — Owner-only update of a group DM's `name` and `icon`. Either field may be omitted (no-op), null (clear), or set. Empty/whitespace name collapses to null. `icon` accepts a bare attachment filename owned by the caller (image/*, ≤ `GROUP_DM_ICON_MAX_BYTES`) or an absolute http(s) URL. No-op short-circuit when nothing actually changes — emits no system message and no federation relay. See `docs/systems/dm-system.md` "Group Metadata Update" for the full transaction, federation relay, and icon URL round-trip rules.
+
+**`DELETE /dm/:id/members/:targetUserId`** — Owner kicks a member from a group DM. Reuses the leave path with `reason: 'kick'`; evicts the target from the DM voice room first. Sends `dm_channel_closed` to the kicked user. Receivers enforce `sourceInstance === ownerHomeInstance`; non-owner kicks reject as `unauthorized_source`.
+
+**`POST /dm/:id/transfer`** — Owner transfers ownership to another current member without leaving. Updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts an `owner_changed` system message; broadcasts `dm_owner_updated`; queues an `ownership_transfer` outbox event. Reuses the existing receiver path (`processOwnershipTransferEvent`) with no protocol changes.
 
 ## Social (`routes/social.ts`) — auth required
 ```
