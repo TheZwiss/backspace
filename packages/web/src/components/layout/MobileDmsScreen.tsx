@@ -12,7 +12,7 @@ import { resolveAssetUrl } from '../../utils/assetUrls';
 import { useNavigate } from 'react-router-dom';
 import { parseFederatedUsername, isFederationGlobeApplicable, isSelf } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import { formatDmSidebarPreview } from '../../utils/dmFormatters';
+import { formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import type { DmChannel, User } from '@backspace/shared';
 import type { TaggedFriend } from '../../stores/socialStore';
 
@@ -88,13 +88,11 @@ function MobileDmRow({
   const canonicalMainUser = useCanonicalUserView(rawMainUser ?? FALLBACK_USER);
   const mainUser = rawMainUser ? canonicalMainUser : null;
 
-  // Group DMs use `dm.name` when set, else fall back to a comma-joined member
-  // list (matches `MobileChatScreen` + `DmListItem`). 1:1 DMs use the
-  // canonical view of the single other member.
+  // Group DMs → `formatDmHeaderName` (single source of truth shared with
+  // `MobileChatScreen`, `MainContent`, `DmListItem`, welcome hero). 1:1 DMs
+  // keep the canonical view of the single other member.
   const name = isGroup
-    ? (dm.name && dm.name.length > 0
-        ? dm.name
-        : otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', '))
+    ? formatDmHeaderName(dm, authUser ?? null)
     : mainUser?.displayName ?? (parseFederatedUsername(mainUser?.username ?? '').baseName || 'Unknown');
 
   // Show a single federation globe next to the group name when any non-self

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview } from './dmFormatters';
+import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel } from './dmFormatters';
 import type { DmChannel, DmLastMessagePreview, User } from '@backspace/shared';
 
 /** Build a local-time Date: new Date(year, month-1, day, hour, minute) as a timestamp. */
@@ -238,6 +238,148 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       createdAt: 1,
     });
     expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown renamed the group');
+  });
+});
+
+// ─── formatDmHeaderName / formatDmInputLabel ──────────────────────────────────
+
+function makeMember(id: string, fields: Partial<User> = {}): User {
+  return {
+    id,
+    username: id.toLowerCase(),
+    displayName: null,
+    avatar: null,
+    banner: null,
+    accentColor: null,
+    avatarColor: null,
+    bio: null,
+    homeInstance: null,
+    status: 'offline',
+    customStatus: null,
+    isAdmin: false,
+    createdAt: 0,
+    replicatedInstances: [],
+    ...fields,
+  };
+}
+
+function makeGroupDmFull(args: { name: string | null; otherMembers: User[]; ownerId?: string }): DmChannel {
+  return {
+    id: 'dm-1',
+    ownerId: args.ownerId ?? 'OWNER',
+    name: args.name,
+    icon: null,
+    members: [makeMember('SELF', { username: 'self' }), ...args.otherMembers],
+    lastMessage: null,
+    metadataUpdatedAt: 0,
+  } as DmChannel;
+}
+
+function make1on1Dm(other: User): DmChannel {
+  return {
+    id: 'dm-1',
+    ownerId: null,
+    name: null,
+    icon: null,
+    members: [makeMember('SELF', { username: 'self' }), other],
+    lastMessage: null,
+    metadataUpdatedAt: 0,
+  } as DmChannel;
+}
+
+const SELF = { id: 'SELF', username: 'self' };
+
+describe('formatDmHeaderName', () => {
+  it('group with `dm.name` set → returns dm.name verbatim', () => {
+    const dm = makeGroupDmFull({
+      name: 'Cool Group',
+      otherMembers: [makeMember('A', { displayName: 'Alice' })],
+    });
+    expect(formatDmHeaderName(dm, SELF)).toBe('Cool Group');
+  });
+
+  it('group with whitespace-only dm.name → falls back to joined names', () => {
+    const dm = makeGroupDmFull({
+      name: '   ',
+      otherMembers: [makeMember('A', { displayName: 'Alice' }), makeMember('B', { displayName: 'Bob' })],
+    });
+    expect(formatDmHeaderName(dm, SELF)).toBe('Alice, Bob');
+  });
+
+  it('group without a name → comma-joined member display names (self excluded)', () => {
+    const dm = makeGroupDmFull({
+      name: null,
+      otherMembers: [
+        makeMember('A', { displayName: 'Alice' }),
+        makeMember('B', { displayName: 'Bob' }),
+        makeMember('C', { displayName: 'Charlie' }),
+      ],
+    });
+    expect(formatDmHeaderName(dm, SELF)).toBe('Alice, Bob, Charlie');
+  });
+
+  it('group with members lacking displayName → falls back to parseFederatedUsername base', () => {
+    const dm = makeGroupDmFull({
+      name: null,
+      otherMembers: [makeMember('A', { username: 'alice@nova.ddns.net' })],
+    });
+    expect(formatDmHeaderName(dm, SELF)).toBe('alice');
+  });
+
+  it('group with only self → returns "Group" placeholder', () => {
+    const dm = makeGroupDmFull({ name: null, otherMembers: [] });
+    expect(formatDmHeaderName(dm, SELF)).toBe('Group');
+  });
+
+  it('1-on-1 → partner display name', () => {
+    const dm = make1on1Dm(makeMember('A', { displayName: 'Alice' }));
+    expect(formatDmHeaderName(dm, SELF)).toBe('Alice');
+  });
+
+  it('1-on-1 without displayName → username base', () => {
+    const dm = make1on1Dm(makeMember('A', { username: 'alice@nova.ddns.net' }));
+    expect(formatDmHeaderName(dm, SELF)).toBe('alice');
+  });
+
+  it('1-on-1 with no resolvable partner → "Direct Message"', () => {
+    const dm: DmChannel = {
+      id: 'dm-1', ownerId: null, name: null, icon: null,
+      members: [makeMember('SELF', { username: 'self' })],
+      lastMessage: null, metadataUpdatedAt: 0,
+    } as DmChannel;
+    expect(formatDmHeaderName(dm, SELF)).toBe('Direct Message');
+  });
+});
+
+describe('formatDmInputLabel', () => {
+  it('group with `dm.name` set → "#<name>"', () => {
+    const dm = makeGroupDmFull({ name: 'Cool Group', otherMembers: [makeMember('A')] });
+    expect(formatDmInputLabel(dm, SELF)).toBe('#Cool Group');
+  });
+
+  it('group without a name → "the group" (collapses joined-names form)', () => {
+    // Regression: previously the placeholder showed
+    // "Message #Alice, Bob, Charlie, Dave" which overflows the input.
+    const dm = makeGroupDmFull({
+      name: null,
+      otherMembers: [
+        makeMember('A', { displayName: 'Alice' }),
+        makeMember('B', { displayName: 'Bob' }),
+        makeMember('C', { displayName: 'Charlie' }),
+        makeMember('D', { displayName: 'Dave' }),
+      ],
+    });
+    expect(formatDmInputLabel(dm, SELF)).toBe('the group');
+  });
+
+  it('group with whitespace-only dm.name → "the group"', () => {
+    const dm = makeGroupDmFull({ name: '   ', otherMembers: [makeMember('A')] });
+    expect(formatDmInputLabel(dm, SELF)).toBe('the group');
+  });
+
+  it('1-on-1 → "@<partner>"', () => {
+    const dm = make1on1Dm(makeMember('A', { displayName: 'Alice' }));
+    expect(formatDmInputLabel(dm, SELF)).toBe('@Alice');
   });
 });
 

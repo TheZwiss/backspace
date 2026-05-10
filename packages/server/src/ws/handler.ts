@@ -1329,7 +1329,12 @@ function buildReadyPayload(userId: string): {
         id: dmChannel.id,
         federatedId: dmChannel.federatedId ?? null,
         ownerId: dmChannel.ownerId ?? null,
+        ownerHomeUserId: dmChannel.ownerHomeUserId ?? null,
+        ownerHomeInstance: dmChannel.ownerHomeInstance ?? null,
         createdAt: dmChannel.createdAt,
+        name: dmChannel.name ?? null,
+        icon: dmChannel.icon ?? null,
+        metadataUpdatedAt: dmChannel.metadataUpdatedAt ?? 0,
         members,
         lastMessage: last ? {
           id: last.id,

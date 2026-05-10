@@ -7,6 +7,7 @@ import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TransferIndicator } from './TransferIndicator';
 import { parseFederatedUsername } from '../../utils/identity';
+import { formatDmHeaderName, formatDmInputLabel } from '../../utils/dmFormatters';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 
@@ -47,18 +48,25 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const rawMainOther = !isGroup ? otherMembers[0] : undefined;
   const canonicalMainOther = useCanonicalUserView((rawMainOther as unknown as User) ?? FALLBACK_USER);
 
-  // Resolve channel/DM name
+  // Resolve channel/DM name. Group DMs route through `formatDmHeaderName` so
+  // a renamed group shows `dm.name` (previously this surface silently dropped
+  // it and always rendered the joined-names fallback). 1-on-1 DMs keep the
+  // canonical-view lookup so replicated aliases still surface the home
+  // account's displayName.
   let channelName = 'Channel';
+  let inputPlaceholder: string | undefined;
   if (isDm && dm) {
     if (isGroup) {
-      channelName = otherMembers
-        .map(m => m.displayName ?? parseFederatedUsername(m.username).baseName)
-        .join(', ');
+      channelName = formatDmHeaderName(dm, authUser);
+      inputPlaceholder = `Message ${formatDmInputLabel(dm, authUser)}`;
     } else if (rawMainOther) {
       channelName =
         canonicalMainOther.displayName ??
         parseFederatedUsername(canonicalMainOther.username).baseName ??
         'Direct Message';
+      // Use the canonical `channelName` directly so header + placeholder stay
+      // aligned even when the raw partner and canonical view disagree.
+      inputPlaceholder = `Message @${channelName}`;
     } else {
       channelName = 'Direct Message';
     }
@@ -119,7 +127,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
           `absolute bottom-full` to the bubble), so we don't render it here. */}
       <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
         {channelId && <MessageList channelId={channelId} />}
-        {channelId && <MessageInput channelId={channelId} channelName={channelName} />}
+        {channelId && <MessageInput channelId={channelId} channelName={channelName} placeholder={inputPlaceholder} />}
       </div>
     </div>
   );

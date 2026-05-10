@@ -4,7 +4,7 @@ import { AvatarStack } from '../ui/AvatarStack';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isSelf, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
-import { formatDmTimestamp, formatDmSidebarPreview } from '../../utils/dmFormatters';
+import { formatDmTimestamp, formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
@@ -44,10 +44,11 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
   const firstOther = rawFirstOther ? firstOtherCanonical : null;
 
   const { baseName } = parseFederatedUsername(firstOther?.username ?? '');
+  // Groups → `formatDmHeaderName` (honors `dm.name`, falls back to joined
+  // names — same path used by the chat header, welcome hero, and mobile).
+  // 1-on-1 keeps the canonical-view name so replicated aliases stay correct.
   const displayName = isGroup
-    ? (dm.name ?? (otherMembers.length > 0
-      ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-      : 'Empty Group'))
+    ? formatDmHeaderName(dm, user)
     : firstOther?.displayName ?? baseName;
 
   // Group globe: at least one member is federated → render once with comma-joined tooltip.

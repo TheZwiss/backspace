@@ -18,6 +18,7 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { formatDmHeaderName, formatDmInputLabel } from '../../utils/dmFormatters';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
@@ -100,9 +101,23 @@ export function MainContent() {
     // conditional so the hook is called unconditionally).
     const firstOther = _rawFirstOther ? _canonicalFirstOther : (otherMembers[0] ?? null);
     const { baseName: firstBaseName } = parseFederatedUsername(firstOther?.username ?? '');
-    const dmName = isGroupDm
-      ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-      : firstOther?.displayName ?? (firstBaseName || 'Direct Message');
+    // Group DMs route through `formatDmHeaderName` (honors `dm.name`, falls
+    // back to joined member names); 1-on-1 DMs keep the canonical-view path
+    // so replicated aliases still surface the home-instance display name.
+    const dmName = isGroupDm && dmChannel
+      ? formatDmHeaderName(dmChannel, authUser)
+      : (firstOther?.displayName ?? (firstBaseName || 'Direct Message'));
+    // Message-input placeholder — groups use `formatDmInputLabel` which
+    // collapses unnamed groups to "the group" so the textarea doesn't render
+    // "Message #Alice, Bob, Charlie, Dave". 1-on-1 reuses the canonical
+    // `dmName` so the placeholder stays aligned with the header (the utility
+    // resolves the raw partner; on replicated aliases the canonical view
+    // can disagree).
+    const dmInputPlaceholder = isGroupDm && dmChannel
+      ? `Message ${formatDmInputLabel(dmChannel, authUser)}`
+      : dmChannel
+        ? `Message @${dmName}`
+        : undefined;
 
     const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
@@ -289,7 +304,7 @@ export function MainContent() {
           </div>
         </div>
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
-        <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} />
+        <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} placeholder={dmInputPlaceholder} />
         <SearchPopover
           open={searchOpen}
           onClose={() => setSearchOpen(false)}

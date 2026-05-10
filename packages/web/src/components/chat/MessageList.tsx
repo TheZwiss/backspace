@@ -18,6 +18,7 @@ import { AvatarStack } from '../ui/AvatarStack';
 import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
+import { formatDmHeaderName } from '../../utils/dmFormatters';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
 import type { MessageWithUser } from '@backspace/shared';
 import { SystemMessage } from './SystemMessage';
@@ -771,9 +772,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const isGroupDm = !!dm.ownerId;
 
     if (isGroupDm) {
-      const groupName = dm.name ?? otherMembers
-        .map(m => m.displayName ?? (m.username?.includes('@') ? m.username.split('@')[0] : m.username))
-        .join(', ');
+      const groupName = formatDmHeaderName(dm, authUser);
       const ownerMember = dm.members.find(m => m.id === dm.ownerId);
       const ownerName = ownerMember?.displayName ?? ownerMember?.username ?? 'Unknown';
       const hasFederated = dm.members.some(m => m.homeInstance);

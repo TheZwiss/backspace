@@ -19,6 +19,15 @@ import { useVisualViewportInset } from '../../hooks/useVisualViewportInset';
 interface MessageInputProps {
   channelId: string;
   channelName: string;
+  /**
+   * Optional override for the textarea placeholder. When omitted the
+   * placeholder is derived from `channelName` (`'Message @user'` for DMs,
+   * `'Message #channel'` otherwise). DM call sites pass the resolved
+   * placeholder directly so they can collapse the unreadable joined-names
+   * form ("Message #Alice, Bob, Charlie, Dave") to "Message the group"
+   * when the group has no `dm.name` set.
+   */
+  placeholder?: string;
 }
 
 interface MentionState {
@@ -34,7 +43,7 @@ function makeFileHandleKey(): string {
   return `up-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function MessageInput({ channelId, channelName }: MessageInputProps) {
+export function MessageInput({ channelId, channelName, placeholder }: MessageInputProps) {
   // Composer state lives in composerStore (per-channel, persisted)
   const composerState = useComposerStore((s) => s.states.get(channelId)) ?? {
     draftText: '',
@@ -889,7 +898,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onPaste={canAttachFiles ? handlePaste : undefined}
-            placeholder={`Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
+            placeholder={placeholder ?? `Message ${channelName.startsWith('@') ? channelName : `#${channelName}`}`}
             className="input-embedded flex-1 py-[10px] px-1 resize-none text-[15px] leading-[1.375rem] max-h-[50vh] scrollbar-thin"
             rows={1}
           />

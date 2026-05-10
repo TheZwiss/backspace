@@ -248,3 +248,69 @@ export function formatDmTimestamp(createdAt: number): string {
   // Previous year — "Dec 14, 2025"
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
+
+// ─── DM Display Names ─────────────────────────────────────────────────────────
+
+type AuthLike = { id: string; username: string; homeInstance?: string | null } | null;
+
+/** Other-side member resolution, identical to every other DM display path. */
+function otherMembersOf(dm: DmChannel, currentUser: AuthLike): User[] {
+  return dm.members.filter(m => !isSelf(m, currentUser));
+}
+
+/** Member's visible name — display name if set, else the parsed base of the username. */
+function memberDisplayName(m: User): string {
+  return m.displayName ?? parseFederatedUsername(m.username ?? '').baseName ?? '';
+}
+
+/**
+ * Visible header name for a DM channel.
+ *
+ *   - 1-on-1 DM → the other member's display/base name (or `'Direct Message'`)
+ *   - Group with `dm.name` set → that name verbatim
+ *   - Group without a name → comma-joined member names (excluding self)
+ *
+ * Single source of truth: prior to this, the desktop chat header
+ * (`MainContent`) and the mobile chat header (`MobileChatScreen`) silently
+ * dropped `dm.name`, so a renamed group still showed the joined-names
+ * fallback in those two surfaces while every other site honored it.
+ */
+export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string {
+  const isGroup = !!dm.ownerId;
+  const others = otherMembersOf(dm, currentUser);
+
+  if (isGroup) {
+    if (dm.name && dm.name.trim().length > 0) return dm.name;
+    if (others.length === 0) return 'Group';
+    return others.map(memberDisplayName).join(', ');
+  }
+
+  const partner = others[0];
+  if (!partner) return 'Direct Message';
+  return memberDisplayName(partner) || 'Direct Message';
+}
+
+/**
+ * Placeholder label for a DM message input. Callers prepend `'Message '`.
+ *
+ *   - 1-on-1 DM → `'@<partner>'`
+ *   - Group with `dm.name` set → `'#<name>'`
+ *   - Group without a name → `'the group'`
+ *
+ * The unnamed-group case intentionally collapses to a generic noun: the
+ * joined-names form is unreadable as a one-line placeholder once a group
+ * has 4+ members ("Message #Test, Nova, youruser, Nova" runs off-screen
+ * and obscures the actual call-to-action).
+ */
+export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string {
+  const isGroup = !!dm.ownerId;
+
+  if (isGroup) {
+    if (dm.name && dm.name.trim().length > 0) return `#${dm.name}`;
+    return 'the group';
+  }
+
+  const partner = otherMembersOf(dm, currentUser)[0];
+  if (!partner) return '@unknown';
+  return `@${memberDisplayName(partner) || 'unknown'}`;
+}
