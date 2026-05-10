@@ -154,6 +154,9 @@ PK: id
 | ownerHomeInstance | text | | Owner's home instance URL |
 | deletedAt | integer | | Soft-delete (GC after 24h if no local members) |
 | createdAt | integer NOT NULL | | |
+| name | text | | Group DM custom name. NULL = use comma-joined member fallback. Owner-only writes. |
+| icon | text | | Group DM custom icon. NULL = use AvatarStack fallback. Owner instance stores bare filename; receivers store bare filename on download success or absolute URL on fallback. |
+| metadataUpdatedAt | integer NOT NULL | 0 | Server-side version vector for `group_metadata_update` federation dedup. Captured at the moment of the owner-instance DB write; default 0 means "any rename wins". |
 
 ### dm_members
 PK: (dmChannelId, userId)
