@@ -38,3 +38,10 @@ export const BITRATE_MATRIX_KBPS: Record<number, Record<number, number>> = {
   1440: { 30: 10000, 45: 12000, 60: 14000, 75: 16000, 90: 18000, 120: 22000 },
   2160: { 30: 20000, 45: 24000, 60: 28000, 75: 32000, 90: 38000, 120: 45000 },
 };
+
+// ─── Group DM Constants ──────────────────────────────────────────────────────
+
+export const GROUP_DM_NAME_MAX_LENGTH = 50;
+export const GROUP_DM_NAME_MIN_LENGTH = 1;
+export const GROUP_DM_ICON_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+export const GROUP_DM_ICON_MIME_PREFIX = 'image/';
