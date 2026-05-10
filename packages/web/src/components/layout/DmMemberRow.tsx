@@ -25,6 +25,15 @@ export interface DmMemberRowProps {
   isFriend: boolean;
   /** Whether to render the kebab "⋮" trigger button (right side of the row). */
   showKebab?: boolean;
+  /**
+   * Force the kebab to be fully opaque regardless of hover state.
+   *
+   * Desktop hides the kebab until the row is hovered (`opacity-0 group-hover:opacity-100`),
+   * which is invisible on touch devices that don't fire `:hover`. Mobile callers
+   * (e.g. `MobileGroupDmInfo`) pass `alwaysShowKebab` to keep the trigger
+   * permanently visible. Default `false` preserves the desktop hover-reveal.
+   */
+  alwaysShowKebab?: boolean;
   /** Fired when the viewer activates a menu entry. The component closes the menu itself. */
   onMenuAction: (action: DmMemberRowAction, member: User) => void;
 }
@@ -74,6 +83,7 @@ export function DmMemberRow({
   callerIsOwner,
   isFriend,
   showKebab = false,
+  alwaysShowKebab = false,
   onMenuAction,
 }: DmMemberRowProps) {
   const canonical = useCanonicalUserView(member);
@@ -229,7 +239,11 @@ export function DmMemberRow({
             // Right-click on the kebab still opens the same menu at cursor.
             handleContextMenu(e);
           }}
-          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-[4px] text-txt-tertiary hover:text-txt-primary hover:bg-interactive-active opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          className={`flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-[4px] text-txt-tertiary hover:text-txt-primary hover:bg-interactive-active transition-opacity ${
+            alwaysShowKebab
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+          }`}
         >
           <KebabIcon />
         </button>

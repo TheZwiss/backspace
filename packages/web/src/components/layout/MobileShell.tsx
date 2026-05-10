@@ -18,6 +18,7 @@ import { TransferIndicator } from './TransferIndicator';
 import { MobileVoiceMiniBar } from './MobileVoiceMiniBar';
 import { MobileVoiceFullScreen } from './MobileVoiceFullScreen';
 import { MobileMembersScreen } from './MobileMembersScreen';
+import { MobileGroupDmInfo } from './MobileGroupDmInfo';
 import { FriendsPage } from '../chat/FriendsPage';
 import { ExplorePage } from '../chat/ExplorePage';
 import { UserProfileModal } from '../modals/UserProfileModal';
@@ -89,6 +90,7 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
     </div>
   ),
   'members': (params) => <MobileMembersScreen params={params} />,
+  'group-dm-info': (params) => <MobileGroupDmInfo params={params} />,
   'voice-full': () => <MobileVoiceFullScreen />,
   'explore': () => <ExplorePage />,
   'user-profile': (params) => {

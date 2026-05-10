@@ -76,6 +76,7 @@ function renderRow(props: Partial<Parameters<typeof DmMemberRow>[0]> = {}) {
         callerIsOwner={props.callerIsOwner ?? false}
         isFriend={props.isFriend ?? false}
         showKebab={props.showKebab ?? false}
+        alwaysShowKebab={props.alwaysShowKebab ?? false}
         onMenuAction={props.onMenuAction ?? onMenuAction}
       />
       <ContextMenuRenderer />
@@ -197,6 +198,24 @@ describe('DmMemberRow — kebab', () => {
   it('hides the kebab when showKebab=false (default)', () => {
     const { container } = renderRow();
     expect(container.querySelector('[data-dm-member-kebab]')).toBeFalsy();
+  });
+
+  it('keeps the kebab transparent at rest when showKebab=true and alwaysShowKebab=false (desktop hover-reveal)', () => {
+    const { container } = renderRow({ showKebab: true });
+    const kebab = container.querySelector<HTMLButtonElement>('[data-dm-member-kebab]');
+    expect(kebab).toBeTruthy();
+    // Desktop default: hidden until row is hovered.
+    expect(kebab!.className).toContain('opacity-0');
+    expect(kebab!.className).toContain('group-hover:opacity-100');
+  });
+
+  it('forces the kebab fully opaque when alwaysShowKebab=true (mobile)', () => {
+    const { container } = renderRow({ showKebab: true, alwaysShowKebab: true });
+    const kebab = container.querySelector<HTMLButtonElement>('[data-dm-member-kebab]');
+    expect(kebab).toBeTruthy();
+    expect(kebab!.className).toContain('opacity-100');
+    // The hover-reveal class must NOT be present in always-show mode.
+    expect(kebab!.className).not.toContain('group-hover:opacity-100');
   });
 
   it('shows the kebab when showKebab=true and clicking it opens the same menu', async () => {
