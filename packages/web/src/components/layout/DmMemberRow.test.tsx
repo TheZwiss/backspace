@@ -15,9 +15,20 @@ vi.mock('../../audio/AudioManager', () => ({
 
 // Force desktop rendering in ContextMenuRenderer (mobile path triggers
 // document-level long-press listeners we don't need here).
+// DmMemberRow now anchors the profile popout itself via
+// `useUIStore.getState().openUserProfile(...)`, so we expose a real `getState`
+// hook that the test below asserts against.
+const openUserProfileMock = vi.fn();
+const uiStoreState = { isMobile: false, openUserProfile: openUserProfileMock };
 vi.mock('../../stores/uiStore', () => ({
-  useUIStore: (selector: (s: { isMobile: boolean; openUserProfile: () => void }) => unknown) =>
-    selector({ isMobile: false, openUserProfile: () => {} }),
+  useUIStore: Object.assign(
+    (selector: (s: typeof uiStoreState) => unknown) => selector(uiStoreState),
+    {
+      getState: () => uiStoreState,
+      setState: vi.fn(),
+      subscribe: vi.fn(),
+    },
+  ),
 }));
 
 import { DmMemberRow, type DmMemberRowAction } from './DmMemberRow';
@@ -50,6 +61,7 @@ beforeEach(() => {
   act(() => {
     useContextMenuStore.getState().close();
   });
+  openUserProfileMock.mockClear();
 });
 
 function renderRow(props: Partial<Parameters<typeof DmMemberRow>[0]> = {}) {
@@ -223,5 +235,89 @@ describe('DmMemberRow — onMenuAction', () => {
 
     expect(onMenuAction).toHaveBeenCalledTimes(1);
     expect(onMenuAction).toHaveBeenCalledWith('transfer', expect.objectContaining({ id: member.id }));
+  });
+});
+
+describe('DmMemberRow — profile popout anchoring', () => {
+  it('anchors openUserProfile to the row bounding rect (matches MemberSidebar pattern)', async () => {
+    const user = userEvent.setup();
+    const { container, onMenuAction, member } = renderRow();
+    const row = container.querySelector('[data-dm-member-row]') as HTMLElement;
+
+    // Stub the row's getBoundingClientRect so we get a stable anchor target.
+    const rect: DOMRect = {
+      top: 200,
+      left: 1500,
+      right: 1740,
+      bottom: 240,
+      width: 240,
+      height: 40,
+      x: 1500,
+      y: 200,
+      toJSON: () => ({}),
+    } as DOMRect;
+    row.getBoundingClientRect = () => rect;
+
+    // jsdom defaults innerHeight to 768; make sure that matters for the math.
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    openMenuByContextMenu(row);
+    const profileBtn = await screen.findByText('View Profile');
+    await user.click(profileBtn);
+
+    expect(openUserProfileMock).toHaveBeenCalledTimes(1);
+    expect(openUserProfileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: member.id }),
+      // Math.min(200, 800 - 450) = 200; left = 1500 - 316 = 1184.
+      { top: 200, left: 1184 },
+    );
+    // The row no longer routes 'profile' through onMenuAction.
+    expect(onMenuAction).not.toHaveBeenCalled();
+  });
+
+  it('clamps top to (innerHeight - 450) when the row sits near the bottom of the viewport', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRow();
+    const row = container.querySelector('[data-dm-member-row]') as HTMLElement;
+
+    const rect: DOMRect = {
+      top: 700,
+      left: 1500,
+      right: 1740,
+      bottom: 740,
+      width: 240,
+      height: 40,
+      x: 1500,
+      y: 700,
+      toJSON: () => ({}),
+    } as DOMRect;
+    row.getBoundingClientRect = () => rect;
+
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+
+    openMenuByContextMenu(row);
+    await user.click(await screen.findByText('View Profile'));
+
+    // Math.min(700, 800 - 450 = 350) → top clamped to 350.
+    expect(openUserProfileMock).toHaveBeenCalledWith(
+      expect.anything(),
+      { top: 350, left: 1184 },
+    );
+  });
+
+  it('falls back to onMenuAction("profile", ...) when the row has no bounding rect', async () => {
+    const user = userEvent.setup();
+    const { container, onMenuAction, member } = renderRow();
+    const row = container.querySelector('[data-dm-member-row]') as HTMLElement;
+
+    // Simulate a missing rect — defensive fallback path.
+    row.getBoundingClientRect = () => null as unknown as DOMRect;
+
+    openMenuByContextMenu(row);
+    await user.click(await screen.findByText('View Profile'));
+
+    expect(openUserProfileMock).not.toHaveBeenCalled();
+    expect(onMenuAction).toHaveBeenCalledTimes(1);
+    expect(onMenuAction).toHaveBeenCalledWith('profile', expect.objectContaining({ id: member.id }));
   });
 });

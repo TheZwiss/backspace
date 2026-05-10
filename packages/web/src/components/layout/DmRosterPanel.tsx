@@ -89,6 +89,10 @@ export function DmRosterPanel() {
 
   const handleMenuAction = async (action: DmMemberRowAction, member: User) => {
     if (action === 'profile') {
+      // Profile popout is anchored by DmMemberRow itself (matches the
+      // MemberSidebar pattern). This branch only fires on the unlikely
+      // fallback path where the row couldn't compute its bounding rect —
+      // in that case, anchor to the top-left of the roster column.
       openUserProfile(member, { top: 100, left: 100 });
       return;
     }

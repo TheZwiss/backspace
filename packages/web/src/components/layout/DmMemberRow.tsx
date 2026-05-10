@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import type { User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
 import { Username } from '../ui/Username';
@@ -9,6 +9,7 @@ import {
   useContextMenuStore,
   type ContextMenuItem,
 } from '../../stores/contextMenuStore';
+import { useUIStore } from '../../stores/uiStore';
 
 export type DmMemberRowAction = 'profile' | 'transfer' | 'kick' | 'remove-friend';
 
@@ -77,6 +78,7 @@ export function DmMemberRow({
 }: DmMemberRowProps) {
   const canonical = useCanonicalUserView(member);
   const openContextMenu = useContextMenuStore((s) => s.open);
+  const rowRef = useRef<HTMLDivElement>(null);
 
   const { baseName, domain } = parseFederatedUsername(canonical.username);
   const displayName = canonical.displayName ?? baseName;
@@ -90,7 +92,22 @@ export function DmMemberRow({
       key: 'profile',
       type: 'action',
       label: 'View Profile',
-      onClick: () => onMenuAction('profile', canonical),
+      onClick: () => {
+        // Anchor the popout to this row's bounding rect — matches the
+        // MemberSidebar pattern (see MemberSidebar.tsx:158-165). On mobile
+        // the position arg is ignored by the store (full-screen push).
+        const rect = rowRef.current?.getBoundingClientRect();
+        if (rect) {
+          useUIStore.getState().openUserProfile(canonical, {
+            top: Math.min(rect.top, window.innerHeight - 450),
+            left: rect.left - 316,
+          });
+        } else {
+          // Fallback: defer to the consumer if we can't compute a rect
+          // (shouldn't happen in practice, but keeps the contract intact).
+          onMenuAction('profile', canonical);
+        }
+      },
     });
 
     const showTransfer = callerIsOwner && !isSelf;
@@ -148,6 +165,7 @@ export function DmMemberRow({
 
   return (
     <div
+      ref={rowRef}
       data-context-menu
       data-dm-member-row
       data-user-id={canonical.id}
