@@ -1,33 +1,11 @@
 import type { DmChannel, User } from '@backspace/shared';
 import { Avatar } from '../ui/Avatar';
+import { AvatarStack } from '../ui/AvatarStack';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isSelf, isFederationGlobeApplicable } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmTimestamp, formatDmSidebarPreview } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
-
-/**
- * Renders a single avatar slot in the group DM avatar pair.
- * Extracted as a component so useCanonicalUserView can be called per-slot
- * (hooks must not be called inside a variable-length .map()).
- */
-function DmGroupAvatarSlot({ member, index }: { member: User; index: number }) {
-  const canonical = useCanonicalUserView(member);
-  const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
-  return (
-    <div
-      className="absolute rounded-full overflow-hidden border-2 border-surface-channel"
-      style={{
-        width: 22, height: 22,
-        left: index * 10,
-        top: index * 6,
-        zIndex: 2 - index,
-      }}
-    >
-      <Avatar src={canonical.avatar} name={displayName} size={22} userId={canonical.homeUserId ?? canonical.id} user={canonical} />
-    </div>
-  );
-}
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
   if (!homeInstance) return false;
@@ -67,10 +45,16 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
 
   const { baseName } = parseFederatedUsername(firstOther?.username ?? '');
   const displayName = isGroup
-    ? (otherMembers.length > 0
+    ? (dm.name ?? (otherMembers.length > 0
       ? otherMembers.map(m => m.displayName ?? parseFederatedUsername(m.username).baseName).join(', ')
-      : 'Empty Group')
+      : 'Empty Group'))
     : firstOther?.displayName ?? baseName;
+
+  // Group globe: at least one member is federated → render once with comma-joined tooltip.
+  const groupFederatedMembers = isGroup
+    ? dm.members.filter(m => isFederationGlobeApplicable(m))
+    : [];
+  const showGroupGlobe = isGroup && groupFederatedMembers.length > 0;
 
   const handleClick = () => onSelect(dm.id);
   const handleClose = (e: React.MouseEvent) => {
@@ -155,11 +139,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
 
       {/* Avatar */}
       {isGroup ? (
-        <div className="relative w-8 h-8 flex-shrink-0">
-          {otherMembers.slice(0, 2).map((m, i) => (
-            <DmGroupAvatarSlot key={m.id} member={m} index={i} />
-          ))}
-        </div>
+        <AvatarStack members={otherMembers} size={32} border="channel" iconUrl={dm.icon} />
       ) : (
         <Avatar src={firstOther?.avatar} name={firstOther?.displayName ?? parseFederatedUsername(firstOther?.username ?? '').baseName} size={32} status={firstOther?.status as any} userId={firstOther?.homeUserId ?? firstOther?.id} user={firstOther ?? undefined} />
       )}
@@ -170,6 +150,13 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
           <span className={nameClass}>
             {displayName}
           </span>
+          {showGroupGlobe && (
+            <Tooltip content={groupFederatedMembers.map(m => m.username).join(', ')} position="top">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={fedBadgeClass}>
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+            </Tooltip>
+          )}
           {!isGroup && firstOther && isFederationGlobeApplicable(firstOther) && (
             <Tooltip content={firstOther.username} position="top">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className={fedBadgeClass}>
