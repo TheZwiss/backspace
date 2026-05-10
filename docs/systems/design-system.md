@@ -199,6 +199,8 @@ interface AvatarStackProps {
 
 **Hooks-in-loop safety:** each rendered slot is its own `<AvatarTile>` component so `useCanonicalUserView` is called exactly once per slot, never inside a variable-length `.map()`.
 
+**Tile geometry contract.** Each `AvatarTile` renders at `size × size` with a 2px border (`box-sizing: border-box` from Tailwind preflight), so its content area is `(size − 4) × (size − 4)`. The inner `Avatar` is sized to that content area (`size − 2 · TILE_BORDER_WIDTH`) and centered geometrically on the tile via `flex items-center justify-center`, **not** by inline-flow placement. Both corrections are required: sizing the Avatar to the outer dimensions overflows the padding box and gets clipped off-center (visible disc remains centered, but the avatar's contents — image crop, initials gradient + letter — anchor at the padding-edge top-left and visibly drift toward the lower-right of the visible disc); relying on `Avatar`'s `inline-flex` placement makes the Avatar drift vertically by whatever the inherited `line-height` adds, independent of border. `TILE_BORDER_WIDTH` is exported from `AvatarStack.tsx` as the single source of truth for the `border-2` width and must be updated in lockstep with any future change to that class.
+
 **Border tiers:** the surface tier the stack sits on determines the tile border color (so the tiles cleanly separate from the panel they overlap). `channel` → `border-surface-channel` (sidebar); `chat` → `border-surface-chat` (chat area / welcome header / chat header); `modal` → `border-surface-elevated` (modal hero, mobile info-screen hero — there is no `surface-modal` token in `tailwind.config.js`).
 
 **Usage sites** (all six call sites in the codebase):

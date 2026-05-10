@@ -164,6 +164,35 @@ describe('AvatarStack', () => {
     expect(overflowTop).toBeGreaterThan(Math.max(...tileTops) - 1);
   });
 
+  it('sizes the inner Avatar to the tile content area so contents stay centered', () => {
+    // Regression for the off-center clipping bug: when the inner Avatar was
+    // sized to the outer tile dimensions, `box-sizing: border-box` + 2px border
+    // pushed its contents (image crop, initials gradient + letter) toward the
+    // lower-right of the visible disc. The fix is to size the inner Avatar to
+    // (tileSize − 2·border) and center it geometrically with flex.
+    const { container } = render(
+      <AvatarStack members={makeUsers(4)} size={80} border="chat" />,
+    );
+    const tiles = Array.from(
+      container.querySelectorAll('[data-avatar-stack-tile]'),
+    ) as HTMLElement[];
+    expect(tiles.length).toBe(4);
+    for (const tile of tiles) {
+      // Tile is centered as a flex container so the Avatar bypasses inline-flow
+      // baseline drift entirely.
+      expect(tile.className).toMatch(/\bflex\b/);
+      expect(tile.className).toMatch(/items-center/);
+      expect(tile.className).toMatch(/justify-center/);
+      // Inner Avatar is sized to (tileSize − 2·border) so it fits the padding
+      // box exactly. With size=80 and tileRatio=0.58, tileSize=46 → inner=42.
+      const tileSize = parseInt(tile.style.width, 10);
+      const inner = tile.querySelector('[data-avatar]') as HTMLElement | null;
+      expect(inner).toBeTruthy();
+      expect(inner!.style.width).toBe(`${tileSize - 4}px`);
+      expect(inner!.style.height).toBe(`${tileSize - 4}px`);
+    }
+  });
+
   it('renders icon override and ignores the stack', () => {
     const { container } = render(
       <AvatarStack

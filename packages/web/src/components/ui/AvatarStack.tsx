@@ -50,6 +50,18 @@ const BORDER_CLASS: Record<AvatarStackProps['border'], string> = {
   modal: 'border-surface-elevated',
 };
 
+/**
+ * Width (in px) of the `border-2` Tailwind class applied to every tile,
+ * placeholder, badge, and overflow slot. Centralized as a constant because
+ * `box-sizing: border-box` (Tailwind preflight default) makes a wrapper with
+ * `width: N` + `border-2` have a content area of `(N − 2·BORDER) × (N − 2·BORDER)`.
+ * Inner content (e.g. the `Avatar` inside an `AvatarTile`) must be sized to
+ * the content area, not the outer width — otherwise it overflows the padding
+ * box, gets clipped off-center by `overflow-hidden + rounded-full`, and the
+ * visible avatar/initials end up shifted toward the upper-left of the tile.
+ */
+const TILE_BORDER_WIDTH = 2;
+
 /** Resolves a bare filename to /api/uploads/, leaves absolute URLs alone. */
 function resolveIconSrc(iconUrl: string): string {
   if (iconUrl.startsWith('http') || iconUrl.startsWith('blob:') || iconUrl.startsWith('data:') || iconUrl.startsWith('/')) {
@@ -92,16 +104,32 @@ function AvatarTile({
 }) {
   const canonical = useCanonicalUserView(member);
   const displayName = canonical.displayName ?? parseFederatedUsername(canonical.username).baseName;
+  // Two corrections on top of the previous "drop the Avatar straight in" form:
+  //
+  //   1. Box-sizing. The wrapper renders at `size × size` with a 2px border
+  //      (border-box default), so its content area is `(size − 4) × (size − 4)`.
+  //      An Avatar sized to `size` would overflow the padding box and get
+  //      clipped off-center — the clip is centered on the wrapper but the
+  //      Avatar starts at the padding-edge top-left, so its contents (image
+  //      crop, initials gradient + letter) end up displaced toward the
+  //      lower-right of the visible disc.
+  //   2. Inline-flex baseline. `Avatar`'s root is `inline-flex`, which makes
+  //      it sit on the line box's text baseline. With any non-1 inherited
+  //      `line-height`, the Avatar drifts vertically inside its container,
+  //      not just horizontally. Centering it via the wrapper (`flex` +
+  //      `items-center justify-center`) bypasses inline layout entirely so
+  //      the Avatar is anchored geometrically, regardless of inherited type.
+  const innerSize = Math.max(0, size - 2 * TILE_BORDER_WIDTH);
   return (
     <div
       data-avatar-stack-tile="true"
-      className={`absolute rounded-full overflow-hidden border-2 ${borderClass} ${className}`}
+      className={`absolute rounded-full overflow-hidden border-2 flex items-center justify-center ${borderClass} ${className}`}
       style={{ width: size, height: size, ...style }}
     >
       <Avatar
         src={canonical.avatar}
         name={displayName}
-        size={size}
+        size={innerSize}
         userId={canonical.homeUserId ?? canonical.id}
         user={canonical}
       />
