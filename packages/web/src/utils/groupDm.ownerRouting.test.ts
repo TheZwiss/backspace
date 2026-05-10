@@ -160,7 +160,25 @@ describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
     await api.dm.kickMember('dm-1', 'target-user');
 
     expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.kickMember).toHaveBeenCalledWith('dm-1', 'target-user');
+    // Third arg is the optional federated identity (undefined when target is local)
+    expect(remoteClient.dm.kickMember).toHaveBeenCalledWith('dm-1', 'target-user', undefined);
+  });
+
+  it('after transfer: api.dm.kickMember forwards federated identity when supplied', async () => {
+    useSpaceStore.setState({
+      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
+    });
+
+    await api.dm.kickMember('dm-1', 'target-user', {
+      homeUserId: 'target-home-id',
+      homeInstance: 'https://orbit.test',
+    });
+
+    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
+    expect(remoteClient.dm.kickMember).toHaveBeenCalledWith('dm-1', 'target-user', {
+      homeUserId: 'target-home-id',
+      homeInstance: 'https://orbit.test',
+    });
   });
 
   it('after transfer: api.dm.transferOwnership routes to new owner instance', async () => {
@@ -171,7 +189,24 @@ describe('group DM owner routing — api.dm.* (Task 5.2)', () => {
     await api.dm.transferOwnership('dm-1', 'next-owner');
 
     expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
-    expect(remoteClient.dm.transferOwnership).toHaveBeenCalledWith('dm-1', 'next-owner');
+    expect(remoteClient.dm.transferOwnership).toHaveBeenCalledWith('dm-1', 'next-owner', undefined);
+  });
+
+  it('after transfer: api.dm.transferOwnership forwards federated identity when supplied', async () => {
+    useSpaceStore.setState({
+      dmChannels: [{ ...baseDm, ownerHomeInstance: 'https://orbit.test' }],
+    });
+
+    await api.dm.transferOwnership('dm-1', 'next-owner', {
+      homeUserId: 'next-owner-home-id',
+      homeInstance: 'https://orbit.test',
+    });
+
+    expect(mockGetApiForOrigin).toHaveBeenCalledWith('https://orbit.test');
+    expect(remoteClient.dm.transferOwnership).toHaveBeenCalledWith('dm-1', 'next-owner', {
+      homeUserId: 'next-owner-home-id',
+      homeInstance: 'https://orbit.test',
+    });
   });
 
   it('non-owner-only op (sendMessage) is unaffected by ownerHomeInstance', async () => {

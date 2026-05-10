@@ -121,7 +121,17 @@ export function DmRosterPanel() {
     if (!pendingKick) return;
     setSubmitting(true);
     try {
-      await api.dm.kickMember(dmChannel.id, pendingKick.id);
+      // Pass federated identity when the target is a federated user.
+      // `pendingKick.id` may be the home id (when the home view is in the
+      // userViews cache) OR a local id from any instance — neither is
+      // guaranteed to match the OWNER instance's local replicated id. The
+      // owner instance resolves home id + home instance via
+      // `resolveOrCreateReplicatedUser`, which is the only deterministic
+      // way to find the right `dm_members.userId` row across instances.
+      const federated = pendingKick.homeUserId && pendingKick.homeInstance
+        ? { homeUserId: pendingKick.homeUserId, homeInstance: pendingKick.homeInstance }
+        : undefined;
+      await api.dm.kickMember(dmChannel.id, pendingKick.id, federated);
       addToast(
         `Removed ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from the group`,
         'success',
@@ -143,7 +153,11 @@ export function DmRosterPanel() {
     if (!pendingTransfer) return;
     setSubmitting(true);
     try {
-      await api.dm.transferOwnership(dmChannel.id, pendingTransfer.id);
+      // See confirmKick for the rationale on federated identity.
+      const federated = pendingTransfer.homeUserId && pendingTransfer.homeInstance
+        ? { homeUserId: pendingTransfer.homeUserId, homeInstance: pendingTransfer.homeInstance }
+        : undefined;
+      await api.dm.transferOwnership(dmChannel.id, pendingTransfer.id, federated);
       addToast(
         `Ownership transferred to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}`,
         'success',

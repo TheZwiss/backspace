@@ -106,9 +106,16 @@ const apiTransferOwnership = vi.fn().mockResolvedValue({});
 vi.mock('../../api/client', () => ({
   api: {
     dm: {
-      kickMember: (channelId: string, userId: string) => apiKickMember(channelId, userId),
-      transferOwnership: (channelId: string, userId: string) =>
-        apiTransferOwnership(channelId, userId),
+      kickMember: (
+        channelId: string,
+        userId: string,
+        federated?: { homeUserId: string; homeInstance: string },
+      ) => apiKickMember(channelId, userId, federated),
+      transferOwnership: (
+        channelId: string,
+        userId: string,
+        federated?: { homeUserId: string; homeInstance: string },
+      ) => apiTransferOwnership(channelId, userId, federated),
     },
   },
 }));
@@ -343,7 +350,8 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiKickMember).toHaveBeenCalledTimes(1);
     });
-    expect(apiKickMember).toHaveBeenCalledWith('dm-1', 'tgt');
+    // Local target → federated arg is undefined.
+    expect(apiKickMember).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
   });
 
   it('transfer action: opens confirm dialog, then calls api.dm.transferOwnership on confirm', async () => {
@@ -367,7 +375,8 @@ describe('DmRosterPanel — action wiring', () => {
     await waitFor(() => {
       expect(apiTransferOwnership).toHaveBeenCalledTimes(1);
     });
-    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', 'tgt');
+    // Local target → federated arg is undefined.
+    expect(apiTransferOwnership).toHaveBeenCalledWith('dm-1', 'tgt', undefined);
   });
 
   it('remove-friend action: calls socialStore.removeFriend with the row user id', async () => {

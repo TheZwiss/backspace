@@ -248,11 +248,32 @@ Either field may be omitted (no-op for that field), null (clear), or a value. Em
 
 Owner-only removal of a single member from a group DM.
 
+**Target identification (local vs federated):**
+
+The `:targetUserId` path segment carries either a local user id on the
+owner's instance OR a federated home user id. Optional query string
+`?homeInstance=<origin>` signals federated resolution: when present, the
+server treats the segment as a homeUserId and resolves it via
+`resolveOrCreateReplicatedUser(targetUserId, homeInstance)`. Without the
+query parameter, the segment is treated as a local id (legacy form). This
+mirrors the federated path on `POST /api/dm/:id/transfer` and is required
+for any federated target, because:
+
+- The channel-serving instance and the owner-serving instance can disagree
+  on the local replicated user id for the same federated user.
+- The client's `useCanonicalUserView` cache may surface the user's HOME
+  view, whose `id` is the home id (not this instance's local replicated id).
+
+The client passes the federated query when the target has `homeUserId` +
+`homeInstance` populated. See `api.dm.kickMember`'s `federated` parameter.
+
 **Validation:**
 - 1-on-1 DM (`ownerId` is NULL) -> 400
 - Caller must be the owner -> else 403
 - Cannot kick self (use leave instead) -> 400
 - Target must be a current member -> else 404
+- Unresolvable target (federated id with no replicated row, or unknown
+  local id) -> 404
 
 **Sequence:** evict target from any active DM voice room (`evictUserFromDmVoiceRoom`), then reuse the leave path with `reason: 'kick'` -- emits `member_removed` system message (with `reason: 'kick'`), deletes `dm_members` row + `read_states`, broadcasts `dm_member_removed`, sends `dm_channel_closed` to the kicked user, queues `member_remove` outbox event with `reason: 'kick'`. Receiver authority for kicks is `sourceInstance === ownerHomeInstance`; non-owner kicks reject as `unauthorized_source`.
 
@@ -262,15 +283,48 @@ Owner-only removal of a single member from a group DM.
 
 Owner-only transfer of ownership without leaving the channel.
 
-**Request:** `{ newOwnerId: string }`
+**Request:** `TransferOwnershipRequest`
+
+```typescript
+interface TransferOwnershipRequest {
+  newOwnerId?: string;     // local user id on the owner's instance
+  homeUserId?: string;     // federated identifier (paired with homeInstance)
+  homeInstance?: string;   // federated identifier (paired with homeUserId)
+}
+```
+
+**Target identification (local vs federated):**
+
+The endpoint accepts either a local id (`newOwnerId`) OR a federated
+identity (`homeUserId` + `homeInstance`). Federated identification mirrors
+`AddDmMemberRequest` and is required when the client only knows the
+target's home identity — the common case for federated members surfaced
+through `useCanonicalUserView`, whose `id` field is the home id, NOT this
+instance's local replicated id. The server resolves via
+`resolveOrCreateReplicatedUser(homeUserId, homeInstance)` before
+validating membership.
+
+When both forms are supplied, the **federated args win** — they're
+strictly more specific (homeUserId + homeInstance disambiguates across
+instances), and explicit federation arguments should override a stale
+local id that may have come from a cached user view.
+
+Historical context: without the federated path, the membership check
+`isDmMember(id, newOwnerId)` always failed for federated targets because
+`dm_members.userId` on the owner instance is the LOCAL replicated id, not
+the federated home id passed by the client. Symptom was a 400 toast on
+the client: "Target user is not a member of this DM channel".
 
 **Validation:**
+- Body must include `newOwnerId` OR (`homeUserId` + `homeInstance`) -> else 400
+- Unresolvable target (federated id with no replicated row, or unknown
+  local id) -> 404
 - 1-on-1 DM (`ownerId` is NULL) -> 400
 - Caller must be the current owner -> else 403
-- `newOwnerId !== ownerId` (reject self-transfer) -> 400
+- Resolved `newOwnerId !== ownerId` (reject self-transfer) -> 400
 - Target must be a current member -> else 400
 
-**Transaction (`transferGroupDmOwnership`):** updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts `owner_changed` system message; broadcasts `dm_owner_updated`; queues `ownership_transfer` outbox event. The receiver path is the existing `processOwnershipTransferEvent` -- this endpoint reuses it without modification.
+**Transaction (`transferGroupDmOwnership`):** updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts `owner_changed` system message; broadcasts `dm_owner_updated`; queues `ownership_transfer` outbox event. The receiver path is the existing `processOwnershipTransferEvent` -- this endpoint reuses it without modification. The outbox event's `ownership.newOwner` carries the resolved user's home identity, so peers see the correct homeUserId/homeInstance regardless of which form the client used.
 
 ---
 
@@ -840,3 +894,4 @@ For full wire formats, see `docs/systems/websocket.md`.
 | Duplicated membership system messages across restarts | 4× "Jannis added youruser" in group DM, channel keeps flipping to unread after each deploy | Membership event processors inserted system messages unconditionally. Each approval-flow re-peering reset peer `last_synced_at = 0`, so initial sync replayed every historical `member_add` / `member_remove` / `ownership_transfer` on next boot. Each replay's new snowflake ID exceeded the user's `read_states.last_read_message_id`, flipping unread. | Dedup by `(sourceInstance, event.messageId)` on the inserted system message. Both bootstrap and incremental paths in `processMemberAddEvent` now persist these fields so replay is a no-op. |
 | Raw JSON in DM sidebar previews | DM sidebar showed `{"event":"space_invite",...}` / `{"event":"member_added",...}` as the last-message preview | `DmLastMessagePreview` shape omitted `type`, so the client could not distinguish system from user messages and rendered `lastMessage.content` verbatim. | Added `type` to `DmLastMessagePreview`, populated it from `dm_messages.type` in every server emission site, and routed the sidebar through a single `formatDmSidebarPreview` helper that renders human-readable text for each system event. |
 | Owner-only requests routed to wrong instance after manual transfer (latent) | After `POST /api/dm/:id/transfer` moved ownership to a member whose `homeInstance` differed from the channel's pinned serving origin, owner-only client calls (`updateMetadata`, `kickMember`, `transferOwnership`) routed via `getChannelOrigin` would emit outbox events with `sourceInstance !== ownerHomeInstance`, and all peers would reject them as `attribution_mismatch`. Latent only because pre-polish there was no kick endpoint and no metadata edit; auto-transfer-on-leave masked the issue (the leaver IS the actor, and `member_remove reason='leave'` accepts any source). | Added `getOwnerInstanceForDm(channelId)` exported next to `getChannelOrigin`. All four owner-only API client methods (`updateMetadata`, `kickMember`, `transferOwnership` — and any future owner-only routes) call `getApiForOrigin(getOwnerInstanceForDm(channelId))` instead of channel origin. Non-owner operations are unchanged. |
+| Kick / transfer to federated member always failed with "user not a member" | `DELETE /api/dm/:id/members/:targetUserId` and `POST /api/dm/:id/transfer` accepted only a local user id. The client passed `canonical.id` from `useCanonicalUserView`, which returns the user's HOME id when the home view is cached. After owner-routing the request to the owner instance, the owner instance's `dm_members.userId` (its own local replicated id) never matched the home id, so `isDmMember` returned false. | Both endpoints now accept federated identification (`homeUserId` + `homeInstance`) — the transfer endpoint takes them in the body, the kick endpoint reads `homeInstance` from a query string and treats the URL segment as a homeUserId. Server resolves via `resolveOrCreateReplicatedUser` before membership check. Mirrors the `addDmMember` pattern. Client `kickMember` / `transferOwnership` accept an optional `federated` arg and pass it when the target has `homeUserId` + `homeInstance` populated. |

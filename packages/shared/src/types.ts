@@ -594,6 +594,23 @@ export interface AddDmMemberRequest {
   homeInstance?: string;
 }
 
+/**
+ * Body of POST /api/dm/:id/transfer.
+ *
+ * Accepts either a local user id (`newOwnerId`) or a federated identity
+ * (`homeUserId` + `homeInstance`). Federated identification mirrors
+ * `AddDmMemberRequest` and is required when the caller only knows the
+ * target's home identity — typical for federated members surfaced through
+ * the client's `userViews` cache, where `id` is the home id and not the
+ * owner instance's local replicated id. When both are supplied, the
+ * federated args take precedence (strictly more specific).
+ */
+export interface TransferOwnershipRequest {
+  newOwnerId?: string;
+  homeUserId?: string;
+  homeInstance?: string;
+}
+
 export interface GroupDmUserIdentity {
   id: string;
   homeUserId?: string | null;

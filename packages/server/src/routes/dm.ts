@@ -1976,10 +1976,42 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
-  // DELETE /api/dm/:id/members/:targetUserId - Owner kicks a member from a group DM
-  app.delete<{ Params: { id: string; targetUserId: string } }>('/api/dm/:id/members/:targetUserId', async (request, reply) => {
-    const { id, targetUserId } = request.params;
+  // DELETE /api/dm/:id/members/:targetUserId - Owner kicks a member from a group DM.
+  //
+  // The `:targetUserId` URL segment carries either a local user id OR a
+  // federated home user id. When the optional `homeInstance` query string is
+  // present, the segment is interpreted as a home id and resolved via
+  // `resolveOrCreateReplicatedUser(targetUserId, homeInstance)` — same pattern
+  // as POST /api/dm/:id/transfer and POST /api/dm/:id/members. This is
+  // necessary when the client only knows the target's home identity (the
+  // common case for federated members rendered through `useCanonicalUserView`,
+  // whose `id` is the home id, not this instance's local replicated id).
+  // Without this path, the membership check `isDmMember(id, targetUserId)`
+  // fails because `dm_members.userId` on the owner instance is its local
+  // replicated id, not the federated home id.
+  app.delete<{
+    Params: { id: string; targetUserId: string };
+    Querystring: { homeInstance?: string };
+  }>('/api/dm/:id/members/:targetUserId', async (request, reply) => {
+    const { id, targetUserId: rawTargetSegment } = request.params;
+    const homeInstanceQuery = request.query?.homeInstance;
     const db = getDb();
+
+    // Resolve the target to a local user row. When `homeInstance` is supplied,
+    // treat the URL segment as a homeUserId. Otherwise, treat it as a local
+    // user id and look it up directly.
+    let targetUserRow: typeof schema.users.$inferSelect | undefined;
+    if (typeof homeInstanceQuery === 'string' && homeInstanceQuery.length > 0) {
+      targetUserRow = resolveOrCreateReplicatedUser(rawTargetSegment, homeInstanceQuery, db) ?? undefined;
+    } else {
+      targetUserRow = db.select().from(schema.users).where(eq(schema.users.id, rawTargetSegment)).get();
+    }
+
+    if (!targetUserRow) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    const targetUserId = targetUserRow.id;
 
     // Channel must exist (and not be soft-deleted)
     const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
@@ -2021,16 +2053,71 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
-  // POST /api/dm/:id/transfer - Owner transfers ownership to another group member without leaving
-  app.post<{ Params: { id: string }; Body: { newOwnerId?: unknown } }>('/api/dm/:id/transfer', async (request, reply) => {
+  // POST /api/dm/:id/transfer - Owner transfers ownership to another group member without leaving.
+  //
+  // Body accepts either a local id (`newOwnerId`) or a federated identity
+  // (`homeUserId` + `homeInstance`). Federated identification mirrors the
+  // `addDmMember` pattern (see `POST /api/dm/:id/members` above) and is
+  // required when the client only knows the target's home identity — for
+  // example when the channel-serving instance and the owner-serving instance
+  // disagree on the local replicated user id, or when `useCanonicalUserView`
+  // surfaces the user's home view (whose `id` is the home id, NOT this
+  // instance's local replicated id). Without this path, transferring ownership
+  // to a federated member always failed with "user is not part of the DM"
+  // because the owner instance's `dm_members.userId` is its OWN local id, not
+  // the federated home id.
+  app.post<{
+    Params: { id: string };
+    Body: {
+      newOwnerId?: unknown;
+      homeUserId?: unknown;
+      homeInstance?: unknown;
+    };
+  }>('/api/dm/:id/transfer', async (request, reply) => {
     const { id } = request.params;
-    const newOwnerId = (request.body as { newOwnerId?: unknown } | null)?.newOwnerId;
+    const body = (request.body ?? {}) as {
+      newOwnerId?: unknown;
+      homeUserId?: unknown;
+      homeInstance?: unknown;
+    };
+    const rawNewOwnerId = body.newOwnerId;
+    const rawHomeUserId = body.homeUserId;
+    const rawHomeInstance = body.homeInstance;
 
-    if (typeof newOwnerId !== 'string' || newOwnerId.length === 0) {
-      return reply.code(400).send({ error: 'newOwnerId is required', statusCode: 400 });
+    const hasFederatedArgs =
+      typeof rawHomeUserId === 'string' && rawHomeUserId.length > 0 &&
+      typeof rawHomeInstance === 'string' && rawHomeInstance.length > 0;
+    const hasLocalArg = typeof rawNewOwnerId === 'string' && rawNewOwnerId.length > 0;
+
+    if (!hasFederatedArgs && !hasLocalArg) {
+      return reply.code(400).send({
+        error: 'newOwnerId or (homeUserId + homeInstance) is required',
+        statusCode: 400,
+      });
     }
 
     const db = getDb();
+
+    // Resolve the new owner to a local user row. Federated identification
+    // takes precedence when both forms are supplied — it's strictly more
+    // specific (homeUserId + homeInstance disambiguates across instances),
+    // so the explicit federated args wins over a possibly-stale local id.
+    let newOwnerRow: typeof schema.users.$inferSelect | undefined;
+    if (hasFederatedArgs) {
+      newOwnerRow = resolveOrCreateReplicatedUser(
+        rawHomeUserId as string,
+        rawHomeInstance as string,
+        db,
+      ) ?? undefined;
+    } else {
+      newOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, rawNewOwnerId as string)).get();
+    }
+
+    if (!newOwnerRow) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+
+    const newOwnerId = newOwnerRow.id;
 
     // Channel must exist (and not be soft-deleted)
     const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();

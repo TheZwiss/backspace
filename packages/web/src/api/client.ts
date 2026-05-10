@@ -24,6 +24,7 @@ import type {
   CreateDmRequest,
   AddDmMemberRequest,
   CreateGroupDmRequest,
+  TransferOwnershipRequest,
   CreateDmMessageRequest,
   Friend,
   FriendRequest,
@@ -184,14 +185,36 @@ export class BackspaceApiClient {
     updateMetadata: (channelId: string, body: { name?: string | null; icon?: string | null }) => Promise<DmChannel>;
     /**
      * Owner-only: kick a member from a group DM.
-     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see updateMetadata.
+     *
+     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see
+     * updateMetadata. The optional `federated` arg is required when the
+     * target is a federated user: the channel-serving instance and the
+     * owner-serving instance disagree on the local replicated user id, and
+     * the home view surfaced through `userViews` carries the home id, not
+     * the owner instance's local id. When `federated` is supplied, the
+     * server resolves it via `resolveOrCreateReplicatedUser`. Without it,
+     * `targetUserId` is treated as a local id on the owner instance.
      */
-    kickMember: (channelId: string, targetUserId: string) => Promise<{ success: boolean }>;
+    kickMember: (
+      channelId: string,
+      targetUserId: string,
+      federated?: { homeUserId: string; homeInstance: string },
+    ) => Promise<{ success: boolean }>;
     /**
      * Owner-only: transfer group DM ownership to another member without leaving.
-     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see updateMetadata.
+     *
+     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see
+     * updateMetadata. The optional `federated` arg is required for
+     * federated targets, mirroring `kickMember`. When supplied, the server
+     * uses `resolveOrCreateReplicatedUser(homeUserId, homeInstance)` to
+     * find the local user row. Without it, `newOwnerId` is treated as a
+     * local id on the owner instance.
      */
-    transferOwnership: (channelId: string, newOwnerId: string) => Promise<DmChannel>;
+    transferOwnership: (
+      channelId: string,
+      newOwnerId: string,
+      federated?: { homeUserId: string; homeInstance: string },
+    ) => Promise<DmChannel>;
     spaceInvite: (body: SpaceInviteRequest) => Promise<SpaceInviteResponse>;
   };
 
@@ -518,15 +541,31 @@ export class BackspaceApiClient {
         if (target !== this) return target.dm.updateMetadata(channelId, body);
         return request<DmChannel>('PATCH', `/dm/${channelId}`, body);
       },
-      kickMember: (channelId, targetUserId) => {
+      kickMember: (channelId, targetUserId, federated) => {
         const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
-        if (target !== this) return target.dm.kickMember(channelId, targetUserId);
+        if (target !== this) return target.dm.kickMember(channelId, targetUserId, federated);
+        // For federated targets, the URL segment carries the homeUserId and
+        // the `homeInstance` query string signals federated resolution. The
+        // server route resolves via `resolveOrCreateReplicatedUser`. For
+        // local targets, the URL segment is the local user id (legacy form)
+        // and no query is appended.
+        if (federated) {
+          const homeId = encodeURIComponent(federated.homeUserId);
+          const homeInst = encodeURIComponent(federated.homeInstance);
+          return request<{ success: boolean }>(
+            'DELETE',
+            `/dm/${channelId}/members/${homeId}?homeInstance=${homeInst}`,
+          );
+        }
         return request<{ success: boolean }>('DELETE', `/dm/${channelId}/members/${targetUserId}`);
       },
-      transferOwnership: (channelId, newOwnerId) => {
+      transferOwnership: (channelId, newOwnerId, federated) => {
         const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
-        if (target !== this) return target.dm.transferOwnership(channelId, newOwnerId);
-        return request<DmChannel>('POST', `/dm/${channelId}/transfer`, { newOwnerId });
+        if (target !== this) return target.dm.transferOwnership(channelId, newOwnerId, federated);
+        const body: TransferOwnershipRequest = federated
+          ? { homeUserId: federated.homeUserId, homeInstance: federated.homeInstance }
+          : { newOwnerId };
+        return request<DmChannel>('POST', `/dm/${channelId}/transfer`, body);
       },
       spaceInvite: (body) =>
         request<SpaceInviteResponse>('POST', '/dm/space-invite', body),

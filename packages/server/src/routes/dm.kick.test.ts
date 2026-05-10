@@ -355,4 +355,56 @@ describe('DELETE /api/dm/:id/members/:targetUserId — owner kick', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toMatch(/not found/i);
   });
+
+  // Federated-identification path — mirrors POST /api/dm/:id/transfer. The
+  // client cannot reliably know the OWNER instance's local user id for a
+  // federated member (the home view surfaced through `useCanonicalUserView`
+  // carries the home id). The `?homeInstance=...` query string signals the
+  // path segment is a homeUserId; the server resolves via
+  // `resolveOrCreateReplicatedUser` before checking membership.
+  it('kick with federated identity (?homeInstance=...) → resolves to local replicated user and succeeds', async () => {
+    seedGroupDm({
+      id: 'dm-kick-fed-1',
+      ownerId: 'owner-A',
+      members: ['owner-A', 'member-B', 'remote-D'],
+      federatedId: 'fed-kick-fed-1',
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/dm/dm-kick-fed-1/members/remote-dan?homeInstance=' + encodeURIComponent('https://remote.test'),
+    });
+    expect(res.statusCode).toBe(200);
+
+    // Federated member's local replicated row is gone from this channel
+    const remaining = testDb.select().from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, 'dm-kick-fed-1'))
+      .all();
+    expect(remaining.map((m) => m.userId).sort()).toEqual(['member-B', 'owner-A']);
+
+    // Outbox event carries the federated user's home identity with reason=kick
+    const outboxRows = testDb.select().from(schema.federationOutbox).all();
+    const removeRows = outboxRows.filter((r) => r.eventType === 'member_remove');
+    expect(removeRows.length).toBe(1);
+    const wire = JSON.parse(removeRows[0]!.payload);
+    expect(wire.membership.reason).toBe('kick');
+    expect(wire.membership.user.homeUserId).toBe('remote-dan');
+    expect(wire.membership.user.homeInstance).toBe('https://remote.test');
+  });
+
+  // Negative case: federated identity for a user who is NOT a member.
+  it('kick with federated identity for non-member → 404', async () => {
+    seedGroupDm({
+      id: 'dm-kick-fed-2',
+      ownerId: 'owner-A',
+      members: ['owner-A', 'member-B'], // remote-D is NOT a member here
+    });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/dm/dm-kick-fed-2/members/remote-dan?homeInstance=' + encodeURIComponent('https://remote.test'),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toMatch(/not a member/i);
+  });
 });

@@ -332,7 +332,11 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     if (!pendingKick || !channelId) return;
     setSubmittingMemberAction(true);
     try {
-      await api.dm.kickMember(channelId, pendingKick.id);
+      // See DmRosterPanel.confirmKick for federated identity rationale.
+      const federated = pendingKick.homeUserId && pendingKick.homeInstance
+        ? { homeUserId: pendingKick.homeUserId, homeInstance: pendingKick.homeInstance }
+        : undefined;
+      await api.dm.kickMember(channelId, pendingKick.id, federated);
       addToast(
         `Removed ${pendingKick.displayName ?? parseFederatedUsername(pendingKick.username).baseName} from the group`,
         'success',
@@ -354,7 +358,11 @@ export function MobileGroupDmInfo({ params }: MobileGroupDmInfoProps) {
     if (!pendingTransfer || !channelId) return;
     setSubmittingMemberAction(true);
     try {
-      await api.dm.transferOwnership(channelId, pendingTransfer.id);
+      // See DmRosterPanel.confirmKick for federated identity rationale.
+      const federated = pendingTransfer.homeUserId && pendingTransfer.homeInstance
+        ? { homeUserId: pendingTransfer.homeUserId, homeInstance: pendingTransfer.homeInstance }
+        : undefined;
+      await api.dm.transferOwnership(channelId, pendingTransfer.id, federated);
       addToast(
         `Ownership transferred to ${pendingTransfer.displayName ?? parseFederatedUsername(pendingTransfer.username).baseName}`,
         'success',

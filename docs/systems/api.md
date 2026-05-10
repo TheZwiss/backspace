@@ -126,8 +126,8 @@ PATCH  /dm/:id                 { name?, icon? }                     → { id, na
 DELETE /dm/:id                                                      → { success } (soft-close)
 POST   /dm/:id/members         { userIds[] }                        → { dmChannel } [owner, max 10]
 DELETE /dm/:id/members                                              → { success } (leave)
-DELETE /dm/:id/members/:targetUserId                                → { success } [owner kick; cannot self-kick; group only]
-POST   /dm/:id/transfer        { newOwnerId }                       → { success } [owner; member must be in channel; not self]
+DELETE /dm/:id/members/:targetUserId  ?homeInstance=                → { success } [owner kick; cannot self-kick; group only; segment is homeUserId when ?homeInstance is set]
+POST   /dm/:id/transfer        { newOwnerId? | (homeUserId+homeInstance) } → { success } [owner; resolved member must be in channel; not self]
 GET    /dm/:id/messages        ?before=&limit=50                    → { messages[] }
 POST   /dm/:id/messages        { content, attachments?, replyToId? } → { message }
 PATCH  /dm/messages/:id        { content }                          → { message } [author]
@@ -136,9 +136,9 @@ DELETE /dm/messages/:id                                             → { succes
 
 **`PATCH /dm/:id`** — Owner-only update of a group DM's `name` and `icon`. Either field may be omitted (no-op), null (clear), or set. Empty/whitespace name collapses to null. `icon` accepts a bare attachment filename owned by the caller (image/*, ≤ `GROUP_DM_ICON_MAX_BYTES`) or an absolute http(s) URL. No-op short-circuit when nothing actually changes — emits no system message and no federation relay. See `docs/systems/dm-system.md` "Group Metadata Update" for the full transaction, federation relay, and icon URL round-trip rules.
 
-**`DELETE /dm/:id/members/:targetUserId`** — Owner kicks a member from a group DM. Reuses the leave path with `reason: 'kick'`; evicts the target from the DM voice room first. Sends `dm_channel_closed` to the kicked user. Receivers enforce `sourceInstance === ownerHomeInstance`; non-owner kicks reject as `unauthorized_source`.
+**`DELETE /dm/:id/members/:targetUserId`** — Owner kicks a member from a group DM. The `:targetUserId` segment carries either a local user id on the owner's instance OR a federated home user id when the `?homeInstance=<origin>` query string is present (server resolves via `resolveOrCreateReplicatedUser` — same pattern as `POST /dm/:id/members`). Federated form is required for federated targets, because the client's cached user view returns the user's home id, not the owner instance's local replicated id. Reuses the leave path with `reason: 'kick'`; evicts the target from the DM voice room first. Sends `dm_channel_closed` to the kicked user. Receivers enforce `sourceInstance === ownerHomeInstance`; non-owner kicks reject as `unauthorized_source`.
 
-**`POST /dm/:id/transfer`** — Owner transfers ownership to another current member without leaving. Updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts an `owner_changed` system message; broadcasts `dm_owner_updated`; queues an `ownership_transfer` outbox event. Reuses the existing receiver path (`processOwnershipTransferEvent`) with no protocol changes.
+**`POST /dm/:id/transfer`** — Owner transfers ownership to another current member without leaving. Body accepts either a local id (`newOwnerId`) or a federated identity (`homeUserId` + `homeInstance`). When both forms are supplied, federated args take precedence. Server resolves via `resolveOrCreateReplicatedUser` before checking membership — mirrors `POST /dm/:id/members`. Updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts an `owner_changed` system message; broadcasts `dm_owner_updated`; queues an `ownership_transfer` outbox event. Reuses the existing receiver path (`processOwnershipTransferEvent`) with no protocol changes.
 
 ## Social (`routes/social.ts`) — auth required
 ```

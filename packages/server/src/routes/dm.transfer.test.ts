@@ -406,4 +406,95 @@ describe('POST /api/dm/:id/transfer — manual ownership transfer', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatch(/newOwnerId/i);
   });
+
+  // The federated-identification path is the bug-fix surface for the
+  // "cannot transfer to a federated user" report. The client sends
+  // `{ homeUserId, homeInstance }` from the cached user view; the owner
+  // instance must resolve that to its own local replicated row (different
+  // id) before checking membership and recording ownership.
+  it('transfer with federated identity ({ homeUserId, homeInstance }) → resolves to local replicated user and succeeds', async () => {
+    seedGroupDm({
+      id: 'dm-fed-1',
+      ownerId: 'owner-A',
+      members: ['owner-A', 'member-B', 'remote-D'],
+      federatedId: 'fed-transfer-fed-1',
+    });
+
+    // The client only knows the home identity of the federated target.
+    // On THIS instance the local replicated id is `remote-D` but the
+    // request body intentionally omits it — only home identifiers travel.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/dm-fed-1/transfer',
+      payload: { homeUserId: 'remote-dan', homeInstance: 'https://remote.test' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    // Channel ownership row points to the local replicated user row,
+    // and ownerHomeUserId / ownerHomeInstance match the target's home.
+    const channel = testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm-fed-1')).get();
+    expect(channel?.ownerId).toBe('remote-D');
+    expect(channel?.ownerHomeUserId).toBe('remote-dan');
+    expect(channel?.ownerHomeInstance).toBe('https://remote.test');
+
+    // Outbox event carries the new owner's home identity.
+    const outboxRows = testDb.select().from(schema.federationOutbox).all();
+    const transferRows = outboxRows.filter((r) => r.eventType === 'ownership_transfer');
+    expect(transferRows.length).toBe(1);
+    const wire = JSON.parse(transferRows[0]!.payload);
+    expect(wire.ownership.newOwner.homeUserId).toBe('remote-dan');
+    expect(wire.ownership.newOwner.homeInstance).toBe('https://remote.test');
+  });
+
+  // When both forms are supplied, the federated args take precedence —
+  // they're strictly more specific. A stale `newOwnerId` from the client's
+  // cached view (could be the home id from `useCanonicalUserView`) should
+  // not override the explicit federated identifier.
+  it('transfer with BOTH newOwnerId and federated identity → federated args win', async () => {
+    seedGroupDm({
+      id: 'dm-fed-2',
+      ownerId: 'owner-A',
+      members: ['owner-A', 'member-B', 'remote-D'],
+      federatedId: 'fed-transfer-fed-2',
+    });
+
+    // newOwnerId references a different member (member-B). Federated args
+    // point to remote-D. The federated path must win.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/dm-fed-2/transfer',
+      payload: {
+        newOwnerId: 'member-B',
+        homeUserId: 'remote-dan',
+        homeInstance: 'https://remote.test',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const channel = testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm-fed-2')).get();
+    expect(channel?.ownerId).toBe('remote-D');
+    expect(channel?.ownerHomeUserId).toBe('remote-dan');
+  });
+
+  // Negative case: federated identity for a user who is not a member of
+  // this DM channel must still 400, matching the existing local-id path.
+  it('transfer with federated identity for a non-member → 400', async () => {
+    seedGroupDm({
+      id: 'dm-fed-3',
+      ownerId: 'owner-A',
+      members: ['owner-A', 'member-B'], // remote-D is NOT a member here
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/dm/dm-fed-3/transfer',
+      payload: { homeUserId: 'remote-dan', homeInstance: 'https://remote.test' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/not a member/i);
+
+    // Ownership row unchanged
+    const channel = testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm-fed-3')).get();
+    expect(channel?.ownerId).toBe('owner-A');
+  });
 });
