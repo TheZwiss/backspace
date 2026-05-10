@@ -30,6 +30,7 @@ Related specs: `docs/systems/federation.md` (wire protocol, outbox worker, peer 
 | Soft-close | Yes (`closed=1` on dm_members) | Yes (same) |
 | Leave | Not supported (use close) | Yes (DELETE `/api/dm/:id/members`) |
 | Deletion | Never (1-on-1 DMs persist) | Soft-delete when last member leaves, hard-delete after 24h |
+| `name` / `icon` | Always NULL (no metadata) | Nullable. NULL = use comma-joined / AvatarStack fallback. Owner-only writes via `PATCH /api/dm/:id` |
 
 **Critical invariant:** `ownerId` must NEVER be set to NULL on a group DM. A NULL `ownerId` identifies the channel as 1-on-1 -- nulling it corrupts the channel's type identity and breaks membership logic.
 
@@ -201,6 +202,75 @@ Close and reopen are relayed to all peer instances that hold a copy of the DM:
 **Federation relay:**
 - Queue `member_add` with full `group` roster
 - Target origins include the new member's home instance even if not previously in the group
+
+---
+
+## Group Metadata Update
+
+**Endpoint:** `PATCH /api/dm/:id` -- `dm.ts:dmRoutes`
+
+Owner-only update of the group DM's `name` and/or `icon`. 1-on-1 DMs reject with 400; non-owners reject with 403.
+
+**Request:** `{ name?: string | null, icon?: string | null }`
+
+Either field may be omitted (no-op for that field), null (clear), or a value. Empty/whitespace `name` collapses to null. `icon` accepts a bare attachment filename (must be owned by caller, image/*, ≤ `GROUP_DM_ICON_MAX_BYTES`) or an absolute http(s) URL (used by the federated rebroadcast path). When a value is provided that equals the stored value, no-op short-circuit returns 200 with no system message and no relay.
+
+**Validation (origin instance):**
+- 1-on-1 DM (`ownerId` is NULL) -> 400
+- Caller must be a member; caller must equal `ownerId` -> else 403
+- `name` (when changing): trimmed length must satisfy `[GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH]`
+- `icon` (when changing to a local filename): `attachments` row exists with `uploaderId === request.userId`, `mimetype` starts with `image/`, `size <= GROUP_DM_ICON_MAX_BYTES`. Absolute URL accepted as-is. Bare filename / `/api/uploads/<filename>` is normalized to bare filename.
+
+**Transaction:**
+1. Diff against current row. If neither field changed -> return 200 with current channel; emit nothing.
+2. Capture `metadataUpdatedAt = Date.now()` inside the transaction.
+3. Update `dm_channels.name`, `icon`, `metadataUpdatedAt` in one statement.
+4. Insert one or two `dm_messages` system rows: `name_changed` (`{ event, oldName, newName }`) and/or `icon_changed` (`{ event }`). Both share a single `eventMessageId` correlation root with suffix scheme: `${eventMessageId}:name`, `${eventMessageId}:icon`.
+
+**Post-transaction:**
+- Broadcast `dm_channel_updated { dmChannelId, name, icon }` via `sendToDmMembers` (members-only by construction; `metadataUpdatedAt` is intentionally omitted from the WS payload — purely a server-side version vector).
+- Broadcast each new system message via `dm_message_created`.
+- Queue `group_metadata_update` outbox event with `targetOrigins = getGroupDmTargetOrigins(channelId)`.
+- If old icon was a local file and changed/cleared: `deleteUploadFile(old) + deleteAttachmentByFilename(old)` (matches avatar precedent at `users.ts:463-466`).
+
+**Icon URL round-trip:**
+- **Owner instance:** `dm_channels.icon` stores the bare filename. Outbound relay normalizes to `${getOurOrigin()}/api/uploads/${icon}` via `normalizeIconForWire` (mirrors profile relay).
+- **Receiver instance:** stores either local filename (download success) or absolute URL (download failure fallback). Avatar/`<img>` rendering already handles both transparently.
+- **Receivers never re-relay `group_metadata_update`.** Authority invariant ensures only the owner instance emits these events. A receiver's locally-cached filename can never accidentally federate to a third peer.
+- **Bootstrap to a new peer** carries the absolute URL inside the extended `FederationGroupPayload` (`member_add` event); see `docs/systems/federation.md` for the bootstrap payload shape.
+
+**Clock semantics:**
+`metadataUpdatedAt = Date.now()` is captured at the moment of the DB write inside the owner-instance transaction, not at request entry. This keeps the version vector monotonic across rapid edits on the same instance. Receivers compare strictly greater (`>`) — equal or stale timestamps are silently accepted.
+
+### Owner Kick
+
+**Endpoint:** `DELETE /api/dm/:id/members/:targetUserId` -- `dm.ts:dmRoutes`
+
+Owner-only removal of a single member from a group DM.
+
+**Validation:**
+- 1-on-1 DM (`ownerId` is NULL) -> 400
+- Caller must be the owner -> else 403
+- Cannot kick self (use leave instead) -> 400
+- Target must be a current member -> else 404
+
+**Sequence:** evict target from any active DM voice room (`evictUserFromDmVoiceRoom`), then reuse the leave path with `reason: 'kick'` -- emits `member_removed` system message (with `reason: 'kick'`), deletes `dm_members` row + `read_states`, broadcasts `dm_member_removed`, sends `dm_channel_closed` to the kicked user, queues `member_remove` outbox event with `reason: 'kick'`. Receiver authority for kicks is `sourceInstance === ownerHomeInstance`; non-owner kicks reject as `unauthorized_source`.
+
+### Manual Ownership Transfer
+
+**Endpoint:** `POST /api/dm/:id/transfer` -- `dm.ts:dmRoutes`
+
+Owner-only transfer of ownership without leaving the channel.
+
+**Request:** `{ newOwnerId: string }`
+
+**Validation:**
+- 1-on-1 DM (`ownerId` is NULL) -> 400
+- Caller must be the current owner -> else 403
+- `newOwnerId !== ownerId` (reject self-transfer) -> 400
+- Target must be a current member -> else 400
+
+**Transaction (`transferGroupDmOwnership`):** updates `ownerId`, `ownerHomeUserId`, `ownerHomeInstance`; inserts `owner_changed` system message; broadcasts `dm_owner_updated`; queues `ownership_transfer` outbox event. The receiver path is the existing `processOwnershipTransferEvent` -- this endpoint reuses it without modification.
 
 ---
 
@@ -504,6 +574,8 @@ System messages (`type = 'system'` in `dm_messages`) record group lifecycle even
 | `member_added` | `{ event, targetUserId, targetDisplayName }` | User who added them |
 | `member_removed` | `{ event, targetUserId, targetDisplayName, reason }` | User who left/was removed |
 | `owner_changed` | `{ event, newOwnerId, newOwnerDisplayName }` | Previous owner |
+| `name_changed` | `{ event, oldName, newName }` | Owner who renamed |
+| `icon_changed` | `{ event }` | Owner who set/cleared the icon |
 
 ### `space_invite` (user-initiated, federated via processCreateEvent)
 
@@ -541,6 +613,9 @@ System messages MUST NOT surface their raw JSON `content` in the DM sidebar prev
 | `member_removed` (`reason='leave'`) | `{targetDisplayName} left the group` |
 | `member_removed` (kick) | `{actorName} removed {targetDisplayName}` |
 | `owner_changed` | `{newOwnerDisplayName} is now the group owner` |
+| `name_changed` (newName non-null) | `{actorName} renamed the group` |
+| `name_changed` (newName null) | `{actorName} cleared the group name` |
+| `icon_changed` | `{actorName} updated the group icon` |
 | Unknown / malformed JSON | `System message` |
 
 `actorName` is resolved from the channel `members` roster by `lastMessage.userId`, falling back to the embedded `user` object on `DmMessageWithUser` payloads (used for federation bootstrap). System messages are NEVER prefixed with `${sender}: ` in group DMs — the rendered text already incorporates the actor.
@@ -604,12 +679,22 @@ const isLocalMember = (u: { homeInstance?: string | null }) =>
 | `addDmChannel(channel, origin?)` | Prepends to `dmChannels`, deduplicates by ID, records origin in `channelOriginMap` |
 | `removeDmChannel(id)` | Filters from `dmChannels`, cleans up unread/read state via `chatStore.removeChannelStates()` |
 | `addDmMember(dmChannelId, user)` | Appends user to channel's `members` array (dedup by ID) |
-| `removeDmMember(dmChannelId, userId)` | Filters user from channel's `members` array |
-| `updateDmOwner(dmChannelId, newOwnerId)` | Updates `ownerId` on the channel |
+| `removeDmMember(dmChannelId, userId)` | Filters user from channel's `members` array (reused for kick) |
+| `updateDmOwner(dmChannelId, newOwnerId)` | Updates `ownerId` on the channel (reused for manual transfer) |
+| `updateDmMetadata(dmChannelId, { name, icon })` | Patches `name`/`icon` on the channel; called by the `dm_channel_updated` WS handler |
 | `closeDm(id)` | Calls `api.dm.close(id)` via origin-aware API client, removes from state |
 | `leaveDm(id)` | Calls `api.dm.leave(id)` via origin-aware API client, removes from state |
 | `findExistingDmForUser(targetUser)` | Scans `dmChannels` for a 2-member DM where the other member's `homeUserId` matches the target's `homeUserId` |
 | `upsertUserView(user, deliveringOrigin)` | Inserts/updates the user-view cache under the home-wins preference rule. Called for every DM member surface (kept AND skipped channels) so render sites surface the home view even when first-wins channel dedup discarded the home payload. See `client-federation.md` §3 "User View Cache" |
+
+#### Owner-Only Routing Helper
+
+```typescript
+// spaceStore.ts (exported, paired with getChannelOrigin)
+export function getOwnerInstanceForDm(channelId: string): string;
+```
+
+Returns the channel's `ownerHomeInstance`. Used by all owner-only DM operations (`updateMetadata`, `kickMember`, `transferOwnership`) to route requests via `getApiForOrigin(getOwnerInstanceForDm(channelId))`. Distinct from `getChannelOrigin`, which returns the channel's pinned serving origin (where the WS connection mirrors the channel) — these can diverge after a manual ownership transfer. Non-owner operations (message send, leave, close, typing, reactions, read-state acks) keep routing via `getChannelOrigin`. See "Historical Bugs" for the latent post-transfer routing concern this helper closes.
 
 ### WebSocket Event Handlers (`useWebSocket.ts`)
 
@@ -617,6 +702,7 @@ const isLocalMember = (u: { homeInstance?: string | null }) =>
 |----------|---------|
 | `dm_channel_created` | Normalize remote user assets, upsert each member into `userViews`, call `addDmChannel(channel, origin)` |
 | `dm_channel_closed` | Call `removeDmChannel(dmChannelId)` |
+| `dm_channel_updated` | Call `updateDmMetadata(dmChannelId, { name, icon })` |
 | `dm_member_added` | Normalize remote user assets, upsert into `userViews`, call `addDmMember(dmChannelId, user)` |
 | `dm_member_removed` | Call `removeDmMember(dmChannelId, userId)` |
 | `dm_owner_updated` | Call `updateDmOwner(dmChannelId, newOwnerId)` |
@@ -692,7 +778,10 @@ const normalized = homeInstance.startsWith('http')
 | `POST` | `/api/dm` | JWT | Create or get existing 1-on-1 DM. Accepts `{ userId }` (local) or `{ homeUserId, homeInstance }` (federated) |
 | `POST` | `/api/dm/group` | JWT | Create group DM with multiple members |
 | `POST` | `/api/dm/space-invite` | JWT | Send a space invite card to a friend via DM (see `docs/systems/spaces.md`) |
+| `PATCH` | `/api/dm/:id` | JWT | Update group DM `name` and/or `icon` (owner-only). 1-on-1 DMs reject. See "Group Metadata Update" |
 | `DELETE` | `/api/dm/:id` | JWT | Soft-close DM for caller |
+| `DELETE` | `/api/dm/:id/members/:targetUserId` | JWT | Owner kicks a member from a group DM. Cannot kick self. 1-on-1 DMs reject |
+| `POST` | `/api/dm/:id/transfer` | JWT | Owner transfers ownership to another current member without leaving. Body: `{ newOwnerId }` |
 | `POST` | `/api/dm/:id/members` | JWT | Add member to group DM (any member). Accepts `{ userId }` or `{ homeUserId, homeInstance }` |
 | `DELETE` | `/api/dm/:id/members` | JWT | Leave group DM |
 | `GET` | `/api/dm/:id/messages` | JWT | Get messages with cursor pagination |
@@ -723,9 +812,10 @@ For full wire formats, see `docs/systems/websocket.md`.
 |-------|-----------|-------------|
 | `dm_channel_created` | S->C | Group DM bootstrap, new 1-on-1, soft-close reopen |
 | `dm_channel_closed` | S->C | User closes DM, user leaves group |
+| `dm_channel_updated` | S->C | Group metadata (`name`/`icon`) updated; payload `{ dmChannelId, name, icon }` (no `metadataUpdatedAt` — server-side version vector only) |
 | `dm_member_added` | S->C | Incremental member add (not bootstrap) |
 | `dm_member_removed` | S->C | Member leave/kick |
-| `dm_owner_updated` | S->C | Ownership transfer |
+| `dm_owner_updated` | S->C | Ownership transfer (auto on owner-leave OR manual via `POST /api/dm/:id/transfer`) |
 
 ### Content Events
 
@@ -749,3 +839,4 @@ For full wire formats, see `docs/systems/websocket.md`.
 | Bootstrap vs incremental confusion | N/A (design note) | `bootstrapped` flag is function-local; batch events work correctly because bootstrap adds ALL roster members | No fix needed -- documented as correct behavior |
 | Duplicated membership system messages across restarts | 4× "Jannis added youruser" in group DM, channel keeps flipping to unread after each deploy | Membership event processors inserted system messages unconditionally. Each approval-flow re-peering reset peer `last_synced_at = 0`, so initial sync replayed every historical `member_add` / `member_remove` / `ownership_transfer` on next boot. Each replay's new snowflake ID exceeded the user's `read_states.last_read_message_id`, flipping unread. | Dedup by `(sourceInstance, event.messageId)` on the inserted system message. Both bootstrap and incremental paths in `processMemberAddEvent` now persist these fields so replay is a no-op. |
 | Raw JSON in DM sidebar previews | DM sidebar showed `{"event":"space_invite",...}` / `{"event":"member_added",...}` as the last-message preview | `DmLastMessagePreview` shape omitted `type`, so the client could not distinguish system from user messages and rendered `lastMessage.content` verbatim. | Added `type` to `DmLastMessagePreview`, populated it from `dm_messages.type` in every server emission site, and routed the sidebar through a single `formatDmSidebarPreview` helper that renders human-readable text for each system event. |
+| Owner-only requests routed to wrong instance after manual transfer (latent) | After `POST /api/dm/:id/transfer` moved ownership to a member whose `homeInstance` differed from the channel's pinned serving origin, owner-only client calls (`updateMetadata`, `kickMember`, `transferOwnership`) routed via `getChannelOrigin` would emit outbox events with `sourceInstance !== ownerHomeInstance`, and all peers would reject them as `attribution_mismatch`. Latent only because pre-polish there was no kick endpoint and no metadata edit; auto-transfer-on-leave masked the issue (the leaver IS the actor, and `member_remove reason='leave'` accepts any source). | Added `getOwnerInstanceForDm(channelId)` exported next to `getChannelOrigin`. All four owner-only API client methods (`updateMetadata`, `kickMember`, `transferOwnership` — and any future owner-only routes) call `getApiForOrigin(getOwnerInstanceForDm(channelId))` instead of channel origin. Non-owner operations are unchanged. |
