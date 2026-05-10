@@ -368,7 +368,7 @@ Split-pane layout: 60px `glass-strip` space strip on the left + channel list on 
 - Online friends activity row (horizontal scroll, shows avatar + status dot)
 - DM list sorted by last message time (newest first)
 - Each DM row: avatar, name, message preview, timestamp, unread dot
-- Group DMs: group icon instead of avatar, context menu with "Leave Group"
+- Group DMs: rendered via the shared `<AvatarStack>` (size 40, `border="channel"`, `iconUrl={dm.icon}`) so single-other-member groups, 2-member overlap, and 3+ grids match the desktop sidebar; group name uses `dm.name ?? otherMembers.map(displayName).join(', ')`. A federation globe renders next to the name when any group member is federated. Context menu: "Leave Group".
 - Federated users: `@domain` subtitle below username
 - Empty state: sleeping mascot
 - FAB: New DM button (opens `newDm` modal), positioned `bottom-20 right-4`
@@ -390,8 +390,8 @@ Params: `{ channelId, spaceId }`
 
 - Loads messages and sets current channel on mount via `useChatStore`
 - Resolves channel name: DM names from member list (group: comma-separated), space channels by `#name`
-- Custom header with back button + channel name + members button (space channels only)
-- Members button pushes `members` screen (not shown for DMs)
+- Custom header with back button + channel name + members/group-info button
+- Members button shows for space channels AND group DMs; hidden for 1-on-1 DMs (no roster). Space channels push the `members` screen; group DMs push the `group-dm-info` screen so the user lands on the full info + management surface (`MobileGroupDmInfo`).
 - Renders `MessageList`, `TypingIndicator`, `MessageInput`
 
 ### MobileSettingsScreen
@@ -434,6 +434,21 @@ Member group resolution (`getMemberGroup`):
 3. No roles: `{ key: '__online__', label: 'ONLINE', position: -1 }`
 
 **Loading skeleton:** while `useSpaceStore.loadingSpaceId === spaceId` (the same flag that gates `MobileSpacesScreen`'s channel-list skeleton — `loadSpaceDetail` populates members alongside channels), the screen renders a shimmer skeleton (two role-section headers + circular avatar placeholders + name bars). Gated through `useDelayedLoading` so cached/fast loads don't flash the placeholder. Mirrors desktop `MemberSidebar`'s `showMemberSkeleton`. Skeleton row geometry matches the real member rows (`gap-2.5 px-2 py-2.5` with `w-9 h-9` avatar → ~52px row).
+
+### MobileGroupDmInfo
+
+Params: `{ channelId }`
+
+Pushed by `MobileChatScreen`'s members button when the active channel is a group DM. Mirrors `MobileMembersScreen`'s scroll-body geometry and condenses the desktop `GroupDmSettings` modal + `DmRosterPanel` into a single column.
+
+Layout:
+- Header (`MobileScreenHeader`): "Group Info" + back button.
+- Hero: `<AvatarStack size=80 border="modal" iconUrl={dm.icon}>` (or icon when set), large group name (`dm.name ?? comma-joined fallback`), `N members`, and an Edit button (owner-only) that toggles **inline edit mode** — name becomes a text input; tapping the icon opens the existing `ImageCropModal` (also used by `RegisterPage` and `CreateSpace`). Save/Cancel bar appears at the bottom of the screen, positioned via `useVisualViewportInset` so it rides above the iOS keyboard. Upload defers to Save (no orphan uploads).
+- Actions row: Add Member (any-member; opens `AddDmMemberModal`).
+- Members list: OWNER (crown badge), ONLINE, OFFLINE (dimmed). Uses the shared `DmMemberRow` component. Tap → `user-profile` screen. Long-press OR always-visible kebab → context menu (`Transfer Ownership` and `Remove from Group` are owner-only and hidden on self; `Remove Friend` shown when row user is a friend AND not self). The federation globe renders without a long-press tooltip — the per-row `@domain` subtitle already surfaces federated identity, so a tooltip would be redundant.
+- Destructive footer: "Leave Group" (red).
+
+Owner-only API calls (`updateMetadata`, `kickMember`, `transferOwnership`) route through `getApiForOrigin(getOwnerInstanceForDm(channelId))` — see `docs/systems/dm-system.md` "Owner-Only Routing Helper" for why this is distinct from `getChannelOrigin`.
 
 ### MobileScreenHeader
 
