@@ -14,6 +14,8 @@ import {
   type PendingBubble,
 } from '../../stores/pendingMessageStore';
 import { Avatar } from '../ui/Avatar';
+import { AvatarStack } from '../ui/AvatarStack';
+import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { useDelayedLoading } from '../../hooks/useDelayedLoading';
@@ -757,6 +759,8 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
   const authUser = useAuthStore((s) => s.user);
   const removeFriend = useSocialStore((s) => s.removeFriend);
   const friends = useSocialStore((s) => s.friends);
+  const openUserProfile = useUIStore((s) => s.openUserProfile);
+  const openModal = useUIStore((s) => s.openModal);
   const isDm = isDmChannel(channelId);
   const navigate = useNavigate();
 
@@ -767,7 +771,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     const isGroupDm = !!dm.ownerId;
 
     if (isGroupDm) {
-      const groupName = otherMembers
+      const groupName = dm.name ?? otherMembers
         .map(m => m.displayName ?? (m.username?.includes('@') ? m.username.split('@')[0] : m.username))
         .join(', ');
       const ownerMember = dm.members.find(m => m.id === dm.ownerId);
@@ -783,41 +787,57 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
         }
       };
 
+      const handleOpenSettings = () => {
+        openModal('groupDmSettings', { dmChannelId: channelId, initialTab: 'overview' });
+      };
+
+      const handleOwnerClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        if (!ownerMember) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        openUserProfile(ownerMember, {
+          top: Math.min(rect.bottom + 8, window.innerHeight - 450),
+          left: rect.left,
+        });
+      };
+
       return (
         <div className="px-4 pt-8 pb-4">
-          <div className="mb-2 relative" style={{ width: 80, height: 80 }}>
-            {otherMembers.slice(0, 2).map((m, idx) => (
-              <div
-                key={m.id}
-                className="absolute rounded-full overflow-hidden border-2 border-surface-chat"
-                style={{
-                  width: 56,
-                  height: 56,
-                  left: idx * 28,
-                  top: idx * 12,
-                  zIndex: 2 - idx,
-                }}
-              >
-                <Avatar src={m.avatar} name={m.displayName ?? m.username ?? ''} size={56} user={m} />
-              </div>
-            ))}
+          <div className="mb-2">
+            <AvatarStack members={otherMembers} size={80} border="chat" iconUrl={dm.icon} />
           </div>
           <h3 className="text-[32px] leading-10 font-bold text-txt-primary mt-2">{groupName}</h3>
           <p className="text-txt-secondary text-[14px] mt-1">
             This is the beginning of your group conversation.
           </p>
           <p className="text-xs text-txt-tertiary mt-1">
-            Group created by <strong>@{ownerName}</strong>
+            Owner:{' '}
+            {ownerMember ? (
+              <button
+                type="button"
+                onClick={handleOwnerClick}
+                className="font-bold text-txt-secondary hover:text-txt-primary hover:underline transition-colors"
+              >
+                @{ownerName}
+              </button>
+            ) : (
+              <strong>@{ownerName}</strong>
+            )}
           </p>
           {hasFederated && (
             <p className="text-xs text-txt-tertiary mt-1">
               Messages are stored on your and your recipients' home instances. They are not end-to-end encrypted.
             </p>
           )}
-          <div className="mt-4">
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              onClick={handleOpenSettings}
+              className="px-4 py-1.5 bg-accent-primary hover:bg-accent-primary/80 text-white text-[14px] font-medium rounded-[3px] transition-colors"
+            >
+              Open Group Settings
+            </button>
             <button
               onClick={handleLeaveGroup}
-              className="px-4 py-1.5 bg-surface-elevated hover:bg-surface-elevated text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
+              className="px-4 py-1.5 bg-surface-elevated hover:bg-interactive-hover text-[14px] font-medium text-txt-primary rounded-[3px] transition-colors"
             >
               Leave Group
             </button>
