@@ -130,6 +130,7 @@ interface SpaceState {
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
   updateDmOwner: (dmChannelId: string, newOwnerId: string) => void;
+  updateDmMetadata: (dmChannelId: string, patch: { name?: string | null; icon?: string | null }) => void;
   closeDm: (id: string) => Promise<void>;
   leaveDm: (id: string) => Promise<void>;
   loadSpaces: () => Promise<void>;
@@ -324,6 +325,20 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     dmChannels: state.dmChannels.map(dm =>
       dm.id === dmChannelId ? { ...dm, ownerId: newOwnerId } : dm
     ),
+  })),
+
+  // Patches the group DM's display metadata (name + icon). Idempotent: a
+  // payload with only one of `name`/`icon` leaves the other field untouched.
+  // Mirrors `updateDmOwner` shape; called by the `dm_channel_updated` WS
+  // handler after a remote rename / icon change.
+  updateDmMetadata: (dmChannelId, patch) => set((state) => ({
+    dmChannels: state.dmChannels.map(dm => {
+      if (dm.id !== dmChannelId) return dm;
+      const next = { ...dm };
+      if ('name' in patch) next.name = patch.name ?? null;
+      if ('icon' in patch) next.icon = patch.icon ?? null;
+      return next;
+    }),
   })),
 
   closeDm: async (id) => {
