@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatDmTimestamp } from './dmFormatters';
-import { formatDmPreview } from './dmFormatters';
+import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview } from './dmFormatters';
+import type { DmChannel, DmLastMessagePreview, User } from '@backspace/shared';
 
 /** Build a local-time Date: new Date(year, month-1, day, hour, minute) as a timestamp. */
 function localTs(year: number, month: number, day: number, hour = 12, minute = 0): number {
@@ -178,5 +178,87 @@ describe('formatDmPreview', () => {
       content: 'check this',
       attachments: [{ mimetype: 'video/mp4', originalName: 'clip.mp4' }],
     })).toBe('check this 🎬');
+  });
+});
+
+// ─── System message previews — exercised via formatDmSidebarPreview ──────────
+
+const actor: User = {
+  id: 'U1',
+  username: 'jannis',
+  displayName: 'Jannis',
+  avatarColor: 'mint',
+  avatar: null,
+  bio: null,
+  banner: null,
+  accentColor: null,
+  homeUserId: null,
+  homeInstance: null,
+  status: 'online',
+  customStatus: null,
+  isAdmin: false,
+  createdAt: 0,
+  replicatedInstances: [],
+};
+
+function makeGroupDm(lastMessage: DmLastMessagePreview): Pick<DmChannel, 'lastMessage' | 'ownerId' | 'members'> {
+  return {
+    ownerId: 'U1', // makes it a group DM
+    members: [actor],
+    lastMessage,
+  };
+}
+
+describe('formatDmSidebarPreview — name_changed system message', () => {
+  it('happy path with newName → "<actor> renamed the group"', () => {
+    const dm = makeGroupDm({
+      type: 'system',
+      userId: 'U1',
+      content: JSON.stringify({ event: 'name_changed', oldName: null, newName: 'Cool Group' }),
+      createdAt: 1,
+    });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis renamed the group');
+  });
+
+  it('newName=null (cleared) → "<actor> cleared the group name"', () => {
+    const dm = makeGroupDm({
+      type: 'system',
+      userId: 'U1',
+      content: JSON.stringify({ event: 'name_changed', oldName: 'Old', newName: null }),
+      createdAt: 1,
+    });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis cleared the group name');
+  });
+
+  it('unresolvable actor → "Unknown renamed the group"', () => {
+    const dm = makeGroupDm({
+      type: 'system',
+      userId: 'GHOST', // not in members roster
+      content: JSON.stringify({ event: 'name_changed', oldName: null, newName: 'X' }),
+      createdAt: 1,
+    });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown renamed the group');
+  });
+});
+
+describe('formatDmSidebarPreview — icon_changed system message', () => {
+  it('happy path → "<actor> updated the group icon"', () => {
+    const dm = makeGroupDm({
+      type: 'system',
+      userId: 'U1',
+      content: JSON.stringify({ event: 'icon_changed' }),
+      createdAt: 1,
+    });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis updated the group icon');
+  });
+
+  it('unresolvable actor → "Unknown updated the group icon"', () => {
+    const dm = makeGroupDm({
+      type: 'system',
+      userId: 'GHOST',
+      content: JSON.stringify({ event: 'icon_changed' }),
+      createdAt: 1,
+    });
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown updated the group icon');
   });
 });

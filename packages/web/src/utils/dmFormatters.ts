@@ -101,6 +101,9 @@ interface SystemEventPayload {
   newOwnerId?: unknown;
   newOwnerDisplayName?: unknown;
   reason?: unknown;
+  // name_changed payload
+  oldName?: unknown;
+  newName?: unknown;
   // space_invite payload
   snapshot?: { spaceName?: unknown };
 }
@@ -148,6 +151,16 @@ function formatSystemPreview(content: string | null, actor: User | null | undefi
     case 'owner_changed': {
       const newOwner = asString(data.newOwnerDisplayName) ?? 'A member';
       return `${newOwner} is now the group owner`;
+    }
+    case 'name_changed': {
+      // newName === null is a meaningful "cleared" state — distinct from a
+      // missing field — so we check for a non-empty string explicitly.
+      return asString(data.newName)
+        ? `${actorName} renamed the group`
+        : `${actorName} cleared the group name`;
+    }
+    case 'icon_changed': {
+      return `${actorName} updated the group icon`;
     }
     default:
       return 'System message';
