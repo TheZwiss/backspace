@@ -393,6 +393,278 @@ export function ensureOneOnOneDmChannel(
   return dmChannelId;
 }
 
+/**
+ * Shared core for the leave-DM and kick-DM paths.
+ *
+ * Performs the destructive half of removal (system message, member-row delete,
+ * read_states cleanup, federation relay, dm_member_removed broadcast,
+ * ownership transfer for self-leave, soft-delete on last-member-leave).
+ *
+ * Pre-validation (channel exists, not 1-on-1, target is a member, etc.) is the
+ * caller's responsibility; this helper assumes a valid group DM and a valid
+ * target. The caller is also responsible for any voice-room eviction and for
+ * sending dm_channel_closed to the affected user.
+ *
+ * Branching rules:
+ *   - Ownership transfer fires only when the actor is leaving themselves AND
+ *     was the previous owner (kicks cannot orphan a group: the owner is still
+ *     present, so there's nothing to transfer).
+ *   - Last-member soft-delete fires only on self-leave (kicks are guaranteed
+ *     to leave the owner behind, so the channel can never be empty after a
+ *     kick).
+ */
+function removeDmMember(
+  channelId: string,
+  actorUserId: string,
+  targetUserId: string,
+  reason: 'leave' | 'kick',
+): void {
+  const db = getDb();
+  const isSelfLeave = actorUserId === targetUserId;
+
+  const dmChannel = db.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, channelId)).get();
+  if (!dmChannel) {
+    // Should never happen — caller validates. Defensive no-op.
+    return;
+  }
+
+  // Compute federation targets BEFORE member deletion so the removed user's peer is still included
+  let fedTargetOrigins: string[] | undefined;
+  if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+    fedTargetOrigins = getGroupDmTargetOrigins(channelId);
+  }
+
+  const targetUserRow = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
+  const actorUserRow = isSelfLeave
+    ? targetUserRow
+    : db.select().from(schema.users).where(eq(schema.users.id, actorUserId)).get();
+
+  const targetBaseName = targetUserRow?.username?.includes('@')
+    ? targetUserRow.username.split('@')[0]
+    : (targetUserRow?.username ?? 'Unknown');
+
+  // Insert + broadcast member_removed system message (still a member at this point)
+  const sysMsgId = generateSnowflake();
+  const sysNow = Date.now();
+  const sysContent = JSON.stringify({
+    event: 'member_removed',
+    targetUserId,
+    targetDisplayName: targetUserRow?.displayName ?? targetBaseName,
+    reason,
+  });
+
+  db.insert(schema.dmMessages).values({
+    id: sysMsgId,
+    dmChannelId: channelId,
+    userId: actorUserId,
+    content: sysContent,
+    type: 'system',
+    createdAt: sysNow,
+  }).run();
+
+  connectionManager.sendToDmMembers(channelId, {
+    type: 'dm_message_created',
+    message: {
+      id: sysMsgId,
+      dmChannelId: channelId,
+      userId: actorUserId,
+      content: sysContent,
+      type: 'system',
+      createdAt: sysNow,
+      user: actorUserRow ? sanitizeUser(actorUserRow) : undefined,
+      attachments: [],
+      embeds: [],
+      reactions: [],
+    } as any,
+  });
+
+  // Delete dm_members row for the target
+  db.delete(schema.dmMembers)
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, channelId),
+      eq(schema.dmMembers.userId, targetUserId),
+    ))
+    .run();
+
+  // Clean up read_states for the removed user
+  db.delete(schema.readStates).where(and(
+    eq(schema.readStates.userId, targetUserId),
+    eq(schema.readStates.channelId, channelId),
+  )).run();
+
+  // Federation: relay member_remove event with the reason
+  if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+    const domainOrigin = getOurOrigin();
+
+    const memberRemovePayload: FederationRelayEvent = {
+      eventType: 'member_remove',
+      dmChannelId: channelId,
+      messageId: `member_remove:${targetUserId}:${Date.now()}`,
+      federatedId: dmChannel.federatedId,
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      membership: {
+        user: {
+          homeUserId: targetUserRow?.homeUserId || targetUserId,
+          homeInstance: targetUserRow?.homeInstance || domainOrigin,
+        },
+        removedBy: {
+          homeUserId: actorUserRow?.homeUserId || actorUserId,
+          homeInstance: actorUserRow?.homeInstance || domainOrigin,
+        },
+        reason,
+      },
+    };
+
+    appendMutationLog(
+      memberRemovePayload.messageId,
+      channelId,
+      'member_remove',
+      JSON.stringify(memberRemovePayload),
+    );
+    queueOutboxEvent(
+      memberRemovePayload.messageId,
+      channelId,
+      'member_remove',
+      JSON.stringify(memberRemovePayload),
+      fedTargetOrigins,
+    );
+  }
+
+  // Check remaining members
+  const remainingMembers = db.select()
+    .from(schema.dmMembers)
+    .where(eq(schema.dmMembers.dmChannelId, channelId))
+    .all();
+
+  if (remainingMembers.length > 0) {
+    // Ownership transfer only fires on self-leave when the leaver was the owner.
+    // Kicks cannot orphan a group: the owner is still in the channel.
+    if (isSelfLeave) {
+      const nextOwner = remainingMembers[0];
+      if (dmChannel && dmChannel.ownerId === actorUserId && nextOwner) {
+        db.update(schema.dmChannels)
+          .set({ ownerId: nextOwner.userId })
+          .where(eq(schema.dmChannels.id, channelId))
+          .run();
+
+        for (const member of remainingMembers) {
+          connectionManager.sendToUser(member.userId, {
+            type: 'dm_owner_updated',
+            dmChannelId: channelId,
+            newOwnerId: nextOwner.userId,
+          });
+        }
+
+        const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
+        const newOwnerBaseName = newOwnerUser?.username?.includes('@')
+          ? newOwnerUser.username.split('@')[0]
+          : (newOwnerUser?.username ?? 'Unknown');
+        const ownerSysMsgId = generateSnowflake();
+        const ownerNow = Date.now();
+
+        db.insert(schema.dmMessages).values({
+          id: ownerSysMsgId,
+          dmChannelId: channelId,
+          userId: actorUserId,
+          content: JSON.stringify({
+            event: 'owner_changed',
+            newOwnerId: nextOwner.userId,
+            newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
+          }),
+          type: 'system',
+          createdAt: ownerNow,
+        }).run();
+
+        for (const member of remainingMembers) {
+          connectionManager.sendToUser(member.userId, {
+            type: 'dm_message_created',
+            message: {
+              id: ownerSysMsgId,
+              dmChannelId: channelId,
+              userId: actorUserId,
+              content: JSON.stringify({
+                event: 'owner_changed',
+                newOwnerId: nextOwner.userId,
+                newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
+              }),
+              type: 'system',
+              createdAt: ownerNow,
+              user: actorUserRow ? sanitizeUser(actorUserRow) : undefined,
+              attachments: [],
+              embeds: [],
+              reactions: [],
+            } as any,
+          });
+        }
+
+        // Federation: relay ownership transfer
+        if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+          const domainOrigin = getOurOrigin();
+
+          db.update(schema.dmChannels)
+            .set({
+              ownerHomeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
+              ownerHomeInstance: newOwnerUser?.homeInstance || domainOrigin,
+            })
+            .where(eq(schema.dmChannels.id, channelId))
+            .run();
+
+          const transferPayload: FederationRelayEvent = {
+            eventType: 'ownership_transfer',
+            dmChannelId: channelId,
+            messageId: `ownership_transfer:${nextOwner.userId}:${Date.now()}`,
+            federatedId: dmChannel.federatedId,
+            encryptionVersion: 0,
+            timestamp: Date.now(),
+            ownership: {
+              newOwner: {
+                homeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
+                homeInstance: newOwnerUser?.homeInstance || domainOrigin,
+              },
+              previousOwner: {
+                homeUserId: actorUserRow?.homeUserId || actorUserId,
+                homeInstance: actorUserRow?.homeInstance || domainOrigin,
+              },
+            },
+          };
+
+          appendMutationLog(
+            transferPayload.messageId,
+            channelId,
+            'ownership_transfer',
+            JSON.stringify(transferPayload),
+          );
+          queueOutboxEvent(
+            transferPayload.messageId,
+            channelId,
+            'ownership_transfer',
+            JSON.stringify(transferPayload),
+            fedTargetOrigins,
+          );
+        }
+      }
+    }
+
+    // Broadcast dm_member_removed to remaining members
+    for (const member of remainingMembers) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_member_removed',
+        dmChannelId: channelId,
+        userId: targetUserId,
+      });
+    }
+  } else if (isSelfLeave) {
+    // Last member left — soft-delete for deferred GC (24h grace period).
+    // Only reachable via self-leave; kicks always leave the owner behind.
+    db.update(schema.dmChannels)
+      .set({ deletedAt: Date.now() })
+      .where(eq(schema.dmChannels.id, channelId))
+      .run();
+    console.log(`[dm] Group DM ${channelId} has no remaining members, soft-deleted for GC`);
+  }
+}
+
 export async function dmRoutes(app: FastifyInstance): Promise<void> {
   // Centralized auth for all DM routes
   app.addHook('preHandler', authenticate);
@@ -1591,243 +1863,75 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.clearVoiceUserStatus(request.userId);
     }
 
-    // Compute federation targets BEFORE member deletion so the leaving user's peer is included
-    let fedTargetOrigins: string[] | undefined;
-    let leavingUser: typeof schema.users.$inferSelect | undefined;
-    if (isFederationRelayEnabled() && dmChannel?.federatedId) {
-      fedTargetOrigins = getGroupDmTargetOrigins(id);
-      leavingUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get() ?? undefined;
-    }
-
-    // Insert system message for member leaving (before deletion so they're still a member)
-    const leavingUserRow = leavingUser ?? db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
-    const leaveBaseName = leavingUserRow?.username?.includes('@') ? leavingUserRow.username.split('@')[0] : (leavingUserRow?.username ?? 'Unknown');
-    const leaveSysMsgId = generateSnowflake();
-    const leaveNow = Date.now();
-
-    db.insert(schema.dmMessages).values({
-      id: leaveSysMsgId,
-      dmChannelId: id,
-      userId: request.userId,
-      content: JSON.stringify({
-        event: 'member_removed',
-        targetUserId: request.userId,
-        targetDisplayName: leavingUserRow?.displayName ?? leaveBaseName,
-        reason: 'leave',
-      }),
-      type: 'system',
-      createdAt: leaveNow,
-    }).run();
-
-    connectionManager.sendToDmMembers(id, {
-      type: 'dm_message_created',
-      message: {
-        id: leaveSysMsgId,
-        dmChannelId: id,
-        userId: request.userId,
-        content: JSON.stringify({
-          event: 'member_removed',
-          targetUserId: request.userId,
-          targetDisplayName: leavingUserRow?.displayName ?? leaveBaseName,
-          reason: 'leave',
-        }),
-        type: 'system',
-        createdAt: leaveNow,
-        user: leavingUserRow ? sanitizeUser(leavingUserRow) : undefined,
-        attachments: [],
-        embeds: [],
-        reactions: [],
-      } as any,
-    });
-
-    // Delete dm_members row
-    db.delete(schema.dmMembers)
-      .where(and(
-        eq(schema.dmMembers.dmChannelId, id),
-        eq(schema.dmMembers.userId, request.userId),
-      ))
-      .run();
-
-    // Clean up read_states for the departing user
-    db.delete(schema.readStates).where(and(
-      eq(schema.readStates.userId, request.userId),
-      eq(schema.readStates.channelId, id),
-    )).run();
-
-    // Federation: relay member_remove (leave) to peers
-    if (isFederationRelayEnabled() && dmChannel?.federatedId) {
-      const domainOrigin = getOurOrigin();
-
-      const memberRemovePayload: FederationRelayEvent = {
-        eventType: 'member_remove',
-        dmChannelId: id,
-        messageId: `member_remove:${request.userId}:${Date.now()}`,
-        federatedId: dmChannel.federatedId,
-        encryptionVersion: 0,
-        timestamp: Date.now(),
-        membership: {
-          user: {
-            homeUserId: leavingUser?.homeUserId || request.userId,
-            homeInstance: leavingUser?.homeInstance || domainOrigin,
-          },
-          removedBy: {
-            homeUserId: leavingUser?.homeUserId || request.userId,
-            homeInstance: leavingUser?.homeInstance || domainOrigin,
-          },
-          reason: 'leave',
-        },
-      };
-
-      appendMutationLog(
-        memberRemovePayload.messageId,
-        id,
-        'member_remove',
-        JSON.stringify(memberRemovePayload),
-      );
-      queueOutboxEvent(
-        memberRemovePayload.messageId,
-        id,
-        'member_remove',
-        JSON.stringify(memberRemovePayload),
-        fedTargetOrigins,
-      );
-    }
-
-    // Check remaining members
-    const remainingMembers = db.select()
-      .from(schema.dmMembers)
-      .where(eq(schema.dmMembers.dmChannelId, id))
-      .all();
-
-    if (remainingMembers.length > 0) {
-      // Transfer ownership if the leaving user was the owner
-      const nextOwner = remainingMembers[0];
-      if (dmChannel && dmChannel.ownerId === request.userId && nextOwner) {
-        db.update(schema.dmChannels)
-          .set({ ownerId: nextOwner.userId })
-          .where(eq(schema.dmChannels.id, id))
-          .run();
-
-        // Broadcast ownership change via dedicated event
-        for (const member of remainingMembers) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_owner_updated',
-            dmChannelId: id,
-            newOwnerId: nextOwner.userId,
-          });
-        }
-
-        // Query new owner user outside federation block so it's available for system message
-        const newOwnerUser = db.select().from(schema.users).where(eq(schema.users.id, nextOwner.userId)).get();
-
-        // Insert system message for ownership transfer
-        const newOwnerBaseName = newOwnerUser?.username?.includes('@') ? newOwnerUser.username.split('@')[0] : (newOwnerUser?.username ?? 'Unknown');
-        const ownerSysMsgId = generateSnowflake();
-        const ownerNow = Date.now();
-
-        db.insert(schema.dmMessages).values({
-          id: ownerSysMsgId,
-          dmChannelId: id,
-          userId: request.userId,
-          content: JSON.stringify({
-            event: 'owner_changed',
-            newOwnerId: nextOwner.userId,
-            newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
-          }),
-          type: 'system',
-          createdAt: ownerNow,
-        }).run();
-
-        for (const member of remainingMembers) {
-          connectionManager.sendToUser(member.userId, {
-            type: 'dm_message_created',
-            message: {
-              id: ownerSysMsgId,
-              dmChannelId: id,
-              userId: request.userId,
-              content: JSON.stringify({
-                event: 'owner_changed',
-                newOwnerId: nextOwner.userId,
-                newOwnerDisplayName: newOwnerUser?.displayName ?? newOwnerBaseName,
-              }),
-              type: 'system',
-              createdAt: ownerNow,
-              user: leavingUserRow ? sanitizeUser(leavingUserRow) : undefined,
-              attachments: [],
-              embeds: [],
-              reactions: [],
-            } as any,
-          });
-        }
-
-        // Federation: relay ownership transfer
-        if (isFederationRelayEnabled() && dmChannel?.federatedId) {
-          const domainOrigin = getOurOrigin();
-          const prevOwnerUser = leavingUser; // Already queried above before member deletion
-
-          // Update federated owner columns
-          db.update(schema.dmChannels)
-            .set({
-              ownerHomeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
-              ownerHomeInstance: newOwnerUser?.homeInstance || domainOrigin,
-            })
-            .where(eq(schema.dmChannels.id, id))
-            .run();
-
-          const transferPayload: FederationRelayEvent = {
-            eventType: 'ownership_transfer',
-            dmChannelId: id,
-            messageId: `ownership_transfer:${nextOwner.userId}:${Date.now()}`,
-            federatedId: dmChannel.federatedId,
-            encryptionVersion: 0,
-            timestamp: Date.now(),
-            ownership: {
-              newOwner: {
-                homeUserId: newOwnerUser?.homeUserId || nextOwner.userId,
-                homeInstance: newOwnerUser?.homeInstance || domainOrigin,
-              },
-              previousOwner: {
-                homeUserId: prevOwnerUser?.homeUserId || request.userId,
-                homeInstance: prevOwnerUser?.homeInstance || domainOrigin,
-              },
-            },
-          };
-
-          appendMutationLog(
-            transferPayload.messageId,
-            id,
-            'ownership_transfer',
-            JSON.stringify(transferPayload),
-          );
-          queueOutboxEvent(
-            transferPayload.messageId,
-            id,
-            'ownership_transfer',
-            JSON.stringify(transferPayload),
-            fedTargetOrigins,
-          );
-        }
-      }
-
-      // Broadcast dm_member_removed to remaining members
-      for (const member of remainingMembers) {
-        connectionManager.sendToUser(member.userId, {
-          type: 'dm_member_removed',
-          dmChannelId: id,
-          userId: request.userId,
-        });
-      }
-    } else {
-      // Last member left — soft-delete for deferred GC (24h grace period)
-      db.update(schema.dmChannels)
-        .set({ deletedAt: Date.now() })
-        .where(eq(schema.dmChannels.id, id))
-        .run();
-      console.log(`[dm] Group DM ${id} has no remaining members, soft-deleted for GC`);
-    }
+    removeDmMember(id, request.userId, request.userId, 'leave');
 
     // Send dm_channel_closed to the leaving user
     connectionManager.sendToUser(request.userId, {
+      type: 'dm_channel_closed',
+      dmChannelId: id,
+    });
+
+    return reply.code(200).send({ success: true });
+  });
+
+  // DELETE /api/dm/:id/members/:targetUserId - Owner kicks a member from a group DM
+  app.delete<{ Params: { id: string; targetUserId: string } }>('/api/dm/:id/members/:targetUserId', async (request, reply) => {
+    const { id, targetUserId } = request.params;
+    const db = getDb();
+
+    // Channel must exist (and not be soft-deleted)
+    const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+
+    // 1-on-1 DM rejection (ownerId=NULL signals 1-on-1)
+    if (!dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot kick from a 1-on-1 DM', statusCode: 400 });
+    }
+
+    // Caller must be the owner
+    if (dmChannel.ownerId !== request.userId) {
+      return reply.code(403).send({ error: 'Only the group owner can remove members', statusCode: 403 });
+    }
+
+    // Owner cannot kick themselves
+    if (targetUserId === request.userId) {
+      return reply.code(400).send({ error: 'Owners cannot kick themselves; use leave instead', statusCode: 400 });
+    }
+
+    // Target must be a current member
+    if (!isDmMember(id, targetUserId)) {
+      return reply.code(404).send({ error: 'Target user is not a member of this DM channel', statusCode: 404 });
+    }
+
+    // If kicked user is in this DM's voice room, evict them first so the call state stays consistent
+    const targetVoiceRoom = connectionManager.getUserRoom(targetUserId);
+    if (targetVoiceRoom && targetVoiceRoom.roomId === id) {
+      const left = connectionManager.leaveCurrentRoom(targetUserId);
+      if (left) {
+        connectionManager.sendToDmMembers(id, {
+          type: 'voice_state_update',
+          channelId: id,
+          userId: targetUserId,
+          action: 'leave',
+        });
+        const updatedRoom = connectionManager.getRoom(id);
+        if (updatedRoom && updatedRoom.participants.size === 0) {
+          connectionManager.destroyRoom(id);
+          connectionManager.sendToDmMembers(id, {
+            type: 'dm_call_ended',
+            dmChannelId: id,
+          });
+        }
+      }
+      connectionManager.clearVoiceUserStatus(targetUserId);
+    }
+
+    removeDmMember(id, request.userId, targetUserId, 'kick');
+
+    // Notify the kicked user that they no longer have access to this channel
+    connectionManager.sendToUser(targetUserId, {
       type: 'dm_channel_closed',
       dmChannelId: id,
     });
