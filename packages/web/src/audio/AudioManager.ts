@@ -32,6 +32,17 @@ export class AudioManager {
   private rnnoiseReady = false;
   private keepAliveOscillator: OscillatorNode | null = null;
 
+  // Cached `getUserMedia` denial. After a NotAllowedError, subsequent
+  // `setInputDevice` calls (e.g. `useLiveKit.syncMic` racing the user's
+  // tap on a denial prompt) re-throw the cached error WITHOUT issuing a
+  // second `getUserMedia` — iOS Safari otherwise queues a second permission
+  // prompt that has lost its user-gesture activation, which on iOS PWA
+  // standalone leads to a permanently hung silent prompt. The cache is
+  // cleared by `clearInputDenial()` (called from the user-gesture-driven
+  // `requestMicPermission` retry path in `utils/voice.ts`) so a fresh user
+  // gesture can re-attempt cleanly.
+  private inputDenialError: Error | null = null;
+
   // Subscribers notified when the *upstream* getUserMedia track ends unexpectedly
   // (hardware unplug, OS-level revoke, system audio service crash). Distinct from
   // the published mic track's `onended` — the published track is a clone of the
@@ -209,6 +220,12 @@ export class AudioManager {
       return this.currentStream;
     }
 
+    // Re-throw cached denial without firing a second `getUserMedia`.
+    // See the `inputDenialError` field comment for rationale.
+    if (this.inputDenialError) {
+      throw this.inputDenialError;
+    }
+
     try {
       if (this.currentStream) {
         // Detach our `onended` handlers BEFORE stopping. `.stop()` synchronously
@@ -248,6 +265,11 @@ export class AudioManager {
       };
 
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Successful acquisition — clear any cached denial so next swap is
+      // unimpeded. (Most commonly hit when the user grants permission via
+      // the explicit `requestMicPermission` retry path, but also covers
+      // OS-level grants between calls.)
+      this.inputDenialError = null;
       this.currentStream = newStream;
       this.currentInputDeviceId = deviceId;
       this.streamGeneration++;
@@ -269,8 +291,27 @@ export class AudioManager {
       return this.currentStream;
     } catch (err) {
       console.error('[AudioManager] Failed to set input device:', err);
+      // Cache permission denials so syncMic's racing call doesn't fire a
+      // second `getUserMedia` while the user is still resolving the first
+      // prompt (or on iOS PWA where the second prompt would silently
+      // never surface).
+      if (err instanceof Error && err.name === 'NotAllowedError') {
+        this.inputDenialError = err;
+      }
       throw err;
     }
+  }
+
+  /**
+   * Clears the cached `getUserMedia` denial so the next `setInputDevice`
+   * call attempts a fresh acquisition. Called from
+   * `utils/voice.requestMicPermission` (always invoked from a user
+   * gesture) to re-arm the path after a denial. Without this, the cache
+   * would suppress the retry and the user would be stuck in listener
+   * mode for the rest of the session.
+   */
+  clearInputDenial(): void {
+    this.inputDenialError = null;
   }
 
   /**

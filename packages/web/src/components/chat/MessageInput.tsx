@@ -606,9 +606,26 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
   // `z-[110]` keeps the bubble above any in-chat overlays (mention popover,
   // staged-attachment tiles) but below modals (`z-[300]+`).
   const isMobile = useUIStore((s) => s.isMobile);
-  const { keyboardOpen } = useVisualViewportInset();
+  const { keyboardOpen, textInputFocused } = useVisualViewportInset();
+  // iOS PWA standalone shrinks the *layout viewport* itself for the keyboard
+  // (interactive-widget=resizes-content / native standalone behavior), so
+  // `vv.height` matches `innerHeight` and the height-delta-inferred
+  // `keyboardOpen` stays false even though the keyboard IS up. Focus state is
+  // the robust fallback: a text input being focused means the keyboard is up.
+  // - keyboardOpen true (Android Chrome): MobileShell already shrunk to
+  //   `vv.height`; composer at `bottom: 0` lands on the keyboard top.
+  // - keyboardOpen false but textInputFocused true (iOS PWA): layout viewport
+  //   already shrunk by iOS; composer at `bottom: 4px` lands ~4 px above the
+  //   keyboard top — the tight visual gap the user wants.
+  // - both false: composer 6 px above the home indicator, the rest state.
   const composerStyle: React.CSSProperties | undefined = isMobile
-    ? { bottom: keyboardOpen ? '0px' : 'calc(env(safe-area-inset-bottom) + 6px)' }
+    ? {
+        bottom: keyboardOpen
+          ? '0px'
+          : textInputFocused
+            ? '4px'
+            : 'calc(env(safe-area-inset-bottom) + 6px)',
+      }
     : undefined;
   const composerClass =
     'absolute left-2 right-2 z-[110] glass-bubble rounded-[14px]' +
@@ -700,7 +717,7 @@ export function MessageInput({ channelId, channelName }: MessageInputProps) {
     // offset between renders. The ResizeObserver itself is what catches
     // continuous textarea-autosize growth; these deps just ensure we're
     // attached to the live element after a remount.
-  }, [composerEl, isMobile, keyboardOpen, chatReplyTo, stagedTransfers.length]);
+  }, [composerEl, isMobile, keyboardOpen, textInputFocused, chatReplyTo, stagedTransfers.length]);
 
   // Combined ref: keep `popoverAnchorRef` populated (InputPopover / mention
   // popover anchor + scroll-into-view targets) AND notify the
