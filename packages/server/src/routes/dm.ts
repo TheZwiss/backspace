@@ -413,6 +413,38 @@ export function ensureOneOnOneDmChannel(
  *     to leave the owner behind, so the channel can never be empty after a
  *     kick).
  */
+/**
+ * Evicts a user from a DM channel's voice room (if they're in it), broadcasts the
+ * voice_state_update, and tears down the room/call when it becomes empty.
+ *
+ * Shared by self-leave and owner-kick paths so call-state cleanup stays in lockstep.
+ * No-op if the user isn't currently in this DM's voice room.
+ */
+function evictUserFromDmVoiceRoom(channelId: string, userId: string): void {
+  const userRoom = connectionManager.getUserRoom(userId);
+  if (userRoom && userRoom.roomId === channelId) {
+    const left = connectionManager.leaveCurrentRoom(userId);
+    if (left) {
+      connectionManager.sendToDmMembers(channelId, {
+        type: 'voice_state_update',
+        channelId,
+        userId,
+        action: 'leave',
+      });
+      // Auto-end call if DM room is now empty
+      const updatedRoom = connectionManager.getRoom(channelId);
+      if (updatedRoom && updatedRoom.participants.size === 0) {
+        connectionManager.destroyRoom(channelId);
+        connectionManager.sendToDmMembers(channelId, {
+          type: 'dm_call_ended',
+          dmChannelId: channelId,
+        });
+      }
+    }
+    connectionManager.clearVoiceUserStatus(userId);
+  }
+}
+
 function removeDmMember(
   channelId: string,
   actorUserId: string,
@@ -430,7 +462,7 @@ function removeDmMember(
 
   // Compute federation targets BEFORE member deletion so the removed user's peer is still included
   let fedTargetOrigins: string[] | undefined;
-  if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+  if (isFederationRelayEnabled() && dmChannel.federatedId) {
     fedTargetOrigins = getGroupDmTargetOrigins(channelId);
   }
 
@@ -493,7 +525,7 @@ function removeDmMember(
   )).run();
 
   // Federation: relay member_remove event with the reason
-  if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+  if (isFederationRelayEnabled() && dmChannel.federatedId) {
     const domainOrigin = getOurOrigin();
 
     const memberRemovePayload: FederationRelayEvent = {
@@ -599,7 +631,7 @@ function removeDmMember(
         }
 
         // Federation: relay ownership transfer
-        if (isFederationRelayEnabled() && dmChannel?.federatedId) {
+        if (isFederationRelayEnabled() && dmChannel.federatedId) {
           const domainOrigin = getOurOrigin();
 
           db.update(schema.dmChannels)
@@ -1839,29 +1871,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // If user is in this DM's VoiceRoom, leave it first
-    const userRoom = connectionManager.getUserRoom(request.userId);
-    if (userRoom && userRoom.roomId === id) {
-      const left = connectionManager.leaveCurrentRoom(request.userId);
-      if (left) {
-        // Broadcast voice leave
-        connectionManager.sendToDmMembers(id, {
-          type: 'voice_state_update',
-          channelId: id,
-          userId: request.userId,
-          action: 'leave',
-        });
-        // Auto-end call if DM room is now empty
-        const updatedRoom = connectionManager.getRoom(id);
-        if (updatedRoom && updatedRoom.participants.size === 0) {
-          connectionManager.destroyRoom(id);
-          connectionManager.sendToDmMembers(id, {
-            type: 'dm_call_ended',
-            dmChannelId: id,
-          });
-        }
-      }
-      connectionManager.clearVoiceUserStatus(request.userId);
-    }
+    evictUserFromDmVoiceRoom(id, request.userId);
 
     removeDmMember(id, request.userId, request.userId, 'leave');
 
@@ -1906,27 +1916,7 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // If kicked user is in this DM's voice room, evict them first so the call state stays consistent
-    const targetVoiceRoom = connectionManager.getUserRoom(targetUserId);
-    if (targetVoiceRoom && targetVoiceRoom.roomId === id) {
-      const left = connectionManager.leaveCurrentRoom(targetUserId);
-      if (left) {
-        connectionManager.sendToDmMembers(id, {
-          type: 'voice_state_update',
-          channelId: id,
-          userId: targetUserId,
-          action: 'leave',
-        });
-        const updatedRoom = connectionManager.getRoom(id);
-        if (updatedRoom && updatedRoom.participants.size === 0) {
-          connectionManager.destroyRoom(id);
-          connectionManager.sendToDmMembers(id, {
-            type: 'dm_call_ended',
-            dmChannelId: id,
-          });
-        }
-      }
-      connectionManager.clearVoiceUserStatus(targetUserId);
-    }
+    evictUserFromDmVoiceRoom(id, targetUserId);
 
     removeDmMember(id, request.userId, targetUserId, 'kick');
 
