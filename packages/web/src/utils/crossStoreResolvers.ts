@@ -39,6 +39,27 @@ export function getApiForOrigin(origin: string): BackspaceApiClient {
   return _getApiForOrigin(origin);
 }
 
+// ─── Owner-instance resolution for group DMs ─────────────────────────────────
+// Registered by spaceStore on import; maps a DM channel ID to the current
+// owner's home-instance origin. Lives here (not in spaceStore) so that
+// `api/client.ts` can route owner-only DM calls (rename, icon, kick, transfer)
+// to the owner's home instance without a value-cycle on spaceStore.
+//
+// Returns '' (home) when the resolver is not yet registered or the channel is
+// unknown — keeps owner-only calls hitting the home instance in tests/SSR.
+
+let _getOwnerInstanceForDm: ((channelId: string) => string) | null = null;
+
+export function setOwnerInstanceForDmResolver(
+  resolver: (channelId: string) => string,
+): void {
+  _getOwnerInstanceForDm = resolver;
+}
+
+export function getOwnerInstanceForDm(channelId: string): string {
+  return _getOwnerInstanceForDm?.(channelId) ?? '';
+}
+
 // ─── Hostname → origin resolution (federation) ────────────────────────────────
 // Registered by instanceStore on import; maps a federated user's `homeInstance`
 // hostname (e.g. "remote.example.com") to a full origin URL
