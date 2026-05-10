@@ -96,6 +96,23 @@ function getProfileReferencedFilenames(): Set<string> {
     if (row.banner) referenced.add(path.basename(row.banner));
   }
 
+  // Group DM icons. Skip soft-deleted DMs (the soft-deleted-DM purge in
+  // cleanupSoftDeletedDmChannels handles their attachments separately) and
+  // skip absolute URLs (those reference assets on a remote instance, not
+  // local upload-dir files).
+  const dmIconRows = db.select({ icon: schema.dmChannels.icon })
+    .from(schema.dmChannels)
+    .where(and(
+      isNotNull(schema.dmChannels.icon),
+      isNull(schema.dmChannels.deletedAt),
+    ))
+    .all();
+  for (const row of dmIconRows) {
+    if (row.icon && !row.icon.startsWith('http')) {
+      referenced.add(path.basename(row.icon));
+    }
+  }
+
   return referenced;
 }
 

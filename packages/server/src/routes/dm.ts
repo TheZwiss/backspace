@@ -1606,6 +1606,12 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       deleteUploadFile(oldIcon);
       deleteAttachmentByFilename(oldIcon);
     }
+    // Clean up the attachment record for the newly-set icon — the file is
+    // now referenced via dm_channels.icon (protected by the storage janitor),
+    // so the standalone attachment row is unnecessary. Mirrors users.ts:473.
+    if (iconChanged && nextIcon && !nextIcon.startsWith('http')) {
+      deleteAttachmentByFilename(nextIcon);
+    }
 
     return reply.code(200).send({
       id,
