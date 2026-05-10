@@ -65,6 +65,7 @@ import type {
   SpaceInviteRequest,
   SpaceInviteResponse,
 } from '@backspace/shared';
+import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
 export type { FederationPeer, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
@@ -174,6 +175,23 @@ export class BackspaceApiClient {
     deleteMessage: (id: string) => Promise<{ success: boolean }>;
     addMember: (dmChannelId: string, data: AddDmMemberRequest) => Promise<DmChannel>;
     leave: (dmChannelId: string) => Promise<{ success: boolean }>;
+    /**
+     * Owner-only: rename a group DM and/or update its icon.
+     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) so the
+     * federation event's sourceInstance equals the channel's ownerHomeInstance
+     * (required by the receiver's authority check).
+     */
+    updateMetadata: (channelId: string, body: { name?: string | null; icon?: string | null }) => Promise<DmChannel>;
+    /**
+     * Owner-only: kick a member from a group DM.
+     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see updateMetadata.
+     */
+    kickMember: (channelId: string, targetUserId: string) => Promise<{ success: boolean }>;
+    /**
+     * Owner-only: transfer group DM ownership to another member without leaving.
+     * Routes via getApiForOrigin(getOwnerInstanceForDm(channelId)) — see updateMetadata.
+     */
+    transferOwnership: (channelId: string, newOwnerId: string) => Promise<DmChannel>;
     spaceInvite: (body: SpaceInviteRequest) => Promise<SpaceInviteResponse>;
   };
 
@@ -486,6 +504,30 @@ export class BackspaceApiClient {
         request<DmChannel>('POST', `/dm/${dmChannelId}/members`, data),
       leave: (dmChannelId: string) =>
         request<{ success: boolean }>('DELETE', `/dm/${dmChannelId}/members`),
+      // Owner-only methods. Each first re-routes through the owner's home
+      // instance via getApiForOrigin(getOwnerInstanceForDm(channelId)). When
+      // the resolved client is `this`, we fall through to the local request
+      // (terminating the recursion). When it's a different client (i.e. a
+      // remote BackspaceApiClient), we delegate to that client's identical
+      // method, which will see itself as `this` and execute the request.
+      // This keeps the federation event's sourceInstance equal to the
+      // channel's current ownerHomeInstance — required by receiver authority
+      // checks (see docs/systems/federation.md and the kick-authority test).
+      updateMetadata: (channelId, body) => {
+        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
+        if (target !== this) return target.dm.updateMetadata(channelId, body);
+        return request<DmChannel>('PATCH', `/dm/${channelId}`, body);
+      },
+      kickMember: (channelId, targetUserId) => {
+        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
+        if (target !== this) return target.dm.kickMember(channelId, targetUserId);
+        return request<{ success: boolean }>('DELETE', `/dm/${channelId}/members/${targetUserId}`);
+      },
+      transferOwnership: (channelId, newOwnerId) => {
+        const target = getApiForOrigin(getOwnerInstanceForDm(channelId));
+        if (target !== this) return target.dm.transferOwnership(channelId, newOwnerId);
+        return request<DmChannel>('POST', `/dm/${channelId}/transfer`, { newOwnerId });
+      },
       spaceInvite: (body) =>
         request<SpaceInviteResponse>('POST', '/dm/space-invite', body),
     };
