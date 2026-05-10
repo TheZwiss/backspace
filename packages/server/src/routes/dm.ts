@@ -1929,6 +1929,164 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ success: true });
   });
 
+  // POST /api/dm/:id/transfer - Owner transfers ownership to another group member without leaving
+  app.post<{ Params: { id: string }; Body: { newOwnerId?: unknown } }>('/api/dm/:id/transfer', async (request, reply) => {
+    const { id } = request.params;
+    const newOwnerId = (request.body as { newOwnerId?: unknown } | null)?.newOwnerId;
+
+    if (typeof newOwnerId !== 'string' || newOwnerId.length === 0) {
+      return reply.code(400).send({ error: 'newOwnerId is required', statusCode: 400 });
+    }
+
+    const db = getDb();
+
+    // Channel must exist (and not be soft-deleted)
+    const dmChannel = db.select().from(schema.dmChannels).where(and(eq(schema.dmChannels.id, id), isNull(schema.dmChannels.deletedAt))).get();
+    if (!dmChannel) {
+      return reply.code(404).send({ error: 'DM channel not found', statusCode: 404 });
+    }
+
+    // 1-on-1 DM rejection (ownerId=NULL signals 1-on-1)
+    if (!dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot transfer ownership of a 1-on-1 DM', statusCode: 400 });
+    }
+
+    // Caller must be the current owner
+    if (dmChannel.ownerId !== request.userId) {
+      return reply.code(403).send({ error: 'Only the group owner can transfer ownership', statusCode: 403 });
+    }
+
+    // Self-transfer is a no-op
+    if (newOwnerId === dmChannel.ownerId) {
+      return reply.code(400).send({ error: 'Cannot transfer to current owner', statusCode: 400 });
+    }
+
+    // Target must be a current member
+    if (!isDmMember(id, newOwnerId)) {
+      return reply.code(400).send({ error: 'Target user is not a member of this DM channel', statusCode: 400 });
+    }
+
+    const previousOwnerId = dmChannel.ownerId;
+    const previousOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, previousOwnerId)).get();
+    const newOwnerRow = db.select().from(schema.users).where(eq(schema.users.id, newOwnerId)).get();
+
+    // Federation targets must be computed BEFORE any state mutation so we use the
+    // current member set (which includes the previous owner — they remain a member).
+    let fedTargetOrigins: string[] | undefined;
+    if (isFederationRelayEnabled() && dmChannel.federatedId) {
+      fedTargetOrigins = getGroupDmTargetOrigins(id);
+    }
+
+    const domainOrigin = isFederationRelayEnabled() ? getOurOrigin() : null;
+    const newOwnerHomeUserId = newOwnerRow?.homeUserId || newOwnerId;
+    const newOwnerHomeInstance = newOwnerRow?.homeInstance || domainOrigin || '';
+
+    // Update ownership row — including the home identity so the receiver path can
+    // verify subsequent S2S authority against the correct origin.
+    db.update(schema.dmChannels)
+      .set({
+        ownerId: newOwnerId,
+        ownerHomeUserId: newOwnerHomeUserId,
+        ownerHomeInstance: newOwnerHomeInstance || null,
+      })
+      .where(eq(schema.dmChannels.id, id))
+      .run();
+
+    // Snapshot the post-update member list for broadcasts
+    const members = db.select()
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.dmChannelId, id))
+      .all();
+
+    // Broadcast dm_owner_updated to local members
+    for (const member of members) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_owner_updated',
+        dmChannelId: id,
+        newOwnerId,
+      });
+    }
+
+    // Insert + broadcast owner_changed system message
+    const newOwnerBaseName = newOwnerRow?.username?.includes('@')
+      ? newOwnerRow.username.split('@')[0]
+      : (newOwnerRow?.username ?? 'Unknown');
+    const ownerSysMsgId = generateSnowflake();
+    const ownerNow = Date.now();
+    const ownerSysContent = JSON.stringify({
+      event: 'owner_changed',
+      newOwnerId,
+      newOwnerDisplayName: newOwnerRow?.displayName ?? newOwnerBaseName,
+    });
+
+    db.insert(schema.dmMessages).values({
+      id: ownerSysMsgId,
+      dmChannelId: id,
+      userId: previousOwnerId,
+      content: ownerSysContent,
+      type: 'system',
+      createdAt: ownerNow,
+    }).run();
+
+    for (const member of members) {
+      connectionManager.sendToUser(member.userId, {
+        type: 'dm_message_created',
+        message: {
+          id: ownerSysMsgId,
+          dmChannelId: id,
+          userId: previousOwnerId,
+          content: ownerSysContent,
+          type: 'system',
+          createdAt: ownerNow,
+          user: previousOwnerRow ? sanitizeUser(previousOwnerRow) : undefined,
+          attachments: [],
+          embeds: [],
+          reactions: [],
+        } as any,
+      });
+    }
+
+    // Federation: relay ownership transfer
+    if (isFederationRelayEnabled() && dmChannel.federatedId) {
+      const origin = domainOrigin ?? getOurOrigin();
+
+      const transferPayload: FederationRelayEvent = {
+        eventType: 'ownership_transfer',
+        dmChannelId: id,
+        messageId: `ownership_transfer:${newOwnerId}:${Date.now()}`,
+        federatedId: dmChannel.federatedId,
+        encryptionVersion: 0,
+        timestamp: Date.now(),
+        ownership: {
+          newOwner: {
+            homeUserId: newOwnerHomeUserId,
+            homeInstance: newOwnerHomeInstance || origin,
+          },
+          previousOwner: {
+            homeUserId: previousOwnerRow?.homeUserId || previousOwnerId,
+            homeInstance: previousOwnerRow?.homeInstance || origin,
+          },
+        },
+      };
+
+      appendMutationLog(
+        transferPayload.messageId,
+        id,
+        'ownership_transfer',
+        JSON.stringify(transferPayload),
+      );
+      queueOutboxEvent(
+        transferPayload.messageId,
+        id,
+        'ownership_transfer',
+        JSON.stringify(transferPayload),
+        fedTargetOrigins,
+      );
+    }
+
+    return reply.code(200).send({ success: true });
+  });
+
   // GET /api/dm/:id/messages - Get DM messages with pagination
   app.get<{ Params: { id: string }; Querystring: PaginatedQuery }>('/api/dm/:id/messages', async (request, reply) => {
     const { id } = request.params;
