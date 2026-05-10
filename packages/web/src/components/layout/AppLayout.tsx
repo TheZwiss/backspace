@@ -17,6 +17,7 @@ import { ChannelSettingsModal } from '../modals/ChannelSettingsModal';
 import { CategorySettingsModal } from '../modals/CategorySettingsModal';
 import { NewDmModal } from '../modals/NewDmModal';
 import { AddDmMemberModal } from '../modals/AddDmMemberModal';
+import { GroupDmSettings } from '../modals/GroupDmSettings';
 import { UserProfileModal } from '../modals/UserProfileModal';
 import { IncomingCallModal } from '../voice/IncomingCallModal';
 import { PictureInPicture } from '../voice/PictureInPicture';
@@ -403,6 +404,7 @@ export function AppLayout() {
         <CategorySettingsModal />
         <NewDmModal />
         <AddDmMemberModal />
+        <GroupDmSettings />
         <UserProfileModal />
         <IncomingCallModal />
         <ImagePreview />

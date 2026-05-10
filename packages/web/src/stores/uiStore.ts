@@ -15,6 +15,7 @@ type ModalType =
   | 'imagePreview'
   | 'newDm'
   | 'addDmMember'
+  | 'groupDmSettings'
   | 'userProfile'
   | null;
 
