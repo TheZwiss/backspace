@@ -1294,6 +1294,19 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const domainOrigin = getOurOrigin();
       const allParticipants = getDmParticipants(dmChannelId);
 
+      // Re-fetch the channel row so the bootstrap payload carries the
+      // current name/icon/metadataUpdatedAt. On a freshly-created group
+      // these are null/null/0, but we read them rather than hard-code
+      // so future producer paths (or test mutations between create and
+      // relay) stay correct without touching this site.
+      const channelRow = db.select().from(schema.dmChannels)
+        .where(eq(schema.dmChannels.id, dmChannelId)).get();
+      const wireIcon = channelRow?.icon
+        ? (channelRow.icon.startsWith('http://') || channelRow.icon.startsWith('https://')
+            ? channelRow.icon
+            : `${domainOrigin}/api/uploads/${channelRow.icon}`)
+        : null;
+
       for (const targetUser of targetUsers) {
         if (!targetUser.homeInstance || targetUser.homeInstance === domainOrigin) continue;
 
@@ -1320,9 +1333,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
               homeInstance: callerUser?.homeInstance || domainOrigin,
             },
             members: allParticipants,
-            name: null,                  // safe default — Phase 4 task 4.3 replaces with channel.name
-            icon: null,                  // safe default — Phase 4 task 4.3 replaces with normalized URL
-            metadataUpdatedAt: 0,        // safe default — Phase 4 task 4.3 replaces with channel.metadataUpdatedAt
+            name: channelRow?.name ?? null,
+            icon: wireIcon,
+            metadataUpdatedAt: channelRow?.metadataUpdatedAt ?? 0,
           },
         };
 
@@ -1845,6 +1858,18 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       const addedUser = db.select().from(schema.users).where(eq(schema.users.id, targetUserId)).get();
       const adderUser = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
 
+      // Carry the current group metadata snapshot so a fresh peer can
+      // bootstrap the channel with the correct name + icon. Re-fetch to
+      // pick up any concurrent metadata mutation; the row may have been
+      // patched between the start of this handler and now.
+      const channelRow = db.select().from(schema.dmChannels)
+        .where(eq(schema.dmChannels.id, id)).get();
+      const wireIcon = channelRow?.icon
+        ? (channelRow.icon.startsWith('http://') || channelRow.icon.startsWith('https://')
+            ? channelRow.icon
+            : `${domainOrigin}/api/uploads/${channelRow.icon}`)
+        : null;
+
       const memberAddPayload: FederationRelayEvent = {
         eventType: 'member_add',
         dmChannelId: id,
@@ -1868,9 +1893,9 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
             homeInstance: dmChannel.ownerHomeInstance || domainOrigin,
           },
           members: allParticipants,
-          name: null,                  // safe default — Phase 4 task 4.3 replaces with channel.name
-          icon: null,                  // safe default — Phase 4 task 4.3 replaces with normalized URL
-          metadataUpdatedAt: 0,        // safe default — Phase 4 task 4.3 replaces with channel.metadataUpdatedAt
+          name: channelRow?.name ?? null,
+          icon: wireIcon,
+          metadataUpdatedAt: channelRow?.metadataUpdatedAt ?? 0,
         },
       };
 

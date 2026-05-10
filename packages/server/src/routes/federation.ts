@@ -2960,7 +2960,7 @@ export async function processRelayEvents(
           processReactionRemoveEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'member_add':
-          processMemberAddEvent(event, sourceInstance, db, accepted, rejected);
+          await processMemberAddEvent(event, sourceInstance, db, accepted, rejected);
           break;
         case 'member_remove':
           processMemberRemoveEvent(event, sourceInstance, db, accepted, rejected);
@@ -4043,13 +4043,13 @@ function processReactionRemoveEvent(
 
 // ─── Membership mutation processors ──────────────────────────────────────────
 
-function processMemberAddEvent(
+export async function processMemberAddEvent(
   event: FederationRelayEvent,
   sourceInstance: string,
   db: ReturnType<typeof getDb>,
   accepted: string[],
   rejected: Array<{ messageId: string; reason: string }>,
-): void {
+): Promise<void> {
   if (!event.federatedId || !event.membership?.user) {
     rejected.push({ messageId: event.messageId, reason: 'missing_membership_payload' });
     return;
@@ -4101,6 +4101,19 @@ function processMemberAddEvent(
       ownerId = ownerLocal?.id ?? null;
     }
 
+    // Group metadata snapshot. Older peers omit these fields — fall back
+    // to safe defaults (null name/icon, metadataUpdatedAt=0). When an icon
+    // URL is present, mirror processGroupMetadataUpdateEvent and try to
+    // download a local copy; on failure, persist the absolute URL.
+    const bootstrapName = event.group.name ?? null;
+    const bootstrapIconUrl = event.group.icon ?? null;
+    const bootstrapMetadataUpdatedAt = event.group.metadataUpdatedAt ?? 0;
+    let bootstrapResolvedIcon: string | null = bootstrapIconUrl;
+    if (bootstrapIconUrl !== null) {
+      const localFile = await downloadProfileAsset(bootstrapIconUrl, sourceInstance);
+      bootstrapResolvedIcon = localFile ?? bootstrapIconUrl;
+    }
+
     db.insert(schema.dmChannels)
       .values({
         id: channelId,
@@ -4109,6 +4122,9 @@ function processMemberAddEvent(
         ownerHomeUserId: event.group.owner?.homeUserId ?? null,
         ownerHomeInstance: event.group.owner?.homeInstance ?? null,
         createdAt: now,
+        name: bootstrapName,
+        icon: bootstrapResolvedIcon,
+        metadataUpdatedAt: bootstrapMetadataUpdatedAt,
       })
       .run();
 
