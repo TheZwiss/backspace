@@ -135,6 +135,16 @@ interface VoiceState {
   clearVoiceUsersForOrigin: (origin: string) => void;
   leaveVoice: () => void;
   handleForceDisconnect: () => void;
+  // Mic permission state — set when getUserMedia rejects with NotAllowedError
+  // (most commonly in iOS PWA standalone, where the gesture-window discipline
+  // is strict). Consumers (`useLiveKit` syncMic) skip publishing the mic
+  // track when this is true; the user appears in voice as a connected
+  // participant who can hear others but is effectively muted at the source
+  // (no track ever published, server cannot un-mute remotely). UI surfaces
+  // a "Grant microphone access" affordance to retry from a fresh user
+  // gesture; on success the flag clears and `useLiveKit` republishes.
+  micPermissionDenied: boolean;
+  setMicPermissionDenied: (denied: boolean) => void;
   // Gesture-aware connect/disconnect refs — registered by AppLayout from useLiveKit()
   connectFn: ((channelId: string, isDm?: boolean) => Promise<void>) | null;
   disconnectFn: (() => Promise<void>) | null;
@@ -153,6 +163,7 @@ export const useVoiceStore = create<VoiceState>()(
       isDeafened: false,
       isCameraOn: false,
       isScreenSharing: false,
+      micPermissionDenied: false,
       participants: [],
       speakingParticipantIds: new Set(),
       speakingUserIds: new Set(),
@@ -533,6 +544,8 @@ export const useVoiceStore = create<VoiceState>()(
         spaceMutedUserIds: new Set(),
         spaceDeafenedUserIds: new Set(),
         permissionMutedUserIds: new Set(),
+        // Mic permission gate
+        micPermissionDenied: false,
       }),
 
       clearVoiceUsersForOrigin: (origin: string) => {
@@ -589,6 +602,10 @@ export const useVoiceStore = create<VoiceState>()(
             unwatchedCameras: new Set(),
             streamWatchers: new Map(),
             voiceUsers,
+            // Reset mic permission flag on leave so the next join attempts a
+            // fresh getUserMedia (the user may have granted permission via
+            // OS settings while disconnected).
+            micPermissionDenied: false,
           };
         });
       },
@@ -598,6 +615,9 @@ export const useVoiceStore = create<VoiceState>()(
       disconnectFn: null,
       setConnectFn: (fn) => set({ connectFn: fn }),
       setDisconnectFn: (fn) => set({ disconnectFn: fn }),
+
+      // Mic permission state setter — see interface comment.
+      setMicPermissionDenied: (denied) => set({ micPermissionDenied: denied }),
 
       // Force disconnect: clear local connection state but do NOT touch voiceUsers.
       // Used for involuntary disconnects (identity collision, server shutdown, etc.)
@@ -628,6 +648,7 @@ export const useVoiceStore = create<VoiceState>()(
           watchingStreams: new Set(),
           unwatchedCameras: new Set(),
           streamWatchers: new Map(),
+          micPermissionDenied: false,
         });
       },
 
@@ -669,6 +690,7 @@ export const useVoiceStore = create<VoiceState>()(
         spaceMutedUserIds: new Set(),
         spaceDeafenedUserIds: new Set(),
         permissionMutedUserIds: new Set(),
+        micPermissionDenied: false,
       }),
     }),
     {

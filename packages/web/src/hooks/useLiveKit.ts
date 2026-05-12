@@ -210,6 +210,7 @@ export function useLiveKit() {
   const inputVolume = useVoiceStore((s) => s.inputVolume);
   const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
   const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
+  const micPermissionDenied = useVoiceStore((s) => s.micPermissionDenied);
   const echoCancellation = useVoiceStore((s) => s.echoCancellation);
   const noiseSuppression = useVoiceStore((s) => s.noiseSuppression);
   const autoGainControl = useVoiceStore((s) => s.autoGainControl);
@@ -388,6 +389,19 @@ export function useLiveKit() {
         const micPub = r.localParticipant.getTrackPublications()
           .find(p => p.source === Track.Source.Microphone);
 
+        // Mic permission denied — user joined as a listener. Tear down any
+        // stale publication (defensive: should not exist on first join, but
+        // covers the edge where permission was revoked mid-call) and skip
+        // the publish branch entirely. Re-attempt is gated behind the
+        // `requestMicPermission` user-gesture path which clears the flag
+        // and triggers this effect to re-run via its dep.
+        if (micPermissionDenied) {
+          if (micPub?.track) {
+            await r.localParticipant.unpublishTrack(micPub.track as LocalAudioTrack).catch(() => {});
+          }
+          return;
+        }
+
         // If effectively muted or deafened, mute the track in-place (keep it published)
         if (effectiveMuted || effectiveDeafened) {
           if (micPub?.track && !micPub.isMuted) {
@@ -399,7 +413,24 @@ export function useLiveKit() {
         // Not muted — ensure the AudioManager pipeline is on the right device
         // and at the right volume, then republish if the published track is
         // stale or missing.
-        await audioManager.setInputDevice(inputDeviceId);
+        try {
+          await audioManager.setInputDevice(inputDeviceId);
+        } catch (err: any) {
+          // Late denial (e.g. iOS standalone PWA where the pre-arm in
+          // `joinVoiceChannel` ran inside the gesture but the prompt is
+          // delivered out-of-band; the user denies after `room.connect()`
+          // has already succeeded). Promote to the listener-mode flag so
+          // we don't loop forever trying to re-acquire.
+          if (err?.name === 'NotAllowedError') {
+            useVoiceStore.getState().setMicPermissionDenied(true);
+            useUIStore.getState().addToast(
+              'Microphone access denied. You joined as a listener — tap "Allow microphone" to grant access.',
+              'warning',
+            );
+            return;
+          }
+          throw err;
+        }
         audioManager.setInputVolume(inputVolume);
         await republishMicrophone(r, lastMicGenRef);
       } catch (err) {
@@ -417,7 +448,7 @@ export function useLiveKit() {
     return () => {
       unsubscribeResume();
     };
-  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled]);
+  }, [isMuted, isDeafened, spaceMutedUserIds, spaceDeafenedUserIds, permissionMutedUserIds, inputDeviceId, inputVolume, isConnected, echoCancellation, noiseSuppression, autoGainControl, rnnoiseEnabled, micPermissionDenied]);
 
   // Subscribe to upstream-input-track-end events from AudioManager whenever a
   // room is connected. The published mic track is a clone of a WebAudio

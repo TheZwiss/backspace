@@ -17,6 +17,26 @@ Source files:
 5. Client calls `POST /api/livekit/token { channelId }` → gets JWT + LiveKit URL
 6. Client connects to LiveKit room with token
 
+### Microphone pre-arm (iOS user-gesture discipline)
+
+`utils/voice.joinVoiceChannel` fires `AudioContext.resume()` and `AudioManager.setInputDevice(inputDeviceId)` (which ends in `getUserMedia({audio:…})`) **synchronously inside** the click handler, before the `connectFn(channelId)` call. iOS Safari only surfaces the microphone permission prompt when `getUserMedia` is invoked from inside an active user-gesture; the original flow only acquired the mic in `useLiveKit`'s `syncMic` effect, which fires AFTER `room.connect()` resolves (token fetch + WS handshake) — many awaits past the gesture window. iOS PWA standalone is especially strict and would silently never surface the prompt; the user would see "Waiting for others to join…" indefinitely until they locked/unlocked the device (which iOS treats as a fresh activation).
+
+Pre-arm is fire-and-forget: the mic acquisition runs in parallel with the LiveKit handshake, and `AudioManager.inputSwitchChain`'s serialization guarantees `useLiveKit.syncMic`'s subsequent call short-circuits on the already-acquired `currentStream` (no double prompt, no second `getUserMedia`).
+
+### Listener mode (`micPermissionDenied`)
+
+When the user denies the prompt (or has previously denied at the OS level), the pre-arm's `setInputDevice` rejects with `NotAllowedError`. The `voiceStore.micPermissionDenied` flag is set to `true` and the LiveKit connect proceeds anyway — the user appears in the voice channel as a connected participant who can hear others but has no microphone publication. `useLiveKit.syncMic` checks the flag at the top of its body and skips the publish branch entirely.
+
+The flag clears via:
+- `requestMicPermission()` (in `utils/voice.ts`) — must be called from a user-gesture handler (button click). Clears `AudioManager.inputDenialError` cache, calls `setInputDevice` from a fresh activation. On success, sets `micPermissionDenied=false` and `useLiveKit.syncMic` re-fires (dep on `micPermissionDenied`) to publish the freshly acquired track.
+- `voiceStore.leaveVoice()` / `handleForceDisconnect()` / `resetSession()` / `reset()` — flag resets so the next join attempts a fresh prompt.
+
+UI affordances:
+- **Mobile (`MobileVoiceFullScreen`):** banner below the header reads "Microphone access denied — You're listening only". A right-aligned "Allow microphone" button calls `requestMicPermission()`.
+- **Desktop (`VoiceControlBar`):** *(Future)* — same listener-mode state needs a parity affordance. Desktop is unaffected by the iOS gesture-window bug in practice (browsers there prompt on `getUserMedia` regardless of activation state), but if a desktop user denies the prompt, the same flow applies.
+
+`AudioManager.inputDenialError` caches the most recent `NotAllowedError`. Subsequent `setInputDevice` calls re-throw the cached error rather than firing a second `getUserMedia` — iOS otherwise would queue a second prompt that has lost its activation, leading to a silent hang. Cleared by `AudioManager.clearInputDenial()` (called from `joinVoiceChannel`'s pre-arm and from `requestMicPermission`).
+
 **Token grants (space channels):**
 - SPEAK → can publish MICROPHONE + CAMERA
 - STREAM → can publish SCREEN_SHARE + SCREEN_SHARE_AUDIO
@@ -249,9 +269,34 @@ The "Share system audio" toggle in `ScreenSharePicker` adds an audio track to th
 
 ---
 
+## Mobile Voice Rendering
+
+Mobile (`MobileVoiceFullScreen`) renders the **same** `VoiceGrid` component as desktop. There is no mobile-specific tile component — the rendering, attach/detach, adaptive-stream subscription, focused-publisher layout, and context menus all come from the shared `VoiceGrid` / `VoiceUser` / `StreamTile` pipeline. The only mobile-specific addition is auto-focus on the first live screen-share publication (so phone users don't have to discover tap-to-focus).
+
+See `docs/systems/mobile-ui.md` → "MobileVoiceFullScreen" for the auto-focus state machine, control-bar wiring, and layout sizing.
+
+**Why the shared component path matters.**
+
+- Local camera preview: `VoiceUser` attaches the local participant's `videoTrack` to a `<video muted>`. Mobile gets the self-preview "for free".
+- Remote cameras: `Track.attach(videoEl)` registers the element with LiveKit's `RemoteVideoTrack` adaptive-stream observer, so the SFU automatically picks the appropriate simulcast layer based on the painted tile size on the phone. No mobile-specific bitrate clamp is needed.
+- Screen-share: `StreamTile` lazily subscribes via `setStreamSubscription` only after the user taps "Watch Stream" (or auto-focus does so on mobile, which currently still requires the user to tap the in-tile "Watch Stream" CTA — auto-focus only sets the focused publisher; it does not auto-subscribe to bandwidth-heavy screen-share tracks).
+- Mute / deafen / speaking-ring overlays, watch/unwatch controls, local mute, volume sliders — identical between mobile and desktop.
+
+**Screen-share button wiring on mobile.** `MobileVoiceFullScreen`'s screen-share button calls `handleScreenShareAction()` from `utils/voiceActions`, **not** `voiceStore.toggleScreenShare`. The store action only flips the `isScreenSharing` boolean and never calls `getDisplayMedia`. The canonical `handleScreenShareAction` is shared with desktop's `VoiceControlBar` and the keybind manager; it calls `startScreenShare(room)` / `stopScreenShare(room)` and broadcasts voice status to peers. iOS Safari does not support `getDisplayMedia` (the call rejects); this is a platform limitation. Android Chrome supports it and works.
+
+---
+
 ## Voice Fullscreen
 
-The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` calls `voiceContainerRef.current.requestFullscreen()` (and exits via `document.exitFullscreen()` when the flag clears). A second effect listens to `fullscreenchange` and reflects the actual `document.fullscreenElement` back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+The fullscreen toggle in `VoiceControlBar` flips the `voiceFullscreen` flag in `uiStore`; an effect in `MainContent.tsx` enters/exits the browser's Fullscreen API on `voiceContainerRef`. A second effect listens to `fullscreenchange` and reflects the actual document fullscreen element back into the store, so pressing Esc or system-level fullscreen-exit keeps state in sync. `voiceChatOpen && !voiceFullscreen` hides the side chat panel while fullscreen is active.
+
+**Cross-browser API fallback.** iOS Safari (and iPadOS pre-16.4) does not implement the standard `Element.requestFullscreen()` on generic elements, so the enter-fullscreen effect probes for the API in this order:
+
+1. `el.requestFullscreen()` — standard
+2. `el.webkitRequestFullscreen()` — older WebKit (some iPads, older Safari)
+3. Silent fall-through — pure iPhone Safari has neither API on a `<div>` (only `HTMLVideoElement.webkitEnterFullscreen()` works, which we cannot use for the multi-tile voice container)
+
+When neither native API is available the effect returns without throwing; the `voiceFullscreen` flag still applies `h-screen` to `voiceContainerRef`, which acts as the in-page maximize fallback (chat panel hides, header fades, control bar stays). The exit path mirrors this with `document.exitFullscreen()` → `document.webkitExitFullscreen()` → no-op. Both paths are wrapped in try/catch so a Promise rejection (e.g. user cancels via Esc mid-transition) does not surface as an unhandled error. The `fullscreenchange` listener is registered for both `fullscreenchange` and `webkitfullscreenchange`. Before this fallback, calling the missing API directly threw `TypeError: requestFullscreen is not a function` on iPhone Safari, which surfaced as a full-screen error overlay when an iPhone user crossed the 768 px desktop breakpoint in landscape mode.
 
 **Overlay portals:** While fullscreen is active the browser's Fullscreen API renders only descendants of `voiceContainerRef`. Every overlay reachable during a call (context menus on `StreamTile`/`VoiceUser`/`VoiceChannel`, tooltips on the control bar, `ConnectionInfoPopover`, `ScreenShareSettingsPopover`, `ConfirmDialog` invoked from voice context-menu actions, and `ScreenSharePicker`) portals through `usePortalContainer()` so it lands inside the fullscreen element. Adding new overlays that can be opened from inside the call must follow the same contract — see `docs/systems/design-system.md` Surface Material Tiers.
 

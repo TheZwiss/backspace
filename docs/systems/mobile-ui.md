@@ -510,26 +510,51 @@ File: `MobileVoiceFullScreen.tsx`
 
 **Header:** Collapse chevron (down arrow, pops screen), channel name, space name subtitle, participant count, members button (space channels only).
 
-**Participant grid:**
-- `grid-cols-1` for 1-2 participants, `grid-cols-2` for 3+
-- Avatar size: 80px for 1-2 participants, 56px for 3+
-- Mute/deafen badge overlay on avatar (bottom-right, rose circle with icon)
-- Shows self-mute, space mute, permission mute, self-deafen, space deafen
-- Context menu on other participants: voice mod items, local mute checkbox, volume slider
+**Participant grid:** **Renders `<VoiceGrid participants={participants} />` from `packages/web/src/components/voice/VoiceGrid.tsx` — the same component desktop uses.** This is the source of the camera + screen-share rendering pipeline; mobile has no separate tile components. Reusing `VoiceGrid` gives mobile feature parity with desktop for free:
 
-**Control bar:** `glass-bubble` container with safe area padding.
+- Camera tracks (`p.videoTrack` from `ParticipantInfo`) attach to a `<video>` element via LiveKit's `Track.attach(el)` so the SFU adaptive-stream observer can downshift simulcast layers based on the tile's painted pixel size — automatically scaling quality down on phone-shaped tiles.
+- Local camera: the local participant's `videoTrack` is attached identically, with `muted` on the `<video>` element so the user's own camera doesn't echo through their speakers. (`VoiceUser` sets `muted={isLocal}`.)
+- Remote screen-share tracks render in their own `StreamTile` (one extra tile per streaming participant) — the user must tap "Watch Stream" or focus the tile to subscribe; until then it's an avatar placeholder. `setStreamSubscription` and the `stream_watch` data-channel protocol fire identically on mobile.
+- Tap-to-focus: tapping any tile sets `voiceStore.focusedParticipantId` and the grid switches into the focused-publisher layout (one large tile + bottom strip of others). This works through touch events without modification.
+- Mute / deafen / camera badges, speaking-ring, "(you)" suffix, context-menu (right-click on desktop, long-press on iOS — Safari fires `contextmenu` on long-press), local-mute/volume sliders, watch/unwatch — all carry over.
 
-| Button | State Colors |
-|--------|-------------|
-| Mute | Active: `bg-accent-rose/20 text-accent-rose`, Inactive: `bg-surface-elevated text-txt-primary` |
-| Deafen | Same as mute |
-| Camera | Active: `bg-accent-mint/20 text-accent-mint`, Inactive: same |
-| Screen share | Same as camera |
-| Disconnect | Always `bg-accent-rose text-white` |
+**Auto-focus on screen-share (mobile-only).** When `MobileVoiceFullScreen` mounts (or while it's already mounted) and a screen-share publication appears, the screen sets `focusedParticipantId` to the first live `${identity}:stream` tile so the user lands directly on the watchable stream. Two refs gate the behaviour:
+
+- `userTouchedFocusRef` — flips `true` the first time `focusedParticipantId` changes to anything other than the auto-focused key, or to `null` after auto-focus had been set. Once flipped it stays flipped for the screen lifetime; auto-focus bails out. This means a user who explicitly dismisses focus via the Grid button never has it forced back on, even if a new screen-share starts.
+- `lastAutoFocusedKeyRef` — records the key we last auto-focused so the user-interaction detection can distinguish "user picked a different tile" from "we just set it ourselves".
+
+The unmount cleanup clears `focusedParticipantId` so re-entering the call screen is a clean slate. Desktop is unaffected — auto-focus lives in `MobileVoiceFullScreen`, not `VoiceGrid`.
+
+**Control bar:** `glass-bubble` container with safe area padding. Five round buttons.
+
+| Button | Action | State Colors |
+|--------|--------|-------------|
+| Mute | `voiceStore.toggleMic` | Active: `bg-accent-rose/20 text-accent-rose`, Inactive: `bg-surface-elevated text-txt-primary` |
+| Deafen | `voiceStore.toggleDeafen` | Same as mute |
+| Camera | `handleCameraAction` (canonical, from `utils/voiceActions`) | Active: `bg-accent-mint/20 text-accent-mint`, Inactive: same |
+| Screen share | `handleScreenShareAction` (canonical, from `utils/voiceActions`) | Same as camera |
+| Disconnect | DM call or space voice teardown + pop screen | Always `bg-accent-rose text-white` |
+
+**Screen-share button wiring (load-bearing).** The button calls `handleScreenShareAction`, **not** `voiceStore.toggleScreenShare`. The store action only flips the boolean — it never calls `getDisplayMedia` or publishes a track. `handleScreenShareAction` is the canonical path (also used by `VoiceControlBar` and the keybind handler) that calls `startScreenShare(room)` / `stopScreenShare(room)` and broadcasts voice status. iOS Safari does not support `getDisplayMedia` and the call rejects there — that's a platform limitation, not a Backspace bug; the same call behaves identically on desktop and Android.
+
+**In-call camera switcher (mobile-only).** When `isCameraOn === true` AND `enumerateDevices()` returns more than one `videoinput`, a small chevron pill ("Switch camera", `aria-haspopup="menu"`) is overlaid on the top-right corner of the camera control button. Tapping it opens an upward-expanding menu portaled to `document.body` (so the popup escapes the control bar's `glass-bubble` clipping), pinned to the chevron's screen rect via `getBoundingClientRect()` and re-pinned on resize / capturing scroll. The menu lists every videoinput plus an "Auto (system default)" entry; the current selection is highlighted via `aria-checked` + a `text-txt-primary` accent. Selecting an entry calls `voiceStore.setCameraDeviceId(deviceId)` and closes the picker. The `useLiveKit` `syncCamera` effect picks up the store change and calls `room.switchActiveDevice('videoinput', target)` for an in-place hot-swap (no republish) — see `docs/systems/voice.md` "Hot-swap mid-call". Click-outside dismissal listens to both `mousedown` AND `touchstart` (iOS Safari does not synthesize `mousedown` reliably from a single tap).
+
+The chevron is gated on `isCameraOn && cameraDevices.length > 1` so single-camera phones / desktops never see it. On iOS Safari the videoinput list is populated only after the OS-level camera permission has been granted at least once in the current session — that grant happens when the user first turns on the camera via `handleCameraAction` (which calls `getUserMedia`), so by the time the chevron is eligible to show, labels and device IDs are available. Before grant, `enumerateDevices()` returns one entry with empty `deviceId` and no label; the gate (`length > 1`) keeps the chevron hidden, so the user sees no broken-state UI.
+
+**Voice tile text-selection suppression.** `VoiceUser` and `StreamTile` outer containers carry `data-context-menu` attribute. The global `@media (max-width: 767px)` rule in `globals.css` applies `user-select: none` (and inheriting `-webkit-touch-callout: none` via the `*` rule) to every `[data-context-menu]` element, which also inherits to children. Without this, iOS Safari's long-press handler synthesizes the context menu correctly via `useGlobalLongPress`, but the OS *also* triggers native text selection during the 500 ms hold, leaving the entire page's text highlighted in the background after the menu opens. The `data-context-menu` opt-in is the established convention used by `Message.tsx`, `MobileDmsScreen.tsx`, `MobileFolderSheet.tsx`, and `MobileSpacesScreen.tsx`.
 
 **Disconnect:** Same logic as mini-bar (handles DM calls and space voice, calls `disconnectFn`, pops screen).
 
 **Guard:** If `currentVoiceChannelId` is falsy, calls `popMobileScreen()` and returns null.
+
+**Layout sizing.** The grid body is `flex-1` between the 48 px header and the floating control bar; on a 390 × 844 viewport the body is roughly 390 × 720, so:
+
+- **1 participant:** the lone tile fills the body minus padding (~366 × 206 at 16 : 9). Just the local user's avatar / camera with the standard speaking-ring + name overlay.
+- **2 participants:** `useGridLayout` picks the configuration that maximises tile area. On a portrait phone that's `cols=1, rows=2` — two stacked 16 : 9 tiles ~366 × 200 each, vertically centred.
+- **3–4 participants:** typically `cols=2, rows=2` (4) or `cols=1, rows=3` (3). The same area-maximising algorithm runs on mobile and desktop; nothing is mobile-specific.
+- **Focused mode:** the focused tile fills the body minus the 120 px (max 20 vh) bottom strip; the strip horizontally scrolls if other-participant count exceeds the visible width.
+
+No mobile-specific min-tile clamp exists. If the area-maximising solver picks an absurdly small tile for many participants, paginate-or-scroll is intentionally not added — the issue is symmetric with desktop and any future mobile-only paginator should land on desktop too.
 
 ---
 
@@ -660,6 +685,7 @@ keyboardOcclusion = window.innerHeight - (visualViewport.offsetTop + visualViewp
 It returns `{ value, keyboardOpen, height, offsetTop }`:
 - `value` — `'<n>px'` when the keyboard is open (the occlusion), or the literal `'env(safe-area-inset-bottom)'` string when it is not. Provided for legacy / fallback use.
 - `keyboardOpen` — `true` when `keyboardOcclusion > 1`.
+- `textInputFocused` — `true` while a text-entry element holds focus. Required for iOS PWA standalone where iOS itself shrinks the layout viewport for the keyboard, so `vv.height === innerHeight` and `keyboardOpen` stays `false` even though the keyboard IS up. Consumers OR `keyboardOpen || textInputFocused` to detect "keyboard probably open". The state-equality check inside the hook MUST include this field — historically it was missing, so on iOS PWA the hook silently dropped focus changes; the composer's `bottom` style stayed pinned to `env(safe-area-inset-bottom) + 6px` while the keyboard was open, the `--composer-clearance` ResizeObserver effect's deps fired stale values, and on close the last message overlapped the composer's top edge by ~4 px.
 - `height` — live `visualViewport.height` in pixels (or `null` if `visualViewport` is unavailable).
 - `offsetTop` — live `visualViewport.offsetTop` in pixels.
 

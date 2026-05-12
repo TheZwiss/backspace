@@ -65,24 +65,85 @@ export function MainContent() {
     setSearchOpen(false);
   }, [currentChannelId]);
 
-  // Handle actual browser fullscreen API
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setVoiceFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [setVoiceFullscreen]);
+  // Handle actual browser fullscreen API.
+  //
+  // iOS Safari (and iPadOS pre-16.4) does NOT implement the standard
+  // `Element.requestFullscreen()` on generic elements. Older WebKit exposes a
+  // `webkitRequestFullscreen` variant; pure iPhone has neither for a `<div>`
+  // (only `HTMLVideoElement.webkitEnterFullscreen()` works, which we cannot use
+  // for the multi-tile voice container). On those platforms we still want the
+  // toggle to work as an in-page maximize: the `voiceFullscreen` flag flips the
+  // container to `h-screen` so the call view fills the viewport — that's the
+  // graceful fallback. Calling a missing API directly threw
+  // `TypeError: requestFullscreen is not a function` on iPhone, taking down
+  // the whole voice UI; the guards below contain the platform difference.
+  type FullscreenCapableElement = HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+  };
+  type FullscreenCapableDocument = Document & {
+    webkitFullscreenElement?: Element | null;
+    webkitExitFullscreen?: () => Promise<void> | void;
+  };
+
+  const getFullscreenElement = useCallback((): Element | null => {
+    const d = document as FullscreenCapableDocument;
+    return document.fullscreenElement ?? d.webkitFullscreenElement ?? null;
+  }, []);
 
   useEffect(() => {
-    if (voiceFullscreen && voiceContainerRef.current && !document.fullscreenElement) {
-      voiceContainerRef.current.requestFullscreen().catch(err => {
-        console.error('Error attempting to enable full-screen mode:', err);
-      });
-    } else if (!voiceFullscreen && document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
+    const handleFullscreenChange = () => {
+      setVoiceFullscreen(!!getFullscreenElement());
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [setVoiceFullscreen, getFullscreenElement]);
+
+  useEffect(() => {
+    const el = voiceContainerRef.current as FullscreenCapableElement | null;
+    const d = document as FullscreenCapableDocument;
+    const inFullscreen = !!getFullscreenElement();
+
+    const enter = async () => {
+      if (!el) return;
+      try {
+        if (typeof el.requestFullscreen === 'function') {
+          await el.requestFullscreen();
+        } else if (typeof el.webkitRequestFullscreen === 'function') {
+          await Promise.resolve(el.webkitRequestFullscreen());
+        }
+        // If neither API exists (iPhone Safari / PWA standalone for non-video
+        // elements), fall through silently — the `voiceFullscreen` flag still
+        // applies `h-screen` to give an in-page maximize, which is the
+        // documented graceful fallback.
+      } catch (err) {
+        // Permission denied, user gesture missing, or platform refusal. Keep
+        // the in-page fallback (h-screen) without surfacing a console error.
+        console.warn('Native fullscreen unavailable, using in-page fallback:', err);
+      }
+    };
+
+    const exit = async () => {
+      try {
+        if (typeof document.exitFullscreen === 'function') {
+          await document.exitFullscreen();
+        } else if (typeof d.webkitExitFullscreen === 'function') {
+          await Promise.resolve(d.webkitExitFullscreen());
+        }
+      } catch {
+        // best-effort
+      }
+    };
+
+    if (voiceFullscreen && el && !inFullscreen) {
+      void enter();
+    } else if (!voiceFullscreen && inFullscreen) {
+      void exit();
     }
-  }, [voiceFullscreen]);
+  }, [voiceFullscreen, getFullscreenElement]);
 
   // 2. LOGIC AND EARLY RETURNS
   const channel = channels.find(c => c.id === currentChannelId);

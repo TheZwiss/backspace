@@ -61,6 +61,16 @@ export interface VisualViewportInset {
   /** True if the soft keyboard is occluding the bottom of the layout viewport. */
   keyboardOpen: boolean;
   /**
+   * True if a text-entry element currently has focus. Used as a focus-based
+   * fallback signal for the iOS PWA case where `interactive-widget=resizes-content`
+   * (or iOS's native standalone behavior) shrinks the layout viewport itself
+   * for the keyboard — `vv.height` ends up matching `innerHeight`, so
+   * `keyboardOpen` (which infers from height delta) stays false even though
+   * the keyboard IS up. Consumers that need a "is the keyboard most likely
+   * up" signal should OR `keyboardOpen || textInputFocused`.
+   */
+  textInputFocused: boolean;
+  /**
    * Live `visualViewport.height` in pixels, or `null` if `visualViewport` is
    * unavailable. Consumers that want to size a container to the visible
    * region (e.g. MobileShell when the keyboard is open) read this directly.
@@ -77,12 +87,16 @@ export interface VisualViewportInset {
 const FALLBACK: VisualViewportInset = {
   value: 'env(safe-area-inset-bottom)',
   keyboardOpen: false,
+  textInputFocused: false,
   height: null,
   offsetTop: null,
 };
 
 export function useVisualViewportInset(): VisualViewportInset {
   const [inset, setInset] = useState<VisualViewportInset>(FALLBACK);
+  // Mutable ref so `measure()` reads the latest focus state without React
+  // re-renders racing the visualViewport update path.
+  const textInputFocusedRef = { current: false } as { current: boolean };
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -104,12 +118,14 @@ export function useVisualViewportInset(): VisualViewportInset {
           ? {
               value: `${Math.round(occlusion)}px`,
               keyboardOpen: true,
+              textInputFocused: textInputFocusedRef.current,
               height: vv.height,
               offsetTop: vv.offsetTop,
             }
           : {
               value: 'env(safe-area-inset-bottom)',
               keyboardOpen: false,
+              textInputFocused: textInputFocusedRef.current,
               height: vv.height,
               offsetTop: vv.offsetTop,
             };
@@ -117,9 +133,24 @@ export function useVisualViewportInset(): VisualViewportInset {
       // Functional update + shallow compare so identical re-measurements
       // don't churn React state every animation frame during keyboard
       // transitions.
+      //
+      // ALL returned fields must be in this comparison, otherwise an
+      // observable change to one of them is silently dropped — the historical
+      // bug was `textInputFocused` being absent here. On iOS PWA standalone
+      // the layout viewport is shrunk natively for the keyboard, so
+      // `vv.height` matches `innerHeight` and `keyboardOpen`/`value` stay
+      // unchanged across the transition. The only signal that flips is
+      // `textInputFocused`. Without it in the compare, consumers
+      // (`MessageInput`'s `--composer-clearance` effect, the composer's
+      // inline `bottom` style) never see the focus change propagate, the
+      // composer stayed pinned above the home indicator while the keyboard
+      // was actually up, and on close the clearance variable was computed
+      // off a stale `bottom` value — surfacing as a -4 px overlap between
+      // the last message and the composer's top edge.
       setInset((prev) =>
         prev.value === next.value &&
         prev.keyboardOpen === next.keyboardOpen &&
+        prev.textInputFocused === next.textInputFocused &&
         prev.height === next.height &&
         prev.offsetTop === next.offsetTop
           ? prev
@@ -187,6 +218,11 @@ export function useVisualViewportInset(): VisualViewportInset {
         tag === 'TEXTAREA' ||
         (t as HTMLElement).isContentEditable === true;
       if (!editable) return;
+      // Track focus state — used as a fallback signal in the iOS PWA case
+      // where `vv.height` doesn't shrink for the keyboard (because iOS
+      // native-shifts the layout viewport instead). `focusin` → focused;
+      // `focusout` → unfocused. Capture phase listener so we see all events.
+      textInputFocusedRef.current = e.type === 'focusin';
       // Immediate measure + a polling window for laggy iOS PWA event flows.
       update();
       startPolling(600);

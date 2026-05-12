@@ -340,6 +340,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
 
   return (
     <div
+      data-context-menu
       className={`relative bg-surface-base rounded-xl overflow-hidden flex items-center justify-center group transition-all duration-200 ring-1 ring-white/[0.06] hover:ring-white/10 ${
         'h-full w-full'
       }`}
