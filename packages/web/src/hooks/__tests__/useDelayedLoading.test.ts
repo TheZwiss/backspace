@@ -139,4 +139,26 @@ describe('useDelayedLoading', () => {
     // the 300 ms minDisplay floor. The skeleton should be hidden by now.
     expect(result.current).toBe(false);
   });
+
+  it('honors a custom threshold passed via options', () => {
+    const { result } = renderHook(
+      ({ loading }) => useDelayedLoading(loading, { threshold: 50 }),
+      { initialProps: { loading: true } },
+    );
+    expect(result.current).toBe(false);
+    act(() => { vi.advanceTimersByTime(49); });
+    expect(result.current).toBe(false);
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(result.current).toBe(true);
+  });
+
+  it('default 200ms threshold does not fire at t=50ms (negative control for the custom-threshold test above)', () => {
+    // Negative control: same conditions with the default would still be false at t=50.
+    const { result: defaultThresholdResult } = renderHook(
+      ({ loading }) => useDelayedLoading(loading),
+      { initialProps: { loading: true } },
+    );
+    act(() => { vi.advanceTimersByTime(50); });
+    expect(defaultThresholdResult.current).toBe(false);
+  });
 });
