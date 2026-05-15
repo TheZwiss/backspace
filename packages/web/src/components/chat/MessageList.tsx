@@ -99,7 +99,13 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
   const SMOOTH_SCROLL_DEADLINE_MS = 800;
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const showInitialSkeleton = useDelayedLoading(isLoading && messages.length === 0);
-  const showPaginationSkeleton = useDelayedLoading(isLoadingMore);
+  // 50 ms threshold (vs the 200 ms default on showInitialSkeleton above) is
+  // safe here because Task 2's constant-height slot eliminated the layout
+  // shift the 200 ms originally hid. 50 ms is below the ~100 ms visual
+  // perception threshold so near-instant cache hits still complete without
+  // ever rendering the skeleton, while slow loads see the skeleton appear
+  // before the user's eye can register the slot as empty.
+  const showPaginationSkeleton = useDelayedLoading(isLoadingMore, { threshold: 50 });
   const prevMessagesLength = useRef(0);
   const prevChannelIdRef = useRef<string>(channelId);
   const visibleMsgIdRef = useRef<string | null>(null);
