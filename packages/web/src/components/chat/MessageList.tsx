@@ -26,6 +26,13 @@ import { SystemMessage } from './SystemMessage';
 const EMPTY_MESSAGES: MessageWithUser[] = [];
 const EMPTY_PENDING_BUBBLES: PendingBubble[] = [];
 
+// Constant-height slot rendered above messages whenever hasMore === true.
+// Value derived from the pagination skeleton's analytical rendered height
+// (pt-4 + 3 × (h-10 row) + 2 × mb-5 = 176px after stripping the last row's
+// mb-5), rounded UP to the nearest 4-pixel step for a buffer. See
+// docs/systems/message-list.md "Top-of-list reservation slot".
+const PAGINATION_SLOT_HEIGHT_PX = 200;
+
 interface MessageListProps {
   channelId: string;
   jumpToMessageId?: string | null;
@@ -597,10 +604,24 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
       suppressLoadMore = true;
     }
 
-    if (!suppressLoadMore && container.scrollTop < 50 && hasMore && !isLoadingMore) {
+    // scrollTop >= 0 guards against iOS Safari rubber-band overscroll producing
+    // briefly-negative scrollTop values, which would otherwise satisfy the
+    // upper bound and fire a spurious load during a rubber-band gesture.
+    if (
+      !suppressLoadMore &&
+      container.scrollTop >= 0 &&
+      container.scrollTop < PAGINATION_SLOT_HEIGHT_PX + 50 &&
+      hasMore &&
+      !isLoadingMore
+    ) {
       const requestChannelId = channelId;
       setIsLoadingMore(true);
+      // Capture BOTH synchronously, before the await — `prevScrollTop` must
+      // be the pre-await value for the anchor-from-bottom formula in the
+      // rAF callback below to hold. Moving this capture inside the rAF or
+      // after the await silently breaks the math.
       const prevScrollHeight = container.scrollHeight;
+      const prevScrollTop = container.scrollTop;
       try {
         const loaded = await loadMoreMessages(requestChannelId);
         if (!loaded) return;
@@ -615,7 +636,12 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
           if (currentChannelIdRef.current !== requestChannelId) return;
           const c = containerRef.current;
           if (!c) return;
-          c.scrollTop = c.scrollHeight - prevScrollHeight;
+          // Anchor-from-bottom: keep the user's viewport at the same distance
+          // from the new bottom of content as it was from the old bottom.
+          // `(c.scrollHeight - prevScrollHeight)` is the height of freshly
+          // prepended messages; adding it to `prevScrollTop` keeps the visible
+          // content stationary across the prepend.
+          c.scrollTop = prevScrollTop + (c.scrollHeight - prevScrollHeight);
         });
       } finally {
         setIsLoadingMore(false);
@@ -649,17 +675,25 @@ export function MessageList({ channelId, jumpToMessageId, onJumpComplete }: Mess
         className="h-full overflow-y-auto overflow-x-hidden no-scrollbar"
         onScroll={handleScroll}
       >
-        {showPaginationSkeleton && (
-          <div className="px-4 pt-4" role="status" aria-label="Loading older messages">
-            {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="flex gap-3 mb-5" style={{ animationDelay: `${i * 0.15}s` }}>
-                <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
-                <div className="flex-1 space-y-2 pt-1">
-                  <div className="skeleton skeleton-bar" style={{ width: `${22 + (i * 9) % 18}%`, animationDelay: `${i * 0.15}s` }} />
-                  <div className="skeleton skeleton-bar h-2.5" style={{ width: `${55 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
-                </div>
+        {hasMore && (
+          <div style={{ height: PAGINATION_SLOT_HEIGHT_PX }}>
+            {showPaginationSkeleton && (
+              <div className="px-4 pt-4" role="status" aria-label="Loading older messages">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`flex gap-3 ${i < 2 ? 'mb-5' : ''}`}
+                    style={{ animationDelay: `${i * 0.15}s` }}
+                  >
+                    <div className="skeleton skeleton-circle w-10 h-10 flex-shrink-0" style={{ animationDelay: `${i * 0.15}s` }} />
+                    <div className="flex-1 space-y-2 pt-1">
+                      <div className="skeleton skeleton-bar" style={{ width: `${22 + (i * 9) % 18}%`, animationDelay: `${i * 0.15}s` }} />
+                      <div className="skeleton skeleton-bar h-2.5" style={{ width: `${55 + (i * 11) % 35}%`, animationDelay: `${i * 0.15}s` }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
 
