@@ -1,6 +1,6 @@
 /**
  * Decides whether a freshly-arrived chat message should fire the in-app
- * `message.mp3` cue. Pure, federation-aware (matches against any of the
+ * `message.ogg` cue. Pure, federation-aware (matches against any of the
  * caller's known self-ids).
  *
  * Rule (Discord-default):

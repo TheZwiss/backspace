@@ -1,14 +1,19 @@
 # System Sounds
 
-Single source of truth for the in-app audio cue layer. Every file in
-`packages/web/public/sounds/` is wired to exactly one event with a defined
-audience.
+Single source of truth for the in-app audio cue layer. Files live in
+`packages/web/public/sounds/` as **Ogg Vorbis** (`.ogg`). Most cues are wired
+to exactly one event; the two `stream_user_*` cues are dual-audience (see
+their rows). All cues are self-authored (no third-party/Discord audio).
 
 Source files:
 - Controller: `packages/web/src/components/voice/SoundController.tsx`
+- Viewer-action cues: `packages/web/src/components/voice/StreamTile.tsx`
+  (`handleViewerWatchToggle`)
 - Audio engine: `packages/web/src/audio/AudioManager.ts`
 - Pure helpers: `packages/web/src/utils/notificationFilters.ts`,
-  `packages/web/src/utils/streamWatchProtocol.ts`
+  `packages/web/src/utils/streamWatchProtocol.ts`,
+  `packages/web/src/utils/voiceSoundTransitions.ts` (mute/deafen cue selection)
+- SFX volume: `packages/web/src/utils/sfx.ts` (`getSfxVolume`, `SFX_BASE_VOLUME`)
 - Settings: `packages/web/src/stores/voiceStore.ts`
   (`soundEffectVolume`, `messageSoundAllChannels`),
   `packages/web/src/components/modals/settingsPanels/VoicePanel.tsx`
@@ -19,22 +24,22 @@ Source files:
 
 | File | Event | Audience | Trigger |
 |---|---|---|---|
-| `mute.mp3` | "I am now muted" (any cause) | self | `effectiveMuted` flips true while LK-connected. Effective = self toggle ∪ space-mute ∪ permission-mute. |
-| `unmute.mp3` | "I am no longer muted" | self | `effectiveMuted` flips false while LK-connected. |
-| `deafen.mp3` | "I am now deafened" | self | `effectiveDeafened` flips true while LK-connected. |
-| `undeafen.mp3` | "I am no longer deafened" | self | `effectiveDeafened` flips false while LK-connected. |
-| `camera_on.mp3` | self camera enabled | self | `voiceStore.isCameraOn` flips true. |
-| `camera_off.mp3` | self camera disabled | self | `voiceStore.isCameraOn` flips false. |
-| `user_join.mp3` | someone (incl. self) joined the voice channel | everyone in call | self `isLiveKitConnected` flips true OR a remote participant appears in `participants[]`. |
-| `user_leave.mp3` | a remote participant left voice | everyone in call (excl. the leaver) | a userId disappears from `participants[]`. Suppressed for self (uses `disconnect.mp3`) and during teardown (`justDisconnected` guard). |
-| `disconnect.mp3` | self left voice | self | `isLiveKitConnected` flips false. |
-| `call_ringing.mp3` | incoming DM call (loop) | callee | `voiceStore.incomingCall !== null`. Loops while ringing; cleaned up on accept/reject/timeout. |
-| `call_calling.mp3` | outgoing DM call (loop) | caller | `voiceStore.outgoingCall !== null`. |
-| `stream_started.mp3` | any participant started a screen share | everyone in call (incl. the streamer) | a userId appears in the `participants[].isScreenSharing` set. |
-| `stream_ended.mp3` | any participant stopped a screen share | everyone in call | a userId leaves the `participants[].isScreenSharing` set. |
-| `stream_user_joined.mp3` | a viewer started watching **my** stream | streamer only | `streamWatchers[selfUserId]` gains a watcher identity. |
-| `stream_user_left.mp3` | a viewer stopped watching **my** stream | streamer only | `streamWatchers[selfUserId]` loses a watcher identity. Suppressed for the entire watcher set when self-stream-end fires (see Mechanism Notes). |
-| `message.mp3` | new chat message arrived | self | `shouldPlayMessageSound` returns true (DM channel OR content mentions any of the user's self-ids). User can flip `messageSoundAllChannels` to fire on every channel. |
+| `mute.ogg` | "I am now muted" (any cause) | self | `effectiveMuted` flips true while LK-connected. Effective = self toggle ∪ space-mute ∪ permission-mute. Suppressed when the deafen state also flipped this tick (see Mute/deafen cue selection). |
+| `unmute.ogg` | "I am no longer muted" | self | `effectiveMuted` flips false while LK-connected. Suppressed when the deafen state also flipped this tick. |
+| `deafen.ogg` | "I am now deafened" | self | `effectiveDeafened` flips true while LK-connected. Takes priority over the coincident mute cue. |
+| `undeafen.ogg` | "I am no longer deafened" | self | `effectiveDeafened` flips false while LK-connected. Takes priority over the coincident unmute cue. |
+| `camera_on.ogg` | self camera enabled | self | `voiceStore.isCameraOn` flips true. |
+| `camera_off.ogg` | self camera disabled | self | `voiceStore.isCameraOn` flips false. |
+| `user_join.ogg` | someone (incl. self) joined the voice channel | everyone in call | self `isLiveKitConnected` flips true OR a remote participant appears in `participants[]`. |
+| `user_leave.ogg` | a remote participant left voice | everyone in call (excl. the leaver) | a userId disappears from `participants[]`. Suppressed for self (uses `disconnect.ogg`) and during teardown (`justDisconnected` guard). |
+| `disconnect.ogg` | self left voice | self | `isLiveKitConnected` flips false. |
+| `call_ringing.ogg` | incoming DM call (loop) | callee | `voiceStore.incomingCall !== null`. Loops while ringing; cleaned up on accept/reject/timeout. |
+| `call_calling.ogg` | outgoing DM call (loop) | caller | `voiceStore.outgoingCall !== null`. |
+| `stream_started.ogg` | any participant started a screen share | everyone in call (incl. the streamer) | a userId appears in the `participants[].isScreenSharing` set. |
+| `stream_ended.ogg` | any participant stopped a screen share | everyone in call | a userId leaves the `participants[].isScreenSharing` set. |
+| `stream_user_joined.ogg` | (a) a viewer started watching **my** stream; (b) **I** started watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` gains a watcher identity. (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, true)` on the explicit "Watch Stream" action. |
+| `stream_user_left.ogg` | (a) a viewer stopped watching **my** stream; (b) **I** stopped watching someone's stream | streamer **and** the acting viewer | (a) streamer-side: `streamWatchers[selfUserId]` loses a watcher identity (suppressed for the whole set when self-stream-end fires — see Mechanism Notes). (b) viewer-side: local feedback played by `handleViewerWatchToggle(_, false)` on the explicit "Stop Watching" action. |
+| `message.ogg` | new chat message arrived | self | `shouldPlayMessageSound` returns true (DM channel OR content mentions any of the user's self-ids). User can flip `messageSoundAllChannels` to fire on every channel. |
 
 ---
 
@@ -58,6 +63,43 @@ a phantom mute cue on join (where you might be pre-muted by a moderator before
 ever entering the channel — the `effectiveMuted` flag flips true *after*
 connect because the keyed lookup resolves only once `currentVoiceChannelId` is
 set). Mid-call mod-mute remains audible.
+
+### Mute/deafen cue selection
+
+Deafening is not independent of muting: `voiceStore.toggleDeafen` flips
+`isMuted` together with `isDeafened` in a single atomic `set()` (deafen ⇒
+muted, undeafen ⇒ unmuted), mirroring Discord. SoundController samples both
+effective states on the same store tick, so firing a cue per changed flag would
+play `mute` **and** `deafen` at once when the user hits deafen.
+
+`selectVoiceStateSound(prev, next)` (`utils/voiceSoundTransitions.ts`) resolves
+this to a single cue: if the deafen state changed it returns `deafen`/`undeafen`
+and the coincident mute change is treated as a side effect and suppressed;
+otherwise a mute change returns `mute`/`unmute`. Pure helper, unit-tested.
+
+### Viewer-side watch feedback
+
+`stream_user_joined` / `stream_user_left` also play on the **viewer's own**
+machine as feedback for an explicit watch/stop action, via
+`handleViewerWatchToggle` in `StreamTile.tsx` — the same chokepoint that
+broadcasts the `stream_watch` ping. The cue is played directly (not derived
+from a `watchingStreams` diff) for two reasons: (1) automatic teardown paths
+(streamer stops sharing, participant disconnect) mutate `watchingStreams`
+without being the viewer's action and must stay silent on the viewer side —
+they already get `stream_ended`; (2) a direct local play is independent of the
+data-channel round-trip to the streamer, so the viewer gets identical feedback
+on every platform (Safari and the Electron desktop app alike). This is
+orthogonal to the streamer-side diff below, which fires on a *different*
+machine for that streamer's watcher set — the two never double on one client.
+
+### Playback envelope (anti-pop)
+
+`AudioManager.playSound` wraps every cue in a short gain envelope — a 10ms
+fade-in on start and (for non-looping cues) a 10ms fade-out before the buffer
+ends. Starting a buffer at a non-zero sample amplitude produces an audible
+click/pop; the envelope removes it. Most noticeable on the looping call cues
+(`call_calling` / `call_ringing`), which previously popped on every start.
+Mirrors the envelope already used by `playTestTone`.
 
 ### Viewer tracking — data-channel protocol
 
@@ -147,6 +189,6 @@ of them is a future change that requires sourcing new audio:
 - DM call accepted / connected (the moment ringing transitions to active)
 - DM call missed / declined / ended-remotely
 - Moderator move-to-channel / kick-from-voice (the LK disconnect already plays
-  `disconnect.mp3` for forced disconnects)
+  `disconnect.ogg` for forced disconnects)
 - Friend request received / accepted
 - Mention-everyone / @here (Backspace doesn't currently parse these)

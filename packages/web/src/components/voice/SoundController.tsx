@@ -5,11 +5,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useSpaceStore, isDmChannel, getChannelOrigin, getMyUserIdForOrigin } from '../../stores/spaceStore';
 import { AudioManager } from '../../audio/AudioManager';
 import { shouldPlayMessageSound } from '../../utils/notificationFilters';
-
-/** Compute the effective sound effect gain: base volume (0.8) scaled by the user's SFX slider (0–200). */
-function getSfxVolume(): number {
-  return 0.8 * (useVoiceStore.getState().soundEffectVolume / 100);
-}
+import { selectVoiceStateSound } from '../../utils/voiceSoundTransitions';
+import { getSfxVolume } from '../../utils/sfx';
 
 /**
  * Replicates the `useLiveKit` effective-mute formula on demand. Returns whether
@@ -84,12 +81,14 @@ export function SoundController() {
       // current effective state without firing.
       const eff = computeEffectiveSelfState(state);
       if (state.isLiveKitConnected && prev.current.isLiveKitConnected) {
-        if (eff.muted !== prev.current.effectiveMuted) {
-          audioManager.playSound(eff.muted ? 'mute' : 'unmute', sfxOpts);
-        }
-        if (eff.deafened !== prev.current.effectiveDeafened) {
-          audioManager.playSound(eff.deafened ? 'deafen' : 'undeafen', sfxOpts);
-        }
+        // Deafen toggles mute as an atomic side effect (see
+        // selectVoiceStateSound) — pick the single correct cue so deafening
+        // doesn't play the mute sound on top of the deafen sound.
+        const sound = selectVoiceStateSound(
+          { muted: prev.current.effectiveMuted, deafened: prev.current.effectiveDeafened },
+          { muted: eff.muted, deafened: eff.deafened },
+        );
+        if (sound) audioManager.playSound(sound, sfxOpts);
       }
       prev.current.effectiveMuted = eff.muted;
       prev.current.effectiveDeafened = eff.deafened;

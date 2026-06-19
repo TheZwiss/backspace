@@ -5,6 +5,8 @@ import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextM
 import { getActiveRoom, setStreamSubscription } from '../../hooks/useLiveKit';
 import { stopScreenShare, changeScreenShare } from '../../utils/screenShare';
 import { encodeStreamWatch } from '../../utils/streamWatchProtocol';
+import { AudioManager } from '../../audio/AudioManager';
+import { getSfxVolume } from '../../utils/sfx';
 import { ScreenShareSettingsPopover } from './ScreenShareSettingsPopover';
 import { useVoiceParticipantMeta } from '../../hooks/useVoiceParticipantMeta';
 import type { StreamTile as StreamTileType } from '../../hooks/useLiveKit';
@@ -141,7 +143,26 @@ function StreamAttenuationItem() {
   );
 }
 
-function broadcastStreamWatch(streamerUserId: string, watching: boolean): void {
+/**
+ * Handles a deliberate viewer watch / stop-watch action: plays the local
+ * feedback cue on the viewer's OWN machine and notifies the streamer so their
+ * streamer-side watcher set updates.
+ *
+ * Called only from explicit user-action sites (the "Watch Stream" button and
+ * the watch/stop context-menu items) — never from automatic teardown paths
+ * (streamer stops sharing, participant disconnect), which must stay silent on
+ * the viewer side. The local cue is played directly rather than derived from a
+ * `watchingStreams` diff precisely so those teardown paths don't trigger it.
+ *
+ * The cue plays unconditionally (independent of the data-channel round-trip to
+ * the streamer), so the viewer gets identical feedback on every platform —
+ * Safari and the Electron desktop app alike.
+ */
+function handleViewerWatchToggle(streamerUserId: string, watching: boolean): void {
+  AudioManager.getInstance().playSound(
+    watching ? 'stream_user_joined' : 'stream_user_left',
+    { volume: getSfxVolume() },
+  );
   const room = getActiveRoom();
   if (!room) return;
   const payload = encodeStreamWatch({ type: 'stream_watch', target: streamerUserId, watching });
@@ -275,7 +296,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
             onClick: () => {
               useVoiceStore.getState().unwatchStream(userId);
               setStreamSubscription(getActiveRoom(), identity, false);
-              broadcastStreamWatch(userId, false);
+              handleViewerWatchToggle(userId, false);
             },
           });
         } else {
@@ -289,7 +310,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
             onClick: () => {
               useVoiceStore.getState().watchStream(userId);
               setStreamSubscription(getActiveRoom(), identity, true);
-              broadcastStreamWatch(userId, true);
+              handleViewerWatchToggle(userId, true);
             },
           });
         }
@@ -333,7 +354,7 @@ export function StreamTile({ tile, large }: StreamTileProps) {
   const handleWatch = useCallback(() => {
     useVoiceStore.getState().watchStream(userId);
     setStreamSubscription(getActiveRoom(), participant.identity, true);
-    broadcastStreamWatch(userId, true);
+    handleViewerWatchToggle(userId, true);
   }, [userId, participant.identity]);
 
   const hasVideo = liveScreenTrack !== null;

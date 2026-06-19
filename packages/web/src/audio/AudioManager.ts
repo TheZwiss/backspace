@@ -169,7 +169,7 @@ export class AudioManager {
     if (!this.ctx) this.initContext();
     
     try {
-      const response = await fetch(`/sounds/${name}.mp3`);
+      const response = await fetch(`/sounds/${name}.ogg`);
       if (!response.ok) throw new Error(`Failed to load sound: ${name}`);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.ctx!.decodeAudioData(arrayBuffer);
@@ -191,12 +191,34 @@ export class AudioManager {
     source.loop = options.loop || false;
 
     const gainNode = this.ctx.createGain();
-    gainNode.gain.value = options.volume ?? 0.8;
+    const targetVolume = options.volume ?? 0.8;
+
+    // Short attack/release envelope to avoid the click/pop that occurs when a
+    // buffer starts (or ends) at a non-zero sample amplitude. Without this the
+    // waveform's first sample jumps from silence instantly, producing an
+    // audible pop — most noticeable on the looping call cues. Mirrors the
+    // envelope used by playTestTone().
+    const now = this.ctx.currentTime;
+    const attack = 0.01; // 10ms fade-in — kills the start pop, imperceptible
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(targetVolume, now + attack);
+
+    // Tail fade-out for one-shots so they don't pop at the natural end of the
+    // buffer. Looping cues are stopped explicitly by the caller, so they ramp
+    // in once and hold; no tail ramp is scheduled for them.
+    if (!source.loop) {
+      const release = 0.01; // 10ms fade-out
+      const dur = buffer.duration;
+      if (dur > attack + release) {
+        gainNode.gain.setValueAtTime(targetVolume, now + dur - release);
+        gainNode.gain.linearRampToValueAtTime(0, now + dur);
+      }
+    }
 
     source.connect(gainNode);
     gainNode.connect(this.masterBoost!);
 
-    source.start(0);
+    source.start(now);
     return source;
   }
 
