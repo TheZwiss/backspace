@@ -5,7 +5,9 @@ import { config } from '../config.js';
 import * as schema from './schema.js';
 import { ensureDefaults } from './migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
-import { mkdirSync } from 'fs';
+import { createSnapshot } from '../utils/backup.js';
+import { hasPendingMigrations } from './pendingMigrations.js';
+import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,12 +22,29 @@ function ensureDirectory(filePath: string): void {
 
 export function initDatabase() {
   ensureDirectory(config.dbPath);
+  // Capture existence BEFORE opening — new Database() creates the file, so a
+  // post-open check would always report "exists" and snapshot a 0-row DB on first boot.
+  const dbExisted = existsSync(config.dbPath);
+
   sqlite = new Database(config.dbPath);
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
 
-  // Apply any pending Drizzle migrations
   const migrationsFolder = resolve(__dirname, '../../drizzle');
+
+  // Snapshot before migrating — but only when there is a real DB AND a migration
+  // is actually pending. History is stable across most boots, so this avoids
+  // churning the pre-migration retention with identical copies on every restart.
+  if (!config.backup.disabled && dbExisted && hasPendingMigrations(sqlite, migrationsFolder)) {
+    try {
+      const snap = createSnapshot(sqlite, 'pre-migration');
+      console.log(`[backup] pre-migration snapshot written: ${snap}`);
+    } catch (err) {
+      console.error(`[backup] pre-migration snapshot FAILED — aborting migration to protect data: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder });
 

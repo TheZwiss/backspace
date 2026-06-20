@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
-import { getDb, getRawDb } from './db/index.js';
+import { getDb, getRawDb, closeDatabase } from './db/index.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -181,6 +181,7 @@ async function main(): Promise<void> {
     console.log('Shutting down...');
     stopFederationWorkers();
     await app.close();
+    closeDatabase(); // checkpoints WAL — leaves a complete on-disk file
     process.exit(0);
   };
 
