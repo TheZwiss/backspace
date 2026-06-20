@@ -5,7 +5,6 @@ import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
 import { getDb, getRawDb } from './db/index.js';
-import { seedDatabase } from './db/seed.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -108,7 +107,6 @@ async function main(): Promise<void> {
 
   // Initialize database
   getDb();
-  await seedDatabase();
 
   // Reset orphaned `users.status` rows for locally-homed users. The previous
   // process's in-memory disconnect timers are gone, so any non-offline row
