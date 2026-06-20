@@ -406,11 +406,10 @@ fi
 step "Backspace is running"
 
 echo -e "  ${BOLD}URL:${NC}       https://${DOMAIN}"
-echo -e "  ${BOLD}Admin:${NC}     admin / admin123"
 echo -e "  ${BOLD}Instance:${NC}  ${INSTANCE_NAME}"
 echo -e "  ${BOLD}Voice:${NC}     $(if [[ "$ENABLE_VOICE" == true ]]; then echo 'Enabled'; else echo 'Disabled'; fi)"
 echo ""
-echo -e "  ${YELLOW}Change the admin password immediately after first login.${NC}"
+echo -e "  ${YELLOW}Open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
 echo ""
 echo -e "  ${BOLD}Commands:${NC}"
 echo "    docker compose logs -f          # Watch logs"
