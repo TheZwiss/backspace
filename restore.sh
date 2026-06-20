@@ -16,8 +16,15 @@ fi
 
 # No arg: list snapshots newest-first and exit.
 if [[ $# -eq 0 ]]; then
+  shopt -s nullglob
+  snaps=("$BACKUP_DIR"/*.db)
+  shopt -u nullglob
+  if [[ ${#snaps[@]} -eq 0 ]]; then
+    echo "No snapshots found in $BACKUP_DIR."
+    exit 0
+  fi
   echo "Available snapshots (newest first):"
-  ls -1t "$BACKUP_DIR"/*.db 2>/dev/null | while read -r f; do
+  for f in $(ls -1t "$BACKUP_DIR"/*.db); do
     printf "  %s  (%s)\n" "$(basename "$f")" "$(du -h "$f" | cut -f1)"
   done
   echo ""
@@ -45,14 +52,14 @@ docker compose stop backspace
 # (youruser is in the docker group on both boxes — no sudo prompt.)
 TS="$(date -u +%Y%m%dT%H%M%S)"
 echo "[2/3] Swapping DB inside a root container (pre-restore copy + WAL clear + install)..."
-docker run --rm -v "$(pwd)/data:/data" alpine sh -c "
+docker run --rm -v "$(pwd)/data:/data" alpine sh -c '
   set -e
   if [ -f /data/backspace.db ]; then
-    cp /data/backspace.db /data/backups/backspace-${TS}-pre-restore.db
+    cp /data/backspace.db "/data/backups/backspace-$1-pre-restore.db"
   fi
   rm -f /data/backspace.db-wal /data/backspace.db-shm
-  cp /data/backups/${SNAP_NAME} /data/backspace.db
-"
+  cp "/data/backups/$2" /data/backspace.db
+' sh "$TS" "$SNAP_NAME"
 
 echo "[3/3] Starting backspace container..."
 docker compose start backspace
