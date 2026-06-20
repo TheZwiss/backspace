@@ -22,7 +22,7 @@ COPY packages/web/package.json packages/web/
 COPY patches/ patches/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source code (excluding desktop — not needed in Docker)
 COPY packages/shared/ packages/shared/
@@ -58,7 +58,7 @@ COPY packages/web/package.json packages/web/
 COPY patches/ patches/
 
 # Install production dependencies only (tsx is in server dependencies)
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy shared source (needed at runtime since server imports types directly)
 COPY packages/shared/ packages/shared/

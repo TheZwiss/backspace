@@ -488,3 +488,60 @@ describe('POST /api/auth/register — federation gate split', () => {
     expect(reds).toHaveLength(0);
   });
 });
+
+describe('POST /api/auth/register — first-user-admin promotion', () => {
+  beforeEach(() => {
+    // Start from a completely empty users table (no pre-seeded admin from outer beforeEach).
+    testDb.delete(schema.users).run();
+    // Ensure instance_settings row so registration can proceed.
+    testDb.delete(schema.instanceSettings).run();
+    testDb.insert(schema.instanceSettings).values({
+      id: 1,
+      registrationOpen: 1,
+      federatedRegistrationOpen: 1,
+      updatedAt: Date.now(),
+    }).run();
+  });
+
+  it('first locally-registered user receives isAdmin = 1', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'firstuser', password: 'password123' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const user = testDb.select().from(schema.users).where(eq(schema.users.username, 'firstuser')).get();
+    expect(user?.isAdmin).toBe(1);
+  });
+
+  it('second locally-registered user does NOT receive isAdmin', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'firstuser', password: 'password123' },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'seconduser', password: 'password123' },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const second = testDb.select().from(schema.users).where(eq(schema.users.username, 'seconduser')).get();
+    expect(second?.isAdmin).toBe(0);
+  });
+
+  it('federated user (homeInstance set) is never promoted to admin even if first in DB', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'feduser@remote.example', password: 'password123', homeInstance: 'remote.example' },
+    });
+    // Federated registration is open (federatedRegistrationOpen: 1)
+    expect(res.statusCode).toBe(201);
+
+    const user = testDb.select().from(schema.users).where(eq(schema.users.username, 'feduser@remote.example')).get();
+    expect(user?.isAdmin).toBe(0);
+  });
+});

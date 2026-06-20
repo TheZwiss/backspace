@@ -4,8 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
 import { config } from './config.js';
-import { getDb, getRawDb } from './db/index.js';
-import { seedDatabase } from './db/seed.js';
+import { getDb, getRawDb, closeDatabase } from './db/index.js';
 import { checkFfmpeg } from './utils/thumbnail.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -27,6 +26,7 @@ import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
+import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -108,7 +108,6 @@ async function main(): Promise<void> {
 
   // Initialize database
   getDb();
-  await seedDatabase();
 
   // Reset orphaned `users.status` rows for locally-homed users. The previous
   // process's in-memory disconnect timers are gone, so any non-offline row
@@ -179,10 +178,14 @@ async function main(): Promise<void> {
     startFederationWorkers();
   }
 
+  startBackupWorker();
+
   const shutdown = async () => {
     console.log('Shutting down...');
     stopFederationWorkers();
+    stopBackupWorker();
     await app.close();
+    closeDatabase(); // checkpoints WAL — leaves a complete on-disk file
     process.exit(0);
   };
 

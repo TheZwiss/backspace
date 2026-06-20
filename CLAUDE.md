@@ -128,6 +128,7 @@ Data: `packages/server/data/` (backspace.db + uploads/)
 - `./install.sh` — Interactive first-time setup
 - `./deploy.sh [pi|vm|all]` — Rsync + rebuild on target(s)
 - Instances: `nova.ddns.net` (Pi), `orbit.ddns.net` (VM)
+- First registered user becomes admin (no default credentials). DB auto-backups to data/backups/; restore via ./restore.sh. See docs/systems/deployment.md.
 
 ---
 
@@ -157,6 +158,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [desktop.md](docs/systems/desktop.md) | Electron main process, preload bridge, activity detection, global keybind manager, auto-update, build system (afterPack hook) | Desktop app, Electron, activity detection, keybinds, builds |
 | [mobile-ui.md](docs/systems/mobile-ui.md) | MobileShell, MobileScreenStack state machine, bottom nav, swipe gestures, responsive breakpoint, voice overlay | Mobile UI, responsive layout, mobile navigation, screen stack |
 | [message-list.md](docs/systems/message-list.md) | Auto-scroll model, position memory (session-only), embed renderer dimension contract, known limitations | Touching MessageList.tsx, scroll behavior, embed renderers, position restore |
+| [deployment.md](docs/systems/deployment.md) | Hosting pipeline: Docker/Caddy build, admin bootstrap, DB backup/restore, image pinning, env vars | Any deploy, backup/restore, or hosting change |
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
 
 ---

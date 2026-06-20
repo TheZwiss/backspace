@@ -32,7 +32,7 @@ services:
 
   # ── Caddy reverse proxy (auto-HTTPS) ─────────────────────
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.1-alpine
     container_name: caddy
     restart: unless-stopped
     ports:
@@ -55,7 +55,7 @@ services:
   # ── LiveKit voice/video server ────────────────────────────
   # Activated by COMPOSE_PROFILES=voice in .env
   livekit:
-    image: livekit/livekit-server:latest
+    image: livekit/livekit-server:v1.9.11
     container_name: livekit
     restart: unless-stopped
     network_mode: host
