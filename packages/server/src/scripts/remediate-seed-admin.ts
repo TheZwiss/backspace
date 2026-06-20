@@ -40,6 +40,9 @@ if (isMain) {
         // (on the bind-mount → visible on the host as data/seed-admin-rotated.txt).
         const outFile = path.join(path.dirname(dbPath), 'seed-admin-rotated.txt');
         fs.writeFileSync(outFile, `${r.newPassword}\n`, { mode: 0o600 });
+        // `mode` only applies when the file is newly created; chmod guarantees 0600
+        // even if a prior run left the file with looser permissions (it holds a password).
+        fs.chmodSync(outFile, 0o600);
         console.log('Seed admin password ROTATED.');
         console.log(`  New password: ${r.newPassword}`);
         console.log(`  Also written to: ${outFile} (delete after you have stored it)`);
