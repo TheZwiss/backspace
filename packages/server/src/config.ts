@@ -69,6 +69,15 @@ export const config = {
   dbPath: env('DB_PATH', resolve(__dirname, '../../../data/backspace.db')),
   maxUploadSize: envInt('MAX_UPLOAD_SIZE', 104857600),
   registrationOpen: envBool('REGISTRATION_OPEN', true),
+  backup: {
+    dir: envOptional('BACKUP_DIR') ?? resolve(dirname(env('DB_PATH', resolve(__dirname, '../../../data/backspace.db'))), 'backups'),
+    intervalHours: envInt('BACKUP_INTERVAL_HOURS', 24),
+    keepScheduled: envInt('BACKUP_KEEP_SCHEDULED', 7),
+    keepPreMigration: envInt('BACKUP_KEEP_PREMIGRATION', 5),
+    keepManual: envInt('BACKUP_KEEP_MANUAL', 10),
+    offsiteCmd: envOptional('BACKUP_OFFSITE_CMD'),
+    disabled: envBool('BACKUP_DISABLED', false),
+  },
 } as const;
 
 if (config.jwtSecret.length < 32) {
