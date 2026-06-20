@@ -26,6 +26,7 @@ import { adminRoutes } from './routes/admin.js';
 import { gifRoutes } from './routes/gif.js';
 import { federationRoutes } from './routes/federation.js';
 import { startFederationWorkers, stopFederationWorkers } from './utils/federationWorker.js';
+import { startBackupWorker, stopBackupWorker } from './utils/backupWorker.js';
 import './utils/federationRollback.js'; // Side-effect: registers rollback callbacks for outbox terminal failures.
 import { registerCallRelayHooks } from './ws/events.js';
 import { resetStalePresenceOnBoot } from './utils/presenceBoot.js';
@@ -177,9 +178,12 @@ async function main(): Promise<void> {
     startFederationWorkers();
   }
 
+  startBackupWorker();
+
   const shutdown = async () => {
     console.log('Shutting down...');
     stopFederationWorkers();
+    stopBackupWorker();
     await app.close();
     closeDatabase(); // checkpoints WAL — leaves a complete on-disk file
     process.exit(0);
