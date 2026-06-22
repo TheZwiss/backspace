@@ -242,7 +242,7 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       }
 
       // Step 2: Compute the user's true home identity
-      // If we're a federated user (e.g. youruser@nova browsing orbit),
+      // If we're a federated user (e.g. erin@nova browsing orbit),
       // homeInstance points to the real home, not window.location.host.
       const trueHomeHost = currentUser.homeInstance ?? window.location.host;
       const bareUsername = currentUser.username.includes('@')

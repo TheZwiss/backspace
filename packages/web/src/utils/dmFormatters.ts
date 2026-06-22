@@ -299,7 +299,7 @@ export function formatDmHeaderName(dm: DmChannel, currentUser: AuthLike): string
  *
  * The unnamed-group case intentionally collapses to a generic noun: the
  * joined-names form is unreadable as a one-line placeholder once a group
- * has 4+ members ("Message #Test, Nova, youruser, Nova" runs off-screen
+ * has 4+ members ("Message #Test, Nova, erin, Nova" runs off-screen
  * and obscures the actual call-to-action).
  */
 export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string {

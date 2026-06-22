@@ -859,7 +859,7 @@ Owner-authored update of a group DM's `name` and/or `icon`. Mirrors the `profile
       "userId": "...",
       "homeUserId": "...",
       "homeInstance": "https://nova.ddns.net",
-      "profile": { "username": "jannis" }
+      "profile": { "username": "heidi" }
     }
   }
 }
@@ -1593,7 +1593,7 @@ Relevant settings in `instance_settings`:
 
 The frontend needs to resolve federated identities for display purposes:
 
-**`parseFederatedUsername(username)`** -- splits `"youruser@nova.ddns.net"` into `{baseName: "youruser", domain: "nova.ddns.net"}`.
+**`parseFederatedUsername(username)`** -- splits `"erin@nova.ddns.net"` into `{baseName: "erin", domain: "nova.ddns.net"}`.
 
 **`isSelf(user, homeUser)`** -- determines if a user object is the logged-in user or their replicated stub. Uses cascading checks: same ID, known self-ID set, homeInstance + baseName match.
 

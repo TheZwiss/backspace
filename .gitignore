@@ -17,10 +17,19 @@ data/
 *.db
 *.db-journal
 
-# Environment
+# Environment — ignore every .env variant except the tracked example
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Credentials / private keys (defense-in-depth; none should ever be committed)
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
 
 # Generated deployment config (contains secrets)
 livekit.yaml
@@ -28,9 +37,16 @@ livekit.yaml
 # OS files
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+._*
 *.swp
 *.swo
 *~
+
+# Internal process docs / scratch (never published; see scripts/prepare-public-release.sh)
+*.rtf
+*.rtfd/
 
 # IDE
 .idea/

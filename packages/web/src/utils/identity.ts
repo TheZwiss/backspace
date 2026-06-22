@@ -2,8 +2,8 @@ import type { User } from '@backspace/shared';
 
 /**
  * Splits a potentially federated username into base name and domain.
- * "youruser@nova.ddns.net" → { baseName: "youruser", domain: "nova.ddns.net" }
- * "youruser"                → { baseName: "youruser", domain: null }
+ * "erin@nova.ddns.net" → { baseName: "erin", domain: "nova.ddns.net" }
+ * "erin"                → { baseName: "erin", domain: null }
  */
 export function parseFederatedUsername(username: string): { baseName: string; domain: string | null } {
   const atIndex = username.indexOf('@');
@@ -42,7 +42,7 @@ export function isSelf(
   // Replicated user: homeInstance matches our origin
   if (!user.homeInstance) return false;
   if (user.homeInstance !== window.location.host) return false;
-  // Username: "youruser" or "youruser@nova.ddns.net" → base must match
+  // Username: "erin" or "erin@nova.ddns.net" → base must match
   const { baseName } = parseFederatedUsername(user.username);
   const { baseName: homeBase } = parseFederatedUsername(homeUser.username);
   return baseName === homeBase;
@@ -150,7 +150,7 @@ export function isDeliveryFromHome(
  *
  * True iff the user is genuinely remote: their username carries an `@domain`
  * suffix AND that domain is NOT our own host. Catches the bug where a stub
- * delivered by a sibling instance (e.g. orbit-side `axel@nova.ddns.net`
+ * delivered by a sibling instance (e.g. orbit-side `frank@nova.ddns.net`
  * viewed from a session logged in to nova) would otherwise show the globe.
  *
  * Compose with {@link useCanonicalUserView} at render sites: resolve the

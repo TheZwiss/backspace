@@ -73,7 +73,7 @@ beforeEach(() => {
   }).run();
   // Online native FRIENDED with the stub — should be snapshotted
   testDb.insert(schema.users).values({
-    id: 'native-friend', username: 'youruser', passwordHash: 'x',
+    id: 'native-friend', username: 'erin', passwordHash: 'x',
     status: 'online', isAdmin: 0, homeUserId: 'native-friend', createdAt: Date.now(),
   }).run();
   testDb.insert(schema.friends).values({

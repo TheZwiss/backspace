@@ -2,9 +2,10 @@
   "name": "@backspace/desktop",
   "version": "1.0.0",
   "private": true,
+  "license": "Elastic-2.0",
   "description": "Backspace",
   "author": {
-    "name": "youruser",
+    "name": "Jannis Braun",
     "email": "backspace@backspace.chat"
   },
   "homepage": "https://github.com/TheZwiss/backspace",

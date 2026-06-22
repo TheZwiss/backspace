@@ -62,7 +62,7 @@ beforeEach(() => {
   // Native local user
   testDb.insert(schema.users).values({
     id: 'native-1',
-    username: 'youruser',
+    username: 'erin',
     passwordHash: 'x',
     status: 'online',
     isAdmin: 0,

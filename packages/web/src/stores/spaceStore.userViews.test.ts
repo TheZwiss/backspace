@@ -75,28 +75,28 @@ describe('spaceStore.upsertUserView preference rule', () => {
   });
 
   it('home view (delivered by user home) wins over an existing stub', () => {
-    // orbit delivers Axel as a federated stub (axel's home is nova).
+    // orbit delivers Frank as a federated stub (frank's home is nova).
     const stubAxel = makeUser({
       id: 'orbit-local-id',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
       avatar: 'https://nova.ddns.net/api/uploads/old.png',
     });
     useSpaceStore.getState().upsertUserView(stubAxel, 'https://orbit.ddns.net');
 
-    // Then nova delivers axel natively (no homeInstance, our home origin '').
+    // Then nova delivers frank natively (no homeInstance, our home origin '').
     // canonicalUserKey for the home view: needs to match the stub's key.
-    // Stub key = "nova.ddns.net:nova-axel-id".
-    // Home view (nova native): homeInstance=null, homeUserId=null, id="nova-axel-id"
-    //   → key = ":nova-axel-id"
+    // Stub key = "nova.ddns.net:nova-frank-id".
+    // Home view (nova native): homeInstance=null, homeUserId=null, id="nova-frank-id"
+    //   → key = ":nova-frank-id"
     // These keys are different on purpose: the home record on its home instance
     // has no homeInstance/homeUserId. The cross-instance match relies on the
     // stub being the federated form. Verify behavior accordingly.
     const homeAxel = makeUser({
-      id: 'nova-axel-id',
-      username: 'axel',
+      id: 'nova-frank-id',
+      username: 'frank',
       avatar: '',
       avatarColor: 'teal',
     });
@@ -111,19 +111,19 @@ describe('spaceStore.upsertUserView preference rule', () => {
   });
 
   it('two same-canonical-key federated views: home delivery upgrades over sibling stub', () => {
-    // Same person, same canonical key (homeInstance=nova, homeUserId=nova-axel-id),
+    // Same person, same canonical key (homeInstance=nova, homeUserId=nova-frank-id),
     // but delivered from two different origins.
     const fromOrbit = makeUser({
       id: 'orbit-local',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
     const fromNova = makeUser({
       id: 'nova-local',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'teal',
     });
@@ -140,15 +140,15 @@ describe('spaceStore.upsertUserView preference rule', () => {
   it('stub view does NOT overwrite an existing home view', () => {
     const fromNova = makeUser({
       id: 'nova-local',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'teal',
     });
     const fromOrbit = makeUser({
       id: 'orbit-local',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
@@ -165,15 +165,15 @@ describe('spaceStore.upsertUserView preference rule', () => {
   it('same-tier writes update freshness (later write wins)', () => {
     const a = makeUser({
       id: 'orbit-1',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
     const b = makeUser({
       id: 'orbit-1',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'sky', // simulating a later profile-update event
     });
@@ -195,14 +195,14 @@ describe('spaceStore.upsertUserView preference rule', () => {
 
   it('removeInstanceSpaces prunes entries delivered by the removed origin only', () => {
     const homeView = makeUser({
-      id: 'nova-axel-id',
-      username: 'axel',
+      id: 'nova-frank-id',
+      username: 'frank',
       avatarColor: 'teal',
     });
     const stubView = makeUser({
-      id: 'orbit-axel-stub',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      id: 'orbit-frank-stub',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
@@ -221,8 +221,8 @@ describe('spaceStore.upsertUserView preference rule', () => {
 
   it('removeInstanceSpaces of the home origin evicts entries it delivered', () => {
     const homeView = makeUser({
-      id: 'nova-axel-id',
-      username: 'axel',
+      id: 'nova-frank-id',
+      username: 'frank',
       avatarColor: 'teal',
     });
     useSpaceStore.getState().upsertUserView(homeView, '');
@@ -231,20 +231,20 @@ describe('spaceStore.upsertUserView preference rule', () => {
   });
 
   it('treats native users delivered by a remote as that remote\'s home view', () => {
-    // jannis is native to orbit (homeInstance=null on orbit). When orbit
+    // heidi is native to orbit (homeInstance=null on orbit). When orbit
     // delivers him, that's the home view. canonicalKey uses orbit-host.
-    const jannis = makeUser({
-      id: 'orbit-jannis-id',
-      username: 'jannis',
+    const heidi = makeUser({
+      id: 'orbit-heidi-id',
+      username: 'heidi',
       avatarColor: 'sky',
     });
-    useSpaceStore.getState().upsertUserView(jannis, 'https://orbit.ddns.net');
-    // Key is built from user.homeInstance — but jannis has none. So the key is
-    // ':orbit-jannis-id'. That's correct: when delivered later from a sibling,
-    // jannis would arrive WITH homeInstance set (synthesized by normalizeUserAssets),
+    useSpaceStore.getState().upsertUserView(heidi, 'https://orbit.ddns.net');
+    // Key is built from user.homeInstance — but heidi has none. So the key is
+    // ':orbit-heidi-id'. That's correct: when delivered later from a sibling,
+    // heidi would arrive WITH homeInstance set (synthesized by normalizeUserAssets),
     // producing a different (federated) key. The cache holds both, with the
     // home view winning on a cross-key collision-free basis.
-    const entry = useSpaceStore.getState().userViews.get(`:${jannis.id}`);
+    const entry = useSpaceStore.getState().userViews.get(`:${heidi.id}`);
     expect(entry?.isHome).toBe(true);
   });
 });

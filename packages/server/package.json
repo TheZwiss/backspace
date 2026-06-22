@@ -2,9 +2,11 @@
   "name": "@backspace/server",
   "version": "1.0.0",
   "private": true,
+  "license": "Elastic-2.0",
+  "author": "Jannis Braun",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "PORT=3005 tsx watch src/index.ts",
     "start": "node --import tsx/esm src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",

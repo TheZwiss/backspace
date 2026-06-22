@@ -66,9 +66,9 @@ beforeEach(() => {
 describe('getCanonicalUserView', () => {
   it('returns the input unchanged on cache miss', () => {
     const stub = makeUser({
-      id: 'orbit-axel-stub',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      id: 'orbit-frank-stub',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
@@ -77,16 +77,16 @@ describe('getCanonicalUserView', () => {
 
   it('returns the cached entry when one exists for the same canonical key', () => {
     const stub = makeUser({
-      id: 'orbit-axel-stub',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      id: 'orbit-frank-stub',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'lavender',
     });
     const homeFromNova = makeUser({
       id: 'nova-local-id',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
       avatarColor: 'teal',
     });
@@ -106,9 +106,9 @@ describe('getCanonicalUserView', () => {
     useSpaceStore.getState().upsertUserView(someOther, '');
 
     const stub = makeUser({
-      id: 'orbit-axel-stub',
-      username: 'axel@nova.ddns.net',
-      homeUserId: 'nova-axel-id',
+      id: 'orbit-frank-stub',
+      username: 'frank@nova.ddns.net',
+      homeUserId: 'nova-frank-id',
       homeInstance: 'nova.ddns.net',
     });
     expect(getCanonicalUserView(stub)).toBe(stub);

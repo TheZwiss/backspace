@@ -573,8 +573,8 @@ Called by `useAuth()` hook when token exists but user object is null:
 
 Splits a potentially federated username:
 ```
-"youruser@nova.ddns.net" -> { baseName: "youruser", domain: "nova.ddns.net" }
-"youruser"                -> { baseName: "youruser", domain: null }
+"erin@nova.ddns.net" -> { baseName: "erin", domain: "nova.ddns.net" }
+"erin"                -> { baseName: "erin", domain: null }
 ```
 
 ### Self-ID Registry

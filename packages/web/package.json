@@ -2,6 +2,8 @@
   "name": "@backspace/web",
   "version": "1.0.0",
   "private": true,
+  "license": "Elastic-2.0",
+  "author": "Jannis Braun",
   "type": "module",
   "scripts": {
     "dev": "vite",

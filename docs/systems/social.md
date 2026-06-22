@@ -590,7 +590,7 @@ Source: `packages/web/src/utils/identity.ts`
 
 ### `parseFederatedUsername(username)`
 
-Splits `"youruser@nova.ddns.net"` into `{ baseName: "youruser", domain: "nova.ddns.net" }`. Uses `indexOf('@')` (first occurrence). Returns `{ baseName: username, domain: null }` for non-federated usernames.
+Splits `"erin@nova.ddns.net"` into `{ baseName: "erin", domain: "nova.ddns.net" }`. Uses `indexOf('@')` (first occurrence). Returns `{ baseName: username, domain: null }` for non-federated usernames.
 
 ### `isSelf(user, homeUser)`
 

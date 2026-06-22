@@ -2566,7 +2566,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
         // 4. Query mutation log for the relevant channels
         //    Return mutations for ALL locally-created messages (source_instance IS NULL).
-        //    This includes messages by replicated users (e.g., Jannis browsing orbit)
+        //    This includes messages by replicated users (e.g., Heidi browsing orbit)
         //    because they were created on THIS instance and need to be synced to the peer.
         if (effectiveChannelFilter) {
           // Validate that the requested channel is actually shared with this peer
@@ -3111,7 +3111,7 @@ export function extractDomain(homeInstance: string): string {
  * Two valid cases:
  * 1. **Direct**: author is from the source instance (standard S2S — peer sends events for its own users).
  * 2. **Homeward relay**: author is from the *receiving* instance. This happens when a client-federation
- *    user (e.g., youruser@nova logged into orbit) sends a message on a remote server, and the
+ *    user (e.g., erin@nova logged into orbit) sends a message on a remote server, and the
  *    S2S relay forwards it back to the author's home instance. The trusted peer is just the messenger.
  *
  * Both sides are normalized to bare domain before comparison.

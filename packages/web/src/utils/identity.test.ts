@@ -16,7 +16,7 @@ describe('normalizeOriginToHost', () => {
   it('extracts host from full URLs', () => {
     expect(normalizeOriginToHost('https://nova.ddns.net')).toBe('nova.ddns.net');
     expect(normalizeOriginToHost('http://localhost:3000')).toBe('localhost:3000');
-    expect(normalizeOriginToHost('https://orbit.example.com:8443/path')).toBe('orbit.example.com:8443');
+    expect(normalizeOriginToHost('https://orbit.ddns.net:8443/path')).toBe('orbit.ddns.net:8443');
   });
 
   it('returns bare-domain inputs unchanged', () => {
@@ -47,12 +47,12 @@ describe('canonicalUserKey', () => {
   it('produces the same key for stubs of the same person across instances', () => {
     const fromOrbit = canonicalUserKey({
       id: 'orbitLocalId',
-      homeUserId: 'nova-axel',
+      homeUserId: 'nova-frank',
       homeInstance: 'nova.ddns.net',
     });
     const fromAnotherPeer = canonicalUserKey({
       id: 'otherPeerLocalId',
-      homeUserId: 'nova-axel',
+      homeUserId: 'nova-frank',
       homeInstance: 'nova.ddns.net',
     });
     expect(fromOrbit).toBe(fromAnotherPeer);
@@ -109,7 +109,7 @@ describe('isDeliveryFromHome', () => {
     )).toBe(true);
   });
 
-  it('rejects sibling-stub deliveries (orbit delivering Axel whose home is nova)', () => {
+  it('rejects sibling-stub deliveries (orbit delivering Frank whose home is nova)', () => {
     expect(isDeliveryFromHome(
       { homeInstance: 'nova.ddns.net' },
       'https://orbit.ddns.net',
@@ -141,16 +141,16 @@ describe('isFederationGlobeApplicable', () => {
   });
 
   it('returns false for purely-local users (no @domain in username)', () => {
-    expect(isFederationGlobeApplicable({ username: 'axel' })).toBe(false);
-    expect(isFederationGlobeApplicable({ username: 'youruser' })).toBe(false);
+    expect(isFederationGlobeApplicable({ username: 'frank' })).toBe(false);
+    expect(isFederationGlobeApplicable({ username: 'erin' })).toBe(false);
   });
 
   it('returns false when the username domain matches our own host (the load-bearing case)', () => {
-    // Logged in to nova; viewing orbit-stub of Axel whose username is "axel@nova.ddns.net".
-    expect(isFederationGlobeApplicable({ username: 'axel@nova.ddns.net' })).toBe(false);
+    // Logged in to nova; viewing orbit-stub of Frank whose username is "frank@nova.ddns.net".
+    expect(isFederationGlobeApplicable({ username: 'frank@nova.ddns.net' })).toBe(false);
   });
 
   it('returns true for genuinely remote users', () => {
-    expect(isFederationGlobeApplicable({ username: 'jannis@orbit.ddns.net' })).toBe(true);
+    expect(isFederationGlobeApplicable({ username: 'heidi@orbit.ddns.net' })).toBe(true);
   });
 });

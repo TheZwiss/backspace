@@ -22,11 +22,18 @@ vi.mock('../db/index.js', () => ({
 }));
 
 // Mock the ssrf module so tests don't need real DNS resolution.
-// Default: validateExternalUrl resolves (allow). Individual tests override as needed.
-vi.mock('./ssrf.js', () => ({
-  validateExternalUrl: vi.fn().mockResolvedValue(undefined),
-  isPrivateIp: vi.fn().mockReturnValue(false),
-}));
+// safeFetch mirrors the real contract: validate the URL first, then fetch — so a
+// rejecting validator must prevent the fetch. Default: validateExternalUrl
+// resolves (allow). Individual tests override via mockRejectedValueOnce.
+vi.mock('./ssrf.js', () => {
+  const validateExternalUrl = vi.fn().mockResolvedValue(undefined);
+  const isPrivateIp = vi.fn().mockReturnValue(false);
+  const safeFetch = vi.fn(async (url: string, init?: RequestInit) => {
+    await validateExternalUrl(url);
+    return (global.fetch as unknown as typeof fetch)(url, init);
+  });
+  return { validateExternalUrl, isPrivateIp, safeFetch };
+});
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
@@ -95,16 +102,14 @@ describe('fetchSpaceInviteSnapshot', () => {
   });
 
   it('returns null when SSRF validator rejects the origin', async () => {
-    // Override the module-level mock to reject for this test only.
+    // Reject validation for this one call; safeFetch must bail before fetching.
     const ssrf = await import('./ssrf.js');
-    const spy = vi.spyOn(ssrf, 'validateExternalUrl').mockRejectedValueOnce(new Error('blocked'));
+    (ssrf.validateExternalUrl as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('blocked'));
     const fetchSpy = global.fetch as any;
 
     const snap = await fetchSpaceInviteSnapshot('http://127.0.0.1:9200', 'abc');
     expect(snap).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();   // CRITICAL — the fetch must NOT happen
-
-    spy.mockRestore();
   });
 });
 

@@ -35,6 +35,23 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   });
 }
 
+// jsdom does not implement navigator.mediaDevices. Provide a default no-op stub
+// so components that enumerate devices or subscribe to `devicechange` (e.g.
+// MobileVoiceFullScreen) don't crash during render. Tests that need real device
+// behavior override it per-test (configurable: true).
+if (!navigator.mediaDevices) {
+  Object.defineProperty(navigator, 'mediaDevices', {
+    value: {
+      enumerateDevices: () => Promise.resolve([]),
+      getUserMedia: () => Promise.reject(new Error('mediaDevices.getUserMedia not available in tests')),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    },
+    configurable: true,
+    writable: true,
+  });
+}
+
 // Polyfill ClipboardItem for jsdom (not included in jsdom)
 if (typeof ClipboardItem === 'undefined') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -90,7 +90,7 @@ No resting border — sunken `surface-input` background provides differentiation
 | Voice | LiveKit (livekit-client + livekit-server-sdk), RNNoise |
 | Media | sharp (thumbnails), Cheerio (URL metadata), react-easy-crop |
 | Chat | react-markdown + remark-gfm, prism-react-renderer, emoji-mart |
-| Desktop | Electron 33, electron-updater, uiohook-napi |
+| Desktop | Electron 40, electron-updater, uiohook-napi |
 | Testing | Vitest, @testing-library/react |
 
 **Do not introduce new dependencies without justification.**

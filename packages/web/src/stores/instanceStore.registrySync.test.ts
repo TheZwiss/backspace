@@ -33,11 +33,11 @@ vi.mock('../audio/AudioManager', () => ({
 
 const mockUser = {
   id: 'user-1',
-  username: 'youruser',
+  username: 'erin',
   homeInstance: null,
   homeUserId: 'user-1',
   replicatedInstances: [
-    { origin: 'https://orbit.example', username: 'youruser@nova.example' },
+    { origin: 'https://orbit.example', username: 'erin@nova.example' },
   ],
 };
 
@@ -90,7 +90,7 @@ describe('instanceStore registry sync gating', () => {
       registry: [{
         origin: 'https://orbit.example',
         label: 'Orbit',
-        username: 'youruser@nova.example',
+        username: 'erin@nova.example',
         remoteUserId: 'remote-1',
         status: 'auth_expired',
         addedAt: 1,

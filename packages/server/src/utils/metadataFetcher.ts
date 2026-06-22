@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { validateExternalUrl } from './ssrf.js';
+import { safeFetch } from './ssrf.js';
 
 export interface UrlMetadata {
   title: string | null;
@@ -16,21 +16,14 @@ export interface UrlMetadata {
 }
 
 export async function fetchUrlMetadata(url: string): Promise<UrlMetadata | null> {
-  try {
-    await validateExternalUrl(url);
-  } catch {
-    return null;
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         'User-Agent': 'BackspaceBot/1.0',
       },
       signal: controller.signal,
-      redirect: 'follow',
     });
     clearTimeout(timeout);
 

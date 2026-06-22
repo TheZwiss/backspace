@@ -137,9 +137,9 @@ Invalid URLs (fail `new URL()` parsing): same as fallthrough.
 
 ## 3. SSRF Protection
 
-`ssrf.ts:validateExternalUrl()`
+`ssrf.ts:validateExternalUrl()` and `ssrf.ts:safeFetch()`
 
-Called before every outbound fetch (metadata fetching and image dimension probing). Throws on any violation.
+All outbound fetches to user- or peer-supplied URLs go through `safeFetch()`, which validates the target with `validateExternalUrl()` (below) and re-validates the destination of every redirect hop. `validateExternalUrl()` throws on any violation.
 
 ### Validation Steps
 
@@ -166,7 +166,9 @@ Called before every outbound fetch (metadata fetching and image dimension probin
 
 ### Redirect Handling
 
-Both `fetchUrlMetadata` and `probeRemoteImageDimensions` use `redirect: 'follow'` in their `fetch()` calls. SSRF validation is performed on the **original** URL before fetch, but the native `fetch` follows redirects without re-validating intermediate URLs. This means a redirect from a public IP to a private IP would not be caught by the current implementation.
+Outbound fetches use `safeFetch()` (`ssrf.ts`), which follows redirects **manually** (`redirect: 'manual'`) and runs `validateExternalUrl()` against every hop's destination before following it, capped at 5 redirects. A redirect from a public host to a private/internal address (loopback, link-local, RFC1918) is therefore blocked, closing the redirect-based SSRF bypass. Callers — `fetchUrlMetadata`, `probeRemoteImageDimensions`, and `fetchSpaceInviteSnapshot` — all route through `safeFetch` rather than calling `validateExternalUrl` + `fetch` separately.
+
+**Residual:** `validateExternalUrl` resolves DNS and `fetch` resolves again, leaving a narrow DNS-rebinding TOCTOU window. Closing it fully requires pinning the resolved IP at connect time via a custom dispatcher; the redirect re-validation closes the practical, attacker-controlled bypass.
 
 ---
 
@@ -176,8 +178,8 @@ Both `fetchUrlMetadata` and `probeRemoteImageDimensions` use `redirect: 'follow'
 
 ### Flow
 
-1. `validateExternalUrl(url)` — SSRF check, returns `null` on failure
-2. `fetch(url)` with `User-Agent: BackspaceBot/1.0`, 5-second timeout via `AbortController`
+1. `safeFetch(url)` — SSRF-validated fetch (initial URL + every redirect hop); throws on block, caught to return `null`
+2. Request sent with `User-Agent: BackspaceBot/1.0`, 5-second timeout via `AbortController`
 3. **Content-Type detection** — if response is `image/*`, `video/*`, or `audio/*`, returns early with `contentType` field set (no HTML parsing)
 4. **Size guard** — rejects responses with `Content-Length > 512KB`
 5. **Stream-read with hard limit** — reads body via `ReadableStream`, stops at 512KB even for chunked (unknown-length) responses
@@ -283,7 +285,7 @@ Used for direct image URLs where dimensions are unknown (not provided by OG tags
 
 ### Mechanism
 
-1. **SSRF validation** — `validateExternalUrl(url)`, returns `null` on block
+1. **SSRF-validated fetch** — `safeFetch(url)` validates the URL and every redirect hop; a block throws and is caught to return `null`
 2. **Range request** — fetches first 32KB (`PROBE_BYTES = 32_768`) with header `Range: bytes=0-32767`
 3. **Timeout** — 3-second abort (`PROBE_TIMEOUT_MS = 3_000`)
 4. **Graceful body read** — reads up to `PROBE_BYTES` via `ReadableStream`, then aggressively cancels the connection via `reader.cancel()`

@@ -62,9 +62,9 @@ This is a **real account with a real bcrypt password** — not a replicated stub
 
 | Account type | Username | passwordHash | homeInstance | Can log in? |
 |---|---|---|---|---|
-| Local (native) | `youruser` | bcrypt hash | `NULL` | Yes |
-| Federated (client-created) | `youruser@nova.ddns.net` | bcrypt hash | `nova.ddns.net` | Yes |
-| Replicated stub (S2S-created) | `youruser@nova.ddns.net` | `!federation-replicated` | `nova.ddns.net` | No |
+| Local (native) | `erin` | bcrypt hash | `NULL` | Yes |
+| Federated (client-created) | `erin@nova.ddns.net` | bcrypt hash | `nova.ddns.net` | Yes |
+| Replicated stub (S2S-created) | `erin@nova.ddns.net` | `!federation-replicated` | `nova.ddns.net` | No |
 
 Key distinction: **Federated accounts** and **replicated stubs** can have the same username format (`user@instance`), but federated accounts have real passwords and can log in. Replicated stubs are server-created placeholders for identity resolution and cannot log in.
 
@@ -75,9 +75,9 @@ The merge migration in `migrate.ts` detects when both exist for the same remote 
 When a user adds a remote instance via the Connections settings:
 
 1. **Verify home password** — client confirms the user's password against the home instance
-2. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `youruser@nova.ddns.net`)
+2. **Compute federated username** — `{bareUsername}@{homeHost}` (e.g., `erin@nova.ddns.net`)
 3. **Try registration** on remote instance with:
-   - Username: `youruser@nova.ddns.net`
+   - Username: `erin@nova.ddns.net`
    - Password: same as home instance password
    - `homeInstance`: `nova.ddns.net` (bare domain)
    - `homeUserId`: user's Snowflake ID on home instance
@@ -106,7 +106,7 @@ interface ConnectedInstance {
   label: string;            // Instance display name
   token: string;            // JWT for this instance
   user: User;               // User record on this instance
-  username: string;         // e.g., 'youruser@nova.ddns.net'
+  username: string;         // e.g., 'erin@nova.ddns.net'
   status: 'connected' | 'connecting' | 'disconnected' | 'error';
   error?: string;
   api: BackspaceApiClient;  // Authenticated API client

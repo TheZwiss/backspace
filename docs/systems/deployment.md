@@ -7,7 +7,7 @@ Source files:
 - `docker-compose.yml` -- `backspace` + `caddy` (+ optional `livekit`) services, healthcheck
 - `Caddyfile` -- reverse proxy / auto-HTTPS config
 - `install.sh` -- interactive first-time setup
-- `deploy.sh` -- rsync + rebuild to Jannis's two boxes
+- `deploy.sh` -- rsync + rebuild to Heidi's two boxes
 - `backup.sh` / `restore.sh` -- manual snapshot + restore tooling (host side)
 - `packages/server/src/config.ts` -- `config.backup.*` env parsing
 - `packages/server/src/utils/backup.ts` -- `createSnapshot` (VACUUM INTO), `listSnapshots`, `pruneSnapshots`, off-box hook
@@ -62,7 +62,7 @@ Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the per
 
 ### Redeploy: `deploy.sh [pi|vm|all]`
 
-`./deploy.sh` is Jannis's redeploy helper for the two live instances — `nova.ddns.net` (Raspberry Pi) and `orbit.ddns.net` (VM). It does **not** build locally; it `rsync`s the working tree to the target (excluding `node_modules`, `.env`, `data/`, build output, and a list of local-only paths) and then runs `docker compose up -d --build` on the remote so the image is rebuilt in place. Targets:
+`./deploy.sh` is Heidi's redeploy helper for the two live instances — `nova.ddns.net` (Raspberry Pi) and `orbit.ddns.net` (VM). It does **not** build locally; it `rsync`s the working tree to the target (excluding `node_modules`, `.env`, `data/`, build output, and a list of local-only paths) and then runs `docker compose up -d --build` on the remote so the image is rebuilt in place. Targets:
 
 | Arg | Target |
 |-----|--------|

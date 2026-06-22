@@ -18,8 +18,8 @@ vi.mock('../../api/client', () => ({
 
 const actor: User = {
   id: 'U1',
-  username: 'jannis',
-  displayName: 'Jannis',
+  username: 'heidi',
+  displayName: 'Heidi',
   avatar: null,
   banner: null,
   accentColor: null,
@@ -66,18 +66,18 @@ function renderSM(message: MessageWithUser, dmArg: Pick<DmChannel, 'members'> | 
 }
 
 describe('SystemMessage — name_changed', () => {
-  it('newName="Cool Group" with resolvable actor → "✎ Jannis renamed the group to \\"Cool Group\\""', () => {
+  it('newName="Cool Group" with resolvable actor → "✎ Heidi renamed the group to \\"Cool Group\\""', () => {
     const msg = buildMessage({ event: 'name_changed', oldName: null, newName: 'Cool Group' });
     renderSM(msg, dm);
     expect(screen.getByText('✎')).toBeDefined();
-    expect(screen.getByText(/Jannis renamed the group to "Cool Group"/)).toBeDefined();
+    expect(screen.getByText(/Heidi renamed the group to "Cool Group"/)).toBeDefined();
   });
 
-  it('newName=null (cleared) with resolvable actor → "✎ Jannis cleared the group name"', () => {
+  it('newName=null (cleared) with resolvable actor → "✎ Heidi cleared the group name"', () => {
     const msg = buildMessage({ event: 'name_changed', oldName: 'Old', newName: null });
     renderSM(msg, dm);
     expect(screen.getByText('✎')).toBeDefined();
-    expect(screen.getByText(/Jannis cleared the group name/)).toBeDefined();
+    expect(screen.getByText(/Heidi cleared the group name/)).toBeDefined();
   });
 
   it('unresolvable actor (member missing from roster) → "✎ Unknown renamed …"', () => {
@@ -88,11 +88,11 @@ describe('SystemMessage — name_changed', () => {
 });
 
 describe('SystemMessage — icon_changed', () => {
-  it('resolvable actor → "🖼 Jannis updated the group icon"', () => {
+  it('resolvable actor → "🖼 Heidi updated the group icon"', () => {
     const msg = buildMessage({ event: 'icon_changed' });
     renderSM(msg, dm);
     // The 🖼 character is U+1F5BC (FRAME WITH PICTURE), not 🖼️ (with VS-16).
     expect(screen.getByText('\u{1F5BC}')).toBeDefined();
-    expect(screen.getByText(/Jannis updated the group icon/)).toBeDefined();
+    expect(screen.getByText(/Heidi updated the group icon/)).toBeDefined();
   });
 });

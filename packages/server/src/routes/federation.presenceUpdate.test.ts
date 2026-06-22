@@ -52,11 +52,11 @@ beforeEach(() => {
   testDb = drizzle(sqlite, { schema });
   applyMigrations(sqlite);
   sentToUserCalls.length = 0;
-  // Local user (youruser) and replicated stub (pbtest3) — they're friends.
+  // Local user (erin) and replicated stub (pbtest3) — they're friends.
   testDb.insert(schema.users).values([
     {
-      id: 'local-youruser', username: 'youruser', passwordHash: 'x', status: 'online', isAdmin: 0,
-      homeUserId: 'local-youruser', createdAt: Date.now(),
+      id: 'local-erin', username: 'erin', passwordHash: 'x', status: 'online', isAdmin: 0,
+      homeUserId: 'local-erin', createdAt: Date.now(),
     },
     {
       id: 'stub-pbtest3', username: 'pbtest3@orbit.ddns.net', displayName: 'pbtest3',
@@ -65,7 +65,7 @@ beforeEach(() => {
     },
   ]).run();
   testDb.insert(schema.friends).values({
-    userId: 'local-youruser', friendId: 'stub-pbtest3', createdAt: Date.now(),
+    userId: 'local-erin', friendId: 'stub-pbtest3', createdAt: Date.now(),
   }).run();
 });
 
@@ -94,7 +94,7 @@ describe('processPresenceUpdateEvent', () => {
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-pbtest3')).get();
     expect(row!.status).toBe('online');
 
-    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-youruser');
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
     expect(broadcast).toBeDefined();
     expect(broadcast!.payload.type).toBe('presence_update');
     expect(broadcast!.payload.userId).toBe('stub-pbtest3');
@@ -160,7 +160,7 @@ describe('processPresenceUpdateEvent', () => {
       },
     };
     fed.processPresenceUpdateEvent(event, 'orbit.ddns.net', testDb, [], []);
-    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-youruser');
+    const broadcast = sentToUserCalls.find((c) => c.userId === 'local-erin');
     expect(broadcast!.payload.activities).toEqual([{ type: 'playing', name: 'Test' }]);
   });
 });

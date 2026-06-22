@@ -17,9 +17,32 @@ import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: resolve(__dirname, '../../.env') });
 
-const LIVEKIT_URL = process.env.LIVEKIT_URL || 'wss://nova.ddns.net/livekit';
-const API_KEY = process.env.LIVEKIT_API_KEY || 'REDACTED_LIVEKIT_KEY';
-const API_SECRET = process.env.LIVEKIT_API_SECRET || 'REDACTED_LIVEKIT_SECRET';
+// All values come from the environment (loaded from .env above). Never hardcode
+// credentials, hostnames, or LAN addresses here — this script ships in the repo.
+const env = {
+  url: process.env.LIVEKIT_URL,
+  apiKey: process.env.LIVEKIT_API_KEY,
+  apiSecret: process.env.LIVEKIT_API_SECRET,
+};
+
+const missing = (['url', 'apiKey', 'apiSecret'] as const)
+  .filter((k) => !env[k])
+  .map((k) => ({ url: 'LIVEKIT_URL', apiKey: 'LIVEKIT_API_KEY', apiSecret: 'LIVEKIT_API_SECRET' }[k]));
+
+if (missing.length > 0) {
+  console.error('LIVEKIT VERIFICATION FAILED');
+  console.error(`Missing required environment variable(s): ${missing.join(', ')}`);
+  console.error('Set them in packages/server/.env (or the process environment) and re-run.');
+  process.exit(1);
+}
+
+// Narrowed to string: guaranteed present past the guard above.
+const LIVEKIT_URL = env.url as string;
+const API_KEY = env.apiKey as string;
+const API_SECRET = env.apiSecret as string;
+// Optional: a LAN-local LiveKit URL to try first (e.g. http://10.0.0.5:7880),
+// useful when the public domain does not hairpin on the local network.
+const LIVEKIT_LAN_URL = process.env.LIVEKIT_LAN_URL;
 
 async function verify() {
   console.log('=== LiveKit Verification ===');
@@ -66,31 +89,34 @@ async function verify() {
 
   // Step 3: Connect to LiveKit server via RoomServiceClient
   console.log('[3/3] Connecting to LiveKit server...');
-  // The LiveKit server runs on the Pi at 192.168.1.10:7880 (host network mode).
-  // The DDNS domain (nova.ddns.net) routes externally but may not loop back on LAN.
-  // Try the LAN address first, then fall back to the configured URL.
-  const lanUrl = 'http://192.168.1.10:7880';
+  // Convert the configured ws(s):// URL to its http(s):// form for the REST client.
   const wanUrl = LIVEKIT_URL.replace('wss://', 'https://').replace('ws://', 'http://');
+  // Optionally try a LAN-local address first (set LIVEKIT_LAN_URL) — useful when
+  // the public domain does not hairpin back to the host on the local network.
+  const candidates = [LIVEKIT_LAN_URL, wanUrl].filter((u): u is string => Boolean(u));
 
-  let roomService: RoomServiceClient;
-  let usedUrl: string;
-  try {
-    roomService = new RoomServiceClient(lanUrl, API_KEY, API_SECRET);
-    const rooms = await roomService.listRooms();
-    usedUrl = lanUrl;
-    console.log(`  Server responded via LAN (${lanUrl}). Active rooms: ${rooms.length}`);
-    for (const room of rooms) {
-      console.log(`    - ${room.name} (${room.numParticipants} participants)`);
+  let usedUrl = '';
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      const roomService = new RoomServiceClient(candidate, API_KEY, API_SECRET);
+      const rooms = await roomService.listRooms();
+      usedUrl = candidate;
+      console.log(`  Server responded via ${candidate}. Active rooms: ${rooms.length}`);
+      for (const room of rooms) {
+        console.log(`    - ${room.name} (${room.numParticipants} participants)`);
+      }
+      break;
+    } catch (err) {
+      lastError = err;
+      console.log(`  ${candidate} unreachable${candidates.length > 1 ? ', trying next…' : ''}`);
     }
-  } catch {
-    console.log(`  LAN address unreachable, trying WAN (${wanUrl})...`);
-    roomService = new RoomServiceClient(wanUrl, API_KEY, API_SECRET);
-    const rooms = await roomService.listRooms();
-    usedUrl = wanUrl;
-    console.log(`  Server responded via WAN (${wanUrl}). Active rooms: ${rooms.length}`);
-    for (const room of rooms) {
-      console.log(`    - ${room.name} (${room.numParticipants} participants)`);
-    }
+  }
+  if (!usedUrl) {
+    throw new Error(
+      `Could not reach the LiveKit server at any of: ${candidates.join(', ')}`,
+      { cause: lastError },
+    );
   }
   console.log(`  ✓ LiveKit server is reachable at ${usedUrl} and credentials are valid`);
   console.log('');

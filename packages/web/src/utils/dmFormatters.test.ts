@@ -185,8 +185,8 @@ describe('formatDmPreview', () => {
 
 const actor: User = {
   id: 'U1',
-  username: 'jannis',
-  displayName: 'Jannis',
+  username: 'heidi',
+  displayName: 'Heidi',
   avatarColor: 'mint',
   avatar: null,
   bio: null,
@@ -217,7 +217,7 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       content: JSON.stringify({ event: 'name_changed', oldName: null, newName: 'Cool Group' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis renamed the group');
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi renamed the group');
   });
 
   it('newName=null (cleared) → "<actor> cleared the group name"', () => {
@@ -227,7 +227,7 @@ describe('formatDmSidebarPreview — name_changed system message', () => {
       content: JSON.stringify({ event: 'name_changed', oldName: 'Old', newName: null }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis cleared the group name');
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi cleared the group name');
   });
 
   it('unresolvable actor → "Unknown renamed the group"', () => {
@@ -391,7 +391,7 @@ describe('formatDmSidebarPreview — icon_changed system message', () => {
       content: JSON.stringify({ event: 'icon_changed' }),
       createdAt: 1,
     });
-    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Jannis updated the group icon');
+    expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Heidi updated the group icon');
   });
 
   it('unresolvable actor → "Unknown updated the group icon"', () => {

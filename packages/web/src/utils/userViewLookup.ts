@@ -24,7 +24,7 @@ export function getCanonicalUserView(user: User): User {
 /**
  * Reactive lookup into the userViews cache. Subscribes to the specific cache
  * entry so the calling component re-renders when an upsert lands a better
- * view (e.g. nova's home view of Axel arriving after orbit's stub
+ * view (e.g. nova's home view of Frank arriving after orbit's stub
  * populated the cache first). Returns the input unchanged on cache miss; the
  * site falls back to the current best information until the cache fills.
  *

@@ -5,7 +5,7 @@ import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from './snowflake.js';
 import { classifyUrl } from './embedClassifier.js';
 import { fetchUrlMetadata } from './metadataFetcher.js';
-import { validateExternalUrl } from './ssrf.js';
+import { safeFetch } from './ssrf.js';
 import { connectionManager } from '../ws/handler.js';
 
 const MAX_EMBEDS_PER_MESSAGE = 5;
@@ -18,27 +18,20 @@ const PROBE_TIMEOUT_MS = 3_000;
  * Uses Range request to avoid downloading the entire file.
  * Returns null on any failure (timeout, network, unrecognized format, SSRF block).
  */
-async function probeRemoteImageDimensions(
+export async function probeRemoteImageDimensions(
   url: string,
 ): Promise<{ width: number; height: number } | null> {
-  try {
-    await validateExternalUrl(url);
-  } catch {
-    return null;
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         'User-Agent': 'BackspaceBot/1.0',
         Accept: 'image/*',
         Range: `bytes=0-${PROBE_BYTES - 1}`,
       },
       signal: controller.signal,
-      redirect: 'follow',
     });
     // NOTE: Do NOT clearTimeout here — keep the abort active during body read.
     // The finally block handles cleanup after all reads complete.
