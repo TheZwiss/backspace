@@ -1138,20 +1138,7 @@ function handleEvent(origin: string, event: ServerEvent): void {
     // ─── Channel/space events (all origins) ─────────────────────────────────
 
     case 'channel_created': {
-      const { currentSpaceId: curSpaceId, channels: curChannels, setChannels, channelToSpaceMap, channelPermissions, channelOriginMap, voiceChannelIds } = useSpaceStore.getState();
-      if (event.spaceId === curSpaceId) {
-        if (!curChannels.find(c => c.id === event.channel.id)) {
-          setChannels([...curChannels, event.channel].sort((a, b) => a.position - b.position));
-        }
-      }
-      channelToSpaceMap.set(event.channel.id, event.spaceId);
-      channelOriginMap.set(event.channel.id, origin);
-      if (event.channel.type === 'voice') {
-        voiceChannelIds.add(event.channel.id);
-      }
-      if (event.channel.myPermissions) {
-        channelPermissions.set(event.channel.id, event.channel.myPermissions);
-      }
+      useSpaceStore.getState().upsertChannel(event.channel, event.spaceId, origin);
       break;
     }
 

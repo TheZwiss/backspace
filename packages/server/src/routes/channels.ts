@@ -254,7 +254,15 @@ export async function channelRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    return reply.code(201).send(channelData);
+    // Return the channel with the creator's computed permissions (same shape as
+    // the channel_created WS event) so the client can render it immediately
+    // without waiting for the broadcast to round-trip.
+    const creatorPerms = computePermissions(request.userId, id, channelId);
+    return reply.code(201).send({
+      ...channelData,
+      isPrivate: false,
+      myPermissions: permissionsToString(creatorPerms),
+    });
   });
 
   // PATCH /api/channels/:id - Update a channel (admin+)

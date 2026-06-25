@@ -148,6 +148,7 @@ interface SpaceState {
   joinByCode: (inviteCode: string, origin?: string) => Promise<Space>;
   generateInvite: (spaceId: string) => Promise<string>;
   createChannel: (spaceId: string, name: string, type: 'text' | 'voice', topic?: string, categoryId?: string) => Promise<Channel>;
+  upsertChannel: (channel: Channel, spaceId: string, origin: string) => void;
   deleteChannel: (channelId: string) => Promise<void>;
   createCategory: (spaceId: string, name: string) => Promise<ChannelCategory>;
   updateCategory: (categoryId: string, data: { name?: string; position?: number }) => Promise<void>;
@@ -554,11 +555,44 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
     const origin = space?._instanceOrigin ?? '';
     const client = getApiForOrigin(origin);
     const channel = await client.channels.create(spaceId, { name, type, topic, categoryId });
-    set((state) => {
-      if (state.channels.some(c => c.id === channel.id)) return state;
-      return { channels: [...state.channels, channel].sort((a, b) => a.position - b.position) };
-    });
+    // Reconcile through upsertChannel so the new channel's permission entry is
+    // written with a fresh map reference (see upsertChannel). The create
+    // response carries the creator's myPermissions, so the channel renders
+    // immediately without waiting for the channel_created WS event.
+    get().upsertChannel(channel, spaceId, origin);
     return channel;
+  },
+
+  // Add or replace a channel and its derived lookup state. channels and
+  // channelPermissions are render inputs for the sidebar's visibleChannels memo,
+  // so they MUST be replaced with fresh references — mutating the existing
+  // channelPermissions Map in place sets the value but never triggers a
+  // re-render, which is why a freshly created channel could stay hidden until
+  // the space was reloaded.
+  upsertChannel: (channel: Channel, spaceId: string, origin: string) => {
+    set((state) => {
+      // Lookup maps are read imperatively (routing/voice), not render inputs —
+      // in-place mutation matches their usage everywhere else.
+      state.channelToSpaceMap.set(channel.id, spaceId);
+      state.channelOriginMap.set(channel.id, origin);
+      if (channel.type === 'voice') state.voiceChannelIds.add(channel.id);
+
+      const channelPermissions = new Map(state.channelPermissions);
+      if (channel.myPermissions) {
+        channelPermissions.set(channel.id, channel.myPermissions);
+      }
+
+      // channels only holds the currently-open space's list.
+      if (state.currentSpaceId !== spaceId) {
+        return { channelPermissions };
+      }
+      const exists = state.channels.some(c => c.id === channel.id);
+      const channels = (exists
+        ? state.channels.map(c => (c.id === channel.id ? channel : c))
+        : [...state.channels, channel]
+      ).sort((a, b) => a.position - b.position);
+      return { channels, channelPermissions };
+    });
   },
 
   deleteChannel: async (channelId: string) => {

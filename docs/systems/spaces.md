@@ -444,7 +444,11 @@ Updates `spaces.ownerId`, broadcasts `space_updated` WS event.
 
 Position: `max(existing positions) + 1`.
 
+**Response (201):** the created channel including the creator's computed `myPermissions` and `isPrivate: false` — same shape as the `channel_created` event payload — so the creating client can render it immediately without waiting for the broadcast to round-trip.
+
 **Broadcast:** `channel_created` sent per-user (only to users with VIEW_CHANNEL on the new channel). Each user's event includes their computed `myPermissions`.
+
+**Client reconciliation:** both the create response and the `channel_created` event are applied through the `upsertChannel` store action, which replaces `channels` and `channelPermissions` with fresh references. This is required because the sidebar's `visibleChannels` filter is keyed on `channelPermissions`; mutating that Map in place would set the value without triggering a re-render, leaving a freshly created channel hidden until the space was reopened.
 
 ### Update Channel
 
