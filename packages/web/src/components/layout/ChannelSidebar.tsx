@@ -581,7 +581,7 @@ export function ChannelSidebar() {
       </div>
 
       {/* Channels — dynamic category layout */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 space-y-[2px] no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-3 px-2 no-scrollbar" style={{ paddingBottom: floatingPanelHeight + 24 }} onDrop={containerHandlers.onDrop} onDragOver={containerHandlers.onDragOver} onContextMenu={handleSidebarContextMenu}>
         {showChannelSkeleton ? (
           <div className="px-2 pt-3" role="status" aria-label="Loading channels">
             {/* Category group 1 */}
