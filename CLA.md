@@ -3,11 +3,11 @@
 Thank you for your interest in contributing to Backspace ("the Project"), owned
 and maintained by **Jannis Braun** ("the Maintainer", "I", "me", or "my").
 
-This Contributor License Agreement ("Agreement") clarifies the intellectual
-property rights granted with Contributions from any person or entity ("You")
-to the Maintainer. It protects You, the Maintainer, and the Project's users; it
-does **not** change Your right to use Your own Contributions for any other
-purpose.
+This Contributor License Agreement ("Agreement") governs the intellectual
+property rights in Contributions made by any person or entity ("You") to the
+Project. Backspace is a single-owner project: to keep ownership of the codebase
+unified in one hand, **You assign your Contributions to the Maintainer**, and in
+return the Maintainer grants You a broad license to keep using your own work.
 
 By submitting a Contribution to the Project (for example, by opening a pull
 request) and by signing this Agreement through the Project's CLA bot, You accept
@@ -27,52 +27,70 @@ any communication You conspicuously mark in writing as "Not a Contribution".
 including by version control systems, issue trackers, mailing lists, or
 electronic messages, but excluding communication marked "Not a Contribution".
 
-## 2. Copyright License and Right to Relicense
+## 2. Assignment of Copyright
 
-You retain all right, title, and interest in and to Your Contributions. You do
-**not** assign Your copyright to the Maintainer.
+You hereby irrevocably assign, transfer, and convey to the Maintainer your
+entire right, title, and interest worldwide in and to your Contributions,
+including all copyrights and all rights under copyright (and all renewals,
+revivals, and extensions thereof), free and clear. The Maintainer becomes the
+sole owner of the Contributions and may use, reproduce, modify, distribute,
+sublicense, relicense (under any terms, including open-source, source-available,
+proprietary, or commercial licenses), sell, and otherwise exploit them without
+restriction and without any obligation to You.
 
-Instead, You grant to the Maintainer, and to recipients of software distributed
-by the Maintainer, a perpetual, worldwide, non-exclusive, royalty-free,
-irrevocable license to reproduce, prepare derivative works of, publicly display,
-publicly perform, sublicense, and distribute Your Contributions and such
-derivative works.
+This assignment covers all Contributions You have already submitted and all
+Contributions You submit in the future, effective at the moment each is created.
 
-You further grant the Maintainer the right to **license and relicense Your
-Contributions, and the Project as a whole, under any license terms the
-Maintainer chooses** — including the Elastic License 2.0, other open-source or
-source-available licenses, and proprietary or commercial licenses — now and in
-the future, without further notice to or consent from You. This right exists so
-the Maintainer can sustain, evolve, and commercially license the Project while
-keeping it source-available to the community.
+## 3. Fallback License (where assignment is not effective)
 
-## 3. Patent License
+To the extent that the assignment in Section 2 is for any reason ineffective or
+unenforceable under applicable law, You instead grant the Maintainer a
+perpetual, worldwide, exclusive, irrevocable, royalty-free, fully sublicensable
+and transferable license to use, reproduce, modify, prepare derivative works of,
+publicly display, publicly perform, distribute, relicense, sell, and otherwise
+exploit your Contributions, by all means and in all media now known or later
+developed — so that the Maintainer obtains, as nearly as possible, the same
+rights as full ownership.
 
-You grant to the Maintainer and to recipients of software distributed by the
-Maintainer a perpetual, worldwide, non-exclusive, royalty-free, irrevocable
-(except as stated in this section) patent license to make, have made, use, offer
-to sell, sell, import, and otherwise transfer Your Contributions, where such
-license applies only to those patent claims licensable by You that are
-necessarily infringed by Your Contribution alone or by combination of Your
-Contribution with the Project to which it was Submitted.
+## 4. Patent Assignment and License
 
-If any entity institutes patent litigation against You or any other entity
-(including a cross-claim or counterclaim in a lawsuit) alleging that Your
-Contribution, or the Project to which You contributed, constitutes direct or
-contributory patent infringement, then any patent licenses granted to that
-entity under this Agreement for that Contribution or Project terminate as of the
-date such litigation is filed.
+To the maximum extent permitted by law, You assign to the Maintainer your rights
+in any patents and patent applications that are necessarily infringed by your
+Contribution alone or by combination of your Contribution with the Project. To
+the extent such assignment is not effective, You grant the Maintainer a
+perpetual, worldwide, non-exclusive, royalty-free, irrevocable, sublicensable
+patent license to make, have made, use, offer to sell, sell, import, and
+otherwise transfer your Contributions.
 
-## 4. Your Representations
+## 5. License Back to You
+
+The Maintainer grants You a perpetual, worldwide, non-exclusive, royalty-free,
+irrevocable license to use, reproduce, modify, and distribute **the specific
+Contributions You authored** for any purpose, including in your own other
+projects. This license-back applies only to the material You personally created
+and does not grant You any rights in the Project as a whole or in the
+Contributions of others. It does not limit the Maintainer's ownership under
+Sections 2–4.
+
+## 6. Moral Rights
+
+To the fullest extent permitted by applicable law, You waive, and agree not to
+assert, any moral rights (including rights of attribution and integrity) You may
+have in your Contributions against the Maintainer or the Maintainer's licensees
+and successors. Where such rights cannot be waived, You agree not to enforce
+them in a way that interferes with the Maintainer's exercise of the rights
+assigned and granted above.
+
+## 7. Your Representations
 
 You represent that:
 
-1. Each of Your Contributions is Your original creation, or You have sufficient
-   rights to grant the licenses described in this Agreement.
-2. You are legally entitled to grant the above licenses. If Your employer has
-   rights to intellectual property You create, You represent that You have
-   received permission to make the Contributions on behalf of that employer, or
-   that Your employer has waived such rights for Your Contributions.
+1. Each of Your Contributions is Your original creation, and You have the full
+   right and authority to assign it and to grant the rights in this Agreement.
+2. You are legally entitled to make this assignment. If Your employer has rights
+   to intellectual property You create, You represent that You have received
+   permission to make the Contributions on behalf of that employer, or that Your
+   employer has waived such rights for Your Contributions.
 3. Each of Your Contributions does not, to the best of Your knowledge, violate
    any third party's copyrights, trademarks, patents, or other intellectual
    property rights.
@@ -81,20 +99,20 @@ You represent that:
    You are personally aware, in the Contribution itself or in the accompanying
    pull request.
 
-## 5. No Obligation
+## 8. No Obligation
 
 You acknowledge that the Maintainer is under no obligation to use, merge, or
 incorporate any Contribution. The decision to include any Contribution in the
 Project rests solely with the Maintainer.
 
-## 6. Disclaimer
+## 9. Disclaimer
 
-Except for the representations in Section 4, Your Contributions are provided "as
+Except for the representations in Section 7, Your Contributions are provided "as
 is", without warranty of any kind, express or implied, including without
 limitation any warranties of merchantability, fitness for a particular purpose,
 title, or non-infringement.
 
-## 7. Entity Contributions
+## 10. Entity Contributions
 
 If You are signing on behalf of a legal entity, You represent that You have the
 authority to bind that entity and its affiliates to this Agreement, and the

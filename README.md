@@ -49,8 +49,10 @@ _Screenshots coming soon._
 
 ### Communication
 - Real-time text channels over WebSocket
-- Voice and video channels via [LiveKit](https://livekit.io/)
-- Screen sharing with configurable quality (VP9, up to 4K/120fps depending on instance limits)
+- `@mention` autocomplete with mention highlighting
+- Voice and video channels via [LiveKit](https://livekit.io/), with RNNoise noise suppression (on by default)
+- Screen sharing up to 4K / 120fps — VP9 by default, with an optional hardware-accelerated H.264 mode and a VP8 simulcast fallback; quality bounds are admin-configurable
+- Picture-in-Picture for voice and video
 - Direct messages — 1-on-1 and group DMs (up to 10 people)
 - DM voice/video calls with ring / accept / reject
 - Message reactions, replies, editing, and deletion
@@ -60,9 +62,9 @@ _Screenshots coming soon._
 - GIF search (Klipy)
 
 ### Organization
-- Spaces with channel categories and folders
+- Spaces with channel categories
 - Role-based permissions — bitwise RBAC with category- and channel-level overrides
-- Customizable user sidebar layout
+- Customizable user sidebar layout, with personal color-coded folders that group whole spaces
 - Space discovery (public, request-to-join, and private)
 - Shareable invite codes
 
@@ -71,6 +73,8 @@ _Screenshots coming soon._
 - User search and discovery
 - Mutual friends and mutual spaces
 - User profiles with banner, bio, and accent color
+- Presence and rich activities (playing, listening, watching, streaming, custom)
+- Privacy controls — toggle discoverability and activity-status sharing
 
 ### Moderation
 - Bans with reason and audit trail
@@ -89,16 +93,28 @@ _Screenshots coming soon._
 ### Platform
 - File uploads with image thumbnails (via `sharp`)
 - Full-text search with `from:`, `has:`, `before:`, and `after:` filters, plus jump-to-message
-- Admin panel — user management, storage management, streaming/quality config, instance settings
+- Admin panel — instance settings, user management, registration controls, storage management, and federation/peering, plus granular streaming controls (a per-resolution × per-frame-rate bitrate matrix, min/max caps, quality-slider step, and an optional user-set-bitrate mode)
 - Automatic SQLite backups (pre-migration, scheduled, and manual) with restore tooling
-- Electron desktop app (Windows, macOS, Linux) with global keybinds and activity detection
+- Electron desktop app (Windows, macOS, Linux) with global keybinds (push-to-talk, mute, deafen) and activity detection
+- Native desktop notifications and unread badge counts
+- Installable PWA — service-worker caching and an offline message queue (messages send once you reconnect)
 - Mobile-responsive web UI
 - Account management — password change and account deletion with safeguards
 
-## Quick Start
+## Installation
 
-The fastest path for a real deployment is the interactive installer, which
-generates your `.env`, configures HTTPS, and optionally enables voice.
+The intended way to deploy Backspace is the **interactive installer** — it
+configures everything (`.env`, secrets, HTTPS, optional voice) and brings the
+stack up for you. Everything you need for a working instance is below.
+
+### Requirements
+
+- A **Linux host** (VPS, VM, or home server) with **Docker** and **Docker Compose**.
+- A **domain name** pointed at the host's public IP — Caddy uses it to obtain
+  HTTPS certificates automatically.
+- The ability to open the firewall ports in step 2.
+
+### 1. Run the installer
 
 ```bash
 git clone https://github.com/TheZwiss/backspace.git
@@ -106,14 +122,60 @@ cd backspace
 ./install.sh
 ```
 
-The installer asks for your domain, generates a secure `JWT_SECRET`, and brings
-the stack up with Docker. When it finishes, open `https://your-domain` and
-**create the first account — it automatically becomes the instance admin.**
-There is no default username or password.
+The installer walks you through everything interactively:
 
-### Manual Docker deployment
+- asks for your domain,
+- generates a secure `JWT_SECRET`,
+- optionally enables voice/video (sets up the bundled LiveKit server),
+- writes `.env` (and `livekit.yaml` if voice is enabled),
+- starts all services with Docker and configures automatic HTTPS via Caddy.
 
-If you'd rather configure it yourself:
+### 2. Open the firewall ports
+
+Open these on the host — and, if it's behind a router, port-forward them to the host:
+
+| Port | Proto | When | Purpose |
+|------|-------|------|---------|
+| `80` | TCP | **Always** | HTTP — Caddy's automatic-HTTPS (ACME) challenge + redirect to HTTPS |
+| `443` | TCP | **Always** | HTTPS — web app, REST API, WebSocket, and LiveKit signaling (proxied) |
+| `3478` | UDP | If voice enabled | TURN — NAT traversal for WebRTC |
+| `7881` | TCP | If voice enabled | WebRTC TCP fallback (clients that can't use UDP) |
+| `50000–60000` | UDP | If voice enabled | WebRTC media (voice / video / screen-share streams) |
+
+Without voice, you only need `80` and `443`. The voice ports are required only
+when you enable LiveKit. LiveKit's own signaling port (`7880`) stays internal —
+it's reverse-proxied through Caddy on `443`, so you do **not** forward it.
+
+> **Do this together with DNS, ideally before (or right after) running the
+> installer.** Caddy gets your HTTPS certificate from Let's Encrypt the first
+> time the stack starts, which requires your domain to resolve to this host
+> **and** ports `80`/`443` reachable from the internet. If they aren't ready
+> yet, that's fine — Caddy keeps retrying, and HTTPS comes up automatically once
+> DNS and the ports are in place.
+
+### 3. Create your admin account
+
+Open `https://your-domain` and register. **The first account created becomes the
+instance admin** — there is no default username or password.
+
+If the page doesn't load over HTTPS, it's almost always DNS or ports `80`/`443`
+not being reachable from outside — check `docker compose logs caddy` for
+certificate errors. (The installer's health check confirms the app is up
+internally, not that the certificate was issued.)
+
+### Backups & restore
+
+The app takes automatic SQLite snapshots (before every migration, on a schedule,
+and on demand via `./backup.sh`). Restore from a snapshot with `./restore.sh`.
+See [`docs/systems/deployment.md`](docs/systems/deployment.md) for the full
+backup/restore and image-pinning guide.
+
+### Manual setup (advanced, optional)
+
+The installer above is the supported path. If you'd rather configure everything
+by hand, you can skip it and drive Docker Compose directly — but then DNS,
+`.env`, secrets, voice config, and the same firewall ports from step 2 are your
+responsibility:
 
 ```bash
 git clone https://github.com/TheZwiss/backspace.git
@@ -133,16 +195,6 @@ The stack runs three services via Docker Compose:
 | `backspace` | The app (API + WebSocket + built web client) on internal port `3000` |
 | `caddy`     | Reverse proxy with automatic HTTPS for your `DOMAIN` (ports `80`/`443`) |
 | `livekit`   | Voice/video server — optional, enabled with `COMPOSE_PROFILES=voice` |
-
-Point your domain's DNS at the host and open ports `80`/`443`. Caddy obtains a
-TLS certificate automatically. The first account you register becomes admin.
-
-### Backups & restore
-
-The app takes automatic SQLite snapshots (before every migration, on a schedule,
-and on demand via `./backup.sh`). Restore from a snapshot with `./restore.sh`.
-See [`docs/systems/deployment.md`](docs/systems/deployment.md) for the full
-backup/restore and image-pinning guide.
 
 ## Development
 
@@ -196,6 +248,9 @@ LIVEKIT_URL=wss://your-domain
 LIVEKIT_API_KEY=your-api-key
 LIVEKIT_API_SECRET=your-api-secret
 ```
+
+Enabling voice also requires opening the WebRTC ports (`3478/UDP`, `7881/TCP`,
+`50000–60000/UDP`) — see [Open the firewall ports](#2-open-the-firewall-ports).
 
 Without LiveKit configured, everything else — text, federation, DMs, uploads,
 search — works fully; only voice/video channels won't connect.
@@ -257,10 +312,13 @@ understand or extend a subsystem.
 ## Contributing
 
 Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md)
-first. All contributors sign a [Contributor License Agreement](CLA.md) — a
-one-time comment on your pull request, handled automatically by a bot. You keep
-copyright to your work; the CLA grants the maintainer the rights needed to use
-and relicense the project.
+first. Backspace is a single-owner project, so all contributors sign a
+[Contributor License Agreement](CLA.md) — a one-time comment on your pull
+request, handled automatically by a bot. The CLA **assigns copyright in your
+contribution to the maintainer** (Jannis Braun), who becomes its sole owner; in
+return you receive a license to reuse the specific code you wrote in your own
+other projects. If you're not comfortable assigning your contribution, please
+don't submit it.
 
 ## Security
 

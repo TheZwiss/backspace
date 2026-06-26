@@ -20,11 +20,13 @@ features, documentation, and design.
 Before your first contribution can be merged, you must sign the project's
 [Contributor License Agreement](CLA.md).
 
-The CLA confirms that you have the right to contribute your code and grants the
-maintainer (Jannis Braun) a broad, perpetual license to use and relicense your
-contribution — including the right to license the project commercially. **You
-keep the copyright to your own work**; you are simply granting these rights, not
-giving your code away.
+Backspace is a single-owner project. The CLA **assigns copyright in your
+contribution to the maintainer (Jannis Braun)**, who becomes its sole owner and
+may license the project under any terms, including commercially. In return, you
+receive a perpetual license to reuse the specific code you authored in your own
+other projects (see CLA §5). You also confirm that you have the right to
+contribute the code in the first place. If you are not comfortable assigning
+your contribution, please do not submit it.
 
 Signing is automatic and takes one comment:
 
