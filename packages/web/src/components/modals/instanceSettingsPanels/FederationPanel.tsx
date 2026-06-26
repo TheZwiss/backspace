@@ -388,12 +388,14 @@ function sortPeers(peers: FederationPeer[], sortBy: SortBy, view: PeerView): Fed
 
 // ─── Peer Row ────────────────────────────────────────────────────────────────
 
-function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRotateIntervalDays }: {
+function PeerRow({ peer, view, expanded, onToggleExpand, onAction, onRecheck, recheckLoading, defaultAutoRotateIntervalDays }: {
   peer: FederationPeer;
   view: PeerView;
   expanded: boolean;
   onToggleExpand: () => void;
   onAction: (type: 'rotate' | 'revoke' | 'reinitiate' | 'delete' | 'reset') => void;
+  onRecheck: () => void;
+  recheckLoading: boolean;
   defaultAutoRotateIntervalDays: number;
 }) {
   const [editingInterval, setEditingInterval] = useState(false);
@@ -562,6 +564,16 @@ function PeerRow({ peer, view, expanded, onToggleExpand, onAction, defaultAutoRo
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
+                  {peer.status === 'unreachable' && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onRecheck(); }}
+                      disabled={recheckLoading}
+                      className="px-3 py-1.5 text-xs font-medium bg-accent-mint/10 text-accent-mint hover:bg-accent-mint/20 rounded transition-colors disabled:opacity-50"
+                    >
+                      {recheckLoading ? 'Checking…' : 'Check now'}
+                    </button>
+                  )}
                   {peer.status === 'needs_attention' ? (
                     <button
                       type="button"
@@ -830,6 +842,7 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
     peer: FederationPeer;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [recheckingId, setRecheckingId] = useState<string | null>(null);
 
   const fetchPeers = useCallback(async () => {
     setPeersLoading(true);
@@ -878,6 +891,26 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       : view === 'revoked' && revokedPeers.length === 0
         ? 'No revoked peers.'
         : null;
+
+  const handleRecheck = async (peer: FederationPeer) => {
+    setRecheckingId(peer.id);
+    try {
+      const result = await api.federation.recheckPeer(peer.id);
+      const name = peer.instanceName || new URL(peer.origin).host;
+      if (result.recovered) {
+        setPeers((prev) => prev.map((p) =>
+          p.id === peer.id ? { ...p, status: 'active' } : p
+        ));
+        addToast(`${name} is back online`, 'success', 3000);
+      } else {
+        addToast(`${name} is still unreachable`, 'warning', 3000);
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Recheck failed', 'warning', 3000);
+    } finally {
+      setRecheckingId(null);
+    }
+  };
 
   const handleConfirmAction = async () => {
     if (!confirmAction) return;
@@ -1032,6 +1065,8 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
                   expanded={expandedPeerId === peer.id}
                   onToggleExpand={() => setExpandedPeerId(expandedPeerId === peer.id ? null : peer.id)}
                   onAction={(type) => setConfirmAction({ type, peer })}
+                  onRecheck={() => handleRecheck(peer)}
+                  recheckLoading={recheckingId === peer.id}
                   defaultAutoRotateIntervalDays={useSettingsStore.getState().instanceSettings?.defaultAutoRotateIntervalDays ?? 90}
                 />
               ))}
