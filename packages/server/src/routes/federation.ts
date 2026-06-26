@@ -19,6 +19,7 @@ import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
+import { probePeerReachable, markPeerRecovered } from '../utils/federationRecovery.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent, ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
 import { GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH } from '@backspace/shared/src/constants.js';
@@ -1562,6 +1563,51 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
 
       return reply.code(200).send({ success: true });
+    },
+  );
+
+  // ─── POST /api/federation/peers/:id/recheck ────────────────────────────────
+  // Admin-only: run an immediate reachability probe on an unreachable peer.
+  // On success the peer transitions to active (outbox flushes on the next tick).
+  app.post<{ Params: { id: string } }>(
+    '/api/federation/peers/:id/recheck',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params;
+      const db = getDb();
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, id))
+        .get();
+
+      if (!peer) {
+        return reply.code(404).send({ error: 'Peer not found', statusCode: 404 });
+      }
+
+      if (peer.status !== 'unreachable') {
+        return reply.code(400).send({
+          error: 'Recheck is only available for unreachable peers.',
+          statusCode: 400,
+        });
+      }
+
+      const reachable = await probePeerReachable(peer.origin);
+
+      if (reachable) {
+        await markPeerRecovered(peer.id);
+        return reply.code(200).send({ recovered: true, status: 'active' });
+      }
+
+      // Probe failed — advance pacing so a manual attempt stays consistent with
+      // the recovery worker's schedule.
+      db.update(schema.federationPeers)
+        .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: Date.now() })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+
+      return reply.code(200).send({ recovered: false, status: 'unreachable' });
     },
   );
 
