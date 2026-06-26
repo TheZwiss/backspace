@@ -400,6 +400,8 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | lastFailureAt | integer | | |
 | consecutiveFailures | integer NOT NULL | 0 | >=10 → unreachable (network/5xx failures). Counter — never null. |
 | consecutiveAuthFailures | integer NOT NULL | 0 | >=5 → needs_attention. Tracked separately from `consecutiveFailures` (network) because auth (401/403) and network failures have different resolution paths. |
+| lastProbeAt | integer | | Epoch ms of the last reachability probe in the current `unreachable` episode. `NULL` = probe immediately due (set on entry into `unreachable` and on recovery). Paces `processRecoveryTick`. |
+| probeAttempts | integer NOT NULL | 0 | Consecutive failed recovery probes; indexes `RECOVERY_BACKOFF_MS`. Reset to 0 on recovery and on entry into `unreachable`. Counter — never null. Migration `0006_spicy_scourge`. |
 | lastSyncedAt | integer | 0 | |
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |

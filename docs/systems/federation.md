@@ -115,14 +115,24 @@ Both instances store the **same** HMAC secret. The initiating instance generates
 | `active` | Yes | No | Yes | No (returns existing) | N/A |
 | `pending` | No | No | No | No (returns 409) | N/A |
 | `awaiting_approval` | No | No | No | Returns pending; no re-handshake | Yes (admin deletes) |
-| `unreachable` | No (entries wait) | Yes (1h interval) | Yes (resets to active) | No | N/A |
+| `unreachable` | No (entries wait) | Yes — demand-driven probe (backoff while mail queued; 15-min backstop when silent) | Yes (resets to active) | No | N/A |
 | `needs_attention` | No (entries bounded by TTL) | No | Yes (200 no-update, same as active) | No (admin must Reset first) | Yes (admin Reset deletes record) |
 | `revoked` | No (entries purged) | No | No (returns 403) | Yes (old record deleted) | N/A |
 | `rejected` | No | No | No | Yes (admin deletes record, then re-initiates) | N/A |
 
 ### PEER_UNREACHABLE_THRESHOLD
 
-Defined in `federationWorker.ts:47` as `10`. After 10 consecutive delivery failures for a peer, the worker sets `status = 'unreachable'`. The health check worker (15-minute interval, matching `ROTATION_GRACE_PERIOD_MS`) pings `GET /api/instance/info` on unreachable peers and reverts to `active` on success.
+Defined in `federationWorker.ts` as `10`. After 10 consecutive delivery failures for a peer, `handleOutboxDeliveryFailure` sets `status = 'unreachable'` and, on entry, resets the recovery pacing fields (`probe_attempts = 0`, `last_probe_at = NULL`) so the first probe fires immediately.
+
+**Demand-driven recovery (`processRecoveryTick`)** — A dedicated recovery loop runs on a 5-second tick (`RECOVERY_TICK_INTERVAL_MS`). On each tick it scans `unreachable` peers and, for each, decides whether a probe is due:
+
+- If the peer has ≥1 queued outbox row, the probe interval is `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` indexed (clamped) by `probe_attempts` — fast retries while mail is actually waiting.
+- If the peer has no queued mail, it falls back to the `HEALTH_CHECK_INTERVAL_MS` (15-minute) backstop — there is nothing to deliver, so there is no urgency.
+- A probe is due when `last_probe_at IS NULL` (immediate first probe on the unreachable transition) or `now - last_probe_at >= interval`.
+
+When due, it calls `probePeerReachable(origin)` (`utils/federationRecovery.ts`) — an unauthenticated `GET /api/instance/info` with a 10-second timeout (no HMAC; reachability is not trust). On success it calls `markPeerRecovered(peerId)`, which reverts the peer to `active`, zeroes `consecutive_failures`, refreshes `last_seen_at`, resets `probe_attempts`/`last_probe_at`, and broadcasts `federation_peers_changed` (via `onPeerActivated`). On failure it increments `probe_attempts` and stamps `last_probe_at = now` to advance the backoff.
+
+`processHealthCheckTick` (15-minute interval, matching `ROTATION_GRACE_PERIOD_MS`) no longer owns recovery — it now handles **secret-rotation grace-period finalization and auto-rotation only**.
 
 ### Auto-Peering
 
@@ -280,6 +290,7 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/peers/:id/permanent` | DELETE | JWT + admin | Hard-delete revoked peer record |
 | `/api/federation/peers/:id/reset` | POST | JWT + admin | Delete peer record (cascade-deletes outbox). Only admissible in `needs_attention` state. |
 | `/api/federation/peers/:id/rotate` | POST | JWT + admin | Trigger immediate secret rotation |
+| `/api/federation/peers/:id/recheck` | POST | JWT + admin | Run an immediate reachability probe on an unreachable peer; 400 unless status='unreachable'; 200 `{ recovered, status }` |
 | `/api/federation/approval-requests` | GET | JWT + admin | List pending peering approval requests (inbound + outbound). Outbound rows include `subscribers: ApprovalRequestSubscriberSummary[]` (possibly empty). Inbound rows omit `subscribers`. Each row carries `direction: 'inbound' \| 'outbound'`. |
 | `/api/federation/approval-requests/:id/approve` | POST | JWT + admin | Approve request — direction-branched (see Approval flow above) |
 | `/api/federation/approval-requests/:id/deny` | POST | JWT + admin | Deny request — direction-branched (see Denial flow above) |
@@ -649,6 +660,8 @@ Logged at `console.log` ("outbox entry removed (terminal)") to distinguish from 
 | 5 | 1 hour |
 | 6 | 6 hours |
 | 7+ | 24 hours (cap) |
+
+The schedule above (`BACKOFF_SCHEDULE_MS`) paces per-entry retries. Peer-level recovery from `unreachable` is separate and demand-driven: `processRecoveryTick` probes unreachable peers on `RECOVERY_BACKOFF_MS = [30s, 1m, 5m, 15m]` while they have queued mail (15-min backstop when silent), paced by the per-peer `last_probe_at` / `probe_attempts` columns and the `probePeerReachable` helper in `utils/federationRecovery.ts`. See [PEER_UNREACHABLE_THRESHOLD](#peer_unreachable_threshold).
 
 ### Authentication-failure handling (401 / 403)
 

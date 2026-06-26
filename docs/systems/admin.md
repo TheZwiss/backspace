@@ -523,6 +523,7 @@ Manages: federation peers list, pending approval requests (inbound + outbound), 
   - **ConfirmDialog copy variants:** the dialog branches on direction. Outbound approve confirms "send `/peer/accept` to {origin} on behalf of N user(s)"; outbound deny confirms "fan out denied notifications to N user(s) and discard the queued request" (no remote network call).
 - Federation peers: fetched via `api.federation.peers()`, displayed as a list with status badges (active/pending/unreachable/awaiting_approval/rejected/needs_attention), last-seen/synced times, and per-peer actions.
 - Peers with status `'revoked'` are filtered out of the visible list.
+- Peers in `unreachable` status render a "Check now" button that calls `api.federation.recheckPeer(peerId)` (`POST /api/federation/peers/:id/recheck`) to run an immediate reachability probe. On `recovered: true` the row flips to `active` locally and a success toast fires; otherwise a "still unreachable" toast shows. This is the manual counterpart to the demand-driven `processRecoveryTick` worker (see [federation.md → PEER_UNREACHABLE_THRESHOLD](federation.md#peer_unreachable_threshold)).
 - Revoke calls `api.federation.revokePeer(peerId)` and removes from local list.
 - Peers in `needs_attention` status render with a rose "Needs Attention" pill and a single "Reset Peering" action. The action opens a danger-variant ConfirmDialog explaining that reset deletes the local peer record (cascade-removes outbox entries) and requires out-of-band re-peering with the remote admin.
 
