@@ -43,6 +43,13 @@
       "when": 1778428627458,
       "tag": "0005_group_dm_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782474063349,
+      "tag": "0006_spicy_scourge",
+      "breakpoints": true
     }
   ]
 }
