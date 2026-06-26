@@ -425,3 +425,100 @@ describe('outbox worker — terminal rejection reasons + rollback invocation', (
     expect(invokeRollbackMock).not.toHaveBeenCalled();
   });
 });
+
+describe('unreachable transition resets probe pacing', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.restoreAllMocks();
+  });
+
+  it('crossing the threshold sets status=unreachable and resets pacing', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-thr', origin: 'https://peer.example', hmacSecret: 'secret',
+      status: 'active', consecutiveFailures: 9, probeAttempts: 4, lastProbeAt: 123,
+      lastSyncedAt: Date.now(), createdAt: Date.now(),
+    }).run();
+    seedOutboxEntry('e-thr', 'peer-thr', 'm-thr');
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('down'));
+
+    const { processOutboxTick } = await import('./federationWorker.js');
+    await processOutboxTick();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-thr')).get()!;
+    expect(row.status).toBe('unreachable');
+    expect(row.consecutiveFailures).toBe(10);
+    expect(row.probeAttempts).toBe(0);
+    expect(row.lastProbeAt).toBeNull();
+  });
+});
+
+describe('processRecoveryTick — demand-driven recovery', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.restoreAllMocks();
+  });
+
+  function seedUnreachable(id: string, attempts = 0, lastProbeAt: number | null = null): void {
+    testDb.insert(schema.federationPeers).values({
+      id, origin: 'https://peer.example', hmacSecret: 'secret',
+      status: 'unreachable', consecutiveFailures: 10,
+      probeAttempts: attempts, lastProbeAt,
+      lastSyncedAt: Date.now(), createdAt: Date.now(),
+    }).run();
+  }
+
+  it('recovers a peer with queued mail when the probe succeeds', async () => {
+    seedUnreachable('peer-a');                 // lastProbeAt=null → immediately due
+    seedOutboxEntry('e-a', 'peer-a', 'm-a');   // has pending mail
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    await processRecoveryTick();
+
+    expect(spy).toHaveBeenCalledWith('https://peer.example/api/instance/info', expect.anything());
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-a')).get()!;
+    expect(row.status).toBe('active');
+  });
+
+  it('advances backoff when the probe fails', async () => {
+    seedUnreachable('peer-b');
+    seedOutboxEntry('e-b', 'peer-b', 'm-b');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 502 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    await processRecoveryTick();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-b')).get()!;
+    expect(row.status).toBe('unreachable');
+    expect(row.probeAttempts).toBe(1);
+    expect(row.lastProbeAt).toBeGreaterThan(0);
+  });
+
+  it('does NOT probe a silent peer before the 15-min backstop is due', async () => {
+    seedUnreachable('peer-c', 1, Date.now() - 60_000); // no outbox entry, probed 1m ago
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    await processRecoveryTick();
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('does NOT probe a pending peer before its backoff interval elapses', async () => {
+    seedUnreachable('peer-d', 0, Date.now() - 5_000); // BACKOFF[0]=30s, probed 5s ago
+    seedOutboxEntry('e-d', 'peer-d', 'm-d');
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+
+    const { processRecoveryTick } = await import('./federationWorker.js');
+    await processRecoveryTick();
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

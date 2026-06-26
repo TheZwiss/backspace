@@ -11,7 +11,8 @@ import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
-import { onPeerActivated, startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
+import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
+import { probePeerReachable, markPeerRecovered } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import fs from 'node:fs';
@@ -28,6 +29,9 @@ const FILE_QUEUE_INTERVAL_MS = 30_000;    // 30 seconds
 // one grace window on each side, so rotation desync can't outlast the window
 // and trip spurious auth failures on the other peer.
 const HEALTH_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const RECOVERY_TICK_INTERVAL_MS = 5_000;   // 5 seconds — demand-driven recovery scan
+/** Per-peer recovery-probe backoff (ms), indexed by probe_attempts (0-based). */
+const RECOVERY_BACKOFF_MS: readonly number[] = [30_000, 60_000, 300_000, 900_000];
 const JANITOR_INTERVAL_MS = 3_600_000;     // 1 hour
 
 const OUTBOX_BATCH_LIMIT = 50;
@@ -35,7 +39,6 @@ const FILE_QUEUE_BATCH_LIMIT = 5;
 
 const OUTBOX_FETCH_TIMEOUT_MS = 30_000;
 const FILE_DOWNLOAD_TIMEOUT_MS = 60_000;
-const HEALTH_CHECK_TIMEOUT_MS = 10_000;
 
 /** Exponential backoff schedule by attempt number (1-indexed). Values in milliseconds. */
 const BACKOFF_SCHEDULE_MS: readonly number[] = [
@@ -75,11 +78,12 @@ const TERMINAL_REJECTION_REASONS = new Set<string>([
 let outboxTimer: ReturnType<typeof setTimeout> | null = null;
 let fileQueueTimer: ReturnType<typeof setTimeout> | null = null;
 let healthCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
 let janitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 let outboxAbortController: AbortController | null = null;
 let fileQueueAbortController: AbortController | null = null;
-let healthCheckAbortController: AbortController | null = null;
+let recoveryAbortController: AbortController | null = null;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -445,24 +449,23 @@ function handleOutboxDeliveryFailure(
     .get();
 
   const newFailures = (peer?.consecutiveFailures ?? 0) + 1;
-  const updates: Record<string, number | string> = {
-    lastFailureAt: now,
-    consecutiveFailures: newFailures,
-  };
-
-  if (newFailures >= PEER_UNREACHABLE_THRESHOLD) {
-    (updates as Record<string, number | string>)['status'] = 'unreachable';
-    console.warn(
-      `[federation-worker] Peer ${peerId} marked unreachable after ${newFailures} consecutive failures`,
-    );
-  }
+  const isNowUnreachable = newFailures >= PEER_UNREACHABLE_THRESHOLD;
 
   db.update(schema.federationPeers)
-    .set(updates)
+    .set({
+      lastFailureAt: now,
+      consecutiveFailures: newFailures,
+      // On entry into unreachable, reset recovery pacing so processRecoveryTick
+      // fires an immediate first probe (lastProbeAt=null) with a fresh backoff.
+      ...(isNowUnreachable ? { status: 'unreachable' as const, probeAttempts: 0, lastProbeAt: null } : {}),
+    })
     .where(eq(schema.federationPeers.id, peerId))
     .run();
 
-  if (newFailures >= PEER_UNREACHABLE_THRESHOLD) {
+  if (isNowUnreachable) {
+    console.warn(
+      `[federation-worker] Peer ${peerId} marked unreachable after ${newFailures} consecutive failures`,
+    );
     onPeerDeactivated(peerId, 'network_threshold').catch(err =>
       console.error('[federation-worker] onPeerDeactivated from unreachable threshold failed:', err)
     );
@@ -1004,6 +1007,64 @@ async function processFileQueueEntry(
   }
 }
 
+// ─── Recovery Worker (demand-driven) ─────────────────────────────────────────
+
+function scheduleRecoveryTick(): void {
+  recoveryTimer = setTimeout(() => {
+    processRecoveryTick().catch((err) => {
+      console.error('[federation-worker] Recovery tick error:', err);
+    }).finally(() => {
+      scheduleRecoveryTick();
+    });
+  }, RECOVERY_TICK_INTERVAL_MS);
+}
+
+/**
+ * Probe unreachable peers and recover them. Cadence is demand-driven: peers with
+ * queued outbox mail are probed on RECOVERY_BACKOFF_MS (indexed by probe_attempts);
+ * silent peers fall back to the HEALTH_CHECK_INTERVAL_MS backstop. Probes run
+ * sequentially to bound outbound concurrency; the candidate set is small.
+ */
+export async function processRecoveryTick(): Promise<void> {
+  const db = getDb();
+  const now = Date.now();
+
+  const unreachablePeers = db
+    .select()
+    .from(schema.federationPeers)
+    .where(eq(schema.federationPeers.status, 'unreachable'))
+    .all();
+
+  for (const peer of unreachablePeers) {
+    const pending = db
+      .select({ id: schema.federationOutbox.id })
+      .from(schema.federationOutbox)
+      .where(eq(schema.federationOutbox.peerId, peer.id))
+      .limit(1)
+      .get();
+
+    const interval = pending
+      ? RECOVERY_BACKOFF_MS[Math.min(peer.probeAttempts, RECOVERY_BACKOFF_MS.length - 1)]!
+      : HEALTH_CHECK_INTERVAL_MS;
+
+    const due = peer.lastProbeAt === null || (now - peer.lastProbeAt) >= interval;
+    if (!due) continue;
+
+    recoveryAbortController = new AbortController();
+    const reachable = await probePeerReachable(peer.origin, recoveryAbortController.signal);
+
+    if (reachable) {
+      await markPeerRecovered(peer.id);
+      console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+    } else {
+      db.update(schema.federationPeers)
+        .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: now })
+        .where(eq(schema.federationPeers.id, peer.id))
+        .run();
+    }
+  }
+}
+
 // ─── Health Check Worker ────────────────────────────────────────────────────
 
 function scheduleHealthCheckTick(): void {
@@ -1101,54 +1162,6 @@ async function processHealthCheckTick(): Promise<void> {
       console.warn(`[federation-worker] Auto-rotation failed for peer ${peer.origin}: ${message}`);
     }
   }
-
-  const unreachablePeers = db
-    .select()
-    .from(schema.federationPeers)
-    .where(eq(schema.federationPeers.status, 'unreachable'))
-    .all();
-
-  if (unreachablePeers.length === 0) {
-    return;
-  }
-
-  const now = Date.now();
-
-  for (const peer of unreachablePeers) {
-    healthCheckAbortController = new AbortController();
-
-    try {
-      const response = await fetch(`${peer.origin}/api/instance/info`, {
-        signal: AbortSignal.any([
-          healthCheckAbortController.signal,
-          AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
-        ]),
-      });
-
-      if (response.ok) {
-        db.update(schema.federationPeers)
-          .set({
-            status: 'active',
-            consecutiveFailures: 0,
-            lastSeenAt: now,
-          })
-          .where(eq(schema.federationPeers.id, peer.id))
-          .run();
-
-        console.log(
-          `[federation-worker] Peer ${peer.origin} recovered — marked active`,
-        );
-
-        await onPeerActivated(peer.id, 'health_check_recovery');
-      }
-      // If not ok, leave as unreachable — will check again next cycle
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return;
-      }
-      // Leave as unreachable — will check again next cycle
-    }
-  }
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────
@@ -1215,6 +1228,7 @@ export function startFederationWorkers(): void {
   scheduleOutboxTick();
   scheduleFileQueueTick();
   scheduleHealthCheckTick();
+  scheduleRecoveryTick();
   scheduleJanitorTick();
   federatedCallSentinelTimer = setInterval(() => {
     runFederatedCallSentinelTick().catch(err =>
@@ -1247,6 +1261,10 @@ export function stopFederationWorkers(): void {
     clearTimeout(healthCheckTimer);
     healthCheckTimer = null;
   }
+  if (recoveryTimer) {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = null;
+  }
 
   if (janitorTimer) {
     clearTimeout(janitorTimer);
@@ -1264,8 +1282,8 @@ export function stopFederationWorkers(): void {
   fileQueueAbortController?.abort();
   fileQueueAbortController = null;
 
-  healthCheckAbortController?.abort();
-  healthCheckAbortController = null;
+  recoveryAbortController?.abort();
+  recoveryAbortController = null;
 
   console.log('[federation-worker] Federation workers stopped');
 }
