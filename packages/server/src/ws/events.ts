@@ -74,6 +74,7 @@ function getMessageWithUser(messageId: string): MessageWithUser | null {
     width: a.width ?? null,
     height: a.height ?? null,
     duration: a.duration ?? null,
+    playable: a.playable ?? null,
     createdAt: a.createdAt,
   }));
 

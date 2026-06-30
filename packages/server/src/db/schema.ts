@@ -102,6 +102,10 @@ export const attachments = sqliteTable('attachments', {
   width: integer('width'),
   height: integer('height'),
   duration: real('duration'),
+  // Tri-state web-playability for video attachments: 1 = decodable in a
+  // browser <video>, 0 = known-undecodable (e.g. HEVC .mov), NULL = unknown
+  // (codec unprobed / non-video). Drives the client's download fallback.
+  playable: integer('playable', { mode: 'boolean' }),
   sourceUrl: text('source_url'),
   federationStatus: text('federation_status'),
   federationMeta: text('federation_meta'),

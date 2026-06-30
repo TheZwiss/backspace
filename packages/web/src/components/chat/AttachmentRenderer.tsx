@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Attachment } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useTransferStore } from '../../stores/transferStore';
@@ -14,6 +14,16 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+/** Format a duration in seconds as `m:ss` (or `h:mm:ss` for long clips). */
+function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 /**
  * Resolves the displayable URL for an attachment. Same logic used by inline
  * `<img>`/`<video>`/`<audio>` rendering and the file-card download button —
@@ -22,6 +32,110 @@ function formatFileSize(bytes: number): string {
 export function attUrlOf(filename: string): string {
   if (filename.startsWith('http') || filename.startsWith('/')) return filename;
   return `/api/uploads/${filename}`;
+}
+
+interface VideoAttachmentProps {
+  attachment: Attachment;
+  attUrl: string;
+  thumbUrl: string | null;
+  federationInlineBadge: React.ReactNode;
+}
+
+/**
+ * Video attachment with a graceful fallback for formats the browser can't
+ * decode. The dominant case is a macOS screen recording (HEVC inside a .mov):
+ * the upload succeeds and a server-side poster is generated, but inline
+ * `<video>` playback silently fails (stuck at 0:00). We resolve this two ways:
+ *
+ *   1. Proactive — the server classifies web-playability from the probed codec
+ *      (`attachment.playable === false`), so we render the download card
+ *      directly with no flash of a dead player.
+ *   2. Reactive — for the optimistic/unknown cases, the `<video>` `onError`
+ *      handler flips to the same card if playback actually fails at runtime.
+ *
+ * The fallback card surfaces the poster (still a useful preview), filename,
+ * duration and size, and a one-tap download — never a silently broken player.
+ */
+function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }: VideoAttachmentProps) {
+  const startDownload = useTransferStore((s) => s.startDownload);
+  const [failed, setFailed] = useState(attachment.playable === false);
+
+  const { width, height, originalName, mimetype, size, duration } = attachment;
+  const hasDimensions = !!(width && height);
+  const sizing = hasDimensions
+    ? { aspectRatio: `${width}/${height}`, maxHeight: 300 }
+    : undefined;
+
+  if (failed) {
+    const meta = [duration ? formatDuration(duration) : null, formatFileSize(size)]
+      .filter(Boolean)
+      .join(' · ');
+    return (
+      <div className="mt-1 max-w-[400px]">
+        <button
+          type="button"
+          onClick={() => {
+            void startDownload(attUrl, { filename: originalName, size, mimetype, tray: true });
+          }}
+          className="block w-full text-left rounded-lg overflow-hidden border border-border-hard bg-surface-channel/50 hover:bg-interactive-hover transition-all group/vid"
+        >
+          {thumbUrl && (
+            <div className="relative w-full" style={sizing}>
+              <img
+                src={thumbUrl}
+                alt={originalName}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center gap-1.5 text-white">
+                <svg className="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                </svg>
+                <span className="text-[12px] font-medium">Can't play here — download</span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 p-3">
+            {!thumbUrl && (
+              <div className="p-2 bg-surface-base rounded text-txt-tertiary flex-shrink-0">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-txt-link text-[14px] font-medium truncate group-hover/vid:underline">{originalName}</p>
+              <p className="text-[12px] text-txt-tertiary">
+                {meta ? `${meta} · ` : ''}Unsupported video format
+              </p>
+            </div>
+          </div>
+        </button>
+        {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 max-w-[400px]">
+      <div
+        className="relative max-h-[300px] rounded-lg overflow-hidden"
+        style={sizing}
+      >
+        <video
+          controls
+          preload={hasDimensions ? 'none' : 'metadata'}
+          poster={thumbUrl ?? undefined}
+          src={attUrl}
+          onError={() => setFailed(true)}
+          className="w-full h-full rounded-lg"
+        >
+          Your browser does not support video playback.
+        </video>
+      </div>
+      {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
+    </div>
+  );
 }
 
 export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
@@ -109,26 +223,13 @@ export function AttachmentRenderer({ attachment }: AttachmentRendererProps) {
   }
 
   if (mimetype.startsWith('video/')) {
-    const { width, height } = attachment;
-    const hasDimensions = width && height;
     return (
-      <div className="mt-1 max-w-[400px]">
-        <div
-          className="relative max-h-[300px] rounded-lg overflow-hidden"
-          style={hasDimensions ? { aspectRatio: `${width}/${height}`, maxHeight: 300 } : undefined}
-        >
-          <video
-            controls
-            preload={hasDimensions ? 'none' : 'metadata'}
-            poster={thumbUrl ?? undefined}
-            className="w-full h-full rounded-lg"
-          >
-            <source src={attUrl} type={mimetype} />
-            Your browser does not support video playback.
-          </video>
-        </div>
-        {federationInlineBadge && <div className="mt-1">{federationInlineBadge}</div>}
-      </div>
+      <VideoAttachment
+        attachment={attachment}
+        attUrl={attUrl}
+        thumbUrl={thumbUrl}
+        federationInlineBadge={federationInlineBadge}
+      />
     );
   }
 

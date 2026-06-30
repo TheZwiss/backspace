@@ -20,6 +20,7 @@ import {
   generateVideoThumbnail,
   thumbFilename,
 } from '../utils/thumbnail.js';
+import { classifyVideoPlayable } from '../utils/mediaPlayable.js';
 import { eq } from 'drizzle-orm';
 import type { Attachment } from '@backspace/shared';
 import fs from 'node:fs';
@@ -251,6 +252,10 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
       let width: number | null = null;
       let height: number | null = null;
       let duration: number | null = null;
+      // Tri-state web-playability for video (null = unknown/optimistic). Lets
+      // the client render a download fallback for codecs the browser can't
+      // decode (e.g. HEVC .mov) instead of a dead <video> stuck at 0:00.
+      let playable: boolean | null = null;
       try {
         if (isResizableImage(mimetype)) {
           stagedThumbName = await generateThumbnail(srcPath, mimetype, config.uploadDir);
@@ -271,6 +276,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
             duration = mediaMeta.duration ?? null;
             if (width === null && mediaMeta.width) width = mediaMeta.width;
             if (height === null && mediaMeta.height) height = mediaMeta.height;
+            playable = classifyVideoPlayable(mimetype, mediaMeta.codec);
           }
         } else if (mimetype.startsWith('audio/')) {
           const mediaMeta = await probeMediaMeta(srcPath, mimetype);
@@ -286,7 +292,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
           } catch { /* ignore */ }
           stagedThumbName = null;
         }
-        width = null; height = null; duration = null;
+        width = null; height = null; duration = null; playable = null;
       }
 
       // ── Commit point: rename .tus/<id> → uploads/<snowflakeId><ext> ──────
@@ -337,6 +343,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
           width,
           height,
           duration,
+          playable,
           createdAt: now,
         }).run();
       } catch (err) {
@@ -362,6 +369,7 @@ export async function filesRoutes(app: FastifyInstance): Promise<void> {
         width: width ?? undefined,
         height: height ?? undefined,
         duration: duration ?? undefined,
+        playable,
         createdAt: now,
       };
 

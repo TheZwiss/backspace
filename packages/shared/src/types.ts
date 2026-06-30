@@ -244,6 +244,13 @@ export interface Attachment {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  /**
+   * Web-playability for video attachments. `false` = the codec can't be
+   * decoded in a browser <video> (e.g. HEVC .mov) so the client renders a
+   * download fallback; `true`/`null` = attempt inline playback (null is the
+   * optimistic unknown case, also covered by the client's onError fallback).
+   */
+  playable?: boolean | null;
   federationStatus?: string | null;
   federationMeta?: string | null;
   createdAt: number;
@@ -1088,6 +1095,9 @@ export interface FederationRelayAttachment {
   width?: number;
   height?: number;
   duration?: number;
+  // Web-playability computed by the origin instance (see Attachment.playable).
+  // Propagated so the receiving instance need not re-probe the codec.
+  playable?: boolean | null;
   thumbnailFilename?: string;
   sourceUrl: string;
 }

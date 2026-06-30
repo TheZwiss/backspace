@@ -105,6 +105,7 @@ PK: (spaceId, userId)
 | width | integer | | Image/video pixel width |
 | height | integer | | Image/video pixel height |
 | duration | real | | Audio/video seconds |
+| playable | integer (boolean) | NULL | Video web-playability tri-state: 1 = browser-decodable, 0 = known-undecodable (e.g. HEVC .mov), NULL = unknown/non-video. See uploads.md §3. |
 | sourceUrl | text | | Remote URL (federation) |
 | federationStatus | text | | local/remote/remote_partial |
 | federationMeta | text | | JSON rejection info |

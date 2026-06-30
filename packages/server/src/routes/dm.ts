@@ -122,6 +122,7 @@ export function buildDmMessageWithUser(
       width: a.width ?? null,
       height: a.height ?? null,
       duration: a.duration ?? null,
+      playable: a.playable ?? null,
       federationStatus: a.federationStatus ?? null,
       federationMeta: a.federationMeta ?? null,
       createdAt: a.createdAt,

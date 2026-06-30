@@ -2911,6 +2911,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           width: a.width ?? undefined,
           height: a.height ?? undefined,
           duration: a.duration ?? undefined,
+          playable: a.playable ?? null,
           thumbnailFilename: a.thumbnailFilename ?? undefined,
           sourceUrl: `${localOrigin}/api/uploads/${a.filename}`,
         }));
@@ -3656,6 +3657,7 @@ async function processCreateEvent(
           width: attachment.width ?? null,
           height: attachment.height ?? null,
           duration: attachment.duration ?? null,
+          playable: attachment.playable ?? null,
           thumbnailFilename: null,  // Don't copy source thumbnail — it doesn't exist locally
           sourceUrl: attachment.sourceUrl,
           createdAt: now,
@@ -3830,6 +3832,7 @@ function processUpdateEvent(
       width: a.width,
       height: a.height,
       duration: a.duration,
+      playable: a.playable ?? null,
       createdAt: a.createdAt,
     }));
 

@@ -3,7 +3,8 @@
 Source files:
 - `packages/server/src/routes/uploads.ts` -- File serving (cache, security, Range)
 - `packages/server/src/routes/files.ts` -- tus protocol endpoints (`/api/files/*`), PRE_CREATE / PRE_PATCH / POST_FINISH hooks, janitor helpers
-- `packages/server/src/utils/thumbnail.ts` -- Image thumbnail generation (sharp), video thumbnail extraction (ffmpeg), image dimension probing, profile image resizing, media metadata extraction
+- `packages/server/src/utils/thumbnail.ts` -- Image thumbnail generation (sharp), video thumbnail extraction (ffmpeg), image dimension probing, profile image resizing, media metadata extraction (incl. video codec)
+- `packages/server/src/utils/mediaPlayable.ts` -- `classifyVideoPlayable(mimetype, codec)` web-playability classifier (drives `attachments.playable`)
 - `packages/server/src/utils/fileCleanup.ts` -- File deletion helpers (disk + thumbnail + attachment record cleanup)
 - `packages/server/src/utils/storageJanitor.ts` -- Storage stats, orphan detection, cleanup routines (orphaned files, unlinked attachments, dangling references, old media), federation GC, soft-deleted DM channel purge
 - `packages/web/src/stores/transferStore.ts` -- Client transfer manager (uploads via tus-js-client, downloads via fetch + FS Access)
@@ -149,10 +150,20 @@ Processing occurs inline during upload, before the response is sent. All process
    - Returns `{ thumbnailFilename, width, height }` (dimensions are from the original frame, not the thumbnail)
 
 2. **Metadata probing** (`thumbnail.ts:probeMediaMeta`)
-   - ffprobe for dimensions: `-select_streams v:0 -show_entries stream=width,height -of json`
+   - ffprobe for dimensions + codec: `-select_streams v:0 -show_entries stream=width,height,codec_name -of json`
    - ffprobe for duration: `-show_entries format=duration -of json`
    - Duration rounded to 2 decimal places
    - If thumbnail extraction failed, dimensions fall back to ffprobe values
+   - Returns `codec` (the primary video stream's `codec_name`) when available
+
+3. **Web-playability classification** (`mediaPlayable.ts:classifyVideoPlayable`)
+   - The finish hook calls `classifyVideoPlayable(mimetype, codec)` and stores the result in `attachments.playable` (tri-state, see below).
+   - The browser `<video>` element can't decode every uploaded format. The dominant failure case is a macOS screen recording — a `video/quicktime` (.mov) container holding an **HEVC (H.265)** stream — which Chromium, Firefox and stock Electron can't decode. The file uploads fine and a server-side ffmpeg poster is generated, but inline playback silently fails (stuck at 0:00 with no error).
+   - `attachments.playable` is a deliberate tri-state:
+     - `0` / `false` — codec is confidently undecodable in mainstream browsers (HEVC, ProRes, WMV, MPEG-1/2, etc.). The client renders a download fallback card directly, no flash of a dead player.
+     - `1` / `true` — web-standard codec (H.264/AVC, VP8/VP9, AV1, Theora) in a web container (`video/mp4`, `video/webm`, `video/ogg`). Plays inline.
+     - `NULL` — unknown / optimistic. Codec couldn't be probed (ffmpeg absent or probe failed), or it's a web-safe codec in a container with inconsistent cross-browser support (H.264 in .mov). The client attempts inline playback and degrades via the `<video>` `onError` handler.
+   - `false` is never widened beyond codecs known to fail everywhere, so an instance without ffmpeg keeps prior behaviour (attempt playback) rather than regressing every video to "unplayable".
 
 ### Audio Processing
 
@@ -521,7 +532,7 @@ URL resolution for attachment/thumbnail:
 | MIME category | Rendering |
 |---------------|-----------|
 | `image/*` | `<img>` with click-to-preview, lazy loading, aspect ratio from width/height, max 400x300px, uses thumbnail if available |
-| `video/*` | `<video>` with native controls, poster from thumbnail, preload `none` (with dimensions) or `metadata` (without), max 400px wide / 300px tall |
+| `video/*` | `VideoAttachment` sub-component. Playable (`playable !== false`): `<video src>` with native controls, poster from thumbnail, preload `none` (with dimensions) or `metadata` (without), max 400px wide / 300px tall, with an `onError` handler that falls back to the download card. Unplayable (`playable === false`, e.g. HEVC .mov): renders the download card directly — poster (if any) under a "Can't play here — download" overlay, plus filename, duration, size and a one-tap download. Never a silently broken player. |
 | `audio/*` | Audio card with icon, filename, size, `<audio>` with native controls, preload `metadata`, max 420px wide |
 | Other | Download link card with file icon, filename (link-styled), size |
 

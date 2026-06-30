@@ -138,19 +138,21 @@ export async function probeImageDimensions(filepath: string): Promise<{ width: n
 export async function probeMediaMeta(
   filepath: string,
   mimetype: string,
-): Promise<{ width?: number; height?: number; duration?: number } | null> {
+): Promise<{ width?: number; height?: number; duration?: number; codec?: string } | null> {
   if (!(await checkFfmpeg())) return null;
 
   try {
-    const result: { width?: number; height?: number; duration?: number } = {};
+    const result: { width?: number; height?: number; duration?: number; codec?: string } = {};
 
-    // Video dimensions (stream-level)
+    // Video dimensions + codec (stream-level). The codec drives web-playability
+    // classification (see utils/mediaPlayable.ts) so the client can render a
+    // download fallback for formats the browser can't decode (e.g. HEVC .mov).
     if (mimetype.startsWith('video/')) {
       try {
         const { stdout } = await execFile('ffprobe', [
           '-v', 'error',
           '-select_streams', 'v:0',
-          '-show_entries', 'stream=width,height',
+          '-show_entries', 'stream=width,height,codec_name',
           '-of', 'json',
           '-i', filepath,
         ], { timeout: FFMPEG_TIMEOUT });
@@ -161,7 +163,10 @@ export async function probeMediaMeta(
           result.width = stream.width;
           result.height = stream.height;
         }
-      } catch { /* dimension probe failed — continue for duration */ }
+        if (typeof stream?.codec_name === 'string' && stream.codec_name) {
+          result.codec = stream.codec_name;
+        }
+      } catch { /* dimension/codec probe failed — continue for duration */ }
     }
 
     // Duration (format-level — works for video and audio)

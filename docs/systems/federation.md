@@ -941,12 +941,13 @@ When `queueDmRelay` constructs the relay payload, each attachment gets a `source
 ```
 sourceUrl: `${getOurOrigin()}/api/uploads/${attachment.filename}`
 ```
+The payload also carries `playable` (video web-playability, computed by the origin from the probed codec — see uploads.md §3) so the receiving instance need not re-probe the file's codec.
 
 ### Inbound (receiving instance -- `processCreateEvent`)
 
 1. For each attachment in `event.message.attachments`:
    - SSRF check: `isUrlFromPeer(sourceUrl, peerOrigin)` -- hostname of sourceUrl must match peer origin hostname
-   - Create `attachments` row with `filename = sourceUrl` (remote URL as interim filename)
+   - Create `attachments` row with `filename = sourceUrl` (remote URL as interim filename), carrying through `playable` from the relay payload
    - Queue `federation_file_queue` entry with `status = 'pending'`, `expiresAt = now + 30 days`
 2. Initial WebSocket broadcast uses sourceUrl directly (frontend's `AttachmentRenderer` detects `http` prefix)
 
