@@ -14,13 +14,13 @@
  *
  * Run via `pnpm gen-icons` after artwork changes; commit the diff.
  *
- * APP-ICON HYBRID RENDERING: app-icon outputs ≥128 px source from the 3D
- * raster PNGs (x1=149 / x2=294 / x3=440), routed by closest-fit (smallest
+ * APP-ICON RENDERING: every app-icon output sources from the 3D raster
+ * PNGs (x1=149 / x2=294 / x3=440 / 1024), routed by closest-fit (smallest
  * source ≥ target) to minimise resampling, then masked to a rounded-square
- * silhouette (22 %·side ≈ Apple's macOS template radius). Outputs <128 px
- * source from app-icon.svg — flat geometry stays crisp at favicon sizes
- * where the 3D detail wouldn't read anyway. Tray icons and the PWA
- * maskable inner remain SVG-only.
+ * silhouette (22 %·side ≈ Apple's macOS template radius). The flat
+ * app-icon.svg is retained as a source but no longer rendered: at favicon
+ * sizes its gradient mark halos into a white perimeter border (see
+ * RASTER_THRESHOLD). Tray icons and the PWA maskable inner remain SVG-only.
  *
  * DETERMINISM: byte-stable for a given lockfile only. After bumping
  * sharp / png-to-ico / png2icons, expect a follow-up regen+commit in
@@ -64,14 +64,20 @@ const MASKABLE_BG = '#1d1d1b';
 // is fine and keeps output stable across all target sizes.
 const SVG_DENSITY = 1200;
 
-// Sizes at or above this threshold render from the 3D raster PNG sources;
-// smaller targets render from app-icon.svg. 128 picked because:
-//   - dock / launcher / homescreen / PWA tile thumbnails are all ≥128 px,
-//     where the 3D-rendered design intent reads;
-//   - <128 (favicons, small Linux launcher slots, small .ico subset) reads
-//     better from flat SVG — crisp pixel grid alignment, and the 3D detail
-//     wouldn't be visible at that size regardless.
-const RASTER_THRESHOLD = 128;
+// Every app-icon size renders from the 3D raster PNG sources; nothing
+// renders from the flat app-icon.svg. Set to 128 originally on the theory
+// that flat geometry reads crisper than the 3D render at favicon sizes —
+// but the flat mark's gradient sheen runs bright (#fff) to the badge
+// perimeter with no dark separation, so at 16/32 px it anti-aliases into a
+// white halo that reads as a border around the icon (reported in Safari
+// browser tabs; same defect in small Windows .ico / Linux launcher reps).
+// The committed 3D render frames the mark in a dark surround and stays
+// clean down to 16 px. Lanczos downscale from the 149 px @1x source is
+// sharp's standard high-quality resampler; the slight softness vs. a flat
+// vector render is the correct trade against the halo. Kept as a gate (not
+// hard-removed) so the SVG path can be re-enabled if a corrected flat mark
+// — one whose sheen doesn't reach the perimeter — is ever supplied.
+const RASTER_THRESHOLD = 0;
 
 // Rounded-square corner radius as a fraction of the side length. 0.22
 // matches the existing app-icon.svg geometry (rx=32.42 on a 147.46 viewBox
@@ -177,11 +183,12 @@ async function writeIco(path, svg, sizes) {
 }
 
 async function writeAppIconIco(path, sources, sizes) {
-  // Mixed-source .ico: each pixel size routes through renderAppIcon, so
-  // 16/24/32/48/64 come from the SVG and 128/256 from the raster — Windows
-  // auto-picks the closest size for the active DPI, getting flat-crisp
-  // small variants for taskbar/Properties and the designed render at the
-  // larger sizes that Alt+Tab and explorer thumbnails use.
+  // Every pixel size routes through renderAppIcon (3D raster, squircle-
+  // masked) so the whole .ico — taskbar/Properties small reps through the
+  // Alt+Tab / explorer large reps — shares one faithful render. Windows
+  // auto-picks the closest size for the active DPI. (Small reps were SVG-
+  // sourced until the flat mark's perimeter halo forced the raster switch;
+  // see RASTER_THRESHOLD.)
   mkdirSync(dirname(path), { recursive: true });
   const buffers = await Promise.all(sizes.map((s) => renderAppIcon(sources, s)));
   const ico = await pngToIco(buffers);
@@ -289,7 +296,7 @@ async function main() {
     appIconSources,
     [16, 24, 32, 48, 64, 128, 256],
   );
-  trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes (svg<128, raster≥128)');
+  trace('win-ico', join(DESKTOP_BUILD, 'icon.ico'), '7 sizes (raster)');
 
   // --- Desktop: tray ---
   await writePng(join(DESKTOP_RES, 'tray-iconTemplate.png'), markMonoDark, 22);
@@ -306,10 +313,10 @@ async function main() {
 
   // --- Web: favicons + PWA + in-app ---
   await writeAppIconPng(join(WEB_ICONS, 'favicon-16.png'), appIconSources, 16);
-  trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (svg)');
+  trace('favicon-16', join(WEB_ICONS, 'favicon-16.png'), '16 (raster)');
 
   await writeAppIconPng(join(WEB_ICONS, 'favicon-32.png'), appIconSources, 32);
-  trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (svg)');
+  trace('favicon-32', join(WEB_ICONS, 'favicon-32.png'), '32 (raster)');
 
   await writeAppIconPng(join(WEB_ICONS, 'apple-touch-icon.png'), appIconSources, 180);
   trace('apple-touch', join(WEB_ICONS, 'apple-touch-icon.png'), '180 (raster)');

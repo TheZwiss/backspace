@@ -37,12 +37,12 @@ git history clean.
 
 ## Sources
 
-App-icon outputs use a hybrid pipeline: SVG <128 px (crisp pixel-grid alignment, where 3D detail wouldn't read), 3D-rendered raster ≥128 px (the designed render shows). The closest-fit picker selects the smallest raster source whose native dimension is ≥ the target output size, so every output is a downscale — no upscale anywhere.
+Every app-icon output renders from the 3D-rendered raster sources — including favicons and the small `.ico` / Linux reps. The flat `app-icon.svg` is retained as a source but no longer rendered: at favicon sizes its gradient mark's bright sheen runs to the badge perimeter and anti-aliases into a white halo that reads as a border around the icon (reported in Safari tabs; same defect in small Windows/Linux reps). The closest-fit picker selects the smallest raster source whose native dimension is ≥ the target output size, so every output is a downscale — no upscale anywhere. See `RASTER_THRESHOLD` in `gen-icons.mjs` for the gate.
 
 | Brand source                       | Drives                                                                              |
 |------------------------------------|-------------------------------------------------------------------------------------|
-| `assets/brand/app-icon.svg`        | App-icon outputs <128 px (favicons 16/32, small Linux launcher reps 16/32/48/64, small `.ico` reps 16/24/32/48/64) |
-| `assets/brand/app-icon-x1.png` (149) | App-icon outputs ≥128 and ≤149 (Linux 128, Windows `.ico` 128 rep)                |
+| `assets/brand/app-icon.svg`        | Retained as the flat archival source; not rendered (gated off — see `RASTER_THRESHOLD`). Re-enable only with a corrected flat mark whose sheen stops short of the perimeter. |
+| `assets/brand/app-icon-x1.png` (149) | App-icon outputs ≤149 (favicons 16/32, Linux 16/32/48/64/128, Windows `.ico` 16/24/32/48/64/128 reps) |
 | `assets/brand/app-icon-x2.png` (294) | App-icon outputs >149 and ≤294 (Linux 256, Windows `.ico` 256 rep, apple-touch 180, PWA 192, in-app `logo.png` 256) |
 | `assets/brand/app-icon-x3.png` (440) | App-icon outputs >294 and ≤440 (currently unused — reserved for future intermediate targets) |
 | `assets/brand/app-icon-1024.png`     | App-icon outputs >440 (Linux 512, Linux 1024, `build/icon.png` 512, PWA 512, `.icns` synthesis input 1024) |
