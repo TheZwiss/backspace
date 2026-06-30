@@ -33,7 +33,7 @@ and live screen-shares, each labelled with its own resolution and frame rate.
 
 <div align="center">
   <img src="screenshots/chat.webp" alt="A text channel with an active conversation and a typing indicator" width="900" /><br/>
-  <sub>Real-time messages with read states and live typing indicators.</sub>
+  <sub>Real-time messages with replies, reactions, and live typing indicators.</sub>
 </div>
 
 <br/>

@@ -44,7 +44,7 @@ inside a business — but not to resell as a hosted service. See
   <tr>
     <td width="50%" valign="top">
       <img src="docs/screenshots/chat.webp" alt="A text channel with messages and a typing indicator" /><br/>
-      <sub><b>Text channels</b> — Markdown, replies, reactions, read states, and live typing indicators.</sub>
+      <sub><b>Text channels</b> — Markdown, replies, reactions, and live typing indicators.</sub>
     </td>
     <td width="50%" valign="top">
       <img src="docs/screenshots/screen-share-settings.webp" alt="The screen-share settings popover" /><br/>
