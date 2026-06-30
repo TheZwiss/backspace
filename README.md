@@ -26,9 +26,7 @@ inside a business — but not to resell as a hosted service. See
 [License](#license) for the exact terms.
 
 > **Project status** <a name="project-status"></a>
-> Backspace is in active development and runs on live test instances, but has not
-> had a tagged public release yet. Expect rough edges, and pin to a specific
-> commit if you deploy it.
+> Backspace is early-stage and under active development.
 
 ## Screenshots
 
@@ -107,7 +105,7 @@ inside a business — but not to resell as a hosted service. See
 - Privacy controls — toggle discoverability and activity-status sharing
 
 ### Moderation
-- Bans with reason and audit trail
+- Bans with reason and moderator attribution (who, why, and when)
 - Voice restrictions (space-level mute/deafen, persisted)
 - Member move and force-disconnect
 - Join-request approval for gated spaces
