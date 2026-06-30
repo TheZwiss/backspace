@@ -25,6 +25,26 @@ function formatDuration(seconds: number): string {
 }
 
 /**
+ * Whether *this* browser can decode HEVC (H.265) in a <video> element.
+ *
+ * Web-playability of HEVC is browser-dependent, so the server's `playable`
+ * flag (computed Chromium-first) can't be authoritative for every client:
+ * WebKit (Safari on macOS/iOS) decodes HEVC via the OS, while Chromium,
+ * Firefox and stock Electron cannot. HEVC is the codec that the server's
+ * "unplayable" verdict effectively hinges on, so we probe for it here and let
+ * capable browsers attempt playback rather than blindly showing the fallback.
+ *
+ * Computed once at module load. `canPlayType` returns '' when unsupported and
+ * 'maybe'/'probably' otherwise; Safari reports support for the hvc1/hev1 tags.
+ */
+const BROWSER_SUPPORTS_HEVC: boolean = (() => {
+  if (typeof document === 'undefined') return false;
+  const v = document.createElement('video');
+  return v.canPlayType('video/mp4; codecs="hvc1"') !== '' ||
+    v.canPlayType('video/mp4; codecs="hev1"') !== '';
+})();
+
+/**
  * Resolves the displayable URL for an attachment. Same logic used by inline
  * `<img>`/`<video>`/`<audio>` rendering and the file-card download button —
  * exported so right-click menus can use it without duplicating the rule.
@@ -49,16 +69,23 @@ interface VideoAttachmentProps {
  *
  *   1. Proactive — the server classifies web-playability from the probed codec
  *      (`attachment.playable === false`), so we render the download card
- *      directly with no flash of a dead player.
- *   2. Reactive — for the optimistic/unknown cases, the `<video>` `onError`
- *      handler flips to the same card if playback actually fails at runtime.
+ *      directly with no flash of a dead player. This is honoured only when the
+ *      current browser also can't decode the format: the server flag is
+ *      Chromium-first, but WebKit (Safari/iOS) decodes HEVC, so a Safari user
+ *      still gets inline playback (see `BROWSER_SUPPORTS_HEVC`).
+ *   2. Reactive — for the optimistic/unknown cases, and for capable browsers
+ *      attempting a flagged file, the `<video>` `onError` handler flips to the
+ *      same card if playback actually fails at runtime.
  *
  * The fallback card surfaces the poster (still a useful preview), filename,
  * duration and size, and a one-tap download — never a silently broken player.
  */
 function VideoAttachment({ attachment, attUrl, thumbUrl, federationInlineBadge }: VideoAttachmentProps) {
   const startDownload = useTransferStore((s) => s.startDownload);
-  const [failed, setFailed] = useState(attachment.playable === false);
+  // Pre-fail only when the server flagged it unplayable AND this browser can't
+  // decode it anyway. Capable browsers (Safari/WebKit ⇒ HEVC) attempt playback
+  // and fall back via onError if it genuinely fails.
+  const [failed, setFailed] = useState(attachment.playable === false && !BROWSER_SUPPORTS_HEVC);
 
   const { width, height, originalName, mimetype, size, duration } = attachment;
   const hasDimensions = !!(width && height);
