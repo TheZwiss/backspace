@@ -32,18 +32,48 @@ inside a business — but not to resell as a hosted service. See
 
 ## Screenshots
 
-<!--
-  Drop screenshots into docs/screenshots/ and uncomment the block below.
-  Suggested shots: a space with channels, a voice channel with video tiles,
-  a DM conversation, and the Connections / federation settings panel.
-
 <div align="center">
-  <img src="docs/screenshots/space.png" alt="Space view" width="800" />
-  <img src="docs/screenshots/voice.png" alt="Voice & video" width="800" />
-</div>
--->
 
-_Screenshots coming soon._
+<img src="docs/screenshots/voice-video-grid.webp" alt="A voice channel with a grid of camera and screen-share tiles" width="900" />
+
+<sub><em>A voice channel in full swing — camera tiles alongside live screen-shares, each with its own resolution / frame-rate label.</em></sub>
+
+</div>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/chat.webp" alt="A text channel with messages and a typing indicator" /><br/>
+      <sub><b>Text channels</b> — Markdown, replies, reactions, read states, and live typing indicators.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/screen-share-settings.webp" alt="The screen-share settings popover" /><br/>
+      <sub><b>Screen-share controls</b> — resolution, frame rate, codec, and bitrate, within admin-set bounds.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/space-discovery.webp" alt="The space discovery / Explore view" /><br/>
+      <sub><b>Spaces &amp; discovery</b> — browse public, request-to-join, and joined spaces.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/group-dm.webp" alt="A federated group direct message" /><br/>
+      <sub><b>Direct messages</b> — 1-on-1 and group DMs, including members on peer instances.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/user-discovery.webp" alt="The find-people / user discovery view" /><br/>
+      <sub><b>Friends &amp; social</b> — find people across instances with mutual friends and spaces.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/screenshots/admin-federation.webp" alt="The federation admin panel showing peered instances" /><br/>
+      <sub><b>Federation admin</b> — manage peered instances, relay, and secret rotation.</sub>
+    </td>
+  </tr>
+</table>
+
+<div align="center"><a href="docs/screenshots.md"><b>→ See all screenshots</b></a></div>
 
 ## Features
 

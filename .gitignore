@@ -34,6 +34,9 @@ id_ed25519*
 # Generated deployment config (contains secrets)
 livekit.yaml
 
+# Raw screenshot originals — optimized WebP copies live in docs/screenshots/
+demo-pictures/
+
 # OS files
 .DS_Store
 Thumbs.db
