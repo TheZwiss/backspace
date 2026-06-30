@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import type { ServerEvent, ClientEvent, ActiveCallInfo, Activity, User } from '@backspace/shared';
 import { resolveAssetUrl, normalizeUserAssets, normalizeMessageAssets } from '../utils/assetUrls';
 import { broadcastVoiceStatus, broadcastDeafenViaLiveKit } from '../utils/voice';
+import { applySpaceVoiceState } from '../utils/voiceStateSync';
 import { sortDmChannels } from '../utils/dmSorting';
 import { registerSelfId } from '../utils/identity';
 import { getActiveRoom } from './useLiveKit';
@@ -548,6 +549,15 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'voice_status_update':
       setVoiceUserStatus(event.userId, event.isMuted, event.isDeafened, event.isCameraOn, event.isScreenSharing);
+      break;
+
+    case 'space_voice_state':
+      // A space the user just joined mid-session — bootstrap its current voice
+      // presence (occupants, statuses, space/permission mutes). The `ready`
+      // payload only carries this at connect time, so without it the new
+      // member's channel sidebar shows empty voice channels until a reload.
+      // Scoped to event.spaceId; never disturbs other spaces' live voice state.
+      applySpaceVoiceState(event);
       break;
 
     case 'voice_space_muted': {

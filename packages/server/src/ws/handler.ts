@@ -392,10 +392,114 @@ class ConnectionManager {
       this.userSpaces.set(userId, new Set());
     }
     this.userSpaces.get(userId)!.add(spaceId);
+
+    // A user joining a space mid-session must be bootstrapped with that space's
+    // current voice presence. The `ready` payload only carries voice state at
+    // connect time (see buildReadyPayload), so without this push, members already
+    // sitting in a voice channel stay invisible in the new member's channel
+    // sidebar until a full page reload. We deliver a scoped snapshot over the same
+    // ordered WebSocket as the `voice_state_update` deltas, so there is no
+    // snapshot-vs-stream race (a join/leave that happens after this snapshot is
+    // emitted strictly afterwards on the same socket). `addUserSpace` is the single
+    // chokepoint every join path funnels through (invite, public join, join-request
+    // approval) and is NOT used on reconnect (that path uses setUserSpaces), so this
+    // fires exactly once per genuine join. Space creation hits this too but produces
+    // an empty snapshot and is skipped below.
+    const snapshot = this.buildSpaceVoiceState(spaceId, userId);
+    if (Object.keys(snapshot.voiceStates).length === 0
+        && Object.keys(snapshot.spaceVoiceStates).length === 0) {
+      return;
+    }
+    this.sendToUser(userId, {
+      type: 'space_voice_state',
+      spaceId,
+      voiceStates: snapshot.voiceStates,
+      voiceUserStates: snapshot.voiceUserStates,
+      spaceVoiceStates: snapshot.spaceVoiceStates,
+    });
   }
 
   getUserSpaces(userId: string): Set<string> {
     return this.userSpaces.get(userId) ?? new Set();
+  }
+
+  /**
+   * Build the current voice-presence snapshot for a single space, from the
+   * perspective of `userId`:
+   * - which voice channels the user can VIEW have participants, and who they are,
+   * - each participant's per-user status (mute/deafen/camera/screenshare),
+   * - space-level mute/deafen (persisted) + permission-mute (ephemeral)
+   *   restrictions, keyed `spaceId:userId`.
+   *
+   * Voice presence is VIEW_CHANNEL-filtered per `computePermissions` exactly as
+   * `buildReadyPayload` does — a user must never learn who is sitting in a voice
+   * channel they cannot see.
+   *
+   * Single source of truth shared by `buildReadyPayload` (connect-time bootstrap,
+   * looped across all of a user's spaces) and `addUserSpace` (mid-session join
+   * push). Keep these two consumers in sync by changing only this method.
+   */
+  buildSpaceVoiceState(spaceId: string, userId: string): {
+    voiceStates: Record<string, string[]>;
+    voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }>;
+    spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }>;
+  } {
+    const db = getDb();
+    const voiceStates: Record<string, string[]> = {};
+    const voiceUserStates: Record<string, { isMuted: boolean; isDeafened: boolean; isCameraOn: boolean; isScreenSharing: boolean }> = {};
+    const spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> = {};
+
+    // Who is currently in each of this space's voice channels the user can VIEW.
+    const voiceChannels = db.select({ id: schema.channels.id })
+      .from(schema.channels)
+      .where(and(eq(schema.channels.spaceId, spaceId), eq(schema.channels.type, 'voice')))
+      .all();
+    for (const ch of voiceChannels) {
+      const chPerms = computePermissions(userId, spaceId, ch.id);
+      const hasView = (chPerms & PermissionBits.VIEW_CHANNEL) !== 0n || (chPerms & PermissionBits.ADMINISTRATOR) !== 0n;
+      if (!hasView) continue;
+      const participants = this.getRoomParticipants(ch.id);
+      if (participants.size > 0) {
+        const ids = Array.from(participants);
+        voiceStates[ch.id] = ids;
+        for (const uid of ids) {
+          const status = this.getVoiceUserStatus(uid);
+          if (status) voiceUserStates[uid] = status;
+        }
+      }
+    }
+
+    // Space mute/deafen — persisted, authoritative (survives reconnect). These are
+    // space-level flags (they do not reveal which channel a user is in), so they
+    // are not channel-filtered, mirroring buildReadyPayload.
+    const restrictions = db.select()
+      .from(schema.voiceRestrictions)
+      .where(eq(schema.voiceRestrictions.spaceId, spaceId))
+      .all();
+    for (const r of restrictions) {
+      const key = `${r.spaceId}:${r.userId}`;
+      const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+      if (r.restrictionType === 'mute') existing.spaceMuted = true;
+      if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
+      spaceVoiceStates[key] = existing;
+    }
+    // Permission-mute — ephemeral, derived from in-memory state for every
+    // participant currently in this space's voice rooms (mirrors buildReadyPayload).
+    for (const [, room] of this.voiceRooms) {
+      if (room.roomType !== 'space') continue;
+      const meta = room.metadata as SpaceRoomMeta;
+      if (meta.spaceId !== spaceId) continue;
+      for (const participantId of room.participants) {
+        if (this.isPermissionMuted(spaceId, participantId)) {
+          const key = `${spaceId}:${participantId}`;
+          const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
+          existing.permissionMuted = true;
+          spaceVoiceStates[key] = existing;
+        }
+      }
+    }
+
+    return { voiceStates, voiceUserStates, spaceVoiceStates };
   }
 
   // ─── Unified VoiceRoom API ─────────────────────────────────────────────────
@@ -1414,18 +1518,18 @@ function buildReadyPayload(userId: string): {
   const spaceLayout: SpaceLayoutItem[] | null = layoutRow ? JSON.parse(layoutRow.layout) : null;
   const layoutUpdatedAt: number | null = layoutRow?.updatedAt ?? null;
 
-  // Build voice states — tell the client who is currently in voice channels
-  // across all their spaces
+  // Build voice states — who is currently in voice channels, plus space mute/
+  // deafen and permission-mute, across all the user's spaces. Delegates to the
+  // shared per-space helper (also used for the mid-session join push in
+  // ConnectionManager.addUserSpace) so the two code paths can never diverge.
+  // The helper applies the same VIEW_CHANNEL filtering used when building the
+  // `spaces` array above.
   const voiceStates: Record<string, string[]> = {};
+  const spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> = {};
   for (const space of spaces) {
-    for (const ch of space.channels) {
-      if (ch.type === 'voice') {
-        const participants = connectionManager.getRoomParticipants(ch.id);
-        if (participants.size > 0) {
-          voiceStates[ch.id] = Array.from(participants);
-        }
-      }
-    }
+    const snap = connectionManager.buildSpaceVoiceState(space.id, userId);
+    Object.assign(voiceStates, snap.voiceStates);
+    Object.assign(spaceVoiceStates, snap.spaceVoiceStates);
   }
 
   // Build active calls from user's DM memberships
@@ -1483,37 +1587,6 @@ function buildReadyPayload(userId: string): {
         const status = connectionManager.getVoiceUserStatus(uid);
         if (status) {
           voiceUserStates[uid] = status;
-        }
-      }
-    }
-  }
-
-  // Build space mute/deafen states from DB (authoritative source for all spaces the user belongs to)
-  // Also includes ephemeral permission-mute state from in-memory Set
-  const spaceVoiceStates: Record<string, { spaceMuted: boolean; spaceDeafened: boolean; permissionMuted: boolean }> = {};
-  if (spaceIds.length > 0) {
-    const allRestrictions = db.select()
-      .from(schema.voiceRestrictions)
-      .where(inArray(schema.voiceRestrictions.spaceId, spaceIds))
-      .all();
-    for (const r of allRestrictions) {
-      const key = `${r.spaceId}:${r.userId}`;
-      const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
-      if (r.restrictionType === 'mute') existing.spaceMuted = true;
-      if (r.restrictionType === 'deafen') existing.spaceDeafened = true;
-      spaceVoiceStates[key] = existing;
-    }
-    // Include ephemeral permission-mute state for all voice participants in user's spaces
-    for (const [roomId, room] of connectionManager.getAllRooms()) {
-      if (room.roomType !== 'space') continue;
-      const meta = room.metadata as SpaceRoomMeta;
-      if (!spaceIds.includes(meta.spaceId)) continue;
-      for (const participantId of room.participants) {
-        if (connectionManager.isPermissionMuted(meta.spaceId, participantId)) {
-          const key = `${meta.spaceId}:${participantId}`;
-          const existing = spaceVoiceStates[key] ?? { spaceMuted: false, spaceDeafened: false, permissionMuted: false };
-          existing.permissionMuted = true;
-          spaceVoiceStates[key] = existing;
         }
       }
     }

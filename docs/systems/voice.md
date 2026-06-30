@@ -17,6 +17,18 @@ Source files:
 5. Client calls `POST /api/livekit/token { channelId }` → gets JWT + LiveKit URL
 6. Client connects to LiveKit room with token
 
+### Voice presence bootstrap on mid-session space join
+
+A client learns who is sitting in a space's voice channels from the WS `ready`
+payload at connect time. Joining a space *without reloading* therefore needs the
+same bootstrap for the new space, or its voice channels render empty until a
+refresh. The server pushes a scoped `space_voice_state` snapshot from
+`ConnectionManager.addUserSpace` (the single join chokepoint), built by
+`buildSpaceVoiceState(spaceId, userId)` — the same VIEW_CHANNEL-filtered helper
+that feeds `ready`. The client applies it via `utils/voiceStateSync.applySpaceVoiceState`.
+See `docs/systems/websocket.md` → "Mid-session space join" for the full rationale
+(single ordered channel, no snapshot-vs-stream race).
+
 ### Microphone pre-arm (iOS user-gesture discipline)
 
 `utils/voice.joinVoiceChannel` fires `AudioContext.resume()` and `AudioManager.setInputDevice(inputDeviceId)` (which ends in `getUserMedia({audio:…})`) **synchronously inside** the click handler, before the `connectFn(channelId)` call. iOS Safari only surfaces the microphone permission prompt when `getUserMedia` is invoked from inside an active user-gesture; the original flow only acquired the mic in `useLiveKit`'s `syncMic` effect, which fires AFTER `room.connect()` resolves (token fetch + WS handshake) — many awaits past the gesture window. iOS PWA standalone is especially strict and would silently never surface the prompt; the user would see "Waiting for others to join…" indefinitely until they locked/unlocked the device (which iOS treats as a fresh activation).

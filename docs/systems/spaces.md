@@ -170,7 +170,7 @@ Two endpoints serve the same purpose:
 
 **Side effects:**
 1. Insert `space_members` row
-2. `connectionManager.addUserSpace` for WS broadcasts
+2. `connectionManager.addUserSpace` for WS broadcasts — also pushes a scoped `space_voice_state` snapshot to the joining user so voice-channel occupants appear without a reload (see `docs/systems/websocket.md` → "Mid-session space join")
 3. `member_joined` WS event broadcast to space
 4. Response: `Space` object
 
