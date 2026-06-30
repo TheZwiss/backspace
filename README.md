@@ -87,7 +87,7 @@ inside a business — but not to resell as a hosted service. See
 - DM voice/video calls with ring / accept / reject
 - Message reactions, replies, editing, and deletion
 - Markdown formatting with syntax highlighting
-- Typing indicators, read states, and presence
+- Typing indicators, unread tracking (badges and an unread divider), and presence
 - Rich link embeds (YouTube, Vimeo, Spotify, and generic OpenGraph) with SSRF-protected scraping
 - GIF search (Klipy)
 
@@ -127,8 +127,8 @@ inside a business — but not to resell as a hosted service. See
 - Automatic SQLite backups (pre-migration, scheduled, and manual) with restore tooling
 - Electron desktop app (Windows, macOS, Linux) with global keybinds (push-to-talk, mute, deafen) and activity detection
 - Native desktop notifications and unread badge counts
-- Installable PWA — service-worker caching and an offline message queue (messages send once you reconnect)
-- Mobile-responsive web UI
+- Mobile-responsive web UI with a dedicated touch layout (bottom navigation, swipe gestures, full-screen views)
+- Installable PWA — add it to your phone's home screen to run it as a standalone app, with service-worker caching and an offline message queue (messages send once you reconnect)
 - Account management — password change and account deletion with safeguards
 
 ## Installation
@@ -309,6 +309,19 @@ pnpm build       # package for distribution
 
 Cross-platform builds are produced for Windows, macOS, and Linux. See
 [`docs/systems/desktop.md`](docs/systems/desktop.md).
+
+## Mobile
+
+Backspace works on mobile today — just open your instance in a phone browser.
+The UI has a dedicated touch layout (bottom navigation, swipe gestures, and
+full-screen views), and because it ships as an installable **PWA** you can use
+your browser's **Add to Home Screen** to install it as a standalone app: its own
+icon, no browser chrome, and an offline message queue that flushes when you
+reconnect.
+
+Native **iOS and Android app-store apps are planned** — once the project gains
+traction and the funding for the developer-program licenses is secured. Until
+then, the installable PWA is the supported way to run Backspace on a phone.
 
 ## Architecture
 
