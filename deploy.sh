@@ -39,6 +39,9 @@ EXCLUDES=(
   --exclude='installers'
   --exclude='data'
   --exclude='livekit.yaml'
+  # Host-owned reverse-proxy config: the Pi's Caddyfile carries extra vhost
+  # blocks (e.g. other-site.example.com) that aren't in this repo. Never overwrite it.
+  --exclude='Caddyfile'
   --exclude='.DS_Store'
   --exclude='.superpowers'
   --exclude='.claude'
