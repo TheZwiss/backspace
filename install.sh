@@ -7,7 +7,8 @@
 #
 # Usage:
 #   ./install.sh                    Interactive setup
-#   DOMAIN=chat.example.com ./install.sh   Non-interactive
+#   Non-interactive — set any/all of these to skip the matching prompt:
+#     DOMAIN=chat.example.com ENABLE_VOICE=true INSTANCE_NAME="My Chat" ./install.sh
 # ============================================================
 
 set -euo pipefail
@@ -365,8 +366,18 @@ fi
 
 step "Deploying Backspace"
 
-info "Building Backspace image (this may take a few minutes on first run)..."
-$COMPOSE build --quiet
+# AGPL-3.0 § 13 source offer: bake the running build's git commit into the image
+# so GET /api/instance/info advertises the exact source version. Passed straight
+# to the build as --build-arg (survives the sudo/non-sudo $COMPOSE split, unlike
+# an exported env var). Empty when this isn't a git checkout (e.g. tarball
+# install) or git is unavailable → the server treats the commit as null.
+BUILD_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo '')"
+if [[ -n "$BUILD_COMMIT" ]]; then
+  info "Building Backspace image from commit ${BUILD_COMMIT} (this may take a few minutes on first run)..."
+else
+  info "Building Backspace image (this may take a few minutes on first run)..."
+fi
+$COMPOSE build --quiet --build-arg BACKSPACE_COMMIT="$BUILD_COMMIT"
 
 info "Starting services..."
 $COMPOSE up -d
@@ -392,13 +403,52 @@ fi
 # ── Phase 7: Set instance name ──────────────────────────────
 
 if [[ "$healthy" == true && -n "$INSTANCE_NAME" && "$INSTANCE_NAME" != "Backspace" ]]; then
-  $DOCKER exec -w /app/packages/server backspace node -e "
-    const Database = require('better-sqlite3');
-    const db = new Database('/app/data/backspace.db');
-    const changes = db.prepare('UPDATE instance_settings SET instance_name = ? WHERE id = 1').run('${INSTANCE_NAME}').changes;
+  # Pass the name through the container environment (never string-interpolated
+  # into the JS source) so names with quotes/spaces/'$' are stored verbatim and
+  # can't break or inject into the node -e program.
+  $DOCKER exec -e BS_INSTANCE_NAME="$INSTANCE_NAME" -w /app/packages/server backspace node -e '
+    const Database = require("better-sqlite3");
+    const db = new Database("/app/data/backspace.db");
+    const changes = db.prepare("UPDATE instance_settings SET instance_name = ? WHERE id = 1").run(process.env.BS_INSTANCE_NAME).changes;
     db.close();
-    if (changes === 0) { console.error('No rows updated'); process.exit(1); }
-  " 2>/dev/null && success "Instance name set to: ${INSTANCE_NAME}" || warn "Could not set instance name (set it manually in admin settings)"
+    if (changes === 0) { console.error("No rows updated"); process.exit(1); }
+  ' 2>/dev/null && success "Instance name set to: ${INSTANCE_NAME}" || warn "Could not set instance name (set it manually in admin settings)"
+fi
+
+# ── Phase 7.5: Verify HTTPS reachability ───────────────────
+# The internal healthcheck only proves the app is up *inside* Docker. What the
+# operator actually cares about is whether https://DOMAIN works — which needs
+# Caddy to have obtained a publicly-trusted TLS certificate, and that only
+# happens once DNS points here AND ports 80/443 are reachable from the internet.
+#
+# We test this hairpin-safely with `curl --resolve DOMAIN:443:127.0.0.1`: it
+# connects to the LOCAL Caddy but presents the real SNI/Host and performs full
+# certificate verification. Success means Caddy is serving a valid, publicly-
+# trusted certificate for DOMAIN *and* the app answers over it — which is only
+# possible once issuance has succeeded. Crucially this avoids a false negative
+# on self-hosted boxes that can't reach their own public address (router NAT
+# hairpin), where a plain external request would time out even though the site
+# is perfectly reachable for everyone else.
+
+https_status="skipped"
+if [[ "$healthy" == true ]]; then
+  step "Verifying HTTPS"
+  https_status="pending"
+
+  info "Checking for a valid TLS certificate on ${DOMAIN} (Caddy issues it on first start)..."
+  for i in $(seq 1 15); do
+    if curl -fsS --max-time 6 --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/health" >/dev/null 2>&1; then
+      https_status="live"
+      break
+    fi
+    sleep 2
+  done
+
+  if [[ "$https_status" == "live" ]]; then
+    success "HTTPS is live — a valid TLS certificate is installed and Backspace is serving over it."
+  else
+    warn "HTTPS is not live yet — Caddy hasn't obtained a publicly-trusted certificate."
+  fi
 fi
 
 # ── Phase 8: Summary ───────────────────────────────────────
@@ -408,8 +458,23 @@ step "Backspace is running"
 echo -e "  ${BOLD}URL:${NC}       https://${DOMAIN}"
 echo -e "  ${BOLD}Instance:${NC}  ${INSTANCE_NAME}"
 echo -e "  ${BOLD}Voice:${NC}     $(if [[ "$ENABLE_VOICE" == true ]]; then echo 'Enabled'; else echo 'Disabled'; fi)"
+case "$https_status" in
+  live)    echo -e "  ${BOLD}HTTPS:${NC}     ${GREEN}Live${NC}" ;;
+  pending) echo -e "  ${BOLD}HTTPS:${NC}     ${YELLOW}Not live yet${NC}" ;;
+esac
 echo ""
-echo -e "  ${YELLOW}Open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
+
+if [[ "$https_status" == "pending" ]]; then
+  echo -e "  ${YELLOW}The app is up, but HTTPS isn't live yet — Caddy is still trying to get a certificate.${NC}"
+  echo -e "  ${YELLOW}This is normal right after install; it comes up automatically once BOTH are true:${NC}"
+  echo "    1. ${DOMAIN} resolves to THIS host's public IP"
+  echo "    2. Ports 80 and 443 are open and forwarded to this host from the internet"
+  echo -e "  Watch progress:  ${BOLD}docker compose logs -f caddy${NC}"
+  echo ""
+  echo -e "  ${YELLOW}Then open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
+else
+  echo -e "  ${YELLOW}Open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
+fi
 echo ""
 echo -e "  ${BOLD}Commands:${NC}"
 echo "    docker compose logs -f          # Watch logs"
@@ -417,12 +482,25 @@ echo "    docker compose restart          # Restart all services"
 echo "    docker compose down             # Stop everything"
 echo "    docker compose up -d --build    # Rebuild after code changes"
 
+echo ""
+# Best-effort primary LAN IP (the address a router would port-forward to).
+LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1)
+echo -e "  ${BOLD}Ports to open${NC} — on this host's firewall (ufw / firewalld / cloud"
+echo -e "  security group)${BOLD} and,${NC} if the host is behind a router, also"
+echo -e "  port-forward them to this host${LAN_IP:+ (${LAN_IP})}:"
+echo ""
+echo "    80/TCP            HTTP  — cert challenge + HTTP→HTTPS redirect      (required)"
+echo "    443/TCP           HTTPS — web app, API, WebSocket, LiveKit signal   (required)"
 if [[ "$ENABLE_VOICE" == true ]]; then
-  echo ""
-  echo -e "  ${BOLD}Firewall — open these ports for voice/video:${NC}"
-  echo "    3478/UDP          TURN (NAT traversal)"
-  echo "    7881/TCP          WebRTC TCP fallback"
-  echo "    50000-60000/UDP   WebRTC media"
+  echo "    3478/UDP          TURN  — WebRTC NAT traversal                       (voice)"
+  echo "    7881/TCP          WebRTC TCP fallback                              (voice)"
+  echo "    50000-60000/UDP   WebRTC media — voice / video / screen-share      (voice)"
 fi
+echo ""
+echo -e "  ${YELLOW}80 and 443 must be reachable from the internet before HTTPS can come up.${NC}"
+if [[ "$ENABLE_VOICE" == true ]]; then
+  echo -e "  ${YELLOW}Voice/video won't connect until the voice ports above are reachable too.${NC}"
+fi
+echo -e "  LiveKit's own signaling port (7880) stays internal — do ${BOLD}not${NC} forward it."
 
 echo ""
