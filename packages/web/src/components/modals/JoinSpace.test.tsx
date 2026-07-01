@@ -174,6 +174,27 @@ describe('JoinSpaceModal', () => {
     expect(mockNavigate).not.toHaveBeenCalledWith('/explore');
   });
 
+  it('shows loading skeletons while discovery is fetching with no spaces yet', () => {
+    useExploreStore.setState({ isLoading: true, spaces: [] });
+    useUIStore.setState({ activeModal: 'joinSpace' });
+    renderModal();
+    // The skeleton branch (discoveryLoading && previewSpaces.length === 0)
+    // renders placeholder rows marked with `animate-pulse`.
+    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
+  it('degrades to the invite path when discovery fails to load', () => {
+    useExploreStore.setState({ error: 'boom', spaces: [], isLoading: false });
+    useUIStore.setState({ activeModal: 'joinSpace' });
+    renderModal();
+    // Discovery failure shows a degrade note...
+    expect(screen.getByText(/Couldn.t load spaces/i)).toBeInTheDocument();
+    // ...but the invite input stays usable so the user can still join.
+    expect(
+      screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123')
+    ).toBeInTheDocument();
+  });
+
   it('hides discovery and shows a notice when discovery is disabled', () => {
     useExploreStore.setState({ discoveryEnabled: false });
     useUIStore.setState({ activeModal: 'joinSpace' });

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useSpaceJoin } from '../../hooks/useSpaceJoin';
 import { getSpaceGradient } from '../../utils/gradients';
 import type { TaggedExploreSpace } from '../../stores/exploreStore';
@@ -23,8 +22,6 @@ export function ExploreSpacePreviewCard({
     join,
     sendRequest,
   } = useSpaceJoin(space);
-
-  const [expanded, setExpanded] = useState(false);
 
   const fallbackGradient = getSpaceGradient(space.id, space.name, space.avatarColor).gradient;
   const iconUrl = space.icon
@@ -79,7 +76,7 @@ export function ExploreSpacePreviewCard({
           ) : (
             <button
               type="button"
-              onClick={() => { openRequestForm(); setExpanded(true); }}
+              onClick={openRequestForm}
               className="px-3 py-1.5 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-xs font-medium rounded-full transition-colors"
             >
               Request
@@ -89,7 +86,7 @@ export function ExploreSpacePreviewCard({
       </div>
 
       {/* Inline request form */}
-      {showRequestForm && expanded && (
+      {showRequestForm && (
         <div className="mt-2.5 space-y-2">
           <textarea
             value={requestMessage}
@@ -109,7 +106,7 @@ export function ExploreSpacePreviewCard({
             </button>
             <button
               type="button"
-              onClick={() => { cancelRequestForm(); setExpanded(false); }}
+              onClick={cancelRequestForm}
               className="px-3 py-1.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
             >
               Cancel

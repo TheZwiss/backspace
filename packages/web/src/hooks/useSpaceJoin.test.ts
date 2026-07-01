@@ -75,6 +75,15 @@ describe('useSpaceJoin', () => {
     expect(result.current.joining).toBe(false);
   });
 
+  it('openRequestForm/cancelRequestForm toggle showRequestForm', () => {
+    const { result } = renderHook(() => useSpaceJoin(makeSpace({ visibility: 'request' })));
+    expect(result.current.showRequestForm).toBe(false);
+    act(() => result.current.openRequestForm());
+    expect(result.current.showRequestForm).toBe(true);
+    act(() => result.current.cancelRequestForm());
+    expect(result.current.showRequestForm).toBe(false);
+  });
+
   it('sendRequest() calls requestJoin and flips to pending', async () => {
     const { result } = renderHook(() => useSpaceJoin(makeSpace({ visibility: 'request' })));
     act(() => result.current.setRequestMessage('  please  '));
