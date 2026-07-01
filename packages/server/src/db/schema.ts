@@ -23,6 +23,8 @@ export const users = sqliteTable('users', {
   passwordChangedAt: integer('password_changed_at'),
   showActivity: integer('show_activity').notNull().default(1),
   federationRegistryUpdatedAt: integer('federation_registry_updated_at').default(0),
+  federationHealPending: integer('federation_heal_pending').default(0),
+  federationHomeOrphaned: integer('federation_home_orphaned').default(0),
   createdAt: integer('created_at').notNull(),
 });
 
@@ -308,6 +310,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
   id: integer('id').primaryKey().default(1),
   instanceName: text('instance_name').default('Backspace'),
   workerId: integer('worker_id'),
+  instanceId: text('instance_id'),
   discoveryEnabled: integer('discovery_enabled').notNull().default(1),
   maxBitrateKbps: integer('max_bitrate_kbps').notNull().default(20000),
   minBitrateKbps: integer('min_bitrate_kbps').notNull().default(500),
@@ -385,6 +388,22 @@ export const federationPeers = sqliteTable('federation_peers', {
   autoRotateIntervalDays: integer('auto_rotate_interval_days').notNull().default(90),
   createdAt: integer('created_at').notNull(),
   approvalToken: text('approval_token'),
+  peerInstanceId: text('peer_instance_id'),
+  observedPeerInstanceId: text('observed_peer_instance_id'),
+  needsAttentionReason: text('needs_attention_reason'),
+});
+
+// Records a detected federated-peer reset (same origin, new instance epoch).
+// One row per origin; upserted when a live epoch change is observed, resolved
+// once stale replicated identities are healed.
+export const federationResetEvents = sqliteTable('federation_reset_events', {
+  origin: text('origin').primaryKey(),
+  deadEpoch: text('dead_epoch').notNull(),
+  newEpoch: text('new_epoch'),
+  detectedAt: integer('detected_at').notNull(),
+  resolvedAt: integer('resolved_at'),
+  stubCount: integer('stub_count').notNull().default(0),
+  orphanedAccountCount: integer('orphaned_account_count').notNull().default(0),
 });
 
 // SQL-level CHECK constraint enforces (direction='inbound' → hmac_secret NOT NULL).
