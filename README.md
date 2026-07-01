@@ -4,12 +4,12 @@
 
 # Backspace
 
-**An open, self-hosted communication platform — text, voice, video, and federation — that you own.**
+**A self-hosted communication platform — text, voice, video, and federation — that you own.**
 
 [![License: Elastic License 2.0](https://img.shields.io/badge/license-Elastic%20License%202.0-2563eb.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org/)
-[![Status](https://img.shields.io/badge/status-active%20development-f59e0b.svg)](#project-status)
+[![Version](https://img.shields.io/badge/version-1.0.0-16a34a.svg)](#project-status)
 
 </div>
 
@@ -17,7 +17,7 @@
 
 Backspace is a Discord-style chat platform you run on your own hardware. Spaces,
 channels, roles, voice and video, screen sharing, direct messages, friends, file
-sharing, and full-text search — plus **server-to-server federation**, so
+sharing, and message search — plus **server-to-server federation**, so
 independent Backspace instances can talk to each other while each stays under
 its own control.
 
@@ -26,7 +26,33 @@ inside a business — but not to resell as a hosted service. See
 [License](#license) for the exact terms.
 
 > **Project status** <a name="project-status"></a>
-> Backspace is early-stage and under active development.
+> Backspace 1.0 — stable, self-hostable, and actively developed. Running on two
+> live instances. A young project; issues and feedback welcome.
+
+## What makes Backspace different
+
+Self-hosted chat usually forces a trade-off: gaming-grade voice and video, *or* a
+polished Discord-style experience, *or* federation between independent servers —
+rarely all three, and rarely with the fine-grained media controls people expect.
+
+Backspace does all three at once:
+
+- **Voice & video with a real control surface.** Not just "it has screen share":
+  choose resolution, frame rate, codec (VP9 or hardware H.264), and bitrate; set
+  independent 0–200% volume for every person *and* every screen-share; RNNoise
+  noise suppression; a live connection inspector (bitrate, codec, ping, packet
+  loss, jitter); and a per-tile badge showing each stream's measured
+  resolution/frame-rate. Screen sharing goes up to 4K/120fps within admin-set
+  bounds.
+- **Federation, not a walled garden.** Run your own instance and peer it with
+  others: cross-instance friends, DMs, calls, and presence — each server
+  independently owned, requests HMAC-authenticated.
+- **A complete, polished platform — not a demo.** Role-based permissions with
+  per-category and per-channel overrides, friends and group DMs, inline playable
+  media, moderation with audit trails, search, a desktop app, and an installable
+  mobile PWA — all in the warm, calm "Aether Drift" interface.
+
+You own the server, the data, and the network it federates into.
 
 ## Screenshots
 
@@ -76,18 +102,23 @@ inside a business — but not to resell as a hosted service. See
 ## Features
 
 ### Communication
-- Real-time text channels over WebSocket
-- `@mention` autocomplete with mention highlighting
-- Voice and video channels via [LiveKit](https://livekit.io/), with RNNoise noise suppression (on by default)
-- Screen sharing up to 4K / 120fps — VP9 by default, with an optional hardware-accelerated H.264 mode and a VP8 simulcast fallback; quality bounds are admin-configurable
-- Picture-in-Picture for voice and video
-- Direct messages — 1-on-1 and group DMs (up to 10 people)
-- DM voice/video calls with ring / accept / reject
-- Message reactions, replies, editing, and deletion
+- Real-time text channels over WebSocket, with `@mention` autocomplete and mention highlighting
 - Markdown formatting with syntax highlighting
-- Typing indicators, unread tracking (badges and an unread divider), and presence
-- Rich link embeds (YouTube, Vimeo, Spotify, and generic OpenGraph) with SSRF-protected scraping
-- GIF search (Klipy)
+- Message reactions, replies, editing, deletion, and per-message mark-as-unread
+- Rich link embeds (YouTube, Vimeo, Spotify, and generic OpenGraph) with SSRF-protected scraping, plus GIF search (Klipy)
+- Typing indicators, unread badges, and presence
+- Direct messages — 1-on-1 and group DMs (up to 10 people), with voice/video calls (ring / accept / reject)
+
+**Voice, video & screen sharing** (via [LiveKit](https://livekit.io/)):
+- Screen sharing up to 4K / 120fps — VP9 by default, an optional hardware-accelerated H.264 mode, and a VP8 simulcast fallback
+- Per-stream quality controls — resolution, frame rate, codec, and bitrate, within admin-set bounds
+- Independent 0–200% volume for every participant *and* every screen-share
+- RNNoise noise suppression (on by default), plus echo-cancellation and auto-gain toggles and mic/speaker device selection
+- Live connection inspector — per-participant bitrate, codec, ping, packet loss, and jitter — plus a per-tile badge showing each stream's measured resolution/frame-rate
+- Screen-share viewer detection ("who's watching") and auto-ducking that lowers stream audio when someone speaks
+- Selective subscription — mute or stop watching any camera/stream to save bandwidth
+- Push-to-talk and fully customizable keybinds (including mouse buttons), in the browser and the desktop app
+- Picture-in-Picture for voice and video
 
 ### Organization
 - Spaces with channel categories
@@ -102,6 +133,7 @@ inside a business — but not to resell as a hosted service. See
 - Mutual friends and mutual spaces
 - User profiles with banner, bio, and accent color
 - Presence and rich activities (playing, listening, watching, streaming, custom)
+- Manual status — Online, Idle, or Do Not Disturb — with a custom status message
 - Privacy controls — toggle discoverability and activity-status sharing
 
 ### Moderation
@@ -119,8 +151,8 @@ inside a business — but not to resell as a hosted service. See
 - Background workers for outbox delivery, file download, peer health, and cleanup
 
 ### Platform
-- File uploads with image thumbnails (via `sharp`)
-- Full-text search with `from:`, `has:`, `before:`, and `after:` filters, plus jump-to-message
+- File uploads with image thumbnails (via `sharp`), drag-and-drop and paste-to-upload, and in-app avatar/banner cropping
+- Message search with `from:`, `has:`, `before:`, and `after:` filters, plus jump-to-message
 - Admin panel — instance settings, user management, registration controls, storage management, and federation/peering, plus granular streaming controls (a per-resolution × per-frame-rate bitrate matrix, min/max caps, quality-slider step, and an optional user-set-bitrate mode)
 - Automatic SQLite backups (pre-migration, scheduled, and manual) with restore tooling
 - Electron desktop app (Windows, macOS, Linux) with global keybinds (push-to-talk, mute, deafen) and activity detection
