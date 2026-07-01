@@ -50,6 +50,13 @@ function notifyFederationChangeListeners(): void {
   for (const cb of federationChangeListeners) cb();
 }
 
+const federationPeerResetDetectedListeners = new Set<(origin: string) => void>();
+
+export function onFederationPeerResetDetected(cb: (origin: string) => void): () => void {
+  federationPeerResetDetectedListeners.add(cb);
+  return () => { federationPeerResetDetectedListeners.delete(cb); };
+}
+
 // ─── Connection state ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
@@ -823,6 +830,11 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'federation_peers_changed': {
       notifyFederationChangeListeners();
+      break;
+    }
+
+    case 'federation_peer_reset_detected': {
+      for (const cb of federationPeerResetDetectedListeners) cb(event.origin);
       break;
     }
 
