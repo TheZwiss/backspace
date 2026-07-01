@@ -2317,6 +2317,55 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/epoch ────────────────────────────────────────────
+  // Server-to-server: return this instance's persistent epoch (instance_id).
+  // Authenticated via HMAC-SHA256 signature on the REQUEST (only a peer holding
+  // the shared secret may call it), and the RESPONSE body is HMAC-SIGNED with
+  // the same secret so the caller can verify the epoch it newly trusts before
+  // writing it as the peer's baseline (design §3.2 / §9). The value itself
+  // (instanceId) is already public via /instance/info; signing is for
+  // baseline-integrity, not confidentiality.
+  app.post(
+    '/api/federation/epoch',
+    { bodyLimit: 4 * 1024 },
+    async (request, reply) => {
+      const db = getDb();
+
+      // 1. Parse and require federation headers (mirror relay/users-lookup).
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(400).send({ error: 'Missing or malformed federation headers', statusCode: 400 });
+      }
+
+      // 2. Resolve the peer by origin. Reject unknown or revoked peers.
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+      if (!peer || peer.status === 'revoked') {
+        return reply.code(403).send({ error: 'Not peered', statusCode: 403 });
+      }
+
+      // 3. Verify the inbound request signature (honours rotation grace).
+      const bodyString = JSON.stringify(request.body ?? {});
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // 4. Sign the response body with the peer's shared secret and return it.
+      const responseBody = JSON.stringify({ instanceId: getInstanceId() });
+      const sigHeaders = buildFederationHeaders(responseBody, peer.hmacSecret, getOurOrigin());
+      reply.headers({
+        'X-Federation-Signature': sigHeaders['X-Federation-Signature'],
+        'X-Federation-Timestamp': sigHeaders['X-Federation-Timestamp'],
+        'X-Federation-Nonce': sigHeaders['X-Federation-Nonce'],
+        'Content-Type': 'application/json',
+      });
+      return reply.code(200).send(responseBody);
+    },
+  );
+
   // ─── POST /api/federation/users/lookup ─────────────────────────────────────
   // Server-to-server: resolve a username on this instance to its canonical
   // (homeUserId, profile snapshot). Used by another instance to construct a

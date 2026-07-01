@@ -307,6 +307,11 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/peer/denied` | POST | HMAC | Receive denial notification for awaiting_approval peer |
 | `/api/federation/identity` | DELETE | HMAC | Delete federated user identity (soft/full mode) |
 | `/api/federation/users/lookup` | POST | HMAC, rate-limited 60/min/peer | Resolve a username on this instance to (homeUserId, profile snapshot) for cross-instance friend-request originators |
+| `/api/federation/epoch` | POST | HMAC (signed request **and** signed response) | Return this instance's persistent epoch `{ instanceId }`; populates a peer's trusted epoch baseline (`peer_instance_id`) |
+
+### S2S Epoch Refresh (`POST /api/federation/epoch`)
+
+HMAC-authenticated in **both directions**: the request is signed (only a peer holding the shared secret may call it — unknown/revoked peers → 403, bad signature → 401, missing headers → 400) **and the response body `{ instanceId }` is HMAC-signed** with the same secret (`X-Federation-Signature/Timestamp/Nonce` response headers). The caller (`fetchPeerEpoch(peer)` in `utils/federationEpoch.ts`) verifies that response signature with the same secret before trusting the value, then writes it to `federation_peers.peer_instance_id`. Response-signing (not TLS-only) is deliberate: a poisoned baseline could drive a spurious data-heal on a live peer, so the newly-trusted epoch is authenticated (design §9). `fetchPeerEpoch` **fails safe** — a `404` from a not-yet-upgraded peer, an absent/invalid response signature, or a network/timeout error all return `null` (10s timeout via `AbortSignal.timeout`); the caller treats `null` as "retry on the next tick," never as an error to surface. This is the deterministic populator of the epoch baseline (the bounded periodic epoch-refresh, design §3.2), independent of organic relay traffic.
 
 ### S2S Identity Deletion (`DELETE /api/federation/identity`)
 
