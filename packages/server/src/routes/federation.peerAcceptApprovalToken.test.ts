@@ -61,6 +61,7 @@ function seedInstanceSettings(autoAccept: 0 | 1): void {
   testDb.insert(schema.instanceSettings).values({
     id: 1,
     instanceName: 'Local Backspace',
+    instanceId: 'test-epoch-local',
     autoAcceptPeering: autoAccept,
     registrationOpen: 1,
     updatedAt: Date.now(),

@@ -57,17 +57,19 @@ Backspace federation is peer-to-peer with no central authority. Each instance ma
 - Validates `sourceOrigin`, `challenge`, `hmacSecret`, and (optional) `instanceName` from body
 - Handles existing peers: active -> return 200 (idempotent), revoked -> return 403, pending -> update with new secret and activate
 - New peer: creates record with provided `hmacSecret`, sets `status='active'`
-- Returns `{ accepted: true, instanceName: <ourName | null> }` on success — see "Instance name exchange" below
+- Returns `{ accepted: true, instanceName: <ourName | null>, instanceId: <ourEpoch> }` on success — see "Instance name & epoch exchange" below
 
-### Instance name exchange
+### Instance name & epoch exchange
 
-The handshake is bidirectional for the `instance_name` label rendered in the federation panel and in DM-call toasts (`peerLabel`):
+The handshake is bidirectional for two pieces of metadata: the `instance_name` label rendered in the federation panel and in DM-call toasts (`peerLabel`), and the **instance epoch** (`instance_id`, this instance's persistent incarnation UUID minted by `ensureDefaults`, accessed via `getInstanceId()`). The epoch is the authenticated baseline used by the instance-epoch self-healing feature to detect a wipe-and-reinstall on the same domain (design: `docs/superpowers/specs/2026-07-01-federation-instance-epoch-self-healing-design.md`).
 
-- **Initiator → responder:** the request body to `/peer/accept` carries `{ sourceOrigin, hmacSecret, instanceName }`. The responder reads `instanceName` and persists it to `federation_peers.instance_name` on every state-mutating activation path: `pending → active`, `awaiting_approval → active`, `rejected → active` (override), and new-peer create. The idempotent early-return path for already-`active` and `needs_attention` peers does NOT overwrite — same security posture that already refuses to overwrite `hmac_secret` on these paths from an unauthenticated request.
+- **Initiator → responder:** the request body to `/peer/accept` carries `{ sourceOrigin, hmacSecret, instanceName, instanceId }`. The responder reads `instanceName` → `federation_peers.instance_name` and `instanceId` → `federation_peers.peer_instance_id` on every state-mutating activation path: `pending → active`, `awaiting_approval → active` (token-valid and autoAccept-fallback), `rejected → active` (override), and new-peer create. The idempotent early-return path for already-`active` and `needs_attention` peers does NOT overwrite — same security posture that already refuses to overwrite `hmac_secret` on these paths from an unauthenticated request. (The idempotent guard's *detection* of a changed epoch on that path is a later part of the self-healing feature; the handshake itself only writes the epoch on true activation.)
 
-- **Responder → initiator:** the `/peer/accept` response body is `{ accepted: true, instanceName: <ourName | null> }`. The initiator (`performHandshake` in `utils/federationPeering.ts` and `/peer/initiate` in `routes/federation.ts`) parses it and persists alongside the `status='active'` write. Older peers that omit the field are tolerated — the column stays `null`. Non-JSON bodies are tolerated defensively.
+- **Responder → initiator:** the `/peer/accept` response body is `{ accepted: true, instanceName: <ourName | null>, instanceId: <ourEpoch> }`. The initiator (`performHandshake` in `utils/federationPeering.ts`, `/peer/initiate`, and both `/approval-requests/:id/approve` handlers in `routes/federation.ts`) parses `instanceName` and `instanceId` and persists them alongside the `status='active'` write (`peer_instance_id`). Older peers that omit either field are tolerated — the respective column stays `null` (backstopped later by the deterministic epoch-refresh and relay-envelope population). Non-JSON bodies are tolerated defensively.
 
-`instance_name` is cosmetic metadata, eventually-consistent. Anywhere `peerLabel` is rendered falls back to origin hostname when `instance_name IS NULL`. Instance renames do not currently re-broadcast — that's a separate, unimplemented feature.
+All four outbound `/peer/accept` senders (`performHandshake`, `/peer/initiate`, and the inbound + outbound `/approve` handlers) include `instanceId: getInstanceId()` in the request body, so a peer learns our epoch regardless of which path activated the relationship.
+
+`instance_name` is cosmetic metadata, eventually-consistent. Anywhere `peerLabel` is rendered falls back to origin hostname when `instance_name IS NULL`. Instance renames do not currently re-broadcast — that's a separate, unimplemented feature. `peer_instance_id` is trust-consequential (only ever written from authenticated channels) — see the self-healing design spec for detection/heal semantics.
 
 ### Secret Storage & Rotation
 

@@ -5,6 +5,7 @@ import { generateSnowflake } from './snowflake.js';
 import { getOurOrigin, generateHmacSecret } from './federationAuth.js';
 import { validateOrigin } from '../routes/federation.js';
 import { onPeerActivated, onPeerDeactivated } from './federationPeerActivation.js';
+import { getInstanceId } from './federationEpoch.js';
 import type { EnsurePeeredCallerIntent } from '@backspace/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -304,6 +305,7 @@ async function performHandshake(
         sourceOrigin: ourOrigin,
         hmacSecret,
         instanceName: getInstanceName(),
+        instanceId: getInstanceId(),
       }),
       signal: AbortSignal.timeout(10_000),
     });
@@ -333,21 +335,26 @@ async function performHandshake(
     }
 
     if (response.ok) {
-      // 200 = peer accepted and activated. Parse remote's instanceName from
-      // the response body so we can render a friendly label for the peer.
+      // 200 = peer accepted and activated. Parse remote's instanceName and
+      // instanceId (epoch) from the response body so we can render a friendly
+      // label for the peer and record its authenticated epoch baseline.
       // Tolerate omission (older peers) and non-JSON bodies (defensive).
       let remoteInstanceName: string | null = null;
+      let remoteInstanceId: string | null = null;
       try {
-        const body = (await response.json()) as { instanceName?: string | null };
+        const body = (await response.json()) as { instanceName?: string | null; instanceId?: string | null };
         if (typeof body?.instanceName === 'string' && body.instanceName.length > 0) {
           remoteInstanceName = body.instanceName;
         }
+        if (typeof body?.instanceId === 'string' && body.instanceId.length > 0) {
+          remoteInstanceId = body.instanceId;
+        }
       } catch {
-        // Non-JSON or empty body — leave remoteInstanceName as null.
+        // Non-JSON or empty body — leave remoteInstanceName/Id as null.
       }
 
       db.update(schema.federationPeers)
-        .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, approvalToken: null })
+        .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: remoteInstanceId, approvalToken: null })
         .where(eq(schema.federationPeers.id, peerId))
         .run();
       const { connectionManager } = await import('../ws/handler.js');
