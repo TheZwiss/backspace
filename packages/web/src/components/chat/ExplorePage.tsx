@@ -7,13 +7,13 @@ import { Mascot } from '../ui/Mascot';
 import { getSpaceGradient } from '../../utils/gradients';
 import { extractDominantColors, colorsToGradient } from '../../utils/colorExtractor';
 import { MemberListToggleButton } from '../layout/MemberListToggleButton';
+import { useSpaceJoin } from '../../hooks/useSpaceJoin';
 
 export function ExplorePage() {
   const navigate = useNavigate();
   const setCurrentSpace = useSpaceStore((s) => s.setCurrentSpace);
 
   const spaces = useExploreStore((s) => s.spaces);
-  const myRequests = useExploreStore((s) => s.myRequests);
   const isLoading = useExploreStore((s) => s.isLoading);
   const discoveryEnabled = useExploreStore((s) => s.discoveryEnabled);
   const error = useExploreStore((s) => s.error);
@@ -150,7 +150,6 @@ export function ExplorePage() {
                   <SpaceCard
                     key={`${space.id}:${space._instanceOrigin}`}
                     space={space}
-                    isPending={myRequests.some(r => r.spaceId === space.id && r.status === 'pending')}
                     onJoinSuccess={handleJoinSuccess}
                   />
                 ))}
@@ -187,7 +186,6 @@ export function ExplorePage() {
                       <SpaceCard
                         key={`${space.id}:${space._instanceOrigin}`}
                         space={space}
-                        isPending={false}
                         onJoinSuccess={handleJoinSuccess}
                       />
                     ))}
@@ -204,26 +202,29 @@ export function ExplorePage() {
 
 function SpaceCard({
   space,
-  isPending,
   onJoinSuccess,
 }: {
   space: TaggedExploreSpace;
-  isPending: boolean;
   onJoinSuccess: (spaceId: string) => void;
 }) {
-  const publicJoin = useExploreStore((s) => s.publicJoin);
-  const requestJoin = useExploreStore((s) => s.requestJoin);
+  const {
+    isJoined,
+    isPublic,
+    isPending,
+    joining,
+    joinError,
+    showRequestForm,
+    requestMessage,
+    setRequestMessage,
+    openRequestForm,
+    cancelRequestForm,
+    join,
+    sendRequest,
+  } = useSpaceJoin(space);
 
-  const [joining, setJoining] = useState(false);
-  const [showRequestForm, setShowRequestForm] = useState(false);
-  const [requestMessage, setRequestMessage] = useState('');
-  const [requestSent, setRequestSent] = useState(isPending);
-  const [joinError, setJoinError] = useState('');
   const [iconGradient, setIconGradient] = useState<string | null>(null);
 
   const fallbackGradient = getSpaceGradient(space.id, space.name, space.avatarColor).gradient;
-  const isPublic = space.visibility === 'public';
-  const isJoined = space.joined === true;
   const originLabel = space._instanceOrigin
     ? (() => { try { return new URL(space._instanceOrigin).host; } catch { return space._instanceOrigin; } })()
     : null;
@@ -248,29 +249,8 @@ function SpaceCard({
   }, [iconUrl, bannerUrl]);
 
   const handlePublicJoin = async () => {
-    setJoining(true);
-    setJoinError('');
-    try {
-      const fullSpace = await publicJoin(space);
-      onJoinSuccess(fullSpace.id);
-    } catch (err) {
-      setJoinError(err instanceof Error ? err.message : 'Failed to join');
-      setJoining(false);
-    }
-  };
-
-  const handleRequestJoin = async () => {
-    setJoining(true);
-    setJoinError('');
-    try {
-      await requestJoin(space, requestMessage.trim() || undefined);
-      setRequestSent(true);
-      setShowRequestForm(false);
-    } catch (err) {
-      setJoinError(err instanceof Error ? err.message : 'Failed to send request');
-    } finally {
-      setJoining(false);
-    }
+    const full = await join();
+    if (full) onJoinSuccess(full.id);
   };
 
   const handleViewSpace = () => {
@@ -397,7 +377,7 @@ function SpaceCard({
               'Join Space'
             )}
           </button>
-        ) : requestSent ? (
+        ) : isPending ? (
           <button
             disabled
             className="w-full py-2 bg-interactive-muted text-txt-tertiary text-sm font-medium rounded cursor-default"
@@ -415,14 +395,14 @@ function SpaceCard({
             />
             <div className="flex gap-2">
               <button
-                onClick={handleRequestJoin}
+                onClick={sendRequest}
                 disabled={joining}
                 className="flex-1 py-1.5 bg-accent-amber hover:bg-accent-amber/80 text-[#13131a] text-sm font-medium rounded transition-colors disabled:opacity-50"
               >
                 {joining ? 'Sending...' : 'Send Request'}
               </button>
               <button
-                onClick={() => setShowRequestForm(false)}
+                onClick={cancelRequestForm}
                 className="px-3 py-1.5 text-sm text-txt-tertiary hover:text-txt-secondary transition-colors"
               >
                 Cancel
@@ -431,7 +411,7 @@ function SpaceCard({
           </div>
         ) : (
           <button
-            onClick={() => setShowRequestForm(true)}
+            onClick={openRequestForm}
             className="w-full py-2 bg-accent-amber/20 hover:bg-accent-amber/30 text-accent-amber text-sm font-medium rounded transition-colors"
           >
             Request to Join
