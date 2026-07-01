@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -318,5 +319,95 @@ describe('fetchPeerEpoch — signs request, verifies signed response, fails safe
     const { fetchPeerEpoch } = await import('./federationEpoch.js');
     const result = await fetchPeerEpoch({ origin: PEER_ORIGIN, hmacSecret: PEER_SECRET });
     expect(result).toBeNull();
+  });
+});
+
+describe('refreshPeerEpochs — deterministic populate-if-null baseline (self-terminating)', () => {
+  // Drives the REAL refreshPeerEpochs → fetchPeerEpoch → verifySignature round-trip.
+  // fetchPeerEpoch is deliberately NOT stubbed: a signing/arg-order mismatch must
+  // fail these assertions loudly rather than degrade to a silent null (which would
+  // masquerade as a benign 404 and quietly disable the whole refresh).
+  beforeEach(() => {
+    // Local instance epoch must be readable (getOurOrigin does not need it, but the
+    // module is shared; seed for parity with real boot state).
+    seedInstanceSettings(LOCAL_EPOCH);
+    seedActivePeer();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** A response body signed with `secret` over exactly the bytes we return. */
+  function signedEpochResponse(instanceId: string, secret: string): Response {
+    const responseBody = JSON.stringify({ instanceId });
+    const sigHeaders = buildFederationHeaders(responseBody, secret, PEER_ORIGIN);
+    return new Response(responseBody, { status: 200, headers: sigHeaders });
+  }
+
+  function readPeerInstanceId(): string | null {
+    const row = testDb
+      .select({ peerInstanceId: schema.federationPeers.peerInstanceId })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-remote'))
+      .get();
+    return row?.peerInstanceId ?? null;
+  }
+
+  it('populates peer_instance_id from a validly-signed response, then self-terminates', async () => {
+    const fetchMock = vi.fn(async () => signedEpochResponse('E1', PEER_SECRET));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { refreshPeerEpochs } = await import('./federationEpoch.js');
+    await refreshPeerEpochs();
+
+    expect(readPeerInstanceId()).toBe('E1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Second pass: the peer is now non-null, so the IS NULL filter excludes it —
+    // no further fetch is issued. Self-termination is structural, not incidental.
+    await refreshPeerEpochs();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(readPeerInstanceId()).toBe('E1');
+  });
+
+  it('leaves the baseline NULL when the response signature is invalid (tampered)', async () => {
+    // Signed with a different secret → verification fails → fetchPeerEpoch returns null.
+    const fetchMock = vi.fn(async () => signedEpochResponse('E1', 'a-different-secret'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { refreshPeerEpochs } = await import('./federationEpoch.js');
+    await refreshPeerEpochs();
+
+    expect(readPeerInstanceId()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the baseline NULL and does not throw on a 404 (peer not yet upgraded)', async () => {
+    const fetchMock = vi.fn(async () => new Response('Not found', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { refreshPeerEpochs } = await import('./federationEpoch.js');
+    await expect(refreshPeerEpochs()).resolves.toBeUndefined();
+
+    expect(readPeerInstanceId()).toBeNull();
+  });
+
+  it('never overwrites an already-populated baseline (populate-if-null only)', async () => {
+    testDb.update(schema.federationPeers)
+      .set({ peerInstanceId: 'pre-existing' })
+      .where(eq(schema.federationPeers.id, 'peer-remote'))
+      .run();
+
+    const fetchMock = vi.fn(async () => signedEpochResponse('E1', PEER_SECRET));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { refreshPeerEpochs } = await import('./federationEpoch.js');
+    await refreshPeerEpochs();
+
+    // Already non-null → excluded by the IS NULL filter → no fetch, value untouched.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(readPeerInstanceId()).toBe('pre-existing');
   });
 });

@@ -313,6 +313,8 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 
 HMAC-authenticated in **both directions**: the request is signed (only a peer holding the shared secret may call it — unknown/revoked peers → 403, bad signature → 401, missing headers → 400) **and the response body `{ instanceId }` is HMAC-signed** with the same secret (`X-Federation-Signature/Timestamp/Nonce` response headers). The caller (`fetchPeerEpoch(peer)` in `utils/federationEpoch.ts`) verifies that response signature with the same secret before trusting the value, then writes it to `federation_peers.peer_instance_id`. Response-signing (not TLS-only) is deliberate: a poisoned baseline could drive a spurious data-heal on a live peer, so the newly-trusted epoch is authenticated (design §9). `fetchPeerEpoch` **fails safe** — a `404` from a not-yet-upgraded peer, an absent/invalid response signature, or a network/timeout error all return `null` (10s timeout via `AbortSignal.timeout`); the caller treats `null` as "retry on the next tick," never as an error to surface. This is the deterministic populator of the epoch baseline (the bounded periodic epoch-refresh, design §3.2), independent of organic relay traffic.
 
+**Deterministic epoch-refresh driver (`refreshPeerEpochs()` in `utils/federationEpoch.ts`).** Selects every `active` peer whose `peer_instance_id IS NULL`, calls `fetchPeerEpoch(peer)` once each, and on a non-null result writes the epoch via `UPDATE ... SET peer_instance_id WHERE id = ? AND peer_instance_id IS NULL`. The trailing `IS NULL` guard makes it **populate-if-null only** — it can never overwrite a baseline another path (relay envelope, handshake) already established — and makes it **self-terminating**: once a peer's `peer_instance_id` is set, the `IS NULL` filter excludes it, so it is never fetched again. A `null` from `fetchPeerEpoch` (404 / bad-sig / network) is a benign `continue` with no error log-spam, retried next tick. Wired into the federation worker in two places: once at `startFederationWorkers()` startup and once at the end of `processHealthCheckTick()` (the existing 15-minute health-check tick), both as `refreshPeerEpochs().catch(() => {})`. This guarantees the trusted baseline is populated within one refresh cycle of an upgrade, independent of user/relay activity — the load-bearing populator that relay-only population cannot cover for idle peers.
+
 ### S2S Identity Deletion (`DELETE /api/federation/identity`)
 
 Allows a home instance to remove a user's replicated identity from a remote instance.
@@ -1563,6 +1565,7 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | Outbox delivery | 10s | 50 | 30s | `processOutboxTick` |
 | File download | 30s | 5 | 60s | `processFileQueueTick` |
 | Health check | 15min | all unreachable | 10s | `processHealthCheckTick` |
+| Epoch-refresh baseline | Startup + 15min (end of health tick) | active peers w/ `peer_instance_id IS NULL` | 10s per peer | `refreshPeerEpochs` (populate-if-null, self-terminating) |
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
 | Startup bootstrap sync | Once at startup | -- | 30s per page | `startupBootstrapSync` → `onPeerActivated` |
 

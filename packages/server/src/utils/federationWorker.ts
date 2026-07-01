@@ -15,6 +15,7 @@ import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivat
 import { probePeerReachable, markPeerRecovered } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
+import { refreshPeerEpochs } from './federationEpoch.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -1162,6 +1163,14 @@ async function processHealthCheckTick(): Promise<void> {
       console.warn(`[federation-worker] Auto-rotation failed for peer ${peer.origin}: ${message}`);
     }
   }
+
+  // ── Deterministic baseline epoch-refresh ────────────────────────────────────
+  // Populate-if-null, self-terminating: fill peer_instance_id for active peers
+  // whose baseline is still NULL (design §3.2). Runs every tick so the baseline
+  // is established within one 15-minute cycle of an upgrade, independent of any
+  // relay/user activity. Best-effort — a failed fetch is a benign no-op retried
+  // next tick, so it never disturbs the rest of the health-check work.
+  await refreshPeerEpochs().catch(() => {});
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────
@@ -1235,6 +1244,12 @@ export function startFederationWorkers(): void {
       console.error('[federation-worker] federatedCallSentinel tick failed:', err)
     );
   }, FEDERATED_CALL_SENTINEL_MS);
+  // Deterministic baseline epoch-refresh at startup (design §3.2): populate
+  // peer_instance_id for any active peer whose baseline is still NULL, so an
+  // instance that upgrades sees its peers' epochs within one cycle regardless of
+  // traffic. Best-effort, self-terminating (populate-if-null).
+  refreshPeerEpochs().catch(() => {});
+
   // Bootstrap sync for freshly-peered rows (async, non-blocking)
   startupBootstrapSync().catch((err) => {
     console.error('[federation-worker] Startup bootstrap sync error:', err);

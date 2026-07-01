@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { buildFederationHeaders, verifySignature, getOurOrigin } from './federationAuth.js';
 
@@ -84,5 +84,54 @@ export async function fetchPeerEpoch(peer: PeerForEpoch): Promise<string | null>
     return (JSON.parse(text) as { instanceId?: string }).instanceId ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Deterministic baseline populator: for each `active` peer whose
+ * `peer_instance_id` is still NULL, fetch its authenticated epoch once and store
+ * it. This is the load-bearing guarantee (design §3.2) — it populates the
+ * trusted baseline within one refresh cycle of an upgrade, independent of any
+ * user/relay activity, closing the window that relay-only population leaves for
+ * idle peers.
+ *
+ * Populate-if-null ONLY: the `UPDATE ... WHERE peer_instance_id IS NULL` guard
+ * makes it structurally impossible to overwrite a baseline that another path
+ * (relay, handshake) already established. Self-terminating: once a peer's
+ * `peer_instance_id` is set, the `isNull` filter excludes it, so it is never
+ * fetched again.
+ *
+ * Staggered-rollout tolerant: `fetchPeerEpoch` returns `null` for a 404
+ * (not-yet-upgraded peer), a bad/absent response signature, or a network error.
+ * All of those are benign no-ops — we simply skip the peer and retry on the next
+ * tick, with no error log-spam. No exception escapes this function.
+ */
+export async function refreshPeerEpochs(): Promise<void> {
+  const db = getDb();
+  const peers = db
+    .select({
+      id: schema.federationPeers.id,
+      origin: schema.federationPeers.origin,
+      hmacSecret: schema.federationPeers.hmacSecret,
+    })
+    .from(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.status, 'active'),
+      isNull(schema.federationPeers.peerInstanceId),
+    ))
+    .all();
+
+  for (const peer of peers) {
+    const epoch = await fetchPeerEpoch(peer);
+    if (!epoch) continue; // 404 / bad-sig / network → retry next tick, no log-spam.
+
+    // Populate-if-null only: the IS NULL guard never overwrites a non-null baseline.
+    db.update(schema.federationPeers)
+      .set({ peerInstanceId: epoch })
+      .where(and(
+        eq(schema.federationPeers.id, peer.id),
+        isNull(schema.federationPeers.peerInstanceId),
+      ))
+      .run();
   }
 }
