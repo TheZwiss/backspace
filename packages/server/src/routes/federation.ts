@@ -40,6 +40,7 @@ interface SanitizedPeer {
   rotationInProgress: boolean;
   secretRotatedAt: number | null;
   autoRotateIntervalDays: number;
+  needsAttentionReason: string | null;
 }
 
 function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): SanitizedPeer {
@@ -56,6 +57,7 @@ function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): Sanitize
     rotationInProgress: row.pendingHmacSecret !== null,
     secretRotatedAt: row.secretRotatedAt,
     autoRotateIntervalDays: row.autoRotateIntervalDays,
+    needsAttentionReason: row.needsAttentionReason,
   };
 }
 

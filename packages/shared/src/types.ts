@@ -1188,6 +1188,7 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
+  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | null;
 }
 
 // ─── Outbound peering gate ──────────────────────────────────────────────────
