@@ -54,7 +54,9 @@ success "Linux detected"
 # Check Docker
 if ! command -v docker &>/dev/null; then
   warn "Docker is not installed."
-  read -rp "Install Docker now? [Y/n] " yn
+  # `|| yn=""` so an EOF (non-interactive / piped stdin) doesn't trip `set -e`;
+  # an empty answer then falls through to the [Y/n] default of installing.
+  read -rp "Install Docker now? [Y/n] " yn || yn=""
   if [[ "${yn,,}" == "n" ]]; then
     error "Docker is required. Install it and re-run this script."
     exit 1
@@ -62,8 +64,13 @@ if ! command -v docker &>/dev/null; then
   info "Installing Docker via official script..."
   curl -fsSL https://get.docker.com | sh
   sudo systemctl enable --now docker 2>/dev/null || true
-  sudo usermod -aG docker "$USER"
-  warn "Added $USER to docker group. You may need to log out and back in."
+  # Resolve the current user via `id -un`, not $USER: under `set -u`, $USER is
+  # not guaranteed to be set (sudo, `su` without -l, cron, some `docker exec`
+  # contexts) and an unset reference would abort the script right after Docker
+  # was installed, leaving it half-configured.
+  run_user="$(id -un)"
+  sudo usermod -aG docker "$run_user"
+  warn "Added $run_user to docker group. You may need to log out and back in."
   # Use sudo for the rest of this session
   DOCKER="sudo docker"
   COMPOSE="sudo docker compose"
@@ -117,7 +124,7 @@ else
 fi
 
 # Disk space check
-available_kb=$(df -k . 2>/dev/null | tail -1 | awk '{print $4}')
+available_kb=$(df -k . 2>/dev/null | tail -1 | awk '{print $4}' || true)
 if [[ -n "$available_kb" ]] && (( available_kb < 3000000 )); then
   warn "Low disk space: $((available_kb / 1024))MB available (recommend 3GB+)"
 else
@@ -172,9 +179,14 @@ fi
 info "Verifying DNS for ${DOMAIN}..."
 resolved_ip=""
 if command -v dig &>/dev/null; then
-  resolved_ip=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1)
+  resolved_ip=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
 elif command -v getent &>/dev/null; then
-  resolved_ip=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
+  # A non-resolving domain makes `getent hosts` exit 2, and with `set -o
+  # pipefail` that would abort the installer here — before the graceful
+  # "Could not resolve" warning below. Swallow it: an empty result is the
+  # intended "not resolved yet" signal (installing before DNS is set up is
+  # explicitly supported).
+  resolved_ip=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1 || true)
 fi
 
 my_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
@@ -484,7 +496,7 @@ echo "    docker compose up -d --build    # Rebuild after code changes"
 
 echo ""
 # Best-effort primary LAN IP (the address a router would port-forward to).
-LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1)
+LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || true)
 echo -e "  ${BOLD}Ports to open${NC} — on this host's firewall (ufw / firewalld / cloud"
 echo -e "  security group)${BOLD} and,${NC} if the host is behind a router, also"
 echo -e "  port-forward them to this host${LAN_IP:+ (${LAN_IP})}:"
