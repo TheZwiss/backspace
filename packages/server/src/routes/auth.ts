@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -7,7 +7,8 @@ import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
 import { AVATAR_COLORS } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
-import { findFederatedUser } from './federation.js';
+import { findFederatedUser, extractDomain } from './federation.js';
+import { fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { getInviteByToken, inviteStatus, redeemInvite, InviteUnavailableError } from '../utils/inviteService.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -413,6 +414,39 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           clearTimeout(timeout);
 
           if (homeResponse.ok) {
+            // §6.3a epoch guard: self-heal (re-hashing the local password because
+            // the home accepted it) must fire ONLY when the home instance is the
+            // SAME incarnation we established trust with. A reset home (new
+            // incarnation on the same domain) accepting a NEW same-name user's
+            // credentials would otherwise silently hand that stranger this
+            // established account. We gate on the trusted baseline epoch.
+            //
+            // Reuse the authenticated fetchPeerEpoch (HMAC-signed both ways) rather
+            // than an unauthenticated login-response body — the latter is
+            // TLS-MITM-bypassable and would re-open the exact hijack this closes.
+            const homeDomain = extractDomain(user.homeInstance);
+            const peer = db.select().from(schema.federationPeers)
+              .where(or(
+                eq(schema.federationPeers.origin, homeDomain),
+                eq(schema.federationPeers.origin, `https://${homeDomain}`),
+                eq(schema.federationPeers.origin, `http://${homeDomain}`),
+              ))
+              .get();
+
+            if (peer && peer.peerInstanceId) {
+              // Baseline on record → enforce. currentEpoch === null means "cannot
+              // determine" (peer too old → 404, unreachable, bad sig, or the reset
+              // peer's desynced secret rejects our signed request) → fail closed.
+              const currentEpoch = await fetchPeerEpoch({ origin: peer.origin, hmacSecret: peer.hmacSecret });
+              if (currentEpoch !== peer.peerInstanceId) {
+                app.log.warn(
+                  `Refused self-heal for ${user.username}: home epoch ${currentEpoch ?? 'unknown'} != baseline ${peer.peerInstanceId}`,
+                );
+                return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+              }
+            }
+            // No peer row / null baseline → legacy allow (fall through to self-heal).
+
             // Home instance accepted the password — update our stale hash.
             // Do NOT set passwordChangedAt: this is a state correction, not a
             // password change. Setting it would invalidate existing valid JWTs.
