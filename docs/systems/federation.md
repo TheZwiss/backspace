@@ -333,6 +333,15 @@ In a single transaction, `markPeerReset`:
 
 Legacy peers advertise no epoch (`instanceId` null), so detection requires a non-null observed epoch differing from a non-null stored baseline — legacy peers never trigger it, and the existing `auth_failures → needs_attention → manual Reset` path continues unchanged for them.
 
+### Limbo-window user error (`peer_reset_pending`)
+
+Between reset detection (`markPeerReset`) and the admin's one-click Re-peer, the stale identity graph still exists and no heal has run (design §5.3). During this window a user re-adding a same-name friend, or creating a DM to that origin, would otherwise hit a confusing `already_friends` (stale friendship bound to the dead incarnation) or `peer_rejected` (the peer now sits in `needs_attention`, tripping `ensurePeered`). Both user-facing hot paths short-circuit with a clearer **409 `{ error: 'peer_reset_pending' }`**:
+
+- **Friend-add** (`social.ts` `POST /api/social/requests`, federated branch): after `resolveOriginFromHostname` yields `peerOrigin` and **before** the peering/lookup/`already_friends` checks.
+- **DM-create** (`dm.ts` `POST /api/dm`, `homeUserId + homeInstance` branch): before stub creation, so no un-flagged stub is left behind. The target origin is resolved with `resolveOriginFromHostname(new URL(canonicalizeHomeInstance(homeInstance)).host)`.
+
+Both perform an **O(1) point lookup** on the `federation_reset_events` origin PRIMARY KEY (`origin = peerOrigin AND resolved_at IS NULL`). `peerOrigin` (from `resolveOriginFromHostname`, which returns the stored `federation_peers.origin` verbatim) is exactly the string `markPeerReset` journals, so the query is a single indexed hit/miss. The guard **only** short-circuits when an unresolved row exists; the common case — no reset in progress — is one indexed miss and the normal path proceeds byte-for-byte unchanged. Once the admin re-peers and `healResetIncarnation` resolves the journal (`resolved_at` set), the guard stops firing and the freshly-clean graph accepts the re-add.
+
 ### Data Self-Heal (`healResetIncarnation` — `utils/federationReset.ts`)
 
 Detection (`markPeerReset`) only snapshots + journals + notifies; it destroys nothing. The actual heal is `healResetIncarnation(origin, newEpoch, reason)`, fired from `onPeerActivated` (`utils/federationPeerActivation.ts`) **after an admin-authenticated re-peer**, keyed to the confirmed epoch change (design §6). It runs **before** the mutation-log re-sync in `onPeerActivated` so re-sync repopulates onto a clean slate, and it runs **outside any transaction** (`tombstoneUser` opens its own; better-sqlite3 throws on a nested `BEGIN`).

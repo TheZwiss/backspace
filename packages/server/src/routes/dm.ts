@@ -47,6 +47,7 @@ import {
   normalizeIconForWire,
 } from '../utils/federationOutbox.js';
 import { getOurOrigin, canonicalizeHomeInstance } from '../utils/federationAuth.js';
+import { resolveOriginFromHostname } from '../utils/federationOriginResolve.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 import { resolveLocalUser, resolveOrCreateReplicatedUser } from './federation.js';
 
@@ -928,6 +929,40 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
     let targetUser: typeof schema.users.$inferSelect | undefined;
 
     if (homeUserId && homeInstance) {
+      // Limbo-window guard (federation instance-epoch self-healing §5.3).
+      // If the target's home instance was reset-detected but the admin has not yet
+      // re-peered, an UNRESOLVED `federation_reset_events` row exists for its origin.
+      // Creating a DM now would bind to stale, dead-incarnation identity state, so
+      // surface a clear `peer_reset_pending` instead of silently forming a doomed
+      // channel. Checked BEFORE stub creation so no un-flagged stub is left behind.
+      //
+      // The journal is keyed by the peer's `federation_peers.origin` (the exact string
+      // `markPeerReset` stores). `resolveOriginFromHostname` returns that stored origin
+      // verbatim, giving an O(1) point lookup on the origin PRIMARY KEY; the common case
+      // (no reset) is a single indexed miss and the normal path proceeds unchanged.
+      const canon = canonicalizeHomeInstance(homeInstance);
+      let peerOrigin: string | null = null;
+      if (canon) {
+        try {
+          peerOrigin = resolveOriginFromHostname(new URL(canon).host);
+        } catch {
+          peerOrigin = null;
+        }
+      }
+      if (peerOrigin) {
+        const pendingReset = db
+          .select({ origin: schema.federationResetEvents.origin })
+          .from(schema.federationResetEvents)
+          .where(and(
+            eq(schema.federationResetEvents.origin, peerOrigin),
+            isNull(schema.federationResetEvents.resolvedAt),
+          ))
+          .get();
+        if (pendingReset) {
+          return reply.code(409).send({ error: 'peer_reset_pending', statusCode: 409 });
+        }
+      }
+
       // Federated identity: resolve or create a replicated user stub
       targetUser = resolveOrCreateReplicatedUser(homeUserId, homeInstance, db) ?? undefined;
     } else if (userId && typeof userId === 'string') {

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and, or, ne, like, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, ne, like, sql, inArray, isNull } from 'drizzle-orm';
 import { getDb, getRawDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
@@ -181,6 +181,32 @@ async function handleFederatedFriendRequest(
   const peerOrigin = resolveOriginFromHostname(targetDomain);
   if (!peerOrigin) {
     return reply.code(400).send({ error: 'invalid_target_domain', statusCode: 400, domain: targetDomain });
+  }
+
+  // 1a. Limbo-window guard (federation instance-epoch self-healing §5.3).
+  //     If this peer's home instance was reset-detected but the admin has not yet
+  //     re-peered, an UNRESOLVED `federation_reset_events` row exists for its origin
+  //     (the peer sits in `needs_attention`, its local friendship/stub graph still
+  //     bound to the dead incarnation). Without this guard the re-add would surface
+  //     a confusing `already_friends` (stale friendship) or `peer_rejected` (the
+  //     needs_attention peer) — neither of which tells the user what to do. Return a
+  //     clear `peer_reset_pending` instead.
+  //
+  //     `resolveOriginFromHostname` returns the peer's stored `federation_peers.origin`
+  //     verbatim, which is exactly the string `markPeerReset` journals as
+  //     `federation_reset_events.origin` (its PRIMARY KEY), so this is an O(1) indexed
+  //     point lookup. The common case — no reset in progress — is a single indexed miss
+  //     and the normal path proceeds unchanged.
+  const pendingReset = db
+    .select({ origin: schema.federationResetEvents.origin })
+    .from(schema.federationResetEvents)
+    .where(and(
+      eq(schema.federationResetEvents.origin, peerOrigin),
+      isNull(schema.federationResetEvents.resolvedAt),
+    ))
+    .get();
+  if (pendingReset) {
+    return reply.code(409).send({ error: 'peer_reset_pending', statusCode: 409 });
   }
 
   // 2. ensurePeered — block until 'active', or surface peer status as error
