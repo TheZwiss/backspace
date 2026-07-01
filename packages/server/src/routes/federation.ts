@@ -21,7 +21,7 @@ import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/f
 import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
 import { getInstanceId } from '../utils/federationEpoch.js';
 import { probePeerReachable, recoverOrDetectReset } from '../utils/federationRecovery.js';
-import { markPeerReset } from '../utils/federationReset.js';
+import { markPeerReset, homeInstanceMatch } from '../utils/federationReset.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent, ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
 import { GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH } from '@backspace/shared/src/constants.js';
@@ -1525,6 +1525,69 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         .all();
 
       return reply.code(200).send({ peers: peers.map(sanitizePeer) });
+    },
+  );
+
+  // ─── GET /api/federation/reset-events ──────────────────────────────────────
+  // Admin-only: the durable reset journal + per-origin orphaned real accounts,
+  // for the "Reset cleanup" admin surface (instance-epoch self-healing §6.4).
+  // Read-only; disposition actions reuse the existing one-click Re-peer (reset
+  // + initiate) and the existing DELETE /api/admin/users/:id (full-purge Remove).
+  app.get(
+    '/api/federation/reset-events',
+    { preHandler: [authenticate, requireAdmin] },
+    async (_request, reply) => {
+      const db = getDb();
+      const events = db.select().from(schema.federationResetEvents).all();
+
+      const result = events.map((ev) => {
+        const accounts = db
+          .select({
+            id: schema.users.id,
+            username: schema.users.username,
+            displayName: schema.users.displayName,
+            avatarColor: schema.users.avatarColor,
+          })
+          .from(schema.users)
+          .where(and(
+            eq(schema.users.federationHomeOrphaned, 1),
+            eq(schema.users.isDeleted, 0),
+            homeInstanceMatch(ev.origin),
+          ))
+          .all();
+
+        const orphanedAccounts = accounts.map((a) => {
+          const ownedSpaces = db
+            .select({ id: schema.spaces.id, name: schema.spaces.name })
+            .from(schema.spaces)
+            .where(eq(schema.spaces.ownerId, a.id))
+            .all();
+          const spaceMemberCount = db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.spaceMembers)
+            .where(eq(schema.spaceMembers.userId, a.id))
+            .get()?.n ?? 0;
+          const messageCount = db
+            .select({ n: sql<number>`count(*)` })
+            .from(schema.messages)
+            .where(eq(schema.messages.userId, a.id))
+            .get()?.n ?? 0;
+          return { ...a, ownedSpaces, spaceMemberCount, messageCount };
+        });
+
+        return {
+          origin: ev.origin,
+          deadEpoch: ev.deadEpoch,
+          newEpoch: ev.newEpoch,
+          detectedAt: ev.detectedAt,
+          resolvedAt: ev.resolvedAt,
+          stubCount: ev.stubCount,
+          orphanedAccountCount: ev.orphanedAccountCount,
+          orphanedAccounts,
+        };
+      });
+
+      return reply.code(200).send({ events: result });
     },
   );
 

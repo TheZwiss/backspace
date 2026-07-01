@@ -1191,6 +1191,43 @@ export interface FederationPeer {
   needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | null;
 }
 
+// ─── Reset-cleanup admin surface (instance-epoch self-healing §6.4) ──────────
+
+/**
+ * A real (non-stub) account whose home instance was reset — quarantined via
+ * `federation_home_orphaned = 1`. Surfaced to the admin "Reset cleanup" UI with
+ * enough context (owned spaces, membership/message counts) to decide Keep or
+ * Remove.
+ */
+export interface FederationOrphanedAccount {
+  id: string;
+  username: string; // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  displayName: string | null;
+  avatarColor: string | null;
+  ownedSpaces: { id: string; name: string }[];
+  spaceMemberCount: number; // # of spaces they're a member of
+  messageCount: number; // # of space messages they authored
+}
+
+/**
+ * A durable row from the `federation_reset_events` journal, augmented with the
+ * origin's current orphaned real accounts for admin disposition.
+ */
+export interface FederationResetEvent {
+  origin: string;
+  deadEpoch: string;
+  newEpoch: string | null;
+  detectedAt: number;
+  resolvedAt: number | null;
+  stubCount: number;
+  orphanedAccountCount: number;
+  orphanedAccounts: FederationOrphanedAccount[];
+}
+
+export interface FederationResetEventsResponse {
+  events: FederationResetEvent[];
+}
+
 // ─── Outbound peering gate ──────────────────────────────────────────────────
 
 /**

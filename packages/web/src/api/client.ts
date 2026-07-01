@@ -53,6 +53,9 @@ import type {
   FederationIdentityDeleteRequest,
   FederationIdentityDeleteResponse,
   FederationPeer,
+  FederationOrphanedAccount,
+  FederationResetEvent,
+  FederationResetEventsResponse,
   ApprovalRequest,
   PeeringSubscription,
   PeeringNotification,
@@ -68,7 +71,7 @@ import type {
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
-export type { FederationPeer, ApprovalRequest, PeeringSubscription, PeeringNotification };
+export type { FederationPeer, FederationOrphanedAccount, FederationResetEvent, FederationResetEventsResponse, ApprovalRequest, PeeringSubscription, PeeringNotification };
 
 export class RateLimitError extends Error {
   readonly retryAfter: number;
@@ -275,6 +278,7 @@ export class BackspaceApiClient {
     initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: FederationPeer }>;
     ensurePeered: (data: { remoteOrigin: string }) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
     peers: () => Promise<{ peers: FederationPeer[] }>;
+    resetEvents: () => Promise<FederationResetEventsResponse>;
     revokePeer: (id: string) => Promise<{ success: boolean }>;
     resetPeer: (id: string) => Promise<{ success: boolean }>;
     recheckPeer: (id: string) => Promise<{ recovered: boolean; status: string }>;
@@ -702,6 +706,8 @@ export class BackspaceApiClient {
         request<{ peers: FederationPeer[] }>(
           'GET', '/federation/peers'
         ),
+      resetEvents: () =>
+        request<FederationResetEventsResponse>('GET', '/federation/reset-events'),
       revokePeer: (id: string) =>
         request<{ success: boolean }>('DELETE', `/federation/peers/${id}`),
       resetPeer: (id: string) =>
