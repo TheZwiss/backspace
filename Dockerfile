@@ -79,6 +79,13 @@ ENV HOST=0.0.0.0
 ENV DB_PATH=/app/data/backspace.db
 ENV UPLOAD_DIR=/app/data/uploads
 
+# AGPL-3.0 § 13 source offer: bake the running build's git commit into the image
+# so GET /api/instance/info can advertise the exact version. Passed via
+# --build-arg BACKSPACE_COMMIT=$(git rev-parse --short HEAD) (see deploy.sh /
+# docker-compose.yml). Empty when git is unavailable → server treats as null.
+ARG BACKSPACE_COMMIT=""
+ENV BACKSPACE_COMMIT=$BACKSPACE_COMMIT
+
 EXPOSE 3000
 
 # Health check — reads PORT from environment so it works with any configured port

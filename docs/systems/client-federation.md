@@ -342,8 +342,10 @@ The **Connections** panel (in user settings) allows managing remote instance con
 The hostname-probe step calls `GET /api/instance/info` on the target. The response carries two registration fields:
 
 ```typescript
-{ name, version, registrationOpen: boolean, federatedRegistrationOpen: boolean }
+{ name, version, registrationOpen: boolean, federatedRegistrationOpen: boolean, sourceCodeUrl: string, commit: string | null }
 ```
+
+`sourceCodeUrl` / `commit` are the AGPL § 13 source offer (see `api.md`). `probeInstance` returns the whole payload, and the connect/login/reconnect/autoConnect paths persist `version`, `sourceCodeUrl`, and `commit` onto each `ConnectedInstance` so the client can surface the source link per instance.
 
 `federatedRegistrationOpen` is the gate for **creating a federated `username@thisInstance` account** via the Connections flow. When the probe returns `federatedRegistrationOpen === false`, `ConnectedInstances.tsx` (the AddInstanceFlow's password step) renders an amber-tinted banner above the password input:
 

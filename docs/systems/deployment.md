@@ -36,6 +36,8 @@ Backspace ships as a single application container fronted by Caddy. Everything i
 
 The server is run through `tsx` (no separate transpile step); TypeScript is executed directly at runtime.
 
+**AGPL § 13 commit injection.** The runtime stage declares `ARG BACKSPACE_COMMIT` + `ENV BACKSPACE_COMMIT=$BACKSPACE_COMMIT` so the running build's git commit is baked into the image and read by `config.commit` (exposed via `GET /api/instance/info`). `docker-compose.yml` forwards it through `build.args: { BACKSPACE_COMMIT: ${BACKSPACE_COMMIT:-} }`, and `deploy.sh` captures `git rev-parse --short HEAD` locally (the remote has no `.git` after rsync) and exports it inline before the remote `docker compose up -d --build`. Empty/unset → `config.commit` is `null` (local dev, or git unavailable). The source URL itself is `config.sourceCodeUrl` (env `BACKSPACE_SOURCE_URL`, default upstream) — operators running a modified build MUST set it to their fork.
+
 ### Run: `docker compose up -d --build`
 
 `docker-compose.yml` defines:

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import { RateLimitError } from '../../api/client';
+import { api, RateLimitError } from '../../api/client';
+import type { InstanceInfoResponse } from '@backspace/shared';
+import { SourceCodeLink } from '../ui/SourceCodeLink';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
@@ -13,6 +15,17 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
+
+  // AGPL § 13: anonymous users must be able to reach the source of the running
+  // version. Fetched from the unauthenticated public info endpoint.
+  const [instanceInfo, setInstanceInfo] = useState<InstanceInfoResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.instance.info()
+      .then((info) => { if (!cancelled) setInstanceInfo(info); })
+      .catch(() => { /* Non-critical — link is simply omitted if unreachable. */ });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (retryAfter <= 0) return;
@@ -129,6 +142,12 @@ export function LoginPage() {
             </Link>
           </p>
         </form>
+
+        {instanceInfo && (
+          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+            <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
+          </div>
+        )}
       </div>
     </div>
   );

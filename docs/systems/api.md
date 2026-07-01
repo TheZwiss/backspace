@@ -227,9 +227,11 @@ Permissions checked: CONNECT, SPEAK, STREAM (space channels). DM calls: always f
 
 ## Instance (`routes/instance.ts`) — public
 ```
-GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen }
+GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, sourceCodeUrl, commit }
 ```
 `federatedRegistrationOpen` is a UX hint consumed by the Connections add-instance pre-flight (see `client-federation.md`). The 403 from `POST /auth/register` remains the security boundary.
+
+`sourceCodeUrl` (`string`) and `commit` (`string | null`) implement the **AGPL-3.0 § 13 network-use source offer**: every network user (and federated peer) can obtain the Corresponding Source of the exact version this instance is running. `sourceCodeUrl` comes from `config.sourceCodeUrl` (env `BACKSPACE_SOURCE_URL`, default `https://github.com/TheZwiss/backspace`) — operators who modify Backspace MUST set it to their fork's source. `commit` comes from `config.commit` (env `BACKSPACE_COMMIT`, injected at Docker build via `deploy.sh --build-arg`; `null` in local dev). The web client surfaces `sourceCodeUrl`/`version` via the `SourceCodeLink` component on settings sidebars and the pre-auth login/register pages; the desktop app exposes it via the tray + app menus ("Source code (AGPL)") and the native About panel.
 
 ## Settings (`routes/settings.ts`)
 ```

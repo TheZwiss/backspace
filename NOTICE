@@ -1,7 +1,9 @@
 Backspace
 Copyright (c) 2026 Jannis Braun
 
-This product is licensed under the Elastic License 2.0 (see the LICENSE file).
+Backspace is free and open source software under the GNU Affero General Public
+License v3.0 (AGPL-3.0-only); see the LICENSE file. A separate commercial license
+is also available; see LICENSE-COMMERCIAL.md.
 
 It bundles, depends on, or redistributes the third-party components listed
 below. Each remains under its own license.
@@ -30,10 +32,11 @@ authored for the Backspace project and are covered by the project license.
 Icons and brand assets
 ================================================================================
 
-The Backspace name, logos, marks, and app icons (assets/brand/,
+The Backspace name, logo, and app icons (assets/brand/,
 packages/web/public/icons/, packages/desktop build resources) are original
-works and trademarks of the project. The Elastic License 2.0 grants no right to
-use these trademarks; trademark use is governed separately by applicable law.
+works and trademarks of the project. Neither the AGPL nor the commercial license
+grants any right to use these trademarks; trademark use is governed separately by
+applicable law.
 
 In-application UI icons are hand-authored inline SVGs and are covered by the
 project license.

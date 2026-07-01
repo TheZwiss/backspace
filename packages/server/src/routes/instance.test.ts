@@ -82,7 +82,7 @@ describe('GET /api/instance/info', () => {
     expect(body.federatedRegistrationOpen).toBe(false);
   });
 
-  it('returns the full contract: name, version, registrationOpen, federatedRegistrationOpen', async () => {
+  it('returns the full contract: name, version, registrationOpen, federatedRegistrationOpen, sourceCodeUrl, commit', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/instance/info' });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -90,5 +90,9 @@ describe('GET /api/instance/info', () => {
     expect(typeof body.version).toBe('string');
     expect(typeof body.registrationOpen).toBe('boolean');
     expect(typeof body.federatedRegistrationOpen).toBe('boolean');
+    // AGPL § 13 source offer — always a URL; commit is a string or null.
+    expect(typeof body.sourceCodeUrl).toBe('string');
+    expect(body.sourceCodeUrl).toMatch(/^https?:\/\//);
+    expect(body.commit === null || typeof body.commit === 'string').toBe(true);
   });
 });

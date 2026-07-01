@@ -69,6 +69,45 @@ let pendingDeepLink: string | null = null;
 
 const knownInstanceOrigins = new Set<string>();
 
+// ─── AGPL-3.0 § 13 source offer ─────────────────────────────────────────────
+// Upstream fallback for the "Source code" menu items and the About panel.
+// Used when the connected instance can't be reached or advertises no source URL.
+const UPSTREAM_SOURCE_URL = 'https://github.com/TheZwiss/backspace';
+
+/**
+ * Resolve the Corresponding Source URL for the instance the desktop app is
+ * pointed at, honouring an operator's modified fork via GET /api/instance/info.
+ * Falls back to the upstream repo when no instance is loaded or the probe fails.
+ */
+async function resolveSourceUrl(): Promise<string> {
+  let base: string | null = process.env.BACKSPACE_URL ?? loadInstanceUrl();
+  if (!base && mainWindow && !mainWindow.isDestroyed()) {
+    const current = mainWindow.webContents.getURL();
+    if (current.startsWith('http://') || current.startsWith('https://')) base = current;
+  }
+  if (!base) return UPSTREAM_SOURCE_URL;
+
+  try {
+    const origin = new URL(base).origin;
+    const res = await fetch(`${origin}/api/instance/info`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return UPSTREAM_SOURCE_URL;
+    const info = (await res.json()) as { sourceCodeUrl?: unknown };
+    if (typeof info.sourceCodeUrl === 'string' && /^https?:\/\//i.test(info.sourceCodeUrl)) {
+      return info.sourceCodeUrl;
+    }
+  } catch {
+    // Unreachable / malformed — fall back to upstream.
+  }
+  return UPSTREAM_SOURCE_URL;
+}
+
+/** Open the resolved source URL externally; upstream fallback on any failure. */
+function openSourceCode(): void {
+  resolveSourceUrl()
+    .then((url) => shell.openExternal(url))
+    .catch(() => { void shell.openExternal(UPSTREAM_SOURCE_URL); });
+}
+
 // ─── Window State Persistence ───────────────────────────────────────────────
 
 interface WindowState {
@@ -930,6 +969,14 @@ if (!gotTheLock) {
     createWindow();
     createTray();
 
+    // AGPL-3.0 § 13: native About panel advertises the version + source repo.
+    app.setAboutPanelOptions({
+      applicationName: 'Backspace',
+      applicationVersion: app.getVersion(),
+      copyright: `AGPL-3.0-only · Source: ${UPSTREAM_SOURCE_URL}`,
+      website: UPSTREAM_SOURCE_URL,
+    });
+
     // Tray + macOS app-menu actions. Defined once so the subscriber and the
     // initial-fire share one implementation (no drift on future menu changes).
     const trayActions = {
@@ -941,6 +988,7 @@ if (!gotTheLock) {
       onChangeInstance: () => handleRecoveryAction('change-instance'),
       onCheckForUpdates: () => handleRecoveryAction('check-update'),
       onRestartToInstall: () => handleRecoveryAction('install-update'),
+      onOpenSource: () => openSourceCode(),
       onQuit: () => requestQuit(),
     };
 

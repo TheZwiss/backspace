@@ -1,8 +1,8 @@
 # Contributing to Backspace
 
-Thanks for considering a contribution! Backspace is an open, source-available
-project and contributions of all sizes are welcome — bug reports, fixes,
-features, documentation, and design.
+Thanks for considering a contribution! Backspace is free and open source software
+(GNU AGPL-3.0, with a commercial dual-license option), and contributions of all
+sizes are welcome — bug reports, fixes, features, documentation, and design.
 
 ## Before you start
 
@@ -20,13 +20,12 @@ features, documentation, and design.
 Before your first contribution can be merged, you must sign the project's
 [Contributor License Agreement](CLA.md).
 
-Backspace is a single-owner project. The CLA **assigns copyright in your
-contribution to the maintainer (Jannis Braun)**, who becomes its sole owner and
-may license the project under any terms, including commercially. In return, you
-receive a perpetual license to reuse the specific code you authored in your own
-other projects (see CLA §5). You also confirm that you have the right to
-contribute the code in the first place. If you are not comfortable assigning
-your contribution, please do not submit it.
+Backspace is a single-owner project. Under the CLA **you keep the copyright to
+your contribution** and grant the maintainer (Jannis Braun) an exclusive,
+sublicensable license to it — which is what lets the project be offered under both
+the AGPL and a commercial license. In return, you receive a perpetual license to
+reuse the specific code you authored in your own other projects (see CLA §5). You
+also confirm that you have the right to contribute the code in the first place.
 
 Signing is automatic and takes one comment:
 
@@ -67,7 +66,12 @@ it.
   `docs/systems/federation.md` and `docs/systems/client-federation.md`.
 - **Design system.** UI work follows the "Aether Drift" design system documented
   in `docs/systems/design-system.md`.
-- **No new dependencies without justification.** Prefer the existing stack.
+- **No new dependencies without justification.** Prefer the existing stack. New
+  dependencies must be **permissive** (MIT/ISC/Apache-2.0/BSD), or weak-copyleft
+  (LGPL/MPL) only when dynamically linked at arm's length. Never add **strong
+  copyleft** (GPL/AGPL) or non-permissive licenses (SSPL, BUSL/BSL,
+  non-commercial): strong copyleft cannot ship in the commercial edition, and the
+  others are incompatible with `AGPL-3.0-only`.
 - **Complete implementations only.** No placeholder code, no `TODO` stubs, no
   partial components. Handle the error and edge cases.
 
@@ -85,9 +89,10 @@ it.
 Use GitHub Issues. For bugs, include reproduction steps, expected vs. actual
 behavior, and your environment (deployment method, browser/desktop, and whether
 federation or voice is involved). For security issues, please do **not** open a
-public issue — see the README's security section.
+public issue — see [`SECURITY.md`](SECURITY.md).
 
 ## License
 
 By contributing, you agree that your contributions are licensed under the
-[Elastic License 2.0](LICENSE) and are subject to the [CLA](CLA.md).
+[GNU AGPL-3.0](LICENSE) and are subject to the [CLA](CLA.md) — an exclusive-license
+grant that also enables the project's commercial dual-license.

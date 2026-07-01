@@ -2,7 +2,7 @@
   "name": "@backspace/desktop",
   "version": "1.0.0",
   "private": true,
-  "license": "Elastic-2.0",
+  "license": "AGPL-3.0-only",
   "description": "Backspace",
   "author": {
     "name": "Jannis Braun",

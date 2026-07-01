@@ -10,7 +10,13 @@
 services:
   # ── Backspace application server ──────────────────────────
   backspace:
-    build: .
+    build:
+      context: .
+      args:
+        # AGPL-3.0 § 13: bake the running build's git commit into the image so
+        # /api/instance/info advertises the exact version. deploy.sh exports
+        # BACKSPACE_COMMIT before `docker compose build`; empty when unset.
+        BACKSPACE_COMMIT: ${BACKSPACE_COMMIT:-}
     container_name: backspace
     restart: unless-stopped
     volumes:

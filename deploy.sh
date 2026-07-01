@@ -16,6 +16,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# ── Build metadata ──────────────────────────────────────────
+# AGPL-3.0 § 13 source offer: capture the git commit locally and pass it to the
+# remote build. rsync excludes .git, so the remote cannot resolve it itself.
+# Empty when git is unavailable → server treats the commit as null.
+BUILD_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo '')"
+
 # ── Targets ─────────────────────────────────────────────────
 
 PI_USER="youruser"
@@ -84,7 +90,7 @@ deploy() {
   # Rebuild
   echo "  [3/4] Building and restarting..."
   # Clean up stale renamed containers left by failed recreates (e.g. "d420a6c00439_backspace")
-  ssh "$PI_USER@$host" "cd $path && docker rm -f \$(docker ps -aq --filter 'name=_backspace' 2>/dev/null) 2>/dev/null; docker compose up -d --build"
+  ssh "$PI_USER@$host" "cd $path && docker rm -f \$(docker ps -aq --filter 'name=_backspace' 2>/dev/null) 2>/dev/null; BACKSPACE_COMMIT='$BUILD_COMMIT' docker compose up -d --build"
 
   # Prune old images; keep build cache capped at 2GB for fast rebuilds
   echo "  [4/4] Pruning stale Docker data..."

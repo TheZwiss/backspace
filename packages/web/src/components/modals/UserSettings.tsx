@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
+import { SourceCodeLink } from '../ui/SourceCodeLink';
+import { api } from '../../api/client';
+import type { InstanceInfoResponse } from '@backspace/shared';
 import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { AccountPanel } from './settingsPanels/AccountPanel';
@@ -59,8 +62,20 @@ export function UserSettingsModal() {
 
   const [tab, setTab] = useState<SettingsTab>('account');
   const [mobileView, setMobileView] = useState<'tabs' | 'content'>('tabs');
+  // AGPL § 13: home-instance source offer. Fetched from the public info endpoint
+  // so the source link reflects the version this instance is actually running.
+  const [instanceInfo, setInstanceInfo] = useState<InstanceInfoResponse | null>(null);
 
   const isOpen = activeModal === 'userSettings';
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    api.instance.info()
+      .then((info) => { if (!cancelled) setInstanceInfo(info); })
+      .catch(() => { /* Non-critical — link falls back to hidden if unreachable. */ });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   // Deep-linking: read modalData.tab when opening
   useEffect(() => {
@@ -148,6 +163,12 @@ export function UserSettingsModal() {
             >
               Log Out
             </button>
+
+            {instanceInfo && (
+              <div className="px-3 pt-2">
+                <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -196,6 +217,12 @@ export function UserSettingsModal() {
               >
                 Log Out
               </button>
+
+              {instanceInfo && (
+                <div className="px-3 pt-2">
+                  <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
+                </div>
+              )}
             </div>
           </div>
         )}

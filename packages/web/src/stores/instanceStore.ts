@@ -536,9 +536,30 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
     try {
       const user = await inst.api.users.me();
 
+      // Refresh the instance label (non-critical — a failure here must not
+      // block a successful token reconnect).
+      let info: (InstanceInfoResponse) | null = null;
+      try {
+        info = await inst.api.instance.info();
+      } catch {
+        // Keep whatever label the instance already had.
+      }
+
       set((state) => ({
         instances: state.instances.map(i =>
-          i.origin === origin ? { ...i, status: 'connected' as const, user, error: undefined } : i
+          i.origin === origin
+            ? {
+                ...i,
+                status: 'connected' as const,
+                user,
+                error: undefined,
+                ...(info
+                  ? {
+                      label: info.name,
+                    }
+                  : {}),
+              }
+            : i
         ),
       }));
 
@@ -996,10 +1017,11 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
             // Verify the token is still valid
             const user = await client.users.me();
 
-            // Fetch instance info for fresh label
+            // Fetch instance info for a fresh label
             let label = cachedEntry.label || new URL(origin).host;
+            let info: InstanceInfoResponse | null = null;
             try {
-              const info = await client.instance.info();
+              info = await client.instance.info();
               label = info.name;
             } catch {
               // Non-critical — keep cached label

@@ -9,6 +9,7 @@ import type { AvatarColor, CheckInviteResponse, InstanceInfoResponse } from '@ba
 import { api, RateLimitError } from '../../api/client';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
+import { SourceCodeLink } from '../ui/SourceCodeLink';
 
 // Single-source regex for extracting a bare invite token from a pasted full URL.
 // Token format: 22 chars base64url ([A-Za-z0-9_-]).
@@ -725,6 +726,13 @@ export function RegisterPage() {
                 Skip for now
               </button>
             </div>
+          </div>
+        )}
+
+        {/* AGPL § 13: source offer for anonymous visitors, shown on both steps. */}
+        {instanceInfo && (
+          <div className="mt-6 pt-4 border-t border-white/[0.04] flex justify-center">
+            <SourceCodeLink sourceCodeUrl={instanceInfo.sourceCodeUrl} version={instanceInfo.version} commit={instanceInfo.commit} />
           </div>
         )}
         </div>

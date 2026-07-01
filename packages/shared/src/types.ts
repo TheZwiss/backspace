@@ -798,6 +798,12 @@ export interface InstanceInfoResponse {
   version: string;
   registrationOpen: boolean;
   federatedRegistrationOpen: boolean;
+  // AGPL-3.0 § 13 network-use source offer: URL to the Corresponding Source of
+  // the version this instance is running (operator-configurable via
+  // BACKSPACE_SOURCE_URL so forks point at their own source).
+  sourceCodeUrl: string;
+  // Short git SHA/tag of the running build; null in dev builds with no commit injected.
+  commit: string | null;
 }
 
 export interface VerifyPasswordRequest {

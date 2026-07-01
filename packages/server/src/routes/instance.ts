@@ -23,6 +23,10 @@ export async function instanceRoutes(app: FastifyInstance): Promise<void> {
       version: BACKSPACE_VERSION,
       registrationOpen,
       federatedRegistrationOpen: settings?.federatedRegistrationOpen === 1,
+      // AGPL-3.0 § 13: advertise the source of the running version to every
+      // network user (and federated peer) — public/unauthenticated by design.
+      sourceCodeUrl: config.sourceCodeUrl,
+      commit: config.commit,
     };
 
     return reply.code(200).send(response);

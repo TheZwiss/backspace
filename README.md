@@ -6,7 +6,7 @@
 
 **A self-hosted communication platform — text, voice, video, and federation — that you own.**
 
-[![License: Elastic License 2.0](https://img.shields.io/badge/license-Elastic%20License%202.0-2563eb.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3da639.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org/)
 [![Version](https://img.shields.io/badge/version-1.0.0-16a34a.svg)](#project-status)
@@ -21,9 +21,9 @@ sharing, and message search — plus **server-to-server federation**, so
 independent Backspace instances can talk to each other while each stays under
 its own control.
 
-It is **source-available**: free to self-host, modify, and use — including
-inside a business — but not to resell as a hosted service. See
-[License](#license) for the exact terms.
+It is **free and open source** under the **GNU AGPL-3.0**, and dual-licensed: a
+commercial license is available if the AGPL doesn't fit your use. See
+[License](#license) for the details.
 
 > **Project status** <a name="project-status"></a>
 > Backspace 1.0 — stable, self-hostable, and actively developed.
@@ -386,42 +386,59 @@ understand or extend a subsystem.
 Contributions are welcome. Please read [`CONTRIBUTING.md`](CONTRIBUTING.md)
 first. Backspace is a single-owner project, so all contributors sign a
 [Contributor License Agreement](CLA.md) — a one-time comment on your pull
-request, handled automatically by a bot. The CLA **assigns copyright in your
-contribution to the maintainer** (Jannis Braun), who becomes its sole owner; in
-return you receive a license to reuse the specific code you wrote in your own
-other projects. If you're not comfortable assigning your contribution, please
-don't submit it.
+request, handled automatically by a bot. **You keep the copyright to your
+contribution** and grant the maintainer (Jannis Braun) an exclusive license to
+it — which is what lets Backspace be offered under both the AGPL and a commercial
+license. You also receive a perpetual license to reuse the specific code you
+wrote in your own other projects.
 
 ## Security
 
 If you discover a security vulnerability, please **do not** open a public issue.
-Instead, report it privately to the maintainer via a GitHub security advisory on
-this repository, or by direct contact. We'll work with you on a fix and
-coordinated disclosure.
+Report it privately via a GitHub security advisory on this repository — see
+[`SECURITY.md`](SECURITY.md). We'll work with you on a fix and coordinated
+disclosure.
 
 ## License
 
-Backspace is licensed under the **[Elastic License 2.0](LICENSE)**.
+Backspace is **free and open source software**, licensed under the
+**[GNU Affero General Public License v3.0](LICENSE)** (`AGPL-3.0-only`).
 
 In plain terms:
 
-- ✅ You may self-host, run, and use it — including commercially and inside a business.
-- ✅ You may read, modify, and redistribute the source.
-- ❌ You may **not** provide Backspace to third parties as a hosted or managed
-  service (i.e. you can't sell Backspace-as-a-service) without a separate
-  commercial license from the maintainer.
-- ❌ You may not remove or obscure the license and copyright notices.
+- ✅ Self-host, run, study, and modify it — including commercially and inside a business.
+- ✅ Redistribute it and your changes under the same AGPL-3.0 license.
+- ⚠️ If you run a **modified** version as a network service, you must offer your
+  users its complete corresponding source (AGPL § 13). Backspace makes this easy —
+  set `BACKSPACE_SOURCE_URL` to your fork so the in-app "Source code" link points
+  at what you actually run.
+- ⚠️ Preserve the copyright and license notices.
 
-This makes Backspace **source-available**, not OSI "open source" — the only
-practical difference is the hosted-service restriction above. If you want to
-offer Backspace as a commercial service, contact the maintainer
-([@TheZwiss](https://github.com/TheZwiss)) about a commercial license.
+**Commercial license.** If the AGPL doesn't fit — embedding Backspace in a
+closed-source product, offering it as a managed service without publishing your
+modifications, or an organization that can't use AGPL software — a separate
+commercial license is available on request. See
+[`LICENSE-COMMERCIAL.md`](LICENSE-COMMERCIAL.md).
 
-Bundled third-party components (the DM Sans font, etc.) retain their own
-licenses; see [`NOTICE`](NOTICE).
+> **Our open-source commitment.** Every released version of Backspace is, and
+> will remain, available under the AGPL-3.0. The Contributor License Agreement
+> exists to enable a commercial license and optional enterprise add-ons — **not**
+> to take the open-source edition private. If this project is ever abandoned, or
+> the open-source edition is relicensed under non-free terms, the community stays
+> free to fork the last AGPL release.
 
-"Backspace" and the Backspace logo are trademarks of Jannis Braun and are not
-covered by the code license.
+Copyright © 2026 Jannis Braun. Contributions are made under the
+[Contributor License Agreement](CLA.md): you keep your copyright and grant the
+maintainer an exclusive license, which is what lets Backspace be offered under
+both the AGPL and a commercial license.
+
+*Relicensing note: as of 2026-07-01, Backspace moved from the Elastic License 2.0
+to AGPL-3.0-only, authorized by the sole copyright holder; releases tagged before
+that date remain under the Elastic License 2.0.*
+
+"Backspace", the Backspace logo, and app icons are trademarks of Jannis Braun and
+are not licensed under either the AGPL or the commercial license. Bundled
+third-party components retain their own licenses; see [`NOTICE`](NOTICE).
 
 ## Acknowledgements
 

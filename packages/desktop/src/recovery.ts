@@ -96,6 +96,8 @@ interface MenuActions {
   onChangeInstance: () => void;
   onCheckForUpdates: () => void;
   onRestartToInstall: () => void;
+  // AGPL-3.0 § 13: open the Corresponding Source of the running instance.
+  onOpenSource: () => void;
   onQuit: () => void;
 }
 
@@ -138,6 +140,7 @@ export function buildTrayMenuTemplate(
   items.push(
     { type: 'separator' },
     { label: 'Change Instance', click: actions?.onChangeInstance },
+    { label: 'Source code (AGPL)', click: actions?.onOpenSource },
     { type: 'separator' },
     { label: 'Quit', click: actions?.onQuit },
   );
@@ -152,6 +155,7 @@ export function buildAppMenuTemplate(
 ): MenuItemConstructorOptions[] {
   const appSubmenu: MenuItemConstructorOptions[] = [
     { role: 'about' },
+    { label: 'Source code (AGPL)', click: () => actions?.onOpenSource?.() },
     { type: 'separator' },
     checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];

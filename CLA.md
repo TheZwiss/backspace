@@ -5,9 +5,10 @@ and maintained by **Jannis Braun** ("the Maintainer", "I", "me", or "my").
 
 This Contributor License Agreement ("Agreement") governs the intellectual
 property rights in Contributions made by any person or entity ("You") to the
-Project. Backspace is a single-owner project: to keep ownership of the codebase
-unified in one hand, **You assign your Contributions to the Maintainer**, and in
-return the Maintainer grants You a broad license to keep using your own work.
+Project. Backspace is a single-owner project: to keep the licensing of the
+codebase unified in one hand, **You keep the copyright to your Contributions and
+grant the Maintainer a broad exclusive license** to them, and in return the
+Maintainer grants You a license to keep using your own work.
 
 By submitting a Contribution to the Project (for example, by opening a pull
 request) and by signing this Agreement through the Project's CLA bot, You accept
@@ -27,40 +28,37 @@ any communication You conspicuously mark in writing as "Not a Contribution".
 including by version control systems, issue trackers, mailing lists, or
 electronic messages, but excluding communication marked "Not a Contribution".
 
-## 2. Assignment of Copyright
+## 2. Grant of Exclusive License
 
-You hereby irrevocably assign, transfer, and convey to the Maintainer your
-entire right, title, and interest worldwide in and to your Contributions,
-including all copyrights and all rights under copyright (and all renewals,
-revivals, and extensions thereof), free and clear. The Maintainer becomes the
-sole owner of the Contributions and may use, reproduce, modify, distribute,
-sublicense, relicense (under any terms, including open-source, source-available,
-proprietary, or commercial licenses), sell, and otherwise exploit them without
-restriction and without any obligation to You.
+You retain ownership of and all copyright in your Contributions. You hereby grant
+the Maintainer a perpetual, worldwide, **exclusive**, royalty-free, irrevocable,
+fully sublicensable, and transferable license to use, reproduce, modify, prepare
+derivative works of, publicly display, publicly perform, distribute, relicense
+(under any terms, including open-source and commercial licenses), sell, and
+otherwise exploit your Contributions, by all means and in all media now known or
+later developed — so that the Maintainer may offer the Project under both the
+GNU AGPL-3.0 and one or more commercial licenses.
 
-This assignment covers all Contributions You have already submitted and all
+This grant covers all Contributions You have already submitted and all
 Contributions You submit in the future, effective at the moment each is created.
 
-## 3. Fallback License (where assignment is not effective)
+## 3. Fallback (where an exclusive license is limited)
 
-To the extent that the assignment in Section 2 is for any reason ineffective or
-unenforceable under applicable law, You instead grant the Maintainer a
-perpetual, worldwide, exclusive, irrevocable, royalty-free, fully sublicensable
-and transferable license to use, reproduce, modify, prepare derivative works of,
-publicly display, publicly perform, distribute, relicense, sell, and otherwise
-exploit your Contributions, by all means and in all media now known or later
-developed — so that the Maintainer obtains, as nearly as possible, the same
-rights as full ownership.
+To the extent that the exclusive license in Section 2 is, in any jurisdiction,
+narrower than stated or otherwise limited by law, You grant the Maintainer the
+broadest license permissible there, and — only to the extent necessary to give
+the Maintainer equivalent rights — assign such rights to the Maintainer, so that
+the Maintainer obtains, as nearly as possible, the same rights as the exclusive
+license in Section 2.
 
-## 4. Patent Assignment and License
+## 4. Patent License
 
-To the maximum extent permitted by law, You assign to the Maintainer your rights
-in any patents and patent applications that are necessarily infringed by your
-Contribution alone or by combination of your Contribution with the Project. To
-the extent such assignment is not effective, You grant the Maintainer a
-perpetual, worldwide, non-exclusive, royalty-free, irrevocable, sublicensable
-patent license to make, have made, use, offer to sell, sell, import, and
-otherwise transfer your Contributions.
+You grant the Maintainer a perpetual, worldwide, non-exclusive, royalty-free,
+irrevocable, sublicensable patent license — under any patent claims You can
+license that are necessarily infringed by your Contribution alone or by
+combination of your Contribution with the Project — to make, have made, use,
+offer to sell, sell, import, and otherwise transfer your Contributions and the
+Project.
 
 ## 5. License Back to You
 
@@ -69,7 +67,7 @@ irrevocable license to use, reproduce, modify, and distribute **the specific
 Contributions You authored** for any purpose, including in your own other
 projects. This license-back applies only to the material You personally created
 and does not grant You any rights in the Project as a whole or in the
-Contributions of others. It does not limit the Maintainer's ownership under
+Contributions of others. It does not limit the Maintainer's rights under
 Sections 2–4.
 
 ## 6. Moral Rights
@@ -86,8 +84,8 @@ assigned and granted above.
 You represent that:
 
 1. Each of Your Contributions is Your original creation, and You have the full
-   right and authority to assign it and to grant the rights in this Agreement.
-2. You are legally entitled to make this assignment. If Your employer has rights
+   right and authority to grant the rights and licenses in this Agreement.
+2. You are legally entitled to make these grants. If Your employer has rights
    to intellectual property You create, You represent that You have received
    permission to make the Contributions on behalf of that employer, or that Your
    employer has waived such rights for Your Contributions.

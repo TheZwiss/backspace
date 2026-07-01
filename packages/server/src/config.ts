@@ -48,6 +48,24 @@ if (publicOrigin !== undefined) {
   }
 }
 
+// AGPL-3.0 § 13 "network-use source offer": users interacting over the network
+// must be able to obtain the Corresponding Source of the *running* version.
+// Operators who modify Backspace and self-host MUST point this at their own
+// fork's source so the offer stays accurate. Defaults to the upstream repo for
+// unmodified deployments.
+const UPSTREAM_SOURCE_URL = 'https://github.com/TheZwiss/backspace';
+const sourceCodeUrl = envOptional('BACKSPACE_SOURCE_URL') ?? UPSTREAM_SOURCE_URL;
+if (!/^https?:\/\//i.test(sourceCodeUrl)) {
+  throw new Error(
+    `BACKSPACE_SOURCE_URL must start with http:// or https:// — got: ${sourceCodeUrl}`
+  );
+}
+
+// Short git SHA/tag of the running build, injected at Docker build time via the
+// BACKSPACE_COMMIT build arg (see Dockerfile / deploy.sh). Null in local dev
+// (no build step) — the § 13 offer still works via version + sourceCodeUrl.
+const commit = envOptional('BACKSPACE_COMMIT') ?? null;
+
 export const config = {
   port: envInt('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
@@ -55,6 +73,8 @@ export const config = {
   jwtExpiresIn: env('JWT_EXPIRES_IN', '30d'),
   domain: envOptional('DOMAIN'),
   publicOrigin,
+  sourceCodeUrl,
+  commit,
 
   livekit: {
     url: envOptional('LIVEKIT_URL'),
