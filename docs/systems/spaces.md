@@ -9,11 +9,13 @@ Source files:
 - `packages/web/src/stores/exploreStore.ts` — Explore page state, multi-instance discovery aggregation
 - `packages/web/src/components/modals/CreateSpace.tsx` — Space creation modal (icon crop, color, visibility)
 - `packages/web/src/components/modals/JoinSpace.tsx` — Join-by-code modal with federation connect phases
+- `packages/web/src/components/modals/ExploreSpacePreviewCard.tsx` — Compact discoverable-space card rendered inside the Join Space modal
 - `packages/web/src/components/modals/InviteModal.tsx` — Invite link generation and copy
 - `packages/web/src/components/modals/TransferOwnershipModal.tsx` — Ownership transfer member picker
 - `packages/web/src/components/modals/SpaceSettings.tsx` — Space settings: overview, discovery, members, roles, bans
 - `packages/web/src/components/JoinPage.tsx` — Public invite landing page with federation redirect
 - `packages/web/src/hooks/useDragManager.ts` — Channel/category/voice-user drag-and-drop
+- `packages/web/src/hooks/useSpaceJoin.ts` — Shared join/request state machine over exploreStore (used by ExplorePage SpaceCard and the JoinSpace modal preview card)
 - `packages/web/src/utils/inviteParser.ts` — Invite code/URL/qualified-code parser
 
 Cross-references: [database.md](database.md) (table schemas), [permissions.md](permissions.md) (resolution algorithm, override tiers), [websocket.md](websocket.md) (event types), [federation.md](federation.md) (peer relay), [voice.md](voice.md) (voice channel join)
@@ -196,12 +198,32 @@ Public route at `/join/:inviteCode`. Handles five phases:
 
 ### Join Space Modal (`JoinSpaceModal`)
 
-Modal with three phases matching JoinPage but in-app:
-- `input` — text field for invite code or URL
+Opened from the space sidebar "Join a Space" action. The `input` phase is
+**discovery-first**: on open it triggers `exploreStore.fetchSpaces()` +
+`fetchMyRequests()` (same multi-instance discovery data as the Explore page)
+and renders up to 6 unjoined public/request spaces as compact
+`ExploreSpacePreviewCard`s. A "Browse all in Explore" action routes to the full
+Explore page — `navigate('/explore')` on desktop, `pushMobileScreen('explore')`
+on mobile (`uiStore.isMobile`). Joining a public preview card closes the modal
+and navigates into the space.
+
+States: loading (skeletons), empty / all-joined (notice), discovery disabled by
+admin (`discoveryEnabled=false` → notice, invite path becomes primary), fetch
+error (quiet degrade — invite path unaffected).
+
+Below a divider, the secondary **"Have an invite code?"** section keeps the
+invite-code/link flow: `parseInviteInput` → `joinByCode(code, origin?)`, with the
+unchanged federation phases:
 - `connect` — password prompt for federation
 - `fallback` — different-password login for remote instance
 
-Uses `parseInviteInput` to parse, then `joinByCode(code, origin?)` from spaceStore.
+The join/request behavior of both the compact preview card and the Explore
+page's `SpaceCard` is provided by the shared `useSpaceJoin` hook, so the two
+surfaces cannot drift.
+
+The direct sidebar "Explore Spaces" button remains the 1-click path to the full
+Explore page; the modal's discovery preview is an additional, in-context entry
+point, not a replacement.
 
 ---
 
