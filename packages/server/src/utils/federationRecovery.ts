@@ -1,6 +1,6 @@
 import { getDb } from '../db/index.js';
 import * as schema from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { onPeerActivated } from './federationPeerActivation.js';
 import { markPeerReset } from './federationReset.js';
 
@@ -102,4 +102,63 @@ export async function recoverOrDetectReset(
   }
   await markPeerRecovered(peer.id);
   return 'recovered';
+}
+
+/**
+ * Detection-only epoch probe for peers already parked in `needs_attention`
+ * (design §4.1). Runs on the 15-minute health-check tick.
+ *
+ * The gap this closes: a reset peer can reach `needs_attention` via the
+ * AUTH-FAILURE path — its HTTP is up and returning 401/403 because the new
+ * incarnation has no peer row for us, so `consecutive_auth_failures` crosses
+ * `AUTH_FAILURE_THRESHOLD` — WITHOUT ever transitioning through `unreachable`.
+ * The `unreachable`-only recovery probe (`processRecoveryTick`) therefore never
+ * sees such a peer, so its epoch change is never observed and no
+ * `federation_reset_events` journal is ever created. A later manual admin
+ * Re-peer would then run `healResetIncarnation` with no journal row → no heal →
+ * the stale-friendship / split-DM split-brain persists for this sub-case. This
+ * pass probes those peers so the journal is created at detection time.
+ *
+ * **Detection only — never a recover-to-active.** Unlike `recoverOrDetectReset`,
+ * this NEVER flips a peer to `active`: a `needs_attention` peer's HMAC secret is
+ * desynced, so a matching or unknown epoch means "still broken, still needs an
+ * admin," not "recovered." On an observed epoch mismatch it calls
+ * `markPeerReset` (snapshot + journal + admin notify) and nothing else; the
+ * trusted baseline (`peer_instance_id`) and `hmac_secret` are left untouched.
+ * On a match / unknown / unreachable result it does nothing at all.
+ *
+ * Candidate set (deliberately small — one `/instance/info` GET per peer per
+ * tick): `status='needs_attention'` AND `peer_instance_id IS NOT NULL` (a null
+ * baseline has nothing to compare against) AND the reason is not already
+ * `peer_reset_detected` (those peers already carry a journal — re-probing would
+ * be wasted work). Peers whose reason is `auth_failures` or NULL qualify.
+ */
+export async function detectResetOnNeedsAttentionPeers(signal?: AbortSignal): Promise<void> {
+  const db = getDb();
+  const peers = db
+    .select({
+      id: schema.federationPeers.id,
+      origin: schema.federationPeers.origin,
+      peerInstanceId: schema.federationPeers.peerInstanceId,
+    })
+    .from(schema.federationPeers)
+    .where(and(
+      eq(schema.federationPeers.status, 'needs_attention'),
+      isNotNull(schema.federationPeers.peerInstanceId),
+      or(
+        isNull(schema.federationPeers.needsAttentionReason),
+        ne(schema.federationPeers.needsAttentionReason, 'peer_reset_detected'),
+      ),
+    ))
+    .all();
+
+  for (const peer of peers) {
+    const result = await probePeerReachable(peer.origin, signal);
+    // Detection fires ONLY on a reachable peer advertising a non-null epoch that
+    // differs from the trusted baseline. Everything else (unreachable, unknown
+    // epoch, or a matching epoch) is a no-op — no recover-to-active from here.
+    if (result.reachable && result.instanceId && peer.peerInstanceId && result.instanceId !== peer.peerInstanceId) {
+      markPeerReset(peer.id, peer.origin, peer.peerInstanceId, result.instanceId);
+    }
+  }
 }

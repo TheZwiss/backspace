@@ -150,4 +150,88 @@ describe('federationRecovery primitives', () => {
     // A reset peer must NOT be recovered to active.
     expect(onPeerActivated).not.toHaveBeenCalled();
   });
+
+  // ── detectResetOnNeedsAttentionPeers (design §4.1) ─────────────────────────
+  // Closes the auth-failure sub-case: a reset peer whose HTTP is up (returning
+  // 401/403 because the new incarnation has no peer row for us) crosses
+  // AUTH_FAILURE_THRESHOLD and lands in `needs_attention` WITHOUT ever passing
+  // through `unreachable`, so the unreachable-only recovery probe never observes
+  // its epoch change. This pass probes those peers too — detection ONLY, never a
+  // recover-to-active.
+  function seedNeedsAttention(id: string, reason: string | null, peerInstanceId: string | null): void {
+    testDb.insert(schema.federationPeers).values({
+      id, origin: 'https://peer.example', hmacSecret: 'secret',
+      status: 'needs_attention', needsAttentionReason: reason,
+      peerInstanceId, consecutiveFailures: 0,
+      lastSyncedAt: Date.now(), createdAt: Date.now(),
+    }).run();
+  }
+
+  it('detectResetOnNeedsAttentionPeers flags an auth-failure peer whose epoch changed (detection only)', async () => {
+    seedNeedsAttention('peer-na', 'auth_failures', 'E0');
+    // A pure replicated stub belonging to the dead incarnation (bare-domain home).
+    testDb.insert(schema.users).values({
+      id: 'stub-1', username: 'carol', displayName: 'carol',
+      passwordHash: '!federation-replicated', homeInstance: 'peer.example',
+      createdAt: Date.now(),
+    }).run();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"instanceId":"E1"}', { status: 200 }));
+
+    const { detectResetOnNeedsAttentionPeers } = await import('./federationRecovery.js');
+    await detectResetOnNeedsAttentionPeers();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-na')).get()!;
+    expect(row.status).toBe('needs_attention'); // NOT flipped to active
+    expect(row.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row.observedPeerInstanceId).toBe('E1'); // observed epoch recorded
+    expect(row.peerInstanceId).toBe('E0'); // trusted baseline untouched
+    expect(row.hmacSecret).toBe('secret'); // secret untouched
+
+    const journal = testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, 'https://peer.example')).get()!;
+    expect(journal.deadEpoch).toBe('E0');
+    expect(journal.resolvedAt).toBeNull();
+
+    const stub = testDb.select().from(schema.users)
+      .where(eq(schema.users.id, 'stub-1')).get()!;
+    expect(stub.federationHealPending).toBe(1); // dead incarnation snapshotted
+
+    expect(onPeerActivated).not.toHaveBeenCalled(); // detection only
+  });
+
+  it('detectResetOnNeedsAttentionPeers is a no-op when the probed epoch matches the baseline', async () => {
+    seedNeedsAttention('peer-same', 'auth_failures', 'E0');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"instanceId":"E0"}', { status: 200 }));
+
+    const { detectResetOnNeedsAttentionPeers } = await import('./federationRecovery.js');
+    await detectResetOnNeedsAttentionPeers();
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-same')).get()!;
+    expect(row.status).toBe('needs_attention');
+    expect(row.needsAttentionReason).toBe('auth_failures'); // unchanged
+    expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
+    expect(onPeerActivated).not.toHaveBeenCalled();
+  });
+
+  it('detectResetOnNeedsAttentionPeers skips peers already flagged peer_reset_detected (no probe)', async () => {
+    seedNeedsAttention('peer-done', 'peer_reset_detected', 'E0');
+    const spy = vi.spyOn(globalThis, 'fetch');
+
+    const { detectResetOnNeedsAttentionPeers } = await import('./federationRecovery.js');
+    await detectResetOnNeedsAttentionPeers();
+
+    expect(spy).not.toHaveBeenCalled(); // already journaled — not re-probed
+  });
+
+  it('detectResetOnNeedsAttentionPeers skips peers with a null baseline (nothing to compare)', async () => {
+    seedNeedsAttention('peer-nobase', 'auth_failures', null);
+    const spy = vi.spyOn(globalThis, 'fetch');
+
+    const { detectResetOnNeedsAttentionPeers } = await import('./federationRecovery.js');
+    await detectResetOnNeedsAttentionPeers();
+
+    expect(spy).not.toHaveBeenCalled(); // no trusted baseline → cannot detect a change
+  });
 });

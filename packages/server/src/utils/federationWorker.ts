@@ -12,7 +12,7 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { probePeerReachable, recoverOrDetectReset } from './federationRecovery.js';
+import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
@@ -1180,6 +1180,17 @@ async function processHealthCheckTick(): Promise<void> {
   // relay/user activity. Best-effort — a failed fetch is a benign no-op retried
   // next tick, so it never disturbs the rest of the health-check work.
   await refreshPeerEpochs().catch(() => {});
+
+  // ── Reset detection for needs_attention peers (design §4.1) ─────────────────
+  // A reset peer can land in `needs_attention` via the auth-failure path (HTTP
+  // up, 401/403 from a new incarnation) WITHOUT ever passing through
+  // `unreachable`, so the unreachable-only recovery probe never observes its
+  // epoch change. Probe those peers here so a reset journal is created at
+  // detection time (otherwise a later manual Re-peer heals nothing). Detection
+  // ONLY — never flips a needs_attention peer to active. Best-effort: a failure
+  // is a benign no-op retried next tick and must not disturb the rest of the tick.
+  // No shared abort signal — probePeerReachable carries its own 10s timeout.
+  await detectResetOnNeedsAttentionPeers().catch(() => {});
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────
