@@ -4,9 +4,9 @@ import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import { api } from '../../../api/client';
-import { onFederationPeersChanged } from '../../../hooks/useWebSocket';
+import { onFederationPeersChanged, onFederationPeerResetDetected } from '../../../hooks/useWebSocket';
 import type { InstanceAdminSettings } from '@backspace/shared';
-import type { FederationPeer, ApprovalRequest } from '../../../api/client';
+import type { FederationPeer, ApprovalRequest, FederationResetEvent, FederationOrphanedAccount } from '../../../api/client';
 
 // ─── Global Settings ─────────────────────────────────────────────────────────
 
@@ -813,6 +813,278 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
   );
 }
 
+// ─── Reset Cleanup ──────────────────────────────────────────────────────────
+//
+// Highest-priority admin attention surface for the instance-epoch self-healing
+// flow (§6.4). Two stacked surfaces:
+//   1. A persistent accent-rose banner per peer detected as reset
+//      (status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'),
+//      with a one-click Re-peer (resetPeer → initiatePeering) that triggers the
+//      server-side heal on activation.
+//   2. Per-origin lists of the dead incarnation's orphaned real accounts with
+//      Keep (no-op resting/frozen state) and Remove (full purge via the existing
+//      admin delete) actions.
+
+function peerName(peer: FederationPeer): string {
+  if (peer.instanceName) return peer.instanceName;
+  try {
+    return new URL(peer.origin).host;
+  } catch {
+    return peer.origin;
+  }
+}
+
+function originHost(origin: string): string {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return origin;
+  }
+}
+
+type ResetConfirmAction =
+  | { kind: 'repeer'; peer: FederationPeer }
+  | { kind: 'remove'; account: FederationOrphanedAccount; origin: string };
+
+function ResetCleanup() {
+  const addToast = useUIStore((s) => s.addToast);
+  const [resetPeers, setResetPeers] = useState<FederationPeer[]>([]);
+  const [events, setEvents] = useState<FederationResetEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ResetConfirmAction | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [peersResult, eventsResult] = await Promise.all([
+        api.federation.peers(),
+        api.federation.resetEvents(),
+      ]);
+      setResetPeers(
+        peersResult.peers.filter(
+          (p) => p.status === 'needs_attention' && p.needsAttentionReason === 'peer_reset_detected',
+        ),
+      );
+      setEvents(eventsResult.events);
+    } catch {
+      // Silently fail — empty surface shown; the peer list section surfaces load errors.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  // Real-time: re-fetch (debounced) on any federation change.
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const unsub = onFederationPeersChanged(() => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        fetchAll();
+      }, 500);
+    });
+    return () => { unsub(); clearTimeout(timeout); };
+  }, [fetchAll]);
+
+  // Real-time: a fresh reset detection nudges the admin (the banner is the real
+  // surface) and triggers an immediate re-fetch.
+  useEffect(() => {
+    const unsub = onFederationPeerResetDetected((origin) => {
+      addToast(`${originHost(origin)} was reset — federation needs re-establishing`, 'warning');
+      fetchAll();
+    });
+    return () => { unsub(); };
+  }, [addToast, fetchAll]);
+
+  const handleConfirm = async () => {
+    if (!confirmAction) return;
+    setActionLoading(true);
+    try {
+      if (confirmAction.kind === 'repeer') {
+        const { peer } = confirmAction;
+        // Order matters: reset the stale local record BEFORE the fresh handshake,
+        // so activation heals stale friendships/DMs against the new incarnation.
+        await api.federation.resetPeer(peer.id);
+        await api.federation.initiatePeering({ remoteOrigin: peer.origin });
+        addToast(`Re-peering initiated with ${peerName(peer)}`, 'success', 3000);
+        await fetchAll();
+      } else {
+        const { account } = confirmAction;
+        await api.admin.deleteUser(account.id);
+        addToast(`Removed ${account.username} and all their content`, 'success', 3000);
+        setKeptIds((prev) => {
+          const next = new Set(prev);
+          next.delete(account.id);
+          return next;
+        });
+        await fetchAll();
+      }
+    } catch (err) {
+      if (confirmAction.kind === 'remove') {
+        const status = (err as { status?: number } | null | undefined)?.status;
+        const ownsSpaces =
+          status === 400 ||
+          (err != null && typeof err === 'object' && 'ownedSpaces' in err) ||
+          confirmAction.account.ownedSpaces.length > 0;
+        if (ownsSpaces) {
+          addToast(
+            `${confirmAction.account.username} owns spaces — transfer ownership first (Space Settings → Ownership).`,
+            'warning',
+          );
+        } else {
+          addToast(err instanceof Error ? err.message : 'Failed to remove account', 'warning');
+        }
+      } else {
+        addToast(err instanceof Error ? err.message : 'Re-peering failed', 'warning');
+      }
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const eventsWithOrphans = events.filter((e) => e.orphanedAccounts.length > 0);
+
+  // Render nothing when there is no reset-detected peer and no orphaned account —
+  // exactly as PendingApprovals returns null when empty (loading also renders null).
+  if (resetPeers.length === 0 && eventsWithOrphans.length === 0) return null;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Reset Cleanup</div>
+        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-rose/15 text-accent-rose">
+          {resetPeers.length + eventsWithOrphans.reduce((n, e) => n + e.orphanedAccounts.length, 0)}
+        </span>
+      </div>
+
+      {/* Reset-detected peer banners */}
+      {resetPeers.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {resetPeers.map((peer) => (
+            <div
+              key={peer.id}
+              className="bg-accent-rose/10 border border-accent-rose/30 rounded-lg p-3.5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-txt-primary">
+                    {peerName(peer)} was reset
+                  </div>
+                  <div className="text-[11px] text-txt-tertiary truncate">{peer.origin}</div>
+                  <p className="text-xs text-txt-secondary mt-1.5 leading-relaxed">
+                    A new instance is running on this domain. Re-establish federation to heal stale friendships and DMs.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmAction({ kind: 'repeer', peer })}
+                  disabled={actionLoading}
+                  className="shrink-0 px-3 py-1.5 text-xs font-medium bg-accent-mint/10 text-accent-mint hover:bg-accent-mint/20 rounded transition-colors disabled:opacity-50"
+                >
+                  Re-peer
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Orphaned real accounts per reset origin */}
+      {eventsWithOrphans.length > 0 && (
+        <div className="rounded-lg bg-white/[0.02] p-3.5 space-y-4 mb-5">
+          {eventsWithOrphans.map((event) => (
+            <div key={`${event.origin}:${event.deadEpoch}`}>
+              <div className="text-xs text-txt-tertiary mb-2 leading-relaxed">
+                <span className="font-medium text-txt-secondary">{originHost(event.origin)}</span>{' '}
+                was reset — {event.stubCount} replicated{' '}
+                {event.stubCount === 1 ? 'identity' : 'identities'} auto-cleaned,{' '}
+                {event.orphanedAccounts.length}{' '}
+                {event.orphanedAccounts.length === 1 ? 'account' : 'accounts'} with local content orphaned.
+              </div>
+              <div className="space-y-2">
+                {event.orphanedAccounts.map((account) => {
+                  const kept = keptIds.has(account.id);
+                  return (
+                    <div key={account.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-txt-primary truncate">
+                            {account.displayName || account.username}
+                          </div>
+                          <div className="text-[11px] text-txt-tertiary truncate">{account.username}</div>
+                          <div className="text-[11px] text-txt-tertiary mt-0.5">
+                            {account.spaceMemberCount}{' '}
+                            {account.spaceMemberCount === 1 ? 'membership' : 'memberships'} ·{' '}
+                            {account.messageCount}{' '}
+                            {account.messageCount === 1 ? 'message' : 'messages'}
+                          </div>
+                          {account.ownedSpaces.length > 0 && (
+                            <div className="text-[11px] text-accent-amber mt-0.5 truncate">
+                              Owns: {account.ownedSpaces.map((s) => s.name).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          {kept ? (
+                            <span className="text-[11px] text-txt-tertiary italic">Kept — frozen</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setKeptIds((prev) => new Set(prev).add(account.id))
+                              }
+                              className="px-3 py-1.5 text-xs font-medium text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
+                            >
+                              Keep
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmAction({ kind: 'remove', account, origin: event.origin })
+                            }
+                            disabled={actionLoading}
+                            className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confirmAction && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => { if (!actionLoading) setConfirmAction(null); }}
+          onConfirm={handleConfirm}
+          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove Orphaned Account'}
+          description={
+            confirmAction.kind === 'repeer'
+              ? `This deletes the local peer record and starts a fresh authenticated handshake with ${confirmAction.peer.origin}. The remote must be reachable and (if it does not auto-accept) approve the request.`
+              : `Permanently delete ${confirmAction.account.username} and all their content on this instance? This cannot be undone.`
+          }
+          confirmLabel={confirmAction.kind === 'repeer' ? 'Re-peer & heal' : 'Delete permanently'}
+          variant={confirmAction.kind === 'repeer' ? 'warning' : 'danger'}
+          loading={actionLoading}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── Main Panel ──────────────────────────────────────────────────────────────
 
 export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChange?: (count: number) => void }) {
@@ -1017,6 +1289,8 @@ export function FederationPanel({ onApprovalCountChange }: { onApprovalCountChan
       </div>
 
       <FederationGlobalSettings />
+
+      <ResetCleanup />
 
       <PendingApprovals onCountChange={handleApprovalCountChange} />
 

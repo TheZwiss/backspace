@@ -26,6 +26,7 @@ vi.mock('../../../stores/uiStore', () => ({
 
 vi.mock('../../../hooks/useWebSocket', () => ({
   onFederationPeersChanged: () => () => {},
+  onFederationPeerResetDetected: () => () => {},
 }));
 
 import { FederationPanel } from './FederationPanel';
