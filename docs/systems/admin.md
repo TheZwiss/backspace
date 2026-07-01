@@ -171,8 +171,11 @@ No authentication. Returns:
   federatedRegistrationOpen: boolean;  // NOT NULL DEFAULT 1; gates federated-account creation
   sourceCodeUrl: string;      // AGPL § 13; config.sourceCodeUrl (env BACKSPACE_SOURCE_URL)
   commit: string | null;      // AGPL § 13; config.commit (env BACKSPACE_COMMIT, build-injected)
+  instanceId: string;         // Persistent per-instance epoch (incarnation UUID); getInstanceId()
 }
 ```
+
+`instanceId` is the persistent per-instance epoch — a UUID minted once by `ensureDefaults` on first boot and stable across restarts (stored in `instance_settings.instance_id`, guaranteed non-null after boot). It changes only when the instance is wiped/re-provisioned. Peers read it to detect that a remote has been re-provisioned (federation epoch self-healing). The server reads it via the cached `getInstanceId()` in `utils/federationEpoch.ts`, which throws if the epoch is unset (invariant: `ensureDefaults` runs before any read).
 
 Registration resolution order: `instance_settings.registrationOpen` (if not null) > `config.registrationOpen` (from `REGISTRATION_OPEN` env, default true).
 

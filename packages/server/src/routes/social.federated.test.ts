@@ -457,3 +457,100 @@ describe('POST /api/social/requests — federated branch (authority + self-frien
     expect(body.requestId).toBe('incoming-req');
   });
 });
+
+describe('POST /api/social/requests — federated branch (limbo-window peer_reset_pending)', () => {
+  beforeEach(() => {
+    seedSelf();
+    resolveOriginFromHostnameMock.mockReturnValue('https://orbit.test');
+  });
+
+  function seedResetEvent(resolvedAt: number | null): void {
+    testDb.insert(schema.federationResetEvents).values({
+      origin: 'https://orbit.test',
+      deadEpoch: 'dead-epoch',
+      newEpoch: resolvedAt === null ? null : 'new-epoch',
+      detectedAt: Date.now(),
+      resolvedAt,
+      stubCount: 1,
+      orphanedAccountCount: 0,
+    }).run();
+  }
+
+  it('returns 409 peer_reset_pending when an UNRESOLVED reset event exists for the target origin', async () => {
+    seedResetEvent(null);
+    // Even a stale friendship must NOT surface as `already_friends` during the limbo window.
+    testDb.insert(schema.users).values({
+      id: 'stub-alice',
+      username: 'remote-alice@orbit.test',
+      displayName: 'Alice',
+      passwordHash: '!federation-replicated',
+      status: 'offline',
+      isAdmin: 0,
+      homeInstance: 'orbit.test',
+      homeUserId: 'remote-alice-old',
+      createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.friends).values({
+      userId: CALLER_ID,
+      friendId: 'stub-alice',
+      createdAt: Date.now(),
+    }).run();
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).error).toBe('peer_reset_pending');
+    // Short-circuits before peering/lookup — neither is consulted.
+    expect(ensurePeeredMock).not.toHaveBeenCalled();
+    expect(lookupRemoteUserMock).not.toHaveBeenCalled();
+    // No new request row created.
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+  });
+
+  it('proceeds normally when the reset event is RESOLVED (resolved_at set)', async () => {
+    seedResetEvent(Date.now());
+    ensurePeeredMock.mockResolvedValue({ status: 'active', peerId: 'peer-1' });
+    lookupRemoteUserMock.mockResolvedValue({
+      ok: true,
+      homeUserId: 'remote-alice',
+      username: 'alice',
+      profile: { displayName: 'Alice', avatar: null, avatarColor: 'mint', banner: null, bio: null },
+    });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(ensurePeeredMock).toHaveBeenCalled();
+    expect(JSON.parse(res.body).success).toBe(true);
+  });
+
+  it('proceeds normally when NO reset event exists for the origin', async () => {
+    ensurePeeredMock.mockResolvedValue({ status: 'active', peerId: 'peer-1' });
+    lookupRemoteUserMock.mockResolvedValue({
+      ok: true,
+      homeUserId: 'remote-alice',
+      username: 'alice',
+      profile: { displayName: 'Alice', avatar: null, avatarColor: 'mint', banner: null, bio: null },
+    });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(ensurePeeredMock).toHaveBeenCalled();
+  });
+});

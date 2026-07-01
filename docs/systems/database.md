@@ -33,6 +33,8 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | passwordChangedAt | integer | | Token revocation: tokens before this rejected |
 | showActivity | integer NOT NULL | 1 | Rich presence visibility |
 | federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
+| federationHealPending | integer | 0 | Instance-epoch self-healing: set when a replicated identity is flagged for re-heal after a peer reset |
+| federationHomeOrphaned | integer | 0 | Instance-epoch self-healing: set when this user's home instance was factory-reset and the account could not be re-linked |
 | createdAt | integer NOT NULL | | Epoch ms |
 
 ### spaces
@@ -366,6 +368,7 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | id | integer PK | 1 | |
 | instanceName | text | `'Backspace'` | |
 | workerId | integer | | Snowflake worker ID |
+| instanceId | text | | Persistent instance epoch (incarnation UUID). Minted once per DB by `ensureDefaults` and guaranteed non-null after boot. Discriminator that lets peers detect this instance was factory-reset (new DB → new epoch on same origin). See [federation.md → Instance-Epoch Self-Healing]. |
 | discoveryEnabled | integer NOT NULL | 1 | |
 | maxBitrateKbps | integer NOT NULL | 20000 | |
 | minBitrateKbps | integer NOT NULL | 500 | |
@@ -407,6 +410,22 @@ The user INSERT, `usedCount` increment, and redemption row INSERT all run in a s
 | remoteMaxUploadSize | integer | | Bytes, from peer |
 | createdAt | integer NOT NULL | | |
 | approvalToken | text | | Single-use 64-hex-char token stored when this row is in `awaiting_approval` (received from remote's 202 response). Verified against the inbound `/peer/accept` `approvalToken` field before promoting to `active`. Cleared (`NULL`) on promotion. See [federation.md → Approval Token Verification](federation.md#approval-token-verification). |
+| peerInstanceId | text | | Instance-epoch self-healing: the peer's persistent instance epoch (UUID) as last confirmed. `NULL` until first observed. Compared against `observedPeerInstanceId` to detect a factory-reset peer on the same origin. |
+| observedPeerInstanceId | text | | Instance-epoch self-healing: the instance epoch most recently reported by the peer. A mismatch with `peerInstanceId` signals the peer was reset. |
+| needsAttentionReason | text | | Instance-epoch self-healing: machine-readable reason a peer was moved to `needs_attention` (e.g. epoch reset detected), for admin surfacing. `NULL` when healthy. |
+
+### federation_reset_events
+Instance-epoch self-healing ledger. One row per origin recording a detected federated-peer reset (same origin, new instance epoch). Upserted when a live epoch change is observed; `resolvedAt` is stamped once stale replicated identities from the dead epoch are healed.
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| origin | text PK | | Peer origin URL whose epoch changed |
+| deadEpoch | text NOT NULL | | The instance epoch that was replaced (now stale) |
+| newEpoch | text | | The peer's new instance epoch, once known |
+| detectedAt | integer NOT NULL | | Epoch ms the reset was detected |
+| resolvedAt | integer | | Epoch ms healing completed; `NULL` while in progress |
+| stubCount | integer NOT NULL | 0 | Count of replicated identity stubs affected by the reset |
+| orphanedAccountCount | integer NOT NULL | 0 | Count of accounts that could not be re-linked to the new epoch |
 
 ### peer_approval_requests
 Queue of peering requests pending admin review when `autoAcceptPeering` is `false`. Holds **both directions**: inbound rows (remote asked to peer with us) and outbound rows (a local user-initiated `ensurePeered` call gated on this side; see [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate)). UNIQUE on `(origin, direction)` so the same origin may have at most one row per direction simultaneously. Rows expire after 30 days via janitor cleanup.

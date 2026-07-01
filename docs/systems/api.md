@@ -227,9 +227,11 @@ Permissions checked: CONNECT, SPEAK, STREAM (space channels). DM calls: always f
 
 ## Instance (`routes/instance.ts`) — public
 ```
-GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, sourceCodeUrl, commit }
+GET /instance/info → { name, version, registrationOpen, federatedRegistrationOpen, instanceId, sourceCodeUrl, commit }
 ```
 `federatedRegistrationOpen` is a UX hint consumed by the Connections add-instance pre-flight (see `client-federation.md`). The 403 from `POST /auth/register` remains the security boundary.
+
+`instanceId` (`InstanceInfoResponse.instanceId`, `string`) is this instance's persistent **epoch** — the incarnation UUID minted once by `ensureDefaults` and stable across restarts (see `database.md → Instance Settings`). It is served here (unauthenticated, credential-free) purely as a **detection** signal: `probePeerReachable` reads it to observe that a peer behind a known origin has been factory-reset (a changed epoch). It is **never** written to a peer's trusted baseline from this channel — only the authenticated `/federation/epoch`, relay envelope, and handshake do that. See `federation.md` "Instance Epoch".
 
 `sourceCodeUrl` (`string`) and `commit` (`string | null`) implement the **AGPL-3.0 § 13 network-use source offer**: every network user (and federated peer) can obtain the Corresponding Source of the exact version this instance is running. `sourceCodeUrl` comes from `config.sourceCodeUrl` (env `BACKSPACE_SOURCE_URL`, default `https://github.com/TheZwiss/backspace`) — operators who modify Backspace MUST set it to their fork's source. `commit` comes from `config.commit` (env `BACKSPACE_COMMIT`, injected at Docker build via `deploy.sh --build-arg`; `null` in local dev). The web client surfaces `sourceCodeUrl`/`version` via the `SourceCodeLink` component on settings sidebars and the pre-auth login/register pages; the desktop app exposes it via the tray + app menus ("Source code (AGPL)") and the native About panel.
 
@@ -318,17 +320,22 @@ type InviteRedemption = {
 ## Federation (`routes/federation.ts`)
 ```
 POST   /federation/peer/initiate   (admin)     { remoteOrigin }                    → peer created
-POST   /federation/peer/accept     (public, IP rate-limited 10/min) { sourceOrigin, challenge, hmacSecret, instanceName?, approvalToken? } → accepted (200) | queued (202 + { approvalToken })
+POST   /federation/peer/accept     (public, IP rate-limited 10/min) { sourceOrigin, challenge, hmacSecret, instanceName?, instanceId?, approvalToken? } → { accepted, instanceName, instanceId } (200) | queued (202 + { approvalToken })
 GET    /federation/peers           (admin)                                          → { peers[] } (no secrets)
 DELETE /federation/peers/:id       (admin)                                          → { success } + outbox cleanup
-POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest        → { accepted[], rejected[] }
+POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest (+ sourceInstanceId?) → { accepted[], rejected[] }
 POST   /federation/sync            (HMAC-signed S2S)  { sinceTimestamp, limit?, dmChannelId?, federatedId?, contextType? } → { events[], hasMore, checkpoint }
 POST   /federation/users/lookup    (HMAC-signed S2S, rate-limited 60/min/peer)  { username }  → { found, user? }
+POST   /federation/epoch           (HMAC-signed S2S, HMAC-signed response)  {}  → { instanceId }
 ```
 
 **`POST /api/federation/peer/accept`** — public, IP-rate-limited. Optional `approvalToken` (64-hex) on the request body proves mutual admin approval; required to promote an `awaiting_approval` row to `active` when the receiver has `autoAcceptPeering=0`. The receiver returns it in the 202 body when queueing the request for admin review (`{ queued: true, message, approvalToken }`); the initiator stores it and the receiver's `/approve` later forwards it back. See `federation.md` §1 "Approval Token Verification" for the full lifecycle and threat model.
 
+**Handshake epoch exchange.** The handshake carries the **instance epoch** bidirectionally, mirroring `instanceName`: the request body's `instanceId` is the initiator's epoch (written to `federation_peers.peer_instance_id` on every authenticated activation path), and the 200 response body's `instanceId` is the responder's epoch (persisted by the initiator alongside `status='active'`). Older peers omit the field; the column stays `null` until the epoch-refresh/relay backstop fills it. Both are authenticated baselines — never overwritten by the unauthenticated `/instance/info` probe. **`FederationRelayRequest.sourceInstanceId`** stamps the sender's current epoch on every relay; because the whole body is HMAC-verified, a valid relay authentically carries the sender's incarnation id and populates `peer_instance_id` when null (fast-path baseline). See `federation.md` "Instance Epoch".
+
 **`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
+
+**`POST /api/federation/epoch`** — HMAC-authenticated S2S endpoint returning this instance's persistent epoch (`{ instanceId }`). The **request** is HMAC-signed (only a peer holding the shared secret may call it; unknown/revoked peers → 403, bad signature → 401, missing headers → 400) **and the response body is HMAC-signed** with the same secret (`X-Federation-Signature/Timestamp/Nonce` response headers), so the caller can verify the epoch before writing it as the peer's trusted baseline (`federation_peers.peer_instance_id`). The value is already public via `/instance/info`; signing is for baseline-integrity, not confidentiality. Caller: `fetchPeerEpoch(peer)` (`utils/federationEpoch.ts`), which fails safe — 404 (not-yet-upgraded peer), bad/absent response signature, or network/timeout all return `null` (retry next tick). Populates the epoch baseline deterministically via the bounded periodic epoch-refresh. See `federation.md` "Instance Epoch" §3.2.
 
 ### Federation Peering Approval Queue
 

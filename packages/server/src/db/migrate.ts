@@ -27,6 +27,18 @@ export function ensureDefaults(db: Database.Database): void {
     console.log(`[defaults] Generated Snowflake worker ID: ${workerId}`);
   }
 
+  // 2b. Ensure a persistent instance epoch (incarnation UUID) exists. A fresh
+  // DB mints a new one — this is the discriminator for detecting resets.
+  // The id=1 row is guaranteed by step 1's INSERT OR IGNORE above.
+  const epochRow = db.prepare('SELECT instance_id FROM instance_settings WHERE id = 1').get() as
+    { instance_id: string | null } | undefined;
+  if (!epochRow || epochRow.instance_id === null) {
+    const instanceId = crypto.randomUUID();
+    const res = db.prepare('UPDATE instance_settings SET instance_id = ? WHERE id = 1').run(instanceId);
+    if (res.changes !== 1) throw new Error('ensureDefaults: instance_settings id=1 row missing — cannot mint epoch');
+    console.log('[defaults] Generated instance epoch');
+  }
+
   // 3. Ensure at least one admin exists (promote earliest registered user)
   const anyAdmin = db.prepare('SELECT id FROM users WHERE is_admin = 1 LIMIT 1').get();
   if (!anyAdmin) {

@@ -12,9 +12,10 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { probePeerReachable, markPeerRecovered } from './federationRecovery.js';
+import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
+import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -234,6 +235,11 @@ export async function processOutboxTick(): Promise<void> {
     const request: FederationRelayRequest = {
       version: 1,
       sourceInstance: ourOrigin,
+      // Stamp our current epoch so a verified relay authentically carries this
+      // instance's incarnation id — the receiver uses it as the fast-path
+      // populate-if-null baseline (design §3.2). A reset instance cannot sign a
+      // valid relay, so this never carries a *new* epoch post-reset.
+      sourceInstanceId: getInstanceId(),
       events,
     };
 
@@ -1051,11 +1057,15 @@ export async function processRecoveryTick(): Promise<void> {
     if (!due) continue;
 
     recoveryAbortController = new AbortController();
-    const reachable = await probePeerReachable(peer.origin, recoveryAbortController.signal);
+    const probe = await probePeerReachable(peer.origin, recoveryAbortController.signal);
 
-    if (reachable) {
-      await markPeerRecovered(peer.id);
-      console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+    if (probe.reachable) {
+      const outcome = await recoverOrDetectReset(peer, probe);
+      if (outcome === 'reset_detected') {
+        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch) — routed to needs_attention`);
+      } else {
+        console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+      }
     } else {
       db.update(schema.federationPeers)
         .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: now })
@@ -1162,6 +1172,25 @@ async function processHealthCheckTick(): Promise<void> {
       console.warn(`[federation-worker] Auto-rotation failed for peer ${peer.origin}: ${message}`);
     }
   }
+
+  // ── Deterministic baseline epoch-refresh ────────────────────────────────────
+  // Populate-if-null, self-terminating: fill peer_instance_id for active peers
+  // whose baseline is still NULL (design §3.2). Runs every tick so the baseline
+  // is established within one 15-minute cycle of an upgrade, independent of any
+  // relay/user activity. Best-effort — a failed fetch is a benign no-op retried
+  // next tick, so it never disturbs the rest of the health-check work.
+  await refreshPeerEpochs().catch(() => {});
+
+  // ── Reset detection for needs_attention peers (design §4.1) ─────────────────
+  // A reset peer can land in `needs_attention` via the auth-failure path (HTTP
+  // up, 401/403 from a new incarnation) WITHOUT ever passing through
+  // `unreachable`, so the unreachable-only recovery probe never observes its
+  // epoch change. Probe those peers here so a reset journal is created at
+  // detection time (otherwise a later manual Re-peer heals nothing). Detection
+  // ONLY — never flips a needs_attention peer to active. Best-effort: a failure
+  // is a benign no-op retried next tick and must not disturb the rest of the tick.
+  // No shared abort signal — probePeerReachable carries its own 10s timeout.
+  await detectResetOnNeedsAttentionPeers().catch(() => {});
 }
 
 // ─── Federated Call Health Sweep ────────────────────────────────────────────
@@ -1235,6 +1264,12 @@ export function startFederationWorkers(): void {
       console.error('[federation-worker] federatedCallSentinel tick failed:', err)
     );
   }, FEDERATED_CALL_SENTINEL_MS);
+  // Deterministic baseline epoch-refresh at startup (design §3.2): populate
+  // peer_instance_id for any active peer whose baseline is still NULL, so an
+  // instance that upgrades sees its peers' epochs within one cycle regardless of
+  // traffic. Best-effort, self-terminating (populate-if-null).
+  refreshPeerEpochs().catch(() => {});
+
   // Bootstrap sync for freshly-peered rows (async, non-blocking)
   startupBootstrapSync().catch((err) => {
     console.error('[federation-worker] Startup bootstrap sync error:', err);
