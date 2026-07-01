@@ -333,6 +333,22 @@ In a single transaction, `markPeerReset`:
 
 Legacy peers advertise no epoch (`instanceId` null), so detection requires a non-null observed epoch differing from a non-null stored baseline — legacy peers never trigger it, and the existing `auth_failures → needs_attention → manual Reset` path continues unchanged for them.
 
+### Data Self-Heal (`healResetIncarnation` — `utils/federationReset.ts`)
+
+Detection (`markPeerReset`) only snapshots + journals + notifies; it destroys nothing. The actual heal is `healResetIncarnation(origin, newEpoch, reason)`, fired from `onPeerActivated` (`utils/federationPeerActivation.ts`) **after an admin-authenticated re-peer**, keyed to the confirmed epoch change (design §6). It runs **before** the mutation-log re-sync in `onPeerActivated` so re-sync repopulates onto a clean slate, and it runs **outside any transaction** (`tombstoneUser` opens its own; better-sqlite3 throws on a nested `BEGIN`).
+
+**Two mandatory guards, in order:**
+
+1. **Reason gate.** `onPeerActivated` fires on non-handshake paths too. Only genuine re-handshake reasons carry a freshly-exchanged, trustworthy epoch. `healResetIncarnation` returns immediately unless `reason` is in the allow-list `HANDSHAKE_ACTIVATION_REASONS` (typed `ReadonlySet<PeerActivationReason>`): `initiate_accepted`, `accept_new`, `accept_pending`, `accept_rejected_override`, `accept_awaiting_approval`, `accept_awaiting_approval_fallback`, `approval_handshake`, `ensure_peered`. The two EXCLUDED reasons — `health_check_recovery` (reachability flip in `markPeerRecovered`) and `startup_bootstrap` (boot re-scan) — flip a peer to `active` **without** a handshake, so their baseline is stale (still equals the journaled `dead_epoch`). Without the gate they would hit the `deadEpoch === newEpoch` false-alarm branch and silently resolve the journal + clear the flags WITHOUT healing, permanently burying the bug. Gated out, they leave the journal fully intact for a later genuine re-handshake to heal.
+
+2. **Epoch comparison (false-positive guard).** For a gated-in reason, look up the UNRESOLVED `federation_reset_events` row for the origin (none → return):
+   - **`journal.dead_epoch === newEpoch`** — the re-peer confirmed the SAME incarnation (spurious/spoofed detection, or an admin re-peer to a never-reset live peer). **NO tombstone** — the user-level snapshot flags alone must never authorize destruction; only a confirmed epoch change does. Clears `federation_heal_pending` for the origin and resolves the journal (`new_epoch`, `resolved_at`).
+   - **`journal.dead_epoch !== newEpoch`** — a GENUINE new incarnation. Soft-tombstones the flagged **pure stubs** only, then clears their flags and resolves the journal.
+
+**Soft-tombstone (pure stubs only).** For every user that is `federation_heal_pending = 1` AND `password_hash = '!federation-replicated'` (pure S2S stub sentinel) AND matches the origin (`homeInstanceMatch`), calls `tombstoneUser(uid, { purgeContent: false })`. The `purgeContent: false` is **non-negotiable** — the default (`true`) irreversibly deletes this box's reactions and authored space messages, violating the invariant that a remote's reset never destroys our non-re-syncable content. The soft tombstone clears exactly the relationship rows that cause the bug (`friends`, `friend_requests`, `dm_members`, …) so stale friendships/DMs clear and re-adds work. Flags are then cleared **keyed by the stub id list** (not by re-querying the sentinel — `tombstoneUser` has already randomized `password_hash`).
+
+**Real federated accounts left intact.** A flagged user that is NOT a stub (`password_hash != '!federation-replicated'`) carries real, non-re-syncable local content. It is **never** auto-tombstoned — it stays `federation_heal_pending = 1` and fully intact for the Phase 2 quarantine/admin surface (design §6.3).
+
 ### S2S Identity Deletion (`DELETE /api/federation/identity`)
 
 Allows a home instance to remove a user's replicated identity from a remote instance.

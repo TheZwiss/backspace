@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { isFederationRelayEnabled } from './federationOutbox.js';
 import { buildFederationHeaders, getOurOrigin } from './federationAuth.js';
 import { generateSnowflake } from './snowflake.js';
+import { healResetIncarnation } from './federationReset.js';
 import type { FederationRelayEvent } from '@backspace/shared';
 
 export type PeerActivationReason =
@@ -50,6 +51,25 @@ export async function onPeerActivated(
   const promise = (async () => {
     try {
       resetOutboxBackoff(peerId);
+
+      // Instance-epoch self-heal. If this origin has an unresolved reset journal
+      // AND this is a genuine re-handshake activation (reason gate lives inside
+      // healResetIncarnation), heal the dead incarnation's stale stubs BEFORE the
+      // mutation-log re-sync below — so re-sync repopulates onto a clean slate
+      // (design §6.1). By this point the activation path has already (re)written
+      // peer_instance_id to the freshly-exchanged epoch. Runs OUTSIDE any
+      // transaction: tombstoneUser opens its own, and better-sqlite3 throws on a
+      // nested BEGIN. No-op on non-handshake reasons (health_check_recovery /
+      // startup_bootstrap) and when no reset is journaled.
+      const resetPeerRow = getDb()
+        .select({ origin: schema.federationPeers.origin, epoch: schema.federationPeers.peerInstanceId })
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.id, peerId))
+        .get();
+      if (resetPeerRow?.epoch) {
+        healResetIncarnation(resetPeerRow.origin, resetPeerRow.epoch, reason);
+      }
+
       await syncPeerMutationLog(peerId, reason);
       await fanoutOutboundSubscribers(peerId);
 

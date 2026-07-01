@@ -161,3 +161,119 @@ describe('markPeerReset — detection-only reset routing', () => {
       .where(eq(schema.users.id, 'stub-url')).get()!.federationHealPending).toBe(1);
   });
 });
+
+describe('healResetIncarnation — heal after authenticated re-peer', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  function seedJournal(deadEpoch: string): void {
+    testDb.insert(schema.federationResetEvents).values({
+      origin: ORIGIN, deadEpoch, newEpoch: null,
+      detectedAt: Date.now(), resolvedAt: null,
+      stubCount: 1, orphanedAccountCount: 1,
+    }).run();
+  }
+
+  function flag(id: string): void {
+    testDb.update(schema.users).set({ federationHealPending: 1 })
+      .where(eq(schema.users.id, id)).run();
+  }
+
+  it('genuine reset: soft-tombstones flagged stubs only, leaves real accounts flagged + intact, resolves journal', async () => {
+    seedPeer();
+    seedJournal('E0');
+    // A local native user to be the friendship counterpart.
+    testDb.insert(schema.users).values({
+      id: 'local-1', username: 'alice', passwordHash: '$2b$10$localhash',
+      homeInstance: null, homeUserId: null, isDeleted: 0, createdAt: Date.now(),
+    }).run();
+    // Flagged pure S2S stub with a friendship to the local user.
+    seedUser('stub-1', { passwordHash: STUB });
+    flag('stub-1');
+    testDb.insert(schema.friends).values({
+      userId: 'stub-1', friendId: 'local-1', createdAt: Date.now(),
+    }).run();
+    // Flagged REAL federated account (real bcrypt) — must survive untouched + still flagged.
+    seedUser('real-1', { passwordHash: '$2b$10$realbcrypthash' });
+    flag('real-1');
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(ORIGIN, 'E1', 'initiate_accepted');
+
+    // Stub soft-tombstoned.
+    const stub = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!;
+    expect(stub.isDeleted).toBe(1);
+    expect(stub.username).toBe('!deleted:stub-1');
+    // Its friendship row is gone → re-adds work again.
+    expect(testDb.select().from(schema.friends)
+      .where(eq(schema.friends.userId, 'stub-1')).all()).toHaveLength(0);
+    // Heal flag cleared on the healed stub.
+    expect(stub.federationHealPending).toBe(0);
+
+    // Real account UNTOUCHED and STILL flagged (left for Phase 2 quarantine).
+    const real = testDb.select().from(schema.users).where(eq(schema.users.id, 'real-1')).get()!;
+    expect(real.isDeleted).toBe(0);
+    expect(real.username).toBe('real-1@peer.example');
+    expect(real.federationHealPending).toBe(1);
+
+    // Journal resolved with the freshly-handshaked epoch.
+    const journal = testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!;
+    expect(journal.resolvedAt).not.toBeNull();
+    expect(journal.newEpoch).toBe('E1');
+  });
+
+  it('false positive (re-peer confirmed same incarnation): NO tombstone, flags cleared, journal resolved', async () => {
+    seedPeer();
+    seedJournal('E0');
+    seedUser('stub-1', { passwordHash: STUB });
+    flag('stub-1');
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(ORIGIN, 'E0', 'accept_new'); // dead_epoch === newEpoch → false alarm
+
+    const stub = testDb.select().from(schema.users).where(eq(schema.users.id, 'stub-1')).get()!;
+    expect(stub.isDeleted).toBe(0);                        // NOT tombstoned
+    expect(stub.username).toBe('stub-1@peer.example');
+    expect(stub.federationHealPending).toBe(0);            // flag cleared
+
+    const journal = testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!;
+    expect(journal.resolvedAt).not.toBeNull();
+    expect(journal.newEpoch).toBe('E0');
+  });
+
+  it('recovery/startup flip must NOT resolve the journal or clear flags (the critical guard)', async () => {
+    seedPeer();
+    seedJournal('E0');
+    seedUser('stub-1', { passwordHash: STUB });
+    flag('stub-1');
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+
+    // Both non-handshake reasons flip a peer to active with a STALE baseline
+    // (still E0). Without the reason gate they'd hit dead_epoch === newEpoch and
+    // silently resolve the journal WITHOUT healing → the bug permanently buried.
+    for (const reason of ['health_check_recovery', 'startup_bootstrap'] as const) {
+      healResetIncarnation(ORIGIN, 'E0', reason);
+
+      const journal = testDb.select().from(schema.federationResetEvents)
+        .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!;
+      expect(journal.resolvedAt, `reason=${reason}`).toBeNull();
+      expect(journal.newEpoch, `reason=${reason}`).toBeNull();
+
+      const stub = testDb.select().from(schema.users)
+        .where(eq(schema.users.id, 'stub-1')).get()!;
+      expect(stub.federationHealPending, `reason=${reason}`).toBe(1);
+      expect(stub.isDeleted, `reason=${reason}`).toBe(0);
+    }
+  });
+});

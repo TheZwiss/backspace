@@ -1,7 +1,9 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { extractDomain } from '../routes/federation.js';
 import { connectionManager } from '../ws/handler.js';
+import { tombstoneUser } from './userDeletion.js';
+import type { PeerActivationReason } from './federationPeerActivation.js';
 
 /** Pure-stub sentinel: a user replicated purely over S2S (no local credentials). */
 const REPLICATED_STUB_SENTINEL = '!federation-replicated';
@@ -145,4 +147,139 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
 
   connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
   connectionManager.sendToAdmins({ type: 'federation_peer_reset_detected' as const, origin });
+}
+
+/**
+ * Activation reasons that involve a fresh, HMAC-authenticated handshake which
+ * (re)writes `federation_peers.peer_instance_id`. ONLY these reasons carry a
+ * freshly-exchanged epoch that can be trusted to confirm-or-refute a reset.
+ *
+ * The two EXCLUDED members of `PeerActivationReason` — `health_check_recovery`
+ * (a reachability flip in `markPeerRecovered`) and `startup_bootstrap` (a boot
+ * re-scan) — flip a peer to `active` WITHOUT any handshake, so the baseline they
+ * observe is STALE (still equal to the journaled `dead_epoch`). Letting the heal
+ * run on those paths would take the `deadEpoch === newEpoch` false-alarm branch
+ * and silently resolve the reset journal + clear the snapshot flags WITHOUT ever
+ * healing — permanently burying the bug. The reason gate below stops that: on a
+ * non-handshake activation the journal is left fully intact for a later genuine
+ * re-handshake to heal.
+ *
+ * Typed as `ReadonlySet<PeerActivationReason>` so a typo or a future
+ * union-member rename is caught by tsc, not at runtime.
+ */
+const HANDSHAKE_ACTIVATION_REASONS: ReadonlySet<PeerActivationReason> = new Set([
+  'initiate_accepted',
+  'accept_new',
+  'accept_pending',
+  'accept_rejected_override',
+  'accept_awaiting_approval',
+  'accept_awaiting_approval_fallback',
+  'approval_handshake',
+  'ensure_peered',
+]);
+
+/**
+ * The data self-heal, fired from `onPeerActivated` AFTER an authenticated
+ * re-peer (design §6). It is the counterpart to `markPeerReset`'s detection:
+ * detection snapshots + journals but never destroys; this heals once — and only
+ * once — the epoch change has been proven through a genuine handshake.
+ *
+ * Two mandatory guards, in order:
+ *
+ * 1. **Reason gate.** Returns immediately unless `reason` is a genuine
+ *    handshake activation (see `HANDSHAKE_ACTIVATION_REASONS`). Reachability /
+ *    startup flips carry a stale baseline and must leave the journal untouched.
+ *
+ * 2. **Epoch comparison (false-positive guard).** For a gated-in reason, look up
+ *    the UNRESOLVED `federation_reset_events` row for the origin. If none → no
+ *    outstanding reset → return.
+ *    - `journal.deadEpoch === newEpoch`: the re-peer confirmed the SAME
+ *      incarnation (a spurious/spoofed detection, or an admin re-peer to the
+ *      never-reset live peer). **No tombstone** — the user-level snapshot flags
+ *      alone must never drive destruction; only a confirmed epoch change
+ *      authorizes it. Clear all heal flags for the origin and resolve the
+ *      journal.
+ *    - `journal.deadEpoch !== newEpoch`: a GENUINE new incarnation. Soft-
+ *      tombstone the flagged PURE STUBS only, then clear their flags and resolve
+ *      the journal.
+ *
+ * Real federated accounts (`federation_heal_pending = 1` but NOT a stub) carry
+ * non-re-syncable local content and are **never** auto-tombstoned; they stay
+ * flagged + intact for the Phase 2 quarantine/admin surface (design §6.3).
+ *
+ * **Transaction hazard:** `tombstoneUser` opens its OWN `db.transaction`, and
+ * better-sqlite3 throws on a nested `BEGIN`. `healResetIncarnation` therefore
+ * runs its `select`/`update` calls UNWRAPPED (never inside a transaction) and
+ * calls `tombstoneUser` per-stub outside any open transaction. The caller
+ * (`onPeerActivated`) must likewise not invoke this from within a transaction.
+ *
+ * @param origin   The reset peer's origin (bare domain or full URL).
+ * @param newEpoch The peer's freshly-handshaked epoch (`peer_instance_id`).
+ * @param reason   The activation reason that triggered this call.
+ */
+export function healResetIncarnation(origin: string, newEpoch: string, reason: PeerActivationReason): void {
+  // Guard 1 — reason gate: only a genuine re-handshake carries a trustworthy epoch.
+  if (!HANDSHAKE_ACTIVATION_REASONS.has(reason)) return;
+
+  const db = getDb();
+
+  const journal = db
+    .select()
+    .from(schema.federationResetEvents)
+    .where(and(
+      eq(schema.federationResetEvents.origin, origin),
+      isNull(schema.federationResetEvents.resolvedAt),
+    ))
+    .get();
+  if (!journal) return; // no outstanding reset for this origin
+
+  // Guard 2 — epoch comparison (the false-positive guard).
+  if (journal.deadEpoch === newEpoch) {
+    // FALSE ALARM: re-peer confirmed the SAME incarnation. The snapshot flags
+    // alone must NEVER drive a tombstone — clear them and resolve, no deletion.
+    db.update(schema.users)
+      .set({ federationHealPending: 0 })
+      .where(and(eq(schema.users.federationHealPending, 1), homeInstanceMatch(origin)))
+      .run();
+    db.update(schema.federationResetEvents)
+      .set({ newEpoch, resolvedAt: Date.now() })
+      .where(eq(schema.federationResetEvents.origin, origin))
+      .run();
+    return;
+  }
+
+  // GENUINE reset: soft-tombstone the flagged PURE STUBS only.
+  const stubs = db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(and(
+      eq(schema.users.federationHealPending, 1),
+      eq(schema.users.passwordHash, REPLICATED_STUB_SENTINEL),
+      homeInstanceMatch(origin),
+    ))
+    .all();
+
+  // MANDATORY: purgeContent:false — a soft tombstone. The default (true) would
+  // irreversibly delete this box's reactions / space messages, violating the
+  // §1 invariant that a remote's reset never destroys our non-re-syncable
+  // content. Each call opens its own transaction, so this loop stays UNWRAPPED.
+  for (const stub of stubs) {
+    tombstoneUser(stub.id, { purgeContent: false });
+  }
+
+  // Clear the heal flag on exactly the stubs we healed, keyed by id.
+  // `tombstoneUser` has already randomized their `password_hash`, so re-querying
+  // by the stub sentinel would miss them — the id list is the reliable key.
+  // Real accounts keep `federation_heal_pending = 1` for Phase 2.
+  if (stubs.length > 0) {
+    db.update(schema.users)
+      .set({ federationHealPending: 0 })
+      .where(inArray(schema.users.id, stubs.map((s) => s.id)))
+      .run();
+  }
+
+  db.update(schema.federationResetEvents)
+    .set({ newEpoch, resolvedAt: Date.now() })
+    .where(eq(schema.federationResetEvents.origin, origin))
+    .run();
 }
