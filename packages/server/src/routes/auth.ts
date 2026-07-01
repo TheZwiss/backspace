@@ -379,6 +379,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
     }
 
+    // A federated account whose home instance was reset (a new incarnation stood
+    // up on the same domain) is FROZEN: its identity cannot be cryptographically
+    // proven continuous across the wipe (design §2 non-goal), so we must never let
+    // anyone — including a new same-name user on the reset home — authenticate into
+    // it. Freezing is reversible (admin Keep/Remove, or the real user re-registers
+    // into a fresh account). This is the enforcement half of the §6.3b quarantine;
+    // it blocks the local-password path AND, by returning first, the self-heal path.
+    if (user.federationHomeOrphaned === 1) {
+      return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+    }
+
     const validPassword = await verifyPassword(password, user.passwordHash);
     if (!validPassword) {
       // For federated users, try verifying against the home instance.
