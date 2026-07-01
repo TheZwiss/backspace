@@ -187,7 +187,7 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
       .where(eq(schema.users.id, id)).run();
   }
 
-  it('genuine reset: soft-tombstones flagged stubs only, leaves real accounts flagged + intact, resolves journal', async () => {
+  it('genuine reset: soft-tombstones flagged stubs, quarantines (freeze+rename) real accounts, resolves journal', async () => {
     seedPeer();
     seedJournal('E0');
     // A local native user to be the friendship counterpart.
@@ -201,7 +201,8 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
     testDb.insert(schema.friends).values({
       userId: 'stub-1', friendId: 'local-1', createdAt: Date.now(),
     }).run();
-    // Flagged REAL federated account (real bcrypt) — must survive untouched + still flagged.
+    // Flagged REAL federated account (real bcrypt), no owned space — must survive
+    // (never deleted) but be quarantined: frozen + renamed to free the handle.
     seedUser('real-1', { passwordHash: '$2b$10$realbcrypthash' });
     flag('real-1');
 
@@ -218,11 +219,13 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
     // Heal flag cleared on the healed stub.
     expect(stub.federationHealPending).toBe(0);
 
-    // Real account UNTOUCHED and STILL flagged (left for Phase 2 quarantine).
+    // Real account NEVER deleted (content preserved) but quarantined: frozen,
+    // handle freed via rename, heal flag cleared (Phase 2 §6.3b).
     const real = testDb.select().from(schema.users).where(eq(schema.users.id, 'real-1')).get()!;
     expect(real.isDeleted).toBe(0);
-    expect(real.username).toBe('real-1@peer.example');
-    expect(real.federationHealPending).toBe(1);
+    expect(real.username).toBe('!orphaned:real-1@peer.example');
+    expect(real.federationHomeOrphaned).toBe(1);
+    expect(real.federationHealPending).toBe(0);
 
     // Journal resolved with the freshly-handshaked epoch.
     const journal = testDb.select().from(schema.federationResetEvents)
@@ -275,5 +278,93 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
       expect(stub.federationHealPending, `reason=${reason}`).toBe(1);
       expect(stub.isDeleted, `reason=${reason}`).toBe(0);
     }
+  });
+});
+
+describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {
+  const QORIGIN = 'orbit.ddns.net';
+  let uidCounter = 0;
+
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    vi.clearAllMocks();
+    uidCounter = 0;
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  function seedJournal(opts: { origin: string; deadEpoch: string }): void {
+    testDb.insert(schema.federationResetEvents).values({
+      origin: opts.origin, deadEpoch: opts.deadEpoch, newEpoch: null,
+      detectedAt: Date.now(), resolvedAt: null,
+      stubCount: 0, orphanedAccountCount: 0,
+    }).run();
+  }
+
+  function seedRealAccount(opts: { homeInstance: string; username: string; healPending: number }): string {
+    const id = `real-${++uidCounter}`;
+    testDb.insert(schema.users).values({
+      id, username: opts.username, passwordHash: '$2b$10$realbcrypthash',
+      homeInstance: opts.homeInstance, homeUserId: id,
+      isDeleted: 0, federationHealPending: opts.healPending, createdAt: Date.now(),
+    }).run();
+    return id;
+  }
+
+  function seedSpace(opts: { ownerId: string; name: string }): void {
+    testDb.insert(schema.spaces).values({
+      id: `space-${opts.ownerId}`, name: opts.name,
+      ownerId: opts.ownerId, createdAt: Date.now(),
+    }).run();
+  }
+
+  it('renames + freezes a flagged real account with NO owned spaces', async () => {
+    seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
+
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
+    expect(row.username).toBe(`!orphaned:${uid}@orbit.ddns.net`); // handle freed
+    expect(row.federationHomeOrphaned).toBe(1);                    // frozen
+    expect(row.federationHealPending).toBe(0);                     // processed
+    expect(row.isDeleted).toBe(0);                                 // NOT deleted (content preserved)
+  });
+
+  it('freezes but does NOT rename a flagged real account that OWNS a space; surfaces it', async () => {
+    seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'dave@orbit.ddns.net', healPending: 1 });
+    seedSpace({ ownerId: uid, name: 'Dave HQ' }); // owns a space
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
+
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
+    expect(row.username).toBe('dave@orbit.ddns.net'); // NOT renamed (owner)
+    expect(row.federationHomeOrphaned).toBe(1);        // frozen
+    expect(row.federationHealPending).toBe(0);         // processed
+    expect(row.isDeleted).toBe(0);
+    // journal orphaned_account_count reflects the frozen set (1)
+    const j = testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, QORIGIN)).get()!;
+    expect(j.orphanedAccountCount).toBe(1);
+  });
+
+  it('false-positive branch (same incarnation) does NOT quarantine real accounts', async () => {
+    seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
+    const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(QORIGIN, 'E0', 'accept_new'); // newEpoch == deadEpoch → false alarm
+
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
+    expect(row.username).toBe('carol@orbit.ddns.net'); // untouched
+    expect(row.federationHomeOrphaned ?? 0).toBe(0);    // NOT frozen
+    expect(row.federationHealPending).toBe(0);          // flags cleared (false-alarm path)
   });
 });
