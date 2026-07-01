@@ -15,7 +15,7 @@ import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivat
 import { probePeerReachable, markPeerRecovered } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
-import { refreshPeerEpochs } from './federationEpoch.js';
+import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -235,6 +235,11 @@ export async function processOutboxTick(): Promise<void> {
     const request: FederationRelayRequest = {
       version: 1,
       sourceInstance: ourOrigin,
+      // Stamp our current epoch so a verified relay authentically carries this
+      // instance's incarnation id — the receiver uses it as the fast-path
+      // populate-if-null baseline (design §3.2). A reset instance cannot sign a
+      // valid relay, so this never carries a *new* epoch post-reset.
+      sourceInstanceId: getInstanceId(),
       events,
     };
 

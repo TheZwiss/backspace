@@ -2259,6 +2259,25 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
       }
 
+      // 1b-epoch. Fast-path baseline population (design §3.2). The signature just
+      // verified proves the peer holds the current shared secret, so the epoch it
+      // carries in `sourceInstanceId` is authentic. Populate-if-null ONLY: a valid
+      // relay can never carry an epoch differing from a non-null baseline (a
+      // different incarnation implies a different secret that fails HMAC), so we
+      // only ever fill a NULL — never overwrite. This is independent of per-event
+      // processing and does not affect relay accept/reject in any way. Old peers
+      // omit the field → skip (backward-compatible no-op).
+      const claimedEpoch = request.body.sourceInstanceId;
+      if (claimedEpoch && !peer.peerInstanceId) {
+        db.update(schema.federationPeers)
+          .set({ peerInstanceId: claimedEpoch })
+          .where(and(
+            eq(schema.federationPeers.id, peer.id),
+            isNull(schema.federationPeers.peerInstanceId),
+          ))
+          .run();
+      }
+
       // 1c. Nonce-based replay protection
       if (fedHeaders.nonce) {
         if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {

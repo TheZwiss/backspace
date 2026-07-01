@@ -411,3 +411,84 @@ describe('refreshPeerEpochs — deterministic populate-if-null baseline (self-te
     expect(readPeerInstanceId()).toBe('pre-existing');
   });
 });
+
+describe('POST /api/federation/relay — fast-path epoch baseline (populate-if-null)', () => {
+  // A verified inbound relay authentically carries the sender's current epoch in
+  // `sourceInstanceId` (design §3.2). On the authenticated path only, the receiver
+  // fills a NULL `peer_instance_id` — never overwrites a non-null baseline.
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    seedInstanceSettings(LOCAL_EPOCH);
+    seedActivePeer();
+    app = await buildApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.restoreAllMocks();
+  });
+
+  function readPeerInstanceId(): string | null {
+    const row = testDb
+      .select({ peerInstanceId: schema.federationPeers.peerInstanceId })
+      .from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-remote'))
+      .get();
+    return row?.peerInstanceId ?? null;
+  }
+
+  /** Send a validly-signed relay (empty event batch) carrying `sourceInstanceId`. */
+  async function injectSignedRelay(sourceInstanceId?: string): Promise<number> {
+    const relay: Record<string, unknown> = {
+      version: 1,
+      sourceInstance: PEER_ORIGIN,
+      events: [],
+    };
+    if (sourceInstanceId !== undefined) relay.sourceInstanceId = sourceInstanceId;
+    const body = JSON.stringify(relay);
+    const headers = buildFederationHeaders(body, PEER_SECRET, PEER_ORIGIN);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/relay',
+      headers,
+      payload: body,
+    });
+    return response.statusCode;
+  }
+
+  it('populates a NULL baseline from the epoch a verified relay carries', async () => {
+    expect(readPeerInstanceId()).toBeNull();
+    const status = await injectSignedRelay('remote-epoch-A');
+    expect(status).toBe(200);
+    expect(readPeerInstanceId()).toBe('remote-epoch-A');
+  });
+
+  it('never overwrites a non-null baseline (a valid relay cannot carry a differing epoch)', async () => {
+    const first = await injectSignedRelay('remote-epoch-A');
+    expect(first).toBe(200);
+    expect(readPeerInstanceId()).toBe('remote-epoch-A');
+
+    // A subsequent relay claiming a different epoch must leave the baseline intact.
+    const second = await injectSignedRelay('remote-epoch-B');
+    expect(second).toBe(200);
+    expect(readPeerInstanceId()).toBe('remote-epoch-A');
+  });
+
+  it('is a no-op when a pre-existing baseline is already set', async () => {
+    testDb.update(schema.federationPeers)
+      .set({ peerInstanceId: 'pre-existing' })
+      .where(eq(schema.federationPeers.id, 'peer-remote'))
+      .run();
+
+    const status = await injectSignedRelay('remote-epoch-A');
+    expect(status).toBe(200);
+    expect(readPeerInstanceId()).toBe('pre-existing');
+  });
+
+  it('is a no-op for a backward-compatible relay that omits sourceInstanceId', async () => {
+    const status = await injectSignedRelay(undefined);
+    expect(status).toBe(200);
+    expect(readPeerInstanceId()).toBeNull();
+  });
+});

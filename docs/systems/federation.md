@@ -406,6 +406,8 @@ Two layers of replay protection:
 
 **Important:** The body is re-serialized server-side. This means Fastify's JSON parsing and re-stringification must produce identical output to the sender's `JSON.stringify`. In practice this works because both sides use standard `JSON.stringify` with no custom replacers.
 
+**Relay-envelope epoch (fast-path baseline population, design §3.2).** `FederationRelayRequest` carries `sourceInstanceId?: string` — the sender stamps its current epoch (`getInstanceId()`) when building the request in `federationWorker.ts`. Because the whole body is HMAC-verified above (step 4), a valid relay authentically carries the sender's current incarnation id. Immediately after the signature check passes (and only there — the authenticated boundary), the receiver runs **populate-if-null**: `if (sourceInstanceId && peer.peerInstanceId IS NULL) UPDATE federation_peers SET peer_instance_id = <claimed> WHERE id = ? AND peer_instance_id IS NULL`. This is the *fast-path* baseline populator — it fills the trusted epoch the instant organic traffic flows, usually before the deterministic 15-minute `refreshPeerEpochs` backstop fires. It **never overwrites** a non-null baseline: a differing incarnation implies a different HMAC secret that would have failed verification, so a valid relay can never carry an epoch differing from an established baseline. Runs independent of per-event processing and does not affect relay accept/reject. Backward-compatible: older peers omit `sourceInstanceId` → the update is skipped (no-op).
+
 ---
 
 ## 3. Identity Resolution

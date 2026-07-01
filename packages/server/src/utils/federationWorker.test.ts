@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import { __resetInstanceIdCacheForTest } from './federationEpoch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -84,6 +85,20 @@ function applyMigrations(db: Database.Database): void {
   }
 }
 
+/**
+ * Seed this instance's epoch so the outbox relay builder can stamp
+ * `sourceInstanceId` via getInstanceId(). Resets the module cache so the fresh
+ * per-test DB row is read rather than a value cached from a prior test.
+ */
+function seedInstanceEpoch(): void {
+  testDb.insert(schema.instanceSettings).values({
+    id: 1,
+    instanceId: 'worker-test-epoch',
+    updatedAt: Date.now(),
+  } as typeof schema.instanceSettings.$inferInsert).run();
+  __resetInstanceIdCacheForTest();
+}
+
 function seedPeer(id: string): void {
   testDb.insert(schema.federationPeers).values({
     id, origin: 'https://peer.example', hmacSecret: 'secret',
@@ -108,6 +123,7 @@ describe('outbox worker — duplicate rejection is terminal', () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
+    seedInstanceEpoch();
     vi.restoreAllMocks();
     // Re-apply the static mocks that vi.restoreAllMocks() would undo.
     // isFederationRelayEnabled is mocked at module level via vi.mock (hoisted),
@@ -303,6 +319,7 @@ describe('outbox worker — terminal rejection reasons + rollback invocation', (
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
+    seedInstanceEpoch();
     vi.restoreAllMocks();
     invokeRollbackMock.mockReset();
   });
@@ -431,6 +448,7 @@ describe('unreachable transition resets probe pacing', () => {
     sqlite = new Database(':memory:');
     testDb = drizzle(sqlite, { schema });
     applyMigrations(sqlite);
+    seedInstanceEpoch();
     vi.restoreAllMocks();
   });
 
