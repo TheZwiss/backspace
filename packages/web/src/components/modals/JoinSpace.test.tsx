@@ -17,6 +17,7 @@ vi.mock('../../audio/AudioManager', () => ({
 import { JoinSpaceModal } from './JoinSpace';
 import { useUIStore } from '../../stores/uiStore';
 import { useSpaceStore } from '../../stores/spaceStore';
+import { useExploreStore } from '../../stores/exploreStore';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -34,6 +35,18 @@ beforeEach(() => {
     spaces: [],
     currentSpaceId: null,
   });
+  useExploreStore.setState({
+    spaces: [],
+    myRequests: [],
+    isLoading: false,
+    discoveryEnabled: true,
+    error: null,
+    fetchSpaces: vi.fn().mockResolvedValue(undefined),
+    fetchMyRequests: vi.fn().mockResolvedValue(undefined),
+    publicJoin: vi.fn().mockResolvedValue({ id: 'p1', name: 'Preview Space' }),
+    requestJoin: vi.fn().mockResolvedValue({ id: 'r1', spaceId: 'p1', status: 'pending' }),
+  });
+  useUIStore.setState({ isMobile: false });
 });
 
 function renderModal() {
@@ -119,5 +132,55 @@ describe('JoinSpaceModal', () => {
     await waitFor(() => {
       expect(screen.getByText('Invalid invite code')).toBeInTheDocument();
     });
+  });
+
+  it('shows the discovery heading and fetches spaces on open', () => {
+    useUIStore.setState({ activeModal: 'joinSpace' });
+    renderModal();
+    expect(screen.getByText(/Discover spaces to join/i)).toBeInTheDocument();
+    expect(useExploreStore.getState().fetchSpaces).toHaveBeenCalled();
+    expect(screen.getByText('Browse all in Explore')).toBeInTheDocument();
+  });
+
+  it('renders live preview cards for unjoined discoverable spaces', () => {
+    useExploreStore.setState({
+      spaces: [{
+        id: 'p1', name: 'Preview Space', icon: null, banner: null, avatarColor: null,
+        description: null, visibility: 'public', memberCount: 4, createdAt: 0,
+        joined: false, _instanceOrigin: '',
+      }],
+    });
+    useUIStore.setState({ activeModal: 'joinSpace' });
+    renderModal();
+    expect(screen.getByText('Preview Space')).toBeInTheDocument();
+  });
+
+  it('Browse all navigates to /explore on desktop and closes the modal', async () => {
+    const user = userEvent.setup();
+    useUIStore.setState({ activeModal: 'joinSpace', isMobile: false });
+    renderModal();
+    await user.click(screen.getByText('Browse all in Explore'));
+    expect(mockNavigate).toHaveBeenCalledWith('/explore');
+    expect(useUIStore.getState().activeModal).toBeNull();
+  });
+
+  it('Browse all uses the mobile screen stack when on mobile', async () => {
+    const user = userEvent.setup();
+    const pushMobileScreen = vi.fn();
+    useUIStore.setState({ activeModal: 'joinSpace', isMobile: true, pushMobileScreen });
+    renderModal();
+    await user.click(screen.getByText('Browse all in Explore'));
+    expect(pushMobileScreen).toHaveBeenCalledWith('explore');
+    expect(mockNavigate).not.toHaveBeenCalledWith('/explore');
+  });
+
+  it('hides discovery and shows a notice when discovery is disabled', () => {
+    useExploreStore.setState({ discoveryEnabled: false });
+    useUIStore.setState({ activeModal: 'joinSpace' });
+    renderModal();
+    expect(screen.getByText(/discovery is turned off/i)).toBeInTheDocument();
+    expect(screen.queryByText('Browse all in Explore')).not.toBeInTheDocument();
+    // invite path still available
+    expect(screen.getByPlaceholderText('e.g. abc123 or https://instance.com/join/abc123')).toBeInTheDocument();
   });
 });
