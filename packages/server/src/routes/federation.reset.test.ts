@@ -190,4 +190,49 @@ describe('POST /api/federation/peers/:id/reset', () => {
     const outbox = testDb.select().from(schema.federationOutbox).all();
     expect(outbox).toHaveLength(0);
   });
+
+  it('admits a peer_reset_detected peer and cascade-removes its outbox', async () => {
+    // Detection routes a re-installed remote to needs_attention with the
+    // `peer_reset_detected` sub-reason. The one-click admin Re-peer action
+    // reuses this reset endpoint, so it must admit that peer exactly like an
+    // auth_failures one. The reset handler gates only on `status`, not on the
+    // reason — this locks that reason-agnostic guarantee in place.
+    const now = Date.now();
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-reset',
+      origin: 'https://reinstalled.example',
+      hmacSecret: 'b'.repeat(64),
+      status: 'needs_attention',
+      needsAttentionReason: 'peer_reset_detected',
+      createdAt: now,
+    }).run();
+
+    testDb.insert(schema.federationOutbox).values({
+      id: 'out-reset-1',
+      peerId: 'peer-reset',
+      contextId: 'dm-1',
+      entityId: 'msg-1',
+      contextType: 'dm',
+      eventType: 'message_create',
+      payload: '{}',
+      nextRetryAt: now,
+      expiresAt: now + 86_400_000,
+      createdAt: now,
+    }).run();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peers/peer-reset/reset',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ success: true });
+
+    // Peer row deleted
+    const peers = testDb.select().from(schema.federationPeers).all();
+    expect(peers).toHaveLength(0);
+
+    // Its outbox entries cascade-removed
+    const outbox = testDb.select().from(schema.federationOutbox).all();
+    expect(outbox).toHaveLength(0);
+  });
 });
