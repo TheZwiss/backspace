@@ -126,6 +126,35 @@ export { buildCallUndeliverableToast };
 
 const HOME_ORIGIN = '';
 
+/**
+ * Tear down local state for a DM call that ended, was rejected, or became
+ * terminally undeliverable. Clears the call UI/federation state, and tears
+ * down the LiveKit session **only when the active voice connection still
+ * belongs to the DM call**.
+ *
+ * The guard is load-bearing: `disconnectFn()` tears down whatever LiveKit room
+ * is currently active, regardless of which channel it is. Once the user has
+ * joined a *space* voice channel, `currentVoiceChannelId` is set and the active
+ * room is the space channel — NOT the DM call (the two are mutually exclusive;
+ * `setCurrentVoiceChannel` clears `activeDmCall`). A stale `dm_call_ended` echo
+ * must never disconnect that space connection.
+ *
+ * This is exactly what happens to the **last** participant to leave a DM call
+ * for a space channel: their `voice_join` empties the server-side DM room, the
+ * server broadcasts `dm_call_ended` back to every DM member (including them),
+ * and an unguarded `disconnectFn()` would tear down the space room they just
+ * connected to — stranding the UI on "Connecting…" until a manual rejoin.
+ */
+export function teardownDmCall(): void {
+  const voice = useVoiceStore.getState();
+  voice.setIncomingCall(null);
+  voice.setOutgoingCall(null);
+  voice.setActiveDmCall(null);
+  voice.clearFederatedCallData();
+  // Never tear down a space voice connection in response to a DM-call signal.
+  if (voice.disconnectFn && !voice.currentVoiceChannelId) voice.disconnectFn();
+}
+
 function handleEvent(origin: string, event: ServerEvent): void {
   const isHome = origin === HOME_ORIGIN;
   const { setUser } = useAuthStore.getState();
@@ -1027,7 +1056,13 @@ function handleEvent(origin: string, event: ServerEvent): void {
       if (wasOutgoingCall || isLiveKitConnected) {
         setActiveDmCall({ dmChannelId: callDmId });
       }
-      if (connectFn && !isLiveKitConnected && wasOutgoingCall && callDmId) {
+      // The caller connects to the DM room. `wasOutgoingCall` alone identifies
+      // the caller session (other sessions/tabs never set outgoingCall), and
+      // `connect()` de-dupes an already-connected same room — so we must NOT
+      // also gate on `!isLiveKitConnected`: a caller who is currently sitting in
+      // a space voice channel is LiveKit-connected, and gating on it would skip
+      // the DM connect entirely, stranding them in the space channel.
+      if (connectFn && wasOutgoingCall && callDmId) {
         connectFn(callDmId, true).catch((err: unknown) => {
           console.error('[WS] DM call connect failed:', err);
         });
@@ -1037,39 +1072,24 @@ function handleEvent(origin: string, event: ServerEvent): void {
 
     case 'dm_call_rejected': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
-      setIncomingCall(null);
-      setOutgoingCall(null);
-      setActiveDmCall(null);
-      clearFederatedCallData();
-      if (disconnectFn) disconnectFn();
+      teardownDmCall();
       break;
     }
 
     case 'dm_call_ended': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
-      setIncomingCall(null);
-      setOutgoingCall(null);
-      setActiveDmCall(null);
-      clearFederatedCallData();
-      if (disconnectFn) disconnectFn();
+      teardownDmCall();
       break;
     }
 
     case 'dm_call_undeliverable': {
       if (!isHome && !activePeerOrigins.has(origin)) break;
 
-      const { setIncomingCall, setOutgoingCall, setActiveDmCall, disconnectFn, clearFederatedCallData } = useVoiceStore.getState();
       const { addToast } = useUIStore.getState();
 
       if (event.terminal) {
         // Tear down local outbound call state — mirrors dm_call_ended.
-        setIncomingCall(null);
-        setOutgoingCall(null);
-        setActiveDmCall(null);
-        clearFederatedCallData();
-        if (disconnectFn) disconnectFn();
+        teardownDmCall();
       }
 
       const msg = buildCallUndeliverableToast(event.failures, event.terminal, event.phase);

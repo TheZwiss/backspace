@@ -58,6 +58,41 @@ export function broadcastDeafenViaLiveKit(): void {
   });
 }
 
+/**
+ * Clear the client-side presence of a *space* voice channel when the local user
+ * transitions into a DM call.
+ *
+ * A DM call and a space voice channel are mutually exclusive: the invariant is
+ * that a DM call has **no** `currentVoiceChannelId` (only `activeDmCall`). The
+ * space→DM transition must therefore drop the space channel's client state, the
+ * mirror of `joinVoiceChannel` clearing `activeDmCall` on the DM→space
+ * transition.
+ *
+ * Why this is necessary even though the server already drops us from the space
+ * room (`dm_call_start` / `dm_call_accept` → `leaveCurrentRoom` →
+ * `broadcastRoomLeave`): `VoiceChannel` renders the occupant list for the
+ * channel equal to `currentVoiceChannelId` from the *live LiveKit participants*
+ * (its "our channel is the source of truth" branch). If `currentVoiceChannelId`
+ * still points at the old space channel, the DM call's participants get mapped
+ * onto it and the local user appears to still be sitting in the space channel.
+ *
+ * Clears `currentVoiceChannelId` directly (not via `setCurrentVoiceChannel`,
+ * which would also wipe the `activeDmCall` the caller/acceptor just set) and
+ * optimistically removes self from the old channel's `voiceUsers` so the
+ * sidebar updates immediately, without waiting for the server's leave
+ * broadcast.
+ */
+export function clearSpaceVoiceForDmCall(): void {
+  const { currentVoiceChannelId, removeVoiceUser } = useVoiceStore.getState();
+  if (!currentVoiceChannelId) return;
+
+  const origin = getChannelOrigin(currentVoiceChannelId);
+  const myId = getMyUserIdForOrigin(origin);
+  if (myId) removeVoiceUser(currentVoiceChannelId, myId);
+
+  useVoiceStore.setState({ currentVoiceChannelId: null });
+}
+
 // ---------------------------------------------------------------------------
 // Voice channel join
 // ---------------------------------------------------------------------------

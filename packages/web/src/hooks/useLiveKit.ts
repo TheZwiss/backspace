@@ -19,7 +19,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUIStore } from '../stores/uiStore';
 import type { User } from '@backspace/shared';
-import { broadcastVoiceStatus } from '../utils/voice';
+import { broadcastVoiceStatus, clearSpaceVoiceForDmCall } from '../utils/voice';
 import { consumeIntentionalCameraOff, markIntentionalCameraOff } from '../utils/voiceActions';
 import { AudioManager } from '../audio/AudioManager';
 import { SpeakingDetector } from '../audio/SpeakingDetector';
@@ -572,6 +572,13 @@ export function useLiveKit() {
   const connect = useCallback(async (channelId: string, isDm?: boolean) => {
     const storedId = isDm ? `dm-${channelId}` : channelId;
     if (connectedChannelRef.current === storedId && roomRef.current?.state === ConnectionState.Connected) return;
+
+    // Entering a DM call: drop any space voice channel we're still "in" on the
+    // client. Done synchronously (before any await) so the sidebar updates
+    // immediately. See clearSpaceVoiceForDmCall for why currentVoiceChannelId
+    // must be cleared here — otherwise the DM call's participants render against
+    // the old space channel and we appear to still be sitting in it.
+    if (isDm) clearSpaceVoiceForDmCall();
 
     // Register voice state with the WS server after LiveKit connects (not for DM calls)
     const registerWithServer = () => {
