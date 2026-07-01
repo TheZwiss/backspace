@@ -26,8 +26,7 @@ inside a business — but not to resell as a hosted service. See
 [License](#license) for the exact terms.
 
 > **Project status** <a name="project-status"></a>
-> Backspace 1.0 — stable, self-hostable, and actively developed. Running on two
-> live instances. A young project; issues and feedback welcome.
+> Backspace 1.0 — stable, self-hostable, and actively developed.
 
 ## What makes Backspace different
 
