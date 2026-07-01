@@ -53,9 +53,11 @@ beforeEach(async () => {
 
   // Seed the singleton instance_settings row mirroring ensureDefaults() —
   // tests don't run the boot-time helper, so we insert manually with the
-  // schema-default values for the new federatedRegistrationOpen column.
+  // schema-default values for the new federatedRegistrationOpen column plus
+  // the persistent epoch (instanceId) that ensureDefaults mints on boot.
   testDb.insert(schema.instanceSettings).values({
     id: 1,
+    instanceId: '123e4567-e89b-12d3-a456-426614174000',
     updatedAt: Date.now(),
   }).run();
 
@@ -94,5 +96,8 @@ describe('GET /api/instance/info', () => {
     expect(typeof body.sourceCodeUrl).toBe('string');
     expect(body.sourceCodeUrl).toMatch(/^https?:\/\//);
     expect(body.commit === null || typeof body.commit === 'string').toBe(true);
+    // Persistent per-instance epoch (incarnation UUID) is always advertised.
+    expect(typeof body.instanceId).toBe('string');
+    expect(body.instanceId).toMatch(/^[0-9a-f-]{36}$/);
   });
 });

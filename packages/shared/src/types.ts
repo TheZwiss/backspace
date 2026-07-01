@@ -798,6 +798,10 @@ export interface InstanceInfoResponse {
   version: string;
   registrationOpen: boolean;
   federatedRegistrationOpen: boolean;
+  // Persistent per-instance epoch (incarnation UUID). Minted by ensureDefaults on
+  // first boot and stable across restarts; changes only on a wipe/re-provision.
+  // Peers use it to detect that a remote has been re-provisioned (self-healing).
+  instanceId: string;
   // AGPL-3.0 § 13 network-use source offer: URL to the Corresponding Source of
   // the version this instance is running (operator-configurable via
   // BACKSPACE_SOURCE_URL so forks point at their own source).
@@ -1111,7 +1115,15 @@ export interface FederationRelayAttachment {
 export interface FederationRelayRequest {
   version: 1;
   sourceInstance: string;
+  // Sender's persistent epoch (incarnation UUID). Optional for wire compatibility
+  // with peers that predate epoch self-healing; when present, the receiver can
+  // detect that the source instance has been re-provisioned.
+  sourceInstanceId?: string;
   events: FederationRelayEvent[];
+}
+
+export interface FederationEpochResponse {
+  instanceId: string;
 }
 
 export interface FederationRelayResponse {
