@@ -486,6 +486,7 @@ export type ServerEvent =
   | { type: 'federation_peer_rejected'; peerOrigin: string; peerLabel?: string; reason: string; affectedContexts: Array<{ contextType: 'dm' | 'friend'; contextId: string; contextLabel: string }> }
   | { type: 'federation_peer_active'; peerOrigin: string }
   | { type: 'federation_peers_changed' }
+  | { type: 'federation_peer_reset_detected'; origin: string }
   | { type: 'federation_approval_request_received'; origin: string; instanceName?: string }
   | { type: 'peering_subscription_changed' }
   | { type: 'peering_notification_received'; kind: PeeringNotificationKind }

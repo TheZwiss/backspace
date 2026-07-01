@@ -12,7 +12,7 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { probePeerReachable, markPeerRecovered } from './federationRecovery.js';
+import { probePeerReachable, recoverOrDetectReset } from './federationRecovery.js';
 import { backfillReplicatedProfileAssets } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
@@ -1057,11 +1057,15 @@ export async function processRecoveryTick(): Promise<void> {
     if (!due) continue;
 
     recoveryAbortController = new AbortController();
-    const reachable = await probePeerReachable(peer.origin, recoveryAbortController.signal);
+    const probe = await probePeerReachable(peer.origin, recoveryAbortController.signal);
 
-    if (reachable) {
-      await markPeerRecovered(peer.id);
-      console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+    if (probe.reachable) {
+      const outcome = await recoverOrDetectReset(peer, probe);
+      if (outcome === 'reset_detected') {
+        console.warn(`[federation-worker] Peer ${peer.origin} reset detected (new instance epoch) — routed to needs_attention`);
+      } else {
+        console.log(`[federation-worker] Peer ${peer.origin} recovered — marked active`);
+      }
     } else {
       db.update(schema.federationPeers)
         .set({ probeAttempts: peer.probeAttempts + 1, lastProbeAt: now })

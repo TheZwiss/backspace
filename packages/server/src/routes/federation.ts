@@ -20,7 +20,8 @@ import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcast
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
 import { getInstanceId } from '../utils/federationEpoch.js';
-import { probePeerReachable, markPeerRecovered } from '../utils/federationRecovery.js';
+import { probePeerReachable, recoverOrDetectReset } from '../utils/federationRecovery.js';
+import { markPeerReset } from '../utils/federationReset.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent, ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
 import { GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH } from '@backspace/shared/src/constants.js';
@@ -1120,6 +1121,16 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // Legitimate recovery path: local admin clicks "Reset peering" →
           // row is deleted → remote's /peer/accept then lands on a
           // non-existent row and the normal handshake path runs.
+          //
+          // Detection-only: if the inbound epoch differs from our trusted
+          // baseline, the peer is a NEW incarnation on the same domain (a
+          // wipe-and-reinstall). Route it to needs_attention + snapshot +
+          // journal — but STILL return 200 and STILL do not rekey. The
+          // anti-hijack guard above is preserved verbatim; detection never
+          // grants capability.
+          if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) {
+            markPeerReset(existing.id, sourceOrigin, existing.peerInstanceId, reqInstanceId);
+          }
           return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
         }
         if (existing.status === 'revoked') {
@@ -1619,10 +1630,16 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      const reachable = await probePeerReachable(peer.origin);
+      const probe = await probePeerReachable(peer.origin);
 
-      if (reachable) {
-        await markPeerRecovered(peer.id);
+      if (probe.reachable) {
+        const outcome = await recoverOrDetectReset(peer, probe);
+        if (outcome === 'reset_detected') {
+          // The peer is a new incarnation on the same domain. It was routed to
+          // needs_attention (detection-only, no rekey) and must NOT be recovered
+          // to active until an admin re-peers through the authenticated path.
+          return reply.code(200).send({ recovered: false, status: 'needs_attention' });
+        }
         return reply.code(200).send({ recovered: true, status: 'active' });
       }
 
