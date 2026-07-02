@@ -404,6 +404,7 @@ export const federationResetEvents = sqliteTable('federation_reset_events', {
   resolvedAt: integer('resolved_at'),
   stubCount: integer('stub_count').notNull().default(0),
   orphanedAccountCount: integer('orphaned_account_count').notNull().default(0),
+  acknowledgedAt: integer('acknowledged_at'),
 });
 
 // SQL-level CHECK constraint enforces (direction='inbound' → hmac_secret NOT NULL).

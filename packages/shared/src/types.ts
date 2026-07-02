@@ -1203,7 +1203,7 @@ export interface FederationPeer {
  */
 export interface FederationOrphanedAccount {
   id: string;
-  username: string; // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  username: string; // preserved original handle (detach spec); legacy rows may carry '!orphaned:{uid}@domain'
   displayName: string | null;
   avatarColor: string | null;
   ownedSpaces: { id: string; name: string }[];
@@ -1221,6 +1221,7 @@ export interface FederationResetEvent {
   newEpoch: string | null;
   detectedAt: number;
   resolvedAt: number | null;
+  acknowledgedAt: number | null;
   stubCount: number;
   orphanedAccountCount: number;
   orphanedAccounts: FederationOrphanedAccount[];

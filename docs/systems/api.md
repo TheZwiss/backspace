@@ -327,6 +327,7 @@ POST   /federation/peer/initiate   (admin)     { remoteOrigin }                 
 POST   /federation/peer/accept     (public, IP rate-limited 10/min) { sourceOrigin, challenge, hmacSecret, instanceName?, instanceId?, approvalToken? } → { accepted:true, instanceName, instanceId } (200) | queued (202 + { approvalToken }) | 409 { accepted:false, code:'PEER_EXISTS_RESET_REQUIRED', instanceName, instanceId }
 GET    /federation/peers           (admin)                                          → { peers[] } (no secrets; each peer carries needsAttentionReason)
 GET    /federation/reset-events     (admin)                                          → FederationResetEventsResponse
+POST   /federation/reset-events/acknowledge (admin)  { origin }                      → { success } (200) | 400 missing origin | 404 unknown origin
 DELETE /federation/peers/:id       (admin)                                          → { success } + outbox cleanup
 POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest (+ sourceInstanceId?) → { accepted[], rejected[] }
 POST   /federation/sync            (HMAC-signed S2S)  { sinceTimestamp, limit?, dmChannelId?, federatedId?, contextType? } → { events[], hasMore, checkpoint }
@@ -345,7 +346,7 @@ POST   /federation/epoch           (HMAC-signed S2S, HMAC-signed response)  {}  
 ```typescript
 type FederationOrphanedAccount = {
   id: string;
-  username: string;            // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  username: string;            // preserved original handle (detach spec); legacy rows may carry '!orphaned:{uid}@domain'
   displayName: string | null;
   avatarColor: string | null;
   ownedSpaces: { id: string; name: string }[];
@@ -354,12 +355,14 @@ type FederationOrphanedAccount = {
 };
 type FederationResetEvent = {
   origin: string; deadEpoch: string; newEpoch: string | null;
-  detectedAt: number; resolvedAt: number | null;
+  detectedAt: number; resolvedAt: number | null; acknowledgedAt: number | null;
   stubCount: number; orphanedAccountCount: number;
   orphanedAccounts: FederationOrphanedAccount[];
 };
 type FederationResetEventsResponse = { events: FederationResetEvent[] };
 ```
+
+**`POST /api/federation/reset-events/acknowledge`** — admin-only, no S2S. Body `{ origin }`: `400` if missing, `404` if no journal row for that origin, else stamps `acknowledged_at = Date.now()` **only if currently null** (idempotent — a second call keeps the original timestamp) and returns `{ success: true }`. Lets the admin banner be dismissed server-side (Task 7) instead of client-only state; purely informational, detached accounts stay detached (detach spec §4.6).
 
 Disposition actions reuse existing endpoints (no new mutating routes): one-click Re-peer = `POST /peers/:id/reset` → `POST /peer/initiate`; full-purge Remove = `DELETE /api/admin/users/:id` (owns-spaces → transfer first). **`needsAttentionReason`** (`'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null`) is now included on each `GET /federation/peers` peer object so the client can raise the persistent Reset-cleanup banner only for reset-detected peers and surface an "incomplete Re-peer" warning for `repeer_incomplete`. See `federation.md` "Instance Epoch" and `client-federation.md` §8.
 

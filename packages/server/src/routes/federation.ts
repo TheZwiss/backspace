@@ -1646,11 +1646,43 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           resolvedAt: ev.resolvedAt,
           stubCount: ev.stubCount,
           orphanedAccountCount: ev.orphanedAccountCount,
+          acknowledgedAt: ev.acknowledgedAt,
           orphanedAccounts,
         };
       });
 
       return reply.code(200).send({ events: result });
+    },
+  );
+
+  // ─── POST /api/federation/reset-events/acknowledge ─────────────────────────
+  // Admin-only: dismiss a reset event from the admin banner. Purely
+  // informational state — detached accounts stay detached and functional;
+  // acknowledging just stops the surface from re-listing them (detach spec §4.6).
+  app.post<{ Body: { origin: string } }>(
+    '/api/federation/reset-events/acknowledge',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { origin } = request.body;
+      if (!origin || typeof origin !== 'string') {
+        return reply.code(400).send({ error: 'origin is required', statusCode: 400 });
+      }
+      const db = getDb();
+      const existing = db
+        .select()
+        .from(schema.federationResetEvents)
+        .where(eq(schema.federationResetEvents.origin, origin))
+        .get();
+      if (!existing) {
+        return reply.code(404).send({ error: 'No reset event for this origin', statusCode: 404 });
+      }
+      if (existing.acknowledgedAt === null) {
+        db.update(schema.federationResetEvents)
+          .set({ acknowledgedAt: Date.now() })
+          .where(eq(schema.federationResetEvents.origin, origin))
+          .run();
+      }
+      return reply.code(200).send({ success: true });
     },
   );
 

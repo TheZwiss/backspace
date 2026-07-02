@@ -426,6 +426,7 @@ Instance-epoch self-healing ledger. One row per origin recording a detected fede
 | resolvedAt | integer | | Epoch ms healing completed; `NULL` while in progress |
 | stubCount | integer NOT NULL | 0 | Count of replicated identity stubs affected by the reset |
 | orphanedAccountCount | integer NOT NULL | 0 | Count of accounts that could not be re-linked to the new epoch |
+| acknowledgedAt | integer | | Epoch ms the admin dismissed this reset event from the banner (`POST /api/federation/reset-events/acknowledge`, idempotent); `NULL` while unacknowledged. Purely informational — detach spec §4.6 |
 
 ### peer_approval_requests
 Queue of peering requests pending admin review when `autoAcceptPeering` is `false`. Holds **both directions**: inbound rows (remote asked to peer with us) and outbound rows (a local user-initiated `ensurePeered` call gated on this side; see [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate)). UNIQUE on `(origin, direction)` so the same origin may have at most one row per direction simultaneously. Rows expire after 30 days via janitor cleanup.
