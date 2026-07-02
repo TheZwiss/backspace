@@ -271,7 +271,6 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(peer?.status).toBe('needs_attention');
     expect(peer?.needsAttentionReason).toBe('repeer_incomplete');
-    expect(peer?.status).not.toBe('active');
   });
 
   it('(c) on 200 with a valid signed epoch, activates (verified:true) and clears needsAttentionReason', async () => {

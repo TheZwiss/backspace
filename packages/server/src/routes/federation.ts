@@ -1001,7 +1001,11 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: remoteInstanceId, needsAttentionReason: null, approvalToken: null })
+          // The baseline is trust-consequential (design §9 — a poisoned baseline can drive
+          // a spurious heal), so store the epoch we cryptographically verified via the signed
+          // /epoch round-trip, not the unverified handshake-response body. They are normally
+          // identical; the verified one is authoritative if they ever differ.
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: verifiedEpoch, needsAttentionReason: null, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
