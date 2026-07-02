@@ -380,7 +380,7 @@ When a user changes their password on their home instance, `authStore.changePass
 
 **Pre-checks:**
 1. `username` must match stored username (confirmation safeguard)
-2. Local users must provide and verify `password`; federated users rely on JWT auth
+2. Native local users **and detached accounts** (`federation_home_orphaned = 1`) must provide and verify `password` against the local hash; non-detached federated users rely on JWT auth (their home instance already vouches for them). A detached account is a sovereign local account with no home verifying anything, so it follows the LOCAL rule — the same self-destruct protection as a native account, and mirroring the change-password rule (§5, detach spec §4.4). Condition: `!user.homeInstance || user.federationHomeOrphaned === 1`. Missing password → 400; wrong password → 403.
 3. Must not own any spaces (returns 400 with `ownedSpaces` list)
 
 **Client-side flow** (`authStore.deleteAccount()`):

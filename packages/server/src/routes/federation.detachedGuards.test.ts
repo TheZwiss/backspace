@@ -145,6 +145,66 @@ describe('S2S identity delete — detached account guard', () => {
   });
 });
 
+describe('S2S presence_update — detached account guard', () => {
+  it('skips a detached account (acked, status unchanged)', async () => {
+    const fed = await import('./federation.js');
+    const event: FederationRelayEvent = {
+      eventType: 'presence_update',
+      contextType: 'profile',
+      messageId: 'm-presence-hijack',
+      encryptionVersion: 0,
+      timestamp: Date.now(),
+      presenceUpdate: {
+        homeUserId: DETACHED_HOME_UID,
+        homeInstance: PEER_DOMAIN,
+        status: 'online', // would flip the sovereign account's presence if not guarded
+        ts: Date.now(),
+      },
+    };
+    const accepted: string[] = [];
+    const rejected: Array<{ messageId: string; reason: string }> = [];
+    fed.processPresenceUpdateEvent(event, PEER_DOMAIN, testDb, accepted, rejected);
+
+    // Acked (not rejected) — avoid a sender retry loop.
+    expect(rejected).toEqual([]);
+    expect(accepted).toEqual(['m-presence-hijack']);
+
+    // The detached row's status is untouched (stays offline).
+    const row = testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get();
+    expect(row?.status).toBe('offline');
+  });
+});
+
+describe('hydrateReplicatedUserProfile — detached account guard', () => {
+  it('leaves a detached row untouched even when fields are empty', async () => {
+    const fed = await import('./federation.js');
+    const before = testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!;
+    expect(before.bio).toBeNull();
+    expect(before.avatarColor).toBeNull();
+
+    // A replayed old-homeUserId snapshot from the new incarnation. Without the
+    // detached guard, hydrate would fill the empty bio / avatarColor fields.
+    const result = await fed.hydrateReplicatedUserProfile(before, {
+      username: 'alice',
+      displayName: 'Hijacked',
+      bio: 'hijacked bio',
+      avatarColor: '#ffffff',
+      avatar: null,
+      banner: null,
+    }, testDb);
+
+    // No-op return: the row object is returned unchanged.
+    expect(result.bio).toBeNull();
+    expect(result.avatarColor).toBeNull();
+
+    // And the DB row is untouched.
+    const after = testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!;
+    expect(after.bio).toBeNull();
+    expect(after.avatarColor).toBeNull();
+    expect(after.displayName).toBe('Alice');
+  });
+});
+
 describe('S2S profile_update — detached account guard', () => {
   it('skips a detached account (acked, profile unchanged)', async () => {
     const fed = await import('./federation.js');

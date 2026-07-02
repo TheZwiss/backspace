@@ -4962,6 +4962,12 @@ export async function hydrateReplicatedUserProfile(
 ): Promise<typeof schema.users.$inferSelect> {
   if (!profile) return user;
   if (!user.homeInstance) return user; // Don't update native users
+  // Detached accounts are sovereign local accounts: the home domain now belongs
+  // to a different incarnation, so a relayed snapshot resolved via an old
+  // homeUserId (tier-1 historical hit) must never fill this row's fields. No-op
+  // return, mirroring the profile_update / presence_update / identity-delete
+  // guards (detach spec §4.3).
+  if (user.federationHomeOrphaned === 1) return user;
 
   const baseUrl = user.homeInstance.startsWith('http') ? user.homeInstance : `https://${user.homeInstance}`;
   const buildAbsoluteUrl = (value: string): string => {
@@ -6568,6 +6574,16 @@ export function processPresenceUpdateEvent(
   }
 
   if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Detached accounts are sovereign: the domain now belongs to a different
+  // incarnation, which must never flip the established account's presence by
+  // replaying its old homeUserId. Ack (not reject) — the sender considers this
+  // identity theirs to update; from our side the update simply no-ops.
+  if (localUser.federationHomeOrphaned === 1) {
+    console.log(`[federation] Skipping presence_update for detached account ${localUser.id} (home-orphaned)`);
     accepted.push(event.messageId);
     return;
   }

@@ -149,6 +149,47 @@ describe('markPeerReset — detection-only reset routing', () => {
     expect(row.resolvedAt).toBeNull();
   });
 
+  it('re-detected reset clears a stale acknowledgedAt (dismissed card re-surfaces)', async () => {
+    seedPeer();
+    seedUser('stub-1', { passwordHash: STUB });
+    seedUser('real-1', { passwordHash: '$2b$10$realbcrypthash' });
+
+    const { markPeerReset } = await import('./federationReset.js');
+
+    // First reset detected, then the admin dismisses (acknowledges) the card.
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E1');
+    testDb.update(schema.federationResetEvents)
+      .set({ acknowledgedAt: Date.now() })
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).run();
+    expect(testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!.acknowledgedAt).not.toBeNull();
+
+    // The peer resets AGAIN before the first was resolved — a fresh batch is
+    // detached and needs fresh admin attention, so the dismissal must clear.
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E2');
+    expect(testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!.acknowledgedAt).toBeNull();
+  });
+
+  it('a resolved+acknowledged prior reset is re-armed (acknowledgedAt cleared) on a new reset', async () => {
+    seedPeer();
+    seedUser('stub-1', { passwordHash: STUB });
+
+    const { markPeerReset } = await import('./federationReset.js');
+    markPeerReset('peer-1', ORIGIN, 'E0', 'E1');
+    // Simulate the heal resolving the first reset AND the admin dismissing it.
+    testDb.update(schema.federationResetEvents)
+      .set({ resolvedAt: Date.now(), newEpoch: 'E1', acknowledgedAt: Date.now() })
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).run();
+
+    // Brand-new reset lands (fresh-journal / onConflictDoUpdate branch).
+    markPeerReset('peer-1', ORIGIN, 'E1', 'E2');
+    const row = testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, ORIGIN)).get()!;
+    expect(row.resolvedAt).toBeNull();
+    expect(row.acknowledgedAt).toBeNull();
+  });
+
   it('matches home_instance stored as a full URL (defensive format match)', async () => {
     seedPeer();
     // Legacy straggler stored with the https:// prefix rather than bare domain.

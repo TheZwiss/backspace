@@ -113,9 +113,12 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
     if (existing && existing.resolvedAt === null) {
       // Double-reset: keep the ORIGINAL dead_epoch + detected_at (the
       // incarnation already snapshotted), refresh counts only. Never overwrite
-      // dead_epoch on an unresolved row.
+      // dead_epoch on an unresolved row. Clear `acknowledged_at`: a re-detected
+      // reset is a fresh event that detached a new batch and needs fresh admin
+      // attention — a stale dismissal must not keep the disposition card hidden
+      // (detach spec §4.6).
       tx.update(schema.federationResetEvents)
-        .set({ stubCount, orphanedAccountCount })
+        .set({ stubCount, orphanedAccountCount, acknowledgedAt: null })
         .where(eq(schema.federationResetEvents.origin, origin))
         .run();
     } else {
@@ -140,6 +143,10 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
             resolvedAt: null,
             stubCount,
             orphanedAccountCount,
+            // Re-arm the admin surface: a fresh reset on a previously
+            // resolved+dismissed origin must clear the old dismissal so the
+            // new detached batch's disposition card re-surfaces (detach §4.6).
+            acknowledgedAt: null,
           },
         })
         .run();

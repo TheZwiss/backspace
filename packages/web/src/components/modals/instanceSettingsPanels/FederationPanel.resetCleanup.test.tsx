@@ -218,6 +218,10 @@ describe('FederationPanel — Reset cleanup', () => {
     const removeBtn = await screen.findByRole('button', { name: 'Remove' });
     fireEvent.click(removeBtn);
 
+    // The confirm dialog title uses the current "detached" vocabulary, not the
+    // legacy "Orphaned Account" wording.
+    expect(await screen.findByText('Remove detached account')).toBeInTheDocument();
+
     const confirmBtn = await screen.findByRole('button', { name: 'Delete permanently' });
     fireEvent.click(confirmBtn);
 

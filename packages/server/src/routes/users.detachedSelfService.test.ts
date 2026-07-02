@@ -198,6 +198,51 @@ describe('POST /api/users/@me/change-password — local rule for detached accoun
   });
 });
 
+describe('DELETE /api/users/@me — local rule for detached accounts', () => {
+  it('detached self-delete REQUIRES the local password (local rule)', async () => {
+    // No password → 400
+    const missing = await app.inject({
+      method: 'DELETE',
+      url: '/api/users/@me',
+      headers: { Authorization: `Bearer ${detachedToken()}` },
+      payload: { username: DETACHED_USERNAME },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!.isDeleted).toBe(0);
+
+    // Wrong password → 403
+    const wrong = await app.inject({
+      method: 'DELETE',
+      url: '/api/users/@me',
+      headers: { Authorization: `Bearer ${detachedToken()}` },
+      payload: { username: DETACHED_USERNAME, password: 'not-the-password' },
+    });
+    expect(wrong.statusCode).toBe(403);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!.isDeleted).toBe(0);
+
+    // Correct password → 200 and the account is tombstoned.
+    const ok = await app.inject({
+      method: 'DELETE',
+      url: '/api/users/@me',
+      headers: { Authorization: `Bearer ${detachedToken()}` },
+      payload: { username: DETACHED_USERNAME, password: DETACHED_PASSWORD },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!.isDeleted).toBe(1);
+  });
+
+  it('non-detached federated self-delete still works JWT-only (no password required)', async () => {
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/api/users/@me',
+      headers: { Authorization: `Bearer ${federatedToken()}` },
+      payload: { username: FEDERATED_USERNAME },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(testDb.select().from(schema.users).where(eq(schema.users.id, FEDERATED_ID)).get()!.isDeleted).toBe(1);
+  });
+});
+
 describe('sanitizeUser — federationHomeOrphaned is self-view only', () => {
   it('exposes federationHomeOrphaned only on self-view', () => {
     const detachedRow = testDb.select().from(schema.users).where(eq(schema.users.id, DETACHED_ID)).get()!;

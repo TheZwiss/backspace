@@ -121,8 +121,13 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Username does not match', statusCode: 400 });
     }
 
-    // Native users must verify password; federated users rely on JWT auth
-    if (!user.homeInstance) {
+    // Native users must verify password; non-detached federated users rely on
+    // JWT auth (their home instance already vouches for them). EXCEPTION:
+    // detached accounts (federation_home_orphaned = 1) are sovereign local
+    // accounts with no home verifying anything — they follow the LOCAL rule and
+    // must supply their local password to self-destruct, mirroring
+    // change-password (detach spec §4.4).
+    if (!user.homeInstance || user.federationHomeOrphaned === 1) {
       if (!password || typeof password !== 'string') {
         return reply.code(400).send({ error: 'Password is required', statusCode: 400 });
       }

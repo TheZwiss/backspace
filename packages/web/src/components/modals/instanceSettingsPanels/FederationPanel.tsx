@@ -1095,7 +1095,7 @@ function ResetCleanup() {
           isOpen={true}
           onClose={() => { if (!actionLoading) setConfirmAction(null); }}
           onConfirm={handleConfirm}
-          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove Orphaned Account'}
+          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove detached account'}
           description={
             confirmAction.kind === 'repeer'
               ? `This deletes the local peer record and starts a fresh authenticated handshake with ${confirmAction.peer.origin}. The remote must be reachable and (if it does not auto-accept) approve the request.`
