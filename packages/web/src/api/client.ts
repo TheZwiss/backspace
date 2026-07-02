@@ -277,7 +277,7 @@ export class BackspaceApiClient {
   };
 
   readonly federation: {
-    initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: FederationPeer }>;
+    initiatePeering: (data: { remoteOrigin: string }) => Promise<{ peer: FederationPeer; verified?: boolean }>;
     ensurePeered: (data: { remoteOrigin: string }) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
     peers: () => Promise<{ peers: FederationPeer[] }>;
     resetEvents: () => Promise<FederationResetEventsResponse>;
@@ -697,7 +697,7 @@ export class BackspaceApiClient {
 
     this.federation = {
       initiatePeering: (data: { remoteOrigin: string }) =>
-        request<{ peer: FederationPeer }>(
+        request<{ peer: FederationPeer; verified?: boolean }>(
           'POST', '/federation/peer/initiate', data
         ),
       ensurePeered: (data: { remoteOrigin: string }) =>

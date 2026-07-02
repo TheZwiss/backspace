@@ -122,6 +122,84 @@ describe('FederationPanel — Reset cleanup', () => {
     );
   });
 
+  it('warns when Re-peer completes but the handshake is unverified (verified:false)', async () => {
+    peers.mockResolvedValue({ peers: [resetPeerFixture] });
+    resetEvents.mockResolvedValue({ events: [] });
+    resetPeer.mockResolvedValue({ success: true });
+    initiatePeering.mockResolvedValue({
+      peer: { ...resetPeerFixture, status: 'needs_attention' },
+      verified: false,
+    });
+
+    render(<FederationPanel />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer & heal' }));
+
+    await waitFor(() => expect(initiatePeering).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        'Re-peer incomplete — Peer still holds stale peering for you. Its admin must reset their side, then Re-peer again.',
+        'warning',
+      ),
+    );
+    expect(addToast).not.toHaveBeenCalledWith(
+      expect.stringContaining('Re-peering initiated'),
+      'success',
+      expect.anything(),
+    );
+  });
+
+  it('warns when the remote rejects with 409 PEER_EXISTS_RESET_REQUIRED', async () => {
+    peers.mockResolvedValue({ peers: [resetPeerFixture] });
+    resetEvents.mockResolvedValue({ events: [] });
+    resetPeer.mockResolvedValue({ success: true });
+    initiatePeering.mockRejectedValue(
+      new HttpError(409, 'Peer exists — reset required', {
+        error: 'Peer exists — reset required',
+        statusCode: 409,
+        code: 'PEER_EXISTS_RESET_REQUIRED',
+      }),
+    );
+
+    render(<FederationPanel />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer & heal' }));
+
+    await waitFor(() => expect(initiatePeering).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        'The remote instance still holds stale peering for you. Ask its admin to reset their side, then Re-peer again.',
+        'warning',
+      ),
+    );
+  });
+
+  it('shows the success toast when the handshake is verified (verified:true)', async () => {
+    peers.mockResolvedValue({ peers: [resetPeerFixture] });
+    resetEvents.mockResolvedValue({ events: [] });
+    resetPeer.mockResolvedValue({ success: true });
+    initiatePeering.mockResolvedValue({
+      peer: { ...resetPeerFixture, status: 'active' },
+      verified: true,
+    });
+
+    render(<FederationPanel />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-peer & heal' }));
+
+    await waitFor(() => expect(initiatePeering).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith('Re-peering initiated with Peer', 'success', 3000),
+    );
+    expect(addToast).not.toHaveBeenCalledWith(
+      expect.stringContaining('still holds stale peering'),
+      'warning',
+    );
+  });
+
   it('removes an orphaned account via the existing admin delete', async () => {
     peers.mockResolvedValue({ peers: [] });
     resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });

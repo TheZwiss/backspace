@@ -910,8 +910,15 @@ function ResetCleanup() {
         // Order matters: reset the stale local record BEFORE the fresh handshake,
         // so activation heals stale friendships/DMs against the new incarnation.
         await api.federation.resetPeer(peer.id);
-        await api.federation.initiatePeering({ remoteOrigin: peer.origin });
-        addToast(`Re-peering initiated with ${peerName(peer)}`, 'success', 3000);
+        const result = await api.federation.initiatePeering({ remoteOrigin: peer.origin });
+        if (result.verified === false || result.peer?.status === 'needs_attention') {
+          addToast(
+            `Re-peer incomplete — ${peerName(peer)} still holds stale peering for you. Its admin must reset their side, then Re-peer again.`,
+            'warning',
+          );
+        } else {
+          addToast(`Re-peering initiated with ${peerName(peer)}`, 'success', 3000);
+        }
         await fetchAll();
       } else {
         const { account } = confirmAction;
@@ -938,6 +945,14 @@ function ResetCleanup() {
         } else {
           addToast(err instanceof Error ? err.message : 'Failed to remove account', 'warning');
         }
+      } else if (
+        err instanceof HttpError && err.status === 409 &&
+        (err.body as { code?: string } | undefined)?.code === 'PEER_EXISTS_RESET_REQUIRED'
+      ) {
+        addToast(
+          `The remote instance still holds stale peering for you. Ask its admin to reset their side, then Re-peer again.`,
+          'warning',
+        );
       } else {
         addToast(err instanceof Error ? err.message : 'Re-peering failed', 'warning');
       }
