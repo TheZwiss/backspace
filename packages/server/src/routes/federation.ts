@@ -2836,15 +2836,57 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       // Only populated in the DM branch (friend/profile branches don't need it).
       let channelFederatedIdMap = new Map<string, string>();
 
+      // Friend-branch pagination must be computed from PRE-filter rows —
+      // filtering in place would stall the checkpoint / drop pages (spec §3.2).
+      let prefilterCount: number | null = null;
+      let prefilterLastTs: number | null = null;
+
       if (contextTypeFilter === 'friend') {
-        // ── Friend event sync: no DM channel logic needed ──
-        mutationRows = rawDb.prepare(`
+        // ── Friend event sync: relevance-scoped to the requesting peer ──
+        const fetchedFriendRows = rawDb.prepare(`
           SELECT id, entity_id, context_id, context_type, mutation_type, mutated_at, payload
           FROM federation_mutation_log
           WHERE context_type = 'friend' AND mutated_at > ?
           ORDER BY mutated_at ASC
           LIMIT ?
         `).all(sinceTimestamp, limit) as typeof mutationRows;
+
+        prefilterCount = fetchedFriendRows.length;
+        prefilterLastTs = fetchedFriendRows.length > 0
+          ? fetchedFriendRows[fetchedFriendRows.length - 1]!.mutated_at
+          : null;
+
+        const peerDomainFriend = extractDomain(peer.origin).toLowerCase();
+        const normHome = `lower(replace(replace(coalesce(home_instance, ''), 'https://', ''), 'http://', ''))`;
+        const localRowStmt = rawDb.prepare(`
+          SELECT is_deleted, federation_home_orphaned FROM users
+          WHERE home_user_id = ? AND ${normHome} = ?
+        `);
+
+        // An event qualifies iff at least one side is homed at the requester's
+        // domain AND that side, when it resolves to a local row, is live and
+        // non-detached. A detached/tombstoned row belongs to a dead incarnation
+        // of the requester, not to the requester (spec §3.2).
+        const sideQualifies = (side: { homeUserId?: string; homeInstance?: string } | undefined): boolean => {
+          if (!side?.homeUserId || !side.homeInstance) return false;
+          if (extractDomain(side.homeInstance).toLowerCase() !== peerDomainFriend) return false;
+          const local = localRowStmt.get(side.homeUserId, peerDomainFriend) as
+            { is_deleted: number; federation_home_orphaned: number } | undefined;
+          if (local && (local.is_deleted === 1 || local.federation_home_orphaned === 1)) return false;
+          return true;
+        };
+
+        mutationRows = fetchedFriendRows.filter((row) => {
+          if (!row.payload) return false;
+          let friendship: { from?: { homeUserId?: string; homeInstance?: string }; to?: { homeUserId?: string; homeInstance?: string } } | undefined;
+          try {
+            friendship = (JSON.parse(row.payload) as { friendship?: typeof friendship }).friendship;
+          } catch {
+            return false;
+          }
+          if (!friendship) return false;
+          return sideQualifies(friendship.from) || sideQualifies(friendship.to);
+        });
       } else if (contextTypeFilter === 'profile') {
         // ── Profile event sync: no DM channel logic needed ──
         mutationRows = rawDb.prepare(`
@@ -3238,11 +3280,13 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // 6. Compute pagination metadata
-      const hasMore = mutationRows.length >= limit;
-      const checkpoint = mutationRows.length > 0
-        ? mutationRows[mutationRows.length - 1]!.mutated_at
-        : sinceTimestamp;
+      // 6. Compute pagination metadata — from PRE-filter rows when the friend
+      //    branch filtered, so filtered-out events still advance the cursor.
+      const hasMore = (prefilterCount ?? mutationRows.length) >= limit;
+      const checkpoint = prefilterLastTs
+        ?? (mutationRows.length > 0
+          ? mutationRows[mutationRows.length - 1]!.mutated_at
+          : sinceTimestamp);
 
       // 7. Update peer last-seen timestamp
       db.update(schema.federationPeers)

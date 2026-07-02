@@ -103,6 +103,20 @@ function seedDmWithMessage(channelId: string, memberIds: string[], authorId: str
   }).run();
 }
 
+function seedFriendMutation(id: string, ts: number, from: { homeUserId: string; homeInstance: string }, to: { homeUserId: string; homeInstance: string }): void {
+  testDb.insert(schema.federationMutationLog).values({
+    id, entityId: `fr-${id}`, contextId: `fr-ctx-${id}`,
+    contextType: 'friend', mutationType: 'friend_add', mutatedAt: ts,
+    payload: JSON.stringify({
+      friendship: {
+        from, to,
+        fromProfile: { username: 'x' }, toProfile: { username: 'y' },
+        createdAt: ts,
+      },
+    }),
+  }).run();
+}
+
 async function syncPull(app: FastifyInstance, body: object) {
   const bodyStr = JSON.stringify(body);
   return app.inject({
@@ -167,5 +181,53 @@ describe('POST /api/federation/sync — DM relevance filter', () => {
     const res = await syncPull(app, { sinceTimestamp: 0 });
     const body = JSON.parse(res.body);
     expect(body.events.map((e: { dmChannelId: string }) => e.dmChannelId)).toEqual(['ch-live']);
+  });
+});
+
+describe('POST /api/federation/sync — friend relevance filter', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedPeer();
+    app = await buildApp();
+  });
+
+  it('returns friend events involving the requester domain; filters unrelated ones', async () => {
+    seedFriendMutation('f1', 100,
+      { homeUserId: 'a1', homeInstance: 'https://home.test' },
+      { homeUserId: 'b1', homeInstance: 'https://orbit.test' });   // involves requester → returned
+    seedFriendMutation('f2', 110,
+      { homeUserId: 'a2', homeInstance: 'https://home.test' },
+      { homeUserId: 'c1', homeInstance: 'https://elsewhere.test' }); // unrelated → filtered
+    const res = await syncPull(app, { sinceTimestamp: 0, contextType: 'friend' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].friendship.to.homeUserId).toBe('b1');
+    // Checkpoint advances past the FILTERED row too (pre-filter pagination).
+    expect(body.checkpoint).toBe(110);
+  });
+
+  it('does not qualify an event via a side that resolves to a DETACHED local row', async () => {
+    seedUser({ id: 'stub-dead', username: 'dead@orbit.test', homeInstance: 'orbit.test', homeUserId: 'dead-home', federationHomeOrphaned: 1 });
+    seedFriendMutation('f3', 100,
+      { homeUserId: 'a1', homeInstance: 'https://home.test' },
+      { homeUserId: 'dead-home', homeInstance: 'https://orbit.test' });
+    const res = await syncPull(app, { sinceTimestamp: 0, contextType: 'friend' });
+    const body = JSON.parse(res.body);
+    expect(body.events).toEqual([]);
+    expect(body.checkpoint).toBe(100); // still advances
+  });
+
+  it('qualifies a requester-domain side with no local row (receiver guard is the backstop)', async () => {
+    seedFriendMutation('f4', 100,
+      { homeUserId: 'a1', homeInstance: 'https://home.test' },
+      { homeUserId: 'unknown-home', homeInstance: 'https://orbit.test' });
+    const res = await syncPull(app, { sinceTimestamp: 0, contextType: 'friend' });
+    const body = JSON.parse(res.body);
+    expect(body.events).toHaveLength(1);
   });
 });
