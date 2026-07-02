@@ -432,4 +432,11 @@ describe('isDeletedPartnerDm', () => {
     const dm = { ownerId: 'me', members: [me, { id: 'x', isDeleted: true } as User] };
     expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
   });
+  it('false when there are zero other members', () => {
+    expect(isDeletedPartnerDm({ ownerId: null, members: [me] } as any, me)).toBe(false);
+  });
+  it('false when others are mixed (one deleted, one live)', () => {
+    const dm = { ownerId: null, members: [me, { id: 'x', isDeleted: true } as User, { id: 'y', isDeleted: false } as User] };
+    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
+  });
 });
