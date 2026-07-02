@@ -82,7 +82,7 @@ async function waitForReady(origin: string, proc: ChildProcess, logPath: string,
   }
 }
 
-async function spawnInstance(opts: {
+export async function spawnInstance(opts: {
   domain: string;
   port: number;
   dbPath: string;
@@ -90,7 +90,17 @@ async function spawnInstance(opts: {
   jwtSecret: string;
   logPath: string;
   disableRateLimits?: boolean;
+  /**
+   * When true, set `PUBLIC_ORIGIN=http://127.0.0.1:<port>` so this instance's
+   * `getOurOrigin()` returns its TRANSPORT url instead of the identity
+   * `https://<DOMAIN>`. Required by the real-handshake harness so a single real
+   * `/peer/initiate`→`/peer/accept` creates one working, reachable peer row per
+   * direction (keyed by the transport origin). Default off — existing callers
+   * are unaffected. See realHandshake.ts and federationAuth.ts:187.
+   */
+  publicOriginAsTransport?: boolean;
 }): Promise<SpawnedInstance> {
+  const origin = `http://127.0.0.1:${opts.port}`;
   const env: Record<string, string> = {
     ...process.env,
     NODE_ENV: 'test',
@@ -112,6 +122,9 @@ async function spawnInstance(opts: {
   if (opts.disableRateLimits !== false) {
     env.DISABLE_RATE_LIMITS = '1';
   }
+  if (opts.publicOriginAsTransport) {
+    env.PUBLIC_ORIGIN = origin;
+  }
   // From packages/server/test/helpers → packages/server is up two levels.
   const serverDir = path.resolve(__dirname, '../../');
   const proc = spawn('pnpm', ['exec', 'tsx', 'src/index.ts'], {
@@ -122,7 +135,6 @@ async function spawnInstance(opts: {
   const logStream = createWriteStream(opts.logPath);
   proc.stdout!.pipe(logStream);
   proc.stderr!.pipe(logStream);
-  const origin = `http://127.0.0.1:${opts.port}`;
   await waitForReady(origin, proc, opts.logPath);
   return {
     proc,
@@ -143,6 +155,13 @@ export interface BootOptions {
    * tests that assert rate-limit behaviour (Test #15). Default: false (bypass on).
    */
   enableRateLimits?: boolean;
+  /**
+   * If true, every spawned instance (home + all remotes) sets
+   * `PUBLIC_ORIGIN=http://127.0.0.1:<its-port>` so `getOurOrigin()` returns the
+   * transport url. Required by the real-handshake harness so a single real
+   * handshake yields one reachable peer row per direction. Default: false.
+   */
+  publicOriginAsTransport?: boolean;
 }
 
 /** Boot home + N remotes. All instances ready before the function returns. */
@@ -152,6 +171,7 @@ export async function bootHomePlusRemotes(
 ): Promise<MultiRemoteHarness> {
   if (remoteCount < 1) throw new Error('remoteCount must be >= 1');
   const disableRateLimits = !options.enableRateLimits;
+  const publicOriginAsTransport = options.publicOriginAsTransport ?? false;
   const runId = crypto.randomBytes(4).toString('hex');
   // From packages/server/test/helpers → repo root is up four levels: helpers → test → server → packages → repo-root.
   const runDir = path.resolve(__dirname, `../../../../tests/.tmp/${runId}`);
@@ -166,6 +186,7 @@ export async function bootHomePlusRemotes(
     jwtSecret: crypto.randomBytes(32).toString('hex'),
     logPath: `${runDir}/home.log`,
     disableRateLimits,
+    publicOriginAsTransport,
   });
 
   const remotes: SpawnedInstance[] = [];
@@ -180,6 +201,7 @@ export async function bootHomePlusRemotes(
       jwtSecret: crypto.randomBytes(32).toString('hex'),
       logPath: `${runDir}/remote${i}.log`,
       disableRateLimits,
+      publicOriginAsTransport,
     });
     remotes.push(r);
   }

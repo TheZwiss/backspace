@@ -31,6 +31,7 @@ export interface DbInspector {
   dmChannelExists(dmChannelId: string): boolean;
   registryRow(userId: string, origin: string): unknown;
   replicatedInstancesArray(userId: string): { origin: string }[];
+  federationPeer(origin: string): { origin: string; hmacSecret: string; status: string; peerInstanceId: string | null; needsAttentionReason: string | null } | null;
   close(): void;
 }
 
@@ -91,6 +92,14 @@ export function openInspector(instance: SpawnedInstance): DbInspector {
       if (!row?.replicatedInstances) return [];
       try { return JSON.parse(row.replicatedInstances); } catch { return []; }
     },
+    federationPeer: (origin) => db.prepare(`
+      SELECT origin,
+        hmac_secret AS hmacSecret,
+        status,
+        peer_instance_id AS peerInstanceId,
+        needs_attention_reason AS needsAttentionReason
+      FROM federation_peers WHERE origin = ?
+    `).get(origin) as { origin: string; hmacSecret: string; status: string; peerInstanceId: string | null; needsAttentionReason: string | null } | null,
     close: () => db.close(),
   };
 }
