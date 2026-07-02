@@ -41,11 +41,16 @@ vi.mock('../utils/auth.js', () => ({
   requireAdmin: async () => {},
 }));
 
+// getOurOrigin returns an origin DISTINCT from `https://${config.domain}`
+// (config.domain === 'local.example'). This simulates PUBLIC_ORIGIN being set
+// to something other than https://DOMAIN — the exact configuration that exposed
+// the handshake/S2S-auth origin desync (BUG: resolveLocalOrigin used DOMAIN).
+const PUBLIC_ORIGIN = 'https://public.example';
 vi.mock('../utils/federationAuth.js', async () => {
   const actual = await vi.importActual<typeof import('../utils/federationAuth.js')>('../utils/federationAuth.js');
   return {
     ...actual,
-    getOurOrigin: () => 'https://local.example',
+    getOurOrigin: () => 'https://public.example',
     generateHmacSecret: () => 'mock-generated-secret',
   };
 });
@@ -132,6 +137,39 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(peer?.status).toBe('awaiting_approval');
     expect(peer?.approvalToken).toBe(remoteToken);
+  });
+
+  it('handshake sourceOrigin equals getOurOrigin() (honors PUBLIC_ORIGIN), not https://DOMAIN', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Locate the outbound handshake call to the remote /peer/accept endpoint.
+    const acceptCall = fetchSpy.mock.calls.find(([url]) =>
+      String(url) === 'https://remote.example/api/federation/peer/accept',
+    );
+    expect(acceptCall).toBeDefined();
+
+    const init = acceptCall![1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as { sourceOrigin: string };
+
+    // The handshake sourceOrigin MUST match the origin used for S2S auth
+    // (getOurOrigin / PUBLIC_ORIGIN), so the responder keys the peer row by the
+    // same value it will later see in X-Federation-Origin.
+    expect(body.sourceOrigin).toBe(PUBLIC_ORIGIN);
+    // And it must NOT fall back to https://DOMAIN when PUBLIC_ORIGIN differs.
+    expect(body.sourceOrigin).not.toBe('https://local.example');
   });
 
   it('on 200 from remote, activates and clears approvalToken', async () => {

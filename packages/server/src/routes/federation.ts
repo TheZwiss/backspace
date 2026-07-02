@@ -62,20 +62,17 @@ function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): Sanitize
 }
 
 /**
- * Determine this instance's public origin.
- * Prefer the explicit DOMAIN env var; fall back to the request Host header.
+ * Determine this instance's public origin for the peering handshake.
+ *
+ * Delegates to `getOurOrigin()` so the handshake `sourceOrigin` is IDENTICAL to
+ * the `X-Federation-Origin` value used for authenticated S2S requests. This
+ * honors `PUBLIC_ORIGIN` (getOurOrigin's precedence: PUBLIC_ORIGIN →
+ * `https://${DOMAIN}` → `http://localhost:${PORT}`). Using DOMAIN directly here
+ * previously desynced the responder's peer-row key from the auth origin,
+ * causing permanent `403 Not peered` whenever PUBLIC_ORIGIN != https://DOMAIN.
  */
-function resolveLocalOrigin(request: { headers: Record<string, string | string[] | undefined> }): string {
-  if (config.domain) {
-    return `https://${config.domain}`;
-  }
-  const hostHeader = request.headers.host;
-  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-  if (!host) {
-    throw new Error('Cannot determine local origin: no DOMAIN configured and no Host header');
-  }
-  const protocol = (request as Record<string, unknown>).protocol === 'https' ? 'https' : 'http';
-  return `${protocol}://${host}`;
+function resolveLocalOrigin(): string {
+  return getOurOrigin();
 }
 
 /**
@@ -861,7 +858,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       let localOrigin: string;
       try {
-        localOrigin = resolveLocalOrigin(request);
+        localOrigin = resolveLocalOrigin();
       } catch {
         return reply.code(500).send({
           error: 'Cannot determine local instance origin. Set the DOMAIN environment variable.',
@@ -1883,7 +1880,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
       let localOrigin: string;
       try {
-        localOrigin = resolveLocalOrigin(request);
+        localOrigin = resolveLocalOrigin();
       } catch {
         return reply.code(500).send({
           error: 'Cannot determine local instance origin. Set the DOMAIN environment variable.',
@@ -2138,7 +2135,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       const newSecret = generateHmacSecret();
       let localOrigin: string;
       try {
-        localOrigin = resolveLocalOrigin(request);
+        localOrigin = resolveLocalOrigin();
       } catch {
         return reply.code(500).send({
           error: 'Cannot determine local instance origin. Set the DOMAIN environment variable.',
@@ -3073,7 +3070,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
 
         let localOrigin: string;
         try {
-          localOrigin = resolveLocalOrigin(request);
+          localOrigin = resolveLocalOrigin();
         } catch {
           localOrigin = config.domain ? `https://${config.domain}` : '';
         }
