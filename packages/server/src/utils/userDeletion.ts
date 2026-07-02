@@ -239,6 +239,7 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       isDeleted: 1,
       status: 'offline',
       isAdmin: 0,
+      federationHomeOrphaned: 0,
     }).where(eq(schema.users.id, uid)).run();
   });
 
