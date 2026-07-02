@@ -279,6 +279,33 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
       expect(stub.isDeleted, `reason=${reason}`).toBe(0);
     }
   });
+
+  it('broadcasts user_updated to the survivor of a tombstoned stub 1-on-1 DM', async () => {
+    seedPeer();
+    seedJournal('E0');                          // deadEpoch E0 (differs from the E1 we heal with)
+    seedUser('stub-1', { passwordHash: STUB }); // pure S2S stub on ORIGIN
+    flag('stub-1');                             // federation_heal_pending = 1
+
+    // Survivor (local native user) + 1-on-1 DM with the flagged stub.
+    testDb.insert(schema.users).values({
+      id: 'survivor', username: 'survivor', passwordHash: '$2b$10$localhash',
+      homeInstance: null, homeUserId: null, isDeleted: 0, createdAt: Date.now(),
+    }).run();
+    testDb.insert(schema.dmChannels).values({ id: 'dm_heal', ownerId: null, createdAt: Date.now() }).run();
+    testDb.insert(schema.dmMembers).values({ dmChannelId: 'dm_heal', userId: 'stub-1', closed: 0 }).run();
+    testDb.insert(schema.dmMembers).values({ dmChannelId: 'dm_heal', userId: 'survivor', closed: 0 }).run();
+
+    const { connectionManager } = await import('../ws/handler.js');
+    const sendToUser = connectionManager.sendToUser as ReturnType<typeof vi.fn>;
+    sendToUser.mockClear();
+
+    const { healResetIncarnation } = await import('./federationReset.js');
+    healResetIncarnation(ORIGIN, 'E1', 'initiate_accepted'); // genuine reset (E0 != E1) → tombstones stub-1
+
+    const call = sendToUser.mock.calls.find(([uid, ev]) => uid === 'survivor' && ev?.type === 'user_updated');
+    expect(call).toBeTruthy();
+    expect(call![1].user).toMatchObject({ id: 'stub-1', isDeleted: true, username: 'Deleted User' });
+  });
 });
 
 describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {

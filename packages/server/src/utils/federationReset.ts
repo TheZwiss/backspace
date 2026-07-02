@@ -2,7 +2,8 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { extractDomain } from '../routes/federation.js';
 import { connectionManager } from '../ws/handler.js';
-import { tombstoneUser } from './userDeletion.js';
+import { tombstoneUser, collectDeletionBroadcastTargets } from './userDeletion.js';
+import { sanitizeUser } from './sanitize.js';
 import type { PeerActivationReason } from './federationPeerActivation.js';
 
 /** Pure-stub sentinel: a user replicated purely over S2S (no local credentials). */
@@ -264,7 +265,19 @@ export function healResetIncarnation(origin: string, newEpoch: string, reason: P
   // §1 invariant that a remote's reset never destroys our non-re-syncable
   // content. Each call opens its own transaction, so this loop stays UNWRAPPED.
   for (const stub of stubs) {
+    // Collect co-members BEFORE tombstoning — it deletes the DM/friend/space
+    // rows this set is derived from, so reading them after would return empty
+    // and the survivors' clients would never learn the stub became a
+    // "Deleted User". Mirrors admin.ts / users.ts / federation.ts identity-delete.
+    const targets = collectDeletionBroadcastTargets(stub.id).targetUserIds;
     tombstoneUser(stub.id, { purgeContent: false });
+    // Re-read the now-tombstoned row and broadcast the sanitized (anonymized)
+    // profile so every surviving co-member updates live — no reload required.
+    const deletedRow = db.select().from(schema.users).where(eq(schema.users.id, stub.id)).get();
+    if (deletedRow) {
+      const event = { type: 'user_updated' as const, user: sanitizeUser(deletedRow) };
+      for (const targetId of targets) connectionManager.sendToUser(targetId, event);
+    }
   }
 
   // Clear the heal flag on exactly the stubs we healed, keyed by id.
