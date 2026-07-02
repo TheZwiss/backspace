@@ -432,10 +432,6 @@ Copyright © 2026 Jannis Braun. Contributions are made under the
 maintainer an exclusive license, which is what lets Backspace be offered under
 both the AGPL and a commercial license.
 
-*Relicensing note: as of 2026-07-01, Backspace moved from the Elastic License 2.0
-to AGPL-3.0-only, authorized by the sole copyright holder; releases tagged before
-that date remain under the Elastic License 2.0.*
-
 "Backspace", the Backspace logo, and app icons are trademarks of Jannis Braun and
 are not licensed under either the AGPL or the commercial license. Bundled
 third-party components retain their own licenses; see [`NOTICE`](NOTICE).
