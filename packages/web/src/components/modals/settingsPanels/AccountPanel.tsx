@@ -264,6 +264,13 @@ export function AccountPanel() {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">My Account</h2>
+      {user?.federationHomeOrphaned && user?.homeInstance && (
+        <div className="rounded-lg bg-accent-amber/10 border border-accent-amber/25 px-3.5 py-3 text-xs text-txt-secondary leading-relaxed mb-4">
+          <span className="font-medium text-txt-primary">This account is detached from its home instance.</span>{' '}
+          {user.homeInstance} was reset or is no longer available, so this account now operates locally on
+          this instance — your profile and password are managed here.
+        </div>
+      )}
       {/* ── Profile Customization ── */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
