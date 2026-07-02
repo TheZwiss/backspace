@@ -20,7 +20,11 @@ import type {
 } from '@backspace/shared';
 import { sanitizeUser } from '../utils/sanitize.js';
 
-function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
+export function buildProfileSnapshot(user: typeof schema.users.$inferSelect): FederationRelayProfileSnapshot {
+  if (user.isDeleted) {
+    // Never ship the internal '!deleted:<id>' tombstone marker (spec §3.3).
+    return { deleted: true };
+  }
   // Only meaningful for native users (us). Replicated stubs carry stale status
   // their home owns — emitting it would flap remote UIs on relay receipt.
   const status = !user.homeInstance && user.status

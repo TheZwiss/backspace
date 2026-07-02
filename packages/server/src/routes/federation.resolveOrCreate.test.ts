@@ -131,4 +131,21 @@ describe('resolveOrCreateReplicatedUser — self-homed identity guard', () => {
     expect(result).not.toBeNull();
     expect(result!.username).toBe('bob@orbit.ddns.net');
   });
+
+  it('refuses stub creation when the wire snapshot marks the identity deleted', async () => {
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.ddns.net', testDb, { username: null, deleted: true });
+    expect(result).toBeNull();
+    expect(testDb.select().from(schema.users).all()).toHaveLength(0);
+  });
+
+  it('a deleted-marked identity that already resolves locally still returns the existing row', async () => {
+    testDb.insert(schema.users).values({
+      id: 'stub-1', username: 'old@orbit.ddns.net', passwordHash: '!federation-replicated',
+      homeInstance: 'orbit.ddns.net', homeUserId: 'remote-del', createdAt: 1,
+    }).run();
+    const { resolveOrCreateReplicatedUser } = await import('./federation.js');
+    const result = resolveOrCreateReplicatedUser('remote-del', 'orbit.ddns.net', testDb, { deleted: true });
+    expect(result?.id).toBe('stub-1'); // historical attribution stays intact
+  });
 });

@@ -364,6 +364,7 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
       avatar: schema.users.avatar,
       avatarColor: schema.users.avatarColor,
       status: schema.users.status,
+      isDeleted: schema.users.isDeleted,
     })
     .from(schema.dmMembers)
     .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
@@ -372,19 +373,30 @@ export function getDmParticipants(dmChannelId: string): FederationRelayParticipa
 
   const domainOrigin = getOurOrigin();
 
-  return members.map(m => ({
-    homeUserId: m.homeUserId || m.id,
-    homeInstance: m.homeInstance || domainOrigin,
-    profile: {
-      username: m.username ?? null,
-      displayName: m.displayName ?? null,
-      avatar: m.avatar ?? null,
-      avatarColor: m.avatarColor ?? null,
-      // Only carry presence for native participants — replicated stubs hold
-      // stale status owned by their home; emitting it would flap remote UIs.
-      status: !m.homeInstance ? (m.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
-    },
-  }));
+  return members.map(m => {
+    if (m.isDeleted) {
+      // Tombstoned member: ship the identity for attribution but no profile
+      // data — the internal '!deleted:<id>' marker never leaves this instance.
+      return {
+        homeUserId: m.homeUserId || m.id,
+        homeInstance: m.homeInstance || domainOrigin,
+        profile: { deleted: true },
+      };
+    }
+    return {
+      homeUserId: m.homeUserId || m.id,
+      homeInstance: m.homeInstance || domainOrigin,
+      profile: {
+        username: m.username ?? null,
+        displayName: m.displayName ?? null,
+        avatar: m.avatar ?? null,
+        avatarColor: m.avatarColor ?? null,
+        // Only carry presence for native participants — replicated stubs hold
+        // stale status owned by their home; emitting it would flap remote UIs.
+        status: !m.homeInstance ? (m.status as 'online' | 'idle' | 'dnd' | 'offline' | null) : null,
+      },
+    };
+  });
 }
 
 /**

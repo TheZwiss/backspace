@@ -3661,10 +3661,18 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
-  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null },
+  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null; deleted?: boolean | null },
 ): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
+
+  // A participant the sender marks as deleted must not materialize as a new
+  // stub — mirror of the local-tombstone skip below. An existing row still
+  // resolves above, so historical attribution is unaffected (spec §3.3).
+  if (hints?.deleted) {
+    console.log(`[federation] Skipping stub creation for remotely-deleted identity homeUserId=${homeUserId}`);
+    return null;
+  }
 
   // Check if this identity was previously deleted — don't resurrect a tombstoned
   // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
@@ -3916,7 +3924,7 @@ async function processCreateEvent(
   }> = [];
 
   for (const p of event.participants) {
-    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status });
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status, deleted: p.profile?.deleted });
     // Skip deleted identities — don't include tombstoned users in the DM
     if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
@@ -4513,7 +4521,7 @@ export async function processMemberAddEvent(
     // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status });
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status, deleted: event.group.owner.profile?.deleted });
       ownerId = ownerLocal?.id ?? null;
     }
 
@@ -4550,7 +4558,7 @@ export async function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status });
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status, deleted: member.profile?.deleted });
       // Skip deleted identities — tombstoned users can't be added to a DM
       if (!rosterUser) continue;
       const existing = db.select().from(schema.dmMembers)
@@ -4604,7 +4612,7 @@ export async function processMemberAddEvent(
     event.membership.user.homeUserId,
     event.membership.user.homeInstance,
     db,
-    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status },
+    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status, deleted: event.membership.user.profile?.deleted },
   );
   if (!localUser) {
     // The user's identity has been deleted — don't add a tombstoned user to the DM
@@ -4643,7 +4651,7 @@ export async function processMemberAddEvent(
   // would otherwise find the channel already present and fall through to the incremental path,
   // creating spurious system messages (the exact bug this fixes).
   const actorUser = event.membership.addedBy
-    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status })
+    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status, deleted: event.membership.addedBy.profile?.deleted })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
   const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
@@ -4952,7 +4960,7 @@ export function processOwnershipTransferEvent(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
-    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status },
+    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status, deleted: event.ownership.newOwner.profile?.deleted },
   );
   if (!newOwnerLocal) {
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
@@ -5127,7 +5135,7 @@ async function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status, deleted: event.friendship.fromProfile?.deleted });
   if (!fromUserResolved) {
     // Sender's identity has been deleted — silently accept to drop the event
     accepted.push(event.messageId);
@@ -5245,7 +5253,7 @@ function processFriendRequestUpdateEvent(
   }
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status, deleted: event.friendship.toProfile?.deleted });
   if (!toUser) {
     // Recipient's identity has been deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
@@ -5385,14 +5393,14 @@ async function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status, deleted: event.friendship.fromProfile?.deleted });
   if (!fromUserResolved) {
     // One party's identity is deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
     return;
   }
   let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
-  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status, deleted: event.friendship.toProfile?.deleted });
   if (!toUserResolved) {
     accepted.push(event.messageId);
     return;
@@ -6479,7 +6487,7 @@ export async function processGroupMetadataUpdateEvent(
       actorParticipant.homeUserId,
       actorParticipant.homeInstance,
       db,
-      { username: actorParticipant.profile?.username, status: actorParticipant.profile?.status },
+      { username: actorParticipant.profile?.username, status: actorParticipant.profile?.status, deleted: actorParticipant.profile?.deleted },
     );
     actorUserId = actorUser?.id ?? null;
   }
