@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { eq, or, and, inArray } from 'drizzle-orm';
+import { eq, or, and, inArray, isNotNull } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 
 export interface DeletionBroadcastTargets {
@@ -122,7 +122,26 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
     tx.delete(schema.memberRoles).where(eq(schema.memberRoles.userId, uid)).run();
     tx.delete(schema.friends).where(or(eq(schema.friends.userId, uid), eq(schema.friends.friendId, uid))).run();
     tx.delete(schema.friendRequests).where(or(eq(schema.friendRequests.fromId, uid), eq(schema.friendRequests.toId, uid))).run();
-    tx.delete(schema.dmMembers).where(eq(schema.dmMembers.userId, uid)).run();
+    // DM membership: keep the row for 1-on-1 DMs (ownerId NULL) so the thread
+    // survives as a readable "Deleted User" thread; drop it for group DMs.
+    const userDmChannelIds = tx.select({ dmChannelId: schema.dmMembers.dmChannelId })
+      .from(schema.dmMembers)
+      .where(eq(schema.dmMembers.userId, uid))
+      .all()
+      .map(r => r.dmChannelId);
+    if (userDmChannelIds.length > 0) {
+      const groupDmChannelIds = tx.select({ id: schema.dmChannels.id })
+        .from(schema.dmChannels)
+        .where(and(inArray(schema.dmChannels.id, userDmChannelIds), isNotNull(schema.dmChannels.ownerId)))
+        .all()
+        .map(c => c.id);
+      if (groupDmChannelIds.length > 0) {
+        tx.delete(schema.dmMembers).where(and(
+          eq(schema.dmMembers.userId, uid),
+          inArray(schema.dmMembers.dmChannelId, groupDmChannelIds),
+        )).run();
+      }
+    }
     tx.delete(schema.readStates).where(eq(schema.readStates.userId, uid)).run();
     if (purge) {
       tx.delete(schema.reactions).where(eq(schema.reactions.userId, uid)).run();

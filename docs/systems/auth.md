@@ -403,7 +403,7 @@ All cleanup runs in a single SQLite transaction:
 - `memberRoles` -- removes all role assignments
 - `friends` -- removes all friendships (both directions)
 - `friendRequests` -- removes all friend requests (both directions)
-- `dmMembers` -- removes from all DM channels
+- `dmMembers` -- **partitioned**: the row is KEPT for 1-on-1 DMs (`dm_channels.ownerId IS NULL`) so the thread survives as a readable anonymized "Deleted User" thread; it is deleted only for group DMs (`ownerId IS NOT NULL`). The in-function `userDmChannelIds` local captures the user's DM channel ids before partitioning.
 - `readStates` -- removes all read state records
 - `reactions` -- removes all message reactions
 - `dmReactions` -- removes all DM reactions
@@ -460,8 +460,8 @@ interface TombstoneOptions { purgeContent?: boolean }
 function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
 ```
 
-- **`purgeContent: true`** (default / omitted): full tombstone — removes the user from spaces, friends, DM membership, and read-states; then also deletes `reactions`, `dmReactions`, and the user's space `messages` with their attachments and embeds.
-- **`purgeContent: false`**: soft tombstone — removes the user from spaces, friends, DM membership (`dm_members`), and read-states. The `purgeContent: false` flag skips only `reactions`, `dm_reactions`, and the user's space `messages` (with attachments + embeds); DM membership cleanup and orphaned-DM purge always run in both modes (per `userDeletion.ts:121-126, 169-202`) because zero-member DM channels are unreachable garbage regardless of authorship retention. Used by the federation identity soft-delete endpoint so remote message history is retained.
+- **`purgeContent: true`** (default / omitted): full tombstone — removes the user from spaces, friends, group DM membership, and read-states; then also deletes `reactions`, `dmReactions`, and the user's space `messages` with their attachments and embeds. 1-on-1 DM membership is kept (see below).
+- **`purgeContent: false`**: soft tombstone — removes the user from spaces, friends, group DM membership, and read-states. The `purgeContent: false` flag skips only `reactions`, `dm_reactions`, and the user's space `messages` (with attachments + embeds). The DM membership partition and orphaned-DM purge always run in both modes: group-DM `dm_members` rows are deleted, 1-on-1 `dm_members` rows are KEPT (so the thread survives as an anonymized "Deleted User" thread), and any resulting zero-member DM channel is purged as unreachable garbage. Used by the federation identity soft-delete endpoint so remote message history is retained.
 
 ### `resolveOrCreateReplicatedUser` and Deleted Users
 

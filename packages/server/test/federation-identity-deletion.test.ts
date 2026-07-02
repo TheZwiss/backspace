@@ -317,7 +317,7 @@ describe('Federation identity deletion — server suite', () => {
     homeInspect.close();
   });
 
-  it('#3 soft mode: tombstone shape, messages/reactions retained, dm membership cleared', async () => {
+  it('#3 soft mode: tombstone shape, messages/reactions retained, 1-on-1 dm membership kept', async () => {
     const fx = await setupFullDeletionFixture('t3');
     const { openInspector } = await import('./helpers/dbInspect.js');
 
@@ -358,7 +358,8 @@ describe('Federation identity deletion — server suite', () => {
     expect(remote.spaceMembersForUser(fx.remoteUser.id)).toEqual([]);
     expect(remote.messagesAuthored(fx.remoteUser.id).length).toBe(2); // RETAINED
     expect(remote.reactionsForUser(fx.remoteUser.id).length).toBe(2); // RETAINED
-    expect(remote.dmMembership(fx.remoteUser.id)).toEqual([]); // dm_members always cleared
+    // 1-on-1 DM membership is KEPT (anonymized) so the thread survives as "Deleted User"
+    expect(remote.dmMembership(fx.remoteUser.id).map(r => r.dmChannelId)).toEqual([fx.dmChannelId]);
     expect(remote.dmChannelExists(fx.dmChannelId)).toBe(true); // other party still member
     remote.close();
 
@@ -394,7 +395,8 @@ describe('Federation identity deletion — server suite', () => {
 
     expect(remote.messagesAuthored(fx.remoteUser.id).length).toBe(0); // PURGED
     expect(remote.reactionsForUser(fx.remoteUser.id).length).toBe(0); // PURGED
-    expect(remote.dmMembership(fx.remoteUser.id)).toEqual([]);
+    // 1-on-1 DM membership is KEPT (anonymized) so the thread survives as "Deleted User"
+    expect(remote.dmMembership(fx.remoteUser.id).map(r => r.dmChannelId)).toEqual([fx.dmChannelId]);
     // 1-on-1 DM with another live participant SURVIVES (other party still member)
     expect(remote.dmChannelExists(fx.dmChannelId)).toBe(true);
     remote.close();
@@ -897,7 +899,8 @@ describe('Federation identity deletion — all-remotes fan-out', () => {
       expect(ins.spaceMembersForUser(fixtures[i].remoteUser.id)).toEqual([]);
       expect(ins.messagesAuthored(fixtures[i].remoteUser.id).length).toBe(2); // RETAINED
       expect(ins.reactionsForUser(fixtures[i].remoteUser.id).length).toBe(2); // RETAINED
-      expect(ins.dmMembership(fixtures[i].remoteUser.id)).toEqual([]);
+      // 1-on-1 DM membership is KEPT (anonymized) so the thread survives as "Deleted User"
+      expect(ins.dmMembership(fixtures[i].remoteUser.id).map(r => r.dmChannelId)).toEqual([fixtures[i].dmChannelId]);
       expect(ins.dmChannelExists(fixtures[i].dmChannelId)).toBe(true);
       ins.close();
     });
@@ -958,7 +961,8 @@ describe('Federation identity deletion — all-remotes fan-out', () => {
       expect(after!.username).toBe(`!deleted:${fixtures[i].remoteUser.id}`);
       expect(ins.messagesAuthored(fixtures[i].remoteUser.id).length).toBe(0); // PURGED
       expect(ins.reactionsForUser(fixtures[i].remoteUser.id).length).toBe(0); // PURGED
-      expect(ins.dmMembership(fixtures[i].remoteUser.id)).toEqual([]);
+      // 1-on-1 DM membership is KEPT (anonymized) so the thread survives as "Deleted User"
+      expect(ins.dmMembership(fixtures[i].remoteUser.id).map(r => r.dmChannelId)).toEqual([fixtures[i].dmChannelId]);
       // Observer remains a member, so DM channel survives.
       expect(ins.dmChannelExists(fixtures[i].dmChannelId)).toBe(true);
       ins.close();
