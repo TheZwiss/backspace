@@ -926,11 +926,7 @@ function ResetCleanup() {
       }
     } catch (err) {
       if (confirmAction.kind === 'remove') {
-        const status = (err as { status?: number } | null | undefined)?.status;
-        const ownsSpaces =
-          status === 400 ||
-          (err != null && typeof err === 'object' && 'ownedSpaces' in err) ||
-          confirmAction.account.ownedSpaces.length > 0;
+        const ownsSpaces = err != null && typeof err === 'object' && 'ownedSpaces' in err;
         if (ownsSpaces) {
           addToast(
             `${confirmAction.account.username} owns spaces — transfer ownership first (Space Settings → Ownership).`,

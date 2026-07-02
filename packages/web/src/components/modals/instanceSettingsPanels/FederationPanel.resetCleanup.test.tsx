@@ -131,14 +131,16 @@ describe('FederationPanel — Reset cleanup', () => {
     await waitFor(() => expect(deleteUser).toHaveBeenCalledWith('acc1'));
   });
 
-  it('surfaces "transfer ownership first" when Remove hits owns-spaces 400', async () => {
+  it('surfaces "transfer ownership first" only when the 400 carries an ownedSpaces payload', async () => {
     peers.mockResolvedValue({ peers: [] });
-    resetEvents.mockResolvedValue({
-      events: [resetEvent([orphanedAccount({ ownedSpaces: [{ id: 's1', name: 'My Space' }] })])],
-    });
+    // Isolate the classifier: the fixture account does NOT own spaces locally
+    // (default ownedSpaces: []), so the transfer-first message can only come
+    // from the error's `ownedSpaces` payload — the real server 400 shape.
+    resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
     deleteUser.mockRejectedValue(
       Object.assign(new Error('User owns spaces — transfer ownership first'), {
-        status: 400,
+        error: 'User owns spaces — transfer ownership first',
+        statusCode: 400,
         ownedSpaces: [{ id: 's1', name: 'My Space' }],
       }),
     );
@@ -157,6 +159,32 @@ describe('FederationPanel — Reset cleanup', () => {
         expect.stringContaining('transfer ownership first'),
         'warning',
       ),
+    );
+  });
+
+  it('shows the generic failure toast for a rejection WITHOUT an ownedSpaces payload', async () => {
+    peers.mockResolvedValue({ peers: [] });
+    resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
+    deleteUser.mockRejectedValue(
+      Object.assign(new Error('Internal server error'), { statusCode: 400 }),
+    );
+
+    render(<FederationPanel />);
+
+    const removeBtn = await screen.findByRole('button', { name: 'Remove' });
+    fireEvent.click(removeBtn);
+
+    const confirmBtn = await screen.findByRole('button', { name: 'Delete permanently' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => expect(deleteUser).toHaveBeenCalledWith('acc1'));
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith('Internal server error', 'warning'),
+    );
+    // The classifier must NOT mislabel a generic 400 as an ownership problem.
+    expect(addToast).not.toHaveBeenCalledWith(
+      expect.stringContaining('transfer ownership first'),
+      'warning',
     );
   });
 });
