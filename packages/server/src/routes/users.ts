@@ -77,8 +77,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
 
     // Federated users (replicas on this instance) don't need currentPassword —
     // their home instance already verified the password change, and JWT auth
-    // proves identity. The homeInstance field comes from the DB, not the request.
-    if (!user.homeInstance) {
+    // proves identity. EXCEPTION: detached accounts (federation_home_orphaned=1)
+    // have no home verifying anything — they follow the LOCAL rule (detach spec §4.4).
+    if (!user.homeInstance || user.federationHomeOrphaned === 1) {
       // Local users must provide current password
       if (!currentPassword || typeof currentPassword !== 'string') {
         return reply.code(400).send({ error: 'Current password is required', statusCode: 400 });
@@ -195,9 +196,11 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(404).send({ error: 'User not found', statusCode: 404 });
     }
 
-    // Write-protection: replicated users cannot update durable profile fields.
-    // These are managed by the home instance via S2S relay.
-    if (preUpdateUser.homeInstance) {
+    // Write-protection: replicated users cannot update durable profile fields —
+    // these are managed by the home instance via S2S relay. EXCEPTION: detached
+    // accounts (federation_home_orphaned = 1) have no home instance anymore and
+    // manage their profile locally (detach spec §4.4).
+    if (preUpdateUser.homeInstance && preUpdateUser.federationHomeOrphaned !== 1) {
       const hasDurableField = DURABLE_PROFILE_FIELDS.some(f => (request.body as Record<string, unknown>)[f] !== undefined);
       if (hasDurableField) {
         return reply.code(403).send({ error: 'Profile fields are managed by your home instance', statusCode: 403 });

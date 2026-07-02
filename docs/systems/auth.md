@@ -313,12 +313,13 @@ Trade-off: the separate authenticated call can fail independently of the login P
 | User type | `currentPassword` | Behavior |
 |-----------|-------------------|----------|
 | Local (`homeInstance` is null) | Required | Verified via bcrypt against stored hash |
-| Federated (`homeInstance` set) | Not required | JWT auth is sufficient (home instance already verified the change) |
+| Federated (`homeInstance` set, `federationHomeOrphaned !== 1`) | Not required | JWT auth is sufficient (home instance already verified the change) |
+| Detached (`homeInstance` set, `federationHomeOrphaned === 1`) | Required | Follows the **local** rule — the home is gone, so nothing external verified the change; the local hash is the sole authority (detach design §4.4) |
 
 **Steps:**
 1. Validate `newPassword` is string, min 8 chars
 2. Load user from DB
-3. If local: require and verify `currentPassword`
+3. If local **or detached** (`!homeInstance || federationHomeOrphaned === 1`): require and verify `currentPassword`
 4. Hash new password
 5. Update `passwordHash` AND `passwordChangedAt = Date.now()` -- this invalidates all prior tokens
 6. Sign fresh JWT, return `{ token }`

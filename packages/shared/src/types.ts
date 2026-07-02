@@ -27,6 +27,8 @@ export interface User {
   homeUserId: string | null;
   replicatedInstances: ReplicatedInstance[];
   showActivity?: boolean;
+  /** Self-view only: this federated account's home instance was reset/lost — it now operates as a sovereign local account (detach spec). */
+  federationHomeOrphaned?: boolean;
 }
 
 export interface ReplicatedInstance {
