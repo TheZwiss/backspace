@@ -407,6 +407,19 @@ export const federationResetEvents = sqliteTable('federation_reset_events', {
   acknowledgedAt: integer('acknowledged_at'),
 });
 
+// One-time proof tokens for detached-account re-attach (re-attach spec §3.1).
+// Minted by POST /api/auth/attach-proof for a logged-in native user, verified
+// once by a peer via POST /api/federation/verify-attach-proof. Expired/used
+// rows are deleted opportunistically on each mint.
+export const federationAttachProofs = sqliteTable('federation_attach_proofs', {
+  token: text('token').primaryKey(),
+  homeUserId: text('home_user_id').notNull(),
+  targetDomain: text('target_domain').notNull(),
+  createdAt: integer('created_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  usedAt: integer('used_at'),
+});
+
 // SQL-level CHECK constraint enforces (direction='inbound' → hmac_secret NOT NULL).
 // See packages/server/drizzle/0003_brave_inhumans.sql. drizzle-kit cannot represent
 // CHECK constraints in its snapshot, so any future migration that recreates this
