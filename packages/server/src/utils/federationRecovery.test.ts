@@ -234,4 +234,66 @@ describe('federationRecovery primitives', () => {
 
     expect(spy).not.toHaveBeenCalled(); // no trusted baseline → cannot detect a change
   });
+
+  // ── detectResetForPeer (per-peer unit) ─────────────────────────────────────
+  // The shared single-peer probe fired the instant a peer crosses into
+  // needs_attention via the auth-failure path (event-driven, in federationWorker)
+  // and by the worker-startup sweep — collapsing reset-detection latency from a
+  // 15-minute health-check cycle to one /instance/info GET.
+
+  it('detectResetForPeer returns true and journals the reset when the probed epoch differs', async () => {
+    seedNeedsAttention('peer-evt', 'auth_failures', 'E0');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"instanceId":"E1"}', { status: 200 }));
+
+    const { detectResetForPeer } = await import('./federationRecovery.js');
+    const detected = await detectResetForPeer({ id: 'peer-evt', origin: 'https://peer.example', peerInstanceId: 'E0' });
+
+    expect(detected).toBe(true);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-evt')).get()!;
+    expect(row.status).toBe('needs_attention'); // detection only — never flipped to active
+    expect(row.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row.observedPeerInstanceId).toBe('E1');
+    expect(row.peerInstanceId).toBe('E0'); // trusted baseline untouched
+    expect(row.hmacSecret).toBe('secret'); // never rekeyed
+    expect(testDb.select().from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, 'https://peer.example')).get()!.resolvedAt).toBeNull();
+    expect(onPeerActivated).not.toHaveBeenCalled();
+  });
+
+  it('detectResetForPeer returns false and is a no-op when the probed epoch matches the baseline', async () => {
+    seedNeedsAttention('peer-evt-same', 'auth_failures', 'E0');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"instanceId":"E0"}', { status: 200 }));
+
+    const { detectResetForPeer } = await import('./federationRecovery.js');
+    const detected = await detectResetForPeer({ id: 'peer-evt-same', origin: 'https://peer.example', peerInstanceId: 'E0' });
+
+    expect(detected).toBe(false);
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-evt-same')).get()!;
+    expect(row.needsAttentionReason).toBe('auth_failures'); // unchanged
+    expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
+  });
+
+  it('detectResetForPeer returns false WITHOUT probing when the baseline is null', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch');
+    const { detectResetForPeer } = await import('./federationRecovery.js');
+    const detected = await detectResetForPeer({ id: 'peer-evt-nobase', origin: 'https://peer.example', peerInstanceId: null });
+
+    expect(detected).toBe(false);
+    expect(spy).not.toHaveBeenCalled(); // no baseline → cannot detect a change, no wasted GET
+  });
+
+  it('detectResetForPeer returns false when the peer is unreachable (no false reset)', async () => {
+    seedNeedsAttention('peer-evt-down', 'auth_failures', 'E0');
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ENOTFOUND'));
+
+    const { detectResetForPeer } = await import('./federationRecovery.js');
+    const detected = await detectResetForPeer({ id: 'peer-evt-down', origin: 'https://peer.example', peerInstanceId: 'E0' });
+
+    expect(detected).toBe(false);
+    expect(testDb.select().from(schema.federationResetEvents).all()).toHaveLength(0);
+    expect(testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-evt-down')).get()!.needsAttentionReason).toBe('auth_failures');
+  });
 });
