@@ -526,6 +526,7 @@ Two layers of replay protection:
 - Accepts optional `hints: { username?: string | null }` for tier-2 matching
 - If not found, creates a stub with `homeInstance` normalized to bare domain via `extractDomain`
 - Collision-safe: appends `_1`, `_2`, ..., `_10` suffix if username exists; after 10 attempts, uses `_<random hex>`
+- **Self-homed guard:** an instance never creates a replicated stub homed at its own identity domain (`getOurIdentityDomain()`, DOMAIN-derived). A live self-reference resolves at tier 1; a self-domain identity reaching the create path is a dead incarnation and resolves to `null`. Wire snapshots may carry `deleted: true` — such identities also resolve to `null` at the create path (existing rows still resolve for historical attribution).
 - **Use when:** You MUST have a valid user ID. Always pass `{ username: profile?.username }` when profile data is available.
 
 **`hydrateReplicatedUserProfile(user, profile, db)`** -- `federation.ts:2041`
@@ -1296,6 +1297,8 @@ When relay events carry `FederationRelayProfileSnapshot` data:
 - `processFriendRequestCreateEvent` / `processFriendAddEvent`: hydrates friend profiles
 - `social.ts` federated friend-request handler: hydrates the looked-up stub
 
+Snapshots for tombstoned users carry `deleted: true` and no profile fields — the internal `!deleted:<id>` username marker never leaves the instance (`getDmParticipants`, `buildProfileSnapshot`).
+
 `hydrateReplicatedUserProfile` is **best-effort fill-empty only**: it never overwrites an existing avatar/banner/displayName/bio. This protects locally-downloaded bare filenames produced by `processProfileUpdateEvent` (which carries the monotonic `profileUpdatedAt` version) from being clobbered back to absolute URLs on the next DM/friend relay. Authoritative updates flow exclusively through the version-checked `profile_update` event.
 
 **Detached-account guard:** Alongside the native-user skip (`!user.homeInstance → return`), the function also **no-ops on detached rows** (`federation_home_orphaned = 1 → return user`). A detached account retains its `homeInstance` for provenance (design §7), so the native-user skip alone would not catch it; without this guard a DM/friend relay from the reset domain's new incarnation, resolved via an old `homeUserId` tier-1 hit, could fill the sovereign account's empty fields. This is the same domain-keyed mutation class as `profile_update`/`presence_update`, guarded at its own site (design §4.3).
@@ -1535,7 +1538,7 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 ```
 
 **DM sync:**
-- Queries all `dm_channels` with non-null `federated_id` (not soft-deleted)
+- Queries `dm_channels` with non-null `federated_id` (not soft-deleted) that have ≥1 relevant member for the requesting peer (see relevance scoping below)
 - Joins `federation_mutation_log` with `dm_messages` to reconstruct events
 - Only returns locally-created messages (`source_instance IS NULL` via the LEFT JOIN)
 - Handles delete mutations separately (message rows don't exist for deletes)
@@ -1545,6 +1548,8 @@ HMAC-authenticated. Returns events from the `federation_mutation_log`.
 **Friend sync:**
 - Queries `federation_mutation_log WHERE context_type = 'friend'`
 - Returns stored payloads directly (friend events carry their complete data)
+
+**Relevance scoping (dead-incarnation filtering):** the DM branch only offers channels having ≥1 member whose local row is homed at the requesting peer's domain with `is_deleted = 0` AND `federation_home_orphaned = 0`. A freshly reset peer therefore receives an empty DM sync — its pre-reset history stays with the detached accounts on this side. The friend branch filters analogously in JS (an event qualifies iff one side is homed at the requester and does not resolve to a detached/tombstoned local row); `checkpoint`/`hasMore` are computed from pre-filter rows so filtered events still advance the cursor.
 
 ### Relay Event Processing
 
@@ -1663,6 +1668,9 @@ All workers are started by `startFederationWorkers()` on server boot and stopped
 | Epoch-refresh baseline | Startup + 15min (end of health tick) | active peers w/ `peer_instance_id IS NULL` | 10s per peer | `refreshPeerEpochs` (populate-if-null, self-terminating) |
 | Janitor | 1h | -- | -- | `runFederationJanitor` (sync) |
 | Startup bootstrap sync | Once at startup | -- | 30s per page | `startupBootstrapSync` → `onPeerActivated` |
+| Dead-incarnation sweep | Once at startup | -- | -- | `sweepDeadIncarnationArtifacts` (sync, idempotent) |
+
+`sweepDeadIncarnationArtifacts` — startup, idempotent: deletes DM channels with no native member (with explicit child-row cleanup) and unreferenced replicated stubs homed at this instance's own domain; still-referenced stubs are skipped and logged. It does not rely on FK cascade (must not assume `PRAGMA foreign_keys` is ON): the channel delete explicitly clears its `dm_reactions`/`attachments`/`dm_messages`/`dm_members`/`read_states` rows, and the stub delete explicitly clears its `dm_reactions`/`reactions`/`read_states` rows — and the stub's deletable guard mirrors the non-cascading FKs to `users.id` by hand (a future non-cascading FK to `users.id` needs a matching NOT-EXISTS clause).
 
 ### Janitor Cleanup (`storageJanitor.ts:runFederationJanitor`)
 
