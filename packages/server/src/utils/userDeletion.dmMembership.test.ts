@@ -56,4 +56,19 @@ describe('tombstoneUser — DM membership partition', () => {
     // Survivor's 1-on-1 channel still exists and still has the survivor
     expect(testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm_1on1')).get()).toBeTruthy();
   });
+
+  it('keeps a Deleted<->Survivor 1-on-1, purges a Deleted<->Deleted 1-on-1', async () => {
+    const { tombstoneUser } = await import('./userDeletion.js');
+    seedUser('alreadyDead', { isDeleted: 1 });
+    seedUser('victim'); seedUser('survivor');
+    // Survivor thread — must survive
+    seedDm('dm_live', null); seedMember('dm_live', 'victim'); seedMember('dm_live', 'survivor');
+    // Both-dead thread — victim + an already-deleted partner → must be purged
+    seedDm('dm_dead', null); seedMember('dm_dead', 'victim'); seedMember('dm_dead', 'alreadyDead');
+
+    tombstoneUser('victim', { purgeContent: false });
+
+    expect(testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm_live')).get()).toBeTruthy();
+    expect(testDb.select().from(schema.dmChannels).where(eq(schema.dmChannels.id, 'dm_dead')).get()).toBeUndefined();
+  });
 });

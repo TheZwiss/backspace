@@ -185,20 +185,24 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       }
     }
 
-    // Clean up orphaned DM channels (zero members after our removal) — always runs,
-    // orphaned channels are unreachable garbage regardless of purge mode
-    const orphanedDmIds = tx.select({ id: schema.dmChannels.id })
-      .from(schema.dmChannels)
-      .all()
-      .filter(dc => {
-        const memberCount = tx.select({ id: schema.dmMembers.dmChannelId })
-          .from(schema.dmMembers)
-          .where(eq(schema.dmMembers.dmChannelId, dc.id))
-          .all()
-          .length;
-        return memberCount === 0;
-      })
-      .map(dc => dc.id);
+    // Purge DMs that are dead after this deletion: among the channels this user
+    // was in, those with zero LIVE members. The uid being tombstoned right now
+    // still reads isDeleted=0 (its row is updated below), so it is excluded
+    // explicitly — this keeps a Deleted<->Survivor 1-on-1 but purges a
+    // Deleted<->Deleted one. Scoped to the user's channels: only their
+    // membership changed here, so only these can newly become dead.
+    const orphanedDmIds = userDmChannelIds.filter(dmId => {
+      const liveOthers = tx.select({ userId: schema.dmMembers.userId })
+        .from(schema.dmMembers)
+        .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+        .where(and(
+          eq(schema.dmMembers.dmChannelId, dmId),
+          eq(schema.users.isDeleted, 0),
+        ))
+        .all()
+        .filter(m => m.userId !== uid);
+      return liveOthers.length === 0;
+    });
 
     for (const dmId of orphanedDmIds) {
       const msgIds = tx.select({ id: schema.dmMessages.id })
