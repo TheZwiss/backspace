@@ -84,10 +84,12 @@ export class RateLimitError extends Error {
 
 export class HttpError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  readonly body?: unknown;
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -369,7 +371,7 @@ export class BackspaceApiClient {
           throw new RateLimitError(retryAfter);
         }
         const error = await response.json().catch(() => ({ error: 'Request failed' }));
-        throw new HttpError(response.status, (error as { error: string }).error || `HTTP ${response.status}`);
+        throw new HttpError(response.status, (error as { error?: string }).error || `HTTP ${response.status}`, error);
       }
 
       return response.json() as Promise<T>;

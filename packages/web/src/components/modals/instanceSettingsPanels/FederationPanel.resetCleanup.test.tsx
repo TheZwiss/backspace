@@ -10,20 +10,26 @@ const { peers, resetEvents, resetPeer, initiatePeering, deleteUser, addToast } =
   addToast: vi.fn(),
 }));
 
-vi.mock('../../../api/client', () => ({
-  api: {
-    federation: {
-      peers,
-      approvalRequests: vi.fn().mockResolvedValue({ requests: [] }),
-      resetEvents,
-      resetPeer,
-      initiatePeering,
+vi.mock('../../../api/client', async () => {
+  // Re-export the REAL HttpError so the component's `err instanceof HttpError`
+  // classifier and the test's constructed rejection share one class identity.
+  const actual = await vi.importActual<typeof import('../../../api/client')>('../../../api/client');
+  return {
+    ...actual,
+    api: {
+      federation: {
+        peers,
+        approvalRequests: vi.fn().mockResolvedValue({ requests: [] }),
+        resetEvents,
+        resetPeer,
+        initiatePeering,
+      },
+      admin: {
+        deleteUser,
+      },
     },
-    admin: {
-      deleteUser,
-    },
-  },
-}));
+  };
+});
 
 vi.mock('../../../stores/uiStore', () => ({
   useUIStore: (sel: (s: { addToast: typeof addToast }) => unknown) => sel({ addToast }),
@@ -35,6 +41,7 @@ vi.mock('../../../hooks/useWebSocket', () => ({
 }));
 
 import { FederationPanel } from './FederationPanel';
+import { HttpError } from '../../../api/client';
 
 const resetPeerFixture = {
   id: 'p1',
@@ -138,7 +145,7 @@ describe('FederationPanel — Reset cleanup', () => {
     // from the error's `ownedSpaces` payload — the real server 400 shape.
     resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
     deleteUser.mockRejectedValue(
-      Object.assign(new Error('User owns spaces — transfer ownership first'), {
+      new HttpError(400, 'User owns spaces — transfer ownership first', {
         error: 'User owns spaces — transfer ownership first',
         statusCode: 400,
         ownedSpaces: [{ id: 's1', name: 'My Space' }],
@@ -166,7 +173,7 @@ describe('FederationPanel — Reset cleanup', () => {
     peers.mockResolvedValue({ peers: [] });
     resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
     deleteUser.mockRejectedValue(
-      Object.assign(new Error('Internal server error'), { statusCode: 400 }),
+      new HttpError(400, 'Internal server error', { error: 'Internal server error', statusCode: 400 }),
     );
 
     render(<FederationPanel />);

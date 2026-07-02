@@ -3,7 +3,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { Toggle } from '../../ui/Toggle';
 import { ConfirmDialog } from '../../ui/ConfirmDialog';
-import { api } from '../../../api/client';
+import { api, HttpError } from '../../../api/client';
 import { onFederationPeersChanged, onFederationPeerResetDetected } from '../../../hooks/useWebSocket';
 import type { InstanceAdminSettings } from '@backspace/shared';
 import type { FederationPeer, ApprovalRequest, FederationResetEvent, FederationOrphanedAccount } from '../../../api/client';
@@ -926,7 +926,10 @@ function ResetCleanup() {
       }
     } catch (err) {
       if (confirmAction.kind === 'remove') {
-        const ownsSpaces = err != null && typeof err === 'object' && 'ownedSpaces' in err;
+        const ownsSpaces =
+          err instanceof HttpError &&
+          err.status === 400 &&
+          Array.isArray((err.body as { ownedSpaces?: unknown } | undefined)?.ownedSpaces);
         if (ownsSpaces) {
           addToast(
             `${confirmAction.account.username} owns spaces — transfer ownership first (Space Settings → Ownership).`,
