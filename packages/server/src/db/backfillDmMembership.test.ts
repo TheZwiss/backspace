@@ -44,4 +44,23 @@ describe('backfillOneOnOneDmMembership', () => {
     expect(memberCount('healthy')).toBe(2);
     expect(memberCount('unrecoverable')).toBe(1);
   });
+
+  it('does NOT re-add an author whose users row is gone (JOIN users guard — no FK-violating INSERT at boot)', () => {
+    insUser('survivor');
+    insDm('orphan'); insMember('orphan', 'survivor');
+    // Author 'ghost' has NO users row — an orphan message whose identity is gone.
+    // SQLite FK enforcement is per-connection and only checks at write time; it
+    // never re-validates pre-existing rows. So on disk such an orphan message can
+    // exist even with FKs on. Reproduce that by seeding it with FKs momentarily
+    // off, then restore enforcement so the backfill runs under real boot pragmas.
+    db.pragma('foreign_keys = OFF');
+    insMsg('m1', 'orphan', 'ghost');
+    db.pragma('foreign_keys = ON');
+    insMsg('m2', 'orphan', 'survivor');
+    backfillOneOnOneDmMembership(db);
+    // The JOIN users guard drops 'ghost' → nothing restored, member count stays 1.
+    // (A blind re-insert would raise "FOREIGN KEY constraint failed" here.)
+    expect(memberCount('orphan')).toBe(1);
+    expect(db.prepare('SELECT 1 FROM dm_members WHERE dm_channel_id=? AND user_id=?').get('orphan', 'ghost')).toBeUndefined();
+  });
 });
