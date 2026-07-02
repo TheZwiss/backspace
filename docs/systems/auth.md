@@ -425,8 +425,10 @@ All cleanup runs in a single SQLite transaction:
 - If no remaining members, DM becomes orphaned
 
 **Orphaned DM cleanup:**
-- Finds DM channels with zero members after removal
+- Among the user's DM channels, finds those with **zero live members** — `users.isDeleted = 0`, excluding the uid being tombstoned right now (it still reads `isDeleted = 0` at scan time). A Deleted ↔ Survivor 1-on-1 is kept; a Deleted ↔ Deleted 1-on-1 is purged.
 - For each: collects attachment filenames, deletes attachments, reactions, messages, and the channel
+
+> **DM tombstone semantics** (1-on-1 survives as a read-only "Deleted User" thread, group DMs drop the member, `isDeadOneOnOne` read-only guard, dead-DM purge rule, one-time backfill, heal-path `user_updated` broadcast): see `docs/systems/dm-system.md` § "DM Tombstone Semantics".
 
 **User row anonymization:**
 ```

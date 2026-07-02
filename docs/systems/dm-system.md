@@ -5,7 +5,10 @@ Source files:
 - `packages/server/src/routes/federation.ts` -- Inbound relay event processors: `processMemberAddEvent`, `processMemberRemoveEvent`, `processOwnershipTransferEvent`, `processCreateEvent`, `processUpdateEvent`, `processDeleteEvent`, reaction processors, identity resolution (`resolveLocalUser`, `resolveOrCreateReplicatedUser`, `findOrCreateDmChannel`)
 - `packages/server/src/utils/federationOutbox.ts` -- `queueOutboxEvent`, `appendMutationLog`, `queueDmRelay`, `getDmParticipants`, `getGroupDmTargetOrigins`, `computeFederatedId`, `buildRelayPayload`
 - `packages/server/src/utils/storageJanitor.ts` -- `cleanupSoftDeletedDmChannels()` (24h grace period hard-delete)
-- `packages/server/src/db/migrate.ts` -- Self-healing migration for corrupted group DM ownership
+- `packages/server/src/utils/userDeletion.ts` -- `tombstoneUser()`: DM membership partition (1-on-1 kept / group dropped) + dead-DM purge on "zero live members" (see "DM Tombstone Semantics")
+- `packages/server/src/utils/permissions.ts` -- `isDeadOneOnOne()` read-only guard for Deleted-User 1-on-1 threads
+- `packages/server/src/db/migrate.ts` -- Self-healing migration for corrupted group DM ownership; `backfillOneOnOneDmMembership()` restores pre-fix Deleted-User 1-on-1 threads
+- `packages/web/src/components/chat/DmDeletedNotice.tsx` -- read-only composer notice; `packages/web/src/utils/dmFormatters.ts:isDeletedPartnerDm()` gates it
 - `packages/server/src/ws/handler.ts` -- `sendToDmMembers()` broadcasts (ConnectionManager method)
 - `packages/web/src/stores/spaceStore.ts` -- Zustand DM state: `addDmChannel`, `removeDmChannel`, `addDmMember`, `removeDmMember`, `updateDmOwner`, `closeDm`, `leaveDm`, `findExistingDmForUser`
 - `packages/web/src/hooks/useWebSocket.ts` -- Frontend WS event handlers for `dm_channel_created`, `dm_channel_closed`, `dm_member_added`, `dm_member_removed`, `dm_owner_updated`
@@ -397,6 +400,45 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 ---
 
+## DM Tombstone Semantics
+
+When a user is tombstoned (`tombstoneUser()` in `userDeletion.ts` — admin delete, self-delete, federation identity delete, or reset-heal), their DM channels are handled by channel type so that a 1-on-1 survives as a readable, read-only **"Deleted User"** thread while a group DM simply loses the member.
+
+### Membership partition (`userDeletion.ts`)
+
+- **1-on-1 DMs (`dm_channels.ownerId IS NULL`):** the tombstoned user's `dm_members` row is **KEPT**. The channel stores no denormalized partner identity, so the row is what keeps the thread reachable. The row is anonymized for free by the user-row tombstone (`username = '!deleted:{uid}'`, `isDeleted = 1`, nulled profile fields); `GET /api/dm` runs every member through `sanitizeUser` (no `isDeleted` filter), which surfaces the partner as `username: 'Deleted User'` with a nulled avatar/banner/bio.
+- **Group DMs (`ownerId IS NOT NULL`):** the tombstoned user's `dm_members` row is **DELETED**. If the deleted user owned the group, ownership transfers to the next remaining member (the `ownedGroupDms` loop). The channel survives with the remaining roster.
+
+Implementation: the function resolves the user's DM channel ids (`userDmChannelIds`), partitions them by `ownerId`, and deletes membership rows only for the group subset. This partition runs in **both** `purgeContent` modes — full "Remove" purges the deleted user's own authored space content but never the DM message text in a surviving channel (that text is the survivor's content and stays readable).
+
+### Dead-DM purge — "zero live members (exclude-uid)"
+
+After the partition, the orphan-purge scan deletes only channels among `userDmChannelIds` that now have **zero live members** — members whose `users.isDeleted = 0`, excluding the uid being tombstoned right now (its row is still `isDeleted = 0` at scan time because the tombstone `UPDATE` runs afterward, so it is excluded explicitly via `userId != uid`). Effect:
+
+- **Deleted ↔ Survivor 1-on-1:** the survivor is a live other → **kept**.
+- **Deleted ↔ Deleted 1-on-1:** no live others → **purged** (messages, attachment DB rows + disk files, and `dm_reactions` cleaned up, then the `dm_channels` row).
+
+The scan is **scoped** to `userDmChannelIds` (not a global `dm_channels` sweep) — only this user's membership changed, so only these channels can newly become dead. Pre-existing zero-member orphans from other causes are handled by the leave-path soft-delete + storage janitor.
+
+### Read-only enforcement (`isDeadOneOnOne`)
+
+A Deleted-User 1-on-1 is a **read-only archive** — you can never message a tombstoned (and possibly dead-incarnation) partner, and for a 1-on-1 an edit/delete relay would broadcast to all active peers (`getGroupDmTargetOrigins` returns `undefined`), risking mis-direction to a new incarnation. The server is the enforcement boundary:
+
+- **Helper:** `permissions.ts:isDeadOneOnOne(dmChannelId, requesterId)` → `true` when the channel is 1-on-1 (`ownerId IS NULL`) **and** every member other than the requester has `isDeleted = 1` (returns `false` for groups and when there are no other members).
+- **Applied to all three message-mutation endpoints** in `dm.ts`: `POST /api/dm/:id/messages` (after the `isDmMember` gate), `PATCH /api/dm/messages/:id`, and `DELETE /api/dm/messages/:id`. Each rejects with **`403 { error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 }`**.
+
+### Live update on the heal path
+
+`healResetIncarnation` (`utils/federationReset.ts`) — the reset-heal deletion caller — now aligns with the other three deletion callers: for each stub it collects co-member targets via `collectDeletionBroadcastTargets(stub.id)` **before** `tombstoneUser` (which deletes the rows that set is derived from), then re-reads the tombstoned row and broadcasts a sanitized `user_updated` (`{ type: 'user_updated', user: sanitizeUser(deletedRow) }`) to each target via `connectionManager.sendToUser`. Survivors' clients flip the partner to "Deleted User" live — no reload.
+
+Client-side, no new store action was added: the `user_updated` handler already calls `spaceStore.updateUserEverywhere` (patches the matching `dmChannels[].members` entry) and `upsertUserView`, and the 1-on-1 header/composer resolve through the canonical user-view cache, so the partner flips to "Deleted User" across the sidebar, header, and open-thread messages. The composer is replaced by a read-only notice (`components/chat/DmDeletedNotice.tsx`), gated by `dmFormatters.ts:isDeletedPartnerDm(dm, currentUser)` (1-on-1 whose every other member `isDeleted`), in `MainContent` and `MobileChatScreen`.
+
+### One-time backfill for pre-fix threads
+
+Users tombstoned **before** this fix already had their 1-on-1 `dm_members` row deleted, leaving those threads permanently unreachable. `migrate.ts:backfillOneOnOneDmMembership(db)` runs idempotently at every boot (called from `db/index.ts`): for each `ownerId IS NULL` channel with exactly **one** `dm_members` row, it re-inserts a membership row (`closed = 0`) for any distinct `dm_messages.userId` that is missing from `dm_members` **and** still exists in `users` (the `JOIN users` guard drops authors whose row is truly gone). Bounded, only inserts missing rows, safe on every re-run.
+
+---
+
 ## Message Operations
 
 ### Send Message
@@ -411,6 +453,7 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 **Validation:**
 - Caller must be a member (`isDmMember`)
+- Rejected with `403 recipient_deleted` if `isDeadOneOnOne(id, caller)` — read-only Deleted-User thread (see "DM Tombstone Semantics")
 - Must have content or attachments (not both empty)
 - Content max length: 4000 chars (`MAX_MESSAGE_LENGTH`)
 - Attachment ownership verified (must be unlinked and owned by caller)
@@ -426,6 +469,7 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 **Endpoint:** `PATCH /api/dm/messages/:id` -- `dm.ts:dmRoutes`
 
+0. Rejected with `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics")
 1. Author-only (`msg.userId !== request.userId` returns 403)
 2. Update content and set `editedAt`
 3. Delete old embeds, re-resolve new embeds asynchronously
@@ -436,6 +480,7 @@ If a `member_add` federation event arrives for a soft-deleted channel (non-null 
 
 **Endpoint:** `DELETE /api/dm/messages/:id` -- `dm.ts:dmRoutes`
 
+0. Rejected with `403 recipient_deleted` if `isDeadOneOnOne(msg.dmChannelId, caller)` (see "DM Tombstone Semantics")
 1. Author-only
 2. Collect attachment filenames before deletion
 3. Delete attachments, reactions, and message atomically in a transaction
