@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, or } from 'drizzle-orm';
+import { eq, or, lt } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
-import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
+import { hashPassword, verifyPassword, signJwt, authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
@@ -484,5 +485,48 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     };
 
     return reply.code(200).send(response);
+  });
+
+  // ─── POST /api/auth/attach-proof ──────────────────────────────────────────
+  // Mint a one-time proof token for detached-account re-attach on a peer
+  // (re-attach spec §3.1). Native accounts only — the token proves control of
+  // THIS home identity. 60s TTL, single-use, bound to the target peer domain
+  // (the verifying peer's domain is checked server-side on D, not trusted from
+  // the token bearer).
+  app.post<{ Body: { targetDomain?: unknown } }>('/api/auth/attach-proof', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const db = getDb();
+
+    const rawTarget = request.body?.targetDomain;
+    if (typeof rawTarget !== 'string' || rawTarget.trim().length === 0 || rawTarget.length > 255) {
+      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+    }
+    const targetDomain = rawTarget.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
+    // Native accounts only — a federated/replicated account has no authority
+    // to mint proofs for this domain's identities.
+    if (request.homeInstance) {
+      return reply.code(403).send({ error: 'Only native accounts can mint attach proofs', statusCode: 403 });
+    }
+
+    const now = Date.now();
+    // Opportunistic janitor: expired rows have no residual value.
+    db.delete(schema.federationAttachProofs)
+      .where(lt(schema.federationAttachProofs.expiresAt, now))
+      .run();
+
+    const token = randomBytes(32).toString('hex');
+    db.insert(schema.federationAttachProofs).values({
+      token,
+      homeUserId: request.userId,
+      targetDomain,
+      createdAt: now,
+      expiresAt: now + 60_000,
+      usedAt: null,
+    }).run();
+
+    return reply.code(200).send({ token });
   });
 }
