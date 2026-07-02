@@ -187,7 +187,7 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
       .where(eq(schema.users.id, id)).run();
   }
 
-  it('genuine reset: soft-tombstones flagged stubs, quarantines (freeze+rename) real accounts, resolves journal', async () => {
+  it('genuine reset: soft-tombstones flagged stubs, detaches real accounts (flag only, name kept), resolves journal', async () => {
     seedPeer();
     seedJournal('E0');
     // A local native user to be the friendship counterpart.
@@ -202,7 +202,7 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
       userId: 'stub-1', friendId: 'local-1', createdAt: Date.now(),
     }).run();
     // Flagged REAL federated account (real bcrypt), no owned space — must survive
-    // (never deleted) but be quarantined: frozen + renamed to free the handle.
+    // (never deleted) and be DETACHED: flagged orphaned, username preserved.
     seedUser('real-1', { passwordHash: '$2b$10$realbcrypthash' });
     flag('real-1');
 
@@ -219,11 +219,11 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
     // Heal flag cleared on the healed stub.
     expect(stub.federationHealPending).toBe(0);
 
-    // Real account NEVER deleted (content preserved) but quarantined: frozen,
-    // handle freed via rename, heal flag cleared (Phase 2 §6.3b).
+    // Real account NEVER deleted (content preserved) and DETACHED: orphaned flag
+    // set, username PRESERVED, heal flag cleared (detach spec §4.2).
     const real = testDb.select().from(schema.users).where(eq(schema.users.id, 'real-1')).get()!;
     expect(real.isDeleted).toBe(0);
-    expect(real.username).toBe('!orphaned:real-1@peer.example');
+    expect(real.username).toBe('real-1@peer.example'); // unchanged — no rename
     expect(real.federationHomeOrphaned).toBe(1);
     expect(real.federationHealPending).toBe(0);
 
@@ -308,7 +308,7 @@ describe('healResetIncarnation — heal after authenticated re-peer', () => {
   });
 });
 
-describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {
+describe('healResetIncarnation — real-account detach (Phase 2)', () => {
   const QORIGIN = 'orbit.ddns.net';
   let uidCounter = 0;
 
@@ -349,7 +349,7 @@ describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {
     }).run();
   }
 
-  it('renames + freezes a flagged real account with NO owned spaces', async () => {
+  it('detaches a flagged real account with NO owned spaces (flag only, username kept)', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
     const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
 
@@ -357,32 +357,47 @@ describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {
     healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
-    expect(row.username).toBe(`!orphaned:${uid}@orbit.ddns.net`); // handle freed
-    expect(row.federationHomeOrphaned).toBe(1);                    // frozen
-    expect(row.federationHealPending).toBe(0);                     // processed
-    expect(row.isDeleted).toBe(0);                                 // NOT deleted (content preserved)
+    expect(row.username).toBe('carol@orbit.ddns.net'); // username PRESERVED — no rename
+    expect(row.federationHomeOrphaned).toBe(1);         // detached
+    expect(row.federationHealPending).toBe(0);          // processed
+    expect(row.isDeleted).toBe(0);                      // NOT deleted (content preserved)
   });
 
-  it('freezes but does NOT rename a flagged real account that OWNS a space; surfaces it', async () => {
+  it('detaches a space-OWNER identically to a non-owner (flag set, username kept)', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
     const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'dave@orbit.ddns.net', healPending: 1 });
-    seedSpace({ ownerId: uid, name: 'Dave HQ' }); // owns a space
+    seedSpace({ ownerId: uid, name: 'Dave HQ' }); // owns a space — no special case
 
     const { healResetIncarnation } = await import('./federationReset.js');
     healResetIncarnation(QORIGIN, 'E1', 'initiate_accepted');
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
-    expect(row.username).toBe('dave@orbit.ddns.net'); // NOT renamed (owner)
-    expect(row.federationHomeOrphaned).toBe(1);        // frozen
+    expect(row.username).toBe('dave@orbit.ddns.net'); // username PRESERVED (owner treated same as non-owner)
+    expect(row.federationHomeOrphaned).toBe(1);        // detached
     expect(row.federationHealPending).toBe(0);         // processed
     expect(row.isDeleted).toBe(0);
-    // journal orphaned_account_count reflects the frozen set (1)
+    // journal orphaned_account_count reflects the detached set (1)
     const j = testDb.select().from(schema.federationResetEvents)
       .where(eq(schema.federationResetEvents.origin, QORIGIN)).get()!;
     expect(j.orphanedAccountCount).toBe(1);
   });
 
-  it('false-positive branch (same incarnation) does NOT quarantine real accounts', async () => {
+  it('detaches ALL flagged real accounts and quarantineOrphanedAccounts returns the count', async () => {
+    const uid1 = seedRealAccount({ homeInstance: QORIGIN, username: 'erin@orbit.ddns.net', healPending: 1 });
+    const uid2 = seedRealAccount({ homeInstance: QORIGIN, username: 'frank@orbit.ddns.net', healPending: 1 });
+
+    const { quarantineOrphanedAccounts } = await import('./federationReset.js');
+    const count = quarantineOrphanedAccounts(QORIGIN);
+
+    expect(count).toBe(2); // returns the number of accounts detached
+    for (const uid of [uid1, uid2]) {
+      const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
+      expect(row.federationHomeOrphaned).toBe(1);
+      expect(row.federationHealPending).toBe(0);
+    }
+  });
+
+  it('false-positive branch (same incarnation) does NOT detach real accounts', async () => {
     seedJournal({ origin: QORIGIN, deadEpoch: 'E0' });
     const uid = seedRealAccount({ homeInstance: QORIGIN, username: 'carol@orbit.ddns.net', healPending: 1 });
 
@@ -391,7 +406,7 @@ describe('healResetIncarnation — real-account quarantine (Phase 2)', () => {
 
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, uid)).get()!;
     expect(row.username).toBe('carol@orbit.ddns.net'); // untouched
-    expect(row.federationHomeOrphaned ?? 0).toBe(0);    // NOT frozen
+    expect(row.federationHomeOrphaned ?? 0).toBe(0);    // NOT detached
     expect(row.federationHealPending).toBe(0);          // flags cleared (false-alarm path)
   });
 });
