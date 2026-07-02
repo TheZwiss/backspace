@@ -19,7 +19,7 @@ import { deleteAttachmentFiles, deleteUploadFile } from '../utils/fileCleanup.js
 import { tombstoneUser, collectDeletionBroadcastTargets, collectProfileBroadcastTargetIds } from '../utils/userDeletion.js';
 import { computeFederatedId, getDmParticipants, sendCallRelay } from '../utils/federationOutbox.js';
 import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActivation.js';
-import { getInstanceId } from '../utils/federationEpoch.js';
+import { getInstanceId, fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { probePeerReachable, recoverOrDetectReset } from '../utils/federationRecovery.js';
 import { markPeerReset, homeInstanceMatch } from '../utils/federationReset.js';
 import { getDmMessageWithUser } from './dm.js';
@@ -939,16 +939,27 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         }
 
         if (!response.ok) {
-          let errorMessage = `Remote instance rejected peering (HTTP ${response.status})`;
-          try {
-            const body = await response.json() as { error?: string };
-            if (body.error) {
-              errorMessage = body.error;
-            }
-          } catch {
-            // Ignore parse failures — use the default error message
+          // Read the body exactly ONCE here — response.json()/text() consumes the
+          // stream, so both the honest-409 branch and the generic branch below
+          // share this single parse (no double-read of the same Response).
+          const rawBody = await response.text().catch(() => '');
+          let parsed: { error?: string; code?: string } = {};
+          try { parsed = JSON.parse(rawBody) as { error?: string; code?: string }; } catch { /* non-JSON body */ }
+
+          // Responder honestly refused: it already holds peering for us and will
+          // not rekey (anti-hijack). Do NOT create a conflicting row — delete the
+          // pending row so our slot stays clean and the remote's own later Re-peer
+          // can land on a fresh responder slot. Surface an actionable reason.
+          if (response.status === 409 && parsed.code === 'PEER_EXISTS_RESET_REQUIRED') {
+            db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).run();
+            return reply.code(409).send({
+              error: 'The remote instance still holds stale peering for you. Ask its admin to reset (or Re-peer) their side, then try again.',
+              code: 'PEER_EXISTS_RESET_REQUIRED',
+              statusCode: 409,
+            });
           }
 
+          const errorMessage = parsed.error || `Remote instance rejected peering (HTTP ${response.status})`;
           // Clean up the pending peer
           db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).run();
           return reply.code(502).send({ error: errorMessage, statusCode: 502 });
@@ -972,8 +983,25 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // Non-JSON body — leave null.
         }
 
+        // The responder returned 200 → it claims it adopted our secret. PROVE it
+        // with a signed round-trip before trusting the peering (catches BUG-1: a
+        // responder that reported success without adopting, and any residual
+        // desync). fetchPeerEpoch signs with the just-negotiated secret; a desync
+        // → 401/403 → null. Park the peer in needs_attention instead of falsely
+        // activating so the admin sees "re-peer incomplete", not a dead-active row.
+        const verifiedEpoch = await fetchPeerEpoch({ origin: remoteOrigin, hmacSecret });
+        if (!verifiedEpoch) {
+          db.update(schema.federationPeers)
+            .set({ status: 'needs_attention', needsAttentionReason: 'repeer_incomplete', lastSeenAt: Date.now() })
+            .where(eq(schema.federationPeers.id, peerId))
+            .run();
+          connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
+          const parked = db.select().from(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).get();
+          return reply.code(200).send({ peer: parked ? sanitizePeer(parked) : null, verified: false });
+        }
+
         db.update(schema.federationPeers)
-          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: remoteInstanceId, approvalToken: null })
+          .set({ status: 'active', lastSeenAt: Date.now(), instanceName: remoteInstanceName, peerInstanceId: remoteInstanceId, needsAttentionReason: null, approvalToken: null })
           .where(eq(schema.federationPeers.id, peerId))
           .run();
         connectionManager.sendToAdmins({ type: 'federation_peers_changed' as const });
@@ -991,7 +1019,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           return reply.code(500).send({ error: 'Failed to read peer after activation', statusCode: 500 });
         }
 
-        return reply.code(200).send({ peer: sanitizePeer(peer) });
+        return reply.code(200).send({ peer: sanitizePeer(peer), verified: true });
       } catch (err: unknown) {
         // Clean up the pending peer on network/timeout errors
         db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, peerId)).run();
@@ -1124,9 +1152,9 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           // Detection-only: if the inbound epoch differs from our trusted
           // baseline, the peer is a NEW incarnation on the same domain (a
           // wipe-and-reinstall). Route it to needs_attention + snapshot +
-          // journal — but STILL return 200 and STILL do not rekey. The
-          // anti-hijack guard above is preserved verbatim; detection never
-          // grants capability.
+          // journal — but STILL return 409 (PEER_EXISTS_RESET_REQUIRED) and
+          // STILL do not rekey. The anti-hijack guard above is preserved
+          // verbatim; detection never grants capability.
           if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) {
             markPeerReset(existing.id, sourceOrigin, existing.peerInstanceId, reqInstanceId);
           }

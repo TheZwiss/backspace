@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from './snowflake.js';
+import { buildFederationHeaders } from './federationAuth.js';
 
 setWorkerId(1);
 
@@ -232,7 +233,7 @@ describe('POST /api/federation/peer/accept — peer_instance_id (epoch) persiste
   });
 });
 
-describe('POST /api/federation/peer/initiate — persists remote epoch from handshake response', () => {
+describe('POST /api/federation/peer/initiate — verifies the handshake before persisting remote epoch', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -251,13 +252,26 @@ describe('POST /api/federation/peer/initiate — persists remote epoch from hand
     sqlite.close();
   });
 
-  it('writes peer_instance_id from the remote /peer/accept response body', async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch-1' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+  it('activates and persists peer_instance_id after a verified /epoch round-trip', async () => {
+    // The responder signs the /epoch response with the SAME secret the initiator
+    // sent it in /peer/accept — mirroring a real responder that adopted the secret.
+    let capturedSecret = '';
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/api/federation/peer/accept')) {
+        capturedSecret = (JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret;
+        return new Response(JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch-1' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (u.endsWith('/api/federation/epoch')) {
+        const body = JSON.stringify({ instanceId: 'remote-epoch-1' });
+        const headers = buildFederationHeaders(body, capturedSecret, 'https://remote.example');
+        return new Response(body, { status: 200, headers });
+      }
+      throw new Error(`unexpected fetch ${u}`);
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const response = await app.inject({
@@ -267,24 +281,32 @@ describe('POST /api/federation/peer/initiate — persists remote epoch from hand
     });
 
     expect(response.statusCode).toBe(200);
+    expect((response.json() as { verified?: boolean }).verified).toBe(true);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(row?.status).toBe('active');
     expect(row?.peerInstanceId).toBe('remote-epoch-1');
 
     // Our epoch must be sent in the outbound handshake body.
-    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const sentBody = JSON.parse(call[1].body as string) as { instanceId?: string };
+    const acceptCall = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/api/federation/peer/accept')) as unknown as [string, RequestInit];
+    const sentBody = JSON.parse(acceptCall[1].body as string) as { instanceId?: string };
     expect(sentBody.instanceId).toBe(LOCAL_EPOCH);
   });
 
-  it('writes null peer_instance_id when the remote response omits instanceId', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+  it('parks in needs_attention when the /epoch verification cannot complete (legacy/unverifiable peer)', async () => {
+    // Remote returns 200 on /peer/accept but has no verifiable /epoch endpoint
+    // (404 → legacy). Without a signed round-trip we refuse to false-activate.
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.endsWith('/api/federation/peer/accept')) {
+        return new Response(JSON.stringify({ accepted: true, instanceName: 'Remote' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (u.endsWith('/api/federation/epoch')) return new Response('not found', { status: 404 });
+      throw new Error(`unexpected fetch ${u}`);
+    }));
 
     const response = await app.inject({
       method: 'POST',
@@ -293,9 +315,11 @@ describe('POST /api/federation/peer/initiate — persists remote epoch from hand
     });
 
     expect(response.statusCode).toBe(200);
+    expect((response.json() as { verified?: boolean }).verified).toBe(false);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
-    expect(row?.status).toBe('active');
+    expect(row?.status).toBe('needs_attention');
+    expect(row?.needsAttentionReason).toBe('repeer_incomplete');
     expect(row?.peerInstanceId).toBeNull();
   });
 });

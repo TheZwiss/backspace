@@ -8,8 +8,35 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
+import { buildFederationHeaders } from '../utils/federationAuth.js';
 
 setWorkerId(1);
+
+// The pending row's secret is deterministic in this suite (generateHmacSecret is
+// mocked below to return this exact value). fetchPeerEpoch signs its /epoch
+// request with the pending row's secret and verifies the response with the same
+// secret, so a valid signed epoch response must be signed with THIS secret.
+const PENDING_SECRET = 'mock-generated-secret';
+
+/**
+ * URL-aware outbound fetch stub. `/peer/accept` returns `acceptResponse`; the
+ * subsequent `/api/federation/epoch` call returns a valid HMAC-signed
+ * `{ instanceId }` (signed with the pending row's secret so fetchPeerEpoch's real
+ * signature check passes) when `epochToEcho` is a string, or `401` when null.
+ */
+function makeUrlAwareFetch(acceptResponse: Response, epochToEcho: string | null): typeof globalThis.fetch {
+  return (async (url: string | URL | Request): Promise<Response> => {
+    const u = String(url);
+    if (u.endsWith('/api/federation/peer/accept')) return acceptResponse.clone();
+    if (u.endsWith('/api/federation/epoch')) {
+      if (epochToEcho === null) return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
+      const body = JSON.stringify({ instanceId: epochToEcho });
+      const headers = buildFederationHeaders(body, PENDING_SECRET, 'https://remote.example');
+      return new Response(body, { status: 200, headers });
+    }
+    throw new Error(`unexpected fetch ${u}`);
+  }) as typeof globalThis.fetch;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -173,12 +200,13 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
   });
 
   it('on 200 from remote, activates and clears approvalToken', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
       new Response(
-        JSON.stringify({ accepted: true, instanceName: 'Remote' }),
+        JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
-    );
+      'remote-epoch',
+    ));
 
     const response = await app.inject({
       method: 'POST',
@@ -191,5 +219,83 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
     expect(peer?.status).toBe('active');
     expect(peer?.approvalToken).toBeNull();
+  });
+
+  // ─── Task 6: 409 honest-refusal + verify-before-activate (BUG-1b/BUG-2) ─────
+
+  it('(a) on 409 PEER_EXISTS_RESET_REQUIRED, returns 409 and DELETES the pending row', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
+      new Response(
+        JSON.stringify({ accepted: false, code: 'PEER_EXISTS_RESET_REQUIRED', error: 'reset required' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      ),
+      // No epoch call is expected on this path; guard with null anyway.
+      null,
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().code).toBe('PEER_EXISTS_RESET_REQUIRED');
+
+    // The pending row must be gone — no false-active, no lingering slot.
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(peer).toBeUndefined();
+  });
+
+  it('(b) on 200 but failed epoch verification, parks in needs_attention (verified:false), NOT active', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
+      new Response(
+        JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+      // Epoch endpoint responds 401 → fetchPeerEpoch returns null.
+      null,
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().verified).toBe(false);
+
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(peer?.status).toBe('needs_attention');
+    expect(peer?.needsAttentionReason).toBe('repeer_incomplete');
+    expect(peer?.status).not.toBe('active');
+  });
+
+  it('(c) on 200 with a valid signed epoch, activates (verified:true) and clears needsAttentionReason', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
+      new Response(
+        JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+      'remote-epoch',
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().verified).toBe(true);
+
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(peer?.status).toBe('active');
+    expect(peer?.needsAttentionReason).toBeNull();
+    expect(peer?.peerInstanceId).toBe('remote-epoch');
   });
 });

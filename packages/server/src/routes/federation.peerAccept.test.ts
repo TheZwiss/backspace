@@ -8,8 +8,30 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
+import { buildFederationHeaders } from '../utils/federationAuth.js';
 
 setWorkerId(1);
+
+// A URL-aware outbound fetch stub for /peer/initiate: /peer/accept returns
+// `acceptBody` (200); /api/federation/epoch signs its response with the secret
+// the initiator just sent in /peer/accept, so fetchPeerEpoch's real signature
+// check passes and the handshake verifies (status → active).
+function initiateFetchStub(acceptBody: Record<string, unknown>): typeof globalThis.fetch {
+  let capturedSecret = '';
+  return (async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const u = String(url);
+    if (u.endsWith('/api/federation/peer/accept')) {
+      capturedSecret = (JSON.parse(String(init?.body)) as { hmacSecret: string }).hmacSecret;
+      return new Response(JSON.stringify(acceptBody), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (u.endsWith('/api/federation/epoch')) {
+      const body = JSON.stringify({ instanceId: 'remote-epoch' });
+      const headers = buildFederationHeaders(body, capturedSecret, 'https://remote.example');
+      return new Response(body, { status: 200, headers });
+    }
+    throw new Error(`unexpected fetch ${u}`);
+  }) as typeof globalThis.fetch;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -473,13 +495,8 @@ describe('POST /api/federation/peer/initiate — persists remote instanceName fr
     vi.unstubAllGlobals();
   });
 
-  it('writes remote.instanceName when remote /peer/accept succeeds', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true, instanceName: 'Remote Backspace' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+  it('writes remote.instanceName when remote /peer/accept succeeds (and epoch verifies)', async () => {
+    vi.stubGlobal('fetch', initiateFetchStub({ accepted: true, instanceName: 'Remote Backspace', instanceId: 'remote-epoch' }));
 
     const response = await app.inject({
       method: 'POST',
@@ -494,13 +511,8 @@ describe('POST /api/federation/peer/initiate — persists remote instanceName fr
     expect(row?.instanceName).toBe('Remote Backspace');
   });
 
-  it('writes null instanceName when remote response omits the field', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () =>
-      new Response(JSON.stringify({ accepted: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    ));
+  it('writes null instanceName when remote response omits the field (and epoch verifies)', async () => {
+    vi.stubGlobal('fetch', initiateFetchStub({ accepted: true, instanceId: 'remote-epoch' }));
 
     const response = await app.inject({
       method: 'POST',
@@ -511,6 +523,7 @@ describe('POST /api/federation/peer/initiate — persists remote instanceName fr
     expect(response.statusCode).toBe(200);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(row?.status).toBe('active');
     expect(row?.instanceName).toBeNull();
   });
 });
