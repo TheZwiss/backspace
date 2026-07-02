@@ -2860,10 +2860,23 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         // Use federated_id: any channel with a federated ID is a federated DM
         // that should be synced. The peer's relay endpoint will create the channel
         // if it doesn't exist, or match by federated_id if it does.
+        // Relevance scoping (dead-incarnation spec §3.2): only offer channels
+        // with at least one LIVE member homed at the requesting peer's domain.
+        // A reset peer's former users are detached (federation_home_orphaned=1)
+        // or tombstoned here — their channels are our history, not the new
+        // incarnation's. Channels not involving the requester at all are none
+        // of its business either (third-instance over-broadcast).
+        const peerDomain = extractDomain(peer.origin).toLowerCase();
         const sharedChannelRows = rawDb.prepare(`
-          SELECT id as dm_channel_id, federated_id FROM dm_channels
-          WHERE federated_id IS NOT NULL AND deleted_at IS NULL
-        `).all() as Array<{ dm_channel_id: string; federated_id: string }>;
+          SELECT DISTINCT c.id as dm_channel_id, c.federated_id
+          FROM dm_channels c
+          JOIN dm_members m ON m.dm_channel_id = c.id
+          JOIN users u ON u.id = m.user_id
+          WHERE c.federated_id IS NOT NULL AND c.deleted_at IS NULL
+            AND u.is_deleted = 0
+            AND u.federation_home_orphaned = 0
+            AND lower(replace(replace(coalesce(u.home_instance, ''), 'https://', ''), 'http://', '')) = ?
+        `).all(peerDomain) as Array<{ dm_channel_id: string; federated_id: string }>;
 
         const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
         channelFederatedIdMap = new Map<string, string>(
