@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import {
   PermissionBits,
@@ -259,6 +259,28 @@ export function isDmMember(dmChannelId: string, userId: string): boolean {
     ))
     .get();
   return member !== undefined;
+}
+
+/**
+ * True when a DM is a 1-on-1 (ownerId NULL) whose only other participant(s)
+ * are tombstoned (isDeleted=1). Used to make a Deleted-User thread read-only:
+ * no message create/edit/delete, so we never enqueue doomed/mis-directed relays.
+ */
+export function isDeadOneOnOne(dmChannelId: string, requesterId: string): boolean {
+  const db = getDb();
+  const channel = db.select({ ownerId: schema.dmChannels.ownerId })
+    .from(schema.dmChannels).where(eq(schema.dmChannels.id, dmChannelId)).get();
+  if (!channel || channel.ownerId !== null) return false; // groups are never a dead 1-on-1
+  const others = db.select({ isDeleted: schema.users.isDeleted })
+    .from(schema.dmMembers)
+    .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+    .where(and(
+      eq(schema.dmMembers.dmChannelId, dmChannelId),
+      sql`${schema.dmMembers.userId} != ${requesterId}`,
+    ))
+    .all();
+  if (others.length === 0) return false;
+  return others.every(o => o.isDeleted === 1);
 }
 
 export function isBanned(spaceId: string, userId: string): boolean {

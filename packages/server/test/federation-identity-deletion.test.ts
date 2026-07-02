@@ -402,6 +402,55 @@ describe('Federation identity deletion — server suite', () => {
     remote.close();
   });
 
+  it('#19 read-only: mutations on a Deleted-User 1-on-1 are rejected 403 recipient_deleted', async () => {
+    const fx = await setupFullDeletionFixture('t19');
+
+    // Survivor authors a message BEFORE the deletion so there is a message THEY own
+    // to edit/delete — this ensures the read-only guard (not the ownership 403) is
+    // what's exercised on the PATCH/DELETE paths, which resolve via msg.dmChannelId.
+    const pre = await fetch(`${harness.remote.origin}/api/dm/${fx.dmChannelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.observerOnRemote.token}` },
+      body: JSON.stringify({ content: 'before deletion' }),
+    });
+    expect(pre.status).toBe(201);
+    const { id: messageId } = await pre.json() as { id: string };
+
+    // Tombstone the remote (federated) user via soft delete
+    const del = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin], mode: 'soft' }),
+    });
+    expect(del.status).toBe(200);
+
+    // Survivor (observerOnRemote) POST -> 403 recipient_deleted
+    const post = await fetch(`${harness.remote.origin}/api/dm/${fx.dmChannelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.observerOnRemote.token}` },
+      body: JSON.stringify({ content: 'still there?' }),
+    });
+    expect(post.status).toBe(403);
+    expect((await post.json()).code).toBe('recipient_deleted');
+
+    // PATCH the survivor's own message (resolves channel via msg.dmChannelId) -> 403
+    const patch = await fetch(`${harness.remote.origin}/api/dm/messages/${messageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.observerOnRemote.token}` },
+      body: JSON.stringify({ content: 'edit' }),
+    });
+    expect(patch.status).toBe(403);
+    expect((await patch.json()).code).toBe('recipient_deleted');
+
+    // DELETE the survivor's own message (resolves channel via msg.dmChannelId) -> 403
+    const remove = await fetch(`${harness.remote.origin}/api/dm/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${fx.observerOnRemote.token}` },
+    });
+    expect(remove.status).toBe(403);
+    expect((await remove.json()).code).toBe('recipient_deleted');
+  });
+
   it('#7 owned-spaces 409: ownership prevents deletion, registry preserved', async () => {
     const { createFederatedUser } = await import('./helpers/testUsers.js');
     const { openInspector } = await import('./helpers/dbInspect.js');

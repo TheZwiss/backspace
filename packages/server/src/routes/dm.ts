@@ -3,7 +3,7 @@ import { eq, and, or, desc, lt, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb, schema } from '../db/index.js';
 import { authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
-import { isDmMember } from '../utils/permissions.js';
+import { isDmMember, isDeadOneOnOne } from '../utils/permissions.js';
 import { connectionManager } from '../ws/handler.js';
 import {
   MAX_MESSAGE_LENGTH,
@@ -2456,6 +2456,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You are not a member of this DM channel', statusCode: 403 });
     }
 
+    if (isDeadOneOnOne(id, request.userId)) {
+      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+    }
+
     const hasContent = content && typeof content === 'string' && content.trim().length > 0;
     const hasAttachments = attachmentIds && attachmentIds.length > 0;
 
@@ -2548,6 +2552,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'You can only edit your own messages', statusCode: 403 });
     }
 
+    if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
+      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
+    }
+
     const now = Date.now();
     db.update(schema.dmMessages)
       .set({ content: content.trim(), editedAt: now })
@@ -2598,6 +2606,10 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
 
     if (msg.userId !== request.userId) {
       return reply.code(403).send({ error: 'You can only delete your own messages', statusCode: 403 });
+    }
+
+    if (isDeadOneOnOne(msg.dmChannelId, request.userId)) {
+      return reply.code(403).send({ error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 });
     }
 
     // Collect attachment filenames before deleting
