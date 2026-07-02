@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel } from './dmFormatters';
+import { formatDmTimestamp, formatDmPreview, formatDmSidebarPreview, formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from './dmFormatters';
 import type { DmChannel, DmLastMessagePreview, User } from '@backspace/shared';
 
 /** Build a local-time Date: new Date(year, month-1, day, hour, minute) as a timestamp. */
@@ -415,5 +415,21 @@ describe('formatDmSidebarPreview — icon_changed system message', () => {
       createdAt: 1,
     });
     expect(formatDmSidebarPreview(dm, { id: 'OTHER', username: 'other' })).toBe('Unknown updated the group icon');
+  });
+});
+
+describe('isDeletedPartnerDm', () => {
+  const me = { id: 'me', username: 'me' } as User;
+  it('true for a 1-on-1 whose only other member is deleted', () => {
+    const dm = { ownerId: null, members: [me, { id: 'x', username: 'Deleted User', isDeleted: true } as User] };
+    expect(isDeletedPartnerDm(dm as any, me)).toBe(true);
+  });
+  it('false for a live partner', () => {
+    const dm = { ownerId: null, members: [me, { id: 'x', username: 'p', isDeleted: false } as User] };
+    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
+  });
+  it('false for a group even with a deleted member', () => {
+    const dm = { ownerId: 'me', members: [me, { id: 'x', isDeleted: true } as User] };
+    expect(isDeletedPartnerDm(dm as any, me)).toBe(false);
   });
 });

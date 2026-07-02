@@ -314,3 +314,14 @@ export function formatDmInputLabel(dm: DmChannel, currentUser: AuthLike): string
   if (!partner) return '@unknown';
   return `@${memberDisplayName(partner) || 'unknown'}`;
 }
+
+/**
+ * True when `dm` is a 1-on-1 whose only other participant(s) are tombstoned.
+ * Drives the read-only composer — you cannot message a deleted user.
+ */
+export function isDeletedPartnerDm(dm: Pick<DmChannel, 'ownerId' | 'members'>, currentUser: AuthLike): boolean {
+  if (dm.ownerId) return false; // group
+  const others = dm.members.filter(m => !isSelf(m, currentUser));
+  if (others.length === 0) return false;
+  return others.every(m => m.isDeleted === true);
+}

@@ -18,7 +18,8 @@ import { wsSend } from '../../hooks/useWebSocket';
 import { MemberListToggleButton } from './MemberListToggleButton';
 import { TransferIndicator } from './TransferIndicator';
 import { isSelf, parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
-import { formatDmHeaderName, formatDmInputLabel } from '../../utils/dmFormatters';
+import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
+import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 import { Tooltip } from '../ui/Tooltip';
@@ -179,6 +180,7 @@ export function MainContent() {
       : dmChannel
         ? `Message @${dmName}`
         : undefined;
+    const dmPartnerDeleted = dmChannel ? isDeletedPartnerDm(dmChannel, authUser) : false;
 
     const isInDmCall = activeDmCall?.dmChannelId === currentChannelId;
     const isCallingThisDm = outgoingCall?.dmChannelId === currentChannelId;
@@ -365,7 +367,9 @@ export function MainContent() {
           </div>
         </div>
         <MessageList channelId={currentChannelId} jumpToMessageId={jumpToMessageId} onJumpComplete={() => setJumpToMessageId(null)} />
-        <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} placeholder={dmInputPlaceholder} />
+        {dmPartnerDeleted
+          ? <DmDeletedNotice />
+          : <MessageInput channelId={currentChannelId} channelName={`@${dmName}`} placeholder={dmInputPlaceholder} />}
         <SearchPopover
           open={searchOpen}
           onClose={() => setSearchOpen(false)}

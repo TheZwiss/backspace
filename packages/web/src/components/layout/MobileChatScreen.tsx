@@ -7,7 +7,8 @@ import { MessageList } from '../chat/MessageList';
 import { MessageInput } from '../chat/MessageInput';
 import { TransferIndicator } from './TransferIndicator';
 import { parseFederatedUsername } from '../../utils/identity';
-import { formatDmHeaderName, formatDmInputLabel } from '../../utils/dmFormatters';
+import { formatDmHeaderName, formatDmInputLabel, isDeletedPartnerDm } from '../../utils/dmFormatters';
+import { DmDeletedNotice } from '../chat/DmDeletedNotice';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import type { User } from '@backspace/shared';
 
@@ -47,6 +48,7 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
   const isGroup = !!dm?.ownerId;
   const rawMainOther = !isGroup ? otherMembers[0] : undefined;
   const canonicalMainOther = useCanonicalUserView((rawMainOther as unknown as User) ?? FALLBACK_USER);
+  const dmPartnerDeleted = dm ? isDeletedPartnerDm(dm, authUser) : false;
 
   // Resolve channel/DM name. Group DMs route through `formatDmHeaderName` so
   // a renamed group shows `dm.name` (previously this surface silently dropped
@@ -127,7 +129,9 @@ export function MobileChatScreen({ params }: MobileChatScreenProps) {
           `absolute bottom-full` to the bubble), so we don't render it here. */}
       <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
         {channelId && <MessageList channelId={channelId} />}
-        {channelId && <MessageInput channelId={channelId} channelName={channelName} placeholder={inputPlaceholder} />}
+        {channelId && (dmPartnerDeleted
+          ? <DmDeletedNotice />
+          : <MessageInput channelId={channelId} channelName={channelName} placeholder={inputPlaceholder} />)}
       </div>
     </div>
   );
