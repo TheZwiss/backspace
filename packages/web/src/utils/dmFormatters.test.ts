@@ -383,6 +383,19 @@ describe('formatDmInputLabel', () => {
   });
 });
 
+describe('deleted 1-on-1 partner', () => {
+  const me: User = { id: 'me', username: 'me', displayName: 'Me' } as User;
+  const deleted: User = { id: 'x', username: 'Deleted User', displayName: null, isDeleted: true } as User;
+  const dm = { id: 'd', ownerId: null, members: [me, deleted], createdAt: 0 } as unknown as DmChannel;
+
+  it('header shows Deleted User', () => {
+    expect(formatDmHeaderName(dm, me)).toBe('Deleted User');
+  });
+  it('input label points at Deleted User', () => {
+    expect(formatDmInputLabel(dm, me)).toBe('@Deleted User');
+  });
+});
+
 describe('formatDmSidebarPreview — icon_changed system message', () => {
   it('happy path → "<actor> updated the group icon"', () => {
     const dm = makeGroupDm({
