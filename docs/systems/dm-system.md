@@ -426,6 +426,8 @@ A Deleted-User 1-on-1 is a **read-only archive** — you can never message a tom
 
 - **Helper:** `permissions.ts:isDeadOneOnOne(dmChannelId, requesterId)` → `true` when the channel is 1-on-1 (`ownerId IS NULL`) **and** every member other than the requester has `isDeleted = 1` (returns `false` for groups and when there are no other members).
 - **Applied to all three message-mutation endpoints** in `dm.ts`: `POST /api/dm/:id/messages` (after the `isDmMember` gate), `PATCH /api/dm/messages/:id`, and `DELETE /api/dm/messages/:id`. Each rejects with **`403 { error: "This user's account was deleted", code: 'recipient_deleted', statusCode: 403 }`**.
+- **Applied to DM reactions on the WebSocket path** in `ws/events.ts`: `handleReactionAdd` and `handleReactionRemove` call `isDeadOneOnOne(dmMsg.dmChannelId, userId)` after the `isDmMember` gate and **silently drop** the frame (WS has no response channel). Without this, a survivor could add/remove reactions on historical messages and the reaction would relay to **all** active peers (a 1-on-1 has no group target-origins, so `queueOutboxEvent(..., undefined)` fans out) — the exact mis-directed relay the read-only invariant exists to prevent.
+- **Client mirror (consistency, not the boundary):** `components/chat/Message.tsx` withdraws the add-reaction affordances (hover button, emoji picker, context-menu "Add Reaction") and no-ops existing-pill toggles when the message's DM is a dead 1-on-1 (`isDeletedPartnerDm(dm, currentUser)`). Existing reactions still **display** read-only; only add/remove is disabled.
 
 ### Live update on the heal path
 

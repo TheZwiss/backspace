@@ -170,11 +170,17 @@ export function tombstoneUser(uid: string, options?: TombstoneOptions): string[]
       and(eq(schema.channelOverrides.targetType, 'member'), eq(schema.channelOverrides.targetId, uid))
     ).run();
 
-    // Transfer ownership of group DMs to the next remaining member
+    // Transfer ownership of group DMs to the next remaining member.
+    // Invariant: ownership must never transfer to a tombstoned member — join
+    // users and require isDeleted=0 so a dead incarnation can't become owner.
     for (const { id: dmId } of ownedGroupDms) {
       const nextMember = tx.select({ userId: schema.dmMembers.userId })
         .from(schema.dmMembers)
-        .where(eq(schema.dmMembers.dmChannelId, dmId))
+        .innerJoin(schema.users, eq(schema.dmMembers.userId, schema.users.id))
+        .where(and(
+          eq(schema.dmMembers.dmChannelId, dmId),
+          eq(schema.users.isDeleted, 0),
+        ))
         .limit(1)
         .get();
       if (nextMember) {

@@ -451,6 +451,50 @@ describe('Federation identity deletion — server suite', () => {
     expect((await remove.json()).code).toBe('recipient_deleted');
   });
 
+  it('#20 read-only: WS reaction_add on a Deleted-User 1-on-1 is silently dropped, not persisted', async () => {
+    const fx = await setupFullDeletionFixture('t20');
+    const { openInspector } = await import('./helpers/dbInspect.js');
+
+    // Survivor authors a message BEFORE the deletion so there is a message living
+    // in the dead thread for the survivor to (attempt to) react on.
+    const pre = await fetch(`${harness.remote.origin}/api/dm/${fx.dmChannelId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.observerOnRemote.token}` },
+      body: JSON.stringify({ content: 'before deletion' }),
+    });
+    expect(pre.status).toBe(201);
+    const { id: messageId } = await pre.json() as { id: string };
+
+    // Tombstone the remote (federated) user via soft delete → thread becomes dead 1-on-1.
+    const del = await fetch(`${harness.home.origin}/api/users/@me/federation-identity/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${fx.homeUser.token}` },
+      body: JSON.stringify({ origins: [harness.remote.origin], mode: 'soft' }),
+    });
+    expect(del.status).toBe(200);
+
+    // Sanity: no reaction by the survivor yet.
+    const before = openInspector(harness.remote);
+    expect(before.dmReactionsForUser(fx.observerOnRemote.id).filter(r => r.dmMessageId === messageId)).toEqual([]);
+    before.close();
+
+    // Survivor opens a WS and attempts to react on the message in the dead thread.
+    const ws = await connectWs(harness.remote.origin, fx.observerOnRemote.token);
+    try {
+      ws.send({ type: 'reaction_add', messageId, emoji: '🔥' });
+      // The handler is synchronous after the frame arrives; 400ms covers transit +
+      // any (rejected) insert attempt. There is no S→C ack for a dropped reaction.
+      await new Promise(r => setTimeout(r, 400));
+    } finally {
+      ws.close();
+    }
+
+    // Assert: NO dm_reactions row was persisted for the survivor on that message.
+    const after = openInspector(harness.remote);
+    expect(after.dmReactionsForUser(fx.observerOnRemote.id).filter(r => r.dmMessageId === messageId)).toEqual([]);
+    after.close();
+  });
+
   it('#7 owned-spaces 409: ownership prevents deletion, registry preserved', async () => {
     const { createFederatedUser } = await import('./helpers/testUsers.js');
     const { openInspector } = await import('./helpers/dbInspect.js');

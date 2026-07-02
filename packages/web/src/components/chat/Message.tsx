@@ -16,6 +16,7 @@ import { EmbedRenderer } from './EmbedRenderer';
 import { Username } from '../ui/Username';
 import { EmojiPicker } from './EmojiPicker';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
+import { isDeletedPartnerDm } from '../../utils/dmFormatters';
 import { isSelf, resolveDisplayIdentity } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import {
@@ -161,10 +162,21 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const isDmMessage = isPendingMessage(message)
     ? !!message.dmChannelId || !message.channelId
     : !!(message as MessageWithUser & { dmChannelId?: string }).dmChannelId || !message.channelId;
+  const dmChannelId = isPendingMessage(message)
+    ? message.dmChannelId
+    : (message as MessageWithUser & { dmChannelId?: string }).dmChannelId;
+  const dmChannels = useSpaceStore((s) => s.dmChannels);
+  // Read-only enforcement (client mirror of the server guard): a dead 1-on-1 DM
+  // (partner tombstoned) accepts no reaction mutations. Existing reactions still
+  // DISPLAY, but the add/toggle affordances are withdrawn since the server drops them.
+  const isDeadDmThread = !!dmChannelId && (() => {
+    const dm = dmChannels.find(d => d.id === dmChannelId);
+    return dm ? isDeletedPartnerDm(dm, currentUser) : false;
+  })();
   const canManageMessages = hasPermissionBit(myChPerms, PermissionBits.MANAGE_MESSAGES);
   const canSendMessages = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.SEND_MESSAGES);
   const canDelete = isAuthor || canManageMessages;
-  const canAddReactions = isDmMessage || hasPermissionBit(myChPerms, PermissionBits.ADD_REACTIONS);
+  const canAddReactions = (isDmMessage || hasPermissionBit(myChPerms, PermissionBits.ADD_REACTIONS)) && !isDeadDmThread;
 
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
@@ -181,6 +193,8 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
     r.user ? isSelf(r.user, currentUser) : r.userId === currentUser?.id;
 
   const toggleReaction = (emoji: string) => {
+    // Read-only: a dead 1-on-1 DM accepts no reaction mutations (add OR remove).
+    if (isDeadDmThread) return;
     const hasReacted = message.reactions?.some(r => isOwnReaction(r) && r.emoji === emoji);
     if (hasReacted) {
       removeReaction(message.id, emoji);

@@ -4,7 +4,7 @@ import { getDb, schema } from '../db/index.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { connectionManager } from './handler.js';
 import type { VoiceRoom, DmRoomMeta, SpaceRoomMeta } from './handler.js';
-import { isMember, getChannelSpaceId, isDmMember, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
+import { isMember, getChannelSpaceId, isDmMember, isDeadOneOnOne, hasPermission, computePermissions, PermissionBits } from '../utils/permissions.js';
 import { broadcastDmMessage, getDmMessageWithUser } from '../routes/dm.js';
 import { MAX_MESSAGE_LENGTH, type MessageWithUser, type Attachment, type DmMessageWithUser, type Embed, type Activity, type ActivityType, type ActivityTimestamps, type ActivityAssets, type ServerEvent, type DmCallUndeliverableFailure, type DmCallUndeliverableReason } from '@backspace/shared';
 import type { CallRelayResult, CallFanoutFailure } from '../utils/federationOutbox.js';
@@ -1138,6 +1138,9 @@ function handleReactionAdd(event: Record<string, unknown>, userId: string, isFed
   if (isFederated) return;
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+  // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
+  // reaction mutations — the relay would fan out to all peers via undefined origins.
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
 
   const reactionId = generateSnowflake();
   const now = Date.now();
@@ -1224,6 +1227,9 @@ function handleReactionRemove(event: Record<string, unknown>, userId: string, is
   if (isFederated) return;
   const dmMsg = db.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, messageId)).get();
   if (!dmMsg || !isDmMember(dmMsg.dmChannelId, userId)) return;
+  // Read-only enforcement: a dead 1-on-1 thread (partner tombstoned) accepts no
+  // reaction mutations — the relay would fan out to all peers via undefined origins.
+  if (isDeadOneOnOne(dmMsg.dmChannelId, userId)) return;
 
   const result = db.delete(schema.dmReactions)
     .where(and(
