@@ -1130,7 +1130,19 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           if (reqInstanceId && existing.peerInstanceId && reqInstanceId !== existing.peerInstanceId) {
             markPeerReset(existing.id, sourceOrigin, existing.peerInstanceId, reqInstanceId);
           }
-          return reply.code(200).send({ accepted: true, instanceName: ourInstanceName, instanceId: ourInstanceId });
+          // Anti-hijack: we did NOT adopt the caller's secret. Report that
+          // honestly (409) instead of a false success (was 200 {accepted:true}),
+          // so the initiator does not false-activate into a permanent HMAC
+          // desync. Legacy initiators read only response.ok → they fail loudly
+          // (never a silent desync); new initiators special-case this code.
+          return reply.code(409).send({
+            accepted: false,
+            code: 'PEER_EXISTS_RESET_REQUIRED',
+            error: 'This instance already holds peering for you; its admin must reset that peering before a new handshake can be accepted.',
+            instanceName: ourInstanceName,
+            instanceId: ourInstanceId,
+            statusCode: 409,
+          });
         }
         if (existing.status === 'revoked') {
           return reply.code(403).send({

@@ -185,7 +185,7 @@ describe('POST /api/federation/peer/accept — instance_name persistence', () =>
     expect(row?.status).toBe('active');
   });
 
-  it('does NOT overwrite instance_name on the active idempotent early-return path', async () => {
+  it('does NOT overwrite instance_name on the active idempotent early-return path (now 409)', async () => {
     testDb.insert(schema.federationPeers).values({
       id: 'peer-active',
       origin: 'https://remote.example',
@@ -205,7 +205,9 @@ describe('POST /api/federation/peer/accept — instance_name persistence', () =>
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    // BUG-1a: existing active peer now returns an honest 409 refusal, not a
+    // false 200. Anti-hijack unchanged — name/secret must be untouched.
+    expect(response.statusCode).toBe(409);
     const row = testDb.select().from(schema.federationPeers)
       .where(eq(schema.federationPeers.id, 'peer-active')).get();
     expect(row?.instanceName).toBe('Original Name');
@@ -257,7 +259,7 @@ describe('POST /api/federation/peer/accept — response body carries instanceNam
     expect(body.instanceName).toBe('Local Backspace');
   });
 
-  it('returns our instanceName on the active idempotent path too', async () => {
+  it('returns our instanceName on the active refusal path too (409)', async () => {
     testDb.insert(schema.federationPeers).values({
       id: 'peer-active',
       origin: 'https://remote.example',
@@ -277,7 +279,9 @@ describe('POST /api/federation/peer/accept — response body carries instanceNam
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    // BUG-1a: honest 409 refusal still carries our own instanceName so the
+    // initiator can surface a useful "reset required" message.
+    expect(response.statusCode).toBe(409);
     const body = response.json() as { accepted: boolean; instanceName?: string | null };
     expect(body.instanceName).toBe('Local Backspace');
   });
@@ -297,6 +301,160 @@ describe('POST /api/federation/peer/accept — response body carries instanceNam
     expect(response.statusCode).toBe(200);
     const body = response.json() as { accepted: boolean; instanceName?: string | null };
     expect(body.instanceName).toBeNull();
+  });
+});
+
+describe('POST /api/federation/peer/accept — BUG-1a: honest 409 refusal for existing active/needs_attention peer', () => {
+  let app: FastifyInstance;
+
+  beforeEach(async () => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    seedInstanceSettings('Local Backspace');
+    app = await buildApp();
+  });
+
+  it('returns 409 PEER_EXISTS_RESET_REQUIRED and keeps S0 when an active peer receives a different secret (matching epoch)', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'active',
+      peerInstanceId: 'epoch-A',
+      instanceName: 'Caller',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.1', // isolate rate-limit bucket (endpoint is IP-keyed)
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-different',
+        instanceId: 'epoch-A', // same epoch → no reset, pure idempotent refusal
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const body = response.json() as {
+      accepted: boolean;
+      code: string;
+      error: string;
+      instanceName?: string | null;
+      instanceId?: string | null;
+      statusCode: number;
+    };
+    expect(body.accepted).toBe(false);
+    expect(body.code).toBe('PEER_EXISTS_RESET_REQUIRED');
+    expect(body.statusCode).toBe(409);
+    expect(body.instanceName).toBe('Local Backspace');
+
+    // Anti-hijack: stored secret unchanged, status unchanged (same epoch).
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-active')).get();
+    expect(row?.hmacSecret).toBe('S0');
+    expect(row?.status).toBe('active');
+  });
+
+  it('returns 409 and keeps S0 when instanceId is omitted (legacy caller, no epoch)', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'active',
+      peerInstanceId: 'epoch-A',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.2', // isolate rate-limit bucket (endpoint is IP-keyed)
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-different',
+        // no instanceId → epoch-mismatch guard cannot fire
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const body = response.json() as { code: string };
+    expect(body.code).toBe('PEER_EXISTS_RESET_REQUIRED');
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-active')).get();
+    expect(row?.hmacSecret).toBe('S0');
+    expect(row?.status).toBe('active');
+  });
+
+  it('epoch MISMATCH: fires markPeerReset (row → needs_attention) AND still returns 409 with S0 unchanged', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-active',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'active',
+      peerInstanceId: 'epoch-A',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.3', // isolate rate-limit bucket (endpoint is IP-keyed)
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-different',
+        instanceId: 'epoch-B-new-incarnation', // differs from stored epoch-A
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const body = response.json() as { code: string };
+    expect(body.code).toBe('PEER_EXISTS_RESET_REQUIRED');
+
+    // Detection still fires: row routed to needs_attention, observed epoch recorded,
+    // but trusted baseline (peerInstanceId) and secret are NOT rekeyed.
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-active')).get();
+    expect(row?.status).toBe('needs_attention');
+    expect(row?.needsAttentionReason).toBe('peer_reset_detected');
+    expect(row?.observedPeerInstanceId).toBe('epoch-B-new-incarnation');
+    expect(row?.peerInstanceId).toBe('epoch-A');
+    expect(row?.hmacSecret).toBe('S0');
+  });
+
+  it('existing needs_attention peer: same 409 refusal, secret unchanged', async () => {
+    testDb.insert(schema.federationPeers).values({
+      id: 'peer-na',
+      origin: 'https://caller.example',
+      hmacSecret: 'S0',
+      status: 'needs_attention',
+      needsAttentionReason: 'peer_reset_detected',
+      peerInstanceId: 'epoch-A',
+      createdAt: Date.now(),
+    }).run();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/accept',
+      remoteAddress: '10.0.1.4', // isolate rate-limit bucket (endpoint is IP-keyed)
+      payload: {
+        sourceOrigin: 'https://caller.example',
+        hmacSecret: 'S1-different',
+        instanceId: 'epoch-A',
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    const body = response.json() as { code: string };
+    expect(body.code).toBe('PEER_EXISTS_RESET_REQUIRED');
+
+    const row = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.id, 'peer-na')).get();
+    expect(row?.hmacSecret).toBe('S0');
+    expect(row?.status).toBe('needs_attention');
   });
 });
 
