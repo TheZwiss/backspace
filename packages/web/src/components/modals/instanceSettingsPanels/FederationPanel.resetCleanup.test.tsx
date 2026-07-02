@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-const { peers, resetEvents, resetPeer, initiatePeering, deleteUser, addToast } = vi.hoisted(() => ({
+const { peers, resetEvents, acknowledgeResetEvent, resetPeer, initiatePeering, deleteUser, addToast } = vi.hoisted(() => ({
   peers: vi.fn(),
   resetEvents: vi.fn(),
+  acknowledgeResetEvent: vi.fn(),
   resetPeer: vi.fn(),
   initiatePeering: vi.fn(),
   deleteUser: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('../../../api/client', async () => {
         peers,
         approvalRequests: vi.fn().mockResolvedValue({ requests: [] }),
         resetEvents,
+        acknowledgeResetEvent,
         resetPeer,
         initiatePeering,
       },
@@ -73,16 +75,21 @@ function orphanedAccount(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function resetEvent(accounts: ReturnType<typeof orphanedAccount>[]) {
+function resetEvent(
+  accounts: ReturnType<typeof orphanedAccount>[],
+  overrides: Record<string, unknown> = {},
+) {
   return {
     origin: 'https://peer.example',
     deadEpoch: 'epoch-old',
     newEpoch: 'epoch-new',
     detectedAt: Date.now(),
     resolvedAt: null,
+    acknowledgedAt: null,
     stubCount: 3,
     orphanedAccountCount: accounts.length,
     orphanedAccounts: accounts,
+    ...overrides,
   };
 }
 
@@ -90,6 +97,7 @@ describe('FederationPanel — Reset cleanup', () => {
   beforeEach(() => {
     peers.mockReset();
     resetEvents.mockReset();
+    acknowledgeResetEvent.mockReset();
     resetPeer.mockReset();
     initiatePeering.mockReset();
     deleteUser.mockReset();
@@ -270,6 +278,82 @@ describe('FederationPanel — Reset cleanup', () => {
     expect(addToast).not.toHaveBeenCalledWith(
       expect.stringContaining('transfer ownership first'),
       'warning',
+    );
+  });
+
+  it('renders the detached-accounts card with Dismiss + Remove and informational copy, no Keep/frozen', async () => {
+    peers.mockResolvedValue({ peers: [] });
+    resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
+
+    render(<FederationPanel />);
+
+    // Both real actions are present.
+    await screen.findByRole('button', { name: /Dismiss/ });
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+
+    // Informational detach copy — not urgent-cleanup language.
+    expect(screen.getAllByText(/detached/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/existing password/i)).toBeInTheDocument();
+
+    // The fake client-only Keep/frozen affordance is fully gone.
+    expect(screen.queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/frozen/i)).not.toBeInTheDocument();
+    // No "orphaned" urgency wording in the detached-accounts copy.
+    expect(screen.queryByText(/with local content orphaned/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render an acknowledged event and excludes it from the badge count', async () => {
+    peers.mockResolvedValue({ peers: [] });
+    resetEvents.mockResolvedValue({
+      events: [resetEvent([orphanedAccount()], { acknowledgedAt: 1234 })],
+    });
+
+    render(<FederationPanel />);
+
+    // Give effects a chance to run, then assert the whole section stays absent.
+    await waitFor(() => expect(resetEvents).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByText('Reset Cleanup')).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Dismiss/ })).not.toBeInTheDocument();
+  });
+
+  it('dismisses an event via the acknowledge API and re-fetches', async () => {
+    peers.mockResolvedValue({ peers: [] });
+    // First load: unacknowledged. After acknowledge, re-fetch returns it acknowledged.
+    resetEvents
+      .mockResolvedValueOnce({ events: [resetEvent([orphanedAccount()])] })
+      .mockResolvedValue({ events: [resetEvent([orphanedAccount()], { acknowledgedAt: 1234 })] });
+    acknowledgeResetEvent.mockResolvedValue({ success: true });
+
+    render(<FederationPanel />);
+
+    const dismissBtn = await screen.findByRole('button', { name: /Dismiss/ });
+    fireEvent.click(dismissBtn);
+
+    await waitFor(() =>
+      expect(acknowledgeResetEvent).toHaveBeenCalledWith('https://peer.example'),
+    );
+    // fetchAll re-runs after acknowledge (peers + resetEvents both hit twice).
+    await waitFor(() => expect(resetEvents).toHaveBeenCalledTimes(2));
+    // The card disappears once the re-fetch marks the event acknowledged.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Dismiss/ })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('surfaces an error toast when dismiss fails', async () => {
+    peers.mockResolvedValue({ peers: [] });
+    resetEvents.mockResolvedValue({ events: [resetEvent([orphanedAccount()])] });
+    acknowledgeResetEvent.mockRejectedValue(new Error('Network down'));
+
+    render(<FederationPanel />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Dismiss/ }));
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith('Network down', 'warning'),
     );
   });
 });
