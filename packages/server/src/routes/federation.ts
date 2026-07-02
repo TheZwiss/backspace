@@ -2753,6 +2753,116 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/verify-attach-proof ───────────────────────────────
+  // Server-to-server: verify a one-time attach-proof token minted by
+  // /api/auth/attach-proof (re-attach spec §3.1). The token is single-use (an
+  // atomic claim guarantees only one concurrent verification can win) and is
+  // bound to the CALLING peer's domain — the binding is checked against the
+  // authenticated peer row (extractDomain(peer.origin)), NEVER trusted from the
+  // request body. This is the anti-replay control: a compromised requester
+  // cannot redeem a token minted for a different peer. The response is HMAC-
+  // signed (epoch pattern) so the caller can trust the identity it carries; all
+  // failure modes fail closed to a signed { valid: false }.
+  app.post<{ Body: { token?: unknown } }>(
+    '/api/federation/verify-attach-proof',
+    { bodyLimit: 4 * 1024 },
+    async (request, reply) => {
+      const db = getDb();
+      const rawDb = getRawDb();
+
+      // 1. Verify HMAC headers (mirror by-home-id / users-lookup).
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      if (isLookupRateLimited(peer.origin)) {
+        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // Replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      }
+
+      // 2. Sign every downstream response with the peer's shared secret so the
+      // caller can trust the identity (or the fail-closed verdict) it carries.
+      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply => {
+        const responseBody = JSON.stringify(payload);
+        const sigHeaders = buildFederationHeaders(responseBody, peer.hmacSecret, getOurOrigin());
+        reply.headers({
+          'X-Federation-Signature': sigHeaders['X-Federation-Signature'],
+          'X-Federation-Timestamp': sigHeaders['X-Federation-Timestamp'],
+          'X-Federation-Nonce': sigHeaders['X-Federation-Nonce'],
+          'Content-Type': 'application/json',
+        });
+        return reply.code(200).send(responseBody);
+      };
+
+      // 3. Validate the token shape (64 hex chars, as minted by attach-proof).
+      const rawToken = (request.body as { token?: unknown } | null)?.token;
+      if (typeof rawToken !== 'string' || !/^[0-9a-f]{64}$/i.test(rawToken)) {
+        return sendSigned({ valid: false });
+      }
+
+      // 4. Atomic single-use claim. The domain binding is server-side: the
+      // token's target_domain must equal the AUTHENTICATED peer's domain, never
+      // a value from the request body. Concurrent verifications cannot both win
+      // because only the first UPDATE that flips used_at from NULL matches.
+      const peerDomain = extractDomain(peer.origin).toLowerCase();
+      const now = Date.now();
+      const claimed = rawDb.prepare(`
+        UPDATE federation_attach_proofs
+        SET used_at = ?
+        WHERE token = ? AND used_at IS NULL AND expires_at > ? AND lower(target_domain) = ?
+        RETURNING home_user_id
+      `).get(now, rawToken, now, peerDomain) as { home_user_id: string } | undefined;
+
+      if (!claimed) {
+        return sendSigned({ valid: false });
+      }
+
+      // 5. Re-confirm the home user is still native (not tombstoned, not turned
+      // into a replicated stub) since the token was minted.
+      const homeUser = db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.id, claimed.home_user_id),
+            eq(schema.users.isDeleted, 0),
+            isNull(schema.users.homeInstance),
+          ),
+        )
+        .get();
+
+      if (!homeUser) {
+        return sendSigned({ valid: false });
+      }
+
+      return sendSigned({ valid: true, homeUserId: homeUser.id, username: homeUser.username });
+    },
+  );
+
   // ─── POST /api/federation/sync ──────────────────────────────────────────────
   // Server-to-server: checkpoint catch-up sync. A peer calls this after downtime
   // to retrieve missed DM mutations from the mutation log.
