@@ -71,12 +71,14 @@ function seedUser(opts: {
   avatarColor?: string | null;
   banner?: string | null;
   bio?: string | null;
+  passwordHash?: string;
+  federationHomeOrphaned?: 0 | 1;
 }): void {
   testDb.insert(schema.users).values({
     id: opts.id,
     username: opts.username,
     displayName: opts.displayName ?? null,
-    passwordHash: 'x',
+    passwordHash: opts.passwordHash ?? 'x',
     status: 'offline',
     isAdmin: 0,
     isDeleted: opts.isDeleted ?? 0,
@@ -87,6 +89,7 @@ function seedUser(opts: {
     avatarColor: opts.avatarColor ?? null,
     banner: opts.banner ?? null,
     bio: opts.bio ?? null,
+    federationHomeOrphaned: opts.federationHomeOrphaned ?? 0,
     createdAt: Date.now(),
   }).run();
 }
@@ -247,5 +250,39 @@ describe('POST /api/federation/users/lookup', () => {
     const blocked = await lookup(app, { username: 'alice' });
     expect(blocked.statusCode).toBe(429);
     expect(blocked.headers['retry-after']).toBe('60');
+  });
+});
+
+describe('findFederatedUser — detached (home-orphaned) accounts', () => {
+  beforeEach(() => {
+    sqlite = new Database(':memory:');
+    testDb = drizzle(sqlite, { schema });
+    applyMigrations(sqlite);
+    // A REAL federated account whose home domain was reset. It has been detached
+    // (federationHomeOrphaned = 1): it now owns its identity locally and must
+    // never be re-captured by the reset domain's new incarnation.
+    seedUser({
+      id: 'detached-1',
+      username: 'alice@peer.example',
+      homeInstance: 'peer.example',
+      homeUserId: 'old-home-uid',
+      passwordHash: '$2b$10$abcdefghijklmnopqrstuv', // real bcrypt-like hash, not a stub
+      federationHomeOrphaned: 1,
+    });
+  });
+
+  it('tier-2 never matches a detached (home-orphaned) account', async () => {
+    const { findFederatedUser } = await import('./federation.js');
+    // Fresh homeUserId → tier-1 miss; the reset domain replays 'alice' as a hint.
+    const found = findFederatedUser('new-home-uid', 'peer.example', testDb, { username: 'alice' });
+    expect(found).toBeUndefined();
+  });
+
+  it('tier-1 (homeUserId) still resolves a detached account for historical references', async () => {
+    const { findFederatedUser } = await import('./federation.js');
+    // The original homeUserId is a legitimate historical reference (e.g. an old
+    // group-DM attribution relayed by a third instance) — tier-1 must still resolve it.
+    const found = findFederatedUser('old-home-uid', 'peer.example', testDb, { username: 'alice' });
+    expect(found?.federationHomeOrphaned).toBe(1);
   });
 });

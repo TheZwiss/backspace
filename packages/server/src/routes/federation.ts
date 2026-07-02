@@ -2322,6 +2322,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'Attribution mismatch: you can only delete users from your own instance', statusCode: 403 });
       }
 
+      // Detached (home-orphaned) accounts are sovereign local accounts. The
+      // domain's new incarnation must not delete them by replaying old
+      // homeUserIds. Idempotent 200: from the caller's perspective this
+      // identity does not exist here.
+      if (user.federationHomeOrphaned === 1) {
+        console.log(`[federation] Ignoring S2S identity delete for detached account ${user.id} from ${fedHeaders.origin}`);
+        return reply.code(200).send({ success: true });
+      }
+
       // 5. Check for owned spaces
       const ownedSpaces = db.select({ id: schema.spaces.id, name: schema.spaces.name })
         .from(schema.spaces)
@@ -3478,6 +3487,10 @@ export function findFederatedUser(
       and(
         eq(schema.users.homeInstance, domain),
         eq(schema.users.isDeleted, 0),
+        // Detached (home-orphaned) accounts are sovereign: never re-bindable to
+        // the domain's new incarnation via username heuristics — that is exactly
+        // how a new same-name user would capture the established account.
+        eq(schema.users.federationHomeOrphaned, 0),
         or(
           sql`lower(substr(${schema.users.username}, 1, instr(${schema.users.username}, '@') - 1)) = ${hintLower}`,
           and(
@@ -6106,6 +6119,16 @@ export async function processProfileUpdateEvent(
 
   // Verify the homeInstance domain matches (guard against homeUserId collisions)
   if (localUser.homeInstance && extractDomain(localUser.homeInstance) !== payloadDomain) {
+    accepted.push(event.messageId);
+    return;
+  }
+
+  // Detached accounts are sovereign: the domain now belongs to a different
+  // incarnation, which must never overwrite the established account's profile
+  // by replaying its old homeUserId. Ack (not reject) — the sender considers
+  // this identity theirs to update; from our side the update simply no-ops.
+  if (localUser.federationHomeOrphaned === 1) {
+    console.log(`[federation] Skipping profile_update for detached account ${localUser.id} (home-orphaned)`);
     accepted.push(event.messageId);
     return;
   }

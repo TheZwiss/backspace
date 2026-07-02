@@ -406,6 +406,7 @@ Allows a home instance to remove a user's replicated identity from a remote inst
 **Behavior:**
 
 - **Attribution guard:** Rejects with `403` if the user's `homeInstance` doesn't match the `X-Federation-Origin` of the signing peer. Prevents one instance from deleting another instance's users.
+- **Detached-account guard:** After the attribution guard, if the resolved user has `federation_home_orphaned = 1` (detached — its home domain was reset and it is now a sovereign local account, see §4.2/§4.3 of the orphaned-account-detach design), returns an idempotent `200 { success: true }` **without deleting**. A new incarnation on the reset domain must never delete an established account by replaying its old `homeUserId`.
 - **Idempotent:** Returns `{ success: true }` for already-deleted or nonexistent users (no error).
 - **Owned spaces check:** Returns `409` with `{ ownedSpaces: string[] }` if the user owns any spaces on the remote. The user must transfer or delete those spaces before identity removal proceeds.
 - **Mode `"soft"`:** Calls `tombstoneUser(uid, { purgeContent: false })` — anonymizes the user row and removes the user from spaces, friends, DM membership (`dm_members`), and read-states. The `purgeContent: false` flag skips only `reactions`, `dm_reactions`, and the user's space `messages` (with attachments + embeds); DM membership cleanup and orphaned-DM purge always run in both modes (per `userDeletion.ts:121-126, 169-202`) because zero-member DM channels are unreachable garbage regardless of authorship retention.
@@ -503,6 +504,7 @@ Two layers of replay protection:
 - Three-tier lookup: homeUserId match → domain + username hint match → not found
 - Tier 1: delegates to `resolveLocalUser` (fast path)
 - Tier 2: uses `extractDomain(homeInstance)` + `hints.username` to match stubs created by the auth registration path (which may have a different homeUserId)
+- **Tier 2 excludes detached accounts** (`federation_home_orphaned = 1`): a detached account is sovereign and must never be re-bound to the reset domain's new incarnation via username heuristics — that is exactly how a new same-name user would capture the established account. **Tier 1 (`homeUserId` match) is deliberately NOT excluded:** the new incarnation mints fresh `homeUserId`s, so a tier-1 hit on a detached row is a legitimate historical reference (e.g. an old group-DM attribution relayed by a third instance), not the new incarnation. Mutations are blocked at their own sites (profile_update handler, S2S identity delete).
 - Side-effect-free — does not modify any records
 - When multiple candidates match in tier 2, prefers real accounts over stubs, then most profile data
 - **Use when:** Read-only lookup that needs to find users created by either auth or relay path
@@ -1310,6 +1312,8 @@ Profile data is synced server-to-server. The home instance is authoritative — 
 **Coalescing:** `entityId = homeUserId`. Rapid successive edits coalesce to one delivery per peer.
 
 **Processing:** Remote overwrites all 6 mutable fields unconditionally; `displayName` falls back to `payload.displayName ?? payload.username`. Rejects if incoming `profileUpdatedAt ≤ stored`. Broadcasts `user_updated` to local WS clients.
+
+**Detached-account guard:** After the domain-collision check and before the version check, if the resolved `localUser` has `federation_home_orphaned = 1` (detached — home domain was reset, now a sovereign local account), the event is **acked (messageId pushed to `accepted`) and skipped without applying**. The reset domain's new incarnation must never overwrite an established account's profile by replaying its old `homeUserId`. Ack rather than reject because the sender legitimately considers the identity theirs to update; from this side the update simply no-ops.
 
 #### Profile Image File Replication
 
