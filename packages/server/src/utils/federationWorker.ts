@@ -13,7 +13,7 @@ import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
-import { backfillReplicatedProfileAssets } from '../routes/federation.js';
+import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
@@ -1304,6 +1304,13 @@ export function startFederationWorkers(): void {
   detectResetOnNeedsAttentionPeers().catch((err) => {
     console.error('[federation-worker] Startup reset-detection sweep error:', err);
   });
+
+  // Remove dead-incarnation artifacts left by pre-fix initial syncs (spec §3.4).
+  try {
+    sweepDeadIncarnationArtifacts();
+  } catch (err) {
+    console.error('[federation-worker] Dead-incarnation sweep error:', err);
+  }
 
   // Backfill any replicated user avatars/banners still stored as absolute URLs
   // (legacy data from before file replication, or rows whose home was offline
