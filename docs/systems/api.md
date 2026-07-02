@@ -13,6 +13,8 @@ GET  /auth/check-invite      ?token=    → CheckInviteResponse
 POST /auth/login             { username, password } → { token, user }
 ```
 
+**`POST /auth/login`** — request/response shape unchanged, but two internal controls from instance-epoch self-healing gate the flow: (1) an account with `federationHomeOrphaned = 1` (home instance factory-reset) is rejected with the generic 401 *before* password verification; (2) the federated password self-heal now runs an **epoch guard** — it re-hashes the stale local password only if the home instance's authenticated epoch (`fetchPeerEpoch`) matches the trusted baseline, failing closed when the epoch differs or can't be determined. No wire-shape change. See `auth.md` §4.
+
 **`POST /auth/register` gating** — branches on whether `homeInstance` is set:
 - **Federated path** (`homeInstance` set): gated solely by `instance_settings.federatedRegistrationOpen`. `inviteToken` is ignored entirely (not validated, not consumed). 403 `Federated registration is closed on this instance` when closed. Existing federated stubs (relay-created, `passwordHash = '!federation-replicated'`) upgrade in place — login is never blocked by this gate.
 - **Local path** (no `homeInstance`):
@@ -321,7 +323,8 @@ type InviteRedemption = {
 ```
 POST   /federation/peer/initiate   (admin)     { remoteOrigin }                    → peer created
 POST   /federation/peer/accept     (public, IP rate-limited 10/min) { sourceOrigin, challenge, hmacSecret, instanceName?, instanceId?, approvalToken? } → { accepted, instanceName, instanceId } (200) | queued (202 + { approvalToken })
-GET    /federation/peers           (admin)                                          → { peers[] } (no secrets)
+GET    /federation/peers           (admin)                                          → { peers[] } (no secrets; each peer carries needsAttentionReason)
+GET    /federation/reset-events     (admin)                                          → FederationResetEventsResponse
 DELETE /federation/peers/:id       (admin)                                          → { success } + outbox cleanup
 POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest (+ sourceInstanceId?) → { accepted[], rejected[] }
 POST   /federation/sync            (HMAC-signed S2S)  { sinceTimestamp, limit?, dmChannelId?, federatedId?, contextType? } → { events[], hasMore, checkpoint }
@@ -332,6 +335,29 @@ POST   /federation/epoch           (HMAC-signed S2S, HMAC-signed response)  {}  
 **`POST /api/federation/peer/accept`** — public, IP-rate-limited. Optional `approvalToken` (64-hex) on the request body proves mutual admin approval; required to promote an `awaiting_approval` row to `active` when the receiver has `autoAcceptPeering=0`. The receiver returns it in the 202 body when queueing the request for admin review (`{ queued: true, message, approvalToken }`); the initiator stores it and the receiver's `/approve` later forwards it back. See `federation.md` §1 "Approval Token Verification" for the full lifecycle and threat model.
 
 **Handshake epoch exchange.** The handshake carries the **instance epoch** bidirectionally, mirroring `instanceName`: the request body's `instanceId` is the initiator's epoch (written to `federation_peers.peer_instance_id` on every authenticated activation path), and the 200 response body's `instanceId` is the responder's epoch (persisted by the initiator alongside `status='active'`). Older peers omit the field; the column stays `null` until the epoch-refresh/relay backstop fills it. Both are authenticated baselines — never overwritten by the unauthenticated `/instance/info` probe. **`FederationRelayRequest.sourceInstanceId`** stamps the sender's current epoch on every relay; because the whole body is HMAC-verified, a valid relay authentically carries the sender's incarnation id and populates `peer_instance_id` when null (fast-path baseline). See `federation.md` "Instance Epoch".
+
+**`GET /api/federation/reset-events`** — admin-only, read-only. Backs the "Reset cleanup" admin surface (instance-epoch self-healing §6.4). Returns the durable `federation_reset_events` journal, each row augmented with the origin's current orphaned real accounts (`federationHomeOrphaned = 1`) for disposition:
+
+```typescript
+type FederationOrphanedAccount = {
+  id: string;
+  username: string;            // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  displayName: string | null;
+  avatarColor: string | null;
+  ownedSpaces: { id: string; name: string }[];
+  spaceMemberCount: number;    // # spaces the account is a member of
+  messageCount: number;        // # space messages authored
+};
+type FederationResetEvent = {
+  origin: string; deadEpoch: string; newEpoch: string | null;
+  detectedAt: number; resolvedAt: number | null;
+  stubCount: number; orphanedAccountCount: number;
+  orphanedAccounts: FederationOrphanedAccount[];
+};
+type FederationResetEventsResponse = { events: FederationResetEvent[] };
+```
+
+Disposition actions reuse existing endpoints (no new mutating routes): one-click Re-peer = `POST /peers/:id/reset` → `POST /peer/initiate`; full-purge Remove = `DELETE /api/admin/users/:id` (owns-spaces → transfer first). **`needsAttentionReason`** (`'auth_failures' | 'peer_reset_detected' | null`) is now included on each `GET /federation/peers` peer object so the client can raise the persistent Reset-cleanup banner only for reset-detected peers. See `federation.md` "Instance Epoch" and `client-federation.md` §8.
 
 **`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
 

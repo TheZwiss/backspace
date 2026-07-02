@@ -534,6 +534,10 @@ Manages: federation peers list, pending approval requests (inbound + outbound), 
 - Revoke calls `api.federation.revokePeer(peerId)` and removes from local list.
 - Peers in `needs_attention` status render with a rose "Needs Attention" pill and a single "Reset Peering" action. The action opens a danger-variant ConfirmDialog explaining that reset deletes the local peer record (cascade-removes outbox entries) and requires out-of-band re-peering with the remote admin.
 
+- **Reset cleanup section** (`ResetCleanup`, instance-epoch self-healing §6.4) — the highest-priority attention surface, rendered above the peer list; returns `null` when there is nothing to clean up. Fetches `api.federation.peers()` + `api.federation.resetEvents()` and subscribes to `onFederationPeerResetDetected` (the `federation_peer_reset_detected` WS event) to refetch live. Two stacked surfaces:
+  - **Reset-detected banner** — one persistent accent-rose banner per peer with `status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'`, distinguishing a wiped-and-reinstalled peer from a generic auth-failure peer. Its **Re-peer** button runs the existing one-click flow in order: `api.federation.resetPeer(id)` **then** `api.federation.initiatePeering({ remoteOrigin })` — resetting the stale local record *before* the fresh handshake so activation heals stale friendships/DMs against the new incarnation (warning-variant ConfirmDialog).
+  - **Orphaned-accounts list** (from `GET /reset-events`, per origin with `orphanedAccounts.length > 0`) — each real account frozen by the reset quarantine, shown with its owned-spaces / membership / message counts. Per-row actions: **Keep** (default no-op resting/frozen state — the account stays `federationHomeOrphaned = 1`) and **Remove** (danger ConfirmDialog → `api.admin.deleteUser(id)`, i.e. the existing `DELETE /api/admin/users/:id` full purge). A Remove on a space-owning account returns the existing `409 { ownedSpaces }`; the UI surfaces a "transfer ownership first" toast rather than deleting.
+
 #### StoragePanel
 
 Manages: storage overview, file type breakdown, upload limit, orphan cleanup, media retention cleanup.

@@ -475,6 +475,13 @@ A new `federationStore.ts` slice (separate from `instanceStore`) holds:
 
 This slice is intentionally separate from `instanceStore` because the data is per-user (not per-instance) and lives on the home server only. WebSocket handlers route `peering_subscription_changed` and `peering_notification_received` events into this slice's refetch actions.
 
+### Reset cleanup (instance-epoch self-healing §6.4)
+
+Modeled on the peering-approval surface above, the FederationPanel's `ResetCleanup` component (`admin.md` "FederationPanel") is the admin surface for a factory-reset peer. It fetches `api.federation.peers()` + `api.federation.resetEvents()` (`GET /api/federation/reset-events`) and subscribes to `onFederationPeerResetDetected(cb)` — the client handler for the `federation_peer_reset_detected` admin WS event (`useWebSocket.ts`) — to refetch live. Two surfaces:
+
+- **Reset-detected banner** — one persistent accent-rose banner per peer with `status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'` (the new `needsAttentionReason` field distinguishes a reset from a generic auth-failure). **Re-peer** runs `resetPeer(id)` **then** `initiatePeering({ remoteOrigin })` — reset-before-handshake so activation heals the stale graph against the new incarnation.
+- **Orphaned-accounts list** — real accounts frozen by the server-side reset quarantine (`FederationOrphanedAccount`: owned-spaces / membership / message counts). **Keep** is the no-op frozen resting state; **Remove** reuses `api.admin.deleteUser(id)` (`DELETE /api/admin/users/:id`, full purge). A Remove on a space owner surfaces the existing `409 { ownedSpaces }` as a "transfer ownership first" toast instead of deleting.
+
 ---
 
 ## 9. Relationship to S2S Federation

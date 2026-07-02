@@ -264,10 +264,11 @@ Validates format (same rules as local registration: 3-32 chars, `/^[a-z0-9_]+$/`
 2. Look up user by `username` (trimmed, lowercased)
 3. Reject if not found (generic "Invalid username or password")
 4. Reject if `isDeleted === 1` ("This account has been deleted")
-5. Verify password via bcrypt
-6. **If password invalid AND user is federated:** attempt self-healing (see below)
-7. **If password invalid AND user is local:** reject
-8. Sign JWT, return `{ token, user }`. **Note:** Login does NOT mutate `users.status`. A successful login does not by itself imply a live connection (the client may never establish a WebSocket due to network failure, mobile background, error path); writing `'online'` here would produce a permanently stuck-online row that no disconnect timer cleans up. The WebSocket auth path (`ws/handler.ts`) is the single source of truth for `status = 'online'`. See `docs/systems/activity-presence.md` "Boot Reset" for the mitigation that runs on server start.
+5. **Reject if `federationHomeOrphaned === 1`** (generic "Invalid username or password") — *before* password verification. This freezes any federated account whose home instance was factory-reset (a new incarnation stood up on the same domain), set by the reset quarantine (§6.3 below / `federation.md` "Instance Epoch"). Because it returns first, it blocks both the local-password path AND the self-heal path — nobody, including a new same-name user on the reset home, can authenticate into the dead-incarnation account. Reversible (admin Keep/Remove, or the real user re-registers into a fresh account).
+6. Verify password via bcrypt
+7. **If password invalid AND user is federated:** attempt self-healing (see below)
+8. **If password invalid AND user is local:** reject
+9. Sign JWT, return `{ token, user }`. **Note:** Login does NOT mutate `users.status`. A successful login does not by itself imply a live connection (the client may never establish a WebSocket due to network failure, mobile background, error path); writing `'online'` here would produce a permanently stuck-online row that no disconnect timer cleans up. The WebSocket auth path (`ws/handler.ts`) is the single source of truth for `status = 'online'`. See `docs/systems/activity-presence.md` "Boot Reset" for the mitigation that runs on server start.
 
 ### Federation Password Self-Healing
 
@@ -276,7 +277,7 @@ When local bcrypt verification fails for a user with `homeInstance` set:
 1. Extract base username (strip `@domain` if present)
 2. POST to `https://{homeInstance}/api/auth/login` with base username and provided password
 3. Timeout: 10 seconds (`AbortController`)
-4. **If home instance accepts (200):**
+4. **If home instance accepts (200):** run the **epoch guard** (see below) before re-hashing. If the guard passes:
    - Re-hash password locally: `hashPassword(password)`
    - Update local `passwordHash` -- but **do NOT set `passwordChangedAt`** (this is a state correction, not a password change; setting it would invalidate existing valid JWTs on this instance)
    - Log the self-healing event
@@ -285,6 +286,17 @@ When local bcrypt verification fails for a user with `homeInstance` set:
 6. **If home instance unreachable (network error/timeout):** return "Invalid username or password" (fall back to local-only rejection)
 
 This flow ensures that when a federated user changes their password on their home instance, they can still log in on remote instances even if the remote's hash is stale.
+
+#### Epoch guard (instance-epoch self-healing §6.3a)
+
+Before re-hashing, the self-heal confirms the home instance is the **same incarnation** the trusted baseline was established with. Without this, a factory-reset home accepting a *new* same-name user's password would silently hand that stranger the established account. The guard does **not** trust the login-response body (TLS-MITM-bypassable, and a reset home would just echo its new epoch); it **reuses the authenticated `fetchPeerEpoch(peer)`** (`utils/federationEpoch.ts`, HMAC-signed request *and* response) to read the home's current epoch, then compares it to `federation_peers.peerInstanceId` for that origin (three-way):
+
+- **No peer row / `peerInstanceId` is null** (legacy/never-tracked): allow — fall through to self-heal (no regression).
+- **Baseline on record AND `fetchPeerEpoch` returns a *different* epoch:** refuse self-heal → "Invalid username or password" (the hijack case).
+- **Baseline on record AND `fetchPeerEpoch` returns `null`** — epoch cannot be determined (peer too old → 404, unreachable, bad/absent response signature, **or the reset peer's desynced secret rejecting our signed request**): **fail closed — refuse self-heal.**
+- **Baseline on record AND the epoch matches:** allow.
+
+Trade-off: the separate authenticated call can fail independently of the login POST, so a transient home outage during a legitimate stale-hash login fails closed. This is security-over-availability on a rare, recoverable path (fallback: a normal password change once the home is reachable); trusting an unauthenticated body would re-open the hijack. A reset peer's `null` result also doubles as a reset signal — the guard is correct even before reset-detection has flagged the peer. The direct-login freeze (step 5 of the Login Flow, `federationHomeOrphaned = 1`) is the post-re-peer complement: once the admin re-peers and the baseline updates to the new epoch, the epoch guard alone would pass again, so the freeze is what keeps the dead-incarnation account locked.
 
 ---
 

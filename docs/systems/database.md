@@ -34,7 +34,7 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | showActivity | integer NOT NULL | 1 | Rich presence visibility |
 | federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
 | federationHealPending | integer | 0 | Instance-epoch self-healing: set when a replicated identity is flagged for re-heal after a peer reset |
-| federationHomeOrphaned | integer | 0 | Instance-epoch self-healing: set when this user's home instance was factory-reset and the account could not be re-linked |
+| federationHomeOrphaned | integer | 0 | Instance-epoch self-healing (now live, Phase 2): **set** to 1 by `quarantineOrphanedAccounts` on every real account whose home instance was factory-reset (freeze); **read** by the login flow (rejected before password verify — `auth.md` §4) and the `GET /api/federation/reset-events` admin surface. Reversible via admin Keep/Remove |
 | createdAt | integer NOT NULL | | Epoch ms |
 
 ### spaces
