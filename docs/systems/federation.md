@@ -310,6 +310,17 @@ Admin-initiated paths (`/peer/initiate`, `/approve`) do NOT call `ensurePeered`.
 | `/api/federation/identity` | DELETE | HMAC | Delete federated user identity (soft/full mode) |
 | `/api/federation/users/lookup` | POST | HMAC, rate-limited 60/min/peer | Resolve a username on this instance to (homeUserId, profile snapshot) for cross-instance friend-request originators |
 | `/api/federation/epoch` | POST | HMAC (signed request **and** signed response) | Return this instance's persistent epoch `{ instanceId }`; populates a peer's trusted epoch baseline (`peer_instance_id`) |
+| `/api/federation/verify-attach-proof` | POST | HMAC (signed request **and** signed response), rate-limited 60/min/peer | Verify a one-time detached-account re-attach proof token; single-use, bound to the calling peer's domain (re-attach spec §3.1) |
+
+### S2S Detached-Account Re-Attach Proof (`POST /api/federation/verify-attach-proof`)
+
+The home-instance verifier for the detached-account re-attach flow (re-attach spec §3.1). A user who was detached on peer R (its home domain was reset; see the Detached-account guards above) proves control of the still-native home account H, mints a one-time proof token on H via `POST /api/auth/attach-proof` (`randomBytes(32).toString('hex')`, stored in `federation_attach_proofs`, bound to R's domain), and hands it to R. R then calls this endpoint on H to redeem it.
+
+- **Request:** HMAC-signed (same boilerplate as `/users/by-home-id`: missing headers → 401, unknown/inactive peer → 403, rate-limited 60/min/peer → 429, bad signature → 401, nonce replay → 409/401). Body `{ token: string }`.
+- **Peer-domain binding is server-side (anti-replay):** the token's `target_domain` must equal the domain of the **authenticated calling peer** (`extractDomain(peer.origin)`), never a value from the request body. A compromised peer cannot redeem a token minted for a different peer.
+- **Single-use is atomic:** the claim is a raw `UPDATE federation_attach_proofs SET used_at=? WHERE token=? AND used_at IS NULL AND expires_at>? AND lower(target_domain)=? RETURNING home_user_id`. Only the first concurrent verification can flip `used_at` from NULL, so a token can never be redeemed twice.
+- **Re-confirms native identity:** after the claim, the home user must still be native and live (`isDeleted=0 AND home_instance IS NULL`) — a user tombstoned or turned into a replicated stub after mint fails closed.
+- **Signed response (epoch pattern):** the body is HMAC-signed with the peer's shared secret (`X-Federation-Signature/Timestamp/Nonce` response headers) so the caller can trust the identity it carries. `{ valid: true, homeUserId, username }` on success; every failure mode (unknown/expired/used/wrong-domain/malformed token, deleted/non-native home user) fails closed to a **still-signed** `{ valid: false }`.
 
 ### S2S Epoch Refresh (`POST /api/federation/epoch`)
 
