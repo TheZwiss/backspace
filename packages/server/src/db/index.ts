@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { config } from '../config.js';
 import * as schema from './schema.js';
-import { ensureDefaults } from './migrate.js';
+import { ensureDefaults, backfillOneOnOneDmMembership } from './migrate.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { createSnapshot } from '../utils/backup.js';
 import { hasPendingMigrations } from './pendingMigrations.js';
@@ -50,6 +50,9 @@ export function initDatabase() {
 
   // Ensure data invariants (settings row, worker ID, first admin)
   ensureDefaults(sqlite);
+  // Recover pre-fix broken 1-on-1 DM threads (deleted partner's membership row
+  // lost before the tombstone fix). Idempotent — safe no-op on every later boot.
+  backfillOneOnOneDmMembership(sqlite);
 
   // Initialize Snowflake worker ID from persisted value
   const settings = sqlite.prepare('SELECT worker_id FROM instance_settings WHERE id = 1').get() as { worker_id: number } | undefined;

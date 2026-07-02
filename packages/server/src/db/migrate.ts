@@ -51,3 +51,39 @@ export function ensureDefaults(db: Database.Database): void {
     }
   }
 }
+
+/**
+ * One-time, idempotent recovery of 1-on-1 DM threads broken before the DM
+ * tombstone fix: those had the deleted partner's dm_members row removed, making
+ * the thread UI-unreachable. For each ownerId-NULL channel with exactly one
+ * member, re-insert membership for any distinct dm_messages author that is
+ * missing from dm_members and still exists in users. Safe to run every boot.
+ */
+export function backfillOneOnOneDmMembership(db: Database.Database): void {
+  const broken = db.prepare(`
+    SELECT dc.id AS channelId
+    FROM dm_channels dc
+    WHERE dc.owner_id IS NULL
+      AND (SELECT COUNT(*) FROM dm_members dm WHERE dm.dm_channel_id = dc.id) = 1
+  `).all() as { channelId: string }[];
+  if (broken.length === 0) return;
+
+  const missingAuthors = db.prepare(`
+    SELECT DISTINCT msg.user_id AS userId
+    FROM dm_messages msg
+    JOIN users u ON u.id = msg.user_id
+    WHERE msg.dm_channel_id = ?
+      AND msg.user_id NOT IN (SELECT user_id FROM dm_members WHERE dm_channel_id = ?)
+  `);
+  const insertMember = db.prepare('INSERT INTO dm_members (dm_channel_id, user_id, closed) VALUES (?, ?, 0)');
+
+  let restored = 0;
+  const run = db.transaction(() => {
+    for (const { channelId } of broken) {
+      const authors = missingAuthors.all(channelId, channelId) as { userId: string }[];
+      for (const { userId } of authors) { insertMember.run(channelId, userId); restored++; }
+    }
+  });
+  run();
+  if (restored > 0) console.log(`[backfill] restored ${restored} deleted-partner DM membership row(s)`);
+}
