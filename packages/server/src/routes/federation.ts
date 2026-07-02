@@ -850,8 +850,30 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
             statusCode: 409,
           });
         }
-        // If revoked, allow re-initiation by removing the old record
-        if (existing.status === 'revoked') {
+        if (existing.status === 'awaiting_approval') {
+          return reply.code(409).send({
+            error: "A peering handshake with this instance is awaiting the remote admin's approval",
+            statusCode: 409,
+          });
+        }
+        // Every remaining terminal/parked state is safe to clear and re-initiate
+        // from — falling through here (rather than to the db.insert below) is what
+        // keeps this route from violating UNIQUE(origin) and 500-ing.
+        //  - revoked: local admin revoked; re-initiate cleanly.
+        //  - rejected: a prior attempt was rejected; allow the local admin's
+        //    authenticated retry (mirrors revoked).
+        //  - needs_attention: this IS the one-click Re-peer step (resetPeer +
+        //    initiate). Deleting the row here is equivalent to the documented
+        //    reset: the reset-heal snapshot lives on users.federation_heal_pending
+        //    (not the peer row) and the federation_reset_events journal is designed
+        //    to survive peer-row deletion (design §4.2/§6.1), and onPeerActivated
+        //    after the fresh handshake re-triggers the heal — so no recovery state
+        //    is lost by removing the local needs_attention peer row here.
+        if (
+          existing.status === 'revoked' ||
+          existing.status === 'rejected' ||
+          existing.status === 'needs_attention'
+        ) {
           db.delete(schema.federationPeers).where(eq(schema.federationPeers.id, existing.id)).run();
         }
       }

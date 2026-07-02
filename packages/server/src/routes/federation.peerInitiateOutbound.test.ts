@@ -297,4 +297,103 @@ describe('POST /api/federation/peer/initiate — 202 token capture & 200 clear',
     expect(peer?.needsAttentionReason).toBeNull();
     expect(peer?.peerInstanceId).toBe('remote-epoch');
   });
+
+  // ─── Existing-row status handling — never fall through to a duplicate insert ──
+  // Regression guard: for a pre-existing peer row in needs_attention /
+  // awaiting_approval / rejected, /peer/initiate must NOT hit the UNIQUE(origin)
+  // constraint and 500. needs_attention/rejected delete+proceed (authenticated
+  // local-admin retry; heal state lives off the peer row); awaiting_approval 409s.
+
+  function seedExistingPeer(status: string, extra: Partial<typeof schema.federationPeers.$inferInsert> = {}): string {
+    const id = `existing-${status}`;
+    testDb.insert(schema.federationPeers).values({
+      id,
+      origin: 'https://remote.example',
+      hmacSecret: 'stale-secret-from-old-peering',
+      status,
+      createdAt: Date.now() - 60_000,
+      ...extra,
+    }).run();
+    return id;
+  }
+
+  it('needs_attention row → does NOT 500; deletes the stale row and proceeds to a fresh handshake (activates)', async () => {
+    const oldId = seedExistingPeer('needs_attention', { needsAttentionReason: 'repeer_incomplete' });
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
+      new Response(
+        JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+      'remote-epoch',
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).not.toBe(500);
+    expect(response.statusCode).toBe(200);
+
+    // The stale row was replaced by a fresh handshake row (new id), now active.
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(peer).toBeDefined();
+    expect(peer?.id).not.toBe(oldId);
+    expect(peer?.status).toBe('active');
+    expect(peer?.needsAttentionReason).toBeNull();
+    expect(peer?.hmacSecret).toBe(PENDING_SECRET);
+  });
+
+  it('rejected row → does NOT 500; deletes the stale row and proceeds to a fresh handshake', async () => {
+    const oldId = seedExistingPeer('rejected');
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(makeUrlAwareFetch(
+      new Response(
+        JSON.stringify({ accepted: true, instanceName: 'Remote', instanceId: 'remote-epoch' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+      'remote-epoch',
+    ));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).not.toBe(500);
+    expect(response.statusCode).toBe(200);
+
+    const peer = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).get();
+    expect(peer?.id).not.toBe(oldId);
+    expect(peer?.status).toBe('active');
+  });
+
+  it('awaiting_approval row → 409 with the awaiting-approval message; row untouched (no duplicate insert)', async () => {
+    const oldId = seedExistingPeer('awaiting_approval', { approvalToken: 'a'.repeat(64) });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ accepted: true }), { status: 200 }),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/federation/peer/initiate',
+      payload: { remoteOrigin: 'https://remote.example' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toMatch(/awaiting the remote admin's approval/i);
+
+    // No outbound handshake, no duplicate row — the existing row is untouched.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const rows = testDb.select().from(schema.federationPeers)
+      .where(eq(schema.federationPeers.origin, 'https://remote.example')).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(oldId);
+  });
 });
