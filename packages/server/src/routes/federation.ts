@@ -3433,6 +3433,20 @@ export function extractDomain(homeInstance: string): string {
 }
 
 /**
+ * The bare lowercase domain that constitutes this instance's federated
+ * identity authority. Derives from DOMAIN (identity), falling back to
+ * getOurOrigin() only when DOMAIN is unset (dev/tests). PUBLIC_ORIGIN is a
+ * transport override and deliberately NOT consulted first — identity
+ * comparisons must not shift when the transport origin is overridden.
+ */
+export function getOurIdentityDomain(): string | null {
+  if (config.domain) return config.domain.toLowerCase();
+  const origin = getOurOrigin();
+  if (!origin) return null;
+  return extractDomain(origin).toLowerCase();
+}
+
+/**
  * Verify that an acting user's homeInstance is legitimate for this relay.
  *
  * Two valid cases:
@@ -3599,6 +3613,18 @@ export function resolveOrCreateReplicatedUser(
   // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
   // already hides the deleted row, so we must query without that filter here.
   const domain = extractDomain(homeInstance);
+
+  // An instance never hosts a replicated stub homed at itself. A self-domain
+  // identity that is live resolves at tier 1 above (native id match); one
+  // that reaches the create path is a dead incarnation from before an
+  // instance reset (e.g. replayed by a peer's initial sync). Creating a row
+  // here is what produced the self-homed double-domain junk stubs.
+  const ourDomain = getOurIdentityDomain();
+  if (ourDomain && domain.toLowerCase() === ourDomain) {
+    console.log(`[federation] Refusing self-homed stub for homeUserId=${homeUserId} (${domain}) — dead incarnation of this instance`);
+    return null;
+  }
+
   const deletedMatch = db
     .select({ id: schema.users.id, isDeleted: schema.users.isDeleted })
     .from(schema.users)
