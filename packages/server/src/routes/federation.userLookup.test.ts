@@ -285,4 +285,26 @@ describe('findFederatedUser — detached (home-orphaned) accounts', () => {
     const found = findFederatedUser('old-home-uid', 'peer.example', testDb, { username: 'alice' });
     expect(found?.federationHomeOrphaned).toBe(1);
   });
+
+  it('tier-2 STILL matches a NON-detached same-name federated account (the exclusion clause does not over-filter)', async () => {
+    const { findFederatedUser } = await import('./federation.js');
+    // Positive companion to the exclusion test: replace the detached seed with an
+    // otherwise-identical NON-detached row (federationHomeOrphaned = 0). Same domain,
+    // same handle base, fresh homeUserId, same hint — the ONLY difference is the flag.
+    // This locks that the `eq(federationHomeOrphaned, 0)` clause discriminates on the
+    // flag alone and never withholds a legitimate replicated identity from tier-2.
+    testDb.delete(schema.users).where(eq(schema.users.id, 'detached-1')).run();
+    seedUser({
+      id: 'live-1',
+      username: 'alice@peer.example',
+      homeInstance: 'peer.example',
+      homeUserId: 'legacy-home-uid',
+      passwordHash: '$2b$10$abcdefghijklmnopqrstuv',
+      federationHomeOrphaned: 0,
+    });
+    // Fresh homeUserId → tier-1 miss; tier-2 must return the non-detached row.
+    const found = findFederatedUser('new-home-uid', 'peer.example', testDb, { username: 'alice' });
+    expect(found?.id).toBe('live-1');
+    expect(found?.federationHomeOrphaned).toBe(0);
+  });
 });
