@@ -274,6 +274,19 @@ describe('POST /api/social/requests — federated branch (lookup failures)', () 
     expect(JSON.parse(res.body).error).toBe('peer_unreachable');
   });
 
+  it('returns 503 (not 500) when lookup throws unexpectedly — defense-in-depth (BUG-3)', async () => {
+    lookupRemoteUserMock.mockRejectedValue(new Error('boom: peer returned HTTP 403'));
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/social/requests',
+      payload: { username: 'alice@orbit.test' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body).error).toBe('peer_unreachable');
+    expect(testDb.select().from(schema.friendRequests).all()).toHaveLength(0);
+  });
+
   it('returns 429 lookup_rate_limited with Retry-After header when lookup returns rate_limited', async () => {
     lookupRemoteUserMock.mockResolvedValue({ ok: false, reason: 'rate_limited', retryAfter: 30 });
     const app = await buildApp();

@@ -60,12 +60,22 @@ export async function lookupRemoteUser(peerOrigin: string, username: string): Pr
   }
 
   if (!response.ok) {
-    throw new Error(`lookupRemoteUser: peer ${peerOrigin} returned HTTP ${response.status}`);
+    // Any non-2xx that isn't 404 (not_found) or 429 (rate_limited) — e.g. 403
+    // (peer rejects our HMAC: revoked, not-yet-active, or a post-reset secret
+    // desync) or 5xx (peer error) — is treated as `unreachable`, NOT thrown.
+    // A peer's auth/transport failure must never surface as an unhandled 500 on
+    // a user action (e.g. a federated friend-add); callers already map
+    // `unreachable` to a graceful 503. Logged for operators.
+    console.warn(`[federation] lookupRemoteUser: peer ${peerOrigin} returned HTTP ${response.status} — treating as unreachable`);
+    return { ok: false, reason: 'unreachable' };
   }
 
-  const json = (await response.json()) as FederationUserLookupResponse;
+  const json = (await response.json().catch(() => null)) as FederationUserLookupResponse | null;
   if (!json || json.found !== true || !json.user || typeof json.user.homeUserId !== 'string') {
-    throw new Error(`lookupRemoteUser: peer ${peerOrigin} returned malformed body`);
+    // A malformed / non-JSON 200 body is peer misbehavior — surface as
+    // unreachable rather than throwing (same reasoning as above).
+    console.warn(`[federation] lookupRemoteUser: peer ${peerOrigin} returned malformed body — treating as unreachable`);
+    return { ok: false, reason: 'unreachable' };
   }
 
   return {

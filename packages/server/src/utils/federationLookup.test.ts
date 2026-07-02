@@ -202,7 +202,33 @@ describe('lookupRemoteUser', () => {
     expect(headers['X-Federation-Timestamp']).toMatch(/^\d+$/);
   });
 
-  it('8. throws on malformed 200 body', async () => {
+  it('9. returns ok:false reason:unreachable on HTTP 403 (peer rejects our auth / desync) — must NOT throw', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+    }));
+
+    const { lookupRemoteUser } = await import('./federationLookup.js');
+    const result = await lookupRemoteUser(PEER_ORIGIN, 'bob');
+
+    expect(result).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
+  it('10. returns ok:false reason:unreachable on HTTP 500 (peer error) — must NOT throw', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: { get: () => null },
+    }));
+
+    const { lookupRemoteUser } = await import('./federationLookup.js');
+    const result = await lookupRemoteUser(PEER_ORIGIN, 'bob');
+
+    expect(result).toEqual({ ok: false, reason: 'unreachable' });
+  });
+
+  it('8. returns ok:false reason:unreachable on malformed 200 body — must NOT throw', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -211,8 +237,7 @@ describe('lookupRemoteUser', () => {
     }));
 
     const { lookupRemoteUser } = await import('./federationLookup.js');
-    await expect(lookupRemoteUser(PEER_ORIGIN, 'bob')).rejects.toThrow(
-      `lookupRemoteUser: peer ${PEER_ORIGIN} returned malformed body`,
-    );
+    const result = await lookupRemoteUser(PEER_ORIGIN, 'bob');
+    expect(result).toEqual({ ok: false, reason: 'unreachable' });
   });
 });

@@ -241,8 +241,19 @@ async function handleFederatedFriendRequest(
   }
   // peering.status === 'active' — continue
 
-  // 3. Lookup
-  const lookup = await lookupRemoteUser(peerOrigin, baseName);
+  // 3. Lookup — a peer's HTTP/transport failure must never surface as a raw 500
+  // on a user action. lookupRemoteUser already maps peer HTTP failures (403/5xx,
+  // malformed body) to a structured `unreachable`; this try/catch is
+  // defense-in-depth so that any *unexpected* throw (e.g. a missing peer row) is
+  // still returned to the user as a graceful 503 rather than an Internal Server
+  // Error. (BUG-3, 2026-07-02: a desynced peer returned 403 → unhandled throw → 500.)
+  let lookup: Awaited<ReturnType<typeof lookupRemoteUser>>;
+  try {
+    lookup = await lookupRemoteUser(peerOrigin, baseName);
+  } catch (err) {
+    console.error(`[social] federated friend-add lookup failed for ${peerOrigin}:`, err);
+    return reply.code(503).send({ error: 'peer_unreachable', statusCode: 503, domain: targetDomain });
+  }
   if (!lookup.ok) {
     if (lookup.reason === 'not_found') {
       return reply.code(404).send({ error: 'user_not_found', statusCode: 404, domain: targetDomain, handle: baseName });
