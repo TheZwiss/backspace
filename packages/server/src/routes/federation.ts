@@ -40,7 +40,7 @@ interface SanitizedPeer {
   rotationInProgress: boolean;
   secretRotatedAt: number | null;
   autoRotateIntervalDays: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | null;
+  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
 }
 
 function sanitizePeer(row: typeof schema.federationPeers.$inferSelect): SanitizedPeer {

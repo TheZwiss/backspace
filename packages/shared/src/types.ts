@@ -1188,7 +1188,7 @@ export interface FederationPeer {
   secretRotatedAt: number | null;
   rotationInProgress: boolean;
   createdAt: number;
-  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | null;
+  needsAttentionReason: 'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null;
 }
 
 // ─── Reset-cleanup admin surface (instance-epoch self-healing §6.4) ──────────
