@@ -290,10 +290,11 @@ export function healResetIncarnation(origin: string, newEpoch: string, reason: P
       .run();
   }
 
-  // Quarantine the flagged REAL accounts (freeze + free-handle / surface). §6.3b.
+  // Detach the flagged REAL accounts (flag-only: sovereign local accounts, no
+  // freeze, no rename — see quarantineOrphanedAccounts docstring). §6.3b.
   const orphanedCount = quarantineOrphanedAccounts(origin);
 
-  // Resolve the journal and refresh the orphaned-account count to the frozen set.
+  // Resolve the journal and refresh the orphaned-account count to the detached set.
   db.update(schema.federationResetEvents)
     .set({ newEpoch, resolvedAt: Date.now(), orphanedAccountCount: orphanedCount })
     .where(eq(schema.federationResetEvents.origin, origin))

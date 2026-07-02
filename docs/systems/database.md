@@ -34,7 +34,7 @@ IDs: Snowflake text, permissions: bigint decimal strings
 | showActivity | integer NOT NULL | 1 | Rich presence visibility |
 | federationRegistryUpdatedAt | integer | 0 | LWW timestamp for federation registry sync |
 | federationHealPending | integer | 0 | Instance-epoch self-healing: set when a replicated identity is flagged for re-heal after a peer reset |
-| federationHomeOrphaned | integer | 0 | Instance-epoch self-healing (now live, Phase 2): **set** to 1 by `quarantineOrphanedAccounts` on every real account whose home instance was factory-reset (freeze); **read** by the login flow (rejected before password verify — `auth.md` §4) and the `GET /api/federation/reset-events` admin surface. Reversible via admin Keep/Remove |
+| federationHomeOrphaned | integer | 0 | Instance-epoch self-healing: **1 = DETACHED / sovereign local account** (its home instance was reset/lost), not "frozen." **Set** to 1 by `quarantineOrphanedAccounts` on every real account from a reset home incarnation (flag-only detach — no rename, no login block). **Read** by: the login flow (self-heal path permanently disabled for detached rows; local-password login still works — `auth.md` §4), `users.ts` (unlocks local profile edit + local change-password), the S2S binding guards (`findFederatedUser` tier-2, `profile_update`, identity-delete all exclude detached rows — `federation.md`), and the `GET /api/federation/reset-events` admin surface. Cleared only by `tombstoneUser` (deletion). Detach spec §3/§4 |
 | createdAt | integer NOT NULL | | Epoch ms |
 
 ### spaces
