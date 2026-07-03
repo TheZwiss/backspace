@@ -53,6 +53,17 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev \
             libxrandr-dev libxinerama-dev libx11-xcb-dev
 
+      - name: Install fpm for .deb packaging
+        if: runner.os == 'Linux'
+        # electron-builder bundles an x86_64-only fpm; on the arm64 runner it
+        # aborts the .deb target with "cannot execute binary file: Exec format
+        # error". Install fpm natively and set USE_SYSTEM_FPM (below) so both
+        # arches package their .deb with a host-native fpm. ruby-dev + make are
+        # needed for fpm's native gem dependencies.
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -80,3 +91,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Use the host-native fpm installed above instead of electron-builder's
+          # bundled x86_64 fpm (which can't run on the arm64 runner). No-op on
+          # macOS/Windows, which don't build .deb.
+          USE_SYSTEM_FPM: "true"
