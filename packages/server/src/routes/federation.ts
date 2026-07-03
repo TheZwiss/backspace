@@ -7100,6 +7100,39 @@ export function reconcileDmChannelFederatedId(
 }
 
 /**
+ * Startup sweep: reconcile any 1-on-1 DM channel whose stored federatedId has
+ * drifted from its members' current home identities (reattach-dm-reconcile
+ * spec §3.3). Heals accounts re-attached before inline reconciliation shipped
+ * (e.g. the live split-conversation duplicate). Idempotent; a noop on a clean DB.
+ */
+export function reconcileDriftedDmFederatedIds(): void {
+  const rawDb = getRawDb();
+  const candidates = rawDb.prepare(`
+    SELECT c.id FROM dm_channels c
+    WHERE c.deleted_at IS NULL
+      AND c.federated_id IS NOT NULL
+      AND (SELECT count(*) FROM dm_members m WHERE m.dm_channel_id = c.id) = 2
+  `).all() as Array<{ id: string }>;
+  if (candidates.length === 0) return;
+
+  let rekeyed = 0;
+  let merged = 0;
+  rawDb.transaction(() => {
+    for (const c of candidates) {
+      // A prior merge in this loop may have deleted this id — reconcile returns
+      // noop for a missing/mutated channel, so this is safe.
+      const r = reconcileDmChannelFederatedId(rawDb, c.id);
+      if (r.action === 'rekeyed') rekeyed++;
+      else if (r.action === 'merged') merged++;
+    }
+  })();
+
+  if (rekeyed > 0 || merged > 0) {
+    console.log(`[federation] DM federatedId reconciliation: rekeyed ${rekeyed}, merged ${merged}`);
+  }
+}
+
+/**
  * Remove dead-incarnation artifacts produced by pre-fix initial syncs
  * (dead-incarnation spec §3.4): DM channels with no native member, and
  * replicated stubs homed at this instance's own domain. Idempotent —

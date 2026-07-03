@@ -13,7 +13,7 @@ import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
-import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts } from '../routes/federation.js';
+import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts, reconcileDriftedDmFederatedIds } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
@@ -1310,6 +1310,14 @@ export function startFederationWorkers(): void {
     sweepDeadIncarnationArtifacts();
   } catch (err) {
     console.error('[federation-worker] Dead-incarnation sweep error:', err);
+  }
+
+  // Heal any 1-on-1 DM channels whose federatedId drifted from their members'
+  // current identities (reattach-dm-reconcile spec §3.3).
+  try {
+    reconcileDriftedDmFederatedIds();
+  } catch (err) {
+    console.error('[federation-worker] DM federatedId reconciliation error:', err);
   }
 
   // Backfill any replicated user avatars/banners still stored as absolute URLs
