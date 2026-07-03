@@ -1,0 +1,12 @@
+# Backspace — Caddy reverse proxy configuration
+# DOMAIN is read from the container environment (set via docker-compose.yml)
+
+{$DOMAIN} {
+    # LiveKit signaling — strip /livekit prefix, forward to host-mode LiveKit
+    handle_path /livekit/* {
+        reverse_proxy host.docker.internal:7880
+    }
+
+    # Backspace API, WebSocket, and frontend — Docker DNS resolves "backspace"
+    reverse_proxy backspace:3000
+}

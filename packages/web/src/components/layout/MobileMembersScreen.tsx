@@ -1,0 +1,267 @@
+import React, { useMemo } from 'react';
+import type { MemberWithUser, Activity } from '@backspace/shared';
+import { useSpaceStore } from '../../stores/spaceStore';
+import { useActivityStore } from '../../stores/activityStore';
+import { useUIStore } from '../../stores/uiStore';
+import { Avatar } from '../ui/Avatar';
+import { Username } from '../ui/Username';
+import { ActivityCard, hasRichActivity, getActivityAccentClass } from '../ui/ActivityCard';
+import { getPrimaryActivity } from '@backspace/shared/src/activities.js';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
+import { useCanonicalUserView } from '../../utils/userViewLookup';
+import { MobileScreenHeader } from './MobileScreenHeader';
+import { useDelayedLoading } from '../../hooks/useDelayedLoading';
+
+/**
+ * Derives the display group for a member based on their highest-positioned role
+ * or owner status. Returns { key, label, color, position }.
+ */
+function getMemberGroup(member: MemberWithUser, ownerId: string | undefined) {
+  if (ownerId && member.userId === ownerId) {
+    const ownerRole = member.roles?.find(r => r.position > 0);
+    return {
+      key: '__owner__',
+      label: 'OWNER',
+      color: ownerRole?.color ?? 'rgb(var(--accent-rose))',
+      position: Infinity,
+    };
+  }
+  if (member.roles && member.roles.length > 0) {
+    const sorted = [...member.roles].sort((a, b) => b.position - a.position);
+    const top = sorted[0]!;
+    return {
+      key: top.id,
+      label: top.name.toUpperCase(),
+      color: top.color,
+      position: top.position,
+    };
+  }
+  return {
+    key: '__online__',
+    label: 'ONLINE',
+    color: undefined,
+    position: -1,
+  };
+}
+
+function MobileMemberRow({
+  member,
+  isOffline,
+  colorStyle,
+  activities,
+  isRichActivity,
+  accentClass,
+  onClickMember,
+}: {
+  member: MemberWithUser;
+  isOffline: boolean;
+  colorStyle: React.CSSProperties | undefined;
+  activities: Activity[];
+  isRichActivity: boolean;
+  accentClass: string;
+  onClickMember: (userId: string) => void;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const { baseName } = parseFederatedUsername(canonical.username);
+  const displayName = canonical.displayName ?? baseName;
+
+  const rowClass = isRichActivity
+    ? `flex items-center gap-2.5 px-4 py-2.5 rounded-[10px] mb-1 cursor-pointer transition-colors glass-pill border-l-2 ${accentClass} active:bg-interactive-hover`
+    : 'flex items-center gap-2.5 px-4 py-2.5 rounded-[4px] cursor-pointer transition-colors active:bg-interactive-hover';
+
+  return (
+    <div
+      onClick={() => onClickMember(member.userId)}
+      className={rowClass}
+    >
+      <Avatar
+        src={canonical.avatar}
+        name={displayName}
+        size={36}
+        status={isOffline ? 'offline' : canonical.status}
+        className={isOffline ? 'opacity-60' : undefined}
+        user={canonical}
+      />
+      <div className="flex-1 min-w-0">
+        <Username
+          username={displayName}
+          className={`text-[13.5px] leading-[1.2] font-medium truncate ${isOffline ? 'text-txt-tertiary' : (!colorStyle ? 'text-txt-primary' : '')}`}
+          style={colorStyle}
+        />
+        {!isOffline && isFederationGlobeApplicable(canonical) && (
+          <div className="text-[10px] leading-[1.3] text-txt-tertiary truncate opacity-60">@{parseFederatedUsername(canonical.username).domain}</div>
+        )}
+        {!isOffline && (
+          <ActivityCard
+            activities={activities}
+            fallbackCustomStatus={canonical.customStatus}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface MobileMembersScreenProps {
+  params?: Record<string, string>;
+}
+
+export function MobileMembersScreen({ params }: MobileMembersScreenProps) {
+  const members = useSpaceStore((s) => s.members);
+  const spaces = useSpaceStore((s) => s.spaces);
+  const currentSpaceId = useSpaceStore((s) => s.currentSpaceId);
+  const loadingSpaceId = useSpaceStore((s) => s.loadingSpaceId);
+  const userActivities = useActivityStore((s) => s.userActivities);
+  const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
+
+  const spaceId = params?.spaceId || currentSpaceId;
+  const space = spaces.find(s => s.id === spaceId);
+  const ownerId = space?.ownerId;
+
+  // Mirror desktop MemberSidebar's `showMemberSkeleton`: gate the skeleton
+  // behind useDelayedLoading so cached / fast loads don't flash the placeholder.
+  const isLoadingSpace = !!loadingSpaceId && loadingSpaceId === spaceId;
+  const showMemberSkeleton = useDelayedLoading(isLoadingSpace);
+
+  const { roleGroups, offlineMembers } = useMemo(() => {
+    const online = members.filter(m => m.user.status !== 'offline');
+    const offline = members.filter(m => m.user.status === 'offline');
+
+    const groups = new Map<string, { label: string; color: string | undefined; position: number; members: MemberWithUser[] }>();
+    for (const m of online) {
+      const group = getMemberGroup(m, ownerId);
+      if (!groups.has(group.key)) {
+        groups.set(group.key, { label: group.label, color: group.color, position: group.position, members: [] });
+      }
+      groups.get(group.key)!.members.push(m);
+    }
+
+    const sorted = [...groups.entries()].sort(
+      (a, b) => b[1].position - a[1].position
+    );
+
+    return { roleGroups: sorted, offlineMembers: offline };
+  }, [members, ownerId]);
+
+  const totalCount = members.length;
+
+  const getMemberColor = (member: MemberWithUser): React.CSSProperties | undefined => {
+    if (member.roles && member.roles.length > 0) {
+      const sorted = [...member.roles].sort((a, b) => b.position - a.position);
+      return { color: sorted[0]!.color };
+    }
+    if (ownerId && member.userId === ownerId) {
+      return { color: 'rgb(var(--accent-rose))' };
+    }
+    return undefined;
+  };
+
+  const handleMemberClick = (userId: string) => {
+    pushMobileScreen('user-profile', { userId });
+  };
+
+  const renderMember = (member: MemberWithUser, isOffline = false) => {
+    const colorStyle = isOffline ? undefined : getMemberColor(member);
+    const activities = userActivities.get(member.userId) ?? [];
+    const isRichActivity = !isOffline && hasRichActivity(activities);
+    const primary = getPrimaryActivity(activities);
+    const accentClass = primary ? getActivityAccentClass(primary.type) : '';
+    return (
+      <MobileMemberRow
+        key={member.userId}
+        member={member}
+        isOffline={isOffline}
+        colorStyle={colorStyle}
+        activities={activities}
+        isRichActivity={isRichActivity}
+        accentClass={accentClass}
+        onClickMember={handleMemberClick}
+      />
+    );
+  };
+
+  const onlineCount = roleGroups.reduce((sum, [, g]) => sum + g.members.length, 0);
+
+  return (
+    <div className="flex flex-col h-full bg-surface-base">
+      <MobileScreenHeader title={totalCount > 0 ? `Members — ${totalCount}` : 'Members'} />
+      <div className="flex-1 overflow-y-auto p-3">
+        {showMemberSkeleton ? (
+          <div className="px-2 pt-2" role="status" aria-label="Loading members">
+            {/* Role group 1 — match real row geometry: w-9 h-9 avatar +
+                gap-2.5 + py-2.5 → ~52px row height. */}
+            <div
+              className="skeleton skeleton-bar h-2 w-[35%] mb-2"
+              style={{ animationDelay: '0s' }}
+            />
+            {Array.from({ length: 2 }, (_, i) => (
+              <div
+                key={`g1-${i}`}
+                className="flex items-center gap-2.5 px-2 py-2.5 mb-1"
+                style={{ animationDelay: `${i * 0.12}s` }}
+              >
+                <div
+                  className="skeleton skeleton-circle w-9 h-9 flex-shrink-0"
+                  style={{ animationDelay: `${i * 0.12}s` }}
+                />
+                <div className="flex-1 space-y-1.5">
+                  <div
+                    className="skeleton skeleton-bar"
+                    style={{ width: `${50 + (i * 19) % 30}%`, animationDelay: `${i * 0.12}s` }}
+                  />
+                </div>
+              </div>
+            ))}
+            {/* Role group 2 */}
+            <div
+              className="skeleton skeleton-bar h-2 w-[45%] mb-2 mt-4"
+              style={{ animationDelay: '0.25s' }}
+            />
+            {Array.from({ length: 5 }, (_, i) => (
+              <div
+                key={`g2-${i}`}
+                className="flex items-center gap-2.5 px-2 py-2.5 mb-1"
+                style={{ animationDelay: `${(i + 2) * 0.12}s` }}
+              >
+                <div
+                  className="skeleton skeleton-circle w-9 h-9 flex-shrink-0"
+                  style={{ animationDelay: `${(i + 2) * 0.12}s` }}
+                />
+                <div className="flex-1 space-y-1.5">
+                  <div
+                    className="skeleton skeleton-bar"
+                    style={{ width: `${42 + (i * 15) % 35}%`, animationDelay: `${(i + 2) * 0.12}s` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : onlineCount === 0 && offlineMembers.length === 0 ? (
+          <div className="flex items-center justify-center h-40 text-txt-tertiary text-sm">
+            No members found
+          </div>
+        ) : (
+          <>
+            {roleGroups.map(([key, group]) => (
+              <div key={key} className="mb-4">
+                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                  {group.label} — {group.members.length}
+                </h3>
+                {group.members.map((m) => renderMember(m))}
+              </div>
+            ))}
+
+            {offlineMembers.length > 0 && (
+              <div>
+                <h3 className="text-[10.5px] font-bold text-txt-tertiary uppercase tracking-[0.06em] px-2 mb-1">
+                  OFFLINE — {offlineMembers.length}
+                </h3>
+                {offlineMembers.map((m) => renderMember(m, true))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

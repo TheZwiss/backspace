@@ -1,0 +1,322 @@
+import React, { useState } from 'react';
+import { Avatar } from '../../ui/Avatar';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
+import { useSpaceStore, getApiForOrigin } from '../../../stores/spaceStore';
+import { useAuthStore } from '../../../stores/authStore';
+import { parseFederatedUsername, isFederationGlobeApplicable } from '../../../utils/identity';
+import { useCanonicalUserView } from '../../../utils/userViewLookup';
+import { hasPermissionBit, PermissionBits } from '../../../utils/permissions';
+import type { MemberWithUser, Role } from '@backspace/shared';
+
+function MembersPanelRow({
+  member,
+  spaceId,
+  ownerId,
+  isExpanded,
+  expandable,
+  canKick,
+  canBan,
+  currentUserId,
+  assignableRoles,
+  memberRoleIds,
+  hasPendingChanges,
+  onToggleExpand,
+  onRoleToggle,
+  onSaveRoles,
+  onCancelRoleChange,
+  onPendingAction,
+}: {
+  member: MemberWithUser;
+  spaceId: string;
+  ownerId: string | undefined;
+  isExpanded: boolean;
+  expandable: boolean;
+  canKick: boolean;
+  canBan: boolean;
+  currentUserId: string | undefined;
+  assignableRoles: Role[];
+  memberRoleIds: Set<string>;
+  hasPendingChanges: boolean;
+  onToggleExpand: (userId: string) => void;
+  onRoleToggle: (userId: string, roleId: string, currentRoleIds: Set<string>) => void;
+  onSaveRoles: (userId: string) => void;
+  onCancelRoleChange: (userId: string) => void;
+  onPendingAction: (action: { type: 'kick' | 'ban'; userId: string; displayName: string }) => void;
+}) {
+  const canonical = useCanonicalUserView(member.user);
+  const isOwner = member.userId === ownerId;
+  const displayName = canonical.displayName ?? canonical.username;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center justify-between p-2 rounded transition-colors ${
+          expandable ? 'cursor-pointer hover:bg-interactive-hover' : ''
+        } ${isExpanded ? 'bg-interactive-hover' : ''}`}
+        onClick={() => {
+          if (expandable) onToggleExpand(member.userId);
+        }}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Avatar
+            src={canonical.avatar}
+            name={displayName}
+            size={32}
+            status={canonical.status}
+            user={canonical}
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">
+              {displayName}
+              {isFederationGlobeApplicable(canonical) && (
+                <span className="ml-1 text-[10px] text-txt-tertiary opacity-60">@{parseFederatedUsername(canonical.username).domain}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-wrap">
+              {isOwner && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-rose/20 text-txt-danger font-medium">
+                  Owner
+                </span>
+              )}
+              {member.roles?.filter((r) => r.id !== spaceId).map((r) => (
+                <span
+                  key={r.id}
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                  style={{ backgroundColor: `${r.color}20`, color: r.color }}
+                >
+                  {r.name}
+                </span>
+              ))}
+              {!isOwner && (!member.roles || member.roles.filter((r) => r.id !== spaceId).length === 0) && (
+                <span className="text-[10px] text-txt-tertiary">No roles</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {canBan && member.userId !== currentUserId && !isOwner && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'ban', userId: member.userId, displayName }); }}
+              className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+            >
+              Ban
+            </button>
+          )}
+          {canKick && member.userId !== currentUserId && !isOwner && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPendingAction({ type: 'kick', userId: member.userId, displayName }); }}
+              className="px-2 py-1 text-xs text-txt-danger hover:bg-accent-rose/10 rounded transition-colors"
+            >
+              Kick
+            </button>
+          )}
+          {expandable && (
+            <svg
+              className={`w-4 h-4 text-txt-tertiary transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          )}
+        </div>
+      </div>
+
+      {/* Role checkboxes — only shown when expanded */}
+      {isExpanded && expandable && (
+        <div className="mt-1 mb-1 ml-10 space-y-1">
+          {assignableRoles.map((role) => (
+            <label key={role.id} className="flex items-center gap-2 cursor-pointer group/role">
+              <input
+                type="checkbox"
+                checked={memberRoleIds.has(role.id)}
+                onChange={() => onRoleToggle(member.userId, role.id, memberRoleIds)}
+                className="w-3.5 h-3.5 rounded border-txt-tertiary accent-accent-primary"
+              />
+              <span
+                className="text-xs font-medium"
+                style={{ color: role.color !== '#9ca3af' ? role.color : undefined }}
+              >
+                {role.name}
+              </span>
+            </label>
+          ))}
+          {hasPendingChanges && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <button
+                onClick={() => onSaveRoles(member.userId)}
+                className="px-2 py-0.5 text-xs bg-accent-primary hover:bg-accent-primary/80 text-white rounded transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => onCancelRoleChange(member.userId)}
+                className="px-2 py-0.5 text-xs text-txt-tertiary hover:text-txt-secondary transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MembersPanelProps {
+  spaceId: string;
+}
+
+export function MembersPanel({ spaceId }: MembersPanelProps) {
+  const spaces = useSpaceStore((s) => s.spaces);
+  const members = useSpaceStore((s) => s.members);
+  const roles = useSpaceStore((s) => s.roles);
+  const loadSpaceDetail = useSpaceStore((s) => s.loadSpaceDetail);
+  const currentUser = useAuthStore((s) => s.user);
+  const spacePermissions = useSpaceStore((s) => s.spacePermissions);
+
+  const space = spaces.find((s) => s.id === spaceId);
+  const spaceApi = getApiForOrigin(space?._instanceOrigin ?? '');
+  const myPerms = spacePermissions.get(spaceId);
+  const canManageRoles = hasPermissionBit(myPerms, PermissionBits.MANAGE_ROLES);
+  const canKick = hasPermissionBit(myPerms, PermissionBits.KICK_MEMBERS);
+  const canBan = hasPermissionBit(myPerms, PermissionBits.BAN_MEMBERS);
+
+  const [pendingRoleChanges, setPendingRoleChanges] = useState<Map<string, Set<string>>>(new Map());
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ type: 'kick' | 'ban'; userId: string; displayName: string } | null>(null);
+
+  // Assignable roles: exclude @everyone (where role.id === spaceId)
+  const assignableRoles = roles.filter((r) => r.id !== spaceId);
+
+  if (!space) return null;
+
+  const getMemberRoleIds = (member: MemberWithUser): Set<string> => {
+    const pending = pendingRoleChanges.get(member.userId);
+    if (pending) return pending;
+    return new Set(member.roles?.map((r) => r.id) ?? []);
+  };
+
+  const handleRoleToggle = (userId: string, roleId: string, currentRoleIds: Set<string>) => {
+    const updated = new Set(currentRoleIds);
+    if (updated.has(roleId)) {
+      updated.delete(roleId);
+    } else {
+      updated.add(roleId);
+    }
+    setPendingRoleChanges((prev) => new Map(prev).set(userId, updated));
+  };
+
+  const handleSaveRoles = async (userId: string) => {
+    const roleIds = pendingRoleChanges.get(userId);
+    if (!roleIds) return;
+    try {
+      await spaceApi.spaces.updateMember(spaceId, userId, { roleIds: Array.from(roleIds) });
+      setPendingRoleChanges((prev) => {
+        const next = new Map(prev);
+        next.delete(userId);
+        return next;
+      });
+      setExpandedMemberId(null);
+      await loadSpaceDetail(spaceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update roles');
+    }
+  };
+
+  const handleCancelRoleChange = (userId: string) => {
+    setPendingRoleChanges((prev) => {
+      const next = new Map(prev);
+      next.delete(userId);
+      return next;
+    });
+  };
+
+  const handleKick = async (userId: string) => {
+    try {
+      await spaceApi.spaces.removeMember(spaceId, userId);
+      await loadSpaceDetail(spaceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to kick member');
+    }
+  };
+
+  const handleBan = async (userId: string) => {
+    try {
+      await spaceApi.spaces.ban(spaceId, userId);
+      await loadSpaceDetail(spaceId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to ban member');
+    }
+  };
+
+  const canExpandMember = (member: MemberWithUser) =>
+    canManageRoles && member.userId !== currentUser?.id && member.userId !== space.ownerId && assignableRoles.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold text-txt-primary mb-6">Members</h2>
+      {error && (
+        <div className="p-2 bg-accent-rose/10 border border-accent-rose/30 rounded text-txt-danger text-sm">{error}</div>
+      )}
+      <p className="text-xs text-txt-tertiary">Manage members of this space. Click a member to edit their roles.</p>
+
+      <div>
+        <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">
+          Members ({members.length})
+        </div>
+        <div className="rounded-lg bg-white/[0.02] p-2">
+          <div className="space-y-0.5">
+            {members.map((member) => (
+              <MembersPanelRow
+                key={member.userId}
+                member={member}
+                spaceId={spaceId}
+                ownerId={space.ownerId}
+                isExpanded={expandedMemberId === member.userId}
+                expandable={canExpandMember(member)}
+                canKick={canKick}
+                canBan={canBan}
+                currentUserId={currentUser?.id}
+                assignableRoles={assignableRoles}
+                memberRoleIds={getMemberRoleIds(member)}
+                hasPendingChanges={pendingRoleChanges.has(member.userId)}
+                onToggleExpand={(uid) => setExpandedMemberId(expandedMemberId === uid ? null : uid)}
+                onRoleToggle={handleRoleToggle}
+                onSaveRoles={handleSaveRoles}
+                onCancelRoleChange={handleCancelRoleChange}
+                onPendingAction={setPendingAction}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        isOpen={pendingAction !== null}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async () => {
+          if (!pendingAction) return;
+          if (pendingAction.type === 'kick') {
+            await handleKick(pendingAction.userId);
+          } else {
+            await handleBan(pendingAction.userId);
+          }
+          setPendingAction(null);
+        }}
+        title={pendingAction?.type === 'ban' ? `Ban ${pendingAction.displayName}` : `Kick ${pendingAction?.displayName ?? ''}`}
+        description={
+          pendingAction?.type === 'ban'
+            ? 'They will be permanently banned from this space until unbanned.'
+            : 'They can rejoin with an invite link.'
+        }
+        variant={pendingAction?.type === 'ban' ? 'danger' : 'warning'}
+        confirmLabel={pendingAction?.type === 'ban' ? 'Ban' : 'Kick'}
+      />
+    </div>
+  );
+}

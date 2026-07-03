@@ -1,0 +1,97 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — universal build (arm64 + x64) on Apple Silicon runner
+          - os: macos-latest
+            args: --mac --arm64 --x64
+          # Windows — x64 + arm64 on x64 runner.
+          # Pinned to windows-2022 (VS 2022 / v17): the windows-latest image
+          # ships VS "18", which the node-gyp bundled with electron-rebuild
+          # cannot detect ("unknown version undefined") when compiling
+          # uiohook-napi in postinstall.
+          - os: windows-2022
+            args: --win --x64 --arm64
+          # Linux — x64 on x64 runner
+          - os: ubuntu-latest
+            args: --linux --x64
+          # Linux — arm64 on arm64 runner
+          - os: ubuntu-24.04-arm
+            args: --linux --arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        # Full X11 dev header set required to compile libuiohook (uiohook-napi)
+        # from source in postinstall. Derived from the headers its sources
+        # include: Xlib/XKB (libx11-dev), XTest+record (libxtst-dev), Intrinsic
+        # (libxt-dev), Xrandr (libxrandr-dev), Xinerama (libxinerama-dev),
+        # Xlib-xcb (libx11-xcb-dev), XKBrules (libxkbfile-dev), xkbcommon
+        # (libxkbcommon-dev, libxkbcommon-x11-dev). Missing libxrandr-dev was
+        # the original build failure (Xrandr.h: No such file or directory).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxtst-dev libxt-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libxkbfile-dev \
+            libxrandr-dev libxinerama-dev libx11-xcb-dev
+
+      - name: Install fpm for .deb packaging
+        if: runner.os == 'Linux'
+        # electron-builder bundles an x86_64-only fpm; on the arm64 runner it
+        # aborts the .deb target with "cannot execute binary file: Exec format
+        # error". Install fpm natively and set USE_SYSTEM_FPM (below) so both
+        # arches package their .deb with a host-native fpm. ruby-dev + make are
+        # needed for fpm's native gem dependencies.
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @backspace/shared build
+
+      - name: Compile desktop TypeScript
+        working-directory: packages/desktop
+        run: pnpm exec tsc
+
+      - name: Build and publish desktop app
+        working-directory: packages/desktop
+        run: pnpm exec electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Use the host-native fpm installed above instead of electron-builder's
+          # bundled x86_64 fpm (which can't run on the arm64 runner). No-op on
+          # macOS/Windows, which don't build .deb.
+          USE_SYSTEM_FPM: "true"

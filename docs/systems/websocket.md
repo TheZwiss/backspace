@@ -1,0 +1,238 @@
+# WebSocket Protocol Reference
+
+Endpoint: `GET /ws` (upgrade to WebSocket)
+Transport: JSON messages over WebSocket
+Source: `packages/server/src/ws/handler.ts`, `packages/server/src/ws/events.ts`
+
+---
+
+## Auth Flow
+
+1. Client connects to `/ws`
+2. Client sends `{ type: 'auth', token: '<jwt>' }` within 10 seconds
+3. Server validates token (rejects deleted users, tokens issued before `passwordChangedAt`)
+4. Server responds with `ready` event containing full client state
+5. Server updates user status to `online`, broadcasts `presence_update` to friends + DM co-members + space co-members (via `collectProfileBroadcastTargetIds`); for native users, also queues a S2S `presence_update` relay to all active peers
+6. Heartbeat: server pings every 30s (RFC 6455 ping frames), dead connections detected after ~65s
+
+---
+
+## Client → Server
+
+### Messages
+| type | fields | notes |
+|------|--------|-------|
+| `message_create` | channelId, content, replyToId? | SEND_MESSAGES perm |
+| `message_edit` | messageId, content | author only |
+| `message_delete` | messageId | author or MANAGE_MESSAGES |
+| `typing_start` | channelId | 5s auto-expire |
+
+### DM Messages
+| type | fields | notes |
+|------|--------|-------|
+| `dm_message_create` | dmChannelId, content?, attachments?, replyToId? | member |
+| `dm_message_edit` | messageId, content | author only |
+| `dm_message_delete` | messageId | author only |
+| `dm_typing_start` | dmChannelId | 5s auto-expire |
+
+### Reactions (space + DM, auto-detected)
+| type | fields | notes |
+|------|--------|-------|
+| `reaction_add` | messageId, emoji | ADD_REACTIONS perm (space) |
+| `reaction_remove` | messageId, emoji | own reactions only |
+
+### Read State
+| type | fields | notes |
+|------|--------|-------|
+| `channel_ack` | channelId, messageId | mark read up to message |
+| `mark_unread` | channelId, messageId | `'0'` to clear all |
+
+### Presence & Activity
+| type | fields | notes |
+|------|--------|-------|
+| `presence_update` | status: online/idle/dnd | persisted to DB |
+| `activity_update` | activities: Activity[] | rate-limited 3s, respects showActivity |
+
+### Voice (Space Channels)
+| type | fields | notes |
+|------|--------|-------|
+| `voice_join` | channelId | one room per user enforced |
+| `voice_leave` | — | |
+| `voice_status` | isMuted, isDeafened, isCameraOn, isScreenSharing | server enforces space/permission mute |
+
+### Voice Moderation
+| type | fields | permission |
+|------|--------|------------|
+| `voice_space_mute` | userId, muted | MUTE_MEMBERS |
+| `voice_space_deafen` | userId, deafened | DEAFEN_MEMBERS |
+| `voice_move` | userId, targetChannelId | MOVE_MEMBERS |
+| `voice_disconnect` | userId | DISCONNECT_MEMBERS |
+
+### DM Calls
+| type | fields | notes |
+|------|--------|-------|
+| `dm_call_start` | dmChannelId?, federatedCallId? | `dmChannelId` can be null when `federatedCallId` is provided. 60s auto-timeout if not accepted |
+| `dm_call_accept` | dmChannelId?, federatedCallId? | ringing→active |
+| `dm_call_reject` | dmChannelId?, federatedCallId? | |
+| `dm_call_end` | dmChannelId?, federatedCallId? | |
+
+### System
+| type | fields |
+|------|--------|
+| `auth` | token |
+| `ping` | — (gets `pong`) |
+
+---
+
+## Server → Client
+
+### System
+| type | fields | scope |
+|------|--------|-------|
+| `ready` | (see Ready Payload below) | user |
+| `pong` | — | user |
+| `error` | message | user |
+
+### Messages
+| type | fields | scope |
+|------|--------|-------|
+| `message_created` | message: MessageWithUser | channel (VIEW_CHANNEL) |
+| `message_updated` | message: MessageWithUser | channel |
+| `message_deleted` | messageId, channelId | channel |
+| `typing` | channelId, userId, username | channel (excludes sender) |
+| `reaction_added` | messageId, reaction (includes user) | channel |
+| `reaction_removed` | messageId, userId, emoji | channel |
+| `embeds_resolved` | messageId, channelId, embeds[] | channel |
+
+### DM Messages
+| type | fields | scope |
+|------|--------|-------|
+| `dm_message_created` | message: DmMessageWithUser | DM members |
+| `dm_message_updated` | message: DmMessageWithUser | DM members |
+| `dm_message_deleted` | messageId, dmChannelId | DM members |
+| `dm_typing` | dmChannelId, userId, username | DM members (excludes sender) |
+| `dm_typing_stop` | dmChannelId, userId | DM members (excludes typer) |
+| `dm_embeds_resolved` | messageId, dmChannelId, embeds[] | DM members |
+
+### Read State
+| type | fields | scope |
+|------|--------|-------|
+| `channel_ack` | channelId, messageId | user (multi-tab sync) |
+| `mark_unread` | channelId, messageId | user (multi-tab sync) |
+
+### Presence & Activity
+| type | fields | scope |
+|------|--------|-------|
+| `presence_update` | userId, status, activities? | friends + DM co-members + space co-members of the user (via `collectProfileBroadcastTargetIds`), plus self for multi-tab sync. For federated stubs, the local instance receives status via S2S `presence_update` relay from the home (see `federation.md` §10 — Presence Sync) and re-broadcasts to the same recipient set. |
+| `user_updated` | user | user |
+
+### Space / Channel Management
+| type | fields | scope |
+|------|--------|-------|
+| `space_updated` | space | space |
+| `member_joined` | spaceId, member: MemberWithUser | space |
+| `member_left` | spaceId, userId | space |
+| `member_banned` | spaceId, reason | user (banned) |
+| `channel_created` | channel, spaceId | space |
+| `channel_updated` | channel, spaceId | space |
+| `channel_deleted` | channelId, spaceId | space |
+| `category_created` | category, spaceId | space |
+| `category_updated` | category, spaceId | space |
+| `category_deleted` | categoryId, spaceId | space |
+| `channel_layout_updated` | spaceId, channels[], categories[] | space |
+| `space_layout_updated` | layout[], folders[], updatedAt? | user |
+
+### DM Channel Management
+| type | fields | scope |
+|------|--------|-------|
+| `dm_channel_created` | dmChannel | user |
+| `dm_channel_closed` | dmChannelId | user |
+| `dm_member_added` | dmChannelId, user | DM members |
+| `dm_member_removed` | dmChannelId, userId | DM members |
+| `dm_owner_updated` | dmChannelId, newOwnerId, newOwnerHomeUserId?, newOwnerHomeInstance? | DM members |
+
+### Voice
+| type | fields | scope |
+|------|--------|-------|
+| `voice_state_update` | channelId, userId, action: join/leave | space |
+| `voice_status_update` | userId, channelId, isMuted, isDeafened, isCameraOn, isScreenSharing | room |
+| `space_voice_state` | spaceId, voiceStates, voiceUserStates, spaceVoiceStates | the joining user. Scoped per-space voice-presence snapshot pushed when a user joins a space mid-session (see below). |
+| `voice_space_muted` | userId, channelId, spaceId, muted | space |
+| `voice_space_deafened` | userId, channelId, spaceId, deafened | space |
+| `voice_permission_muted` | userId, spaceId, muted | space |
+| `voice_moved` | userId, oldChannelId, newChannelId | user (target) |
+| `voice_disconnected` | userId, channelId, reason? | user (target) |
+reason: `'displaced'` (new tab) | `'session_closed'`
+
+### DM Calls
+| type | fields | scope |
+|------|--------|-------|
+| `dm_call_incoming` | dmChannelId?, federatedCallId, callerId, callerName, callOrigin?, livekitUrl?, livekitToken? | DM members (excludes caller). `dmChannelId` can be null for Path B federated calls (no local DM channel). `callOrigin` identifies the hosting instance for cross-instance calls. |
+| `dm_call_accepted` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_rejected` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_ended` | dmChannelId?, federatedCallId? | DM members |
+| `dm_call_undeliverable` | Sent to the originator when a call relay (start / accept / reject / end) to one or more peers fails. Includes `phase: 'start' \| 'accept' \| 'reject' \| 'end' \| 'host_unreachable'` identifying the action; `failures[]` enumerates failed peers with a `reason` (`peer_rejected` / `peer_awaiting_approval` / `peer_transient_failure` / `livekit_unavailable` / `no_recipient`). `terminal: true` means local call state should be (or has been) torn down; `terminal: false` is informational. See `docs/systems/voice.md` for the full phase × terminal matrix. | originator (caller / acceptor / rejector / ender) |
+
+### Social
+| type | fields | scope |
+|------|--------|-------|
+| `friend_request_received` | request | user (target) |
+| `friend_request_accepted` | friend, requestId | user (requester) |
+| `friend_request_declined` | requestId, userId | user (requester) |
+| `friend_request_cancelled` | requestId, userId | user (target) |
+| `friend_removed` | userId | user |
+
+### Discovery
+| type | fields | scope |
+|------|--------|-------|
+| `join_request_received` | request | space (managers) |
+| `join_request_accepted` | request, space | user (requester) |
+| `join_request_declined` | request | user (requester) |
+
+### Federation
+| type | fields | scope |
+|------|--------|-------|
+| `federation_file_rejected` | messageId, dmChannelId, attachmentId, affectedUsers[] | DM members |
+| `federation_approval_request_received` | — (refetch trigger; payload: `{ type }`) | admins. Fires for **both** inbound peering requests (remote → us) AND outbound queue creation when the [Outbound Peering Gate](federation.md#outbound-peering-gate) creates a `peer_approval_requests` row in response to a user_action. Payload shape unchanged from the inbound-only behavior; only the firing surface widened. |
+| `federation_peer_reset_detected` | `{ origin: string }` | admins. Fires from `markPeerReset` when a peer's advertised instance epoch differs from the trusted baseline (a wipe-and-reinstall on the same domain — see [Reset Detection](federation.md#reset-detection-markpeerreset--utilsfederationresetts)). Detection-only: the peer was routed to `needs_attention` (reason `peer_reset_detected`) with no rekey/tombstone. Paired with a `federation_peers_changed` broadcast. **Client handler:** `onFederationPeerResetDetected(cb)` (`useWebSocket.ts`) — the FederationPanel's Reset-cleanup surface subscribes and refetches `GET /api/federation/peers` + `GET /api/federation/reset-events`, raising a persistent banner with one-click Re-peer (see `admin.md` "FederationPanel", `client-federation.md` §8). |
+| `peering_subscription_changed` | — (refetch trigger; payload: `{ type }`) | the subscribing user (all of their connected sessions). Fires when a `peer_approval_subscribers` row belonging to the user is created, modified, or deleted (gate fan-in, user cancel, parent cascade). Client refetches `GET /api/federation/peering-subscriptions`. |
+| `peering_notification_received` | `{ type, kind: 'approved' \| 'denied' \| 'expired' }` | the user the notification belongs to. Fires when a `peer_approval_notifications` row is created (`onPeerActivated` outbound fanout, outbound `/deny` fanout, janitor outbound expiry). Client refetches `GET /api/federation/peering-notifications` and may surface a transient toast for online users. |
+
+**S2S relay-only event (not a direct client WS event):**
+
+`read_state_update` — sent peer-to-peer via the federation relay when a user acknowledges a DM channel on one instance. The receiving instance processes it, upserts the `read_states` row, and then emits a standard `channel_ack` event to the user's local WebSocket connections. The relay event itself is never forwarded to clients directly.
+
+---
+
+## Ready Payload
+
+```typescript
+{
+  type: 'ready',
+  user: User,
+  spaces: SpaceWithChannelsAndMembers[],
+  dmChannels: DmChannel[],
+  folders?: SpaceFolder[],
+  spaceLayout?: SpaceLayoutItem[] | null,
+  layoutUpdatedAt?: number,
+  voiceStates?: Record<channelId, userId[]>,
+  voiceUserStates?: Record<string, { isMuted, isDeafened, isCameraOn, isScreenSharing }>,
+  spaceVoiceStates?: Record<string, { spaceMuted, spaceDeafened, permissionMuted }>,
+  readStates?: ReadState[],
+  activeCalls?: ActiveCallInfo[],  // includes federatedCallHost?, livekitUrl?, livekitToken? for federated calls
+  userActivities?: Record<userId, Activity[]>,
+  rejectedPeerOrigins: string[],         // origins with status 'rejected'; used for DM unreachable indicators
+  awaitingApprovalPeerOrigins: string[], // origins with status 'awaiting_approval'
+  pendingApprovalCount: number           // count of peer_approval_requests rows; only non-zero for admins
+}
+```
+
+**Federation filtering:** When the connecting user is federated (`homeInstance` is set), the server omits all DM-related data from the ready payload. `dmChannels` and `activeCalls` are sent as empty arrays, and `readStates` is filtered to only include space channel entries. Federated users receive their DM data from their home instance's ready payload instead.
+
+**Voice-state assembly:** `voiceStates` / `voiceUserStates` / `spaceVoiceStates` for each of the user's spaces are produced by `ConnectionManager.buildSpaceVoiceState(spaceId, userId)` — the single source of truth shared with the mid-session join push (see below). Voice presence is VIEW_CHANNEL-filtered per `computePermissions`: a user is never told who occupies a voice channel they cannot see.
+
+### Mid-session space join — `space_voice_state` push
+
+The `ready` payload is the **only** carrier of voice presence at connect time. When a user joins a space *mid-session* (invite, public join, or join-request approval) without reloading, they would otherwise see empty voice channels until a refresh, because `member_joined` carries no voice state and `GET /api/spaces/:id` (the channel-sidebar hydrator) has none either.
+
+To close this, `ConnectionManager.addUserSpace(userId, spaceId)` — the single chokepoint every join path funnels through, and which is **not** used on reconnect (that path uses `setUserSpaces`) — builds the same per-space snapshot via `buildSpaceVoiceState` and pushes it to the joining user as a `space_voice_state` event. Delivery rides the same ordered WebSocket as the `voice_state_update` deltas, so there is no snapshot-vs-stream race. The push is skipped when the space has no active voice and no restrictions (e.g. space creation). The client applies it scoped to `spaceId` (`utils/voiceStateSync.applySpaceVoiceState`): it merges occupants/statuses and rebuilds only that space's restriction keys, never disturbing voice state in other spaces.

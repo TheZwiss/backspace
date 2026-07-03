@@ -1,0 +1,862 @@
+import { create } from 'zustand';
+import type { MessageWithUser, Reaction, ReadState } from '@backspace/shared';
+import { wsSend } from '../hooks/useWebSocket';
+import { isDmChannel, getChannelOrigin, getApiForOrigin, useSpaceStore } from './spaceStore';
+import { useAuthStore } from './authStore';
+import { normalizeMessageAssets } from '../utils/assetUrls';
+import { sortDmChannels } from '../utils/dmSorting';
+import { usePendingMessageStore } from './pendingMessageStore';
+
+const MAX_MESSAGES_PER_CHANNEL = 200;
+const MAX_CACHED_CHANNELS = 20;
+const EVICT_TO_CHANNELS = 15;
+
+// In-flight Promise dedup. The store has multiple call sites that may invoke
+// `loadMessages` / `loadMoreMessages` for the same channel in parallel before
+// the first call's awaited result has populated `hasMore`/`messages` (which is
+// the only state-based dedup the original guards relied on):
+//   - `AppLayout` and `MessageList` BOTH fire `loadMessages` on channel mount
+//     because `MessageList` is also rendered by surfaces that don't have the
+//     `AppLayout` chrome (`VoiceChatPanel`).
+//   - `MessageList.handleScroll`'s load-more block can fire multiple times in
+//     a single fast-scroll burst before React commits the `isLoadingMore=true`
+//     state update, sharing one closure with `!isLoadingMore` still true.
+// Without dedup, each parallel call opens its own federated fetch — on a NAT
+// hairpin'd LAN this means N hung TCP connections per channel mount, and the
+// pagination skeleton (driven by component-level `isLoadingMore`) sticks while
+// any of them are still waiting on the 30 s api-client timeout.
+const inFlightLoads = new Map<string, Promise<void>>();
+const inFlightLoadMores = new Map<string, Promise<boolean>>();
+
+interface TypingUser {
+  userId: string;
+  username: string;
+  timestamp: number;
+}
+
+interface RealtimeMessageEvent {
+  channelId: string;
+  message: MessageWithUser;
+}
+
+interface ChatState {
+  messages: Map<string, MessageWithUser[]>;
+  currentChannelId: string | null;
+  typingUsers: Map<string, TypingUser[]>;
+  hasMore: Map<string, boolean>;
+  isLoading: boolean;
+  loadError: string | null;
+  replyTo: MessageWithUser | null;
+  readStates: Map<string, string>;
+  unreadChannels: Set<string>;
+  realtimeMessageEvents: RealtimeMessageEvent[];
+  channelAccessTimes: Map<string, number>;
+  scrollPositions: Map<string, string>;
+  setCurrentChannel: (channelId: string | null) => void;
+  saveScrollPosition: (channelId: string, messageId: string) => void;
+  setReplyTo: (message: MessageWithUser | null) => void;
+  loadMessages: (channelId: string, force?: boolean) => Promise<void>;
+  clearAllMessages: () => void;
+  loadMoreMessages: (channelId: string) => Promise<boolean>;
+  sendMessage: (channelId: string, content: string, attachmentIds?: string[]) => Promise<void>;
+  editMessage: (messageId: string, content: string, channelId: string) => Promise<void>;
+  deleteMessage: (messageId: string, channelId: string) => Promise<void>;
+  addMessage: (channelId: string, message: MessageWithUser) => void;
+  addRealtimeMessage: (channelId: string, message: MessageWithUser) => void;
+  updateMessage: (message: MessageWithUser) => void;
+  removeMessage: (messageId: string, channelId: string) => void;
+  addReaction: (messageId: string, emoji: string) => void;
+  removeReaction: (messageId: string, emoji: string) => void;
+  onReactionAdded: (messageId: string, reaction: any) => void;
+  onReactionRemoved: (messageId: string, userId: string, emoji: string) => void;
+  loadMessagesAround: (channelId: string, messageId: string) => Promise<void>;
+  setTyping: (channelId: string, userId: string, username: string) => void;
+  clearTyping: (channelId: string, userId: string) => void;
+  getMessages: (channelId: string) => MessageWithUser[];
+  getTypingUsers: (channelId: string) => TypingUser[];
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => void;
+  markChannelUnread: (channelId: string) => void;
+  markUnread: (channelId: string, messageId: string) => void;
+  ackChannel: (channelId: string) => void;
+  onChannelAck: (channelId: string, messageId: string) => void;
+  onMarkUnread: (channelId: string, messageId: string) => void;
+  removeChannelStates: (channelIds: Set<string>) => void;
+  rekeyChannelState: (oldId: string, newId: string) => void;
+  updateUserInMessages: (user: { id: string; [key: string]: any }) => void;
+  clearTypingForUser: (userId: string) => void;
+}
+
+/** Find which channel a message belongs to by scanning the message cache. */
+function findChannelForMessage(messages: Map<string, MessageWithUser[]>, messageId: string): string | null {
+  for (const [channelId, msgs] of messages) {
+    if (msgs.some(m => m.id === messageId)) {
+      return channelId;
+    }
+  }
+  return null;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  messages: new Map(),
+  currentChannelId: null,
+  typingUsers: new Map(),
+  hasMore: new Map(),
+  isLoading: false,
+  loadError: null,
+  replyTo: null,
+  readStates: new Map(),
+  unreadChannels: new Set(),
+  realtimeMessageEvents: [],
+  channelAccessTimes: new Map(),
+  scrollPositions: new Map(),
+
+  saveScrollPosition: (channelId, messageId) => {
+    set((state) => {
+      const newPositions = new Map(state.scrollPositions);
+      newPositions.set(channelId, messageId);
+      return { scrollPositions: newPositions };
+    });
+  },
+
+  setCurrentChannel: (channelId) => {
+    set((state) => {
+      const newAccessTimes = new Map(state.channelAccessTimes);
+      if (channelId) {
+        newAccessTimes.set(channelId, Date.now());
+      }
+
+      // Evict stale channels if we have too many cached
+      let newMessages = state.messages;
+      let newHasMore = state.hasMore;
+      let newScrollPositions = state.scrollPositions;
+      if (state.messages.size > MAX_CACHED_CHANNELS) {
+        const entries = [...newAccessTimes.entries()]
+          .filter(([id]) => id !== channelId)
+          .sort((a, b) => a[1] - b[1]);
+        const toEvict = state.messages.size - EVICT_TO_CHANNELS;
+        const evictIds = new Set(entries.slice(0, toEvict).map(([id]) => id));
+        if (evictIds.size > 0) {
+          newMessages = new Map(state.messages);
+          newHasMore = new Map(state.hasMore);
+          newScrollPositions = new Map(state.scrollPositions);
+          for (const id of evictIds) {
+            newMessages.delete(id);
+            newHasMore.delete(id);
+            newAccessTimes.delete(id);
+            newScrollPositions.delete(id);
+          }
+        }
+      }
+
+      return {
+        currentChannelId: channelId,
+        channelAccessTimes: newAccessTimes,
+        messages: newMessages,
+        hasMore: newHasMore,
+        scrollPositions: newScrollPositions,
+      };
+    });
+  },
+  setReplyTo: (message) => set({ replyTo: message }),
+
+  clearAllMessages: () => set({
+    messages: new Map(),
+    hasMore: new Map(),
+    typingUsers: new Map(),
+    readStates: new Map(),
+    unreadChannels: new Set(),
+    realtimeMessageEvents: [],
+    channelAccessTimes: new Map(),
+    scrollPositions: new Map(),
+    currentChannelId: null,
+    replyTo: null,
+  }),
+
+  loadMessages: async (channelId: string, force?: boolean) => {
+    if (!force && get().hasMore.has(channelId)) return;
+    const isDm = isDmChannel(channelId);
+    // For server channels, bail if we don't know which instance owns this channel yet.
+    // The remote WS ready handler will call loadMessages once the map is populated.
+    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
+
+    // Parallel-call dedup: if a load for this channel is already in flight,
+    // return that Promise instead of starting a second fetch. Applies to
+    // force=true callers as well — `useWebSocket`'s ready handler invokes
+    // `loadMessages(currentChannelId, true)` from two adjacent code paths
+    // (one for remote-instance space refresh, one for cache clearing) on every
+    // WS-ready event, and there's no value in two parallel fetches for the
+    // same channel: they hit the same endpoint with the same params and
+    // return the same data. Coalescing is safe; the force caller still gets a
+    // fresh result via the in-flight Promise.
+    {
+      const existing = inFlightLoads.get(channelId);
+      if (existing) return existing;
+    }
+
+    const promise = (async () => {
+      set({ isLoading: true, loadError: null });
+      try {
+        const origin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(origin);
+        const messages = isDm
+          ? await client.dm.messages(channelId)
+          : await client.channels.messages(channelId);
+
+        // Normalize remote asset URLs (avatars, attachment filenames)
+        if (origin) {
+          for (const msg of messages) normalizeMessageAssets(msg, origin);
+        }
+
+        set((state) => {
+          const newMessages = new Map(state.messages);
+          newMessages.set(channelId, messages as MessageWithUser[]);
+          const newHasMore = new Map(state.hasMore);
+          newHasMore.set(channelId, messages.length >= 50);
+          const newAccessTimes = new Map(state.channelAccessTimes);
+          newAccessTimes.set(channelId, Date.now());
+          return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes, isLoading: false, loadError: null };
+        });
+      } catch (err) {
+        set({ isLoading: false, loadError: (err as Error).message || 'Failed to load messages' });
+      }
+    })();
+
+    inFlightLoads.set(channelId, promise);
+    try {
+      await promise;
+    } finally {
+      // Only clear the entry if it still points at our Promise — a force-reload
+      // scheduled while we were in flight may have replaced it, and we don't
+      // want to drop the newer entry.
+      if (inFlightLoads.get(channelId) === promise) {
+        inFlightLoads.delete(channelId);
+      }
+    }
+  },
+
+  loadMoreMessages: async (channelId: string) => {
+    const existing = get().messages.get(channelId);
+    if (!existing || existing.length === 0) return false;
+    if (!get().hasMore.get(channelId)) return false;
+
+    const oldestMessage = existing[0];
+    if (!oldestMessage) return false;
+
+    // Parallel-call dedup. `MessageList.handleScroll`'s load-more block can
+    // fire several times in one fast-scroll burst before React commits the
+    // `isLoadingMore=true` setState — every call sees the same closure with
+    // `!isLoadingMore` still true. Without dedup, each spawns its own
+    // federated fetch, and on a NAT hairpin'd LAN that means N hung TCP
+    // connections per scroll burst, each independently waiting on the 30 s
+    // api-client timeout. Dedup collapses them to one, and every caller's
+    // `await` resolves together.
+    const existingPromise = inFlightLoadMores.get(channelId);
+    if (existingPromise) return existingPromise;
+
+    const promise = (async () => {
+      try {
+        const isDm = isDmChannel(channelId);
+        const origin = getChannelOrigin(channelId);
+        const client = getApiForOrigin(origin);
+        const olderMessages = isDm
+          ? await client.dm.messages(channelId, oldestMessage.id)
+          : await client.channels.messages(channelId, oldestMessage.id);
+
+        // Normalize remote asset URLs (avatars, attachment filenames)
+        if (origin) {
+          for (const msg of olderMessages) normalizeMessageAssets(msg, origin);
+        }
+
+        set((state) => {
+          const newMessages = new Map(state.messages);
+          const current = newMessages.get(channelId) ?? [];
+          newMessages.set(channelId, [...(olderMessages as MessageWithUser[]), ...current]);
+          const newHasMore = new Map(state.hasMore);
+          newHasMore.set(channelId, olderMessages.length >= 50);
+          return { messages: newMessages, hasMore: newHasMore };
+        });
+        return olderMessages.length > 0;
+      } catch {
+        return false;
+      }
+    })();
+
+    inFlightLoadMores.set(channelId, promise);
+    try {
+      return await promise;
+    } finally {
+      if (inFlightLoadMores.get(channelId) === promise) {
+        inFlightLoadMores.delete(channelId);
+      }
+    }
+  },
+
+  loadMessagesAround: async (channelId: string, messageId: string) => {
+    const isDm = isDmChannel(channelId);
+    if (!isDm && !useSpaceStore.getState().channelOriginMap.has(channelId)) return;
+    try {
+      const origin = getChannelOrigin(channelId);
+      const client = getApiForOrigin(origin);
+      const messages = isDm
+        ? await client.dm.messagesAround(channelId, messageId)
+        : await client.channels.messagesAround(channelId, messageId);
+
+      if (origin) {
+        for (const msg of messages) normalizeMessageAssets(msg, origin);
+      }
+
+      set((state) => {
+        const newMessages = new Map(state.messages);
+        newMessages.set(channelId, messages as MessageWithUser[]);
+        const newHasMore = new Map(state.hasMore);
+        newHasMore.set(channelId, true);
+        const newAccessTimes = new Map(state.channelAccessTimes);
+        newAccessTimes.set(channelId, Date.now());
+        return { messages: newMessages, hasMore: newHasMore, channelAccessTimes: newAccessTimes };
+      });
+    } catch (err) {
+      console.error('Failed to load messages around:', err);
+    }
+  },
+
+  sendMessage: async (channelId: string, content: string, attachmentIds?: string[]) => {
+    const replyToId = get().replyTo?.id;
+    const isDm = isDmChannel(channelId);
+    const currentUser = useAuthStore.getState().user;
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
+
+    // Generate optimistic message
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    if (currentUser) {
+      const optimisticMessage: MessageWithUser = {
+        id: tempId,
+        channelId: isDm ? '' : channelId,
+        userId: currentUser.id,
+        content: content || null,
+        replyToId: replyToId ?? null,
+        editedAt: null,
+        createdAt: Date.now(),
+        user: currentUser,
+        attachments: [],
+        embeds: [],
+        reactions: [],
+        replyTo: get().replyTo ?? undefined,
+      };
+      if (isDm) {
+        (optimisticMessage as any).dmChannelId = channelId;
+      }
+      // Add optimistic message immediately
+      get().addMessage(channelId, optimisticMessage);
+
+      // For DMs, update lastMessage on the DM channel so sidebar re-sorts
+      if (isDm) {
+        const { dmChannels, setDmChannels } = useSpaceStore.getState();
+        const updatedDms = dmChannels.map(dm =>
+          dm.id === channelId
+            ? { ...dm, lastMessage: { id: tempId, dmChannelId: channelId, userId: currentUser.id, content, createdAt: Date.now() } }
+            : dm
+        );
+        setDmChannels(sortDmChannels(updatedDms, get().unreadChannels, get().currentChannelId));
+      }
+    }
+
+    set({ replyTo: null });
+
+    try {
+      if (isDm) {
+        await client.dm.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+      } else {
+        await client.channels.sendMessage(channelId, { content, attachments: attachmentIds, replyToId });
+      }
+      // Real message will arrive via WebSocket and replace the temp one
+    } catch {
+      // Rollback: remove the optimistic message on failure
+      get().removeMessage(tempId, channelId);
+    }
+  },
+
+  editMessage: async (messageId: string, content: string, channelId: string) => {
+    const isDm = isDmChannel(channelId);
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
+
+    // Optimistic: update content locally first
+    const messages = get().messages.get(channelId);
+    const originalMessage = messages?.find(m => m.id === messageId);
+    if (originalMessage) {
+      get().updateMessage({ ...originalMessage, content, editedAt: Date.now() });
+    }
+    try {
+      if (isDm) {
+        await client.dm.updateMessage(messageId, { content });
+      } else {
+        await client.messages.update(messageId, { content });
+      }
+      // Real update will arrive via WebSocket
+    } catch {
+      // Rollback: restore the original message on failure
+      if (originalMessage) {
+        get().updateMessage(originalMessage);
+      }
+    }
+  },
+
+  deleteMessage: async (messageId: string, channelId: string) => {
+    const isDm = isDmChannel(channelId);
+    const origin = getChannelOrigin(channelId);
+    const client = getApiForOrigin(origin);
+
+    // Optimistic: remove locally first
+    const messages = get().messages.get(channelId);
+    const savedMessage = messages?.find(m => m.id === messageId);
+    get().removeMessage(messageId, channelId);
+    try {
+      if (isDm) {
+        await client.dm.deleteMessage(messageId);
+      } else {
+        await client.messages.delete(messageId);
+      }
+      // Real deletion will arrive via WebSocket (already removed locally)
+    } catch {
+      // Rollback: re-add the message on failure
+      if (savedMessage) {
+        get().addMessage(channelId, savedMessage);
+      }
+    }
+  },
+
+  addMessage: (channelId: string, message: MessageWithUser) => {
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      const current = newMessages.get(channelId) ?? [];
+      // Avoid duplicates
+      if (current.find(m => m.id === normalizedMessage.id)) return state;
+      // Dedup against pendingMessageStore by (content, sortedAttachmentIds).
+      // No userId check — federation relays arrive with replicated user IDs.
+      const sortedAttIds = (normalizedMessage.attachments ?? []).map((a) => a.id).sort();
+      usePendingMessageStore.getState().matchAndRemove(channelId, normalizedMessage.content ?? '', sortedAttIds);
+      // Remove any optimistic temp message with same content.
+      // Don't require userId match — for federated messages the home user ID
+      // differs from the replicated user ID, but content match is sufficient
+      // since temp messages are unique within the short optimistic window.
+      // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
+      const filtered = current.filter(m => {
+        if (!m.id.startsWith('temp_')) return true;
+        return (m.content || null) !== (normalizedMessage.content || null);
+      });
+      let updated = [...filtered, normalizedMessage];
+      // Cap per-channel messages to prevent memory growth
+      if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
+        updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
+      }
+      newMessages.set(channelId, updated);
+      return { messages: newMessages };
+    });
+  },
+
+  addRealtimeMessage: (channelId: string, message: MessageWithUser) => {
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      const current = newMessages.get(channelId) ?? [];
+      // Avoid duplicates
+      if (current.find(m => m.id === normalizedMessage.id)) return state;
+      // Federation relay dedup: skip if this is a relay copy of a message we
+      // already have (sourceMessageId matches an existing ID), or if we already
+      // have the relay copy and the original is now arriving (existing
+      // sourceMessageId matches incoming ID).
+      if ('sourceMessageId' in normalizedMessage && normalizedMessage.sourceMessageId
+        && current.find(m => m.id === normalizedMessage.sourceMessageId)) return state;
+      if (current.find(m => 'sourceMessageId' in m && m.sourceMessageId === normalizedMessage.id)) return state;
+      // Dedup against pendingMessageStore by (content, sortedAttachmentIds).
+      // No userId check — federation relays arrive with replicated user IDs.
+      const sortedAttIds = (normalizedMessage.attachments ?? []).map((a) => a.id).sort();
+      usePendingMessageStore.getState().matchAndRemove(channelId, normalizedMessage.content ?? '', sortedAttIds);
+      // Remove any optimistic temp message with same content (no userId check —
+      // federated messages arrive with a different replicated user ID).
+      // Normalize both sides: empty string and null are equivalent (server stores null for empty content).
+      const filtered = current.filter(m => {
+        if (!m.id.startsWith('temp_')) return true;
+        return (m.content || null) !== (normalizedMessage.content || null);
+      });
+      let updated = [...filtered, normalizedMessage];
+      // Cap per-channel messages to prevent memory growth
+      if (updated.length > MAX_MESSAGES_PER_CHANNEL) {
+        updated = updated.slice(updated.length - MAX_MESSAGES_PER_CHANNEL);
+      }
+      newMessages.set(channelId, updated);
+      // Append to realtimeMessageEvents (capped at 50)
+      const newEvents = [...state.realtimeMessageEvents, { channelId, message: normalizedMessage }];
+      if (newEvents.length > 50) newEvents.splice(0, newEvents.length - 50);
+      return { messages: newMessages, realtimeMessageEvents: newEvents };
+    });
+  },
+
+  updateMessage: (message: MessageWithUser) => {
+    // DM messages have dmChannelId instead of channelId — check both
+    const channelKey = message.channelId || (message as any).dmChannelId;
+    if (!channelKey) return;
+    const normalizedMessage = { ...message, embeds: message.embeds ?? [] };
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      const current = newMessages.get(channelKey);
+      if (!current) return state;
+      newMessages.set(
+        channelKey,
+        current.map(m => m.id === normalizedMessage.id ? normalizedMessage : m),
+      );
+      return { messages: newMessages };
+    });
+  },
+
+  removeMessage: (messageId: string, channelId: string) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      const current = newMessages.get(channelId);
+      if (!current) return state;
+      newMessages.set(channelId, current.filter(m => m.id !== messageId));
+      return { messages: newMessages };
+    });
+  },
+
+  addReaction: (messageId: string, emoji: string) => {
+    // Resolve the channel from our message cache so the UI doesn't need to pass it
+    const channelId = findChannelForMessage(get().messages, messageId);
+    const origin = channelId ? getChannelOrigin(channelId) : '';
+    wsSend({ type: 'reaction_add', messageId, emoji }, origin);
+  },
+
+  removeReaction: (messageId: string, emoji: string) => {
+    const channelId = findChannelForMessage(get().messages, messageId);
+    const origin = channelId ? getChannelOrigin(channelId) : '';
+    wsSend({ type: 'reaction_remove', messageId, emoji }, origin);
+  },
+
+  onReactionAdded: (messageId: string, reaction: Reaction) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      for (const [channelId, msgs] of newMessages.entries()) {
+        const msgIndex = msgs.findIndex(m => m.id === messageId);
+        if (msgIndex !== -1) {
+          const newMsgs = [...msgs];
+          const oldMsg = newMsgs[msgIndex]!;
+          newMsgs[msgIndex] = {
+            ...oldMsg,
+            reactions: [...(oldMsg.reactions || []), reaction],
+          };
+          newMessages.set(channelId, newMsgs);
+          break;
+        }
+      }
+      return { messages: newMessages };
+    });
+  },
+
+  onReactionRemoved: (messageId: string, userId: string, emoji: string) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      for (const [channelId, msgs] of newMessages.entries()) {
+        const msgIndex = msgs.findIndex(m => m.id === messageId);
+        if (msgIndex !== -1) {
+          const newMsgs = [...msgs];
+          const oldMsg = newMsgs[msgIndex]!;
+          newMsgs[msgIndex] = {
+            ...oldMsg,
+            reactions: (oldMsg.reactions || []).filter(r => !(r.userId === userId && r.emoji === emoji)),
+          };
+          newMessages.set(channelId, newMsgs);
+          break;
+        }
+      }
+      return { messages: newMessages };
+    });
+  },
+
+  setTyping: (channelId: string, userId: string, username: string) => {
+    set((state) => {
+      const newTyping = new Map(state.typingUsers);
+      const current = newTyping.get(channelId) ?? [];
+      const filtered = current.filter(t => t.userId !== userId);
+      filtered.push({ userId, username, timestamp: Date.now() });
+      newTyping.set(channelId, filtered);
+      return { typingUsers: newTyping };
+    });
+
+    // Auto-clear after 5 seconds
+    setTimeout(() => {
+      get().clearTyping(channelId, userId);
+    }, 5000);
+  },
+
+  clearTyping: (channelId: string, userId: string) => {
+    set((state) => {
+      const newTyping = new Map(state.typingUsers);
+      const current = newTyping.get(channelId);
+      if (!current) return state;
+      newTyping.set(channelId, current.filter(t => t.userId !== userId));
+      return { typingUsers: newTyping };
+    });
+  },
+
+  getMessages: (channelId: string) => {
+    return get().messages.get(channelId) ?? [];
+  },
+
+  getTypingUsers: (channelId: string) => {
+    const users = get().typingUsers.get(channelId) ?? [];
+    const now = Date.now();
+    return users.filter(t => now - t.timestamp < 5000);
+  },
+
+  setReadStates: (readStates: ReadState[], channelLastMessageIds: Map<string, string>, originChannelIds?: Set<string>) => {
+    // 1. Merge server read states into existing local state (preserves optimistic acks)
+    const rsMap = new Map(get().readStates);
+    for (const rs of readStates) {
+      const local = rsMap.get(rs.channelId);
+      if (!local) {
+        rsMap.set(rs.channelId, rs.lastReadMessageId);
+      } else {
+        try {
+          if (BigInt(rs.lastReadMessageId) > BigInt(local)) {
+            rsMap.set(rs.channelId, rs.lastReadMessageId);
+          }
+        } catch {
+          rsMap.set(rs.channelId, rs.lastReadMessageId);
+        }
+      }
+    }
+
+    // 2. Rebuild unreadChannels ONLY for channels from this origin
+    //    Keep existing unread entries from other origins untouched,
+    //    but prune orphans that don't map to any known channel
+    const currentChannelId = get().currentChannelId;
+    const { channelToSpaceMap, dmChannels: knownDms } = useSpaceStore.getState();
+    const knownDmIds = new Set(knownDms.map(dm => dm.id));
+    const unread = new Set<string>();
+    for (const id of get().unreadChannels) {
+      if (!originChannelIds || !originChannelIds.has(id)) {
+        // Only preserve if the channel still maps to a known space or DM
+        if (channelToSpaceMap.has(id) || knownDmIds.has(id)) {
+          unread.add(id);
+        }
+      }
+    }
+
+    const channelsToCheck = originChannelIds ?? new Set(channelLastMessageIds.keys());
+    for (const channelId of channelsToCheck) {
+      if (channelId === currentChannelId) continue; // skip current channel (acked momentarily)
+      const lastMsgId = channelLastMessageIds.get(channelId);
+      if (!lastMsgId) continue; // empty channel
+      const lastRead = rsMap.get(channelId);
+      if (!lastRead) {
+        unread.add(channelId);
+        continue;
+      }
+      try {
+        if (BigInt(lastMsgId) > BigInt(lastRead)) {
+          unread.add(channelId);
+        }
+      } catch {
+        unread.add(channelId);
+      }
+    }
+
+    set({ readStates: rsMap, unreadChannels: unread });
+
+    // Re-sort DM list now that unread state is known (handles initial load
+    // where populateFromReady runs before read states are processed)
+    const { dmChannels, setDmChannels } = useSpaceStore.getState();
+    if (dmChannels.length > 0) {
+      setDmChannels(sortDmChannels(dmChannels, unread, currentChannelId));
+    }
+  },
+
+  markChannelUnread: (channelId: string) => {
+    set((state) => {
+      if (state.unreadChannels.has(channelId)) return state;
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.add(channelId);
+      return { unreadChannels: newUnread };
+    });
+  },
+
+  markUnread: (channelId: string, messageId: string) => {
+    // Optimistically update local state
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      const newUnread = new Set(state.unreadChannels);
+      if (messageId === '0') {
+        newReadStates.delete(channelId);
+      } else {
+        newReadStates.set(channelId, messageId);
+      }
+      newUnread.add(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+
+    // Send to the correct federated instance
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'mark_unread', channelId, messageId }, origin);
+  },
+
+  ackChannel: (channelId: string) => {
+    const msgs = get().messages.get(channelId);
+    if (!msgs || msgs.length === 0) return;
+
+    // Find the highest server-confirmed (non-temp) message ID.
+    // We use MAX(id) rather than "last in display order" because federated
+    // relay messages can have local snowflake IDs that don't match createdAt
+    // order — the ack must cover the highest ID to stay consistent with the
+    // server's read-state comparison (which uses BigInt ID comparison).
+    let messageId: string | null = null;
+    let maxId = 0n;
+    for (const msg of msgs) {
+      if (msg && !msg.id.startsWith('temp_')) {
+        try {
+          const id = BigInt(msg.id);
+          if (id > maxId) {
+            maxId = id;
+            messageId = msg.id;
+          }
+        } catch { /* non-numeric ID — skip */ }
+      }
+    }
+    if (!messageId) return; // All messages are temp — nothing to ack yet
+
+    // Update local state immediately
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      newReadStates.set(channelId, messageId!);
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.delete(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+
+    // Re-sort DM list when a DM is marked as read (moves from unread to read group)
+    if (isDmChannel(channelId)) {
+      const { dmChannels, setDmChannels } = useSpaceStore.getState();
+      setDmChannels(sortDmChannels(dmChannels, get().unreadChannels, channelId));
+    }
+
+    // Send to the correct instance
+    const origin = getChannelOrigin(channelId);
+    wsSend({ type: 'channel_ack', channelId, messageId }, origin);
+  },
+
+  onChannelAck: (channelId: string, messageId: string) => {
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      newReadStates.set(channelId, messageId);
+      const newUnread = new Set(state.unreadChannels);
+      newUnread.delete(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+  },
+
+  onMarkUnread: (channelId: string, messageId: string) => {
+    set((state) => {
+      const newReadStates = new Map(state.readStates);
+      const newUnread = new Set(state.unreadChannels);
+      if (messageId === '0') {
+        newReadStates.delete(channelId);
+      } else {
+        newReadStates.set(channelId, messageId);
+      }
+      newUnread.add(channelId);
+      return { readStates: newReadStates, unreadChannels: newUnread };
+    });
+  },
+
+  removeChannelStates: (channelIds: Set<string>) => {
+    if (channelIds.size === 0) return;
+    set((state) => {
+      const newUnread = new Set(state.unreadChannels);
+      const newReadStates = new Map(state.readStates);
+      const newMessages = new Map(state.messages);
+      const newHasMore = new Map(state.hasMore);
+      for (const channelId of channelIds) {
+        newUnread.delete(channelId);
+        newReadStates.delete(channelId);
+        newMessages.delete(channelId);
+        newHasMore.delete(channelId);
+      }
+      return { unreadChannels: newUnread, readStates: newReadStates, messages: newMessages, hasMore: newHasMore };
+    });
+  },
+
+  rekeyChannelState: (oldId: string, newId: string) => {
+    set((state) => {
+      const copyDelete = <V,>(src: Map<string, V>): Map<string, V> => {
+        if (!src.has(oldId)) return src;
+        const next = new Map(src);
+        next.delete(oldId);
+        return next;
+      };
+
+      const messages = copyDelete(state.messages);
+      const typingUsers = copyDelete(state.typingUsers);
+      const hasMore = copyDelete(state.hasMore);
+      const readStates = copyDelete(state.readStates);
+      const channelAccessTimes = copyDelete(state.channelAccessTimes);
+      const scrollPositions = copyDelete(state.scrollPositions);
+
+      let unreadChannels = state.unreadChannels;
+      if (state.unreadChannels.has(oldId)) {
+        unreadChannels = new Set(state.unreadChannels);
+        unreadChannels.delete(oldId);
+        unreadChannels.add(newId);
+      }
+
+      const currentChannelId = state.currentChannelId === oldId ? newId : state.currentChannelId;
+
+      return {
+        messages,
+        typingUsers,
+        hasMore,
+        readStates,
+        channelAccessTimes,
+        scrollPositions,
+        unreadChannels,
+        currentChannelId,
+      };
+    });
+  },
+
+  updateUserInMessages: (user: { id: string; homeUserId?: string | null; [key: string]: any }) => {
+    set((state) => {
+      const newMessages = new Map(state.messages);
+      let changed = false;
+      for (const [channelId, msgs] of newMessages) {
+        let channelChanged = false;
+        const updated = msgs.map(m => {
+          const matches = m.userId === user.id ||
+            (user.homeUserId && m.user?.homeUserId && m.user.homeUserId === user.homeUserId);
+          if (matches) {
+            channelChanged = true;
+            return { ...m, user: { ...m.user, ...user } };
+          }
+          return m;
+        });
+        if (channelChanged) { newMessages.set(channelId, updated); changed = true; }
+      }
+      return changed ? { messages: newMessages } : {};
+    });
+  },
+
+  clearTypingForUser: (userId: string) => {
+    set((state) => {
+      const newTyping = new Map(state.typingUsers);
+      let changed = false;
+      for (const [channelId, users] of newTyping) {
+        const filtered = users.filter(t => t.userId !== userId);
+        if (filtered.length !== users.length) {
+          newTyping.set(channelId, filtered);
+          changed = true;
+        }
+      }
+      return changed ? { typingUsers: newTyping } : state;
+    });
+  },
+}));

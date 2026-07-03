@@ -1,0 +1,83 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1777065939127,
+      "tag": "0000_lethal_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1777144927946,
+      "tag": "0001_complex_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777196627239,
+      "tag": "0002_peer_approval_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1777229997210,
+      "tag": "0003_brave_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1777395066272,
+      "tag": "0004_slim_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1778428627458,
+      "tag": "0005_group_dm_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782474063349,
+      "tag": "0006_spicy_scourge",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782832912087,
+      "tag": "0007_nervous_orphan",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1782932926154,
+      "tag": "0008_cute_sebastian_shaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1783011477517,
+      "tag": "0009_uneven_red_ghost",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1783035334526,
+      "tag": "0010_broken_blazing_skull",
+      "breakpoints": true
+    }
+  ]
+}

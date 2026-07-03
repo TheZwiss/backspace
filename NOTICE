@@ -1,0 +1,64 @@
+Backspace
+Copyright (c) 2026 Jannis Braun
+
+Backspace is free and open source software under the GNU Affero General Public
+License v3.0 (AGPL-3.0-only); see the LICENSE file. A separate commercial license
+is also available; see LICENSE-COMMERCIAL.md.
+
+It bundles, depends on, or redistributes the third-party components listed
+below. Each remains under its own license.
+
+================================================================================
+Fonts
+================================================================================
+
+DM Sans
+  Files:    packages/web/public/fonts/DMSans-Variable.woff2
+            packages/web/public/fonts/DMSans-Variable-Italic.woff2
+  License:  SIL Open Font License, Version 1.1
+  Notice:   Copyright 2014 The DM Sans Project Authors
+            (https://github.com/googlefonts/dm-fonts)
+  The full license text is shipped alongside the font files at
+  packages/web/public/fonts/OFL.txt.
+
+================================================================================
+Sound effects
+================================================================================
+
+In-app sound cues (packages/web/public/sounds/*.ogg) are original works
+authored for the Backspace project and are covered by the project license.
+
+================================================================================
+Icons and brand assets
+================================================================================
+
+The Backspace name, logo, and app icons (assets/brand/,
+packages/web/public/icons/, packages/desktop build resources) are original
+works and trademarks of the project. Neither the AGPL nor the commercial license
+grants any right to use these trademarks; trademark use is governed separately by
+applicable law.
+
+In-application UI icons are hand-authored inline SVGs and are covered by the
+project license.
+
+================================================================================
+npm dependencies
+================================================================================
+
+Backspace depends on open-source packages distributed via npm, all under
+permissive licenses (predominantly MIT, ISC, Apache-2.0, and BSD variants).
+The image-processing dependency "sharp" loads libvips, distributed as a
+prebuilt binary under the LGPL-3.0-or-later license; it is used unmodified and
+dynamically, and is not statically linked into Backspace.
+
+To regenerate the full, current dependency license inventory, run:
+
+  pnpm licenses list --prod
+
+================================================================================
+Emoji
+================================================================================
+
+Emoji selection is provided by @emoji-mart/data and @emoji-mart/react (MIT).
+No emoji glyph images are bundled; glyphs render using the host operating
+system's emoji font.

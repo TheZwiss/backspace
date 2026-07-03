@@ -1,0 +1,34 @@
+{
+  "name": "@backspace/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Backspace",
+  "author": {
+    "name": "Jannis Braun",
+    "email": "backspace@backspace.chat"
+  },
+  "homepage": "https://github.com/TheZwiss/backspace",
+  "main": "dist/main.js",
+  "scripts": {
+    "build:ts": "tsc",
+    "dev": "cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
+    "build": "tsc && electron-builder",
+    "build:all": "tsc && electron-builder --mac --win --linux --arm64 --x64",
+    "clean": "rm -rf dist dist-electron",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "electron-rebuild -f -w uiohook-napi"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0",
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^40.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
+  }
+}

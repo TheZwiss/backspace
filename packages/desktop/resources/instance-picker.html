@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backspace — Connect</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0b0b10;
+      color: #d8d8de;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Subtle radial gradient at top — matches login page */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at top, rgba(124,108,246,0.06) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Titlebar drag strip ── */
+    .titlebar {
+      height: 32px;
+      min-height: 32px;
+      background: #0b0b10;
+      -webkit-app-region: drag;
+      position: relative;
+      z-index: 100;
+    }
+
+    /* ── Main content area ── */
+    .content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+      padding: 0 2rem 2rem;
+    }
+
+    .container {
+      -webkit-app-region: no-drag;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    /* ── Card — solid elevated surface (matches login) ── */
+    .card {
+      background: #252530;
+      border-radius: 6px;
+      padding: 2rem;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #efefef;
+      margin-bottom: 0.25rem;
+    }
+
+    .header p {
+      font-size: 0.875rem;
+      color: #5c5c68;
+      margin-top: 0.25rem;
+    }
+
+    /* ── Form field ── */
+    .field {
+      margin-bottom: 1.25rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      color: #a0a0aa;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 0.625rem 0.75rem;
+      background: #111118;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      color: #efefef;
+      font-family: inherit;
+      font-size: 0.875rem;
+      outline: none;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .field input::placeholder {
+      color: #5c5c68;
+    }
+
+    .field input:focus {
+      box-shadow: 0 0 0 2px #7c6cf6, inset 0 1px 2px rgba(0, 0, 0, 0.25);
+      border-color: rgba(124, 108, 246, 0.3);
+    }
+
+    .field input:disabled {
+      opacity: 0.5;
+    }
+
+    /* ── Button — accent-primary with white text (matches login) ── */
+    .cancel-btn {
+      width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.625rem;
+      background: transparent;
+      color: #a0a0aa;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .cancel-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.04);
+      color: #efefef;
+    }
+    .cancel-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .connect-btn {
+      width: 100%;
+      padding: 0.625rem;
+      background: #7c6cf6;
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease, opacity 0.15s ease;
+    }
+
+    .connect-btn:hover:not(:disabled) {
+      background: rgba(124, 108, 246, 0.8);
+    }
+
+    .connect-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Error display — matches login error style ── */
+    .error-box {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: rgba(253, 164, 175, 0.1);
+      border: 1px solid rgba(253, 164, 175, 0.3);
+      border-radius: 4px;
+      color: #fca5a5;
+      font-size: 0.875rem;
+      text-align: center;
+    }
+
+    /* ── Instance info — success card with mint accent ── */
+    .instance-info {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: rgba(134, 239, 172, 0.1);
+      border: 1px solid rgba(134, 239, 172, 0.25);
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .instance-info .name {
+      font-weight: 600;
+      color: #efefef;
+      font-size: 0.875rem;
+    }
+
+    .instance-info .version {
+      font-size: 0.75rem;
+      color: #a0a0aa;
+      margin-top: 0.125rem;
+    }
+
+    /* ── Loading state ── */
+    .loading-text {
+      margin-top: 1rem;
+      text-align: center;
+      font-size: 0.8125rem;
+      color: #5c5c68;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(92, 92, 104, 0.3);
+      border-top-color: #5c5c68;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.375rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Autofill dark theme ── */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+      -webkit-text-fill-color: #efefef;
+      -webkit-box-shadow: 0 0 0px 1000px #111118 inset;
+      transition: background-color 5000s ease-in-out 0s;
+    }
+
+    /* ── Selection ── */
+    ::selection {
+      background: rgba(134, 239, 172, 0.25);
+      color: #efefef;
+    }
+
+    /* ── Accessibility: reduced transparency ── */
+    @media (prefers-reduced-transparency: reduce) {
+      .card {
+        background: #252530;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="titlebar"></div>
+
+  <div class="content">
+    <div class="container">
+      <div class="card">
+        <div class="header">
+          <h1>Welcome to Backspace</h1>
+          <p>Connect to your instance</p>
+        </div>
+
+        <form id="picker-form">
+          <div class="field">
+            <label for="url-input">Instance URL</label>
+            <input
+              id="url-input"
+              type="text"
+              placeholder="backspace.example.com"
+              autocomplete="off"
+              spellcheck="false"
+              autofocus
+            />
+          </div>
+          <button type="submit" class="connect-btn" id="connect-btn">Connect</button>
+          <button type="button" class="cancel-btn" id="cancel-btn" style="display: none;">Cancel</button>
+        </form>
+
+        <div id="instance-info" class="instance-info" style="display: none;">
+          <div class="name" id="instance-name"></div>
+          <div class="version" id="instance-version"></div>
+        </div>
+
+        <div id="error-box" class="error-box" style="display: none;"></div>
+
+        <div id="loading" class="loading-text" style="display: none;">
+          <span class="spinner"></span> Connecting...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('picker-form');
+    const input = document.getElementById('url-input');
+    const btn = document.getElementById('connect-btn');
+    const errorBox = document.getElementById('error-box');
+    const loadingEl = document.getElementById('loading');
+    const infoEl = document.getElementById('instance-info');
+    const nameEl = document.getElementById('instance-name');
+    const versionEl = document.getElementById('instance-version');
+    const cancelBtn = document.getElementById('cancel-btn');
+    let savedUrl = null;
+
+    function normalizeUrl(raw) {
+      let url = raw.trim();
+      if (!url) return '';
+      // Strip trailing slashes
+      url = url.replace(/\/+$/, '');
+      // Prepend https:// if no protocol
+      if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+      return url;
+    }
+
+    function showError(text) {
+      errorBox.textContent = text;
+      errorBox.style.display = 'block';
+      loadingEl.style.display = 'none';
+    }
+
+    function hideError() {
+      errorBox.style.display = 'none';
+    }
+
+    function setLoading(loading) {
+      input.disabled = loading;
+      btn.disabled = loading;
+      cancelBtn.disabled = loading;
+      loadingEl.style.display = loading ? 'block' : 'none';
+      if (loading) {
+        hideError();
+      }
+    }
+
+    async function init() {
+      if (window.backspace && window.backspace.getInstanceUrl) {
+        try {
+          savedUrl = await window.backspace.getInstanceUrl();
+        } catch { savedUrl = null; }
+      }
+      if (savedUrl) {
+        input.value = savedUrl;
+        cancelBtn.style.display = 'block';
+        // Update header copy to reflect the "switch" intent rather than the
+        // first-run "welcome" framing.
+        document.querySelector('.header h1').textContent = 'Switch instance';
+        document.querySelector('.header p').textContent = 'Connect to a different Backspace instance, or cancel to stay.';
+      }
+    }
+    init();
+
+    cancelBtn.addEventListener('click', async () => {
+      if (!savedUrl) return;
+      cancelBtn.disabled = true;
+      btn.disabled = true;
+      if (window.backspace && window.backspace.setInstanceUrl) {
+        await window.backspace.setInstanceUrl(savedUrl);
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const url = normalizeUrl(input.value);
+      if (!url) {
+        showError('Please enter an instance URL');
+        return;
+      }
+
+      infoEl.style.display = 'none';
+      hideError();
+      setLoading(true);
+
+      try {
+        const res = await fetch(url + '/api/instance/info', {
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!res.ok) {
+          throw new Error('Server returned ' + res.status);
+        }
+
+        const data = await res.json();
+
+        if (!data.name) {
+          throw new Error('Not a Backspace instance');
+        }
+
+        // Show instance info
+        nameEl.textContent = data.name;
+        versionEl.textContent = data.version ? 'v' + data.version : '';
+        infoEl.style.display = 'block';
+        loadingEl.style.display = 'none';
+
+        // Save and navigate
+        if (window.backspace && window.backspace.setInstanceUrl) {
+          await window.backspace.setInstanceUrl(url);
+        }
+      } catch (err) {
+        setLoading(false);
+        infoEl.style.display = 'none';
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          showError('Connection timed out — check the URL and try again');
+        } else if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+          showError('Could not connect — check the URL and try again');
+        } else {
+          showError('Could not connect — ' + err.message);
+        }
+      }
+    });
+  </script>
+</body>
+</html>

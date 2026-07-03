@@ -1,0 +1,518 @@
+#!/usr/bin/env bash
+# ============================================================
+# Backspace — Production Installer
+# ============================================================
+# Sets up Backspace with Caddy (auto-HTTPS) and optional
+# LiveKit (voice/video) on a Linux server.
+#
+# Usage:
+#   ./install.sh                    Interactive setup
+#   Non-interactive — set any/all of these to skip the matching prompt:
+#     DOMAIN=chat.example.com ENABLE_VOICE=true INSTANCE_NAME="My Chat" ./install.sh
+# ============================================================
+
+set -euo pipefail
+
+# ── Output helpers ──────────────────────────────────────────
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
+success() { echo -e "${GREEN}  OK ${NC} $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
+error()   { echo -e "${RED}[ERR]${NC} $*" >&2; }
+
+step() {
+  echo ""
+  echo -e "${BOLD}${CYAN}─── $* ───${NC}"
+  echo ""
+}
+
+# Track whether we need sudo for docker commands
+DOCKER="docker"
+COMPOSE="docker compose"
+
+# ── Phase 1: Prerequisites ─────────────────────────────────
+
+step "Checking prerequisites"
+
+# Must be Linux — host networking (LiveKit) is Linux-only
+if [[ "$(uname -s)" != "Linux" ]]; then
+  error "Backspace production deployment requires Linux."
+  error "Detected: $(uname -s)"
+  error "For development, use: pnpm dev"
+  exit 1
+fi
+success "Linux detected"
+
+# Check Docker
+if ! command -v docker &>/dev/null; then
+  warn "Docker is not installed."
+  # `|| yn=""` so an EOF (non-interactive / piped stdin) doesn't trip `set -e`;
+  # an empty answer then falls through to the [Y/n] default of installing.
+  read -rp "Install Docker now? [Y/n] " yn || yn=""
+  if [[ "${yn,,}" == "n" ]]; then
+    error "Docker is required. Install it and re-run this script."
+    exit 1
+  fi
+  info "Installing Docker via official script..."
+  curl -fsSL https://get.docker.com | sh
+  sudo systemctl enable --now docker 2>/dev/null || true
+  # Resolve the current user via `id -un`, not $USER: under `set -u`, $USER is
+  # not guaranteed to be set (sudo, `su` without -l, cron, some `docker exec`
+  # contexts) and an unset reference would abort the script right after Docker
+  # was installed, leaving it half-configured.
+  run_user="$(id -un)"
+  sudo usermod -aG docker "$run_user"
+  warn "Added $run_user to docker group. You may need to log out and back in."
+  # Use sudo for the rest of this session
+  DOCKER="sudo docker"
+  COMPOSE="sudo docker compose"
+else
+  # Check if current user can talk to Docker daemon
+  if ! docker info &>/dev/null 2>&1; then
+    if sudo docker info &>/dev/null 2>&1; then
+      DOCKER="sudo docker"
+      COMPOSE="sudo docker compose"
+    else
+      error "Cannot connect to Docker daemon."
+      error "Is Docker running? Try: sudo systemctl start docker"
+      exit 1
+    fi
+  fi
+  success "Docker $(docker --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' || echo 'installed')"
+fi
+
+# Check Docker Compose
+if ! $COMPOSE version &>/dev/null 2>&1; then
+  error "Docker Compose plugin is not installed."
+  error "Install: https://docs.docker.com/compose/install/linux/"
+  exit 1
+fi
+success "Docker Compose $($COMPOSE version --short 2>/dev/null || echo 'installed')"
+
+# Check if ports 80/443 are available
+check_port() {
+  local port=$1
+  if ss -tlnp 2>/dev/null | grep -qE ":${port}\b"; then
+    local proc
+    proc=$(ss -tlnp 2>/dev/null | grep -E ":${port}\b" | grep -oP 'users:\(\("\K[^"]+' | head -1 || echo "unknown")
+    error "Port $port is already in use by: $proc"
+    error "Free port $port before running this script."
+    return 1
+  fi
+  return 0
+}
+
+# Only check ports if we're NOT already running (upgrade scenario)
+if ! $DOCKER ps --format '{{.Names}}' 2>/dev/null | grep -q '^caddy$'; then
+  port_ok=true
+  check_port 80  || port_ok=false
+  check_port 443 || port_ok=false
+  if [[ "$port_ok" == false ]]; then
+    exit 1
+  fi
+  success "Ports 80 and 443 are available"
+else
+  success "Caddy is already running (upgrade mode)"
+fi
+
+# Disk space check
+available_kb=$(df -k . 2>/dev/null | tail -1 | awk '{print $4}' || true)
+if [[ -n "$available_kb" ]] && (( available_kb < 3000000 )); then
+  warn "Low disk space: $((available_kb / 1024))MB available (recommend 3GB+)"
+else
+  success "Disk space OK"
+fi
+
+# Check for openssl (needed for secret generation)
+if ! command -v openssl &>/dev/null; then
+  error "openssl is required for generating secrets."
+  error "Install: sudo apt-get install openssl"
+  exit 1
+fi
+
+# ── Phase 2: Configuration ─────────────────────────────────
+
+step "Configuration"
+
+# Detect existing installation
+EXISTING_ENV=false
+if [[ -f .env ]]; then
+  EXISTING_ENV=true
+  info "Existing .env detected — secrets will be preserved."
+fi
+
+# Helper: read existing .env value (|| true prevents set -e from killing
+# the script when grep finds no match and returns exit code 1)
+env_val() {
+  if [[ -f .env ]]; then
+    grep "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- || true
+  fi
+}
+
+# ── Domain ──────────────────────────────────────────────────
+
+existing_domain=$(env_val DOMAIN)
+if [[ -n "${DOMAIN:-}" ]]; then
+  # Non-interactive: DOMAIN set via environment
+  :
+elif [[ -n "$existing_domain" ]]; then
+  read -rp "Domain [$existing_domain]: " DOMAIN
+  DOMAIN="${DOMAIN:-$existing_domain}"
+else
+  read -rp "Domain (e.g., chat.example.com): " DOMAIN
+fi
+
+if [[ -z "${DOMAIN:-}" ]]; then
+  error "Domain is required. Set it via the DOMAIN environment variable or enter it interactively."
+  exit 1
+fi
+
+# DNS verification
+info "Verifying DNS for ${DOMAIN}..."
+resolved_ip=""
+if command -v dig &>/dev/null; then
+  resolved_ip=$(dig +short "$DOMAIN" A 2>/dev/null | tail -1 || true)
+elif command -v getent &>/dev/null; then
+  # A non-resolving domain makes `getent hosts` exit 2, and with `set -o
+  # pipefail` that would abort the installer here — before the graceful
+  # "Could not resolve" warning below. Swallow it: an empty result is the
+  # intended "not resolved yet" signal (installing before DNS is set up is
+  # explicitly supported).
+  resolved_ip=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1 || true)
+fi
+
+my_ip=$(curl -s4 --connect-timeout 5 ifconfig.me 2>/dev/null || curl -s4 --connect-timeout 5 icanhazip.com 2>/dev/null || echo "")
+
+if [[ -z "$resolved_ip" ]]; then
+  warn "Could not resolve ${DOMAIN}. Ensure DNS is configured before Caddy can issue certificates."
+elif [[ -n "$my_ip" && "$resolved_ip" != "$my_ip" ]]; then
+  warn "${DOMAIN} resolves to ${resolved_ip}, but this server appears to be ${my_ip}"
+  warn "Let's Encrypt certificate issuance may fail if DNS doesn't point here."
+else
+  success "${DOMAIN} resolves to ${resolved_ip:-verified}"
+fi
+
+# ── Voice/Video ─────────────────────────────────────────────
+
+existing_profiles=$(env_val COMPOSE_PROFILES)
+if [[ -n "${ENABLE_VOICE:-}" ]]; then
+  # Non-interactive
+  :
+elif [[ "$existing_profiles" == *"voice"* ]]; then
+  read -rp "Voice/video is currently enabled. Keep it? [Y/n] " yn
+  ENABLE_VOICE=$([[ "${yn,,}" == "n" ]] && echo false || echo true)
+else
+  read -rp "Enable voice/video? (requires open UDP ports) [Y/n] " yn
+  ENABLE_VOICE=$([[ "${yn,,}" == "n" ]] && echo false || echo true)
+fi
+ENABLE_VOICE="${ENABLE_VOICE:-true}"
+
+# ── Instance Name ───────────────────────────────────────────
+
+existing_name=$(env_val INSTANCE_NAME)
+if [[ -z "${INSTANCE_NAME:-}" ]]; then
+  read -rp "Instance name [${existing_name:-Backspace}]: " INSTANCE_NAME
+  INSTANCE_NAME="${INSTANCE_NAME:-${existing_name:-Backspace}}"
+fi
+
+# ── Phase 3: Generate Secrets ───────────────────────────────
+
+step "Generating configuration"
+
+# Preserve existing secrets, generate new ones where missing
+JWT_SECRET=$(env_val JWT_SECRET)
+if [[ -z "$JWT_SECRET" || "$JWT_SECRET" == "change_me"* ]]; then
+  JWT_SECRET=$(openssl rand -hex 32)
+  info "Generated new JWT_SECRET"
+else
+  info "Preserved existing JWT_SECRET"
+fi
+
+LIVEKIT_API_KEY=$(env_val LIVEKIT_API_KEY)
+LIVEKIT_API_SECRET=$(env_val LIVEKIT_API_SECRET)
+if [[ "$ENABLE_VOICE" == true ]]; then
+  if [[ -z "$LIVEKIT_API_KEY" ]]; then
+    LIVEKIT_API_KEY="API$(openssl rand -hex 8)"
+    info "Generated new LIVEKIT_API_KEY"
+  else
+    info "Preserved existing LIVEKIT_API_KEY"
+  fi
+  if [[ -z "$LIVEKIT_API_SECRET" ]]; then
+    LIVEKIT_API_SECRET=$(openssl rand -hex 24)
+    info "Generated new LIVEKIT_API_SECRET"
+  else
+    info "Preserved existing LIVEKIT_API_SECRET"
+  fi
+fi
+
+# ── Phase 4: Write Configuration Files ─────────────────────
+
+step "Writing configuration files"
+
+# ── .env ────────────────────────────────────────────────────
+
+cat > .env << EOF
+# Backspace Configuration
+# Generated by install.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+DOMAIN=${DOMAIN}
+
+# Server
+PORT=3000
+HOST=0.0.0.0
+
+# Authentication
+JWT_SECRET=${JWT_SECRET}
+
+# Registration
+REGISTRATION_OPEN=true
+
+# Max upload size in bytes (100MB)
+MAX_UPLOAD_SIZE=104857600
+EOF
+
+if [[ "$ENABLE_VOICE" == true ]]; then
+  cat >> .env << EOF
+
+# LiveKit Voice/Video
+LIVEKIT_URL=wss://${DOMAIN}/livekit
+LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+
+# Activate the LiveKit service in Docker Compose
+COMPOSE_PROFILES=voice
+EOF
+else
+  cat >> .env << EOF
+
+# LiveKit Voice/Video (disabled)
+# To enable: fill in credentials and add COMPOSE_PROFILES=voice
+# LIVEKIT_URL=wss://${DOMAIN}/livekit
+# LIVEKIT_API_KEY=
+# LIVEKIT_API_SECRET=
+EOF
+fi
+
+success ".env"
+
+# ── livekit.yaml ────────────────────────────────────────────
+
+# Always generate livekit.yaml so docker-compose config doesn't complain
+# about a missing bind mount if someone inspects the full compose file.
+if [[ "$ENABLE_VOICE" == true ]]; then
+  cat > livekit.yaml << EOF
+# LiveKit Server Configuration
+# Generated by install.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  use_external_ip: true
+
+turn:
+  enabled: true
+  domain: ${DOMAIN}
+  udp_port: 3478
+
+keys:
+  ${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}
+
+room:
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20
+
+logging:
+  level: info
+EOF
+  success "livekit.yaml"
+else
+  cat > livekit.yaml << EOF
+# LiveKit is disabled. Run install.sh and enable voice to configure.
+port: 7880
+keys: {}
+logging:
+  level: info
+EOF
+  info "livekit.yaml (placeholder — voice disabled)"
+fi
+
+# ── Data directory ──────────────────────────────────────────
+
+mkdir -p ./data/uploads
+success "data/"
+
+# ── Phase 5: Migrate legacy Docker volume (if present) ─────
+
+if $DOCKER volume inspect backspace-data &>/dev/null 2>&1; then
+  if [[ ! -f ./data/backspace.db ]]; then
+    step "Migrating data from legacy Docker volume"
+    info "Copying backspace-data volume contents to ./data ..."
+    $DOCKER run --rm \
+      -v backspace-data:/source:ro \
+      -v "$(pwd)/data:/target" \
+      alpine sh -c "cp -a /source/. /target/"
+    success "Data migrated from backspace-data volume to ./data"
+    info "The old volume is still intact. Remove it with: docker volume rm backspace-data"
+  fi
+fi
+
+# Also clean up legacy external network if it exists (no longer needed)
+if $DOCKER network inspect backspace-net &>/dev/null 2>&1; then
+  info "Legacy backspace-net network detected. It is no longer needed."
+  info "Remove after verifying: docker network rm backspace-net"
+fi
+
+# ── Phase 6: Build & Deploy ────────────────────────────────
+
+step "Deploying Backspace"
+
+# AGPL-3.0 § 13 source offer: bake the running build's git commit into the image
+# so GET /api/instance/info advertises the exact source version. Passed straight
+# to the build as --build-arg (survives the sudo/non-sudo $COMPOSE split, unlike
+# an exported env var). Empty when this isn't a git checkout (e.g. tarball
+# install) or git is unavailable → the server treats the commit as null.
+BUILD_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo '')"
+if [[ -n "$BUILD_COMMIT" ]]; then
+  info "Building Backspace image from commit ${BUILD_COMMIT} (this may take a few minutes on first run)..."
+else
+  info "Building Backspace image (this may take a few minutes on first run)..."
+fi
+$COMPOSE build --quiet --build-arg BACKSPACE_COMMIT="$BUILD_COMMIT"
+
+info "Starting services..."
+$COMPOSE up -d
+
+# Wait for health check
+info "Waiting for Backspace to become healthy..."
+healthy=false
+for i in $(seq 1 60); do
+  status=$($DOCKER inspect backspace --format '{{.State.Health.Status}}' 2>/dev/null || echo "waiting")
+  if [[ "$status" == "healthy" ]]; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+if [[ "$healthy" == true ]]; then
+  success "Backspace is healthy"
+else
+  warn "Health check hasn't passed yet. Check logs: docker compose logs backspace"
+fi
+
+# ── Phase 7: Set instance name ──────────────────────────────
+
+if [[ "$healthy" == true && -n "$INSTANCE_NAME" && "$INSTANCE_NAME" != "Backspace" ]]; then
+  # Pass the name through the container environment (never string-interpolated
+  # into the JS source) so names with quotes/spaces/'$' are stored verbatim and
+  # can't break or inject into the node -e program.
+  $DOCKER exec -e BS_INSTANCE_NAME="$INSTANCE_NAME" -w /app/packages/server backspace node -e '
+    const Database = require("better-sqlite3");
+    const db = new Database("/app/data/backspace.db");
+    const changes = db.prepare("UPDATE instance_settings SET instance_name = ? WHERE id = 1").run(process.env.BS_INSTANCE_NAME).changes;
+    db.close();
+    if (changes === 0) { console.error("No rows updated"); process.exit(1); }
+  ' 2>/dev/null && success "Instance name set to: ${INSTANCE_NAME}" || warn "Could not set instance name (set it manually in admin settings)"
+fi
+
+# ── Phase 7.5: Verify HTTPS reachability ───────────────────
+# The internal healthcheck only proves the app is up *inside* Docker. What the
+# operator actually cares about is whether https://DOMAIN works — which needs
+# Caddy to have obtained a publicly-trusted TLS certificate, and that only
+# happens once DNS points here AND ports 80/443 are reachable from the internet.
+#
+# We test this hairpin-safely with `curl --resolve DOMAIN:443:127.0.0.1`: it
+# connects to the LOCAL Caddy but presents the real SNI/Host and performs full
+# certificate verification. Success means Caddy is serving a valid, publicly-
+# trusted certificate for DOMAIN *and* the app answers over it — which is only
+# possible once issuance has succeeded. Crucially this avoids a false negative
+# on self-hosted boxes that can't reach their own public address (router NAT
+# hairpin), where a plain external request would time out even though the site
+# is perfectly reachable for everyone else.
+
+https_status="skipped"
+if [[ "$healthy" == true ]]; then
+  step "Verifying HTTPS"
+  https_status="pending"
+
+  info "Checking for a valid TLS certificate on ${DOMAIN} (Caddy issues it on first start)..."
+  for i in $(seq 1 15); do
+    if curl -fsS --max-time 6 --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/health" >/dev/null 2>&1; then
+      https_status="live"
+      break
+    fi
+    sleep 2
+  done
+
+  if [[ "$https_status" == "live" ]]; then
+    success "HTTPS is live — a valid TLS certificate is installed and Backspace is serving over it."
+  else
+    warn "HTTPS is not live yet — Caddy hasn't obtained a publicly-trusted certificate."
+  fi
+fi
+
+# ── Phase 8: Summary ───────────────────────────────────────
+
+step "Backspace is running"
+
+echo -e "  ${BOLD}URL:${NC}       https://${DOMAIN}"
+echo -e "  ${BOLD}Instance:${NC}  ${INSTANCE_NAME}"
+echo -e "  ${BOLD}Voice:${NC}     $(if [[ "$ENABLE_VOICE" == true ]]; then echo 'Enabled'; else echo 'Disabled'; fi)"
+case "$https_status" in
+  live)    echo -e "  ${BOLD}HTTPS:${NC}     ${GREEN}Live${NC}" ;;
+  pending) echo -e "  ${BOLD}HTTPS:${NC}     ${YELLOW}Not live yet${NC}" ;;
+esac
+echo ""
+
+if [[ "$https_status" == "pending" ]]; then
+  echo -e "  ${YELLOW}The app is up, but HTTPS isn't live yet — Caddy is still trying to get a certificate.${NC}"
+  echo -e "  ${YELLOW}This is normal right after install; it comes up automatically once BOTH are true:${NC}"
+  echo "    1. ${DOMAIN} resolves to THIS host's public IP"
+  echo "    2. Ports 80 and 443 are open and forwarded to this host from the internet"
+  echo -e "  Watch progress:  ${BOLD}docker compose logs -f caddy${NC}"
+  echo ""
+  echo -e "  ${YELLOW}Then open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
+else
+  echo -e "  ${YELLOW}Open https://${DOMAIN} and create the first account — it becomes the instance admin.${NC}"
+fi
+echo ""
+echo -e "  ${BOLD}Commands:${NC}"
+echo "    docker compose logs -f          # Watch logs"
+echo "    docker compose restart          # Restart all services"
+echo "    docker compose down             # Stop everything"
+echo "    docker compose up -d --build    # Rebuild after code changes"
+
+echo ""
+# Best-effort primary LAN IP (the address a router would port-forward to).
+LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[0-9.]+' | head -1 || true)
+echo -e "  ${BOLD}Ports to open${NC} — on this host's firewall (ufw / firewalld / cloud"
+echo -e "  security group)${BOLD} and,${NC} if the host is behind a router, also"
+echo -e "  port-forward them to this host${LAN_IP:+ (${LAN_IP})}:"
+echo ""
+echo "    80/TCP            HTTP  — cert challenge + HTTP→HTTPS redirect      (required)"
+echo "    443/TCP           HTTPS — web app, API, WebSocket, LiveKit signal   (required)"
+if [[ "$ENABLE_VOICE" == true ]]; then
+  echo "    3478/UDP          TURN  — WebRTC NAT traversal                       (voice)"
+  echo "    7881/TCP          WebRTC TCP fallback                              (voice)"
+  echo "    50000-60000/UDP   WebRTC media — voice / video / screen-share      (voice)"
+fi
+echo ""
+echo -e "  ${YELLOW}80 and 443 must be reachable from the internet before HTTPS can come up.${NC}"
+if [[ "$ENABLE_VOICE" == true ]]; then
+  echo -e "  ${YELLOW}Voice/video won't connect until the voice ports above are reachable too.${NC}"
+fi
+echo -e "  LiveKit's own signaling port (7880) stays internal — do ${BOLD}not${NC} forward it."
+
+echo ""

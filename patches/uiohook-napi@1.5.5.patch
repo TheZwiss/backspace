@@ -1,0 +1,44 @@
+diff --git a/libuiohook/src/darwin/input_hook.c b/libuiohook/src/darwin/input_hook.c
+index e6cd6cec9c3c5a26cda5eccc5fe9eb087752eef9..954f0c5fe8ba1325124cf6117d4b66a788c52a60 100644
+--- a/libuiohook/src/darwin/input_hook.c
++++ b/libuiohook/src/darwin/input_hook.c
+@@ -1149,34 +1149,26 @@ static int create_event_runloop_info(event_runloop_info **hook) {
+     }
+ 
+     // Setup the event mask to listen for.
++    // [Backspace patch] Stripped left/right mouse, mouse-move, drag, and scroll
++    // events. Backspace only needs keyboard + mouse buttons 3+ (PTT side buttons).
+     CGEventMask event_mask = CGEventMaskBit(kCGEventKeyDown) |
+             CGEventMaskBit(kCGEventKeyUp) |
+             CGEventMaskBit(kCGEventFlagsChanged) |
+ 
+-            CGEventMaskBit(kCGEventLeftMouseDown) |
+-            CGEventMaskBit(kCGEventLeftMouseUp) |
+-            CGEventMaskBit(kCGEventLeftMouseDragged) |
+-
+-            CGEventMaskBit(kCGEventRightMouseDown) |
+-            CGEventMaskBit(kCGEventRightMouseUp) |
+-            CGEventMaskBit(kCGEventRightMouseDragged) |
+-
+             CGEventMaskBit(kCGEventOtherMouseDown) |
+             CGEventMaskBit(kCGEventOtherMouseUp) |
+-            CGEventMaskBit(kCGEventOtherMouseDragged) |
+-
+-            CGEventMaskBit(kCGEventMouseMoved) |
+-            CGEventMaskBit(kCGEventScrollWheel) |
+ 
+             // NOTE This event is undocumented and used
+             // for caps-lock release and multi-media keys.
+             CGEventMaskBit(NX_SYSDEFINED);
+ 
+     // Create the event tap.
++    // [Backspace patch] Listen-only tap cannot freeze the system — macOS delivers
++    // events asynchronously without waiting for the callback to return.
+     (*hook)->port = CGEventTapCreate(
+             kCGSessionEventTap,       // kCGHIDEventTap
+             kCGHeadInsertEventTap,    // kCGTailAppendEventTap
+-            kCGEventTapOptionDefault, // kCGEventTapOptionListenOnly See https://github.com/kwhat/jnativehook/issues/22
++            kCGEventTapOptionListenOnly,
+             event_mask,
+             hook_event_proc,
+             NULL);

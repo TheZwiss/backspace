@@ -1,0 +1,563 @@
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/DMSans-Variable-Italic.woff2') format('woff2');
+  font-weight: 100 1000;
+  font-style: italic;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Matte Surfaces (RGB channels for Tailwind opacity support) ── */
+    --bg-base: 11 11 16;
+    --bg-channel: 26 26 35;
+    --bg-chat: 19 19 26;
+    --bg-members: 26 26 35;
+    --bg-elevated: 37 37 48;
+    --bg-input: 17 17 24;
+    --bg-overlay: rgba(0, 0, 0, 0.85);
+
+    /* ── Borders ── */
+    --border-hard: 34 34 44;
+    --border-soft: 42 42 54;
+
+    /* ── Pastel Accents ── */
+    --accent-mint: 134 239 172;
+    --accent-peach: 252 165 165;
+    --accent-lavender: 196 181 253;
+    --accent-sky: 125 211 252;
+    --accent-amber: 252 211 77;
+    --accent-rose: 253 164 175;
+    --accent-coral: 251 146 60;
+
+    /* ── Primary Action (replaces blurple) ── */
+    --accent-primary: 124 108 246;
+    --accent-primary-hover: 107 92 224;
+    --accent-primary-active: 95 79 208;
+
+    /* ── Text Hierarchy ── */
+    --text-primary: 239 239 239;
+    --text-secondary: 160 160 170;
+    --text-tertiary: 92 92 104;
+    --text-category: 72 72 84;
+    --text-message: 216 216 222;
+    --text-link: 125 211 252;
+    --text-positive: 134 239 172;
+    --text-warning: 252 211 77;
+    --text-danger: 252 165 165;
+
+    /* ── Interactive ── */
+    --interactive-hover: rgba(255, 255, 255, 0.06);
+    --interactive-active: rgba(255, 255, 255, 0.12);
+    --interactive-selected: rgba(255, 255, 255, 0.16);
+    --interactive-muted: 58 58 68;
+
+    /* ── Status ── */
+    --status-online: 134 239 172;
+    --status-idle: 252 211 77;
+    --status-dnd: 252 165 165;
+    --status-offline: 58 58 68;
+
+    /* ── Glass Material ── */
+    --glass-bg: rgba(20, 20, 26, 0.52);
+    --glass-modal-bg: rgba(20, 20, 26, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-highlight: rgba(255, 255, 255, 0.05);
+
+    /* ── Notification ── */
+    --notification: 253 164 175;
+  }
+
+  * {
+    @apply border-0;
+    outline: none !important;
+  }
+
+  ::selection {
+    background: rgba(134, 239, 172, 0.25);
+    color: rgb(var(--text-primary));
+  }
+
+  html, body, #root {
+    @apply h-full w-full overflow-hidden bg-surface-base text-txt-message;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Suppress native text selection and callout on mobile interactive elements.
+     Our global useGlobalLongPress handler provides context menus instead.
+     Text can still be copied via context menu "Copy Text" option. */
+  @media (max-width: 767px) {
+    * {
+      -webkit-touch-callout: none;
+    }
+
+    button, [role="button"], [data-context-menu] {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+
+  /* Thin scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--bg-input));
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--bg-channel));
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Dark theme auto-fill */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    -webkit-box-shadow: 0 0 0px 1000px #111118 inset;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+@layer components {
+  /* ── Glass Material Tiers ──
+   * .glass        — Popovers, context menus, autocomplete (small, no backdrop)
+   * .glass-modal  — Center-screen dialogs (large, with backdrop, higher opacity for legibility)
+   * .glass-strip  — Space sidebar edge (moved to @layer utilities to win over bg-surface-* utilities)
+   * .glass-bubble — Persistent floating controls (voice bar, input pill)
+   * .glass-pill   — Inline decorations (reactions, tags, lighter blur)
+   *
+   * RULE: Every floating surface uses a glass tier. Never use bg-surface-elevated for overlays.
+   * See CLAUDE.md "Surface Material Tiers" for the full decision guide.
+   */
+
+  /* Standard glass — popovers, floating elements */
+  .glass {
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.25),
+      0 8px 24px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 var(--glass-highlight);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  /* Floating bubble glass — bottom bar, input pill */
+  .glass-bubble {
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.20),
+      0 8px 24px rgba(0, 0, 0, 0.12),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Modal glass — center-screen dialogs with backdrop */
+  .glass-modal {
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-modal-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.30),
+      0 12px 40px rgba(0, 0, 0, 0.20),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  /* Reaction pill glass — lighter blur for small inline elements */
+  .glass-pill {
+    backdrop-filter: blur(12px) saturate(110%);
+    -webkit-backdrop-filter: blur(12px) saturate(110%);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+  .glass-pill:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+  .glass-pill-mine {
+    background: rgba(134, 239, 172, 0.10);
+    border-color: rgba(134, 239, 172, 0.25);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(134, 239, 172, 0.06);
+  }
+  .glass-pill-mine:hover {
+    background: rgba(134, 239, 172, 0.16);
+  }
+
+  /* ── Input Tiers ── */
+  .input-standard {
+    @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-2 focus:ring-accent-primary focus:border-accent-primary/30
+           transition-colors;
+  }
+  .input-search {
+    @apply bg-surface-input rounded px-3 py-1.5 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-1 focus:ring-accent-primary focus:border-accent-primary/30
+           transition-colors;
+  }
+  .input-embedded {
+    @apply bg-transparent text-txt-primary
+           placeholder:text-txt-tertiary/60 outline-none;
+  }
+  .input-danger {
+    @apply bg-surface-input rounded px-3 py-2 text-sm text-txt-primary
+           placeholder:text-txt-tertiary outline-none
+           border border-white/[0.06] shadow-input
+           focus:ring-2 focus:ring-accent-rose focus:border-accent-rose/30
+           transition-colors;
+  }
+
+  /* iOS Safari auto-zooms on input focus when computed font-size is below
+     16px. Bumping every input tier (and bare <input>/<textarea>/<select>)
+     to 16px on mobile prevents the zoom without changing desktop sizing.
+     `!important` is required because Tailwind utilities (e.g. `text-[15px]`
+     on the chat composer textarea, `text-sm` on form fields) are emitted in
+     the @layer utilities block — which comes after @layer components in the
+     cascade — so they would otherwise override these rules.
+     There is no legitimate reason to use a <16px font-size on a mobile
+     input; the override is universally correct. */
+  @media (max-width: 767px) {
+    .input-standard,
+    .input-search,
+    .input-embedded,
+    .input-danger,
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="datetime-local"],
+    textarea,
+    select,
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"] {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* Accessibility: fall back to solid surfaces when transparency is reduced */
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-channel));
+  }
+  .glass-strip {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-channel));
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.20);
+  }
+  .glass-bubble {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-elevated));
+  }
+  .glass-modal {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-elevated));
+  }
+  .glass-pill {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgb(var(--bg-elevated));
+  }
+}
+
+@layer utilities {
+  /* Space strip glass — in utilities layer so md:glass-strip wins over bg-surface-* */
+  .glass-strip {
+    backdrop-filter: blur(20px) saturate(120%);
+    -webkit-backdrop-filter: blur(20px) saturate(120%);
+    background: var(--glass-bg);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      2px 0 12px rgba(0, 0, 0, 0.20);
+  }
+
+  .rounded-inherit {
+    border-radius: inherit;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 100px;
+  }
+}
+
+/* ── Emoji Mart Overrides ── */
+.emoji-picker-wrapper em-emoji-picker {
+  --em-rgb-background: 20, 20, 26;
+  --em-rgb-input: 17, 17, 24;
+  --em-rgb-color: 216, 216, 222;
+  --em-color-border: rgba(255, 255, 255, 0.07);
+  --em-color-border-over: rgba(255, 255, 255, 0.12);
+  --rgb-accent: 124, 108, 246;
+  --font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  border: none !important;
+  background: transparent !important;
+  max-height: 400px;
+}
+
+/* Mobile bottom-sheet variant: stretch the custom element to fill the
+   sheet's width (so `dynamicWidth: true` can recompute the grid against
+   the real container). Height is left to emoji-mart's own layout — the
+   picker manages its internal scroll region against its measured height
+   and forcing `height: 100%` here would collapse its category nav off-
+   screen because the custom element doesn't propagate flex sizing into
+   its shadow root. The 400px desktop cap is fine for mobile too; the
+   sheet's `max-height: min(60dvh, 60vh)` gives us ~440-500px to play
+   with on common phone viewports. */
+.emoji-picker-wrapper--mobile em-emoji-picker {
+  width: 100%;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.15s ease-out;
+}
+
+/* Slides into place from above — used for popovers that open upward */
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-slide-down {
+  animation: slideDown 0.15s ease-out;
+}
+
+@keyframes typingFadeIn {
+  from { transform: translateY(4px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-typing-in {
+  animation: typingFadeIn 0.15s ease-out;
+}
+
+@keyframes gradientPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.animate-gradient-pulse {
+  animation: gradientPulse 4s ease-in-out infinite;
+}
+
+/* ── Skeleton Loading ── */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.04) 0%,
+    rgba(255,255,255,0.08) 40%,
+    rgba(255,255,255,0.04) 80%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-circle { border-radius: 50%; }
+.skeleton-bar    { height: 12px; border-radius: 6px; }
+.skeleton-block  { border-radius: 8px; }
+
+@keyframes search-flash {
+  0% { background-color: rgba(124, 108, 246, 0.2); }
+  100% { background-color: transparent; }
+}
+.search-highlight { animation: search-flash 2s ease-out; }
+
+@keyframes stepForward {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes stepBack {
+  from { transform: translateX(-24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-step-forward {
+  animation: stepForward 0.25s ease-out;
+}
+.animate-step-back {
+  animation: stepBack 0.25s ease-out;
+}
+
+/* ── Incoming Call Animations ── */
+
+/* Liquid ripple: soft gradient orb that expands and dissolves */
+@keyframes callRippleLiquid {
+  0% {
+    scale: 0.3;
+    opacity: 0.45;
+  }
+  70% {
+    opacity: 0.12;
+  }
+  100% {
+    scale: 2.8;
+    opacity: 0;
+  }
+}
+
+/* Soft multi-layered halo around avatar */
+@keyframes callGlowSoft {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(134, 239, 172, 0.06),
+      0 0 40px rgba(134, 239, 172, 0.04),
+      0 0 80px rgba(134, 239, 172, 0.02);
+  }
+  50% {
+    box-shadow:
+      0 0 24px rgba(134, 239, 172, 0.12),
+      0 0 48px rgba(134, 239, 172, 0.06),
+      0 0 96px rgba(134, 239, 172, 0.03);
+  }
+}
+
+/* Traveling light refraction across glass card surface */
+@keyframes callRefraction {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+/* Gentle breathing glow on accept button */
+@keyframes callButtonBreath {
+  0%, 100% {
+    box-shadow:
+      0 0 12px rgba(134, 239, 172, 0.08),
+      0 0 28px rgba(134, 239, 172, 0.04);
+  }
+  50% {
+    box-shadow:
+      0 0 18px rgba(134, 239, 172, 0.16),
+      0 0 36px rgba(134, 239, 172, 0.06);
+  }
+}
+
+.animate-call-ripple {
+  animation: callRippleLiquid 4s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+.animate-call-glow {
+  animation: callGlowSoft 4s ease-in-out infinite;
+}
+
+.animate-call-button-glow {
+  animation: callButtonBreath 3s ease-in-out infinite;
+}
+
+/* Light refraction shimmer overlay on the call card */
+.call-refraction::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(134, 239, 172, 0.03) 42%,
+    rgba(134, 239, 172, 0.05) 50%,
+    rgba(134, 239, 172, 0.03) 58%,
+    transparent 65%,
+    transparent 100%
+  );
+  animation: callRefraction 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-call-ripple,
+  .animate-call-glow,
+  .animate-call-button-glow { animation: none !important; }
+  .call-refraction::after { animation: none !important; opacity: 0; }
+  .skeleton { animation: none; }
+}
+
+/* ── MOBILE SCREEN TRANSITIONS ── */
+.mobile-screen-enter {
+  transform: translateX(100%);
+}
+.mobile-screen-enter-active {
+  transform: translateX(0);
+  transition: transform 200ms ease-out;
+}
+.mobile-screen-exit-active {
+  transform: translateX(100%);
+  transition: transform 200ms ease-out;
+}
+
+/* ── Electron window drag regions ── */
+.titlebar-drag { -webkit-app-region: drag; }
+.titlebar-no-drag { -webkit-app-region: no-drag; }

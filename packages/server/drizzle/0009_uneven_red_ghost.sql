@@ -1,0 +1,1 @@
+ALTER TABLE `federation_reset_events` ADD `acknowledged_at` integer;

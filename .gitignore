@@ -1,0 +1,93 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+dist-electron/
+installers/
+packages/web/dist/
+packages/server/dist/
+packages/shared/dist/
+packages/desktop/dist/
+packages/desktop/dist-electron/
+
+# Data
+data/
+*.db
+*.db-journal
+
+# Environment — ignore every .env variant except the tracked example
+.env
+.env.*
+!.env.example
+
+# Credentials / private keys (defense-in-depth; none should ever be committed)
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+
+# Generated deployment config (contains secrets)
+livekit.yaml
+
+# Raw screenshot originals — optimized WebP copies live in docs/screenshots/
+demo-pictures/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+._*
+*.swp
+*.swo
+*~
+
+# Internal process docs / scratch (never published; see scripts/prepare-public-release.sh)
+*.rtf
+*.rtfd/
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+# tsc emit artifacts — Vite handles compilation, tsc is type-check only
+packages/web/src/**/*.js
+
+# Misc
+.cache/
+tmp/
+
+# Worktrees
+.worktrees/
+
+# Superpowers brainstorm artifacts
+.superpowers/
+
+# Playwright MCP session artifacts (snapshots, console logs, screenshots)
+.playwright-mcp/
+
+# Local files
+Gemini Starter.rtf
+
+# Test harness scratch directories
+tests/.tmp/
+tests/reports/*
+!tests/reports/.gitkeep
+
+# Claude Code agent scratch — worktrees are embedded repos that, if committed
+# via `git add -A`, produce confusing partial-checkout behavior on clones.
+.claude/worktrees/
+.claude/scheduled_tasks.lock
