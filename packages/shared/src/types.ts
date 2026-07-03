@@ -1163,6 +1163,24 @@ export interface FederationSyncResponse {
   checkpoint: number;
 }
 
+// Detached-account re-attach (re-attach spec §3.1–3.2).
+// Minted on the home instance D for a logged-in native user.
+export interface AttachProofResponse {
+  token: string;
+}
+
+// Body of POST /api/users/@me/reattach on the peer R — the one-time proof token
+// minted by the home instance, verified with D over signed S2S.
+export interface ReattachRequest {
+  token: string;
+}
+
+// Success response of POST /api/users/@me/reattach — the re-bound self-view.
+export interface ReattachResponse {
+  success: true;
+  user: User;
+}
+
 export interface FederationUserLookupRequest {
   username: string;
 }
