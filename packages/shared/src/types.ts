@@ -27,6 +27,8 @@ export interface User {
   homeUserId: string | null;
   replicatedInstances: ReplicatedInstance[];
   showActivity?: boolean;
+  /** Self-view only: this federated account's home instance was reset/lost — it now operates as a sovereign local account (detach spec). */
+  federationHomeOrphaned?: boolean;
 }
 
 export interface ReplicatedInstance {
@@ -1044,6 +1046,12 @@ export interface FederationRelayProfileSnapshot {
   // already-online remote stays stuck at 'offline' on the receiver until they
   // next change status.
   status?: 'online' | 'idle' | 'dnd' | 'offline' | null;
+  /**
+   * The user is tombstoned on the instance that built this snapshot.
+   * Receivers must not create a new stub for this identity; internal
+   * '!deleted:<id>' usernames are never shipped (dead-incarnation spec §3.3).
+   */
+  deleted?: boolean | null;
 }
 
 export interface FederationProfileUpdatePayload {
@@ -1155,6 +1163,24 @@ export interface FederationSyncResponse {
   checkpoint: number;
 }
 
+// Detached-account re-attach (re-attach spec §3.1–3.2).
+// Minted on the home instance D for a logged-in native user.
+export interface AttachProofResponse {
+  token: string;
+}
+
+// Body of POST /api/users/@me/reattach on the peer R — the one-time proof token
+// minted by the home instance, verified with D over signed S2S.
+export interface ReattachRequest {
+  token: string;
+}
+
+// Success response of POST /api/users/@me/reattach — the re-bound self-view.
+export interface ReattachResponse {
+  success: true;
+  user: User;
+}
+
 export interface FederationUserLookupRequest {
   username: string;
 }
@@ -1201,7 +1227,7 @@ export interface FederationPeer {
  */
 export interface FederationOrphanedAccount {
   id: string;
-  username: string; // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  username: string; // preserved original handle (detach spec); legacy rows may carry '!orphaned:{uid}@domain'
   displayName: string | null;
   avatarColor: string | null;
   ownedSpaces: { id: string; name: string }[];
@@ -1219,6 +1245,7 @@ export interface FederationResetEvent {
   newEpoch: string | null;
   detectedAt: number;
   resolvedAt: number | null;
+  acknowledgedAt: number | null;
   stubCount: number;
   orphanedAccountCount: number;
   orphanedAccounts: FederationOrphanedAccount[];

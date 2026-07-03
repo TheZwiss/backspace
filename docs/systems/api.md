@@ -11,9 +11,12 @@ POST /auth/register         { username, password, displayName?, avatarColor?, ho
 GET  /auth/check-username    ?username= → { available, reason? }
 GET  /auth/check-invite      ?token=    → CheckInviteResponse
 POST /auth/login             { username, password } → { token, user }
+POST /auth/attach-proof      (JWT, rate-limited 5/15min)  { targetDomain } → { token }   (AttachProofResponse)
 ```
 
-**`POST /auth/login`** — request/response shape unchanged, but two internal controls from instance-epoch self-healing gate the flow: (1) an account with `federationHomeOrphaned = 1` (home instance factory-reset) is rejected with the generic 401 *before* password verification; (2) the federated password self-heal now runs an **epoch guard** — it re-hashes the stale local password only if the home instance's authenticated epoch (`fetchPeerEpoch`) matches the trusted baseline, failing closed when the epoch differs or can't be determined. No wire-shape change. See `auth.md` §4.
+**`POST /auth/attach-proof`** — JWT-authenticated. Mints a one-time 256-bit token (`randomBytes(32).toString('hex')`) for the logged-in **native** user, stored in `federation_attach_proofs` bound to `{ homeUserId, targetDomain, expiresAt = now+60s }`; expired rows are janitored on each mint (the delete targets `expires_at < now`; a used-but-unexpired row lingers until it expires). The token is handed to the peer named by `targetDomain`, which redeems it via `POST /federation/verify-attach-proof` to re-attach the caller's detached account there. See `federation.md` "S2S Detached-Account Re-Attach Proof" and re-attach spec §3.1.
+
+**`POST /auth/login`** — request/response shape unchanged, but two internal controls from instance-epoch self-healing gate the flow: (1) an account with `federationHomeOrphaned = 1` (home instance factory-reset) is **detached** — a sovereign local account whose local password hash is the sole authority; it logs in normally with that local password (the detach pivot removed the old pre-verification freeze), and the flag's only login effect is to permanently disable self-heal (step 7); (2) for non-detached federated accounts, the password self-heal runs an **epoch guard** — it re-hashes the stale local password only if the home instance's authenticated epoch (`fetchPeerEpoch`) matches the trusted baseline, failing closed when the epoch differs or can't be determined. A detached account can be re-bound to the owner's new home identity via `POST /users/@me/reattach` (re-attach spec §3.2), which clears the flag and re-enables normal federated semantics. No wire-shape change. See `auth.md` §4.
 
 **`POST /auth/register` gating** — branches on whether `homeInstance` is set:
 - **Federated path** (`homeInstance` set): gated solely by `instance_settings.federatedRegistrationOpen`. `inviteToken` is ignored entirely (not validated, not consumed). 403 `Federated registration is closed on this instance` when closed. Existing federated stubs (relay-created, `passwordHash = '!federation-replicated'`) upgrade in place — login is never blocked by this gate.
@@ -47,7 +50,9 @@ GET    /users/:id                                        → { user }
 GET    /users/:id/mutuals     ?homeUserId=               → { mutualFriends[], mutualSpaces[] }
 ```
 
-**Write protection:** If the authenticated user is a replicated user (`homeInstance` is set), the following fields are rejected with 403: `displayName`, `avatar`, `banner`, `accentColor`, `avatarColor`, `bio`. These fields are managed by the home instance via S2S relay.
+**Write protection:** If the authenticated user is a replicated user (`homeInstance` is set **and** `federationHomeOrphaned !== 1`), the following fields are rejected with 403: `displayName`, `avatar`, `banner`, `accentColor`, `avatarColor`, `bio`. These fields are managed by the home instance via S2S relay. **Exception — detached accounts** (`federationHomeOrphaned === 1`): a federated account whose home instance was reset/lost is a sovereign local account with no home managing its profile, so it edits these durable fields locally like a native user (detach design §4.4). Detached edits are NOT relayed (the S2S profile-relay path stays gated on `!homeInstance`).
+
+**Self-view flag:** `GET /users/@me`, the login response, and the WS `ready` payload all sanitize the row with `isSelf=true` and include `federationHomeOrphaned: boolean` (detach design §4.7) — self-view only; it is never exposed to other users and never on the deleted/tombstone branch.
 
 ## Spaces (`routes/spaces.ts`) — auth required
 ```
@@ -325,11 +330,14 @@ POST   /federation/peer/initiate   (admin)     { remoteOrigin }                 
 POST   /federation/peer/accept     (public, IP rate-limited 10/min) { sourceOrigin, challenge, hmacSecret, instanceName?, instanceId?, approvalToken? } → { accepted:true, instanceName, instanceId } (200) | queued (202 + { approvalToken }) | 409 { accepted:false, code:'PEER_EXISTS_RESET_REQUIRED', instanceName, instanceId }
 GET    /federation/peers           (admin)                                          → { peers[] } (no secrets; each peer carries needsAttentionReason)
 GET    /federation/reset-events     (admin)                                          → FederationResetEventsResponse
+POST   /federation/reset-events/acknowledge (admin)  { origin }                      → { success } (200) | 400 missing origin | 404 unknown origin
 DELETE /federation/peers/:id       (admin)                                          → { success } + outbox cleanup
 POST   /federation/relay           (HMAC-signed S2S)  FederationRelayRequest (+ sourceInstanceId?) → { accepted[], rejected[] }
 POST   /federation/sync            (HMAC-signed S2S)  { sinceTimestamp, limit?, dmChannelId?, federatedId?, contextType? } → { events[], hasMore, checkpoint }
 POST   /federation/users/lookup    (HMAC-signed S2S, rate-limited 60/min/peer)  { username }  → { found, user? }
 POST   /federation/epoch           (HMAC-signed S2S, HMAC-signed response)  {}  → { instanceId }
+POST   /federation/verify-attach-proof (HMAC-signed S2S, HMAC-signed response, rate-limited 60/min/peer)  { token } → { valid:true, homeUserId, username } | { valid:false }
+POST   /users/@me/reattach         (JWT as detached account, rate-limited 5/15min)  { token } → { success:true, user } (ReattachResponse) | 400/401/403/404/409
 ```
 
 **`POST /api/federation/peer/accept`** — public, IP-rate-limited. Optional `approvalToken` (64-hex) on the request body proves mutual admin approval; required to promote an `awaiting_approval` row to `active` when the receiver has `autoAcceptPeering=0`. The receiver returns it in the 202 body when queueing the request for admin review (`{ queued: true, message, approvalToken }`); the initiator stores it and the receiver's `/approve` later forwards it back. See `federation.md` §1 "Approval Token Verification" for the full lifecycle and threat model.
@@ -343,7 +351,7 @@ POST   /federation/epoch           (HMAC-signed S2S, HMAC-signed response)  {}  
 ```typescript
 type FederationOrphanedAccount = {
   id: string;
-  username: string;            // '!orphaned:{uid}@domain' for freed handles; real for space owners
+  username: string;            // preserved original handle (detach spec); legacy rows may carry '!orphaned:{uid}@domain'
   displayName: string | null;
   avatarColor: string | null;
   ownedSpaces: { id: string; name: string }[];
@@ -352,16 +360,22 @@ type FederationOrphanedAccount = {
 };
 type FederationResetEvent = {
   origin: string; deadEpoch: string; newEpoch: string | null;
-  detectedAt: number; resolvedAt: number | null;
+  detectedAt: number; resolvedAt: number | null; acknowledgedAt: number | null;
   stubCount: number; orphanedAccountCount: number;
   orphanedAccounts: FederationOrphanedAccount[];
 };
 type FederationResetEventsResponse = { events: FederationResetEvent[] };
 ```
 
+**`POST /api/federation/reset-events/acknowledge`** — admin-only, no S2S. Body `{ origin }`: `400` if missing, `404` if no journal row for that origin, else stamps `acknowledged_at = Date.now()` **only if currently null** (idempotent — a second call keeps the original timestamp) and returns `{ success: true }`. Lets the admin banner be dismissed server-side (Task 7) instead of client-only state; purely informational, detached accounts stay detached (detach spec §4.6).
+
 Disposition actions reuse existing endpoints (no new mutating routes): one-click Re-peer = `POST /peers/:id/reset` → `POST /peer/initiate`; full-purge Remove = `DELETE /api/admin/users/:id` (owns-spaces → transfer first). **`needsAttentionReason`** (`'auth_failures' | 'peer_reset_detected' | 'repeer_incomplete' | null`) is now included on each `GET /federation/peers` peer object so the client can raise the persistent Reset-cleanup banner only for reset-detected peers and surface an "incomplete Re-peer" warning for `repeer_incomplete`. See `federation.md` "Instance Epoch" and `client-federation.md` §8.
 
 **`POST /api/federation/users/lookup`** — HMAC-authenticated S2S endpoint. Resolves a username on this instance to its canonical `(homeUserId, profile snapshot)`. Used by the cross-instance friend-add flow on the sender's home server before queuing a `friend_request_create` event. Responds to native, non-deleted users only; ignores `discoverable`. Returns `{ found: false, code: 'user_not_found' }` for stubs, tombstoned users, or unknown handles. See `federation.md` §1 "S2S User Lookup" for the full contract.
+
+**`POST /api/users/@me/reattach`** — the owner-initiated detached-account re-attach (re-attach spec §3.2). JWT-authenticated as the detached account but registered in `routes/federation.ts` (consumes the peer HMAC channel + profile machinery). Body `{ token }` (64-hex; else 400). Re-binds the sovereign detached row to the owner's new home identity **only** when both proofs hold: the session IS the detached account AND the token verifies with the home peer over signed S2S (`POST /federation/verify-attach-proof`). Guards: non-detached/native → 403; missing/tombstoned session → 404 (already 401'd at `authenticate`); home not an active peer → 409; proof invalid → 401; new identity held by a **non-stub** local account → 409. On success: merges any pre-existing replicated stub for the new identity into the detached row (repoint+dedupe every `users.id` FK a DM/friend replica can hold, then delete the stub), sets `home_user_id`/`federation_home_orphaned=0`, adopts the new home username base if it differs (collision-suffix), nulls `profile_updated_at`, pulls+applies the home profile (best-effort), and broadcasts `user_updated`. The paired mint endpoint is `POST /api/auth/attach-proof` (see Auth). See `federation.md` "Peer-Side Re-Attach" and re-attach spec §3.2–3.3.
+
+**`POST /api/federation/verify-attach-proof`** — HMAC-authenticated S2S endpoint on the home instance that redeems a one-time attach-proof token (single-use, bound to the calling peer's domain, HMAC-signed fail-closed response). See `federation.md` "S2S Detached-Account Re-Attach Proof".
 
 **`POST /api/federation/epoch`** — HMAC-authenticated S2S endpoint returning this instance's persistent epoch (`{ instanceId }`). The **request** is HMAC-signed (only a peer holding the shared secret may call it; unknown/revoked peers → 403, bad signature → 401, missing headers → 400) **and the response body is HMAC-signed** with the same secret (`X-Federation-Signature/Timestamp/Nonce` response headers), so the caller can verify the epoch before writing it as the peer's trusted baseline (`federation_peers.peer_instance_id`). The value is already public via `/instance/info`; signing is for baseline-integrity, not confidentiality. Caller: `fetchPeerEpoch(peer)` (`utils/federationEpoch.ts`), which fails safe — 404 (not-yet-upgraded peer), bad/absent response signature, or network/timeout all return `null` (retry next tick). Populates the epoch baseline deterministically via the bounded periodic epoch-refresh. See `federation.md` "Instance Epoch" §3.2.
 

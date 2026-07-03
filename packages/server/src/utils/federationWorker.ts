@@ -12,8 +12,8 @@ import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
-import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers } from './federationRecovery.js';
-import { backfillReplicatedProfileAssets } from '../routes/federation.js';
+import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
+import { backfillReplicatedProfileAssets, sweepDeadIncarnationArtifacts, reconcileDriftedDmFederatedIds } from '../routes/federation.js';
 import { invokePermanentFailureCallback } from './federationRollback.js';
 import { refreshPeerEpochs, getInstanceId } from './federationEpoch.js';
 import fs from 'node:fs';
@@ -347,7 +347,10 @@ export async function processOutboxTick(): Promise<void> {
         // needs_attention; bounded retry (AUTH_FAILURE_THRESHOLD) rides out
         // transient clock skew and rotation-grace edge races.
         const currentRow = db
-          .select({ consecutiveAuthFailures: schema.federationPeers.consecutiveAuthFailures })
+          .select({
+            consecutiveAuthFailures: schema.federationPeers.consecutiveAuthFailures,
+            peerInstanceId: schema.federationPeers.peerInstanceId,
+          })
           .from(schema.federationPeers)
           .where(eq(schema.federationPeers.id, peerId))
           .get();
@@ -367,6 +370,23 @@ export async function processOutboxTick(): Promise<void> {
           );
           console.warn(
             `[federation-worker] Peer ${peerOrigin} transitioned to needs_attention after ${decision.newAuthFailures} consecutive ${response.status} responses`,
+          );
+
+          // Event-driven reset detection: a genuinely reset peer reaches
+          // needs_attention via THIS auth-failure path (HMAC desynced by the new
+          // incarnation) without ever passing through `unreachable`, so the
+          // 5-second unreachable-only recovery probe never sees it. Probe its
+          // epoch NOW — the instant the connection is declared broken — instead of
+          // waiting up to a full 15-minute health-check cycle for the backstop
+          // sweep. Detection-only (markPeerReset); never flips back to active.
+          // Fire-and-forget: a probe failure is a benign no-op the 15-min tick
+          // retries, and it must not stall the outbox loop.
+          detectResetForPeer({
+            id: peerId,
+            origin: peerOrigin,
+            peerInstanceId: currentRow?.peerInstanceId ?? null,
+          }).catch(err =>
+            console.error('[federation-worker] reset probe on auth-threshold transition failed:', err)
           );
 
           const contextMap = buildContextMapForPeer(db, peerId);
@@ -1274,6 +1294,31 @@ export function startFederationWorkers(): void {
   startupBootstrapSync().catch((err) => {
     console.error('[federation-worker] Startup bootstrap sync error:', err);
   });
+
+  // Startup reset-detection sweep: probe every peer already parked in
+  // `needs_attention` for an epoch change. This catches a peer that was reset
+  // while this instance was down (so no live transition fired) AND any peer that
+  // crossed into needs_attention before this build shipped the event-driven
+  // probe — surfacing "Re-peer & heal" immediately on boot instead of on the
+  // next 15-minute health-check cycle. Best-effort, detection-only.
+  detectResetOnNeedsAttentionPeers().catch((err) => {
+    console.error('[federation-worker] Startup reset-detection sweep error:', err);
+  });
+
+  // Remove dead-incarnation artifacts left by pre-fix initial syncs (spec §3.4).
+  try {
+    sweepDeadIncarnationArtifacts();
+  } catch (err) {
+    console.error('[federation-worker] Dead-incarnation sweep error:', err);
+  }
+
+  // Heal any 1-on-1 DM channels whose federatedId drifted from their members'
+  // current identities (reattach-dm-reconcile spec §3.3).
+  try {
+    reconcileDriftedDmFederatedIds();
+  } catch (err) {
+    console.error('[federation-worker] DM federatedId reconciliation error:', err);
+  }
 
   // Backfill any replicated user avatars/banners still stored as absolute URLs
   // (legacy data from before file replication, or rows whose home was offline

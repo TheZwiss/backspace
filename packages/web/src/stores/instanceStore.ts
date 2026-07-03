@@ -18,6 +18,7 @@ import { clearPasswordSyncTimers } from '../utils/federationOps';
 // so a static import here does not create an import-time cycle.
 import { failoverDmOriginsFromDisconnected } from '../utils/dmOriginFailover';
 import { useUIStore } from './uiStore';
+import { parseFederatedUsername } from '../utils/identity';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,78 @@ export function isSelfOrigin(origin: string): boolean {
     return normalizeOrigin(origin) === window.location.origin;
   } catch {
     return false;
+  }
+}
+
+// ─── Automatic re-attach (re-attach spec §3.4) ────────────────────────────────
+
+/**
+ * Automatic re-attach (re-attach spec §3.4): when a just-connected remote
+ * account is DETACHED and this client also holds an authenticated session on
+ * the account's home domain under the SAME username base, silently perform
+ * the proof exchange — the user has proven both identities, so the accounts
+ * re-link without interaction. Cross-name binds and every ambiguous case fall
+ * through to the explicit AccountPanel action. Fire-and-forget, non-fatal.
+ */
+export async function maybeAutoReattach(instance: ConnectedInstance): Promise<void> {
+  const remoteUser = instance.user;
+  if (!remoteUser.federationHomeOrphaned || !remoteUser.homeInstance) return;
+  const homeDomain = remoteUser.homeInstance.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+
+  // An authenticated session on the account's home domain: the primary
+  // connection when we're browsing it, else a connected secondary instance.
+  const primaryUser = useAuthStore.getState().user;
+  let homeApi: BackspaceApiClient | null = null;
+  let homeUsername: string | null = null;
+  if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
+    homeApi = api;
+    homeUsername = primaryUser.username;
+  } else {
+    const conn = useInstanceStore.getState().instances.find(
+      (i) => i.status === 'connected' && new URL(i.origin).hostname.toLowerCase() === homeDomain,
+    );
+    if (conn) {
+      homeApi = conn.api;
+      homeUsername = conn.username;
+    }
+  }
+  if (!homeApi || !homeUsername) return;
+
+  // Unambiguous case only: same username base on both sides (spec §2/§3.4).
+  const detachedBase = parseFederatedUsername(remoteUser.username).baseName.toLowerCase();
+  const homeBase = parseFederatedUsername(homeUsername).baseName.toLowerCase();
+  if (!detachedBase || detachedBase !== homeBase) return;
+
+  try {
+    // Portless hostname — must match the server's extractDomain(peer.origin)
+    // (new URL(origin).hostname) so the proof's targetDomain binds/verifies on
+    // a non-443 port too. .host would carry the port and 401 forever.
+    const targetHost = new URL(instance.origin).hostname;
+    const { token } = await homeApi.auth.attachProof(targetHost);
+    const res = await instance.api.users.reattach({ token });
+    useInstanceStore.setState((state) => ({
+      instances: state.instances.map((i) =>
+        i.origin === instance.origin ? { ...i, user: res.user, username: res.user.username } : i,
+      ),
+    }));
+    // Registry mirrors the connection's identity — keep the re-bound username in sync.
+    const registry = upsertRegistryEntry(useInstanceStore.getState().registry, instance.origin, {
+      origin: instance.origin,
+      username: res.user.username,
+      remoteUserId: res.user.id,
+    });
+    useInstanceStore.setState({ registry, registryUpdatedAt: Date.now() });
+    useUIStore.getState().addToast(`Account re-linked with ${homeDomain}`, 'success');
+    useInstanceStore.getState().syncRegistry().catch(() => {});
+    // Re-attach reconciled this connection's 1-on-1 DM federatedIds (merge/re-key
+    // on the server); refetch the DM list so the split conversation collapses
+    // without a reload. Belt-and-suspenders for the connection that triggered it
+    // — the server's dm_channel_closed/created events cover the live sidebar too.
+    try { await useSpaceStore.getState().reloadDmsForOrigin(instance.origin); } catch { /* non-fatal */ }
+  } catch (err) {
+    // Non-fatal: the connection works either way; the explicit re-attach
+    // action in AccountPanel remains available.
+    console.warn('[federation] Auto re-attach failed:', err);
   }
 }
 
@@ -355,6 +428,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
 
+      // Automatic re-attach for detached accounts (re-attach spec §3.4).
+      maybeAutoReattach(instance).catch(() => {});
+
       // Ensure server-to-server peering for DM relay (non-fatal)
       try {
         const peerResult = await api.federation.ensurePeered({ remoteOrigin: origin });
@@ -431,6 +507,9 @@ export const useInstanceStore = create<InstanceState>((set, get) => ({
 
       // Open WebSocket connection to the remote instance
       connectInstance(origin, response.token);
+
+      // Automatic re-attach for detached accounts (re-attach spec §3.4).
+      maybeAutoReattach(instance).catch(() => {});
 
       // Sync instance list to all instances (fire-and-forget)
       get().syncInstanceList().catch(() => {});

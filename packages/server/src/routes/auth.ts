@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, or } from 'drizzle-orm';
+import { eq, or, lt } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
 import { getDb, schema } from '../db/index.js';
-import { hashPassword, verifyPassword, signJwt } from '../utils/auth.js';
+import { hashPassword, verifyPassword, signJwt, authenticate } from '../utils/auth.js';
 import { generateSnowflake } from '../utils/snowflake.js';
 import { config } from '../config.js';
 import type { RegisterRequest, LoginRequest, AuthResponse } from '@backspace/shared';
@@ -380,22 +381,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: 'This account has been deleted', statusCode: 401 });
     }
 
-    // A federated account whose home instance was reset (a new incarnation stood
-    // up on the same domain) is FROZEN: its identity cannot be cryptographically
-    // proven continuous across the wipe (design §2 non-goal), so we must never let
-    // anyone — including a new same-name user on the reset home — authenticate into
-    // it. Freezing is reversible (admin Keep/Remove, or the real user re-registers
-    // into a fresh account). This is the enforcement half of the §6.3b quarantine;
-    // it blocks the local-password path AND, by returning first, the self-heal path.
-    if (user.federationHomeOrphaned === 1) {
-      return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
-    }
-
     const validPassword = await verifyPassword(password, user.passwordHash);
     if (!validPassword) {
       // For federated users, try verifying against the home instance.
       // If the password is valid there but stale here, self-heal the local hash.
       if (user.homeInstance) {
+        // Detached account (§6.3b detach): its home domain now belongs to a
+        // DIFFERENT incarnation — there is no trusted home to consult. The
+        // self-heal path is permanently disabled: re-hashing on the new
+        // incarnation's say-so would hand this established account to a
+        // stranger. Local-hash login above remains the only (and sufficient)
+        // way in — the hash was only ever written by the owner's registration
+        // or an epoch-gated self-heal against the OLD incarnation.
+        if (user.federationHomeOrphaned === 1) {
+          return reply.code(401).send({ error: 'Invalid username or password', statusCode: 401 });
+        }
         try {
           const homeUsername = user.username.includes('@')
             ? user.username.split('@')[0]!
@@ -485,5 +485,54 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     };
 
     return reply.code(200).send(response);
+  });
+
+  // ─── POST /api/auth/attach-proof ──────────────────────────────────────────
+  // Mint a one-time proof token for detached-account re-attach on a peer
+  // (re-attach spec §3.1). Native accounts only — the token proves control of
+  // THIS home identity. 60s TTL, single-use, bound to the target peer domain
+  // (the verifying peer's domain is checked server-side on D, not trusted from
+  // the token bearer).
+  app.post<{ Body: { targetDomain?: unknown } }>('/api/auth/attach-proof', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const db = getDb();
+
+    const rawTarget = request.body?.targetDomain;
+    if (typeof rawTarget !== 'string' || rawTarget.trim().length === 0 || rawTarget.length > 255) {
+      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+    }
+    const targetDomain = rawTarget.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    // Re-check emptiness AFTER normalization: inputs like "https://" or "/"
+    // pass the pre-normalization guard but collapse to "" — never persist an
+    // inert target_domain='' proof row.
+    if (targetDomain.length === 0) {
+      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+    }
+
+    // Native accounts only — a federated/replicated account has no authority
+    // to mint proofs for this domain's identities.
+    if (request.homeInstance) {
+      return reply.code(403).send({ error: 'Only native accounts can mint attach proofs', statusCode: 403 });
+    }
+
+    const now = Date.now();
+    // Opportunistic janitor: expired rows have no residual value.
+    db.delete(schema.federationAttachProofs)
+      .where(lt(schema.federationAttachProofs.expiresAt, now))
+      .run();
+
+    const token = randomBytes(32).toString('hex');
+    db.insert(schema.federationAttachProofs).values({
+      token,
+      homeUserId: request.userId,
+      targetDomain,
+      createdAt: now,
+      expiresAt: now + 60_000,
+      usedAt: null,
+    }).run();
+
+    return reply.code(200).send({ token });
   });
 }

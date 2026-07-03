@@ -68,6 +68,9 @@ import type {
   CheckInviteResponse,
   SpaceInviteRequest,
   SpaceInviteResponse,
+  AttachProofResponse,
+  ReattachRequest,
+  ReattachResponse,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
@@ -99,6 +102,7 @@ export class BackspaceApiClient {
     login: (data: LoginRequest) => Promise<AuthResponse>;
     checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
     checkInvite: (token: string) => Promise<CheckInviteResponse>;
+    attachProof: (targetDomain: string) => Promise<AttachProofResponse>;
   };
 
   readonly users: {
@@ -112,6 +116,7 @@ export class BackspaceApiClient {
     getFederationRegistry: () => Promise<{ registry: FederationRegistryEntry[]; updatedAt: number }>;
     putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) => Promise<{ ok: boolean; updatedAt: number }>;
     deleteFederationIdentity: (data: FederationIdentityDeleteRequest) => Promise<FederationIdentityDeleteResponse>;
+    reattach: (data: ReattachRequest) => Promise<ReattachResponse>;
   };
 
   readonly spaceLayout: {
@@ -281,6 +286,7 @@ export class BackspaceApiClient {
     ensurePeered: (data: { remoteOrigin: string }) => Promise<{ peeringStatus: string; peerId?: string; error?: string }>;
     peers: () => Promise<{ peers: FederationPeer[] }>;
     resetEvents: () => Promise<FederationResetEventsResponse>;
+    acknowledgeResetEvent: (origin: string) => Promise<{ success: boolean }>;
     revokePeer: (id: string) => Promise<{ success: boolean }>;
     resetPeer: (id: string) => Promise<{ success: boolean }>;
     recheckPeer: (id: string) => Promise<{ recovered: boolean; status: string }>;
@@ -386,6 +392,8 @@ export class BackspaceApiClient {
         request<{ available: boolean; reason?: string }>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
       checkInvite: (token: string) =>
         request<CheckInviteResponse>('GET', `/auth/check-invite?token=${encodeURIComponent(token)}`, undefined, false),
+      attachProof: (targetDomain: string) =>
+        request<AttachProofResponse>('POST', '/auth/attach-proof', { targetDomain }),
     };
 
     this.users = {
@@ -418,6 +426,8 @@ export class BackspaceApiClient {
         request<FederationIdentityDeleteResponse>(
           'POST', '/users/@me/federation-identity/delete', data
         ),
+      reattach: (data: ReattachRequest) =>
+        request<ReattachResponse>('POST', '/users/@me/reattach', data),
     };
 
     this.spaceLayout = {
@@ -710,6 +720,8 @@ export class BackspaceApiClient {
         ),
       resetEvents: () =>
         request<FederationResetEventsResponse>('GET', '/federation/reset-events'),
+      acknowledgeResetEvent: (origin: string) =>
+        request<{ success: boolean }>('POST', '/federation/reset-events/acknowledge', { origin }),
       revokePeer: (id: string) =>
         request<{ success: boolean }>('DELETE', `/federation/peers/${id}`),
       resetPeer: (id: string) =>

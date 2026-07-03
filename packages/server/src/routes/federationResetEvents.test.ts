@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signJwt } from '../utils/auth.js';
@@ -173,6 +174,95 @@ describe('GET /api/federation/reset-events', () => {
       method: 'GET',
       url: '/api/federation/reset-events',
       headers: { authorization: `Bearer ${userToken()}` },
+    });
+    expect([401, 403]).toContain(res.statusCode);
+  });
+});
+
+describe('POST /api/federation/reset-events/acknowledge', () => {
+  function seedEvent(origin: string): void {
+    testDb.insert(schema.federationResetEvents).values({
+      origin,
+      deadEpoch: 'E0',
+      newEpoch: 'E1',
+      detectedAt: 1000,
+      resolvedAt: 2000,
+      stubCount: 0,
+      orphanedAccountCount: 0,
+    }).run();
+  }
+
+  it('stamps acknowledged_at (idempotent) and GET returns it', async () => {
+    seedEvent('https://peer.example');
+
+    const ack = await app.inject({
+      method: 'POST',
+      url: '/api/federation/reset-events/acknowledge',
+      headers: { authorization: `Bearer ${adminToken()}` },
+      payload: { origin: 'https://peer.example' },
+    });
+    expect(ack.statusCode).toBe(200);
+    expect(JSON.parse(ack.body)).toEqual({ success: true });
+
+    const first = testDb
+      .select()
+      .from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, 'https://peer.example'))
+      .get();
+    expect(first?.acknowledgedAt).toBeTypeOf('number');
+
+    // Idempotent: second call keeps the original timestamp.
+    const ack2 = await app.inject({
+      method: 'POST',
+      url: '/api/federation/reset-events/acknowledge',
+      headers: { authorization: `Bearer ${adminToken()}` },
+      payload: { origin: 'https://peer.example' },
+    });
+    expect(ack2.statusCode).toBe(200);
+    const second = testDb
+      .select()
+      .from(schema.federationResetEvents)
+      .where(eq(schema.federationResetEvents.origin, 'https://peer.example'))
+      .get();
+    expect(second?.acknowledgedAt).toBe(first?.acknowledgedAt);
+
+    // GET includes the field.
+    const get = await app.inject({
+      method: 'GET',
+      url: '/api/federation/reset-events',
+      headers: { authorization: `Bearer ${adminToken()}` },
+    });
+    expect(get.statusCode).toBe(200);
+    expect(JSON.parse(get.body).events[0].acknowledgedAt).toBe(first?.acknowledgedAt);
+  });
+
+  it('returns 404 for an unknown origin', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/federation/reset-events/acknowledge',
+      headers: { authorization: `Bearer ${adminToken()}` },
+      payload: { origin: 'https://nope.example' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 when origin is missing', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/federation/reset-events/acknowledge',
+      headers: { authorization: `Bearer ${adminToken()}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('requires admin (401/403 for non-admin)', async () => {
+    seedEvent('https://peer.example');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/federation/reset-events/acknowledge',
+      headers: { authorization: `Bearer ${userToken()}` },
+      payload: { origin: 'https://peer.example' },
     });
     expect([401, 403]).toContain(res.statusCode);
   });

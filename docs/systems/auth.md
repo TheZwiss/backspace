@@ -264,9 +264,9 @@ Validates format (same rules as local registration: 3-32 chars, `/^[a-z0-9_]+$/`
 2. Look up user by `username` (trimmed, lowercased)
 3. Reject if not found (generic "Invalid username or password")
 4. Reject if `isDeleted === 1` ("This account has been deleted")
-5. **Reject if `federationHomeOrphaned === 1`** (generic "Invalid username or password") — *before* password verification. This freezes any federated account whose home instance was factory-reset (a new incarnation stood up on the same domain), set by the reset quarantine (§6.3 below / `federation.md` "Instance Epoch"). Because it returns first, it blocks both the local-password path AND the self-heal path — nobody, including a new same-name user on the reset home, can authenticate into the dead-incarnation account. Reversible (admin Keep/Remove, or the real user re-registers into a fresh account).
-6. Verify password via bcrypt
-7. **If password invalid AND user is federated:** attempt self-healing (see below)
+5. Verify password via bcrypt. **`federationHomeOrphaned === 1` no longer short-circuits here.** A federated account whose home instance was reset (a new incarnation stood up on the same domain) is now treated as **detached** — a sovereign LOCAL account whose local password hash is the sole authority (detach design §4.1). Local-hash verification proceeds normally: the correct local password logs in. The flag's only login effect is to permanently disable the self-heal path (step 7). *(Historical note: this check was previously a pre-verification freeze that blocked the local-password path too; the detach re-interpretation removed it so the real owner keeps their account instead of being locked out.)*
+6. *(merged into step 5)*
+7. **If password invalid AND user is federated:** if `federationHomeOrphaned === 1` (detached), reject immediately with the generic "Invalid username or password" — **no outbound request to the home domain**: there is no trusted home to consult, and re-hashing on the new incarnation's say-so would hand the account to a stranger. Otherwise attempt self-healing (see below).
 8. **If password invalid AND user is local:** reject
 9. Sign JWT, return `{ token, user }`. **Note:** Login does NOT mutate `users.status`. A successful login does not by itself imply a live connection (the client may never establish a WebSocket due to network failure, mobile background, error path); writing `'online'` here would produce a permanently stuck-online row that no disconnect timer cleans up. The WebSocket auth path (`ws/handler.ts`) is the single source of truth for `status = 'online'`. See `docs/systems/activity-presence.md` "Boot Reset" for the mitigation that runs on server start.
 
@@ -296,7 +296,13 @@ Before re-hashing, the self-heal confirms the home instance is the **same incarn
 - **Baseline on record AND `fetchPeerEpoch` returns `null`** — epoch cannot be determined (peer too old → 404, unreachable, bad/absent response signature, **or the reset peer's desynced secret rejecting our signed request**): **fail closed — refuse self-heal.**
 - **Baseline on record AND the epoch matches:** allow.
 
-Trade-off: the separate authenticated call can fail independently of the login POST, so a transient home outage during a legitimate stale-hash login fails closed. This is security-over-availability on a rare, recoverable path (fallback: a normal password change once the home is reachable); trusting an unauthenticated body would re-open the hijack. A reset peer's `null` result also doubles as a reset signal — the guard is correct even before reset-detection has flagged the peer. The direct-login freeze (step 5 of the Login Flow, `federationHomeOrphaned = 1`) is the post-re-peer complement: once the admin re-peers and the baseline updates to the new epoch, the epoch guard alone would pass again, so the freeze is what keeps the dead-incarnation account locked.
+Trade-off: the separate authenticated call can fail independently of the login POST, so a transient home outage during a legitimate stale-hash login fails closed. This is security-over-availability on a rare, recoverable path (fallback: a normal password change once the home is reachable); trusting an unauthenticated body would re-open the hijack. A reset peer's `null` result also doubles as a reset signal — the guard is correct even before reset-detection has flagged the peer. This epoch guard covers the **undetected-reset window** — non-detached federated accounts whose home was reset but not yet quarantined. Once the quarantine flags an account as **detached** (`federationHomeOrphaned = 1`), the self-heal path is disabled for it entirely (step 7 of the Login Flow): the detached account is no longer a remote identity that can be self-healed at all, so the epoch comparison never runs for it — the local hash is its only authority. Re-peering the new incarnation therefore cannot re-open self-heal into a detached account.
+
+#### Re-attach: leaving the detached state (re-attach spec §3.2)
+
+Detach is sovereign but not permanent: the legitimate owner who re-created their account on the reset home can re-bind the detached account to the new home identity via `POST /api/users/@me/reattach` (registered in `routes/federation.ts`; see `federation.md` "Peer-Side Re-Attach"). It re-binds **only** on possession of BOTH identities — the session IS the detached account (local password authority, via `authenticate`) AND a one-time proof token minted on the home via `POST /api/auth/attach-proof` verifies with the home peer over signed S2S. Identity is never username-matched (that is the tier-2 hijack). On success the endpoint merges any pre-existing replicated stub for the new identity into the detached row, sets `home_user_id = <new homeUserId>`, **clears `federation_home_orphaned` (0)**, nulls `profile_updated_at`, and applies the current home profile. Clearing the flag automatically **re-enables** normal federated-account semantics: login self-heal resumes (the epoch guard above runs again) and the S2S binding guards stop excluding the account — live profile/presence sync from the home is restored. The local password hash is kept; a detached tombstone (`is_deleted = 1`) is never re-attachable.
+
+**Proof-mint endpoint — `POST /api/auth/attach-proof`** (`routes/auth.ts`). The home-side half of the exchange, run against the owner's re-created **native** account on the reset home. JWT-authenticated, rate-limited 5/15min. Body `{ targetDomain }` names the peer the caller intends to re-attach on. Guards: the session user must be **native** (`homeInstance` null) — a federated/replicated session cannot mint a proof for itself. Mints a random 256-bit token (`randomBytes(32).toString('hex')`), inserts a `federation_attach_proofs` row `{ homeUserId, targetDomain, createdAt, expiresAt = now + 60s, usedAt: null }`, and returns `{ token }`. The token is **single-use, 60s TTL, and bound to `targetDomain`** — only the named peer can redeem it (verified server-side against the authenticated peer domain, not the request body, at `POST /api/federation/verify-attach-proof`). Each mint opportunistically janitors expired rows (`DELETE ... WHERE expires_at < now`); since the TTL is 60s, any spent (`used_at` set) token is swept on the next mint after it expires, so the table stays bounded without a background worker.
 
 ---
 
@@ -313,12 +319,13 @@ Trade-off: the separate authenticated call can fail independently of the login P
 | User type | `currentPassword` | Behavior |
 |-----------|-------------------|----------|
 | Local (`homeInstance` is null) | Required | Verified via bcrypt against stored hash |
-| Federated (`homeInstance` set) | Not required | JWT auth is sufficient (home instance already verified the change) |
+| Federated (`homeInstance` set, `federationHomeOrphaned !== 1`) | Not required | JWT auth is sufficient (home instance already verified the change) |
+| Detached (`homeInstance` set, `federationHomeOrphaned === 1`) | Required | Follows the **local** rule — the home is gone, so nothing external verified the change; the local hash is the sole authority (detach design §4.4) |
 
 **Steps:**
 1. Validate `newPassword` is string, min 8 chars
 2. Load user from DB
-3. If local: require and verify `currentPassword`
+3. If local **or detached** (`!homeInstance || federationHomeOrphaned === 1`): require and verify `currentPassword`
 4. Hash new password
 5. Update `passwordHash` AND `passwordChangedAt = Date.now()` -- this invalidates all prior tokens
 6. Sign fresh JWT, return `{ token }`
@@ -379,7 +386,7 @@ When a user changes their password on their home instance, `authStore.changePass
 
 **Pre-checks:**
 1. `username` must match stored username (confirmation safeguard)
-2. Local users must provide and verify `password`; federated users rely on JWT auth
+2. Native local users **and detached accounts** (`federation_home_orphaned = 1`) must provide and verify `password` against the local hash; non-detached federated users rely on JWT auth (their home instance already vouches for them). A detached account is a sovereign local account with no home verifying anything, so it follows the LOCAL rule — the same self-destruct protection as a native account, and mirroring the change-password rule (§5, detach spec §4.4). Condition: `!user.homeInstance || user.federationHomeOrphaned === 1`. Missing password → 400; wrong password → 403.
 3. Must not own any spaces (returns 400 with `ownedSpaces` list)
 
 **Client-side flow** (`authStore.deleteAccount()`):

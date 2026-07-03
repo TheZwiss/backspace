@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useInstanceStore } from '../../../stores/instanceStore';
+import { useSpaceStore } from '../../../stores/spaceStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { DeleteAccountModal } from '../DeleteAccountModal';
@@ -76,6 +77,52 @@ export function AccountPanel() {
 
   const instances = useInstanceStore((s) => s.instances);
   const changePassword = useAuthStore((s) => s.changePassword);
+
+  // ── Detached-account re-attach (fallback path, re-attach spec §3.4) ──
+  // Explicit action shown only when this client also holds an active connection
+  // to the account's home domain. Two-step armed confirm names both identities
+  // before minting the proof. The primary/automatic path lives in instanceStore.
+  const [reattachArmed, setReattachArmed] = useState(false);
+  const [reattaching, setReattaching] = useState(false);
+  const [reattachError, setReattachError] = useState<string | null>(null);
+
+  const homeConnection = useMemo(() => {
+    if (!user?.homeInstance) return null;
+    const homeDomain = user.homeInstance.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+    return instances.find(
+      (i) => i.status === 'connected'
+        // Portless hostname — must agree with the server's extractDomain
+        // (new URL(origin).hostname) so a ported home instance still matches.
+        && new URL(i.origin).hostname.toLowerCase() === homeDomain,
+    ) ?? null;
+  }, [instances, user?.homeInstance]);
+
+  const handleReattach = async () => {
+    if (!homeConnection) return;
+    if (!reattachArmed) {
+      setReattachArmed(true);
+      return;
+    }
+    setReattaching(true);
+    setReattachError(null);
+    try {
+      // Target domain = THIS instance (where the detached account lives).
+      // Portless hostname to match the server's extractDomain contract.
+      const { token } = await homeConnection.api.auth.attachProof(window.location.hostname);
+      const res = await api.users.reattach({ token });
+      useAuthStore.getState().setUser(res.user);
+      // Re-attach reconciled this (home) account's 1-on-1 DM federatedIds on the
+      // server; refetch the home DM list so the split conversation collapses
+      // without a reload.
+      try { await useSpaceStore.getState().reloadDmsForOrigin(''); } catch { /* non-fatal */ }
+      addToast(`Account re-linked with ${homeConnection.username}`, 'success', 3000);
+    } catch (err) {
+      setReattachError(err instanceof Error ? err.message : 'Re-attach failed');
+    } finally {
+      setReattaching(false);
+      setReattachArmed(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -264,6 +311,32 @@ export function AccountPanel() {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">My Account</h2>
+      {user?.federationHomeOrphaned && user?.homeInstance && (
+        <div className="rounded-lg bg-accent-amber/10 border border-accent-amber/25 px-3.5 py-3 text-xs text-txt-secondary leading-relaxed mb-4">
+          <span className="font-medium text-txt-primary">This account is detached from its home instance.</span>{' '}
+          {user.homeInstance} was reset or is no longer available, so this account now operates locally on
+          this instance — your profile and password are managed here.
+          {homeConnection && (
+            <>
+              {' '}As <span className="font-medium text-txt-primary">{homeConnection.username}</span> on{' '}
+              {user.homeInstance}, you can re-link this account — profile and presence will sync from there again.
+              <button
+                type="button"
+                onClick={handleReattach}
+                disabled={reattaching}
+                className="mt-2 block rounded-md bg-accent-amber/20 hover:bg-accent-amber/30 disabled:opacity-50 text-txt-primary px-3 py-1.5 text-xs font-medium transition-colors"
+              >
+                {reattaching
+                  ? 'Re-attaching…'
+                  : reattachArmed
+                    ? `Confirm re-attach as ${homeConnection.username}`
+                    : `Re-attach to ${user.homeInstance}`}
+              </button>
+              {reattachError && <div className="mt-1.5 text-accent-rose">{reattachError}</div>}
+            </>
+          )}
+        </div>
+      )}
       {/* ── Profile Customization ── */}
       <div>
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider mb-1.5">

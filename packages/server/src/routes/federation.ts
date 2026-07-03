@@ -22,6 +22,7 @@ import { onPeerActivated, onPeerDeactivated } from '../utils/federationPeerActiv
 import { getInstanceId, fetchPeerEpoch } from '../utils/federationEpoch.js';
 import { probePeerReachable, recoverOrDetectReset } from '../utils/federationRecovery.js';
 import { markPeerReset, homeInstanceMatch } from '../utils/federationReset.js';
+import { verifyAttachProofWithPeer, fetchHomeProfileByHomeId } from '../utils/federationAttach.js';
 import { getDmMessageWithUser } from './dm.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent, FederationRelayAttachment, FederationSyncRequest, FederationSyncResponse, DmMessageWithUser, DmChannel, FederationRelayProfileSnapshot, FederationIdentityDeleteS2SRequest, FederationProfileUpdatePayload, ServerEvent, ApprovalRequestSubscriberSummary, PeeringTriggerReason } from '@backspace/shared';
 import { GROUP_DM_NAME_MIN_LENGTH, GROUP_DM_NAME_MAX_LENGTH } from '@backspace/shared/src/constants.js';
@@ -1646,11 +1647,43 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
           resolvedAt: ev.resolvedAt,
           stubCount: ev.stubCount,
           orphanedAccountCount: ev.orphanedAccountCount,
+          acknowledgedAt: ev.acknowledgedAt,
           orphanedAccounts,
         };
       });
 
       return reply.code(200).send({ events: result });
+    },
+  );
+
+  // ─── POST /api/federation/reset-events/acknowledge ─────────────────────────
+  // Admin-only: dismiss a reset event from the admin banner. Purely
+  // informational state — detached accounts stay detached and functional;
+  // acknowledging just stops the surface from re-listing them (detach spec §4.6).
+  app.post<{ Body: { origin: string } }>(
+    '/api/federation/reset-events/acknowledge',
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { origin } = request.body;
+      if (!origin || typeof origin !== 'string') {
+        return reply.code(400).send({ error: 'origin is required', statusCode: 400 });
+      }
+      const db = getDb();
+      const existing = db
+        .select()
+        .from(schema.federationResetEvents)
+        .where(eq(schema.federationResetEvents.origin, origin))
+        .get();
+      if (!existing) {
+        return reply.code(404).send({ error: 'No reset event for this origin', statusCode: 404 });
+      }
+      if (existing.acknowledgedAt === null) {
+        db.update(schema.federationResetEvents)
+          .set({ acknowledgedAt: Date.now() })
+          .where(eq(schema.federationResetEvents.origin, origin))
+          .run();
+      }
+      return reply.code(200).send({ success: true });
     },
   );
 
@@ -2322,6 +2355,15 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(403).send({ error: 'Attribution mismatch: you can only delete users from your own instance', statusCode: 403 });
       }
 
+      // Detached (home-orphaned) accounts are sovereign local accounts. The
+      // domain's new incarnation must not delete them by replaying old
+      // homeUserIds. Idempotent 200: from the caller's perspective this
+      // identity does not exist here.
+      if (user.federationHomeOrphaned === 1) {
+        console.log(`[federation] Ignoring S2S identity delete for detached account ${user.id} from ${fedHeaders.origin}`);
+        return reply.code(200).send({ success: true });
+      }
+
       // 5. Check for owned spaces
       const ownedSpaces = db.select({ id: schema.spaces.id, name: schema.spaces.name })
         .from(schema.spaces)
@@ -2712,6 +2754,332 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── POST /api/federation/verify-attach-proof ───────────────────────────────
+  // Server-to-server: verify a one-time attach-proof token minted by
+  // /api/auth/attach-proof (re-attach spec §3.1). The token is single-use (an
+  // atomic claim guarantees only one concurrent verification can win) and is
+  // bound to the CALLING peer's domain — the binding is checked against the
+  // authenticated peer row (extractDomain(peer.origin)), NEVER trusted from the
+  // request body. This is the anti-replay control: a compromised requester
+  // cannot redeem a token minted for a different peer. The response is HMAC-
+  // signed (epoch pattern) so the caller can trust the identity it carries; all
+  // failure modes fail closed to a signed { valid: false }.
+  app.post<{ Body: { token?: unknown } }>(
+    '/api/federation/verify-attach-proof',
+    { bodyLimit: 4 * 1024 },
+    async (request, reply) => {
+      const db = getDb();
+      const rawDb = getRawDb();
+
+      // 1. Verify HMAC headers (mirror by-home-id / users-lookup).
+      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
+      if (!fedHeaders) {
+        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
+      }
+
+      const peer = db
+        .select()
+        .from(schema.federationPeers)
+        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
+        .get();
+
+      if (!peer || peer.status !== 'active') {
+        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
+      }
+
+      if (isLookupRateLimited(peer.origin)) {
+        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
+      }
+
+      const bodyString = JSON.stringify(request.body);
+      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
+        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
+      }
+
+      // Replay protection
+      if (fedHeaders.nonce) {
+        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
+          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
+        }
+      } else if (peer.nonceSupported) {
+        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
+      }
+
+      // 2. Sign every downstream response with the peer's shared secret so the
+      // caller can trust the identity (or the fail-closed verdict) it carries.
+      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply => {
+        const responseBody = JSON.stringify(payload);
+        const sigHeaders = buildFederationHeaders(responseBody, peer.hmacSecret, getOurOrigin());
+        reply.headers({
+          'X-Federation-Signature': sigHeaders['X-Federation-Signature'],
+          'X-Federation-Timestamp': sigHeaders['X-Federation-Timestamp'],
+          'X-Federation-Nonce': sigHeaders['X-Federation-Nonce'],
+          'Content-Type': 'application/json',
+        });
+        return reply.code(200).send(responseBody);
+      };
+
+      // 3. Validate the token shape (64 hex chars, as minted by attach-proof).
+      const rawToken = (request.body as { token?: unknown } | null)?.token;
+      if (typeof rawToken !== 'string' || !/^[0-9a-f]{64}$/i.test(rawToken)) {
+        return sendSigned({ valid: false });
+      }
+
+      // 4. Atomic single-use claim. The domain binding is server-side: the
+      // token's target_domain must equal the AUTHENTICATED peer's domain, never
+      // a value from the request body. Concurrent verifications cannot both win
+      // because only the first UPDATE that flips used_at from NULL matches.
+      const peerDomain = extractDomain(peer.origin).toLowerCase();
+      const now = Date.now();
+      const claimed = rawDb.prepare(`
+        UPDATE federation_attach_proofs
+        SET used_at = ?
+        WHERE token = ? AND used_at IS NULL AND expires_at > ? AND lower(target_domain) = ?
+        RETURNING home_user_id
+      `).get(now, rawToken, now, peerDomain) as { home_user_id: string } | undefined;
+
+      if (!claimed) {
+        return sendSigned({ valid: false });
+      }
+
+      // 5. Re-confirm the home user is still native (not tombstoned, not turned
+      // into a replicated stub) since the token was minted.
+      const homeUser = db
+        .select()
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.id, claimed.home_user_id),
+            eq(schema.users.isDeleted, 0),
+            isNull(schema.users.homeInstance),
+          ),
+        )
+        .get();
+
+      if (!homeUser) {
+        return sendSigned({ valid: false });
+      }
+
+      return sendSigned({ valid: true, homeUserId: homeUser.id, username: homeUser.username });
+    },
+  );
+
+  // ─── POST /api/users/@me/reattach ────────────────────────────────────────────
+  // Owner-initiated exception to the detach invariant (re-attach spec §3.2).
+  // Requires BOTH identities: the session proves the detached account (local
+  // password authority), the one-time token — verified with the home peer over
+  // signed S2S — proves the new home account. Registered here rather than in
+  // users.ts because it consumes federation-internal machinery (peer HMAC
+  // channel, profile fetch, asset download). URL path stays /api/users/@me/*.
+  app.post<{ Body: { token?: unknown } }>('/api/users/@me/reattach', {
+    preHandler: authenticate,
+    config: { rateLimit: { max: 5, timeWindow: '15 minutes' } },
+  }, async (request, reply) => {
+    const db = getDb();
+    const rawDb = getRawDb();
+
+    const rawToken = (request.body as { token?: unknown } | null)?.token;
+    if (typeof rawToken !== 'string' || !/^[0-9a-f]{64}$/i.test(rawToken)) {
+      return reply.code(400).send({ error: 'token is required (64-char hex)', statusCode: 400 });
+    }
+
+    // Guard 1: session user must be a LIVE detached federated account. A missing
+    // or tombstoned row is a 404 (nothing to re-attach); a live non-detached /
+    // native account is a 403 (re-attach is meaningless — it already syncs).
+    const detached = db.select().from(schema.users).where(eq(schema.users.id, request.userId)).get();
+    if (!detached || detached.isDeleted === 1) {
+      return reply.code(404).send({ error: 'User not found', statusCode: 404 });
+    }
+    if (!detached.homeInstance || detached.federationHomeOrphaned !== 1) {
+      return reply.code(403).send({ error: 'Only detached accounts can re-attach', statusCode: 403 });
+    }
+
+    // Guard 2: the home domain must be an ACTIVE peer — the proof is only as
+    // trustworthy as the S2S channel it is verified over.
+    const homeDomain = extractDomain(detached.homeInstance).toLowerCase();
+    const normPeer = (origin: string) => extractDomain(origin).toLowerCase();
+    const peerRow = db.select().from(schema.federationPeers).all()
+      .find(p => normPeer(p.origin) === homeDomain && p.status === 'active');
+    if (!peerRow) {
+      return reply.code(409).send({ error: 'Home instance is not an active peer', statusCode: 409 });
+    }
+
+    // Guard 3: verify the one-time proof with the home instance (fails closed).
+    const verified = await verifyAttachProofWithPeer(peerRow, rawToken);
+    if (!verified.valid) {
+      return reply.code(401).send({ error: 'Attach proof could not be verified', statusCode: 401 });
+    }
+
+    // Guard 4: if the new identity already has a local row for this domain, it
+    // MUST be a replicated stub (the merge source, §3.3). A real account holding
+    // it means state corruption — abort loudly, do not merge.
+    const normHome = `lower(replace(replace(coalesce(home_instance, ''), 'https://', ''), 'http://', ''))`;
+    const existingRow = rawDb.prepare(`
+      SELECT id, password_hash FROM users
+      WHERE home_user_id = ? AND ${normHome} = ? AND is_deleted = 0 AND id != ?
+    `).get(verified.homeUserId, homeDomain, detached.id) as { id: string; password_hash: string } | undefined;
+    if (existingRow && existingRow.password_hash !== '!federation-replicated') {
+      console.error(`[federation] Re-attach conflict: identity ${verified.homeUserId}@${homeDomain} held by non-stub account ${existingRow.id}`);
+      return reply.code(409).send({ error: 'The new identity is already bound to another account on this instance', statusCode: 409 });
+    }
+
+    // Username: adopt the new home base when it differs (existing collision-suffix
+    // scheme). Usernames are not identity, so a base match keeps the current handle.
+    const currentBase = detached.username.includes('@')
+      ? detached.username.slice(0, detached.username.indexOf('@'))
+      : detached.username;
+    let newUsername = detached.username;
+    const newBase = verified.username.toLowerCase();
+    if (newBase !== currentBase.toLowerCase()) {
+      let candidate = `${newBase}@${homeDomain}`;
+      let attempt = 0;
+      while (rawDb.prepare(`SELECT 1 FROM users WHERE username = ? AND id != ?`).get(candidate, detached.id)) {
+        attempt++;
+        candidate = `${newBase}_${attempt}@${homeDomain}`;
+        if (attempt > 10) {
+          candidate = `${newBase}_${randomBytes(4).toString('hex')}@${homeDomain}`;
+          break;
+        }
+      }
+      newUsername = candidate;
+    }
+
+    // Merge + re-bind, atomically. All users.id FK repointing lives here; dedupe
+    // rows that would collide on a composite PK / unique index BEFORE repointing
+    // (spec §3.3). The stub row is the only source — a real account holding the
+    // identity was already rejected by guard 4.
+    const dmReconcileResults: DmReconcileResult[] = [];
+    rawDb.transaction(() => {
+      if (existingRow) {
+        const stubId = existingRow.id;
+        const targetId = detached.id;
+        // dm_members (composite PK dm_channel_id+user_id → dedupe): drop the
+        // stub's membership where the detached row is already a member.
+        rawDb.prepare(`DELETE FROM dm_members WHERE user_id = ? AND dm_channel_id IN (SELECT dm_channel_id FROM dm_members WHERE user_id = ?)`).run(stubId, targetId);
+        rawDb.prepare(`UPDATE dm_members SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // dm_messages / messages (RESTRICT FK, no unique on user_id → straight repoint).
+        rawDb.prepare(`UPDATE dm_messages SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`UPDATE messages SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // attachments.uploader_id (plain text column, NO FK, no unique → straight
+        // repoint). A replicated stub that uploaded a DM/channel attachment would
+        // otherwise leave uploader_id dangling at the deleted stub's id — broken
+        // attribution.
+        rawDb.prepare(`UPDATE attachments SET uploader_id = ? WHERE uploader_id = ?`).run(targetId, stubId);
+        // dm_reactions (dedupe on dm_message_id+emoji per user).
+        rawDb.prepare(`DELETE FROM dm_reactions WHERE user_id = ? AND EXISTS (SELECT 1 FROM dm_reactions r2 WHERE r2.user_id = ? AND r2.dm_message_id = dm_reactions.dm_message_id AND r2.emoji = dm_reactions.emoji)`).run(stubId, targetId);
+        rawDb.prepare(`UPDATE dm_reactions SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // reactions (dedupe on message_id+emoji per user).
+        rawDb.prepare(`DELETE FROM reactions WHERE user_id = ? AND EXISTS (SELECT 1 FROM reactions r2 WHERE r2.user_id = ? AND r2.message_id = reactions.message_id AND r2.emoji = reactions.emoji)`).run(stubId, targetId);
+        rawDb.prepare(`UPDATE reactions SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // friends (composite PK user_id+friend_id → dedupe both directions, then
+        // repoint, then drop any self-friendship the repoint created).
+        rawDb.prepare(`DELETE FROM friends WHERE user_id = ? AND friend_id IN (SELECT friend_id FROM friends WHERE user_id = ?)`).run(stubId, targetId);
+        rawDb.prepare(`DELETE FROM friends WHERE friend_id = ? AND user_id IN (SELECT user_id FROM friends WHERE friend_id = ?)`).run(stubId, targetId);
+        rawDb.prepare(`UPDATE friends SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`UPDATE friends SET friend_id = ? WHERE friend_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`DELETE FROM friends WHERE user_id = friend_id`).run();
+        // friend_requests (unique on neither col alone; repoint both, drop self-rows).
+        rawDb.prepare(`UPDATE friend_requests SET from_id = ? WHERE from_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`UPDATE friend_requests SET to_id = ? WHERE to_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`DELETE FROM friend_requests WHERE from_id = to_id`).run();
+        // read_states (composite PK user_id+channel_id → dedupe).
+        rawDb.prepare(`DELETE FROM read_states WHERE user_id = ? AND channel_id IN (SELECT channel_id FROM read_states WHERE user_id = ?)`).run(stubId, targetId);
+        rawDb.prepare(`UPDATE read_states SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // dm_channels.owner_id (plain text column, NO FK → straight repoint).
+        rawDb.prepare(`UPDATE dm_channels SET owner_id = ? WHERE owner_id = ?`).run(targetId, stubId);
+        rawDb.prepare(`DELETE FROM users WHERE id = ?`).run(stubId);
+      }
+
+      // Group-DM ownership continuity: channels the OLD identity owned keep
+      // authority under the NEW identity (owner_home_user_id is the S2S
+      // authority key, not a users.id FK).
+      const normOwnerHome = `lower(replace(replace(coalesce(owner_home_instance, ''), 'https://', ''), 'http://', ''))`;
+      rawDb.prepare(`UPDATE dm_channels SET owner_home_user_id = ? WHERE owner_home_user_id = ? AND ${normOwnerHome} = ?`)
+        .run(verified.homeUserId, detached.homeUserId, homeDomain);
+
+      // Re-bind. profile_updated_at is nulled so the home's next profile_update
+      // (any version) tier-1 matches and applies (the accept-and-skip guards
+      // only fire on federation_home_orphaned = 1).
+      rawDb.prepare(`UPDATE users SET home_user_id = ?, federation_home_orphaned = 0, username = ?, profile_updated_at = NULL WHERE id = ?`)
+        .run(verified.homeUserId, newUsername, detached.id);
+
+      // Reconcile the account's 1-on-1 DM channels: the home_user_id just
+      // changed, so every 1-on-1 federatedId derived from it is now stale.
+      // Re-key or merge each into its new-identity channel so history stays a
+      // single conversation (reattach-dm-reconcile spec §3.2). Group DMs (UUID
+      // federatedId / != 2 members) are skipped by the helper.
+      const oneOnOne = rawDb.prepare(`
+        SELECT c.id FROM dm_channels c
+        WHERE c.deleted_at IS NULL
+          AND c.federated_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM dm_members m WHERE m.dm_channel_id = c.id AND m.user_id = ?)
+          AND (SELECT count(*) FROM dm_members m2 WHERE m2.dm_channel_id = c.id) = 2
+      `).all(detached.id) as Array<{ id: string }>;
+      for (const c of oneOnOne) {
+        // A merge earlier in this loop may have deleted this id — reconcile
+        // returns noop for a missing/mutated channel, so the loop is convergent.
+        const result = reconcileDmChannelFederatedId(rawDb, c.id);
+        if (result.action !== 'noop') dmReconcileResults.push(result);
+      }
+    })();
+
+    // Best-effort initial profile pull (spec §3.2 step 4). Failure is fine — the
+    // account is re-attached; the next relay fills the profile.
+    const home = await fetchHomeProfileByHomeId(peerRow, verified.homeUserId);
+    if (home) {
+      let avatar: string | null = null;
+      let banner: string | null = null;
+      if (home.profile.avatar) {
+        const url = home.profile.avatar.startsWith('http') ? home.profile.avatar : `${peerRow.origin}/api/uploads/${home.profile.avatar}`;
+        avatar = (await downloadProfileAsset(url, peerRow.origin)) ?? url;
+      }
+      if (home.profile.banner) {
+        const url = home.profile.banner.startsWith('http') ? home.profile.banner : `${peerRow.origin}/api/uploads/${home.profile.banner}`;
+        banner = (await downloadProfileAsset(url, peerRow.origin)) ?? url;
+      }
+      db.update(schema.users).set({
+        displayName: home.profile.displayName ?? home.username,
+        avatar,
+        banner,
+        avatarColor: home.profile.avatarColor ?? detached.avatarColor,
+        bio: home.profile.bio,
+      }).where(eq(schema.users.id, detached.id)).run();
+    }
+
+    const updated = db.select().from(schema.users).where(eq(schema.users.id, detached.id)).get()!;
+    console.log(`[federation] Re-attached account ${updated.id} (${updated.username}): ${detached.homeUserId} → ${verified.homeUserId} @ ${homeDomain}`);
+
+    // Broadcast to friends / DM / space co-members + all self connections.
+    const targetIds = collectProfileBroadcastTargetIds(updated.id);
+    targetIds.add(updated.id);
+    for (const uid of targetIds) {
+      connectionManager.sendToUser(uid, { type: 'user_updated' as const, user: sanitizeUser(updated, uid === updated.id) });
+    }
+
+    // Push DM-list refresh for reconciled channels to affected local members so
+    // the merged/re-keyed conversation replaces the split without a reload
+    // (reattach-dm-reconcile spec §3.4). Reuses existing events, no new type:
+    //  - merged: dm_channel_closed removes the stale source entry; dm_channel_created
+    //    (full DmChannel payload — the client handler reads dmChannel.members) resurfaces
+    //    the surviving target with its merged history.
+    //  - rekeyed: dm_channel_created upserts the channel by id (spaceStore.addDmChannel
+    //    replaces by id), refreshing the now-stale federatedId in place. dm_channel_updated
+    //    would only patch name/icon, not federatedId, so it cannot heal the client here.
+    for (const r of dmReconcileResults) {
+      const targetPayload = buildDmChannelPayload(r.targetChannelId, db);
+      for (const uid of r.affectedUserIds) {
+        if (r.action === 'merged') {
+          connectionManager.sendToUser(uid, { type: 'dm_channel_closed' as const, dmChannelId: r.channelId });
+        }
+        if (targetPayload) {
+          connectionManager.sendToUser(uid, { type: 'dm_channel_created' as const, dmChannel: targetPayload });
+        }
+      }
+    }
+
+    return reply.code(200).send({ success: true, user: sanitizeUser(updated, true) });
+  });
+
   // ─── POST /api/federation/sync ──────────────────────────────────────────────
   // Server-to-server: checkpoint catch-up sync. A peer calls this after downtime
   // to retrieve missed DM mutations from the mutation log.
@@ -2795,15 +3163,57 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       // Only populated in the DM branch (friend/profile branches don't need it).
       let channelFederatedIdMap = new Map<string, string>();
 
+      // Friend-branch pagination must be computed from PRE-filter rows —
+      // filtering in place would stall the checkpoint / drop pages (spec §3.2).
+      let prefilterCount: number | null = null;
+      let prefilterLastTs: number | null = null;
+
       if (contextTypeFilter === 'friend') {
-        // ── Friend event sync: no DM channel logic needed ──
-        mutationRows = rawDb.prepare(`
+        // ── Friend event sync: relevance-scoped to the requesting peer ──
+        const fetchedFriendRows = rawDb.prepare(`
           SELECT id, entity_id, context_id, context_type, mutation_type, mutated_at, payload
           FROM federation_mutation_log
           WHERE context_type = 'friend' AND mutated_at > ?
           ORDER BY mutated_at ASC
           LIMIT ?
         `).all(sinceTimestamp, limit) as typeof mutationRows;
+
+        prefilterCount = fetchedFriendRows.length;
+        prefilterLastTs = fetchedFriendRows.length > 0
+          ? fetchedFriendRows[fetchedFriendRows.length - 1]!.mutated_at
+          : null;
+
+        const peerDomainFriend = extractDomain(peer.origin).toLowerCase();
+        const normHome = `lower(replace(replace(coalesce(home_instance, ''), 'https://', ''), 'http://', ''))`;
+        const localRowStmt = rawDb.prepare(`
+          SELECT is_deleted, federation_home_orphaned FROM users
+          WHERE home_user_id = ? AND ${normHome} = ?
+        `);
+
+        // An event qualifies iff at least one side is homed at the requester's
+        // domain AND that side, when it resolves to a local row, is live and
+        // non-detached. A detached/tombstoned row belongs to a dead incarnation
+        // of the requester, not to the requester (spec §3.2).
+        const sideQualifies = (side: { homeUserId?: string; homeInstance?: string } | undefined): boolean => {
+          if (!side?.homeUserId || !side.homeInstance) return false;
+          if (extractDomain(side.homeInstance).toLowerCase() !== peerDomainFriend) return false;
+          const local = localRowStmt.get(side.homeUserId, peerDomainFriend) as
+            { is_deleted: number; federation_home_orphaned: number } | undefined;
+          if (local && (local.is_deleted === 1 || local.federation_home_orphaned === 1)) return false;
+          return true;
+        };
+
+        mutationRows = fetchedFriendRows.filter((row) => {
+          if (!row.payload) return false;
+          let friendship: { from?: { homeUserId?: string; homeInstance?: string }; to?: { homeUserId?: string; homeInstance?: string } } | undefined;
+          try {
+            friendship = (JSON.parse(row.payload) as { friendship?: typeof friendship }).friendship;
+          } catch {
+            return false;
+          }
+          if (!friendship) return false;
+          return sideQualifies(friendship.from) || sideQualifies(friendship.to);
+        });
       } else if (contextTypeFilter === 'profile') {
         // ── Profile event sync: no DM channel logic needed ──
         mutationRows = rawDb.prepare(`
@@ -2819,10 +3229,23 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         // Use federated_id: any channel with a federated ID is a federated DM
         // that should be synced. The peer's relay endpoint will create the channel
         // if it doesn't exist, or match by federated_id if it does.
+        // Relevance scoping (dead-incarnation spec §3.2): only offer channels
+        // with at least one LIVE member homed at the requesting peer's domain.
+        // A reset peer's former users are detached (federation_home_orphaned=1)
+        // or tombstoned here — their channels are our history, not the new
+        // incarnation's. Channels not involving the requester at all are none
+        // of its business either (third-instance over-broadcast).
+        const peerDomain = extractDomain(peer.origin).toLowerCase();
         const sharedChannelRows = rawDb.prepare(`
-          SELECT id as dm_channel_id, federated_id FROM dm_channels
-          WHERE federated_id IS NOT NULL AND deleted_at IS NULL
-        `).all() as Array<{ dm_channel_id: string; federated_id: string }>;
+          SELECT DISTINCT c.id as dm_channel_id, c.federated_id
+          FROM dm_channels c
+          JOIN dm_members m ON m.dm_channel_id = c.id
+          JOIN users u ON u.id = m.user_id
+          WHERE c.federated_id IS NOT NULL AND c.deleted_at IS NULL
+            AND u.is_deleted = 0
+            AND u.federation_home_orphaned = 0
+            AND lower(replace(replace(coalesce(u.home_instance, ''), 'https://', ''), 'http://', '')) = ?
+        `).all(peerDomain) as Array<{ dm_channel_id: string; federated_id: string }>;
 
         const sharedChannelIds = sharedChannelRows.map(r => r.dm_channel_id);
         channelFederatedIdMap = new Map<string, string>(
@@ -3184,11 +3607,13 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
-      // 6. Compute pagination metadata
-      const hasMore = mutationRows.length >= limit;
-      const checkpoint = mutationRows.length > 0
-        ? mutationRows[mutationRows.length - 1]!.mutated_at
-        : sinceTimestamp;
+      // 6. Compute pagination metadata — from PRE-filter rows when the friend
+      //    branch filtered, so filtered-out events still advance the cursor.
+      const hasMore = (prefilterCount ?? mutationRows.length) >= limit;
+      const checkpoint = prefilterLastTs
+        ?? (mutationRows.length > 0
+          ? mutationRows[mutationRows.length - 1]!.mutated_at
+          : sinceTimestamp);
 
       // 7. Update peer last-seen timestamp
       db.update(schema.federationPeers)
@@ -3392,6 +3817,20 @@ export function extractDomain(homeInstance: string): string {
 }
 
 /**
+ * The bare lowercase domain that constitutes this instance's federated
+ * identity authority. Derives from DOMAIN (identity), falling back to
+ * getOurOrigin() only when DOMAIN is unset (dev/tests). PUBLIC_ORIGIN is a
+ * transport override and deliberately NOT consulted first — identity
+ * comparisons must not shift when the transport origin is overridden.
+ */
+export function getOurIdentityDomain(): string | null {
+  if (config.domain) return config.domain.toLowerCase();
+  const origin = getOurOrigin();
+  if (!origin) return null;
+  return extractDomain(origin).toLowerCase();
+}
+
+/**
  * Verify that an acting user's homeInstance is legitimate for this relay.
  *
  * Two valid cases:
@@ -3478,6 +3917,10 @@ export function findFederatedUser(
       and(
         eq(schema.users.homeInstance, domain),
         eq(schema.users.isDeleted, 0),
+        // Detached (home-orphaned) accounts are sovereign: never re-bindable to
+        // the domain's new incarnation via username heuristics — that is exactly
+        // how a new same-name user would capture the established account.
+        eq(schema.users.federationHomeOrphaned, 0),
         or(
           sql`lower(substr(${schema.users.username}, 1, instr(${schema.users.username}, '@') - 1)) = ${hintLower}`,
           and(
@@ -3545,15 +3988,35 @@ export function resolveOrCreateReplicatedUser(
   homeUserId: string,
   homeInstance: string,
   db: ReturnType<typeof getDb>,
-  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null },
+  hints?: { username?: string | null; status?: 'online' | 'idle' | 'dnd' | 'offline' | null; deleted?: boolean | null },
 ): typeof schema.users.$inferSelect | null {
   const existing = findFederatedUser(homeUserId, homeInstance, db, hints);
   if (existing) return backfillHomeUserId(existing, homeUserId, db);
+
+  // A participant the sender marks as deleted must not materialize as a new
+  // stub — mirror of the local-tombstone skip below. An existing row still
+  // resolves above, so historical attribution is unaffected (spec §3.3).
+  if (hints?.deleted) {
+    console.log(`[federation] Skipping stub creation for remotely-deleted identity homeUserId=${homeUserId}`);
+    return null;
+  }
 
   // Check if this identity was previously deleted — don't resurrect a tombstoned
   // user by creating a new stub. The isDeleted=0 filter in findFederatedUser
   // already hides the deleted row, so we must query without that filter here.
   const domain = extractDomain(homeInstance);
+
+  // An instance never hosts a replicated stub homed at itself. A self-domain
+  // identity that is live resolves at tier 1 above (native id match); one
+  // that reaches the create path is a dead incarnation from before an
+  // instance reset (e.g. replayed by a peer's initial sync). Creating a row
+  // here is what produced the self-homed double-domain junk stubs.
+  const ourDomain = getOurIdentityDomain();
+  if (ourDomain && domain.toLowerCase() === ourDomain) {
+    console.log(`[federation] Refusing self-homed stub for homeUserId=${homeUserId} (${domain}) — dead incarnation of this instance`);
+    return null;
+  }
+
   const deletedMatch = db
     .select({ id: schema.users.id, isDeleted: schema.users.isDeleted })
     .from(schema.users)
@@ -3788,7 +4251,7 @@ async function processCreateEvent(
   }> = [];
 
   for (const p of event.participants) {
-    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status });
+    let localUser = resolveOrCreateReplicatedUser(p.homeUserId, p.homeInstance, db, { username: p.profile?.username, status: p.profile?.status, deleted: p.profile?.deleted });
     // Skip deleted identities — don't include tombstoned users in the DM
     if (!localUser) continue;
     // Hydrate with profile data from the relay event (displayName, avatar, etc.)
@@ -4385,7 +4848,7 @@ export async function processMemberAddEvent(
     // Resolve owner — create a replicated stub if unknown
     let ownerId: string | null = null;
     if (event.group.owner) {
-      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status });
+      const ownerLocal = resolveOrCreateReplicatedUser(event.group.owner.homeUserId, event.group.owner.homeInstance, db, { username: event.group.owner.profile?.username, status: event.group.owner.profile?.status, deleted: event.group.owner.profile?.deleted });
       ownerId = ownerLocal?.id ?? null;
     }
 
@@ -4422,7 +4885,7 @@ export async function processMemberAddEvent(
     // Add all roster members — create replicated user stubs for any
     // participants from remote instances that haven't been seen before.
     for (const member of event.group.members) {
-      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status });
+      const rosterUser = resolveOrCreateReplicatedUser(member.homeUserId, member.homeInstance, db, { username: member.profile?.username, status: member.profile?.status, deleted: member.profile?.deleted });
       // Skip deleted identities — tombstoned users can't be added to a DM
       if (!rosterUser) continue;
       const existing = db.select().from(schema.dmMembers)
@@ -4476,7 +4939,7 @@ export async function processMemberAddEvent(
     event.membership.user.homeUserId,
     event.membership.user.homeInstance,
     db,
-    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status },
+    { username: event.membership.user.profile?.username, status: event.membership.user.profile?.status, deleted: event.membership.user.profile?.deleted },
   );
   if (!localUser) {
     // The user's identity has been deleted — don't add a tombstoned user to the DM
@@ -4515,7 +4978,7 @@ export async function processMemberAddEvent(
   // would otherwise find the channel already present and fall through to the incremental path,
   // creating spurious system messages (the exact bug this fixes).
   const actorUser = event.membership.addedBy
-    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status })
+    ? resolveOrCreateReplicatedUser(event.membership.addedBy.homeUserId, event.membership.addedBy.homeInstance, db, { username: event.membership.addedBy.profile?.username, status: event.membership.addedBy.profile?.status, deleted: event.membership.addedBy.profile?.deleted })
     : null;
   const actorId = actorUser?.id ?? localUser.id;
   const addBaseName = localUser.username?.includes('@') ? localUser.username.split('@')[0] : (localUser.username ?? 'Unknown');
@@ -4824,7 +5287,7 @@ export function processOwnershipTransferEvent(
     event.ownership.newOwner.homeUserId,
     event.ownership.newOwner.homeInstance,
     db,
-    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status },
+    { username: event.ownership.newOwner.profile?.username, status: event.ownership.newOwner.profile?.status, deleted: event.ownership.newOwner.profile?.deleted },
   );
   if (!newOwnerLocal) {
     rejected.push({ messageId: event.messageId, reason: 'participant_not_found' });
@@ -4917,6 +5380,12 @@ export async function hydrateReplicatedUserProfile(
 ): Promise<typeof schema.users.$inferSelect> {
   if (!profile) return user;
   if (!user.homeInstance) return user; // Don't update native users
+  // Detached accounts are sovereign local accounts: the home domain now belongs
+  // to a different incarnation, so a relayed snapshot resolved via an old
+  // homeUserId (tier-1 historical hit) must never fill this row's fields. No-op
+  // return, mirroring the profile_update / presence_update / identity-delete
+  // guards (detach spec §4.3).
+  if (user.federationHomeOrphaned === 1) return user;
 
   const baseUrl = user.homeInstance.startsWith('http') ? user.homeInstance : `https://${user.homeInstance}`;
   const buildAbsoluteUrl = (value: string): string => {
@@ -4993,7 +5462,7 @@ async function processFriendRequestCreateEvent(
   }
 
   // Resolve the sender (create stub if needed — they're on a remote instance)
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status, deleted: event.friendship.fromProfile?.deleted });
   if (!fromUserResolved) {
     // Sender's identity has been deleted — silently accept to drop the event
     accepted.push(event.messageId);
@@ -5111,7 +5580,7 @@ function processFriendRequestUpdateEvent(
   }
 
   // Resolve the recipient (create stub if needed — they're on the remote instance)
-  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
+  const toUser = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status, deleted: event.friendship.toProfile?.deleted });
   if (!toUser) {
     // Recipient's identity has been deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
@@ -5251,14 +5720,14 @@ async function processFriendAddEvent(
   }
 
   // Resolve both users (create stubs if needed) and hydrate with profile data
-  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status });
+  const fromUserResolved = resolveOrCreateReplicatedUser(from.homeUserId, from.homeInstance, db, { username: event.friendship.fromProfile?.username, status: event.friendship.fromProfile?.status, deleted: event.friendship.fromProfile?.deleted });
   if (!fromUserResolved) {
     // One party's identity is deleted — accept idempotently to drop the event
     accepted.push(event.messageId);
     return;
   }
   let fromUser = await hydrateReplicatedUserProfile(fromUserResolved, event.friendship.fromProfile, db);
-  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status });
+  const toUserResolved = resolveOrCreateReplicatedUser(to.homeUserId, to.homeInstance, db, { username: event.friendship.toProfile?.username, status: event.friendship.toProfile?.status, deleted: event.friendship.toProfile?.deleted });
   if (!toUserResolved) {
     accepted.push(event.messageId);
     return;
@@ -6110,6 +6579,16 @@ export async function processProfileUpdateEvent(
     return;
   }
 
+  // Detached accounts are sovereign: the domain now belongs to a different
+  // incarnation, which must never overwrite the established account's profile
+  // by replaying its old homeUserId. Ack (not reject) — the sender considers
+  // this identity theirs to update; from our side the update simply no-ops.
+  if (localUser.federationHomeOrphaned === 1) {
+    console.log(`[federation] Skipping profile_update for detached account ${localUser.id} (home-orphaned)`);
+    accepted.push(event.messageId);
+    return;
+  }
+
   // Version check: reject stale/duplicate events
   const storedTs = localUser.profileUpdatedAt ?? 0;
   const incomingTs = payload.profileUpdatedAt ?? 0;
@@ -6335,7 +6814,7 @@ export async function processGroupMetadataUpdateEvent(
       actorParticipant.homeUserId,
       actorParticipant.homeInstance,
       db,
-      { username: actorParticipant.profile?.username, status: actorParticipant.profile?.status },
+      { username: actorParticipant.profile?.username, status: actorParticipant.profile?.status, deleted: actorParticipant.profile?.deleted },
     );
     actorUserId = actorUser?.id ?? null;
   }
@@ -6517,6 +6996,16 @@ export function processPresenceUpdateEvent(
     return;
   }
 
+  // Detached accounts are sovereign: the domain now belongs to a different
+  // incarnation, which must never flip the established account's presence by
+  // replaying its old homeUserId. Ack (not reject) — the sender considers this
+  // identity theirs to update; from our side the update simply no-ops.
+  if (localUser.federationHomeOrphaned === 1) {
+    console.log(`[federation] Skipping presence_update for detached account ${localUser.id} (home-orphaned)`);
+    accepted.push(event.messageId);
+    return;
+  }
+
   db.update(schema.users)
     .set({ status: payload.status })
     .where(eq(schema.users.id, localUser.id))
@@ -6535,6 +7024,195 @@ export function processPresenceUpdateEvent(
   }
 
   accepted.push(event.messageId);
+}
+
+// ─── Dead-Incarnation Startup Sweep ─────────────────────────────────────────
+
+export interface DmReconcileResult {
+  action: 'noop' | 'rekeyed' | 'merged';
+  channelId: string;
+  targetChannelId: string;
+  affectedUserIds: string[];
+}
+
+/**
+ * Reconcile a single 1-on-1 DM channel's deterministic federatedId against its
+ * members' CURRENT home identities (reattach-dm-reconcile spec §3.1). A 1-on-1
+ * federatedId is f(sorted home user ids); when a participant's home_user_id
+ * changes (re-attach), the channel's stored id goes stale and new messages
+ * compute a different id → a split conversation. This re-keys the channel in
+ * place, or — when a channel already carries the correct id (idx_dm_federated is
+ * UNIQUE, so two rows can't share it) — merges this channel INTO that one and
+ * deletes it.
+ *
+ * Idempotent: a correctly-keyed channel is a noop. Group DMs (UUID federatedId
+ * or member count != 2) are skipped. Must be called inside a transaction.
+ */
+export function reconcileDmChannelFederatedId(
+  rawDb: ReturnType<typeof getRawDb>,
+  channelId: string,
+): DmReconcileResult {
+  const noop: DmReconcileResult = { action: 'noop', channelId, targetChannelId: channelId, affectedUserIds: [] };
+
+  const chan = rawDb.prepare(`SELECT id, federated_id FROM dm_channels WHERE id = ? AND deleted_at IS NULL`).get(channelId) as
+    { id: string; federated_id: string | null } | undefined;
+  if (!chan || !chan.federated_id) return noop;
+  // Only 1-on-1 shape (32 hex). Group DMs use a random UUID.
+  if (!/^[0-9a-f]{32}$/.test(chan.federated_id)) return noop;
+
+  const members = rawDb.prepare(`
+    SELECT u.id, u.home_user_id FROM dm_members m JOIN users u ON u.id = m.user_id
+    WHERE m.dm_channel_id = ?
+  `).all(channelId) as Array<{ id: string; home_user_id: string | null }>;
+  if (members.length !== 2) return noop;
+
+  const homeA = members[0]!.home_user_id || members[0]!.id;
+  const homeB = members[1]!.home_user_id || members[1]!.id;
+  const expected = computeFederatedId(homeA, homeB);
+  if (expected === chan.federated_id) return noop;
+
+  const target = rawDb.prepare(`SELECT id FROM dm_channels WHERE federated_id = ? AND deleted_at IS NULL AND id != ?`).get(expected, channelId) as
+    { id: string } | undefined;
+
+  if (!target) {
+    rawDb.prepare(`UPDATE dm_channels SET federated_id = ? WHERE id = ?`).run(expected, channelId);
+    return { action: 'rekeyed', channelId, targetChannelId: channelId, affectedUserIds: members.map(m => m.id) };
+  }
+
+  // Merge source (channelId) INTO target, then delete source.
+  const targetId = target.id;
+  const targetMemberIds = (rawDb.prepare(`SELECT user_id FROM dm_members WHERE dm_channel_id = ?`).all(targetId) as Array<{ user_id: string }>).map(r => r.user_id);
+  const affected = Array.from(new Set([...members.map(m => m.id), ...targetMemberIds]));
+
+  // Messages: globally-unique ids, straight move (attachments + dm_reactions
+  // reference dm_message_id and follow automatically).
+  rawDb.prepare(`UPDATE dm_messages SET dm_channel_id = ? WHERE dm_channel_id = ?`).run(targetId, channelId);
+  // Members: drop source rows already present on target (composite PK), repoint the rest.
+  rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id IN (SELECT user_id FROM dm_members WHERE dm_channel_id = ?)`).run(channelId, targetId);
+  rawDb.prepare(`UPDATE dm_members SET dm_channel_id = ? WHERE dm_channel_id = ?`).run(targetId, channelId);
+  // read_states: keyed by channel_id; dedupe on (user_id, channel_id) then repoint.
+  rawDb.prepare(`DELETE FROM read_states WHERE channel_id = ? AND user_id IN (SELECT user_id FROM read_states WHERE channel_id = ?)`).run(channelId, targetId);
+  rawDb.prepare(`UPDATE read_states SET channel_id = ? WHERE channel_id = ?`).run(targetId, channelId);
+  // Remove the now-empty source channel.
+  rawDb.prepare(`DELETE FROM dm_channels WHERE id = ?`).run(channelId);
+
+  return { action: 'merged', channelId, targetChannelId: targetId, affectedUserIds: affected };
+}
+
+/**
+ * Startup sweep: reconcile any 1-on-1 DM channel whose stored federatedId has
+ * drifted from its members' current home identities (reattach-dm-reconcile
+ * spec §3.3). Heals accounts re-attached before inline reconciliation shipped
+ * (e.g. the live split-conversation duplicate). Idempotent; a noop on a clean DB.
+ */
+export function reconcileDriftedDmFederatedIds(): void {
+  const rawDb = getRawDb();
+  const candidates = rawDb.prepare(`
+    SELECT c.id FROM dm_channels c
+    WHERE c.deleted_at IS NULL
+      AND c.federated_id IS NOT NULL
+      AND (SELECT count(*) FROM dm_members m WHERE m.dm_channel_id = c.id) = 2
+  `).all() as Array<{ id: string }>;
+  if (candidates.length === 0) return;
+
+  let rekeyed = 0;
+  let merged = 0;
+  rawDb.transaction(() => {
+    for (const c of candidates) {
+      // A prior merge in this loop may have deleted this id — reconcile returns
+      // noop for a missing/mutated channel, so this is safe.
+      const r = reconcileDmChannelFederatedId(rawDb, c.id);
+      if (r.action === 'rekeyed') rekeyed++;
+      else if (r.action === 'merged') merged++;
+    }
+  })();
+
+  if (rekeyed > 0 || merged > 0) {
+    console.log(`[federation] DM federatedId reconciliation: rekeyed ${rekeyed}, merged ${merged}`);
+  }
+}
+
+/**
+ * Remove dead-incarnation artifacts produced by pre-fix initial syncs
+ * (dead-incarnation spec §3.4): DM channels with no native member, and
+ * replicated stubs homed at this instance's own domain. Idempotent —
+ * a no-op on a clean database. Synchronous (better-sqlite3), runs once
+ * at startup from startFederationWorkers.
+ *
+ * Child rows are deleted explicitly: FK cascade enforcement cannot be
+ * assumed ON, and dm_messages.user_id has no cascade anyway.
+ */
+export function sweepDeadIncarnationArtifacts(): void {
+  const ourDomain = getOurIdentityDomain();
+  if (!ourDomain) return;
+  const rawDb = getRawDb();
+  const normHome = `lower(replace(replace(coalesce(home_instance, ''), 'https://', ''), 'http://', ''))`;
+
+  // ── 1. DM channels with no native member. A legitimate channel always
+  //       involves a native user; native-less channels are sync junk. ──
+  const junkChannelIds = (rawDb.prepare(`
+    SELECT c.id FROM dm_channels c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM dm_members m JOIN users u ON u.id = m.user_id
+      WHERE m.dm_channel_id = c.id AND u.home_instance IS NULL
+    )
+  `).all() as Array<{ id: string }>).map(r => r.id);
+
+  if (junkChannelIds.length > 0) {
+    const ph = junkChannelIds.map(() => '?').join(',');
+    rawDb.transaction(() => {
+      rawDb.prepare(`DELETE FROM dm_reactions WHERE dm_message_id IN (SELECT id FROM dm_messages WHERE dm_channel_id IN (${ph}))`).run(...junkChannelIds);
+      rawDb.prepare(`DELETE FROM attachments WHERE dm_message_id IN (SELECT id FROM dm_messages WHERE dm_channel_id IN (${ph}))`).run(...junkChannelIds);
+      rawDb.prepare(`DELETE FROM dm_messages WHERE dm_channel_id IN (${ph})`).run(...junkChannelIds);
+      rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id IN (${ph})`).run(...junkChannelIds);
+      rawDb.prepare(`DELETE FROM read_states WHERE channel_id IN (${ph})`).run(...junkChannelIds);
+      rawDb.prepare(`DELETE FROM dm_channels WHERE id IN (${ph})`).run(...junkChannelIds);
+    })();
+  }
+
+  // ── 2. Self-homed replicated stubs. Junk social rows referencing them go
+  //       first; then stubs with no remaining non-cascading references. ──
+  const stubSelect = `SELECT id FROM users WHERE password_hash = '!federation-replicated' AND ${normHome} = ?`;
+  const allStubIds = (rawDb.prepare(stubSelect).all(ourDomain) as Array<{ id: string }>).map(r => r.id);
+
+  let deletedStubs = 0;
+  if (allStubIds.length > 0) {
+    rawDb.transaction(() => {
+      rawDb.prepare(`DELETE FROM friends WHERE user_id IN (${stubSelect}) OR friend_id IN (${stubSelect})`).run(ourDomain, ourDomain);
+      rawDb.prepare(`DELETE FROM friend_requests WHERE from_id IN (${stubSelect}) OR to_id IN (${stubSelect})`).run(ourDomain, ourDomain);
+
+      // Deletable = no rows left in any table whose FK to users.id does NOT
+      // cascade, and no surviving dm/space membership or authored message.
+      const deletable = (rawDb.prepare(`
+        ${stubSelect}
+          AND NOT EXISTS (SELECT 1 FROM dm_messages WHERE user_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM messages WHERE user_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM dm_members WHERE user_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM space_members WHERE user_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM spaces WHERE owner_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM bans WHERE banned_by = users.id)
+          AND NOT EXISTS (SELECT 1 FROM join_requests WHERE decided_by = users.id)
+          AND NOT EXISTS (SELECT 1 FROM voice_restrictions WHERE moderator_id = users.id)
+          AND NOT EXISTS (SELECT 1 FROM invite_links WHERE created_by = users.id)
+      `).all(ourDomain) as Array<{ id: string }>).map(r => r.id);
+
+      if (deletable.length > 0) {
+        const dph = deletable.map(() => '?').join(',');
+        // Explicit child cleanup for the cascade-declared tables too — FK
+        // enforcement cannot be assumed ON.
+        rawDb.prepare(`DELETE FROM dm_reactions WHERE user_id IN (${dph})`).run(...deletable);
+        rawDb.prepare(`DELETE FROM reactions WHERE user_id IN (${dph})`).run(...deletable);
+        rawDb.prepare(`DELETE FROM read_states WHERE user_id IN (${dph})`).run(...deletable);
+        rawDb.prepare(`DELETE FROM users WHERE id IN (${dph})`).run(...deletable);
+        deletedStubs = deletable.length;
+      }
+    })();
+  }
+
+  const skipped = allStubIds.length - deletedStubs;
+  if (junkChannelIds.length > 0 || allStubIds.length > 0) {
+    console.log(`[federation] Dead-incarnation sweep: removed ${junkChannelIds.length} channels, ${deletedStubs} self-homed stubs${skipped > 0 ? `, skipped ${skipped} still-referenced stubs` : ''}`);
+  }
 }
 
 // ─── Replicated Profile Asset Backfill ──────────────────────────────────────

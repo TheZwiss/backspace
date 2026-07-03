@@ -153,12 +153,44 @@ export async function detectResetOnNeedsAttentionPeers(signal?: AbortSignal): Pr
     .all();
 
   for (const peer of peers) {
-    const result = await probePeerReachable(peer.origin, signal);
-    // Detection fires ONLY on a reachable peer advertising a non-null epoch that
-    // differs from the trusted baseline. Everything else (unreachable, unknown
-    // epoch, or a matching epoch) is a no-op — no recover-to-active from here.
-    if (result.reachable && result.instanceId && peer.peerInstanceId && result.instanceId !== peer.peerInstanceId) {
-      markPeerReset(peer.id, peer.origin, peer.peerInstanceId, result.instanceId);
-    }
+    await detectResetForPeer(peer, signal);
   }
+}
+
+/**
+ * Detection-only epoch probe for a SINGLE `needs_attention` peer — the per-peer
+ * unit shared by the health-tick sweep (`detectResetOnNeedsAttentionPeers`), the
+ * worker-startup sweep, and the event-driven probe fired the instant a peer
+ * crosses into `needs_attention` via the auth-failure path (`federationWorker`).
+ *
+ * The auth-failure transition is the case this exists for: a reset peer whose
+ * HTTP is up but whose HMAC is desynced accrues 401/403s and lands in
+ * `needs_attention` WITHOUT ever passing through `unreachable`, so the 5-second
+ * unreachable-only recovery probe never sees it. Before this probe fired at the
+ * transition, such a peer waited up to a full 15-minute health-check cycle before
+ * its reset was detected and the admin surface offered "Re-peer & heal". Probing
+ * at the transition collapses that latency to a single `/instance/info` GET.
+ *
+ * Detection fires ONLY on a reachable peer advertising a non-null epoch that
+ * differs from the trusted baseline (`peer_instance_id`). Everything else —
+ * unreachable, unknown/absent epoch, a matching epoch, or a null baseline (which
+ * has nothing to compare against) — is a no-op. NEVER flips a peer to `active`: a
+ * `needs_attention` peer's HMAC secret is desynced, so a match/unknown means
+ * "still broken, still needs an admin," not "recovered." On a confirmed epoch
+ * mismatch it calls `markPeerReset` (snapshot + journal + admin notify) and
+ * nothing else — the baseline and `hmac_secret` are left untouched.
+ *
+ * @returns `true` if a reset was detected and `markPeerReset` was called.
+ */
+export async function detectResetForPeer(
+  peer: { id: string; origin: string; peerInstanceId: string | null },
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (!peer.peerInstanceId) return false; // no baseline → nothing to compare against
+  const result = await probePeerReachable(peer.origin, signal);
+  if (result.reachable && result.instanceId && result.instanceId !== peer.peerInstanceId) {
+    markPeerReset(peer.id, peer.origin, peer.peerInstanceId, result.instanceId);
+    return true;
+  }
+  return false;
 }

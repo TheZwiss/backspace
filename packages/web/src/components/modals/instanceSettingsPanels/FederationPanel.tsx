@@ -815,15 +815,21 @@ function PendingApprovals({ onCountChange }: { onCountChange?: (count: number) =
 
 // ─── Reset Cleanup ──────────────────────────────────────────────────────────
 //
-// Highest-priority admin attention surface for the instance-epoch self-healing
-// flow (§6.4). Two stacked surfaces:
+// Admin attention surface for the instance-epoch self-healing flow (§6.4) and
+// the orphaned-account detach flow (detach spec §4.6). Two stacked surfaces:
 //   1. A persistent accent-rose banner per peer detected as reset
 //      (status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'),
 //      with a one-click Re-peer (resetPeer → initiatePeering) that triggers the
-//      server-side heal on activation.
-//   2. Per-origin lists of the dead incarnation's orphaned real accounts with
-//      Keep (no-op resting/frozen state) and Remove (full purge via the existing
-//      admin delete) actions.
+//      server-side heal on activation. This one is genuinely actionable, so it
+//      keeps the rose/danger styling.
+//   2. Per-origin, informational cards for the dead incarnation's detached real
+//      accounts. Detachment is not a failure state: these accounts keep working
+//      locally and their owners sign in with the same password. The card offers a
+//      real, server-side Dismiss (acknowledgeResetEvent — hides the card without
+//      touching the accounts) and a per-account Remove (full purge via the existing
+//      admin delete) for the ones that truly are abandoned. Neutral tier styling —
+//      no urgency. Acknowledged events are filtered out client-side (the endpoint
+//      keeps returning them for audit).
 
 function peerName(peer: FederationPeer): string {
   if (peer.instanceName) return peer.instanceName;
@@ -853,7 +859,6 @@ function ResetCleanup() {
   const [loading, setLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ResetConfirmAction | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [keptIds, setKeptIds] = useState<Set<string>>(new Set());
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -924,11 +929,6 @@ function ResetCleanup() {
         const { account } = confirmAction;
         await api.admin.deleteUser(account.id);
         addToast(`Removed ${account.username} and all their content`, 'success', 3000);
-        setKeptIds((prev) => {
-          const next = new Set(prev);
-          next.delete(account.id);
-          return next;
-        });
         await fetchAll();
       }
     } catch (err) {
@@ -962,7 +962,25 @@ function ResetCleanup() {
     }
   };
 
-  const eventsWithOrphans = events.filter((e) => e.orphanedAccounts.length > 0);
+  // Dismiss the detached-accounts card without touching the accounts — the event
+  // stays in the DB (acknowledged) for audit but stops surfacing to the admin.
+  const handleDismiss = async (origin: string) => {
+    setActionLoading(true);
+    try {
+      await api.federation.acknowledgeResetEvent(origin);
+      await fetchAll();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to dismiss', 'warning');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Only unacknowledged events with detached accounts surface a card. Dismissed
+  // (acknowledged) events are filtered out here and drop off the badge count.
+  const eventsWithOrphans = events.filter(
+    (e) => e.orphanedAccounts.length > 0 && e.acknowledgedAt === null,
+  );
 
   // Render nothing when there is no reset-detected peer and no orphaned account —
   // exactly as PendingApprovals returns null when empty (loading also renders null).
@@ -973,7 +991,7 @@ function ResetCleanup() {
       <div className="flex items-center gap-2 mb-1.5">
         <div className="text-[11px] font-semibold text-txt-tertiary uppercase tracking-wider">Reset Cleanup</div>
         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-accent-rose/15 text-accent-rose">
-          {resetPeers.length + eventsWithOrphans.reduce((n, e) => n + e.orphanedAccounts.length, 0)}
+          {resetPeers.length + eventsWithOrphans.length}
         </span>
       </div>
 
@@ -1019,61 +1037,56 @@ function ResetCleanup() {
                 was reset — {event.stubCount} replicated{' '}
                 {event.stubCount === 1 ? 'identity' : 'identities'} auto-cleaned,{' '}
                 {event.orphanedAccounts.length}{' '}
-                {event.orphanedAccounts.length === 1 ? 'account' : 'accounts'} with local content orphaned.
+                {event.orphanedAccounts.length === 1 ? 'account' : 'accounts'} with local content detached.
+                Detached accounts keep working locally — owners keep access with their existing password.
+                The owner can re-attach a detached account to their new home identity from that account's
+                settings (Account → detached notice) when logged into both.
               </div>
               <div className="space-y-2">
-                {event.orphanedAccounts.map((account) => {
-                  const kept = keptIds.has(account.id);
-                  return (
-                    <div key={account.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-txt-primary truncate">
-                            {account.displayName || account.username}
-                          </div>
-                          <div className="text-[11px] text-txt-tertiary truncate">{account.username}</div>
-                          <div className="text-[11px] text-txt-tertiary mt-0.5">
-                            {account.spaceMemberCount}{' '}
-                            {account.spaceMemberCount === 1 ? 'membership' : 'memberships'} ·{' '}
-                            {account.messageCount}{' '}
-                            {account.messageCount === 1 ? 'message' : 'messages'}
-                          </div>
-                          {account.ownedSpaces.length > 0 && (
-                            <div className="text-[11px] text-accent-amber mt-0.5 truncate">
-                              Owns: {account.ownedSpaces.map((s) => s.name).join(', ')}
-                            </div>
-                          )}
+                {event.orphanedAccounts.map((account) => (
+                  <div key={account.id} className="bg-white/[0.02] rounded-md px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-txt-primary truncate">
+                          {account.displayName || account.username}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0 ml-3">
-                          {kept ? (
-                            <span className="text-[11px] text-txt-tertiary italic">Kept — frozen</span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setKeptIds((prev) => new Set(prev).add(account.id))
-                              }
-                              className="px-3 py-1.5 text-xs font-medium text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors"
-                            >
-                              Keep
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfirmAction({ kind: 'remove', account, origin: event.origin })
-                            }
-                            disabled={actionLoading}
-                            className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
-                          >
-                            Remove
-                          </button>
+                        <div className="text-[11px] text-txt-tertiary truncate">{account.username}</div>
+                        <div className="text-[11px] text-txt-tertiary mt-0.5">
+                          {account.spaceMemberCount}{' '}
+                          {account.spaceMemberCount === 1 ? 'membership' : 'memberships'} ·{' '}
+                          {account.messageCount}{' '}
+                          {account.messageCount === 1 ? 'message' : 'messages'}
                         </div>
+                        {account.ownedSpaces.length > 0 && (
+                          <div className="text-[11px] text-accent-amber mt-0.5 truncate">
+                            Owns: {account.ownedSpaces.map((s) => s.name).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmAction({ kind: 'remove', account, origin: event.origin })
+                          }
+                          disabled={actionLoading}
+                          className="px-3 py-1.5 text-xs font-medium bg-accent-rose/10 text-txt-danger hover:bg-accent-rose/20 rounded transition-colors disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
+              <button
+                type="button"
+                onClick={() => handleDismiss(event.origin)}
+                disabled={actionLoading}
+                className="mt-2 px-3 py-1.5 text-xs font-medium text-txt-tertiary hover:text-txt-secondary bg-white/[0.04] hover:bg-white/[0.06] rounded transition-colors disabled:opacity-50"
+              >
+                Dismiss — keep all detached accounts
+              </button>
             </div>
           ))}
         </div>
@@ -1084,7 +1097,7 @@ function ResetCleanup() {
           isOpen={true}
           onClose={() => { if (!actionLoading) setConfirmAction(null); }}
           onConfirm={handleConfirm}
-          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove Orphaned Account'}
+          title={confirmAction.kind === 'repeer' ? 'Re-establish Federation' : 'Remove detached account'}
           description={
             confirmAction.kind === 'repeer'
               ? `This deletes the local peer record and starts a fresh authenticated handshake with ${confirmAction.peer.origin}. The remote must be reachable and (if it does not auto-accept) approve the request.`

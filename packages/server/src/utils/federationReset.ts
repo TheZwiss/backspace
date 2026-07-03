@@ -113,9 +113,12 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
     if (existing && existing.resolvedAt === null) {
       // Double-reset: keep the ORIGINAL dead_epoch + detected_at (the
       // incarnation already snapshotted), refresh counts only. Never overwrite
-      // dead_epoch on an unresolved row.
+      // dead_epoch on an unresolved row. Clear `acknowledged_at`: a re-detected
+      // reset is a fresh event that detached a new batch and needs fresh admin
+      // attention — a stale dismissal must not keep the disposition card hidden
+      // (detach spec §4.6).
       tx.update(schema.federationResetEvents)
-        .set({ stubCount, orphanedAccountCount })
+        .set({ stubCount, orphanedAccountCount, acknowledgedAt: null })
         .where(eq(schema.federationResetEvents.origin, origin))
         .run();
     } else {
@@ -140,6 +143,10 @@ export function markPeerReset(peerId: string, origin: string, deadEpoch: string,
             resolvedAt: null,
             stubCount,
             orphanedAccountCount,
+            // Re-arm the admin surface: a fresh reset on a previously
+            // resolved+dismissed origin must clear the old dismissal so the
+            // new detached batch's disposition card re-surfaces (detach §4.6).
+            acknowledgedAt: null,
           },
         })
         .run();
@@ -290,10 +297,11 @@ export function healResetIncarnation(origin: string, newEpoch: string, reason: P
       .run();
   }
 
-  // Quarantine the flagged REAL accounts (freeze + free-handle / surface). §6.3b.
+  // Detach the flagged REAL accounts (flag-only: sovereign local accounts, no
+  // freeze, no rename — see quarantineOrphanedAccounts docstring). §6.3b.
   const orphanedCount = quarantineOrphanedAccounts(origin);
 
-  // Resolve the journal and refresh the orphaned-account count to the frozen set.
+  // Resolve the journal and refresh the orphaned-account count to the detached set.
   db.update(schema.federationResetEvents)
     .set({ newEpoch, resolvedAt: Date.now(), orphanedAccountCount: orphanedCount })
     .where(eq(schema.federationResetEvents.origin, origin))
@@ -301,35 +309,28 @@ export function healResetIncarnation(origin: string, newEpoch: string, reason: P
 }
 
 /**
- * Post-heal quarantine of the dead incarnation's REAL federated accounts (design
- * §6.3b). Called from `healResetIncarnation`'s genuine-reset branch AFTER the stub
- * soft-tombstone loop. Real accounts carry non-re-syncable local content and are
- * NEVER auto-deleted — they are FROZEN and surfaced to the admin.
+ * Post-heal DETACH of the dead incarnation's REAL federated accounts (design
+ * §6.3b, revised by the 2026-07-02 detach spec). Called from
+ * `healResetIncarnation`'s genuine-reset branch AFTER the stub soft-tombstone
+ * loop. Real accounts carry non-re-syncable local content and are NEVER
+ * auto-deleted — and, unlike the original quarantine, they are NOT frozen or
+ * renamed either.
  *
- * For every flagged real account (`federation_heal_pending = 1`,
- * `passwordHash != REPLICATED_STUB_SENTINEL`, `isDeleted = 0`) for this origin:
- *  - Set `federation_home_orphaned = 1` (FREEZE). This is universal — it is what
- *    closes the post-re-peer hijack (the Task-2 epoch guard passes once the
- *    baseline is updated to the new epoch, so the freeze is the only remaining
- *    barrier). The direct-login freeze (auth.ts) enforces it.
- *  - If the account OWNS local spaces: do NOT rename it. Space ownership must be
- *    resolved by a human (admin Remove → transfer/delete first). Renaming an owner
- *    would orphan the ownerId reference into a `!orphaned:` handle, confusing to
- *    members. It stays frozen + surfaced.
- *  - Otherwise: rename `username → !orphaned:{uid}@{domain}` to FREE the handle so
- *    a returning same-name user re-registers into a clean fresh account instead of
- *    colliding (defends BOTH login uniqueness AND the registration tier-2
- *    stub-resolution upgrade path — see the plan's collision analysis).
- *  - Clear `federation_heal_pending` (processed).
+ * `federation_home_orphaned = 1` marks the account as DETACHED: it operates as
+ * a sovereign local account from here on. The owner keeps logging in with the
+ * local password (auth.ts skips only the self-heal path); every S2S surface
+ * keyed by the home domain excludes detached rows, so the domain's new
+ * incarnation can never capture, mutate, re-bind, or delete the account.
  *
- * Content (space messages, memberships, reactions) is preserved in all cases.
+ * Usernames are preserved (first-come-first-served on this instance) and there
+ * is no space-owner special case — owners simply keep managing their spaces.
+ * Content is preserved in all cases. No broadcast: nothing visible changes.
  *
- * @returns the number of accounts quarantined (frozen) — used to refresh the
- *          journal's `orphaned_account_count`.
+ * @returns the number of accounts detached — used to refresh the journal's
+ *          `orphaned_account_count`.
  */
 export function quarantineOrphanedAccounts(origin: string): number {
   const db = getDb();
-  const domain = extractDomain(origin);
 
   const accounts = db
     .select({ id: schema.users.id })
@@ -342,22 +343,11 @@ export function quarantineOrphanedAccounts(origin: string): number {
     ))
     .all();
 
-  for (const acct of accounts) {
-    const ownsSpace = db
-      .select({ id: schema.spaces.id })
-      .from(schema.spaces)
-      .where(eq(schema.spaces.ownerId, acct.id))
-      .get();
-
-    const updates: Record<string, string | number> = {
-      federationHomeOrphaned: 1,
-      federationHealPending: 0,
-    };
-    if (!ownsSpace) {
-      // Free the handle only for non-owners.
-      updates.username = `!orphaned:${acct.id}@${domain}`;
-    }
-    db.update(schema.users).set(updates).where(eq(schema.users.id, acct.id)).run();
+  if (accounts.length > 0) {
+    db.update(schema.users)
+      .set({ federationHomeOrphaned: 1, federationHealPending: 0 })
+      .where(inArray(schema.users.id, accounts.map((a) => a.id)))
+      .run();
   }
 
   return accounts.length;
