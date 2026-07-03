@@ -243,6 +243,21 @@ autoInstallOnAppQuit: true
 Publish: GitHub (TheZwiss/backspace)
 ```
 
+**Signing status (as of v1.0.0):** all builds are unsigned. Consequences:
+- **macOS:** Squirrel.Mac refuses to apply unsigned updates — auto-update is
+  effectively disabled on macOS until a Developer ID certificate + notarization
+  are added to the CI build. Users update manually from the releases page.
+  First launch requires right-click → Open (Gatekeeper).
+- **Windows:** NSIS auto-update works unsigned; SmartScreen warns on first
+  install only.
+- **Linux:** AppImage auto-update works unsigned.
+
+CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo):
+native runners for mac (arm64+x64), win (x64+arm64), linux (x64, arm64), each
+job uploading its installers, `.blockmap`s, and platform `latest*.yml` manifest
+to a single draft release. The draft must be published manually — drafts are
+invisible to electron-updater.
+
 ### Check Schedule
 
 | Trigger | Delay |
