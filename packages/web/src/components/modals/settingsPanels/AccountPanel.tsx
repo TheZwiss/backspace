@@ -90,7 +90,9 @@ export function AccountPanel() {
     const homeDomain = user.homeInstance.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
     return instances.find(
       (i) => i.status === 'connected'
-        && i.origin.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase() === homeDomain,
+        // Portless hostname — must agree with the server's extractDomain
+        // (new URL(origin).hostname) so a ported home instance still matches.
+        && new URL(i.origin).hostname.toLowerCase() === homeDomain,
     ) ?? null;
   }, [instances, user?.homeInstance]);
 
@@ -104,7 +106,8 @@ export function AccountPanel() {
     setReattachError(null);
     try {
       // Target domain = THIS instance (where the detached account lives).
-      const { token } = await homeConnection.api.auth.attachProof(window.location.host);
+      // Portless hostname to match the server's extractDomain contract.
+      const { token } = await homeConnection.api.auth.attachProof(window.location.hostname);
       const res = await api.users.reattach({ token });
       useAuthStore.getState().setUser(res.user);
       addToast(`Account re-linked with ${homeConnection.username}`, 'success', 3000);

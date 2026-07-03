@@ -2959,6 +2959,11 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
         // dm_messages / messages (RESTRICT FK, no unique on user_id → straight repoint).
         rawDb.prepare(`UPDATE dm_messages SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
         rawDb.prepare(`UPDATE messages SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);
+        // attachments.uploader_id (plain text column, NO FK, no unique → straight
+        // repoint). A replicated stub that uploaded a DM/channel attachment would
+        // otherwise leave uploader_id dangling at the deleted stub's id — broken
+        // attribution.
+        rawDb.prepare(`UPDATE attachments SET uploader_id = ? WHERE uploader_id = ?`).run(targetId, stubId);
         // dm_reactions (dedupe on dm_message_id+emoji per user).
         rawDb.prepare(`DELETE FROM dm_reactions WHERE user_id = ? AND EXISTS (SELECT 1 FROM dm_reactions r2 WHERE r2.user_id = ? AND r2.dm_message_id = dm_reactions.dm_message_id AND r2.emoji = dm_reactions.emoji)`).run(stubId, targetId);
         rawDb.prepare(`UPDATE dm_reactions SET user_id = ? WHERE user_id = ?`).run(targetId, stubId);

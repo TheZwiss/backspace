@@ -226,6 +226,13 @@ describe('POST /api/users/@me/reattach — stub merge', () => {
     testDb.insert(schema.dmMessages).values({
       id: 'm-stub', dmChannelId: 'ch-1', userId: 'stub-new', content: 'from new incarnation', createdAt: 3,
     }).run();
+    // An attachment the stub uploaded onto its DM message — uploader_id is a
+    // plain text column (no FK), so it must be repointed explicitly or attribution
+    // dangles at the deleted stub's id.
+    testDb.insert(schema.attachments).values({
+      id: 'att-stub', dmMessageId: 'm-stub', uploaderId: 'stub-new',
+      filename: 'f.webp', originalName: 'f.webp', mimetype: 'image/webp', size: 100, createdAt: 3,
+    }).run();
     testDb.insert(schema.friends).values([
       { userId: 'alice', friendId: 'detached-1', createdAt: 1 },
       { userId: 'alice', friendId: 'stub-new', createdAt: 2 },
@@ -240,6 +247,9 @@ describe('POST /api/users/@me/reattach — stub merge', () => {
     // Message repointed.
     const msg = testDb.select().from(schema.dmMessages).where(eq(schema.dmMessages.id, 'm-stub')).get()!;
     expect(msg.userId).toBe('detached-1');
+    // Attachment attribution repointed off the deleted stub.
+    const att = testDb.select().from(schema.attachments).where(eq(schema.attachments.id, 'att-stub')).get()!;
+    expect(att.uploaderId).toBe('detached-1');
     // Membership deduped (detached row already a member).
     const members = testDb.select().from(schema.dmMembers).all().filter(m => m.dmChannelId === 'ch-1');
     expect(members.map(m => m.userId).sort()).toEqual(['alice', 'detached-1']);

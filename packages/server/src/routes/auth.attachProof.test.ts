@@ -112,6 +112,19 @@ describe('POST /api/auth/attach-proof', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('rejects a targetDomain that normalizes to empty and inserts no row', async () => {
+    // "https://" passes the pre-normalization length check but collapses to ""
+    // after protocol/slash stripping — must 400, never persist an inert row.
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/attach-proof',
+      headers: { authorization: `Bearer ${signJwt({ userId: 'native-1', username: 'youruser' })}` },
+      payload: { targetDomain: 'https://' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(testDb.select().from(schema.federationAttachProofs).all()).toHaveLength(0);
+  });
+
   it('rejects unauthenticated requests', async () => {
     const res = await app.inject({ method: 'POST', url: '/api/auth/attach-proof', payload: { targetDomain: 'nova.ddns.net' } });
     expect(res.statusCode).toBe(401);

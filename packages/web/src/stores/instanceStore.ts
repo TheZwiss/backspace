@@ -155,12 +155,12 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
   const primaryUser = useAuthStore.getState().user;
   let homeApi: BackspaceApiClient | null = null;
   let homeUsername: string | null = null;
-  if (primaryUser && !primaryUser.homeInstance && window.location.host.toLowerCase() === homeDomain) {
+  if (primaryUser && !primaryUser.homeInstance && window.location.hostname.toLowerCase() === homeDomain) {
     homeApi = api;
     homeUsername = primaryUser.username;
   } else {
     const conn = useInstanceStore.getState().instances.find(
-      (i) => i.status === 'connected' && new URL(i.origin).host.toLowerCase() === homeDomain,
+      (i) => i.status === 'connected' && new URL(i.origin).hostname.toLowerCase() === homeDomain,
     );
     if (conn) {
       homeApi = conn.api;
@@ -175,7 +175,10 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
   if (!detachedBase || detachedBase !== homeBase) return;
 
   try {
-    const targetHost = new URL(instance.origin).host;
+    // Portless hostname — must match the server's extractDomain(peer.origin)
+    // (new URL(origin).hostname) so the proof's targetDomain binds/verifies on
+    // a non-443 port too. .host would carry the port and 401 forever.
+    const targetHost = new URL(instance.origin).hostname;
     const { token } = await homeApi.auth.attachProof(targetHost);
     const res = await instance.api.users.reattach({ token });
     useInstanceStore.setState((state) => ({

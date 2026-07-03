@@ -80,6 +80,38 @@ describe('maybeAutoReattach', () => {
     useInstanceStore.setState({ instances: [homeConn, detachedConn] });
     await maybeAutoReattach(detachedConn);
     expect((homeConn.api as unknown as { auth: { attachProof: ReturnType<typeof vi.fn> } }).auth.attachProof).not.toHaveBeenCalled();
+    expect((detachedConn.api as unknown as { users: { reattach: ReturnType<typeof vi.fn> } }).users.reattach).not.toHaveBeenCalled();
+  });
+
+  it('mints the PORTLESS target host for a ported instance origin (matches server extractDomain)', async () => {
+    // Both instances served on a non-443 port. The server binds/verifies the
+    // proof against extractDomain(peer.origin) = new URL(origin).hostname, which
+    // is portless — so the client must mint the portless host too, or the
+    // exchange 401s forever. homeInstance is stored bare (portless hostname).
+    const homeConn = makeInstance({
+      origin: 'https://orbit.test:8443',
+      username: 'youruser',
+      user: { id: 'new-home-1', username: 'youruser' } as User,
+    });
+    const attachProof = vi.fn().mockResolvedValue({ token: 'a'.repeat(64) });
+    (homeConn.api as unknown as { auth: { attachProof: typeof attachProof } }).auth.attachProof = attachProof;
+
+    const updatedUser = { id: 'detached-1', username: 'youruser@orbit.test', federationHomeOrphaned: false, homeInstance: 'orbit.test' } as User;
+    const reattach = vi.fn().mockResolvedValue({ success: true, user: updatedUser });
+    const detachedConn = makeInstance({
+      origin: 'https://nova.test:8443',
+      user: { id: 'detached-1', username: 'youruser@orbit.test', federationHomeOrphaned: true, homeInstance: 'orbit.test' } as User,
+    });
+    (detachedConn.api as unknown as { users: { reattach: typeof reattach } }).users.reattach = reattach;
+
+    useInstanceStore.setState({ instances: [homeConn, detachedConn] });
+    await maybeAutoReattach(detachedConn);
+
+    // Portless — 'nova.test', NOT 'nova.test:8443'.
+    expect(attachProof).toHaveBeenCalledWith('nova.test');
+    expect(reattach).toHaveBeenCalledWith({ token: 'a'.repeat(64) });
+    const stored = useInstanceStore.getState().instances.find(i => i.origin === 'https://nova.test:8443')!;
+    expect(stored.user.federationHomeOrphaned).toBe(false);
   });
 
   it('skips when the account is not detached', async () => {

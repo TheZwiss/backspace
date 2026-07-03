@@ -504,6 +504,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
     }
     const targetDomain = rawTarget.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    // Re-check emptiness AFTER normalization: inputs like "https://" or "/"
+    // pass the pre-normalization guard but collapse to "" — never persist an
+    // inert target_domain='' proof row.
+    if (targetDomain.length === 0) {
+      return reply.code(400).send({ error: 'targetDomain is required (string)', statusCode: 400 });
+    }
 
     // Native accounts only — a federated/replicated account has no authority
     // to mint proofs for this domain's identities.
