@@ -1039,6 +1039,8 @@ function ResetCleanup() {
                 {event.orphanedAccounts.length}{' '}
                 {event.orphanedAccounts.length === 1 ? 'account' : 'accounts'} with local content detached.
                 Detached accounts keep working locally — owners keep access with their existing password.
+                The owner can re-attach a detached account to their new home identity from that account's
+                settings (Account → detached notice) when logged into both.
               </div>
               <div className="space-y-2">
                 {event.orphanedAccounts.map((account) => (

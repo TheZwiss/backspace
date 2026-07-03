@@ -298,6 +298,8 @@ describe('FederationPanel — Reset cleanup', () => {
     // Informational detach copy — not urgent-cleanup language.
     expect(screen.getAllByText(/detached/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/existing password/i)).toBeInTheDocument();
+    // Re-attach is surfaced as the recovery path (spec §3.5).
+    expect(screen.getByText(/re-attach a detached account to their new home identity/i)).toBeInTheDocument();
 
     // The fake client-only Keep/frozen affordance is fully gone.
     expect(screen.queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument();

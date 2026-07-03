@@ -428,6 +428,18 @@ Instance-epoch self-healing ledger. One row per origin recording a detected fede
 | orphanedAccountCount | integer NOT NULL | 0 | Count of accounts that could not be re-linked to the new epoch |
 | acknowledgedAt | integer | | Epoch ms the admin dismissed this reset event from the banner (`POST /api/federation/reset-events/acknowledge`, idempotent); `NULL` while unacknowledged. Purely informational — detach spec §4.6 |
 
+### federation_attach_proofs
+One-time proof tokens for **detached-account re-attach** (re-attach spec §3.1). Minted on the owner's re-created **native** account on the reset home instance via `POST /api/auth/attach-proof` (bound to the peer domain the account is detached on), then redeemed exactly once by that peer over signed S2S via `POST /api/federation/verify-attach-proof` to re-bind the detached row to the new home identity. Tokens are single-use (`used_at` set atomically on redemption), short-lived (60s TTL), and peer-domain-bound (verified against the authenticated peer's domain, not the token bearer). Expired rows are janitored opportunistically on each mint, so the table needs no background worker.
+
+| Column | Type | Default | Notes |
+|--------|------|---------|-------|
+| token | text PK | | Random 256-bit token (`randomBytes(32).toString('hex')`, 64 hex chars) handed to the target peer |
+| homeUserId | text NOT NULL | | The native home account's `users.id` this proof asserts control of |
+| targetDomain | text NOT NULL | | Normalized peer domain (lowercase, no scheme/trailing slash) allowed to redeem — checked against the authenticated caller peer, not the request body |
+| createdAt | integer NOT NULL | | Epoch ms the token was minted |
+| expiresAt | integer NOT NULL | | Epoch ms; `createdAt + 60_000`. Redemption requires `expires_at > now` |
+| usedAt | integer | | Epoch ms the token was redeemed; `NULL` while unused. Set atomically via `UPDATE ... WHERE used_at IS NULL ... RETURNING` so a token can never be redeemed twice, even under concurrent verification |
+
 ### peer_approval_requests
 Queue of peering requests pending admin review when `autoAcceptPeering` is `false`. Holds **both directions**: inbound rows (remote asked to peer with us) and outbound rows (a local user-initiated `ensurePeered` call gated on this side; see [federation.md → Outbound Peering Gate](federation.md#outbound-peering-gate)). UNIQUE on `(origin, direction)` so the same origin may have at most one row per direction simultaneously. Rows expire after 30 days via janitor cleanup.
 
