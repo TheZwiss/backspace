@@ -329,6 +329,22 @@ peers from the **Connections** panel in settings. The protocol is documented in
 The Electron desktop app wraps the web client and adds a system tray, native
 notifications, global keybinds, and activity detection.
 
+### Download
+
+Grab the installer for your platform from the
+[**latest release**](https://github.com/TheZwiss/backspace/releases/latest):
+
+| Platform | File | Notes |
+|----------|------|-------|
+| Windows | `Backspace-<version>.exe` | Universal installer (x64 + arm64). SmartScreen may warn on first run — choose "More info" → "Run anyway". Auto-updates. |
+| macOS | `Backspace-<version>-arm64.dmg` (Apple Silicon) / `Backspace-<version>-x64.dmg` (Intel) | Builds are currently **unsigned**: on first launch, right-click the app → **Open** → **Open**. Auto-update is not available on macOS yet — check the releases page for new versions. |
+| Linux | `Backspace-<version>-x86_64.AppImage` / `-arm64.AppImage`, or `.deb` (`amd64` / `arm64`) | AppImage auto-updates; `.deb` installs update via new releases. |
+
+On first launch the app asks for your instance URL — enter the address of the
+Backspace server you use (e.g. `https://chat.example.com`).
+
+### Building from source
+
 ```bash
 cd packages/desktop
 pnpm build:ts    # compile TypeScript
