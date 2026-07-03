@@ -86,6 +86,18 @@ When a user adds a remote instance via the Connections settings:
 
 The same password is used across all instances. Password changes on the home instance are synced to remote instances automatically.
 
+### Automatic Re-Attach on Connect (`maybeAutoReattach`, re-attach spec §3.4)
+
+When a home instance is reset, its established accounts on peers become **detached** (`federationHomeOrphaned = 1`) — sovereign local accounts nothing from the old domain can re-bind. The owner who re-registers on the reset home under the same username + password would otherwise end up with two permanently forked identities. `maybeAutoReattach(instance)` (exported from `instanceStore.ts`) closes that gap as the **primary** re-link UX, and runs fire-and-forget right after `connectInstance(...)` in **both** `connectToRemote` and `loginToRemote`.
+
+It performs the proof exchange **only** when all hold (else it returns silently — the manual fallback stays available):
+
+1. The just-connected account is detached (`user.federationHomeOrphaned && user.homeInstance`).
+2. This client also holds an authenticated session on the account's **home domain** — the primary connection when browsing it (native primary user, host matches), else a `status === 'connected'` secondary instance in `instances`.
+3. That home session's username base equals the detached account's username base (case-insensitive, via `parseFederatedUsername`) — the unambiguous "same name" case. A cross-name bind is manual-only (spec §2).
+
+Exchange: `homeSession.api.auth.attachProof(peerHost)` → `POST /api/auth/attach-proof` mints a one-time token on the home; `instance.api.users.reattach({ token })` → `POST /api/users/@me/reattach` on the peer verifies it over S2S and re-binds. On success the connection's `user`/`username` and the registry entry are updated, a "re-linked" toast fires, and `syncRegistry()` runs. On failure it only `console.warn`s — the connection itself is never torn down.
+
 ### API Client Error Contract
 
 The shared API client (`packages/web/src/api/client.ts:298`) throws `new Error(body.error)` for non-2xx responses. The server's structured error code is on `err.message`; there is **no** `err.body` or `err.code` property. Catch handlers that need to map codes to UI messages should read `err.message` and pass it as both the code and the fallback to `mapServerErrorToMessage` (see `packages/web/src/utils/friendErrors.ts`).
@@ -481,6 +493,12 @@ Modeled on the peering-approval surface above, the FederationPanel's `ResetClean
 
 - **Reset-detected banner** — one persistent accent-rose banner per peer with `status === 'needs_attention' && needsAttentionReason === 'peer_reset_detected'` (the `needsAttentionReason` field distinguishes a reset from a generic auth-failure, and now also `'repeer_incomplete'`). **Re-peer** runs `resetPeer(id)` **then** `initiatePeering({ remoteOrigin })` — reset-before-handshake so activation heals the stale graph against the new incarnation. **The result is surfaced honestly:** `initiatePeering` now returns `{ peer, verified }`; when `verified === false` (or the peer comes back `needs_attention`), or when it rejects with `409 PEER_EXISTS_RESET_REQUIRED`, the toast is a **warning** telling the admin the remote still holds stale peering and its admin must reset the **other** side, then Re-peer again — rather than a false success. A cryptographically-verified activation shows the success toast. The common one-side reset recovers in one click; a bidirectional-stale case names the side that must act. See `federation.md` "Trust re-establishment contract".
 - **Detached-accounts card** — informational, neutral-tier surface (no rose/urgency styling) for the reset incarnation's real accounts that now operate as sovereign local accounts (`FederationOrphanedAccount`: owned-spaces / membership / message counts). Copy: detached accounts keep working locally and owners sign in with their existing password. Cards render only for unacknowledged events (`orphanedAccounts.length > 0 && acknowledgedAt === null`; the endpoint still returns acknowledged events for audit). Per-account **Remove** reuses `api.admin.deleteUser(id)` (`DELETE /api/admin/users/:id`, full purge) for genuinely-abandoned accounts — a Remove on a space owner surfaces the existing `409 { ownedSpaces }` as a "transfer ownership first" toast instead of deleting. A per-event **Dismiss** footer calls `api.federation.acknowledgeResetEvent(origin)` (`POST /api/federation/reset-events/acknowledge`) then re-fetches — a real server-side acknowledgement (replacing the old client-only "Keep") that hides the card and removes the event from the badge count without touching any account.
+
+### AccountPanel re-attach action (fallback, re-attach spec §3.4)
+
+The owner-facing side of re-attach. `AccountPanel` (`components/modals/settingsPanels/AccountPanel.tsx`) renders the detached-account notice whenever the self user is detached (`federationHomeOrphaned && homeInstance`). Below the informational copy it appends a **"Re-attach to `<homeInstance>`"** action **only** when `instanceStore.instances` also holds a `status === 'connected'` connection whose origin host matches the account's `homeInstance` (`homeConnection`, memoized). This is the explicit fallback for what `maybeAutoReattach` deliberately skips: a different username on the new home (cross-name bind), or a home connection established after the detached connection.
+
+The button is a two-step armed confirm that names both identities — first click arms (`Confirm re-attach as <homeUsername>`), second click mints and exchanges the proof: `homeConnection.api.auth.attachProof(window.location.host)` → `api.users.reattach({ token })`, then `useAuthStore.getState().setUser(res.user)` clears the flag so the notice disappears. Errors surface inline; without a home-domain connection the notice keeps only its informational copy.
 
 ---
 

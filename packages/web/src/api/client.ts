@@ -68,6 +68,9 @@ import type {
   CheckInviteResponse,
   SpaceInviteRequest,
   SpaceInviteResponse,
+  AttachProofResponse,
+  ReattachRequest,
+  ReattachResponse,
 } from '@backspace/shared';
 import { getApiForOrigin, getOwnerInstanceForDm } from '../utils/crossStoreResolvers';
 
@@ -99,6 +102,7 @@ export class BackspaceApiClient {
     login: (data: LoginRequest) => Promise<AuthResponse>;
     checkUsername: (username: string) => Promise<{ available: boolean; reason?: string }>;
     checkInvite: (token: string) => Promise<CheckInviteResponse>;
+    attachProof: (targetDomain: string) => Promise<AttachProofResponse>;
   };
 
   readonly users: {
@@ -112,6 +116,7 @@ export class BackspaceApiClient {
     getFederationRegistry: () => Promise<{ registry: FederationRegistryEntry[]; updatedAt: number }>;
     putFederationRegistry: (data: { registry: FederationRegistryEntry[]; updatedAt: number }) => Promise<{ ok: boolean; updatedAt: number }>;
     deleteFederationIdentity: (data: FederationIdentityDeleteRequest) => Promise<FederationIdentityDeleteResponse>;
+    reattach: (data: ReattachRequest) => Promise<ReattachResponse>;
   };
 
   readonly spaceLayout: {
@@ -387,6 +392,8 @@ export class BackspaceApiClient {
         request<{ available: boolean; reason?: string }>('GET', `/auth/check-username?username=${encodeURIComponent(username)}`, undefined, false),
       checkInvite: (token: string) =>
         request<CheckInviteResponse>('GET', `/auth/check-invite?token=${encodeURIComponent(token)}`, undefined, false),
+      attachProof: (targetDomain: string) =>
+        request<AttachProofResponse>('POST', '/auth/attach-proof', { targetDomain }),
     };
 
     this.users = {
@@ -419,6 +426,8 @@ export class BackspaceApiClient {
         request<FederationIdentityDeleteResponse>(
           'POST', '/users/@me/federation-identity/delete', data
         ),
+      reattach: (data: ReattachRequest) =>
+        request<ReattachResponse>('POST', '/users/@me/reattach', data),
     };
 
     this.spaceLayout = {
