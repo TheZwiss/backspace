@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { setWorkerId } from '../utils/snowflake.js';
 import { signJwt } from '../utils/auth.js';
+import { computeFederatedId } from '../utils/federationOutbox.js';
 
 setWorkerId(13);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -266,5 +267,58 @@ describe('POST /api/users/@me/reattach — stub merge', () => {
     // Nothing changed on the detached row.
     const row = testDb.select().from(schema.users).where(eq(schema.users.id, 'detached-1')).get()!;
     expect(row.homeUserId).toBe('dead-home-1');
+  });
+});
+
+describe('POST /api/users/@me/reattach — 1-on-1 DM channel reconciliation', () => {
+  beforeEach(() => {
+    verifyMock.mockResolvedValue({ valid: true, homeUserId: 'new-home-1', username: 'youruser' });
+    profileMock.mockResolvedValue(null);
+    // 'alice' is R-native; she has a DM with the detached account under the OLD
+    // pairing, and a fresh DM under the NEW pairing (created by post-reset relay).
+  });
+
+  it('merges the pre-reattach history channel into the new-identity channel', async () => {
+    const oldFed = computeFederatedId('alice', 'dead-home-1'); // alice home = her id (native)
+    const newFed = computeFederatedId('alice', 'new-home-1');
+    // history channel (old id)
+    testDb.insert(schema.dmChannels).values({ id: 'ch-old', federatedId: oldFed, createdAt: 1 }).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'ch-old', userId: 'alice', closed: 0 },
+      { dmChannelId: 'ch-old', userId: 'detached-1', closed: 0 },
+    ]).run();
+    testDb.insert(schema.dmMessages).values([
+      { id: 'mo1', dmChannelId: 'ch-old', userId: 'alice', content: 'old1', createdAt: 100 },
+      { id: 'mo2', dmChannelId: 'ch-old', userId: 'detached-1', content: 'old2', createdAt: 110 },
+    ]).run();
+    // fresh channel (new id)
+    testDb.insert(schema.dmChannels).values({ id: 'ch-new', federatedId: newFed, createdAt: 2 }).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'ch-new', userId: 'alice', closed: 0 },
+      { dmChannelId: 'ch-new', userId: 'detached-1', closed: 0 },
+    ]).run();
+    testDb.insert(schema.dmMessages).values({ id: 'mn1', dmChannelId: 'ch-new', userId: 'detached-1', content: 'new1', createdAt: 200 }).run();
+
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(200);
+    // old channel gone; all history now under ch-new, in order.
+    expect(testDb.select().from(schema.dmChannels).all().some(c => c.id === 'ch-old')).toBe(false);
+    const msgs = testDb.select().from(schema.dmMessages).all().filter(m => m.dmChannelId === 'ch-new').sort((a, b) => a.createdAt - b.createdAt);
+    expect(msgs.map(m => m.id)).toEqual(['mo1', 'mo2', 'mn1']);
+  });
+
+  it('re-keys the history channel in place when no new-identity channel exists yet', async () => {
+    const oldFed = computeFederatedId('alice', 'dead-home-1');
+    testDb.insert(schema.dmChannels).values({ id: 'ch-old', federatedId: oldFed, createdAt: 1 }).run();
+    testDb.insert(schema.dmMembers).values([
+      { dmChannelId: 'ch-old', userId: 'alice', closed: 0 },
+      { dmChannelId: 'ch-old', userId: 'detached-1', closed: 0 },
+    ]).run();
+    testDb.insert(schema.dmMessages).values({ id: 'mo1', dmChannelId: 'ch-old', userId: 'alice', content: 'x', createdAt: 100 }).run();
+
+    const res = await reattach('detached-1', 'youruser@orbit.test');
+    expect(res.statusCode).toBe(200);
+    const ch = testDb.select().from(schema.dmChannels).all().find(c => c.id === 'ch-old')!;
+    expect(ch.federatedId).toBe(computeFederatedId('alice', 'new-home-1'));
   });
 });

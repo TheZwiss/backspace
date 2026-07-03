@@ -2948,6 +2948,7 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     // rows that would collide on a composite PK / unique index BEFORE repointing
     // (spec §3.3). The stub row is the only source — a real account holding the
     // identity was already rejected by guard 4.
+    const dmReconcileResults: DmReconcileResult[] = [];
     rawDb.transaction(() => {
       if (existingRow) {
         const stubId = existingRow.id;
@@ -3001,6 +3002,25 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
       // only fire on federation_home_orphaned = 1).
       rawDb.prepare(`UPDATE users SET home_user_id = ?, federation_home_orphaned = 0, username = ?, profile_updated_at = NULL WHERE id = ?`)
         .run(verified.homeUserId, newUsername, detached.id);
+
+      // Reconcile the account's 1-on-1 DM channels: the home_user_id just
+      // changed, so every 1-on-1 federatedId derived from it is now stale.
+      // Re-key or merge each into its new-identity channel so history stays a
+      // single conversation (reattach-dm-reconcile spec §3.2). Group DMs (UUID
+      // federatedId / != 2 members) are skipped by the helper.
+      const oneOnOne = rawDb.prepare(`
+        SELECT c.id FROM dm_channels c
+        WHERE c.deleted_at IS NULL
+          AND c.federated_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM dm_members m WHERE m.dm_channel_id = c.id AND m.user_id = ?)
+          AND (SELECT count(*) FROM dm_members m2 WHERE m2.dm_channel_id = c.id) = 2
+      `).all(detached.id) as Array<{ id: string }>;
+      for (const c of oneOnOne) {
+        // A merge earlier in this loop may have deleted this id — reconcile
+        // returns noop for a missing/mutated channel, so the loop is convergent.
+        const result = reconcileDmChannelFederatedId(rawDb, c.id);
+        if (result.action !== 'noop') dmReconcileResults.push(result);
+      }
     })();
 
     // Best-effort initial profile pull (spec §3.2 step 4). Failure is fine — the
@@ -3034,6 +3054,27 @@ export async function federationRoutes(app: FastifyInstance): Promise<void> {
     targetIds.add(updated.id);
     for (const uid of targetIds) {
       connectionManager.sendToUser(uid, { type: 'user_updated' as const, user: sanitizeUser(updated, uid === updated.id) });
+    }
+
+    // Push DM-list refresh for reconciled channels to affected local members so
+    // the merged/re-keyed conversation replaces the split without a reload
+    // (reattach-dm-reconcile spec §3.4). Reuses existing events, no new type:
+    //  - merged: dm_channel_closed removes the stale source entry; dm_channel_created
+    //    (full DmChannel payload — the client handler reads dmChannel.members) resurfaces
+    //    the surviving target with its merged history.
+    //  - rekeyed: dm_channel_created upserts the channel by id (spaceStore.addDmChannel
+    //    replaces by id), refreshing the now-stale federatedId in place. dm_channel_updated
+    //    would only patch name/icon, not federatedId, so it cannot heal the client here.
+    for (const r of dmReconcileResults) {
+      const targetPayload = buildDmChannelPayload(r.targetChannelId, db);
+      for (const uid of r.affectedUserIds) {
+        if (r.action === 'merged') {
+          connectionManager.sendToUser(uid, { type: 'dm_channel_closed' as const, dmChannelId: r.channelId });
+        }
+        if (targetPayload) {
+          connectionManager.sendToUser(uid, { type: 'dm_channel_created' as const, dmChannel: targetPayload });
+        }
+      }
     }
 
     return reply.code(200).send({ success: true, user: sanitizeUser(updated, true) });
