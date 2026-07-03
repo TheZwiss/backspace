@@ -56,6 +56,15 @@ vi.mock('../../../stores/transferStore', () => ({
   ),
 }));
 
+// spaceStore is imported for the post-reattach DM refetch (reloadDmsForOrigin);
+// stub it so this isolated render doesn't load the real store's audio import chain.
+vi.mock('../../../stores/spaceStore', () => ({
+  useSpaceStore: Object.assign(
+    (selector: (s: unknown) => unknown) => selector({}),
+    { getState: () => ({ reloadDmsForOrigin: vi.fn().mockResolvedValue(undefined) }), setState: vi.fn(), subscribe: vi.fn() },
+  ),
+}));
+
 // api.uploads.url is referenced during render for avatar/banner sources;
 // api.users.reattach is the peer call the fallback action fires on confirm.
 vi.mock('../../../api/client', () => ({

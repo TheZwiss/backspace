@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { useUIStore } from '../../../stores/uiStore';
 import { useInstanceStore } from '../../../stores/instanceStore';
+import { useSpaceStore } from '../../../stores/spaceStore';
 import { Avatar } from '../../ui/Avatar';
 import { ImageCropModal } from '../../ui/ImageCropModal';
 import { DeleteAccountModal } from '../DeleteAccountModal';
@@ -110,6 +111,10 @@ export function AccountPanel() {
       const { token } = await homeConnection.api.auth.attachProof(window.location.hostname);
       const res = await api.users.reattach({ token });
       useAuthStore.getState().setUser(res.user);
+      // Re-attach reconciled this (home) account's 1-on-1 DM federatedIds on the
+      // server; refetch the home DM list so the split conversation collapses
+      // without a reload.
+      try { await useSpaceStore.getState().reloadDmsForOrigin(''); } catch { /* non-fatal */ }
       addToast(`Account re-linked with ${homeConnection.username}`, 'success', 3000);
     } catch (err) {
       setReattachError(err instanceof Error ? err.message : 'Re-attach failed');

@@ -29,12 +29,13 @@ vi.mock('./authStore', () => ({
 
 import { useInstanceStore, maybeAutoReattach } from './instanceStore';
 import type { ConnectedInstance } from './instanceStore';
+import { useSpaceStore } from './spaceStore';
 
 function makeInstance(overrides: Partial<ConnectedInstance> & { origin: string }): ConnectedInstance {
   return {
     label: 'x', token: 't', status: 'connected',
     username: overrides.user?.username ?? 'u',
-    api: { auth: { attachProof: vi.fn() }, users: { reattach: vi.fn() } } as unknown as BackspaceApiClient,
+    api: { auth: { attachProof: vi.fn() }, users: { reattach: vi.fn() }, dm: { list: vi.fn().mockResolvedValue([]) } } as unknown as BackspaceApiClient,
     user: { id: 'id', username: 'u' } as User,
     ...overrides,
   };
@@ -69,6 +70,33 @@ describe('maybeAutoReattach', () => {
     expect(reattach).toHaveBeenCalledWith({ token: 'a'.repeat(64) });
     const stored = useInstanceStore.getState().instances.find(i => i.origin === 'https://nova.test')!;
     expect(stored.user.federationHomeOrphaned).toBe(false);
+  });
+
+  it('refetches the DM list for the connection after a successful re-attach', async () => {
+    const homeConn = makeInstance({
+      origin: 'https://orbit.test',
+      username: 'youruser',
+      user: { id: 'new-home-1', username: 'youruser' } as User,
+    });
+    (homeConn.api as unknown as { auth: { attachProof: ReturnType<typeof vi.fn> } }).auth.attachProof =
+      vi.fn().mockResolvedValue({ token: 'a'.repeat(64) });
+
+    const updatedUser = { id: 'detached-1', username: 'youruser@orbit.test', federationHomeOrphaned: false, homeInstance: 'orbit.test' } as User;
+    const detachedConn = makeInstance({
+      origin: 'https://nova.test',
+      user: { id: 'detached-1', username: 'youruser@orbit.test', federationHomeOrphaned: true, homeInstance: 'orbit.test' } as User,
+    });
+    (detachedConn.api as unknown as { users: { reattach: ReturnType<typeof vi.fn> } }).users.reattach =
+      vi.fn().mockResolvedValue({ success: true, user: updatedUser });
+
+    const dmRefetchMock = vi.fn().mockResolvedValue(undefined);
+    const spy = vi.spyOn(useSpaceStore.getState(), 'reloadDmsForOrigin').mockImplementation(dmRefetchMock);
+
+    useInstanceStore.setState({ instances: [homeConn, detachedConn] });
+    await maybeAutoReattach(detachedConn);
+
+    expect(dmRefetchMock).toHaveBeenCalledWith('https://nova.test');
+    spy.mockRestore();
   });
 
   it('skips silently on username-base mismatch (cross-name binds are manual-only)', async () => {

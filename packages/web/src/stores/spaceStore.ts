@@ -126,6 +126,7 @@ interface SpaceState {
   setRoles: (roles: Role[]) => void;
   setDmChannels: (channels: DmChannel[]) => void;
   addDmChannel: (channel: DmChannel, origin?: string) => void;
+  reloadDmsForOrigin: (origin: string) => Promise<void>;
   removeDmChannel: (id: string) => void;
   addDmMember: (dmChannelId: string, user: User) => void;
   removeDmMember: (dmChannelId: string, userId: string) => void;
@@ -284,6 +285,91 @@ export const useSpaceStore = create<SpaceState>((set, get) => ({
       channelOriginMap,
     };
   }),
+
+  // Refetch and replace the DM list for a single origin, mirroring the DM
+  // portion of populateFromReady (dedup vs other origins by federatedId, origin
+  // map, last-message map, failover alternatives, userViews). Used after a
+  // re-attach reconciles this connection's 1-on-1 federatedIds (merge/re-key)
+  // so the split conversation collapses without a full WS reconnect. Origin ''
+  // is the home instance. Non-fatal: the caller wraps it in try/catch.
+  reloadDmsForOrigin: async (origin: string) => {
+    const client = getApiForOrigin(origin);
+    const incomingDms = await client.dm.list();
+
+    // Normalize remote-origin DM member asset URLs (home origin serves clean paths).
+    if (origin !== '') {
+      for (const dm of incomingDms) {
+        for (const member of dm.members) {
+          normalizeUserAssets(member, origin);
+        }
+      }
+    }
+
+    set((state) => {
+      // Upsert every DM member into the userViews cache (home + remote).
+      const { upsertUserView } = get();
+      for (const dm of incomingDms) {
+        for (const member of dm.members) {
+          upsertUserView(member, origin);
+        }
+      }
+
+      // Dedup vs DMs already loaded from OTHER origins (same federatedId).
+      const existingFederatedIds = new Map<string, string>();
+      for (const dm of state.dmChannels) {
+        if (dm.federatedId && (state.channelOriginMap.get(dm.id) ?? '') !== origin) {
+          existingFederatedIds.set(dm.federatedId, dm.id);
+        }
+      }
+
+      const channelOriginMap = new Map(state.channelOriginMap);
+      const channelLastMessageIds = new Map(state.channelLastMessageIds);
+      // Drop this origin's stale channel-map entries before repopulating.
+      for (const dm of state.dmChannels) {
+        if ((state.channelOriginMap.get(dm.id) ?? '') === origin) {
+          channelOriginMap.delete(dm.id);
+          channelLastMessageIds.delete(dm.id);
+        }
+      }
+
+      const dmAlternatives = new Map<string, Map<string, string>>();
+      for (const [fid, byOrigin] of state.dmAlternatives) {
+        dmAlternatives.set(fid, new Map(byOrigin));
+      }
+
+      const filteredDms: DmChannel[] = [];
+      for (const dm of incomingDms) {
+        if (dm.federatedId && existingFederatedIds.has(dm.federatedId)) {
+          continue; // duplicate cross-instance DM — keep the copy from the other origin
+        }
+        filteredDms.push(dm);
+        if (dm.federatedId) existingFederatedIds.set(dm.federatedId, dm.id);
+      }
+      for (const dm of filteredDms) {
+        channelOriginMap.set(dm.id, origin);
+        if (dm.lastMessage?.id) channelLastMessageIds.set(dm.id, dm.lastMessage.id);
+      }
+      // Record every DM's (origin → localChannelId) for failover lookup.
+      for (const dm of incomingDms) {
+        if (!dm.federatedId) continue;
+        let byOrigin = dmAlternatives.get(dm.federatedId);
+        if (!byOrigin) {
+          byOrigin = new Map();
+          dmAlternatives.set(dm.federatedId, byOrigin);
+        }
+        byOrigin.set(origin, dm.id);
+      }
+
+      const existingDmsFromOtherOrigins = state.dmChannels.filter(
+        dm => (state.channelOriginMap.get(dm.id) ?? '') !== origin,
+      );
+      const mergedDms = [...existingDmsFromOtherOrigins, ...filteredDms];
+      const { unreadChannels, currentChannelId } = useChatStore.getState();
+      const sortedDms = sortDmChannels(mergedDms, unreadChannels, currentChannelId);
+
+      return { dmChannels: sortedDms, channelOriginMap, channelLastMessageIds, dmAlternatives };
+    });
+  },
 
   upsertUserView: (user, deliveringOrigin) => set((state) => {
     const key = canonicalUserKey(user);

@@ -195,6 +195,11 @@ export async function maybeAutoReattach(instance: ConnectedInstance): Promise<vo
     useInstanceStore.setState({ registry, registryUpdatedAt: Date.now() });
     useUIStore.getState().addToast(`Account re-linked with ${homeDomain}`, 'success');
     useInstanceStore.getState().syncRegistry().catch(() => {});
+    // Re-attach reconciled this connection's 1-on-1 DM federatedIds (merge/re-key
+    // on the server); refetch the DM list so the split conversation collapses
+    // without a reload. Belt-and-suspenders for the connection that triggered it
+    // — the server's dm_channel_closed/created events cover the live sidebar too.
+    try { await useSpaceStore.getState().reloadDmsForOrigin(instance.origin); } catch { /* non-fatal */ }
   } catch (err) {
     // Non-fatal: the connection works either way; the explicit re-attach
     // action in AccountPanel remains available.
