@@ -6987,6 +6987,77 @@ export function processPresenceUpdateEvent(
 
 // ─── Dead-Incarnation Startup Sweep ─────────────────────────────────────────
 
+export interface DmReconcileResult {
+  action: 'noop' | 'rekeyed' | 'merged';
+  channelId: string;
+  targetChannelId: string;
+  affectedUserIds: string[];
+}
+
+/**
+ * Reconcile a single 1-on-1 DM channel's deterministic federatedId against its
+ * members' CURRENT home identities (reattach-dm-reconcile spec §3.1). A 1-on-1
+ * federatedId is f(sorted home user ids); when a participant's home_user_id
+ * changes (re-attach), the channel's stored id goes stale and new messages
+ * compute a different id → a split conversation. This re-keys the channel in
+ * place, or — when a channel already carries the correct id (idx_dm_federated is
+ * UNIQUE, so two rows can't share it) — merges this channel INTO that one and
+ * deletes it.
+ *
+ * Idempotent: a correctly-keyed channel is a noop. Group DMs (UUID federatedId
+ * or member count != 2) are skipped. Must be called inside a transaction.
+ */
+export function reconcileDmChannelFederatedId(
+  rawDb: ReturnType<typeof getRawDb>,
+  channelId: string,
+): DmReconcileResult {
+  const noop: DmReconcileResult = { action: 'noop', channelId, targetChannelId: channelId, affectedUserIds: [] };
+
+  const chan = rawDb.prepare(`SELECT id, federated_id FROM dm_channels WHERE id = ? AND deleted_at IS NULL`).get(channelId) as
+    { id: string; federated_id: string | null } | undefined;
+  if (!chan || !chan.federated_id) return noop;
+  // Only 1-on-1 shape (32 hex). Group DMs use a random UUID.
+  if (!/^[0-9a-f]{32}$/.test(chan.federated_id)) return noop;
+
+  const members = rawDb.prepare(`
+    SELECT u.id, u.home_user_id FROM dm_members m JOIN users u ON u.id = m.user_id
+    WHERE m.dm_channel_id = ?
+  `).all(channelId) as Array<{ id: string; home_user_id: string | null }>;
+  if (members.length !== 2) return noop;
+
+  const homeA = members[0]!.home_user_id || members[0]!.id;
+  const homeB = members[1]!.home_user_id || members[1]!.id;
+  const expected = computeFederatedId(homeA, homeB);
+  if (expected === chan.federated_id) return noop;
+
+  const target = rawDb.prepare(`SELECT id FROM dm_channels WHERE federated_id = ? AND deleted_at IS NULL AND id != ?`).get(expected, channelId) as
+    { id: string } | undefined;
+
+  if (!target) {
+    rawDb.prepare(`UPDATE dm_channels SET federated_id = ? WHERE id = ?`).run(expected, channelId);
+    return { action: 'rekeyed', channelId, targetChannelId: channelId, affectedUserIds: members.map(m => m.id) };
+  }
+
+  // Merge source (channelId) INTO target, then delete source.
+  const targetId = target.id;
+  const targetMemberIds = (rawDb.prepare(`SELECT user_id FROM dm_members WHERE dm_channel_id = ?`).all(targetId) as Array<{ user_id: string }>).map(r => r.user_id);
+  const affected = Array.from(new Set([...members.map(m => m.id), ...targetMemberIds]));
+
+  // Messages: globally-unique ids, straight move (attachments + dm_reactions
+  // reference dm_message_id and follow automatically).
+  rawDb.prepare(`UPDATE dm_messages SET dm_channel_id = ? WHERE dm_channel_id = ?`).run(targetId, channelId);
+  // Members: drop source rows already present on target (composite PK), repoint the rest.
+  rawDb.prepare(`DELETE FROM dm_members WHERE dm_channel_id = ? AND user_id IN (SELECT user_id FROM dm_members WHERE dm_channel_id = ?)`).run(channelId, targetId);
+  rawDb.prepare(`UPDATE dm_members SET dm_channel_id = ? WHERE dm_channel_id = ?`).run(targetId, channelId);
+  // read_states: keyed by channel_id; dedupe on (user_id, channel_id) then repoint.
+  rawDb.prepare(`DELETE FROM read_states WHERE channel_id = ? AND user_id IN (SELECT user_id FROM read_states WHERE channel_id = ?)`).run(channelId, targetId);
+  rawDb.prepare(`UPDATE read_states SET channel_id = ? WHERE channel_id = ?`).run(targetId, channelId);
+  // Remove the now-empty source channel.
+  rawDb.prepare(`DELETE FROM dm_channels WHERE id = ?`).run(channelId);
+
+  return { action: 'merged', channelId, targetChannelId: targetId, affectedUserIds: affected };
+}
+
 /**
  * Remove dead-incarnation artifacts produced by pre-fix initial syncs
  * (dead-incarnation spec §3.4): DM channels with no native member, and
