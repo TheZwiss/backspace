@@ -52,6 +52,11 @@ pnpm dev              # API server on :3005, Vite dev server on :5173
 
 You can run the two halves separately with `pnpm dev:server` and `pnpm dev:web`.
 
+Working on the **desktop** app additionally needs a C++ toolchain (`make`, `g++`,
+`python3`) to build the native `uiohook-napi` module — on Debian/Ubuntu:
+`sudo apt install build-essential python3`. Without it `pnpm install` just warns
+and skips that one rebuild; the server and web client are unaffected.
+
 Voice and video are optional and require a LiveKit server; see the README for
 configuration. Text, federation, uploads, and everything else run fully without
 it.

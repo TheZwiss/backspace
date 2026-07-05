@@ -268,6 +268,14 @@ cp .env.example .env          # set JWT_SECRET (openssl rand -hex 32)
 pnpm dev                       # API server on :3005, Vite dev server on :5173
 ```
 
+> **Server/web only?** `pnpm install` also builds the desktop app's native
+> keyboard-hook module (`uiohook-napi`), which needs a C++ toolchain
+> (`make`, `g++`, `python3`). If those are missing it now **warns and continues** —
+> the server and web client don't need it. Install a build toolchain
+> (Debian/Ubuntu: `sudo apt install build-essential python3`) only if you're
+> building the **desktop** app. And to *self-host*, use the Docker installer
+> above — it never touches the desktop package.
+
 Run the halves separately if you prefer:
 
 ```bash
