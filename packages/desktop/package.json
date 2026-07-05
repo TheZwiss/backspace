@@ -18,7 +18,7 @@
     "clean": "rm -rf dist dist-electron",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "electron-rebuild -f -w uiohook-napi"
+    "postinstall": "electron-rebuild -f -w uiohook-napi || node -e \"console.warn('[desktop] uiohook-napi native rebuild skipped - needs build tools (make, g++, python3). Only required to RUN the desktop app; the server, web client, and Docker image are unaffected.')\""
   },
   "dependencies": {
     "electron-updater": "^6.3.0",
