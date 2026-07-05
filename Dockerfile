@@ -5,7 +5,7 @@
 # Stage 1: Install dependencies and build frontend
 FROM node:20-slim AS builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ RUN pnpm --filter @backspace/web build
 # Stage 2: Production runtime
 FROM node:20-slim AS runtime
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
 # Install build dependencies for better-sqlite3 native module
 RUN apt-get update && \
