@@ -27,6 +27,12 @@ services:
       - NODE_ENV=production
       - DB_PATH=/app/data/backspace.db
       - UPLOAD_DIR=/app/data/uploads
+      # Fail fast with a clear message if the secret is missing/empty, instead of
+      # letting the container boot-crash on every `restart: unless-stopped` cycle
+      # (a silent loop that only shows up in `docker compose logs backspace`).
+      # install.sh generates this before bringing the stack up; this guard only
+      # bites the manual `cp .env.example .env && docker compose up` path.
+      - "JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in .env - generate one with: openssl rand -hex 32}"
     networks:
       - internal
     healthcheck:
