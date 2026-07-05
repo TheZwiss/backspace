@@ -8,7 +8,7 @@
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-3da639.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-20_LTS-339933.svg)](https://nodejs.org/)
 [![Version](https://img.shields.io/badge/version-1.0.0-16a34a.svg)](#project-status)
 
 </div>
@@ -257,7 +257,10 @@ The stack runs three services via Docker Compose:
 
 ## Development
 
-Requirements: **Node.js 20+** and **pnpm 8+**.
+Requirements: **Node.js 20 (LTS)** and **pnpm 10** — both are pinned (`.nvmrc` +
+the `packageManager` field), so `nvm use` and Corepack select the right versions
+automatically. Newer Node majors are untested; the Docker image always builds on
+Node 20 regardless of your host.
 
 ```bash
 pnpm install
@@ -382,7 +385,7 @@ packages/
 
 | Layer        | Technology |
 |--------------|------------|
-| Server       | Node.js 20+, Fastify 4, TypeScript (strict) |
+| Server       | Node.js 20 (LTS), Fastify 4, TypeScript (strict) |
 | Database     | SQLite (better-sqlite3) + Drizzle ORM |
 | Auth         | JWT + bcrypt |
 | Frontend     | React 18, Vite 6, Tailwind CSS 3, Zustand 5 |

@@ -38,8 +38,9 @@
       "uiohook-napi@1.5.5": "patches/uiohook-napi@1.5.5.patch"
     }
   },
+  "packageManager": "pnpm@10.34.3",
   "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=8.0.0"
+    "node": ">=20.0.0 <21.0.0",
+    "pnpm": ">=10.0.0"
   }
 }
