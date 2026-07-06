@@ -164,14 +164,26 @@ You own the server, the data, and the network it federates into.
 
 The intended way to deploy Backspace is the **interactive installer** — it
 configures everything (`.env`, secrets, HTTPS, optional voice) and brings the
-stack up for you. Everything you need for a working instance is below.
+stack up for you. It **auto-detects your environment** and picks one of three
+deployment modes — the default "All-in-One" (below) needs nothing but a host and
+a domain, but if ports 80/443 are already taken (an existing reverse proxy, a
+tunnel, another app) the installer steers you to the right mode instead of
+dead-ending. See [Deployment modes](#deployment-modes) for the full picture.
+
+By default the installer **pulls a prebuilt multi-architecture image** from the
+GitHub Container Registry (`linux/amd64` + `linux/arm64`), so weak or ARM boxes
+(a Raspberry Pi) skip the heavy local build — it falls back to building from
+source automatically if the image can't be pulled.
 
 ### Requirements
 
 - A **Linux host** (VPS, VM, or home server) with **Docker** and **Docker Compose**.
-- A **domain name** pointed at the host's public IP — Caddy uses it to obtain
-  HTTPS certificates automatically.
-- The ability to open the firewall ports in step 2.
+- A **domain name** for your instance. In the default All-in-One mode it must
+  point at the host's public IP (Caddy obtains HTTPS certificates for it
+  automatically); behind your own reverse proxy or a tunnel it points at that
+  edge instead — see [Deployment modes](#deployment-modes).
+- The ability to open the firewall ports in step 2 (All-in-One), or a reverse
+  proxy / tunnel already terminating HTTPS for you.
 
 ### 1. Run the installer
 
@@ -255,6 +267,202 @@ The stack runs three services via Docker Compose:
 | `caddy`     | Reverse proxy with automatic HTTPS for your `DOMAIN` (ports `80`/`443`) |
 | `livekit`   | Voice/video server — optional, enabled with `COMPOSE_PROFILES=voice` |
 
+## Deployment modes
+
+Homelabs differ. Backspace supports three deployment modes from **one installer**,
+which auto-detects which one fits and, in non-obvious cases, asks. The mode is
+recorded as `DEPLOY_MODE` in `.env`; you can also set it up front for a
+non-interactive install (`DEPLOY_MODE=proxy ./install.sh`).
+
+| Mode | When | HTTPS handled by | Voice |
+|------|------|------------------|-------|
+| **`allinone`** (default) | Ports 80/443 are free and you have a domain | The bundled **Caddy** (automatic Let's Encrypt) | ✅ with UDP media ports open |
+| **`proxy`** | You already run a reverse proxy (nginx, Traefik, Caddy, Nginx Proxy Manager, SWAG…) | **Your** reverse proxy | ✅ if you also proxy `/livekit` and open the media ports |
+| **`tunnel`** | You expose the box through a tunnel (Cloudflare Tunnel, Tailscale…) | The **tunnel** provider | ❌ WebRTC/UDP can't traverse a tunnel |
+
+In `proxy` and `tunnel` mode the bundled Caddy is **not** started; instead the app
+is published on **`127.0.0.1:APP_PORT`** (loopback only — never exposed directly)
+for your proxy or tunnel to forward to. This is driven by a small overlay,
+`docker-compose.proxy.yml`, which the installer wires in for you by setting
+`COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml` in `.env` — so every
+later `docker compose …` command in the directory keeps working with no `-f`
+flags. The installer auto-picks a free `APP_PORT` (3000/8080 are often taken);
+override it with `APP_PORT=…`.
+
+The installer prints ready-to-paste config for your mode at the end. The
+canonical snippets are below.
+
+### Mode 2 — behind your own reverse proxy
+
+The app answers plain HTTP on `127.0.0.1:APP_PORT`; your proxy terminates TLS and
+forwards to it. Every snippet already includes the three things people get wrong:
+**WebSocket upgrade** (chat and live events won't work without it),
+**`X-Forwarded-*`** (the server runs with `trustProxy` and needs the real client
+scheme/IP), and a **body-size limit** matching `MAX_UPLOAD_SIZE` (default 100 MB).
+
+Replace `chat.example.com` and `8080` with your domain and `APP_PORT`.
+
+**nginx** — the `map` goes in `http { }` once; the `server` block per site:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+server {
+    listen 443 ssl;
+    server_name chat.example.com;
+
+    # ssl_certificate     /etc/letsencrypt/live/chat.example.com/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/chat.example.com/privkey.pem;
+
+    client_max_body_size 100m;        # match MAX_UPLOAD_SIZE
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header Upgrade    $http_upgrade;        # WebSocket
+        proxy_set_header Connection $connection_upgrade;  # WebSocket
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Voice only — forward LiveKit signaling (strips the /livekit prefix):
+    # location /livekit/ {
+    #     proxy_pass http://127.0.0.1:7880/;
+    #     proxy_http_version 1.1;
+    #     proxy_set_header Host       $host;
+    #     proxy_set_header Upgrade    $http_upgrade;
+    #     proxy_set_header Connection $connection_upgrade;
+    # }
+}
+```
+
+**Caddy** (if you run your own — it handles WebSocket and `X-Forwarded-*` itself):
+
+```caddy
+chat.example.com {
+    reverse_proxy 127.0.0.1:8080
+    request_body { max_size 100MB }
+
+    # Voice only:
+    # handle_path /livekit/* { reverse_proxy 127.0.0.1:7880 }
+    # handle           { reverse_proxy 127.0.0.1:8080 }
+}
+```
+
+**Traefik** (file provider — Traefik handles WebSocket automatically):
+
+```yaml
+http:
+  routers:
+    backspace:
+      rule: "Host(`chat.example.com`)"
+      entryPoints: [websecure]
+      service: backspace
+      tls: { certResolver: letsencrypt }
+  services:
+    backspace:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8080"
+  # Voice only — add a higher-priority router + stripPrefix middleware for
+  # PathPrefix(`/livekit`) → http://127.0.0.1:7880.
+```
+
+#### GUI proxies (Nginx Proxy Manager, SWAG, etc.)
+
+You can't paste a config file into a point-and-click proxy, so set these fields
+by hand. In **Nginx Proxy Manager**, add a **Proxy Host**:
+
+| Field | Value |
+|-------|-------|
+| **Domain Names** | `chat.example.com` |
+| **Scheme** | `http` |
+| **Forward Hostname / IP** | `127.0.0.1` — but **if NPM runs in Docker**, `127.0.0.1` is NPM's *own* container. Use the host's LAN IP, or `host.docker.internal` with `extra_hosts: ["host.docker.internal:host-gateway"]` on the NPM container. |
+| **Forward Port** | your `APP_PORT` (e.g. `8080`) |
+| **Websockets Support** | **ON** (required — chat/live events break without it) |
+| **Block Common Exploits** | fine to leave on |
+| **SSL tab** | request a Let's Encrypt cert and enable **Force SSL** |
+| **Advanced tab** | add `client_max_body_size 100m;` (match `MAX_UPLOAD_SIZE`) |
+
+The same three ideas apply to any GUI proxy: forward to the app's host+port,
+enable WebSocket support, and raise the request-body limit.
+
+### Mode 3 — behind a tunnel (Cloudflare, Tailscale…)
+
+Same loopback publish as Mode 2, but the tunnel daemon on the host reaches
+`127.0.0.1:APP_PORT` and no inbound ports are opened at all. For **Cloudflare
+Tunnel** (`cloudflared`):
+
+```yaml
+# ~/.cloudflared/config.yml
+tunnel: <YOUR-TUNNEL-ID>
+credentials-file: /root/.cloudflared/<YOUR-TUNNEL-ID>.json
+
+ingress:
+  - hostname: chat.example.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
+```
+
+```bash
+cloudflared tunnel route dns <YOUR-TUNNEL-ID> chat.example.com
+```
+
+Two tunnel-specific caveats, both handled by the installer:
+
+- **Upload cap.** Cloudflare (free/pro) hard-caps request bodies at **100 MB**, so
+  the 100 MB default would let large uploads fail *at the edge*. In `tunnel` mode
+  the installer sets `MAX_UPLOAD_SIZE=94371840` (90 MB) with headroom. Don't raise
+  it back above ~100 MB behind Cloudflare.
+- **No voice.** Voice/video is **WebRTC over UDP**, which a tunnel can't carry — so
+  it's disabled in `tunnel` mode. If you need voice, use Mode 2 (reverse proxy)
+  with the media ports opened, or All-in-One.
+
+### Voice per mode
+
+Voice/video (LiveKit) needs its **UDP media ports** reachable from clients —
+these carry the actual audio/video and never pass through your HTTP proxy or
+tunnel:
+
+| Port | Proto | Purpose |
+|------|-------|---------|
+| `3478` | UDP | TURN — WebRTC NAT traversal |
+| `7881` | TCP | WebRTC TCP fallback |
+| `50000–60000` | UDP | WebRTC media (voice / video / screen-share) |
+
+- **All-in-One** — voice works once those ports are open/forwarded. LiveKit
+  *signaling* is proxied through Caddy on 443 (`/livekit`); port `7880` stays
+  internal, never forwarded.
+- **Reverse proxy** — you must **also** route `/livekit` to `127.0.0.1:7880` (see
+  the commented lines in the snippets) **and** open the media ports above.
+- **Tunnel** — voice does **not** work (UDP can't traverse the tunnel). This is a
+  known, unavoidable limitation, not a misconfiguration.
+
+### Updating a running instance
+
+Back up first — the app auto-snapshots the SQLite DB, and you can take one on
+demand with `./backup.sh` (see [`docs/systems/deployment.md`](docs/systems/deployment.md)).
+Then, from the install directory:
+
+```bash
+git pull                              # refresh compose files / install.sh / docs
+
+# Prebuilt-image installs (the default):
+docker compose pull && docker compose up -d
+
+# From-source installs (a fork, or BACKSPACE_BUILD=true):
+docker compose up -d --build
+```
+
+Because `COMPOSE_FILE` lives in `.env`, these commands automatically use the
+right compose files in every mode — no `-f` flags to remember. A redeploy
+briefly restarts the `backspace` container (clients reconnect automatically).
+
 ## Development
 
 Requirements: **Node.js 20 (LTS)** and **pnpm 10** — both are pinned (`.nvmrc` +
@@ -300,10 +508,13 @@ The most important:
 |----------------------|----------|-------------|-------------|
 | `DOMAIN`             | yes      | —           | Public domain name of your instance |
 | `JWT_SECRET`         | yes      | —           | Auth signing secret, **min 32 chars** (`openssl rand -hex 32`) |
+| `DEPLOY_MODE`        | no       | `allinone`  | `allinone` \| `proxy` \| `tunnel` — see [Deployment modes](#deployment-modes) |
+| `APP_PORT`           | no       | auto        | `proxy`/`tunnel` only: host loopback port the app is published on |
 | `PORT`               | no       | `3000`      | App listen port (behind Caddy in Docker) |
 | `HOST`               | no       | `0.0.0.0`   | Bind address |
 | `REGISTRATION_OPEN`  | no       | `true`      | Set `false` to close signups after setup |
-| `MAX_UPLOAD_SIZE`    | no       | `104857600` | Max upload size in bytes (100 MB) |
+| `MAX_UPLOAD_SIZE`    | no       | `104857600` | Max upload size in bytes (100 MB; 90 MB in `tunnel` mode) |
+| `BACKSPACE_IMAGE` / `BACKSPACE_IMAGE_TAG` | no | `ghcr.io/thezwiss/backspace` / `latest` | Prebuilt image to pull; pin a tag or point at your fork's registry |
 | `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | no | — | Enable voice/video |
 | `COMPOSE_PROFILES`   | no       | —           | Set to `voice` to start the bundled LiveKit service |
 
