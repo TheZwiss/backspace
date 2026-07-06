@@ -1,0 +1,92 @@
+name: Publish Container Image
+
+# Builds and publishes the Backspace application image to the GitHub Container
+# Registry (GHCR) as a multi-architecture (linux/amd64 + linux/arm64) image, so
+# self-hosters — including weak/ARM boxes like a Raspberry Pi — can `docker pull`
+# a prebuilt image instead of building the ~1.6 GB image locally (the Vite build
+# OOMs small ARM hosts). install.sh and docker-compose.yml default to pulling
+# this image, with a from-source build as the fallback.
+#
+# This is intentionally SEPARATE from the desktop-installer workflow
+# (release.yml) — they share the `v*` tag trigger but build entirely different
+# artifacts and must not be entangled.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Allow a manual rebuild/publish (e.g. to (re)publish `latest` or a moving tag
+  # without cutting a new release).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Extra tag to publish (optional, e.g. "edge")'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The runtime image bakes the git commit for the AGPL-3.0 § 13 source
+      # offer (config.commit → GET /api/instance/info). The .git dir is not in
+      # the build context (.dockerignore), so resolve the short SHA here and feed
+      # it to the build as a --build-arg, matching install.sh / deploy.sh.
+      - name: Resolve build metadata
+        id: meta_commit
+        run: echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags and labels
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          # github.repository is "TheZwiss/backspace"; metadata-action lowercases
+          # it → ghcr.io/thezwiss/backspace (GHCR requires lowercase).
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event.inputs.tag != '' }}
+          labels: |
+            org.opencontainers.image.title=Backspace
+            org.opencontainers.image.description=Self-hosted Discord alternative — text, voice, video, and federation.
+            org.opencontainers.image.source=https://github.com/TheZwiss/backspace
+            org.opencontainers.image.licenses=AGPL-3.0-only
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          build-args: |
+            BACKSPACE_COMMIT=${{ steps.meta_commit.outputs.commit }}
+          # Cache multi-arch layers across runs via the GitHub Actions cache to
+          # keep the ~1.6 GB build from re-running cold every release.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

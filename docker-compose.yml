@@ -10,6 +10,14 @@
 services:
   # ── Backspace application server ──────────────────────────
   backspace:
+    # Prebuilt multi-arch image on GHCR (published by .github/workflows/
+    # docker-publish.yml). `docker compose pull` / install.sh's default path
+    # fetches this so weak/ARM hosts skip the heavy local build. Both `image:`
+    # and `build:` are declared: if the image isn't present locally and can't be
+    # pulled, `docker compose up --build` (install.sh's fallback, and deploy.sh)
+    # builds from source instead and tags the result under this same ref.
+    # Override the tag with BACKSPACE_IMAGE_TAG in .env (defaults to `latest`).
+    image: ${BACKSPACE_IMAGE:-ghcr.io/thezwiss/backspace}:${BACKSPACE_IMAGE_TAG:-latest}
     build:
       context: .
       args:

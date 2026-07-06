@@ -1,0 +1,36 @@
+# ============================================================
+# Backspace — Reverse-proxy / Tunnel override
+# ============================================================
+# Overlay for Mode 2 (behind your own reverse proxy) and Mode 3 (tunnel, e.g.
+# Cloudflare Tunnel / Tailscale). Layer it on top of the base compose file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#
+# What it changes versus the all-in-one base:
+#   1. Publishes the app on 127.0.0.1:${APP_PORT} (loopback only) so your own
+#      reverse proxy or tunnel daemon on the same host can reach it. Nothing is
+#      exposed on a public interface by this stack — TLS/termination is the
+#      proxy's job.
+#   2. Moves the bundled Caddy into a profile that is never activated here, so it
+#      does NOT start (your proxy owns 80/443). The base file leaves Caddy in the
+#      default profile, so Mode 1 (`-f docker-compose.yml` alone) is unchanged.
+#
+# ./install.sh selects the right `-f` combination automatically per mode; this
+# file is also usable by hand for a fully manual setup.
+# ============================================================
+
+services:
+  backspace:
+    # Bind to loopback only. The reverse proxy / tunnel connects over 127.0.0.1;
+    # the app is never reachable directly from the network. Container listens on
+    # PORT (default 3000); APP_PORT is the host-side port your proxy forwards to.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:${PORT:-3000}"
+
+  caddy:
+    # Park Caddy in a profile that install.sh / the documented commands never
+    # enable, so the merged config drops it in proxy/tunnel mode. (Compose
+    # replaces the `profiles` list on merge; the base service has none, so this
+    # is the effective value only when this override is layered on.)
+    profiles:
+      - _proxy_mode_no_caddy

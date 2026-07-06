@@ -4,9 +4,11 @@ Operator- and contributor-facing reference for hosting Backspace: the Docker bui
 
 Source files:
 - `Dockerfile` -- multi-stage build (builder → runtime)
-- `docker-compose.yml` -- `backspace` + `caddy` (+ optional `livekit`) services, healthcheck
-- `Caddyfile` -- reverse proxy / auto-HTTPS config
-- `install.sh` -- interactive first-time setup
+- `docker-compose.yml` -- base stack: `backspace` + `caddy` (+ optional `livekit`) services, healthcheck
+- `docker-compose.proxy.yml` -- proxy/tunnel overlay: publishes the app on `127.0.0.1:APP_PORT` and drops Caddy
+- `.github/workflows/docker-publish.yml` -- multi-arch (amd64+arm64) GHCR image publish
+- `Caddyfile` -- reverse proxy / auto-HTTPS config (All-in-One mode only)
+- `install.sh` -- interactive first-time setup, mode-aware (allinone / proxy / tunnel)
 - `deploy.sh` -- rsync + rebuild to Heidi's two boxes
 - `backup.sh` / `restore.sh` -- manual snapshot + restore tooling (host side)
 - `packages/server/src/config.ts` -- `config.backup.*` env parsing
@@ -25,7 +27,35 @@ Source files:
 
 ## 1. Pipeline Overview
 
-Backspace ships as a single application container fronted by Caddy. Everything is built and run via Docker Compose; there is no separate CI artifact — **the image is built on each target host** from source.
+Backspace ships as a single application container. In the default **All-in-One** deployment it is fronted by the bundled Caddy (automatic HTTPS); behind an operator's own reverse proxy or a tunnel, Caddy is dropped and the container is published on a host loopback port instead (see [Deployment modes](#deployment-modes) below). The application image is a **prebuilt multi-architecture image published to GHCR** — `docker compose pull` (install.sh's default path) fetches `ghcr.io/thezwiss/backspace` for `linux/amd64` or `linux/arm64`, so weak/ARM hosts skip the heavy local build; a from-source build is the fallback when the image can't be pulled.
+
+### Prebuilt image (GHCR)
+
+`.github/workflows/docker-publish.yml` builds and pushes the application image to `ghcr.io/thezwiss/backspace` on every `v*` tag (and on manual `workflow_dispatch`). It is deliberately **separate from** the desktop-installer workflow (`release.yml`): the two share the `v*` tag trigger but build entirely different artifacts and must not be entangled.
+
+- **Multi-arch.** `docker/setup-qemu-action` + `buildx` build `linux/amd64,linux/arm64` in one push, so a Raspberry Pi pulls a native image instead of cross-building (the Vite build OOMs small ARM boxes).
+- **Tags.** `docker/metadata-action` derives `{version}`, `{major}.{minor}`, `latest` (on `v*` tags), and `sha-<short>`. A `workflow_dispatch` with an extra `tag` input publishes that tag too (e.g. `latest` without cutting a release).
+- **AGPL § 13 commit stamping is preserved.** The workflow resolves `git rev-parse --short HEAD` and passes it as `--build-arg BACKSPACE_COMMIT=…`, exactly like `install.sh`/`deploy.sh`, plus OCI labels (`source`, `licenses=AGPL-3.0-only`, `revision`). The pulled image therefore advertises its exact source version via `GET /api/instance/info`.
+- **Auth.** The push authenticates with the built-in `GITHUB_TOKEN` (`permissions: packages: write`). The GHCR package must be set **public** once for unauthenticated `docker pull` to work.
+- **Compose wiring.** `docker-compose.yml` declares **both** `image: ${BACKSPACE_IMAGE:-ghcr.io/thezwiss/backspace}:${BACKSPACE_IMAGE_TAG:-latest}` **and** `build: .`. `pull`/`up` uses the image; `up --build` (deploy.sh, or install.sh's fallback) builds from source and tags the result under the same ref. Operators pin a version or point at a fork's registry via `BACKSPACE_IMAGE` / `BACKSPACE_IMAGE_TAG`.
+
+### Deployment modes
+
+One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` auto-detects (and, when ambiguous, prompts); a non-interactive run honors an explicit `DEPLOY_MODE`.
+
+| Mode | Ports 80/443 | Topology | TLS | Voice |
+|------|--------------|----------|-----|-------|
+| `allinone` (default) | must be free | base `docker-compose.yml`: `backspace` + `caddy` (+ `livekit`) | bundled Caddy (Let's Encrypt) | ✅ with UDP media ports open |
+| `proxy` | already taken | base **+** `docker-compose.proxy.yml`: `backspace` on `127.0.0.1:APP_PORT`, no Caddy | operator's reverse proxy | ✅ if operator proxies `/livekit` and opens media ports |
+| `tunnel` | already taken | same overlay as `proxy` | tunnel provider (Cloudflare, Tailscale…) | ❌ WebRTC/UDP can't traverse a tunnel |
+
+**The overlay (`docker-compose.proxy.yml`).** Layered on top of the base file it (1) publishes `backspace` on `127.0.0.1:${APP_PORT:-8080}:${PORT:-3000}` — loopback only, so nothing is exposed on a public interface — and (2) parks `caddy` in an inert profile (`_proxy_mode_no_caddy`) that is never activated, so Caddy does not start. The base file is unchanged, so All-in-One (`docker-compose.yml` alone) behaves exactly as before.
+
+**`COMPOSE_FILE` wiring.** In proxy/tunnel mode install.sh writes `COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml` into `.env`. Docker Compose reads `COMPOSE_FILE` from `.env`, so **every** later `docker compose …` command in the directory transparently uses both files — the operator (and the update commands) never need `-f` flags. All-in-One leaves `COMPOSE_FILE` unset (defaults to `docker-compose.yml`).
+
+**Server proxy-awareness.** The server sets Fastify `trustProxy: true`, so it trusts `X-Forwarded-*` from the fronting proxy/tunnel. `getOurOrigin()` returns `https://${DOMAIN}` (federation/public identity) whenever `DOMAIN` is set and `PUBLIC_ORIGIN` is unset — correct in all three modes, since the public URL is `https://DOMAIN` regardless of which layer terminates TLS. No `PUBLIC_ORIGIN` is needed for a normal proxy/tunnel deployment.
+
+**Voice per mode.** LiveKit media is WebRTC over UDP and never flows through the HTTP proxy/tunnel — the media ports (`3478/udp` TURN, `7881/tcp` fallback, `50000-60000/udp` media) must be reachable from clients directly. All-in-One proxies LiveKit *signaling* through Caddy (`/livekit` → `host.docker.internal:7880`); a reverse-proxy operator must replicate that route (`/livekit` → `127.0.0.1:7880`, prefix stripped) **and** open the media ports. Over a tunnel, voice is unavailable and install.sh force-disables it. See `docs/systems/voice.md` for LiveKit tuning.
 
 ### Build: multi-stage Dockerfile
 
@@ -65,7 +95,13 @@ Caddy provisions and renews TLS certificates automatically for `DOMAIN`; the per
 
 ### First-time setup: `install.sh`
 
-`./install.sh` is the interactive installer for a fresh Linux host. It prompts for the domain, whether to enable voice, and an instance name (each skippable via the `DOMAIN` / `ENABLE_VOICE` / `INSTANCE_NAME` env vars for a non-interactive run), generates a `JWT_SECRET`, writes `.env`, optionally configures LiveKit (`livekit.yaml` + `COMPOSE_PROFILES=voice`), and brings the stack up (`docker compose build` then `up -d`).
+`./install.sh` is the interactive installer for a fresh Linux host. It prompts for the domain, whether to enable voice, and an instance name (each skippable via the `DOMAIN` / `ENABLE_VOICE` / `INSTANCE_NAME` env vars for a non-interactive run), generates a `JWT_SECRET`, writes `.env`, optionally configures LiveKit (`livekit.yaml` + `COMPOSE_PROFILES=voice`), and brings the stack up.
+
+**Mode selection.** Before configuring, it determines the deployment mode (precedence: explicit `DEPLOY_MODE` env → existing `.env` → auto-detect + prompt). Auto-detection checks whether ports 80/443 are free — and does so **Docker-aware**: it consults both `ss` *and* `docker ps` published ports, because a host running Docker with the userland proxy disabled DNATs 80/443 via iptables with **no listening socket for `ss` to see** (a box whose Caddy already owns those ports would otherwise be misread as "ports free"). When 80/443 are free it offers All-in-One (default); when taken it never dead-ends — it explains what holds them and steers to `proxy`/`tunnel`. In proxy/tunnel mode it auto-picks a free loopback `APP_PORT` (scanning past commonly-taken 3000/8080), force-lowers `MAX_UPLOAD_SIZE` to 90 MB for `tunnel` (Cloudflare's 100 MB body cap), and force-disables voice for `tunnel`.
+
+**Image acquisition.** By default it pulls the prebuilt image (`docker compose pull backspace`). If the pull fails but a usable image is already present on the host (a prior run, an air-gapped `docker load`, or a previous from-source build tagged under the ref) it uses that copy rather than forcing a needless rebuild; only if neither pull nor a local image is available does it fall back to `docker compose build` (or when `BACKSPACE_BUILD=true` forces a source build, e.g. a fork). The commit is captured from the checkout and passed as `--build-arg BACKSPACE_COMMIT=<sha>` on the build path.
+
+**Reverse-proxy / tunnel output.** In proxy/tunnel mode the post-deploy check verifies the app answers on `127.0.0.1:APP_PORT` (TLS is the operator's edge's job, not ours to test), and the summary prints paste-ready nginx / Caddy / Traefik snippets (proxy) or a `cloudflared` ingress rule (tunnel), each with WebSocket upgrade, `X-Forwarded-*`, and a body-size cap matching `MAX_UPLOAD_SIZE` already correct — plus the `/livekit` route and media ports when voice is on.
 
 **Post-install HTTPS reachability check.** The container healthcheck only proves the app is up *inside* Docker — not that `https://DOMAIN` actually works, which additionally requires Caddy to have obtained a publicly-trusted certificate (DNS pointing here **and** ports 80/443 reachable from the internet). After the stack is healthy, the installer verifies this and reports it honestly instead of always printing success:
 
@@ -247,14 +283,16 @@ The pre-restore copy means a mistaken restore is itself undoable: the previous D
 
 ## 5. Image Pinning & Upgrades
 
-The two pulled images are **pinned to explicit tags** in `docker-compose.yml`, never `latest`:
+The third-party images are **pinned to explicit tags** in `docker-compose.yml`, never `latest`:
 
 | Service | Pinned image |
 |---------|--------------|
 | `caddy` | `caddy:2.11.1-alpine` |
 | `livekit` | `livekit/livekit-server:v1.9.11` |
 
-Pinning makes deploys reproducible — a rebuild pulls the exact same proxy/SFU version every time, so an upstream release can't silently change behavior under you. (The `backspace` image is built from source via the `Dockerfile`, which itself pins the `node:20-slim` base.)
+Pinning makes deploys reproducible — a rebuild pulls the exact same proxy/SFU version every time, so an upstream release can't silently change behavior under you.
+
+The `backspace` image itself defaults to `ghcr.io/thezwiss/backspace:latest` (`BACKSPACE_IMAGE` / `BACKSPACE_IMAGE_TAG`). `latest` is chosen for a frictionless first install, but it is a **moving** tag: operators who want reproducible upgrades should pin `BACKSPACE_IMAGE_TAG` to a released version (e.g. `1.0.0`) in `.env` and bump it deliberately. On the source-build paths (`deploy.sh`, `install.sh`'s fallback) the image is built from the `Dockerfile`, which pins the `node:20-slim` base.
 
 **Upgrade procedure:** bump the tag in `docker-compose.yml` → test the new version (locally or on one box) → redeploy. Concretely:
 
@@ -270,7 +308,7 @@ Never pin to a floating tag like `latest` or a bare major — it defeats reprodu
 
 These are accepted constraints of the current deploy model, documented so operators aren't surprised:
 
-- **The image is built on each target host, including the ARM Raspberry Pi.** There is no cross-built/registry-pushed artifact. The Pi build is slower and consumes build resources on the box (`deploy.sh` caps the build cache and prunes old images to compensate). A native-module or toolchain regression can surface on ARM but not x86, or vice-versa.
+- **`deploy.sh` still builds on each target host.** The public `install.sh` path now defaults to the prebuilt GHCR image (multi-arch, so a Pi pulls a native image), but `deploy.sh` — Heidi's rsync-then-`up -d --build` helper for `nova`/`orbit` — deliberately builds from the rsynced working tree on the box (it caps the build cache and prunes old images to compensate). A native-module or toolchain regression can still surface on ARM but not x86, or vice-versa, on that path; the CI multi-arch build catches most such regressions before release.
 - **A deploy causes brief downtime + WebSocket reconnect.** `docker compose up -d --build` rebuilds and recreates the `backspace` container; while it restarts, the server is briefly unavailable and every connected client's WebSocket drops and must reconnect. There is no rolling/zero-downtime deploy. Clients reconnect automatically, but in-flight requests during the swap can fail.
 - **`deploy.sh all` can mask one host failing.** The `all` target runs both deploys in parallel (`deploy … & deploy … & wait`). The visible "Deployment complete." is printed regardless of whether one host's build failed mid-stream; the failure scrolls by in the interleaved output. After an `all` deploy, **confirm `/api/health` on both boxes** rather than trusting the final line. For a high-stakes change, deploy to one box at a time.
 
@@ -280,10 +318,12 @@ These are accepted constraints of the current deploy model, documented so operat
 
 | Task | Command |
 |------|---------|
-| First-time install | `./install.sh` (or `DOMAIN=chat.example.com ./install.sh`) |
+| First-time install | `./install.sh` (or `DOMAIN=chat.example.com DEPLOY_MODE=proxy ./install.sh`) |
+| Update (prebuilt image — default) | `git pull && docker compose pull && docker compose up -d` |
+| Update (from source / fork) | `git pull && docker compose up -d --build` |
 | Redeploy both boxes | `./deploy.sh all` |
 | Redeploy one box | `./deploy.sh pi` / `./deploy.sh vm` |
-| Bring stack up manually | `docker compose up -d --build` |
+| Bring stack up manually | `docker compose up -d` (proxy/tunnel: `.env`'s `COMPOSE_FILE` auto-adds the overlay) |
 | Check health | `curl -fsS https://<domain>/api/health` |
 | Take a manual snapshot | `./backup.sh` |
 | List snapshots | `./restore.sh` |
