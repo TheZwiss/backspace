@@ -149,6 +149,10 @@ export function InviteModal() {
   const isOpen = activeModal === 'invite';
   const currentSpace = spaces.find((s) => s.id === currentSpaceId);
   const instanceOrigin = currentSpace?._instanceOrigin ?? '';
+  // Request-only spaces are approval-gated: they have no usable invite link and
+  // the /invite endpoint 403s. Show an explanatory notice instead of the invite
+  // affordances, and skip the invite-code fetch entirely.
+  const isRequestOnly = currentSpace?.visibility === 'request';
 
   const [inviteCode, setInviteCode] = useState('');
   const [codeError, setCodeError] = useState('');
@@ -167,7 +171,7 @@ export function InviteModal() {
 
   // Fetch / generate the per-space invite code on open.
   useEffect(() => {
-    if (!isOpen || !currentSpaceId) return;
+    if (!isOpen || !currentSpaceId || isRequestOnly) return;
     setCodeLoading(true);
     setCodeError('');
     generateInvite(currentSpaceId).then(
@@ -180,7 +184,7 @@ export function InviteModal() {
         setCodeLoading(false);
       },
     );
-  }, [isOpen, currentSpaceId, generateInvite]);
+  }, [isOpen, currentSpaceId, generateInvite, isRequestOnly]);
 
   // Reset modal state on open.
   useEffect(() => {
@@ -333,6 +337,20 @@ export function InviteModal() {
       title="Invite Friends"
       mobileStyle="sheet"
     >
+      {isRequestOnly ? (
+        <div className="space-y-3">
+          <p className="text-[13px] text-txt-tertiary">
+            This space uses join requests — people join by requesting approval
+            from a manager, so it has no invite link to share.
+          </p>
+          <button
+            onClick={closeModal}
+            className="w-full py-2 rounded-md text-[13px] font-semibold glass-pill text-txt-primary"
+          >
+            Got it
+          </button>
+        </div>
+      ) : (
       <div className="space-y-3">
         <p className="text-[13px] text-txt-tertiary">
           Send to friends, or share a link.
@@ -460,6 +478,7 @@ export function InviteModal() {
           </div>
         </div>
       </div>
+      )}
     </Modal>
   );
 }
