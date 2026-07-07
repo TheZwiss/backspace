@@ -19,8 +19,8 @@ submit.
 
 **"Contribution"** means any original work of authorship, including any
 modification of or addition to an existing work, that You intentionally submit
-to the Project in any form — including source code, object code, documentation,
-configuration, designs, or assets — through any means, including pull requests,
+to the Project in any form (including source code, object code, documentation,
+configuration, designs, or assets) through any means, including pull requests,
 patches, issues with attached code, or electronic communication, but excluding
 any communication You conspicuously mark in writing as "Not a Contribution".
 
@@ -36,7 +36,7 @@ fully sublicensable, and transferable license to use, reproduce, modify, prepare
 derivative works of, publicly display, publicly perform, distribute, relicense
 (under any terms, including open-source and commercial licenses), sell, and
 otherwise exploit your Contributions, by all means and in all media now known or
-later developed — so that the Maintainer may offer the Project under both the
+later developed, so that the Maintainer may offer the Project under both the
 GNU AGPL-3.0 and one or more commercial licenses.
 
 This grant covers all Contributions You have already submitted and all
@@ -46,17 +46,17 @@ Contributions You submit in the future, effective at the moment each is created.
 
 To the extent that the exclusive license in Section 2 is, in any jurisdiction,
 narrower than stated or otherwise limited by law, You grant the Maintainer the
-broadest license permissible there, and — only to the extent necessary to give
-the Maintainer equivalent rights — assign such rights to the Maintainer, so that
+broadest license permissible there, and, only to the extent necessary to give
+the Maintainer equivalent rights, assign such rights to the Maintainer, so that
 the Maintainer obtains, as nearly as possible, the same rights as the exclusive
 license in Section 2.
 
 ## 4. Patent License
 
 You grant the Maintainer a perpetual, worldwide, non-exclusive, royalty-free,
-irrevocable, sublicensable patent license — under any patent claims You can
+irrevocable, sublicensable patent license (under any patent claims You can
 license that are necessarily infringed by your Contribution alone or by
-combination of your Contribution with the Project — to make, have made, use,
+combination of your Contribution with the Project) to make, have made, use,
 offer to sell, sell, import, and otherwise transfer your Contributions and the
 Project.
 
