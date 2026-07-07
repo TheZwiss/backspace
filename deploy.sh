@@ -32,6 +32,16 @@ PI_PATH="~/backspace"
 BETA_HOST="orbit.ddns.net"
 BETA_PATH="~/backspace"
 
+# ── Local target override (gitignored) ──────────────────────
+# The values above are public placeholders. A maintainer can point this script
+# at real infrastructure by creating ./.deploy.local (git-ignored) that reassigns
+# PI_USER / PI_LOCAL / PI_REMOTE / PI_PATH / BETA_HOST / BETA_PATH. This keeps
+# real hostnames, IPs, and usernames out of the public repo. Never commit it.
+if [[ -f ./.deploy.local ]]; then
+  # shellcheck source=/dev/null
+  source ./.deploy.local
+fi
+
 # ── Rsync excludes ──────────────────────────────────────────
 
 EXCLUDES=(
