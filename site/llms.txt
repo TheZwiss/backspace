@@ -1,0 +1,29 @@
+# Backspace
+
+> Backspace is a self-hosted, open-source Discord alternative: a Discord-style chat platform you run on your own hardware. It offers spaces, channels, role-based permissions, voice and video, screen sharing up to 4K/120fps, direct messages, friends, full-text search, and server-to-server federation between independently owned instances. It is licensed under the GNU AGPL-3.0 with a commercial dual-license option, deploys with a single Docker installer, and runs on ARM hardware such as a Raspberry Pi.
+
+## What it is
+
+- Category: self-hosted team communication platform, Discord alternative.
+- License: GNU AGPL-3.0 (open source), commercial license available.
+- Stack: TypeScript monorepo, Fastify and SQLite on the server, React on the web, LiveKit for voice and video, Electron desktop app, installable mobile PWA.
+- Deployment: interactive Docker installer with automatic HTTPS via Caddy, prebuilt multi-architecture image (amd64 and arm64).
+
+## Distinctive features
+
+- Fine-grained media controls: per-stream codec (VP9 or hardware H.264), bitrate, resolution, and frame rate; independent 0-200% volume per participant and per screen-share; RNNoise noise suppression; a live connection inspector for bitrate, ping, packet loss, and jitter.
+- Screen sharing up to 4K/120fps within admin-set bounds.
+- Server-to-server federation: independent Backspace instances peer with each other for cross-instance friends, DMs, calls, and presence, each server independently owned, requests HMAC-authenticated. This is a custom Backspace-to-Backspace protocol, not Matrix or ActivityPub.
+- Role-based permissions with per-category and per-channel overrides, group DMs and calls, moderation with audit trails, and full-text search.
+
+## Honest scope
+
+- It does not have Discord's ecosystem or bot library.
+- It is not an open, cross-ecosystem federation standard like Matrix; it federates Backspace instances with each other.
+- Native iOS and Android apps are planned; today the mobile path is an installable PWA.
+
+## Links
+
+- Source code and documentation: https://github.com/TheZwiss/backspace
+- Comparison with Discord, Revolt, Spacebar, Matrix, and Mumble: https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md
+- License: https://github.com/TheZwiss/backspace/blob/main/LICENSE
