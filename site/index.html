@@ -1,0 +1,1082 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backspace: self-hosted, open-source Discord alternative</title>
+<meta name="description" content="Backspace is a self-hosted, open-source Discord alternative with fine-grained voice and video controls, screen sharing up to 4K/120fps, and server-to-server federation. AGPL-3.0, deploys with Docker, runs on a Raspberry Pi." />
+<link rel="canonical" href="https://thezwiss.github.io/backspace/" />
+<link rel="icon" type="image/png" href="assets/logo.png" />
+<link rel="apple-touch-icon" href="assets/logo.png" />
+
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Backspace: self-hosted, open-source Discord alternative" />
+<meta property="og:description" content="Discord-style chat you fully self-host: voice, HD video, screen share up to 4K/120fps, and server-to-server federation. AGPL-3.0." />
+<meta property="og:url" content="https://thezwiss.github.io/backspace/" />
+<meta property="og:image" content="https://thezwiss.github.io/backspace/social-preview.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Backspace: self-hosted Discord alternative" />
+<meta name="twitter:description" content="Voice, HD video, screen share up to 4K/120fps, and federation. Self-hosted and open source." />
+<meta name="twitter:image" content="https://thezwiss.github.io/backspace/social-preview.png" />
+
+<!-- Structured data: software -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Backspace",
+  "applicationCategory": "CommunicationApplication",
+  "operatingSystem": "Linux, Windows, macOS, Web",
+  "description": "Self-hosted, open-source Discord alternative with fine-grained voice and video controls, screen sharing up to 4K/120fps, and server-to-server federation.",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+  "url": "https://thezwiss.github.io/backspace/",
+  "codeRepository": "https://github.com/TheZwiss/backspace",
+  "programmingLanguage": "TypeScript",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<!-- Structured data: FAQ -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is Backspace a self-hosted Discord alternative?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. It gives you a Discord-style experience with spaces, channels, roles, voice, video, screen sharing, DMs, and friends, running entirely on your own server so you own the data and set the rules." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Backspace support screen sharing and high-quality video?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Screen sharing goes up to 4K/120fps within admin-set bounds, with per-stream codec, bitrate, and resolution controls, RNNoise noise suppression, and a live connection inspector. Voice and video use LiveKit and are optional." }
+    },
+    {
+      "@type": "Question",
+      "name": "What does federation mean in Backspace?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Independent Backspace instances can peer with each other so users on different servers can be friends, DM, and call across instances, while each server stays independently owned. Requests between servers are HMAC-authenticated." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I self-host Backspace on a Raspberry Pi?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The installer pulls a prebuilt multi-architecture image for amd64 and arm64, so low-power and ARM boxes skip the heavy local build." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is Backspace open source?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, under the GNU AGPL-3.0, with a commercial dual-license option for cases the AGPL does not fit. Every released version stays available under the AGPL." }
+    }
+  ]
+}
+</script>
+
+<style>
+/* ================= Aether Drift tokens (from the app's globals.css) ================= */
+@font-face {
+  font-family: "DM Sans";
+  src: url("assets/dm-sans.woff2") format("woff2");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --base: #0b0b10;
+  --chat: #13131a;
+  --channel: #1a1a23;
+  --elevated: #252530;
+  --input: #111118;
+  --txt: #efefef;
+  --txt2: #a0a0aa;
+  --txt3: #6d6d7c;
+  --txt4: #5c5c68;
+  --primary: #7c6cf6;
+  --primary-hover: #6b5ce0;
+  --mint: #86efac;
+  --peach: #fca5a5;
+  --lavender: #c4b5fd;
+  --sky: #7dd3fc;
+  --amber: #fcd34d;
+  --rose: #fda4af;
+  --coral: #fb923c;
+  --glass: rgba(20, 20, 26, 0.52);
+  --glass-hi: rgba(30, 30, 40, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.07);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--base);
+  color: var(--txt);
+  font-family: var(--sans);
+  font-optical-sizing: auto;
+  font-size: 16.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgba(124, 108, 246, 0.35); }
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--sky); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+/* ================= Nav ================= */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-border);
+}
+.nav-in { display: flex; align-items: center; gap: 26px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 640; font-size: 17px; letter-spacing: -0.01em; color: var(--txt); margin-right: auto; }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; }
+.nav-link { color: var(--txt2); font-size: 14.5px; font-weight: 460; }
+.nav-link:hover { color: var(--txt); text-decoration: none; }
+@media (max-width: 760px) { .nav-link { display: none; } }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--sans); font-weight: 560; font-size: 15px;
+  padding: 11px 20px; border-radius: 12px; border: 1px solid transparent;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-glass {
+  background: var(--glass-hi); color: var(--txt);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(12px) saturate(110%);
+  -webkit-backdrop-filter: blur(12px) saturate(110%);
+}
+.btn-glass:hover { background: rgba(42, 42, 54, 0.7); }
+.btn-sm { padding: 8px 14px; font-size: 14px; border-radius: 10px; }
+
+/* ================= Hero ================= */
+.hero { padding: 128px 0 40px; position: relative; }
+.hero::before {
+  content: ""; position: absolute; inset: -200px 0 0 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(900px 480px at 78% 0%, rgba(124, 108, 246, 0.09), transparent 62%),
+    radial-gradient(760px 420px at 12% 12%, rgba(134, 239, 172, 0.05), transparent 58%);
+}
+.hero-head { max-width: 780px; margin: 0 auto 44px; text-align: center; }
+.hero-tag {
+  font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.04em;
+  color: var(--txt3); display: block; margin-bottom: 22px;
+}
+.hero-tag b { color: var(--mint); font-weight: 500; }
+h1 {
+  font-size: clamp(2.3rem, 5.4vw, 3.9rem);
+  font-weight: 630; line-height: 1.04; letter-spacing: -0.032em;
+  margin-bottom: 20px;
+  text-wrap: balance;
+}
+.hero-sub {
+  color: var(--txt2); font-size: clamp(1.02rem, 1.9vw, 1.17rem);
+  max-width: 640px; margin: 0 auto 30px; line-height: 1.65;
+}
+.cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.hero-note { font-family: var(--mono); font-size: 12.5px; color: var(--txt4); margin-top: 20px; }
+
+/* ================= The living app window ================= */
+.win {
+  max-width: 1060px; margin: 0 auto;
+  background: var(--chat);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35), 0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+  display: flex; overflow: hidden;
+  height: 500px;
+  text-align: left;
+}
+.win, .win * { font-size: 14px; }
+
+/* space strip */
+.strip {
+  width: 58px; flex: none;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border-right: 1px solid var(--glass-border);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 12px 0;
+}
+.strip .tile {
+  width: 36px; height: 36px; border-radius: 11px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 620; font-size: 15px; color: rgba(11,11,16,0.8);
+}
+.strip .tile.logo { background: var(--elevated); padding: 6px; }
+.strip .tile.logo img { width: 100%; height: 100%; }
+.strip .sep { width: 22px; height: 1px; background: var(--line); flex: none; }
+.strip .tile.active { box-shadow: 0 0 0 2px var(--chat), 0 0 0 3.5px rgba(255,255,255,0.35); }
+.strip .tile.add { background: transparent; border: 1px dashed rgba(255,255,255,0.18); color: var(--txt3); font-weight: 400; font-size: 18px; }
+
+/* channel sidebar */
+.side {
+  width: 210px; flex: none;
+  background: var(--channel);
+  display: flex; flex-direction: column;
+  border-right: 1px solid rgba(0,0,0,0.25);
+}
+.side-head {
+  height: 46px; flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; font-weight: 620; font-size: 14.5px;
+  box-shadow: 0 1px 0 rgba(4,4,5,0.2);
+}
+.side-head svg { color: var(--txt3); }
+.side-scroll { flex: 1; padding: 12px 8px; overflow: hidden; }
+.cat {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--txt4); padding: 10px 8px 5px;
+}
+.chan {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px; border-radius: 8px; color: var(--txt2);
+  font-weight: 460; margin-bottom: 1px;
+}
+.chan .h { color: var(--txt4); font-weight: 400; }
+.chan.on { background: rgba(255,255,255,0.06); color: var(--txt); }
+.vu {
+  display: flex; align-items: center; gap: 8px;
+  padding: 3px 8px 3px 26px; color: var(--txt2); font-size: 13px;
+  opacity: 1; transition: opacity 0.4s ease;
+}
+.vu[hidden] { display: none; }
+.vu .dot { width: 18px; height: 18px; border-radius: 50%; flex: none; position: relative; }
+.vu .dot::after {
+  content: attr(data-i); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 620; color: rgba(11,11,16,0.75);
+}
+.vu.speaking .dot { box-shadow: 0 0 0 2px var(--channel), 0 0 0 3.5px var(--mint); }
+@keyframes ringPulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--channel), 0 0 0 3.5px rgba(134,239,172,0.9); }
+  50% { box-shadow: 0 0 0 2px var(--channel), 0 0 0 3px rgba(134,239,172,0.45); }
+}
+.vu.speaking .dot { animation: ringPulse 1.6s ease-in-out infinite; }
+
+.voice-pill {
+  margin: 8px; padding: 9px 12px; border-radius: 12px; flex: none;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.voice-pill .vt { color: var(--mint); font-size: 12.5px; font-weight: 560; display: flex; align-items: center; gap: 7px; }
+.voice-pill .vc2 { color: var(--txt3); font-size: 11.5px; margin-left: 19px; }
+.user-bar {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; background: rgba(0,0,0,0.18);
+}
+.user-bar .dot { width: 26px; height: 26px; border-radius: 50%; position: relative; flex: none; }
+.user-bar .dot::after {
+  content: "m"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 620; color: rgba(11,11,16,0.75);
+}
+.user-bar .dot i {
+  position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--mint); border: 2px solid var(--channel);
+}
+.user-bar .un { font-size: 13px; font-weight: 560; line-height: 1.2; }
+.user-bar .uh { font-size: 11px; color: var(--txt3); line-height: 1.2; }
+.user-bar svg { color: var(--txt3); margin-left: auto; }
+
+/* chat column */
+.chatcol { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; background: var(--chat); }
+.chat-head {
+  height: 46px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 16px; box-shadow: 0 1px 0 rgba(4,4,5,0.2);
+}
+.chat-head .h { color: var(--txt4); font-weight: 400; font-size: 17px; }
+.chat-head b { font-weight: 620; font-size: 14.5px; }
+.chat-head .topic { color: var(--txt3); font-size: 12.5px; border-left: 1px solid var(--line); padding-left: 10px; margin-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msgs {
+  flex: 1; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 10px 16px 74px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 6px, #000 46px);
+  mask-image: linear-gradient(to bottom, transparent 6px, #000 46px);
+}
+.msg { display: flex; gap: 11px; padding: 6px 0; }
+.msg .dot { width: 34px; height: 34px; border-radius: 50%; flex: none; position: relative; margin-top: 2px; }
+.msg .dot::after {
+  content: attr(data-i); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 620; color: rgba(11,11,16,0.75);
+}
+.msg .mh { display: flex; align-items: baseline; gap: 8px; }
+.msg .mh b { font-weight: 620; font-size: 13.5px; }
+.msg .mh time { color: var(--txt4); font-size: 11px; font-family: var(--mono); }
+.msg p { color: #d8d8de; font-size: 13.5px; line-height: 1.45; }
+.js .msg[data-step] { display: none; }
+.js .msg[data-step].shown { display: flex; animation: msgIn 0.28s ease; }
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.typing {
+  display: flex; visibility: hidden; align-items: center; gap: 8px;
+  padding: 6px 0 0 45px; color: var(--txt3); font-size: 12px; height: 24px;
+}
+.typing.on { visibility: visible; }
+.typing .tb { display: flex; gap: 3px; }
+.typing .tb i {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--txt3);
+  animation: tDot 1.2s ease-in-out infinite;
+}
+.typing .tb i:nth-child(2) { animation-delay: 0.15s; }
+.typing .tb i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes tDot { 0%, 60%, 100% { opacity: 0.35; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+.composer {
+  position: absolute; left: 14px; right: 14px; bottom: 12px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px; border-radius: 14px;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25), 0 8px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+  color: var(--txt4); font-size: 13.5px;
+}
+.composer svg { color: var(--txt3); flex: none; }
+.composer .ph { flex: 1; }
+
+/* members */
+.mems { width: 168px; flex: none; background: var(--channel); padding: 14px 12px; border-left: 1px solid rgba(0,0,0,0.25); }
+.mems .cat { padding: 6px 6px 6px; }
+.mem { display: flex; align-items: center; gap: 9px; padding: 4px 6px; color: var(--txt2); font-size: 13px; }
+.mem .dot { width: 26px; height: 26px; border-radius: 50%; flex: none; position: relative; }
+.mem .dot::after {
+  content: attr(data-i); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 620; color: rgba(11,11,16,0.75);
+}
+.mem .dot i {
+  position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--mint); border: 2px solid var(--channel);
+}
+@media (max-width: 920px) { .mems { display: none; } }
+@media (max-width: 660px) {
+  .side { display: none; }
+  .win { height: 440px; }
+}
+@media (max-width: 460px) { .strip { display: none; } }
+
+/* avatar palettes */
+.av-mara { background: linear-gradient(135deg, var(--mint), var(--sky)); }
+.av-jonas { background: linear-gradient(135deg, var(--lavender), var(--sky)); }
+.av-felix { background: linear-gradient(135deg, var(--peach), var(--coral)); }
+
+/* ================= Sections ================= */
+section { padding: 96px 0; }
+.ch-label {
+  font-family: var(--mono); font-size: 13px; font-weight: 500;
+  color: var(--txt3); display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.ch-label::before { content: "#"; font-size: 15px; font-weight: 600; }
+.ch-mint::before { color: var(--mint); }
+.ch-lavender::before { color: var(--lavender); }
+.ch-sky::before { color: var(--sky); }
+.ch-peach::before { color: var(--peach); }
+.ch-amber::before { color: var(--amber); }
+.ch-coral::before { color: var(--coral); }
+h2 {
+  font-size: clamp(1.65rem, 3.4vw, 2.35rem);
+  font-weight: 620; letter-spacing: -0.026em; line-height: 1.12;
+  margin-bottom: 18px;
+}
+.sec-copy { color: var(--txt2); max-width: 60ch; }
+.sec-copy strong { color: var(--txt); font-weight: 560; }
+.foot-note { font-family: var(--mono); font-size: 12.5px; color: var(--txt4); margin-top: 22px; line-height: 1.7; }
+
+.reveal { opacity: 0; transform: translateY(16px); }
+.reveal.in { opacity: 1; transform: none; transition: opacity 0.65s ease, transform 0.65s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; }
+  *, *::before, *::after { animation-duration: 0.001s !important; animation-iteration-count: 1 !important; transition-duration: 0.001s !important; }
+}
+
+/* voice section */
+.split { display: grid; grid-template-columns: 5fr 6fr; gap: 56px; align-items: center; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; gap: 40px; } }
+.split > *, .fed-grid > *, .plat-grid > *, .inst-grid > * { min-width: 0; }
+.spec { margin-top: 28px; border-top: 1px solid var(--line); }
+.spec-row {
+  display: grid; grid-template-columns: 118px 1fr; gap: 16px;
+  padding: 11px 0; border-bottom: 1px solid var(--line);
+  font-size: 14.5px;
+}
+.spec-row dt { font-family: var(--mono); font-size: 12.5px; color: var(--mint); padding-top: 2px; }
+.spec-row dd { color: var(--txt2); }
+.voice-media { position: relative; padding: 0 0 44px 44px; }
+.voice-media .shot {
+  border-radius: 12px; border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+}
+.voice-media .panel {
+  position: absolute; left: 0; bottom: 0; width: 190px;
+  border-radius: 12px; border: 1px solid var(--glass-border);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.media-cap { font-family: var(--mono); font-size: 11.5px; color: var(--txt4); margin-top: 14px; }
+@media (max-width: 900px) {
+  .voice-media { padding: 0 0 36px 0; }
+  .voice-media .panel { left: 14px; bottom: -6px; width: 160px; }
+}
+
+/* federation */
+.fed { background: var(--chat); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.fed-grid { display: grid; grid-template-columns: 6fr 5fr; gap: 56px; align-items: center; margin-top: 48px; }
+@media (max-width: 900px) { .fed-grid { grid-template-columns: 1fr; gap: 44px; } }
+.fed-diagram { display: flex; align-items: stretch; }
+.node {
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 1px solid var(--glass-border); border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+  padding: 16px 18px; flex: none; width: 176px;
+}
+.node .nh { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--txt); }
+.node .nh i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); flex: none; }
+.node .no { font-size: 12px; color: var(--txt3); margin-top: 6px; }
+.node .nu { display: flex; margin-top: 12px; }
+.node .nu span {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(19,19,26,0.9);
+  margin-right: -6px;
+}
+.wire { flex: 1; position: relative; min-width: 60px; }
+.wire::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  border-top: 1px dashed rgba(196, 181, 253, 0.4);
+}
+.wire .lbl {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -160%);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em;
+  color: var(--lavender); white-space: nowrap;
+  background: var(--chat); padding: 0 8px;
+}
+.wire .pk {
+  position: absolute; top: 50%; width: 7px; height: 7px; margin-top: -3.5px;
+  border-radius: 50%; background: var(--lavender);
+  box-shadow: 0 0 8px rgba(196,181,253,0.8);
+  animation: pkGo 3.4s linear infinite;
+}
+.wire .pk.back { background: var(--mint); box-shadow: 0 0 8px rgba(134,239,172,0.8); animation: pkBack 3.4s linear infinite; animation-delay: 1.7s; }
+@keyframes pkGo { 0% { left: 4px; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: calc(100% - 10px); opacity: 0; } }
+@keyframes pkBack { 0% { left: calc(100% - 10px); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 4px; opacity: 0; } }
+@media (max-width: 520px) {
+  .fed-diagram { flex-direction: column; align-items: center; }
+  .node { width: 100%; max-width: 280px; }
+  .wire { min-height: 72px; width: 1px; min-width: 0; align-self: center; }
+  .wire::before { left: 50%; right: auto; top: 8px; bottom: 8px; border-top: none; border-left: 1px dashed rgba(196,181,253,0.4); }
+  .wire .lbl { transform: translate(-50%, -50%); padding: 3px 10px; border: 1px solid var(--glass-border); border-radius: 999px; background: var(--channel); }
+  .wire .pk, .wire .pk.back { display: none; }
+}
+.fed-shot { border-radius: 12px; border: 1px solid var(--glass-border); box-shadow: 0 16px 48px rgba(0,0,0,0.4); }
+
+/* platform list */
+.plat-grid { display: grid; grid-template-columns: 5fr 6fr; gap: 56px; align-items: center; }
+@media (max-width: 900px) { .plat-grid { grid-template-columns: 1fr; gap: 40px; } }
+.chan-list { margin-top: 8px; }
+.chan-row {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 13px 2px; border-bottom: 1px solid var(--line);
+}
+.chan-row:first-child { border-top: 1px solid var(--line); }
+.chan-row .cn { font-family: var(--mono); font-size: 13px; color: var(--txt); white-space: nowrap; flex: none; width: 178px; }
+.chan-row .cn::before { content: "# "; color: var(--txt4); }
+.chan-row .cd { color: var(--txt2); font-size: 14.5px; }
+@media (max-width: 560px) {
+  .chan-row { flex-direction: column; gap: 3px; }
+  .chan-row .cn { width: auto; }
+}
+.plat-shot { border-radius: 12px; border: 1px solid var(--glass-border); box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+
+/* install */
+.inst { background: var(--chat); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.inst-grid { display: grid; grid-template-columns: 6fr 5fr; gap: 56px; align-items: center; }
+@media (max-width: 900px) { .inst-grid { grid-template-columns: 1fr; gap: 40px; } }
+.term {
+  background: var(--input); border: 1px solid var(--glass-border); border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.term-bar {
+  display: flex; align-items: center; gap: 6px; padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--elevated); }
+.term-bar span { font-family: var(--mono); font-size: 11px; color: var(--txt4); margin-left: 8px; }
+.term-body { padding: 18px 18px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.9; overflow-x: auto; }
+@media (max-width: 560px) { .term-body { font-size: 11.5px; } }
+.tl { white-space: pre; color: var(--txt2); min-height: 1.9em; }
+.tl .pr { color: var(--txt4); user-select: none; }
+.tl.cmd { color: var(--txt); }
+.tl.ok { color: var(--mint); }
+.tl .dim { color: var(--txt4); }
+.js .tl[data-t] { visibility: hidden; }
+.js .tl[data-t].vis { visibility: visible; }
+.caret { display: inline-block; width: 7px; height: 14px; background: var(--txt2); vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.inst-facts { list-style: none; margin-top: 26px; }
+.inst-facts li {
+  display: flex; gap: 12px; align-items: baseline;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+  color: var(--txt2); font-size: 14.5px;
+}
+.inst-facts li::before { content: "▸"; color: var(--amber); font-size: 12px; flex: none; }
+
+/* honesty */
+.honest .sec-copy { max-width: 66ch; }
+.honest-list { list-style: none; margin-top: 30px; max-width: 66ch; }
+.honest-list li { padding: 16px 0; border-bottom: 1px solid var(--line); color: var(--txt2); }
+.honest-list li:first-child { border-top: 1px solid var(--line); }
+.honest-list b { color: var(--txt); font-weight: 560; display: block; margin-bottom: 3px; }
+
+/* compare */
+.table-wrap {
+  overflow-x: auto; border: 1px solid var(--line); border-radius: 14px;
+  margin-top: 38px; background: var(--chat);
+  -webkit-overflow-scrolling: touch;
+}
+table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 14.5px; }
+th, td { text-align: left; padding: 13px 18px; border-bottom: 1px solid var(--line); }
+thead th {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--txt3); font-weight: 500; background: rgba(0,0,0,0.2);
+}
+tbody tr:last-child td { border-bottom: none; }
+td.yes { color: var(--mint); }
+td.no { color: var(--txt4); }
+th.bs, td.bs { background: rgba(124, 108, 246, 0.07); }
+thead th.bs { color: var(--lavender); }
+
+/* faq */
+.faq { display: grid; gap: 12px; margin-top: 38px; max-width: 780px; }
+details {
+  background: var(--channel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 0 20px;
+}
+summary {
+  cursor: pointer; font-weight: 560; font-size: 15.5px; list-style: none;
+  padding: 17px 0; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--txt3); font-size: 19px; font-weight: 400; flex: none; transition: transform 0.2s ease; }
+details[open] summary::after { transform: rotate(45deg); }
+details p { color: var(--txt2); padding: 0 0 18px; font-size: 14.5px; max-width: 62ch; }
+
+/* end cta + footer */
+.endcta { text-align: center; padding: 110px 0 120px; }
+.endcta h2 { margin-bottom: 14px; }
+.endcta .sec-copy { margin: 0 auto 30px; }
+footer { border-top: 1px solid var(--line); padding: 34px 0 44px; }
+.foot-in { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; color: var(--txt3); font-size: 13.5px; }
+.foot-in .fl { display: flex; gap: 22px; flex-wrap: wrap; }
+footer a { color: var(--txt2); }
+footer a:hover { color: var(--txt); }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top"><img src="assets/logo.png" alt="" width="26" height="26" /> Backspace</a>
+    <a class="nav-link" href="#voice">Voice</a>
+    <a class="nav-link" href="#federation">Federation</a>
+    <a class="nav-link" href="#install">Install</a>
+    <a class="nav-link" href="#compare">Compare</a>
+    <a class="nav-link" href="#faq">FAQ</a>
+    <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ Hero ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-head">
+      <span class="hero-tag">open source, AGPL-3.0 · <b>your hardware, your rules</b></span>
+      <h1>Group chat that lives on your own hardware.</h1>
+      <p class="hero-sub">
+        Backspace is a self-hosted, open-source Discord alternative: spaces, roles, voice and video,
+        screen sharing up to 4K at 120fps, and federation between servers that stay independently owned.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/TheZwiss/backspace">Get it on GitHub</a>
+        <a class="btn btn-glass" href="#compare">How it compares</a>
+      </div>
+      <p class="hero-note">one interactive installer · automatic HTTPS · runs on a Raspberry Pi</p>
+    </div>
+
+    <!-- The living window: a hand-built replica of the real client -->
+    <figure class="win" id="win" aria-label="A recreation of the Backspace app: a chat conversation in a self-hosted space, with a voice channel connected.">
+      <div class="strip" aria-hidden="true">
+        <span class="tile logo"><img src="assets/logo.png" alt="" /></span>
+        <span class="sep"></span>
+        <span class="tile active" style="background:linear-gradient(135deg,var(--mint),var(--sky))">a</span>
+        <span class="tile" style="background:linear-gradient(135deg,var(--peach),var(--rose))">k</span>
+        <span class="tile" style="background:linear-gradient(135deg,var(--lavender),var(--sky))">c</span>
+        <span class="tile add">+</span>
+      </div>
+
+      <div class="side">
+        <div class="side-head">attic lab
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+        <div class="side-scroll">
+          <div class="cat">text</div>
+          <div class="chan on"><span class="h">#</span> general</div>
+          <div class="chan"><span class="h">#</span> selfhosted</div>
+          <div class="chan"><span class="h">#</span> 3d-printing</div>
+          <div class="cat">voice</div>
+          <div class="chan">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>
+            lounge
+          </div>
+          <div class="vu speaking" id="vu-mara"><span class="dot av-mara" data-i="m"></span> mara</div>
+          <div class="vu" id="vu-felix"><span class="dot av-felix" data-i="f"></span> felix</div>
+          <div class="vu" id="vu-jonas" hidden><span class="dot av-jonas" data-i="j"></span> jonas</div>
+        </div>
+        <div class="voice-pill">
+          <div class="vt">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+            Voice Connected
+          </div>
+          <div class="vc2">lounge · 34ms</div>
+        </div>
+        <div class="user-bar">
+          <span class="dot av-mara"><i></i></span>
+          <span><span class="un">mara</span><br /><span class="uh">@mara</span></span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        </div>
+      </div>
+
+      <div class="chatcol">
+        <div class="chat-head">
+          <span class="h">#</span><b>general</b>
+          <span class="topic">the server lives in the closet now</span>
+        </div>
+        <div class="msgs" id="msgs">
+          <div class="msg" data-step="1">
+            <span class="dot av-mara" data-i="m"></span>
+            <div><div class="mh"><b>mara</b><time>21:04</time></div>
+            <p>moved us off discord last night. the whole thing runs off the pi in my closet now</p></div>
+          </div>
+          <div class="msg" data-step="2">
+            <span class="dot av-jonas" data-i="j"></span>
+            <div><div class="mh"><b>jonas</b><time>21:04</time></div>
+            <p>how painful was the setup</p></div>
+          </div>
+          <div class="msg" data-step="3">
+            <span class="dot av-mara" data-i="m"></span>
+            <div><div class="mh"><b>mara</b><time>21:05</time></div>
+            <p>one installer. caddy grabbed the certs itself, first account became admin. that was it</p></div>
+          </div>
+          <div class="msg" data-step="4">
+            <span class="dot av-felix" data-i="f"></span>
+            <div><div class="mh"><b>felix</b><time>21:05</time></div>
+            <p>come to lounge, I'll stream the factorio base</p></div>
+          </div>
+          <div class="msg" data-step="5">
+            <span class="dot av-jonas" data-i="j"></span>
+            <div><div class="mh"><b>jonas</b><time>21:06</time></div>
+            <p>ok this share is stupidly sharp. what is this, 1440p?</p></div>
+          </div>
+          <div class="msg" data-step="6">
+            <span class="dot av-felix" data-i="f"></span>
+            <div><div class="mh"><b>felix</b><time>21:06</time></div>
+            <p>4k. open the connection inspector if you don't believe me</p></div>
+          </div>
+          <div class="typing" id="typing" aria-hidden="true">
+            <span class="tb"><i></i><i></i><i></i></span>
+            <span id="typing-who">mara is typing</span>
+          </div>
+        </div>
+        <div class="composer" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+          <span class="ph">Message #general</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>
+        </div>
+      </div>
+
+      <div class="mems" aria-hidden="true">
+        <div class="cat">owner · 1</div>
+        <div class="mem"><span class="dot av-mara" data-i="m"><i></i></span> mara</div>
+        <div class="cat">online · 2</div>
+        <div class="mem"><span class="dot av-felix" data-i="f"><i></i></span> felix</div>
+        <div class="mem"><span class="dot av-jonas" data-i="j"><i></i></span> jonas</div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ Voice ============ -->
+<section id="voice">
+  <div class="wrap split">
+    <div class="reveal">
+      <div class="ch-label ch-mint">voice-and-screen-share</div>
+      <h2>A control surface, not a mute button.</h2>
+      <p class="sec-copy">
+        Most chat apps give you one volume slider and a codec you never see. Backspace hands you the
+        signal path. When a stream stutters, the connection inspector shows you what is happening
+        on the wire, so you fix it instead of guessing at it.
+      </p>
+      <dl class="spec">
+        <div class="spec-row"><dt>codec</dt><dd>VP9 or hardware H.264, chosen per stream</dd></div>
+        <div class="spec-row"><dt>resolution</dt><dd>up to 4K at 120fps, inside bounds the admin sets</dd></div>
+        <div class="spec-row"><dt>bitrate</dt><dd>set it yourself, reset to auto anytime</dd></div>
+        <div class="spec-row"><dt>volume</dt><dd>0 to 200%, per person and per screen share</dd></div>
+        <div class="spec-row"><dt>noise</dt><dd>RNNoise suppression scrubs the keyboard clatter</dd></div>
+        <div class="spec-row"><dt>inspector</dt><dd>live bitrate, codec, ping, packet loss, jitter</dd></div>
+      </dl>
+      <p class="foot-note">voice and video run on LiveKit and are optional. everything else works without them.</p>
+    </div>
+    <div class="reveal">
+      <div class="voice-media">
+        <img class="shot" src="assets/voice-grid.webp" alt="The Backspace voice channel view: a grid of nine camera and screen-share tiles, with the channel sidebar and member list around it." width="1584" height="930" loading="lazy" />
+        <img class="panel" src="assets/stream-settings.webp" alt="The per-stream settings panel: resolution presets from 540p up to 4K and native, frame rates from 30 to 120, content mode, codec choice between VP9 and hardware H.264, a bitrate slider, and a system audio toggle." width="524" height="1062" loading="lazy" />
+      </div>
+      <p class="media-cap">real screenshots: a nine-person call, and the per-stream settings panel.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Federation ============ -->
+<section id="federation" class="fed">
+  <div class="wrap">
+    <div class="reveal" style="max-width:66ch">
+      <div class="ch-label ch-lavender">federation</div>
+      <h2>Independent servers, shared conversation.</h2>
+      <p class="sec-copy">
+        Peer two Backspace instances and their users can be friends, message, and call each other,
+        while every server stays the property of whoever runs it. Requests between servers are
+        <strong>HMAC-signed</strong>, secrets rotate on a schedule you set, and a peer can be revoked at
+        any time. There is no directory and no central anything: two admins agree, and their servers
+        shake hands.
+      </p>
+    </div>
+    <div class="fed-grid">
+      <div class="reveal">
+        <div class="fed-diagram" role="img" aria-label="Diagram: two Backspace instances, closet.mara.dev and rack.jonas.net, exchanging HMAC-signed requests directly with each other.">
+          <div class="node">
+            <div class="nh"><i></i>closet.mara.dev</div>
+            <div class="no">owned and run by mara</div>
+            <div class="nu" aria-hidden="true">
+              <span class="av-mara"></span><span class="av-felix"></span>
+            </div>
+          </div>
+          <div class="wire" aria-hidden="true">
+            <span class="lbl">HMAC-signed</span>
+            <span class="pk"></span>
+            <span class="pk back"></span>
+          </div>
+          <div class="node">
+            <div class="nh"><i></i>rack.jonas.net</div>
+            <div class="no">owned and run by jonas</div>
+            <div class="nu" aria-hidden="true">
+              <span class="av-jonas"></span><span style="background:linear-gradient(135deg,var(--amber),var(--coral))"></span>
+            </div>
+          </div>
+        </div>
+        <p class="sec-copy" style="margin-top:34px">
+          Honest limits: this is Backspace-to-Backspace, not Matrix or ActivityPub, and it is young.
+          If you want a mature, open federation standard today, Matrix is the better choice, and
+          <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">our comparison doc</a>
+          says exactly that.
+        </p>
+      </div>
+      <div class="reveal">
+        <img class="fed-shot" src="assets/federation-peer.webp" alt="The peered instances list from the admin panel: two active peers, one expanded to show health checks, last-seen and sync times, the secret rotation schedule, and controls to rotate the shared secret or revoke the peering." width="1220" height="678" loading="lazy" />
+        <p class="media-cap">from the admin panel: peers are health-checked, secrets rotate on schedule, and revocation is one click away.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Platform ============ -->
+<section id="platform">
+  <div class="wrap plat-grid">
+    <div class="reveal">
+      <div class="ch-label ch-sky">the-rest-of-it</div>
+      <h2>The parts you'd expect, done properly.</h2>
+      <div class="chan-list">
+        <div class="chan-row"><span class="cn">roles-and-permissions</span><span class="cd">bitwise roles, with overrides per category and per channel</span></div>
+        <div class="chan-row"><span class="cn">group-dms</span><span class="cd">direct messages and group calls for up to 10 people</span></div>
+        <div class="chan-row"><span class="cn">moderation</span><span class="cd">bans with reasons and audit trails, voice restrictions that persist</span></div>
+        <div class="chan-row"><span class="cn">search</span><span class="cd">full text across everything, with from: has: before: and after: filters</span></div>
+        <div class="chan-row"><span class="cn">desktop-and-mobile</span><span class="cd">an Electron desktop app, plus an installable PWA on phones</span></div>
+        <div class="chan-row"><span class="cn">files-and-embeds</span><span class="cd">uploads with thumbnails, link previews, GIF search</span></div>
+      </div>
+    </div>
+    <div class="reveal">
+      <img class="plat-shot" src="assets/spaces.webp" alt="The space discovery screen: a grid of public and joined spaces with pastel banner cards, next to the DM sidebar and active-now list." width="1584" height="930" loading="lazy" />
+      <p class="media-cap">space discovery: public, request-to-join, and private spaces.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Install ============ -->
+<section id="install" class="inst">
+  <div class="wrap inst-grid">
+    <div class="reveal">
+      <div class="term" id="term">
+        <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span>mara@closet:~</span></div>
+        <div class="term-body">
+          <div class="tl cmd" data-t="1"><span class="pr">$ </span><span class="tt" data-text="git clone https://github.com/TheZwiss/backspace"></span></div>
+          <div class="tl cmd" data-t="2"><span class="pr">$ </span><span class="tt" data-text="cd backspace &amp;&amp; ./install.sh"></span></div>
+          <div class="tl" data-t="3">  domain, ports, voice: <span class="dim">the installer asks, you answer</span></div>
+          <div class="tl" data-t="4">  HTTPS via Caddy: <span class="dim">certificates arrive on their own</span></div>
+          <div class="tl" data-t="5">  prebuilt image: <span class="dim">amd64 and arm64, no local build</span></div>
+          <div class="tl ok" data-t="6">✓ up. the first account to register becomes admin.</div>
+        </div>
+      </div>
+    </div>
+    <div class="reveal">
+      <div class="ch-label ch-amber">install</div>
+      <h2>One installer, then it's yours.</h2>
+      <p class="sec-copy">
+        The interactive installer walks you through Docker Compose, and Caddy handles HTTPS without
+        being asked twice. There are no default credentials to forget about: the first account you
+        register becomes the admin.
+      </p>
+      <ul class="inst-facts">
+        <li>runs on a Raspberry Pi: the prebuilt image covers amd64 and arm64</li>
+        <li>your data is SQLite files on your own disk, with automatic backups</li>
+        <li>AGPL-3.0, with a commercial dual license where the AGPL doesn't fit</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Honest scope ============ -->
+<section id="scope" class="honest">
+  <div class="wrap reveal">
+    <div class="ch-label ch-peach">before-you-star</div>
+    <h2>Read this before you star it.</h2>
+    <p class="sec-copy">
+      Backspace is young, and you should pick tools with clear eyes. Three things it does not give you today:
+    </p>
+    <ul class="honest-list">
+      <li><b>No Discord ecosystem.</b> There is no bot marketplace and no army of integrations. You get the platform, not the crowd.</li>
+      <li><b>Mobile is a PWA.</b> It installs to your home screen and works well, but native iOS and Android apps are still on the roadmap.</li>
+      <li><b>The federation is young.</b> It peers Backspace with Backspace. For a mature open standard across many ecosystems, Matrix is the better pick.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ Compare ============ -->
+<section id="compare">
+  <div class="wrap reveal">
+    <div class="ch-label ch-coral">how-it-compares</div>
+    <h2>An honest snapshot.</h2>
+    <p class="sec-copy">
+      The full write-up, including where each of these is the better choice, lives in the
+      <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">comparison doc</a>.
+    </p>
+    <div class="table-wrap" tabindex="0">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th class="bs">Backspace</th><th>Discord</th><th>Revolt</th><th>Matrix</th><th>Mumble</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Self-hostable</td><td class="yes bs">Yes</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+          <tr><td>Open source</td><td class="yes bs">AGPL-3.0</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+          <tr><td>Discord-style UX</td><td class="yes bs">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">Different</td><td class="no">No</td></tr>
+          <tr><td>Video and screen share</td><td class="yes bs">Up to 4K/120fps</td><td class="yes">Yes</td><td class="no">Limited</td><td class="yes">Yes</td><td class="no">No</td></tr>
+          <tr><td>Per-stream media controls</td><td class="yes bs">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">Partial</td><td class="no">Audio only</td></tr>
+          <tr><td>Federation</td><td class="yes bs">Between instances</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes, open standard</td><td class="no">No</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+  <div class="wrap reveal">
+    <div class="ch-label ch-lavender">questions</div>
+    <h2>Questions people actually ask.</h2>
+    <div class="faq">
+      <details open>
+        <summary>Is Backspace a self-hosted Discord alternative?</summary>
+        <p>Yes. It gives you a Discord-style experience with spaces, channels, roles, voice, video, screen sharing, DMs, and friends, running entirely on your own server so you own the data and set the rules.</p>
+      </details>
+      <details>
+        <summary>Does it have screen sharing and high-quality video?</summary>
+        <p>Yes. Screen sharing goes up to 4K/120fps within admin-set bounds, with per-stream codec, bitrate, and resolution controls, RNNoise noise suppression, and a live connection inspector. Voice and video use LiveKit and are optional.</p>
+      </details>
+      <details>
+        <summary>What does federation mean here?</summary>
+        <p>Independent Backspace instances can peer with each other so users on different servers can be friends, DM, and call across instances, while each server stays independently owned. Requests between servers are HMAC-authenticated. It is Backspace-to-Backspace, not Matrix or ActivityPub.</p>
+      </details>
+      <details>
+        <summary>Can I run it on a Raspberry Pi?</summary>
+        <p>Yes. The installer pulls a prebuilt multi-architecture image for amd64 and arm64, so low-power and ARM boxes skip the heavy local build.</p>
+      </details>
+      <details>
+        <summary>Is it really open source?</summary>
+        <p>Yes, under the GNU AGPL-3.0, with a commercial dual-license option for cases the AGPL does not fit. Every released version stays available under the AGPL.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ End CTA ============ -->
+<section class="endcta">
+  <div class="wrap reveal">
+    <h2>The next place you hang out could be yours.</h2>
+    <p class="sec-copy">Clone it, run the installer, and you're the admin.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/TheZwiss/backspace">Get it on GitHub</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <span>Backspace is free software under the <a href="https://github.com/TheZwiss/backspace/blob/main/LICENSE">GNU AGPL-3.0</a>, with a commercial dual-license option.</span>
+    <span class="fl">
+      <a href="https://github.com/TheZwiss/backspace">GitHub</a>
+      <a href="https://github.com/TheZwiss/backspace/blob/main/docs/comparison.md">Comparison</a>
+      <a href="https://github.com/TheZwiss/backspace/blob/main/CONTRIBUTING.md">Contributing</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var root = document.documentElement;
+  if (!reduced) root.classList.add("js");
+
+  /* ---- scroll reveals ---- */
+  var revealEls = document.querySelectorAll(".reveal");
+  if (!reduced && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+    revealEls.forEach(function (el) { io.observe(el); });
+  } else {
+    revealEls.forEach(function (el) { el.classList.add("in"); });
+  }
+
+  if (reduced) {
+    var j = document.getElementById("vu-jonas");
+    if (j) j.hidden = false;
+    return;
+  }
+
+  /* ---- hero chat sequence ---- */
+  var typing = document.getElementById("typing");
+  var typingWho = document.getElementById("typing-who");
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function showTyping(who) { typingWho.textContent = who + " is typing"; typing.classList.add("on"); }
+  function hideTyping() { typing.classList.remove("on"); }
+  function showMsg(step) {
+    var el = document.querySelector('.msg[data-step="' + step + '"]');
+    if (el) el.classList.add("shown");
+  }
+  function setSpeaking(id, on) {
+    var el = document.getElementById("vu-" + id);
+    if (el) el.classList.toggle("speaking", on);
+  }
+
+  async function runChat() {
+    await sleep(700);
+    showTyping("mara"); await sleep(1300); hideTyping(); showMsg(1);
+    await sleep(800);
+    showTyping("jonas"); await sleep(1000); hideTyping(); showMsg(2);
+    await sleep(500);
+    showTyping("mara"); await sleep(1400); hideTyping(); showMsg(3);
+    await sleep(1000);
+    showTyping("felix"); await sleep(1000); hideTyping(); showMsg(4);
+    await sleep(500);
+    setSpeaking("mara", false); setSpeaking("felix", true);
+    await sleep(900);
+    document.getElementById("vu-jonas").hidden = false;
+    await sleep(800);
+    showTyping("jonas"); await sleep(1200); hideTyping(); showMsg(5);
+    await sleep(600);
+    showTyping("felix"); await sleep(1000); hideTyping(); showMsg(6);
+    idle();
+  }
+
+  function idle() {
+    var speakers = ["mara", "felix", "jonas"];
+    var i = 1;
+    setInterval(function () {
+      speakers.forEach(function (s) { setSpeaking(s, false); });
+      setSpeaking(speakers[i % speakers.length], true);
+      i++;
+    }, 2600);
+    setInterval(async function () {
+      showTyping("jonas"); await sleep(2800); hideTyping();
+    }, 9000);
+  }
+
+  var winEl = document.getElementById("win");
+  if (winEl) runChat();
+
+  /* ---- terminal typing ---- */
+  var term = document.getElementById("term");
+  if (term && "IntersectionObserver" in window) {
+    var started = false;
+    var tio = new IntersectionObserver(function (entries) {
+      if (started || !entries.some(function (e) { return e.isIntersecting; })) return;
+      started = true; tio.disconnect(); runTerm();
+    }, { threshold: 0.4 });
+    tio.observe(term);
+  }
+
+  async function typeInto(el) {
+    var text = el.getAttribute("data-text");
+    var caret = document.createElement("span");
+    caret.className = "caret";
+    el.after(caret);
+    for (var i = 0; i <= text.length; i++) {
+      el.textContent = text.slice(0, i);
+      await sleep(18 + Math.floor(24 * ((i * 7) % 3) / 3));
+    }
+    caret.remove();
+  }
+
+  async function runTerm() {
+    var lines = term.querySelectorAll(".tl[data-t]");
+    for (var k = 0; k < lines.length; k++) {
+      var line = lines[k];
+      line.classList.add("vis");
+      var tt = line.querySelector(".tt");
+      if (tt) { await typeInto(tt); await sleep(260); }
+      else { await sleep(340); }
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
