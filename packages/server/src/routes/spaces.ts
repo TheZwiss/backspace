@@ -564,6 +564,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Missing CREATE_INVITE permission', statusCode: 403 });
     }
 
+    // Request-only spaces are approval-gated and never joinable by invite code
+    // (see the join endpoints), so they have no usable invite links. Refuse to
+    // hand one out rather than mint a code that would dead-end at the join guard.
+    if (server.visibility === 'request') {
+      return reply.code(403).send({ error: 'Request-only spaces do not use invite links; entry is by join request', statusCode: 403 });
+    }
+
     // Return existing invite code if one exists, otherwise generate a new one
     if (server.inviteCode) {
       return reply.code(200).send({ inviteCode: server.inviteCode });
@@ -603,6 +610,13 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     if (isMember(id, request.userId)) {
       return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+    }
+
+    // Request-only spaces are gated by manager approval: entry must go through
+    // POST /request-join + approval, never a bearer invite code. (Private spaces
+    // remain invite-joinable — that is their only entry path; public too.)
+    if (server.visibility === 'request') {
+      return reply.code(403).send({ error: 'This space requires an approved join request', statusCode: 403 });
     }
 
     const now = Date.now();
@@ -659,6 +673,11 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
 
     if (isMember(server.id, request.userId)) {
       return reply.code(409).send({ error: 'You are already a member of this space', statusCode: 409 });
+    }
+
+    // Request-only spaces are gated by manager approval (see POST /:id/join).
+    if (server.visibility === 'request') {
+      return reply.code(403).send({ error: 'This space requires an approved join request', statusCode: 403 });
     }
 
     const now = Date.now();

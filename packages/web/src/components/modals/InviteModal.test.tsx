@@ -425,6 +425,32 @@ describe('InviteModal', () => {
     expect(screen.getByText('Sam')).toBeInTheDocument();
   });
 
+  it('shows an approval-required notice and hides invite affordances for request-only spaces', async () => {
+    const generateInvite = vi.fn().mockResolvedValue('should-not-be-used');
+    useUIStore.setState({ activeModal: 'invite', modalData: {} });
+    useSpaceStore.setState({
+      currentSpaceId: 'space-1',
+      spaces: [makeSpace({ visibility: 'request' })] as any,
+      members: [],
+      generateInvite,
+    } as any);
+    useSocialStore.setState({
+      friends: [makeFriend({ id: 'f1', username: 'alex', displayName: 'Alex' })],
+    } as any);
+    useAuthStore.setState({ user: { id: 'me', username: 'me' } } as any);
+
+    render(<InviteModal />);
+
+    // Explanatory copy replaces the invite UI.
+    expect(screen.getByText(/join request/i)).toBeInTheDocument();
+    // None of the invite affordances render.
+    expect(screen.queryByPlaceholderText('Search friends...')).not.toBeInTheDocument();
+    expect(screen.queryByText('Or share a link')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alex')).not.toBeInTheDocument();
+    // No invite code is requested for a request-only space (the endpoint 403s).
+    expect(generateInvite).not.toHaveBeenCalled();
+  });
+
   it('passes federated target shape for remote friends', async () => {
     const user = userEvent.setup();
     mockSpaceInvite.mockResolvedValue({});
