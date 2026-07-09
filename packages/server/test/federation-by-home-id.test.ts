@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { bootTwoInstances, type TwoInstanceHarness } from './helpers/twoInstanceHarness.js';
 import { peerInstances } from './helpers/seedPeer.js';
 import { registerLocal } from './helpers/testUsers.js';
 import { buildHeadersForOrigin } from './helpers/hmacSign.js';
+
+// Boots real federated instances and drives S2S over HTTP; the 5s unit-test
+// default is too tight under CI load. See federation-identity-deletion.test.ts
+// for the rationale. A genuine hang still trips this ceiling.
+vi.setConfig({ testTimeout: 30_000 });
 
 let harness: TwoInstanceHarness;
 let sharedSecret: string;
