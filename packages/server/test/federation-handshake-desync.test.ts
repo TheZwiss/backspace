@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   bootTwoInstancesForHandshake,
   registerAdmin,
@@ -10,6 +10,12 @@ import {
 } from './helpers/realHandshake.js';
 import type { TwoInstanceHarness } from './helpers/twoInstanceHarness.js';
 import { openInspector } from './helpers/dbInspect.js';
+
+// Boots real federated instances and drives the peering handshake over HTTP; the
+// 5s unit-test default is too tight under CI load. See
+// federation-identity-deletion.test.ts for the rationale. A genuine hang still
+// trips this ceiling.
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * Acceptance-gate integration suite for the federation handshake desync bugs.
