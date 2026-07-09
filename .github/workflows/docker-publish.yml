@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # The runtime image bakes the git commit for the AGPL-3.0 § 13 source
       # offer (config.commit → GET /api/instance/info). The .git dir is not in
