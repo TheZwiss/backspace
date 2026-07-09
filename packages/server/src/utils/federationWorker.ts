@@ -10,6 +10,7 @@ import { generateSnowflake } from './snowflake.js';
 import { getDmMessageWithUser } from '../routes/dm.js';
 import { connectionManager } from '../ws/handler.js';
 import { generateThumbnail } from './thumbnail.js';
+import { safeFetch } from './ssrf.js';
 import type { FederationRelayRequest, FederationRelayResponse, FederationRelayEvent } from '@backspace/shared';
 import { startupBootstrapSync, onPeerDeactivated } from './federationPeerActivation.js';
 import { probePeerReachable, recoverOrDetectReset, detectResetOnNeedsAttentionPeers, detectResetForPeer } from './federationRecovery.js';
@@ -840,7 +841,8 @@ async function processFileQueueEntry(
   maxUploadSize: number,
   now: number,
 ): Promise<void> {
-  // SSRF protection: validate sourceUrl hostname matches peerOrigin hostname
+  // SSRF protection: sourceUrl must start at the peer host; safeFetch below
+  // re-validates DNS and every redirect hop before downloading bytes.
   try {
     const sourceHostname = new URL(entry.sourceUrl).hostname;
     const peerHostname = new URL(entry.peerOrigin).hostname;
@@ -885,7 +887,7 @@ async function processFileQueueEntry(
   fileQueueAbortController = new AbortController();
 
   try {
-    const response = await fetch(entry.sourceUrl, {
+    const response = await safeFetch(entry.sourceUrl, {
       signal: AbortSignal.any([
         fileQueueAbortController.signal,
         AbortSignal.timeout(FILE_DOWNLOAD_TIMEOUT_MS),
