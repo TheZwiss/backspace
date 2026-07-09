@@ -45,6 +45,15 @@ Storage: Bigint decimal strings in SQLite TEXT columns (bigint not JSON-safe).
 ### Step 1: Owner/Admin Check
 - Space owner OR instance admin (`isAdmin === 1`) → return ALL_PERMISSIONS
 
+### Step 1b: Membership Gate
+- If the user is **not** a member of the space (`getMember` returns nothing) → return `0n`
+- A non-member has no permissions in a space they have not joined. Without this,
+  the @everyone role in Step 2 would leak default member rights (VIEW_CHANNEL,
+  READ_MESSAGE_HISTORY, CREATE_INVITE, …) to any authenticated non-member —
+  allowing them to read channels and mint invite codes for spaces they never
+  joined. Owner and instance admin are already resolved in Step 1, so they are
+  unaffected.
+
 ### Step 2: Compute Base (space-level)
 - Start with @everyone role permissions (role where `id === spaceId`)
 - OR together all permissions from user's assigned roles
@@ -89,7 +98,6 @@ if channelOverride:  base = (base & ~deny) | allow
 | `permissionsToString(perms)` | Bigint → decimal string for JSON |
 | `stringToPermissions(str)` | Decimal string → bigint (supports legacy JSON array format) |
 | `computePermissions(userId, spaceId, channelId?)` | Full resolution algorithm |
-| `computeCategoryPermissions(userId, spaceId, categoryId)` | Stops at category level (no channel overrides) |
 | `hasPermission(userId, spaceId, permission, channelId?)` | Boolean wrapper |
 | `getMember/isMember/isSpaceOwner` | Membership checks |
 | `isDmMember/isBanned` | DM/ban checks |

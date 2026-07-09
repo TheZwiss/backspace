@@ -36,6 +36,13 @@ export function computePermissions(userId: string, spaceId: string, channelId?: 
   const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
   if (userRow?.isAdmin === 1) return ALL_PERMISSIONS;
 
+  // 1c. Membership gate — a user who has not joined the space has NO permissions
+  // in it. Without this, the @everyone role below leaks default member rights
+  // (VIEW_CHANNEL, READ_MESSAGE_HISTORY, CREATE_INVITE, …) to any authenticated
+  // non-member, which allowed reading channels and minting invite codes for
+  // spaces the caller never joined. Owner and instance admin are handled above.
+  if (!getMember(spaceId, userId)) return 0n;
+
   // 2. Base permissions from @everyone role (id === spaceId)
   const everyoneRole = db.select().from(schema.roles)
     .where(and(eq(schema.roles.id, spaceId), eq(schema.roles.spaceId, spaceId)))
@@ -141,67 +148,6 @@ export function computePermissions(userId: string, spaceId: string, channelId?: 
     const deny = stringToPermissions(chanMemberOverride.deny);
     const allow = stringToPermissions(chanMemberOverride.allow);
     base = (base & ~deny) | allow;
-  }
-
-  return base;
-}
-
-/**
- * Compute permissions at the category level (no channel step).
- * Used for determining if a category is "private" for a user.
- */
-export function computeCategoryPermissions(userId: string, spaceId: string, categoryId: string): bigint {
-  const db = getDb();
-
-  const space = db.select().from(schema.spaces).where(eq(schema.spaces.id, spaceId)).get();
-  if (!space) return 0n;
-  if (space.ownerId === userId) return ALL_PERMISSIONS;
-
-  const userRow = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-  if (userRow?.isAdmin === 1) return ALL_PERMISSIONS;
-
-  const everyoneRole = db.select().from(schema.roles)
-    .where(and(eq(schema.roles.id, spaceId), eq(schema.roles.spaceId, spaceId)))
-    .get();
-  let base = everyoneRole ? stringToPermissions(everyoneRole.permissions) : 0n;
-
-  const memberRoleRows = db.select().from(schema.memberRoles)
-    .where(and(eq(schema.memberRoles.spaceId, spaceId), eq(schema.memberRoles.userId, userId)))
-    .all();
-  const assignedRoleIds = memberRoleRows.map(mr => mr.roleId);
-
-  for (const roleId of assignedRoleIds) {
-    const role = db.select().from(schema.roles).where(eq(schema.roles.id, roleId)).get();
-    if (role) base |= stringToPermissions(role.permissions);
-  }
-
-  if ((base & PermissionBits.ADMINISTRATOR) !== 0n) return ALL_PERMISSIONS;
-
-  const catOverrides = db.select().from(schema.categoryOverrides)
-    .where(eq(schema.categoryOverrides.categoryId, categoryId))
-    .all();
-
-  if (catOverrides.length === 0) return base;
-
-  const everyoneOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === spaceId);
-  if (everyoneOverride) {
-    base = (base & ~stringToPermissions(everyoneOverride.deny)) | stringToPermissions(everyoneOverride.allow);
-  }
-
-  let combinedAllow = 0n;
-  let combinedDeny = 0n;
-  for (const roleId of assignedRoleIds) {
-    const roleOverride = catOverrides.find(o => o.targetType === 'role' && o.targetId === roleId);
-    if (roleOverride) {
-      combinedAllow |= stringToPermissions(roleOverride.allow);
-      combinedDeny |= stringToPermissions(roleOverride.deny);
-    }
-  }
-  base = (base & ~combinedDeny) | combinedAllow;
-
-  const memberOverride = catOverrides.find(o => o.targetType === 'member' && o.targetId === userId);
-  if (memberOverride) {
-    base = (base & ~stringToPermissions(memberOverride.deny)) | stringToPermissions(memberOverride.allow);
   }
 
   return base;

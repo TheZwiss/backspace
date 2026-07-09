@@ -113,6 +113,8 @@ Cross-references: [database.md](database.md) (table schemas), [permissions.md](p
 
 **Behavior:** Returns existing `inviteCode` if one exists. Only generates a new one (`crypto.randomBytes(4).toString('hex')`) if the space has no invite code. Invite codes are permanent (no expiration).
 
+**Visibility gate:** returns `403` for `request`-visibility spaces — they are approval-gated and have no usable invite link (the join endpoints reject invite-code joins for them), so the endpoint refuses to hand one out. The client (`InviteModal`) shows an "invite by join request" notice instead of the invite UI for such spaces, and `POST /api/dm/space-invite` likewise rejects a `request`-visibility **local** space with `403 space_requires_approval` (remote request spaces are enforced by their home instance at join time).
+
 **Response:** `{ inviteCode: string }`
 
 ### Invite URL Format
@@ -168,7 +170,9 @@ Two endpoints serve the same purpose:
 | `POST /api/spaces/:id/join` | Join when spaceId is known (body: `{ inviteCode }`) |
 | `POST /api/spaces/join` | Join by code only, spaceId looked up from `inviteCode` |
 
-**Validations:** invite code match, not banned, not already a member.
+**Validations:** invite code match, not banned, not already a member, and **space visibility is not `request`**.
+
+**Visibility gate:** invite-code joins are rejected (`403`) for `request`-visibility spaces — entry to a request-only space must go through `POST /api/spaces/:id/request-join` + manager approval, never a bearer invite code. `private` spaces remain invite-joinable (an invite is their only entry path); `public` spaces are joinable by code or via `POST /api/spaces/:id/public-join`. Combined with the permission membership gate (a non-member cannot obtain `CREATE_INVITE`, see [permissions.md](permissions.md)), this closes the invite-bypass path where a non-member could mint a code for a request-only space and self-join without approval.
 
 **Side effects:**
 1. Insert `space_members` row

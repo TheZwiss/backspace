@@ -54,6 +54,18 @@ function seedSpace(spaceId: string): void {
   }).run();
 }
 
+// Enroll a user as a space member. computePermissions grants @everyone
+// permissions only to actual members, and every real join path inserts this row
+// before voice state is built/pushed — so visibility tests must seed it too.
+function seedMember(spaceId: string, userId: string): void {
+  seedUser(userId);
+  testDb.insert(schema.spaceMembers).values({
+    spaceId,
+    userId,
+    joinedAt: Date.now(),
+  }).run();
+}
+
 function seedChannel(id: string, spaceId: string, type: 'text' | 'voice'): void {
   testDb.insert(schema.channels).values({
     id,
@@ -178,6 +190,7 @@ describe('connectionManager.buildSpaceVoiceState', () => {
     const privateCh = 'vc-private-1';
     seedSpace(spaceId);
     seedEveryoneRole(spaceId);
+    seedMember(spaceId, 'u-viewer');
     seedChannel(publicCh, spaceId, 'voice');
     seedChannel(privateCh, spaceId, 'voice');
     seedDenyViewOverride(privateCh, spaceId);
@@ -204,6 +217,7 @@ describe('connectionManager.addUserSpace voice-state push', () => {
     const voiceCh = 'vc-push-1';
     seedSpace(spaceId);
     seedEveryoneRole(spaceId);
+    seedMember(spaceId, 'u-joiner');
     seedChannel(voiceCh, spaceId, 'voice');
 
     cm.createRoom(voiceCh, 'space', { type: 'space', spaceId });

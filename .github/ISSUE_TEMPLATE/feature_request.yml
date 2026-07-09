@@ -1,0 +1,56 @@
+name: Feature request
+description: Suggest a new capability or an improvement to an existing one.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open an issue before starting work on anything non-trivial, so we can agree on direction first.
+        Please check the README feature list and existing issues before filing.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that Backspace does not support today?
+      placeholder: As a space admin, I want to ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How you imagine it working. Rough ideas are fine.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this touch?
+      options:
+        - Text chat and messaging
+        - Voice, video, or screen sharing
+        - Spaces, roles, and permissions
+        - Direct messages and friends
+        - Federation between instances
+        - Admin and moderation
+        - Desktop app
+        - Mobile and PWA
+        - Deployment and self-hosting
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you have tried, or how other tools handle this.
+  - type: dropdown
+    id: federation-impact
+    attributes:
+      label: Federation compatibility
+      description: Would this need to work across peered instances? If unsure, leave the default.
+      options:
+        - Not sure
+        - Yes, it should work across federated instances
+        - No, it is local to a single instance

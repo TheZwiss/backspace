@@ -1,0 +1,82 @@
+name: Bug report
+description: Report something that is broken or behaving incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please search existing issues first to avoid duplicates.
+        For security vulnerabilities, do not open a public issue. See SECURITY.md and report privately.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug and what you expected instead.
+      placeholder: When I do X, Y happens. I expected Z.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps that trigger the problem.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: deploy-mode
+    attributes:
+      label: Deployment mode
+      description: How is this instance deployed?
+      options:
+        - All-in-One (bundled Caddy)
+        - Behind my own reverse proxy
+        - Behind a tunnel (Cloudflare, Tailscale)
+        - Local development (pnpm dev)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen
+      description: Which client were you using?
+      options:
+        - Web browser
+        - Desktop app (Electron)
+        - Installed PWA on mobile
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Backspace version
+      description: The version shown in the app, or the image tag / commit you deployed.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: subsystems
+    attributes:
+      label: Does it involve voice or federation
+      description: These subsystems have their own moving parts, so it helps to know up front.
+      multiple: true
+      options:
+        - Voice or video (LiveKit)
+        - Screen sharing
+        - Federation between instances
+        - None of these
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Server logs (docker compose logs backspace) or browser console output, if any. This is automatically formatted as code.
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and OS
+      placeholder: "Firefox 128 on Ubuntu 24.04, or Chrome 126 on Windows 11"

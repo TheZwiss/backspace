@@ -34,6 +34,12 @@ id_ed25519*
 # Generated deployment config (contains secrets)
 livekit.yaml
 
+# Local deploy targets & private ops notes — REAL hosts/IPs/users for the
+# maintainer's own infra. NEVER commit: this is a public repo. deploy.sh reads
+# .deploy.local at runtime if present; the committed defaults stay placeholders.
+/.deploy.local
+/.deploy-local/
+
 # Raw screenshot originals — optimized WebP copies live in docs/screenshots/
 demo-pictures/
 

@@ -1,0 +1,67 @@
+name: CI
+
+# Runs the workspace's typecheck, production build, and full test suite on every
+# pull request and on pushes to main. Purpose: catch compile errors and test
+# regressions before merge instead of relying on each contributor running tests
+# locally. Once this check is green on a PR, enable branch protection on `main`
+# ("Require status checks to pass" → select "Build & test") to make it blocking.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer commit on the same branch/PR supersedes in-flight runs — cancel the
+# stale one so a rapid push sequence doesn't queue redundant CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.3
+
+      # Node 20 is the project's supported runtime (package.json engines pins
+      # >=20 <21, .nvmrc says 20). Running the matrix on 20 also means the fresh
+      # install below pulls better-sqlite3's prebuilt binary for the correct ABI,
+      # which is what makes the server suite runnable in CI.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # The desktop postinstall tries to rebuild the native uiohook-napi module.
+      # It fails gracefully (|| warn) without X11 dev headers, and nothing in CI
+      # needs the native binary — the desktop tests and TS compile are pure JS —
+      # so we intentionally skip installing those headers to keep CI fast.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Compiles shared → server → web (each runs tsc; web also runs the Vite
+      # production build). This is the typecheck + build gate for those three.
+      - name: Build shared, server & web
+        run: pnpm build
+
+      # Desktop is not part of `pnpm build` (that produces an Electron installer,
+      # which release.yml owns). Type-check its source here so desktop TS errors
+      # surface on PRs rather than only at release-tag time.
+      - name: Typecheck desktop
+        run: pnpm --filter @backspace/desktop build:ts
+
+      # Runs every package's `test` script (server, web, desktop) via vitest.
+      - name: Test
+        run: pnpm -r test

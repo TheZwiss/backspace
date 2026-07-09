@@ -2393,6 +2393,19 @@ export async function dmRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'invite_invalid', statusCode: 400 });
     }
 
+    // Request-only spaces are approval-gated and have no usable invite links, so
+    // refuse to send an invite card that would dead-end at the recipient's join
+    // guard. This is checked against our LOCAL spaces table by id, independent of
+    // the caller-supplied spaceInstanceOrigin: if the space is genuinely local and
+    // request-only we reject even when the origin is spoofed to look remote. A
+    // truly remote space is absent from this table (undefined → allowed); its own
+    // home instance enforces the same rule when the recipient tries to join.
+    const localSpace = db.select({ visibility: schema.spaces.visibility })
+      .from(schema.spaces).where(eq(schema.spaces.id, body.spaceId)).get();
+    if (localSpace?.visibility === 'request') {
+      return reply.code(403).send({ error: 'space_requires_approval', statusCode: 403 });
+    }
+
     // 4. Resolve / create the 1-on-1 DM (delegate to dedup helper).
     const dmChannelId = ensureOneOnOneDmChannel(callerId, targetUser, db);
 

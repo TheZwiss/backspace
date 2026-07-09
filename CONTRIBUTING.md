@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution! Backspace is free and open source software
 (GNU AGPL-3.0, with a commercial dual-license option), and contributions of all
-sizes are welcome — bug reports, fixes, features, documentation, and design.
+sizes are welcome: bug reports, fixes, features, documentation, and design.
 
 ## Before you start
 
@@ -22,7 +22,7 @@ Before your first contribution can be merged, you must sign the project's
 
 Backspace is a single-owner project. Under the CLA **you keep the copyright to
 your contribution** and grant the maintainer (Jannis Braun) an exclusive,
-sublicensable license to it — which is what lets the project be offered under both
+sublicensable license to it, which is what lets the project be offered under both
 the AGPL and a commercial license. In return, you receive a perpetual license to
 reuse the specific code you authored in your own other projects (see CLA §5). You
 also confirm that you have the right to contribute the code in the first place.
@@ -36,13 +36,13 @@ Signing is automatic and takes one comment:
    > I have read the CLA Document and I hereby sign the CLA
 
 4. The bot records your signature against your GitHub username. You only sign
-   once — it covers all of your future contributions.
+   once, and it covers all of your future contributions.
 
 ## Development setup
 
 Requirements: **Node.js 20 (LTS)** and **pnpm 10**. Run `nvm use` (reads
 `.nvmrc`); Corepack activates the pinned pnpm from the `packageManager` field
-automatically — don't install pnpm globally.
+automatically, so don't install pnpm globally.
 
 ```bash
 pnpm install          # install all workspace dependencies
@@ -53,7 +53,7 @@ pnpm dev              # API server on :3005, Vite dev server on :5173
 You can run the two halves separately with `pnpm dev:server` and `pnpm dev:web`.
 
 Working on the **desktop** app additionally needs a C++ toolchain (`make`, `g++`,
-`python3`) to build the native `uiohook-napi` module — on Debian/Ubuntu:
+`python3`) to build the native `uiohook-napi` module. On Debian/Ubuntu:
 `sudo apt install build-essential python3`. Without it `pnpm install` just warns
 and skips that one rebuild; the server and web client are unaffected.
 
@@ -64,7 +64,7 @@ it.
 ## Coding standards
 
 - **TypeScript strict mode**, no `any`. The codebase compiles cleanly under
-  strict settings — keep it that way.
+  strict settings, so keep it that way.
 - **Match the surrounding code.** Follow existing patterns, naming, and module
   boundaries rather than introducing new ones.
 - **Federation-aware.** Never assume a single global user ID. Resolve the
@@ -96,10 +96,10 @@ it.
 Use GitHub Issues. For bugs, include reproduction steps, expected vs. actual
 behavior, and your environment (deployment method, browser/desktop, and whether
 federation or voice is involved). For security issues, please do **not** open a
-public issue — see [`SECURITY.md`](SECURITY.md).
+public issue. See [`SECURITY.md`](SECURITY.md).
 
 ## License
 
 By contributing, you agree that your contributions are licensed under the
-[GNU AGPL-3.0](LICENSE) and are subject to the [CLA](CLA.md) — an exclusive-license
+[GNU AGPL-3.0](LICENSE) and are subject to the [CLA](CLA.md), an exclusive-license
 grant that also enables the project's commercial dual-license.
