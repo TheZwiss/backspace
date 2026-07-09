@@ -70,6 +70,25 @@ if (typeof ClipboardItem === 'undefined') {
   };
 }
 
+// jsdom's Blob implementation has no `.stream()` method on Node 20 (Node 25+
+// happens to provide one, which is why this only surfaces on the pinned target
+// runtime). undici's `Response` constructor extracts a Blob body by calling
+// `blob.stream()`, so `new Response(blob)` throws "object.stream is not a
+// function" without this. Back it with the blob's own arrayBuffer().
+if (typeof Blob !== 'undefined' && typeof Blob.prototype.stream !== 'function') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Blob.prototype as any).stream = function stream(this: Blob): ReadableStream<Uint8Array> {
+    const blob = this;
+    return new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const buffer = await blob.arrayBuffer();
+        controller.enqueue(new Uint8Array(buffer));
+        controller.close();
+      },
+    });
+  };
+}
+
 // Patch globalThis.Response to preserve Blob content-type in jsdom.
 // jsdom's fetch Response.blob() drops the Blob's MIME type; this shim
 // restores it so tests that construct `new Response(blob)` behave correctly.
