@@ -18,6 +18,8 @@
     "build:server": "pnpm --filter @backspace/server build",
     "build:web": "pnpm --filter @backspace/web build",
     "build": "pnpm --filter @backspace/shared build && pnpm --filter @backspace/server build && pnpm --filter @backspace/web build",
+    "typecheck": "pnpm --filter @backspace/shared build && pnpm -r typecheck",
+    "test": "pnpm -r test",
     "dev:desktop": "pnpm --filter @backspace/desktop dev",
     "build:desktop": "pnpm --filter @backspace/desktop build",
     "gen-icons": "node scripts/gen-icons.mjs"

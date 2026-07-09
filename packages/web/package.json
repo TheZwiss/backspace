@@ -8,6 +8,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "e2e:identity-deletion": "playwright test e2e/identity-deletion.spec.ts"
   },
