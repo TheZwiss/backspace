@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { config } from '../../../config.js';
 import { getDb, getRawDb, schema } from '../../../db/index.js';
-import { buildFederationHeaders, getOurOrigin, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { getOurOrigin, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { sendSignedJson } from './signedResponse.js';
 import { getInstanceId } from '../../../utils/federationEpoch.js';
 import { getDmParticipants } from '../../../utils/federationOutbox.js';
 import { deleteAttachmentFiles } from '../../../utils/fileCleanup.js';
@@ -285,15 +286,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       }
 
       // 4. Sign the response body with the peer's shared secret and return it.
-      const responseBody = JSON.stringify({ instanceId: getInstanceId() });
-      const sigHeaders = buildFederationHeaders(responseBody, peer.hmacSecret, getOurOrigin());
-      reply.headers({
-        'X-Federation-Signature': sigHeaders['X-Federation-Signature'],
-        'X-Federation-Timestamp': sigHeaders['X-Federation-Timestamp'],
-        'X-Federation-Nonce': sigHeaders['X-Federation-Nonce'],
-        'Content-Type': 'application/json',
-      });
-      return reply.code(200).send(responseBody);
+      return sendSignedJson(reply, { instanceId: getInstanceId() }, peer.hmacSecret);
     },
   );
 
