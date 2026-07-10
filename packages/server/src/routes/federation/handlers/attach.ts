@@ -3,7 +3,8 @@ import { config } from '../../../config.js';
 import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { authenticate } from '../../../utils/auth.js';
 import { fetchHomeProfileByHomeId, verifyAttachProofWithPeer } from '../../../utils/federationAttach.js';
-import { buildFederationHeaders, getOurOrigin, parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
+import { sendSignedJson } from './signedResponse.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js';
 import { connectionManager } from '../../../ws/handler.js';
@@ -72,17 +73,8 @@ export function registerAttachRoutes(app: FastifyInstance): void {
 
       // 2. Sign every downstream response with the peer's shared secret so the
       // caller can trust the identity (or the fail-closed verdict) it carries.
-      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply => {
-        const responseBody = JSON.stringify(payload);
-        const sigHeaders = buildFederationHeaders(responseBody, peer.hmacSecret, getOurOrigin());
-        reply.headers({
-          'X-Federation-Signature': sigHeaders['X-Federation-Signature'],
-          'X-Federation-Timestamp': sigHeaders['X-Federation-Timestamp'],
-          'X-Federation-Nonce': sigHeaders['X-Federation-Nonce'],
-          'Content-Type': 'application/json',
-        });
-        return reply.code(200).send(responseBody);
-      };
+      const sendSigned = (payload: { valid: false } | { valid: true; homeUserId: string; username: string }): FastifyReply =>
+        sendSignedJson(reply, payload, peer.hmacSecret);
 
       // 3. Validate the token shape (64 hex chars, as minted by attach-proof).
       const rawToken = (request.body as { token?: unknown } | null)?.token;
