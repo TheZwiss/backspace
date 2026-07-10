@@ -15,7 +15,8 @@ import type { FastifyInstance } from 'fastify';
 import { processRelayEvents } from '../events/dispatch.js';
 import { extractDomain } from '../identity.js';
 import { resolveLocalOrigin } from '../origin.js';
-import { isNonceDuplicate, isRelayRateLimited } from '../rateLimits.js';
+import { isRelayRateLimited } from '../rateLimits.js';
+import { authenticateS2SPeer } from './s2sAuth.js';
 
 export function registerRelayRoutes(app: FastifyInstance): void {
   // ─── DELETE /api/federation/identity ──────────────────────────────────────
@@ -26,37 +27,11 @@ export function registerRelayRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const db = getDb();
 
-      // 1. Verify HMAC signature (same pattern as relay endpoint)
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
-
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // Nonce-based replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      } else {
-        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce)`);
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → signature →
+      // nonce replay. No rate limiter; warns on a legacy peer's missing nonce.
+      const auth = authenticateS2SPeer(request, reply, { logMissingNonce: true });
+      if (!auth.ok) return;
+      const { peer } = auth;
 
       // 2. Validate body
       const { homeUserId, homeInstance, mode } = request.body;
@@ -77,7 +52,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       }
 
       // 4. Attribution guard: only the user's home instance can delete them
-      if (!user.homeInstance || extractDomain(user.homeInstance) !== extractDomain(fedHeaders.origin)) {
+      if (!user.homeInstance || extractDomain(user.homeInstance) !== extractDomain(peer.origin)) {
         return reply.code(403).send({ error: 'Attribution mismatch: you can only delete users from your own instance', statusCode: 403 });
       }
 
@@ -86,7 +61,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       // homeUserIds. Idempotent 200: from the caller's perspective this
       // identity does not exist here.
       if (user.federationHomeOrphaned === 1) {
-        console.log(`[federation] Ignoring S2S identity delete for detached account ${user.id} from ${fedHeaders.origin}`);
+        console.log(`[federation] Ignoring S2S identity delete for detached account ${user.id} from ${peer.origin}`);
         return reply.code(200).send({ success: true });
       }
 
@@ -130,7 +105,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       // 11. Force-disconnect WS if somehow still connected (unlikely but safe)
       connectionManager.forceDisconnectUser(user.id);
 
-      console.log(`[federation] Identity deleted for user ${user.id} (${user.username}) via S2S from ${fedHeaders.origin}, mode=${mode}`);
+      console.log(`[federation] Identity deleted for user ${user.id} (${user.username}) via S2S from ${peer.origin}, mode=${mode}`);
 
       return reply.code(200).send({ success: true });
     },
@@ -145,41 +120,25 @@ export function registerRelayRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const db = getDb();
 
-      // 1. Verify HMAC signature
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → rate limit →
+      // signature → nonce replay. The per-peer relay rate limiter runs BEFORE
+      // signature verification (avoid HMAC work on a flood); warns on a legacy
+      // peer's missing nonce.
+      const auth = authenticateS2SPeer(request, reply, {
+        rateLimiter: { limited: isRelayRateLimited },
+        logMissingNonce: true,
+      });
+      if (!auth.ok) return;
+      const { peer } = auth;
 
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      // 1b. Per-peer rate limiting (before expensive HMAC verification)
-      if (isRelayRateLimited(peer.origin)) {
-        return reply.code(429).send({ error: 'Rate limit exceeded', statusCode: 429 });
-      }
-
-      // Serialize body back to JSON for HMAC verification (we control both sides)
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // 1b-epoch. Fast-path baseline population (design §3.2). The signature just
-      // verified proves the peer holds the current shared secret, so the epoch it
-      // carries in `sourceInstanceId` is authentic. Populate-if-null ONLY: a valid
-      // relay can never carry an epoch differing from a non-null baseline (a
-      // different incarnation implies a different secret that fails HMAC), so we
-      // only ever fill a NULL — never overwrite. This is independent of per-event
-      // processing and does not affect relay accept/reject in any way. Old peers
-      // omit the field → skip (backward-compatible no-op).
+      // 1b-epoch. Fast-path baseline population (design §3.2). The signature the
+      // preamble verified proves the peer holds the current shared secret, so the
+      // epoch it carries in `sourceInstanceId` is authentic. Populate-if-null
+      // ONLY: a valid relay can never carry an epoch differing from a non-null
+      // baseline (a different incarnation implies a different secret that fails
+      // HMAC), so we only ever fill a NULL — never overwrite. Independent of
+      // per-event processing; does not affect relay accept/reject in any way. Old
+      // peers omit the field → skip (backward-compatible no-op).
       const claimedEpoch = request.body.sourceInstanceId;
       if (claimedEpoch && !peer.peerInstanceId) {
         db.update(schema.federationPeers)
@@ -189,18 +148,6 @@ export function registerRelayRoutes(app: FastifyInstance): void {
             isNull(schema.federationPeers.peerInstanceId),
           ))
           .run();
-      }
-
-      // 1c. Nonce-based replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        // Peer previously sent nonces but this request doesn't have one — reject
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      } else {
-        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce)`);
       }
 
       // 2. Validate request body shape
@@ -226,7 +173,7 @@ export function registerRelayRoutes(app: FastifyInstance): void {
         .set({
           lastSeenAt: Date.now(),
           consecutiveFailures: 0,
-          ...(fedHeaders.nonce && !peer.nonceSupported ? { nonceSupported: 1 } : {}),
+          ...(auth.nonce && !peer.nonceSupported ? { nonceSupported: 1 } : {}),
         })
         .where(eq(schema.federationPeers.id, peer.id))
         .run();
@@ -257,6 +204,12 @@ export function registerRelayRoutes(app: FastifyInstance): void {
   // writing it as the peer's baseline (design §3.2 / §9). The value itself
   // (instanceId) is already public via /instance/info; signing is for
   // baseline-integrity, not confidentiality.
+  //
+  // NON-ADOPTER of authenticateS2SPeer (deliberate): gates on status !== 'revoked'
+  // (ANY non-revoked peer must answer so a needs_attention/unreachable peer can
+  // drive RECOVERY via this signed round-trip), returns 400 (not 401) on missing
+  // headers, and runs NO nonce check. Folding it into the helper would flatten the
+  // recovery gate and the status code.
   app.post(
     '/api/federation/epoch',
     { bodyLimit: 4 * 1024 },
@@ -301,40 +254,15 @@ export function registerRelayRoutes(app: FastifyInstance): void {
       const db = getDb();
       const rawDb = getRawDb();
 
-      // 1. Verify HMAC signature
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
-
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // 1b. Nonce-based replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      } else {
-        console.warn(`[federation] Peer ${peer.origin} does not support replay protection (no nonce) [sync]`);
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → signature →
+      // nonce replay. No rate limiter; warns (with the ` [sync]` tag) on a legacy
+      // peer's missing nonce.
+      const auth = authenticateS2SPeer(request, reply, { logMissingNonce: true, logContext: 'sync' });
+      if (!auth.ok) return;
+      const { peer } = auth;
 
       // Ratchet: mark peer as nonce-supporting if this is the first nonce we've seen
-      if (fedHeaders.nonce && !peer.nonceSupported) {
+      if (auth.nonce && !peer.nonceSupported) {
         db.update(schema.federationPeers)
           .set({ nonceSupported: 1 })
           .where(eq(schema.federationPeers.id, peer.id))

@@ -1,8 +1,8 @@
 import { getDb, schema } from '../../../db/index.js';
-import { parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { isLookupRateLimited, isNonceDuplicate } from '../rateLimits.js';
+import { isLookupRateLimited } from '../rateLimits.js';
+import { authenticateS2SPeer } from './s2sAuth.js';
 
 export function registerLookupRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/users/lookup ─────────────────────────────────────
@@ -19,39 +19,14 @@ export function registerLookupRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const db = getDb();
 
-      // 1. Verify HMAC (mirror relay endpoint)
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
-
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      if (isLookupRateLimited(peer.origin)) {
-        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
-      }
-
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // 1b. Nonce-based replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → rate limit →
+      // signature → nonce replay. The per-peer lookup rate limiter (60/min) runs
+      // BEFORE signature verification and sends `Retry-After: 60`. This endpoint
+      // never logged on a missing nonce (logMissingNonce omitted).
+      const auth = authenticateS2SPeer(request, reply, {
+        rateLimiter: { limited: isLookupRateLimited, retryAfterSeconds: 60 },
+      });
+      if (!auth.ok) return;
 
       // 2. Validate body
       const rawUsername = (request.body as { username?: unknown } | null)?.username;
@@ -109,39 +84,14 @@ export function registerLookupRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const db = getDb();
 
-      // 1. Verify HMAC headers
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
-
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      if (isLookupRateLimited(peer.origin)) {
-        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
-      }
-
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // Replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → rate limit →
+      // signature → nonce replay. Same shape as /users/lookup: per-peer lookup
+      // rate limiter (60/min) BEFORE signature, `Retry-After: 60`, no
+      // missing-nonce warning.
+      const auth = authenticateS2SPeer(request, reply, {
+        rateLimiter: { limited: isLookupRateLimited, retryAfterSeconds: 60 },
+      });
+      if (!auth.ok) return;
 
       // 2. Validate body
       const rawId = (request.body as { homeUserId?: unknown } | null)?.homeUserId;

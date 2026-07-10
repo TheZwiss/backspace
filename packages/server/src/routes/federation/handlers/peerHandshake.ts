@@ -625,6 +625,9 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // ─── POST /api/federation/peer/rotate ───────────────────────────────────────
   // Server-to-server: accept a secret rotation request from a peer instance.
   // Authenticated via HMAC-SHA256 signature (current secret), NOT JWT.
+  // NON-ADOPTER of authenticateS2SPeer (deliberate): active-only like the helper
+  // but runs NO nonce replay check (the rotation body is its own replay unit);
+  // sharing the helper would add a nonce gate this endpoint never had.
   app.post<{ Body: { newSecret: string } }>(
     '/api/federation/peer/rotate',
     async (request, reply) => {
@@ -684,6 +687,10 @@ export function registerPeerHandshakeRoutes(app: FastifyInstance): void {
   // Server-to-server: receive a denial notification from a remote instance.
   // Authenticated via HMAC-SHA256 signature (the secret we sent in our original
   // peer/accept request, which the remote stored in their approval queue).
+  // NON-ADOPTER of authenticateS2SPeer (deliberate): gates on 'awaiting_approval'
+  // (404 on no peer row, 409 on wrong status — not the helper's active-only 403),
+  // verifies against a SYNTHETIC no-grace secret object, and runs no nonce check.
+  // Entirely different control flow.
   app.post<{ Body: { origin: string; reason: 'denied_by_admin' | 'expired'; message?: string } }>(
     '/api/federation/peer/denied',
     async (request, reply) => {

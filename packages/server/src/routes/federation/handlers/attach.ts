@@ -3,7 +3,6 @@ import { config } from '../../../config.js';
 import { getDb, getRawDb, schema } from '../../../db/index.js';
 import { authenticate } from '../../../utils/auth.js';
 import { fetchHomeProfileByHomeId, verifyAttachProofWithPeer } from '../../../utils/federationAttach.js';
-import { parseFederationHeaders, verifyPeerSignature } from '../../../utils/federationAuth.js';
 import { sendSignedJson } from './signedResponse.js';
 import { sanitizeUser } from '../../../utils/sanitize.js';
 import { collectProfileBroadcastTargetIds } from '../../../utils/userDeletion.js';
@@ -15,7 +14,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { buildDmChannelPayload } from '../dmChannels.js';
 import { extractDomain } from '../identity.js';
 import { downloadProfileAsset } from '../profile.js';
-import { isLookupRateLimited, isNonceDuplicate } from '../rateLimits.js';
+import { isLookupRateLimited } from '../rateLimits.js';
+import { authenticateS2SPeer } from './s2sAuth.js';
 import { reconcileDmChannelFederatedId } from '../reconciliation.js';
 import type { DmReconcileResult } from '../reconciliation.js';
 
@@ -37,39 +37,15 @@ export function registerAttachRoutes(app: FastifyInstance): void {
       const db = getDb();
       const rawDb = getRawDb();
 
-      // 1. Verify HMAC headers (mirror by-home-id / users-lookup).
-      const fedHeaders = parseFederationHeaders(request.headers as Record<string, string | string[] | undefined>);
-      if (!fedHeaders) {
-        return reply.code(401).send({ error: 'Missing or malformed federation headers', statusCode: 401 });
-      }
-
-      const peer = db
-        .select()
-        .from(schema.federationPeers)
-        .where(eq(schema.federationPeers.origin, fedHeaders.origin))
-        .get();
-
-      if (!peer || peer.status !== 'active') {
-        return reply.code(403).send({ error: 'Unknown or inactive peer', statusCode: 403 });
-      }
-
-      if (isLookupRateLimited(peer.origin)) {
-        return reply.code(429).header('Retry-After', '60').send({ error: 'Rate limit exceeded', statusCode: 429 });
-      }
-
-      const bodyString = JSON.stringify(request.body);
-      if (!verifyPeerSignature(bodyString, fedHeaders.signature, fedHeaders.timestamp, fedHeaders.nonce, peer)) {
-        return reply.code(401).send({ error: 'Invalid signature', statusCode: 401 });
-      }
-
-      // Replay protection
-      if (fedHeaders.nonce) {
-        if (isNonceDuplicate(peer.origin, fedHeaders.nonce)) {
-          return reply.code(409).send({ error: 'Duplicate nonce — possible replay', statusCode: 409 });
-        }
-      } else if (peer.nonceSupported) {
-        return reply.code(401).send({ error: 'Nonce required — peer previously supported nonces', statusCode: 401 });
-      }
+      // Shared inbound S2S-auth preamble: headers → active peer → rate limit →
+      // signature → nonce replay. Shares the lookup rate-limit bucket (60/min) by
+      // design (this is the same friend-request-originator flow as /users/lookup),
+      // running BEFORE signature with `Retry-After: 60`; no missing-nonce warning.
+      const auth = authenticateS2SPeer(request, reply, {
+        rateLimiter: { limited: isLookupRateLimited, retryAfterSeconds: 60 },
+      });
+      if (!auth.ok) return;
+      const { peer } = auth;
 
       // 2. Sign every downstream response with the peer's shared secret so the
       // caller can trust the identity (or the fail-closed verdict) it carries.
