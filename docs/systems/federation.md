@@ -3,7 +3,15 @@
 > **Companion spec:** This document covers **S2S (server-to-server)** federation — the relay protocol, HMAC auth, identity resolution, and background workers. For the **client-side** multi-instance architecture (how the web/desktop app connects to multiple instances, federated account creation, origin-aware routing), see [`client-federation.md`](client-federation.md). Both systems work together.
 
 Source files:
-- `packages/server/src/routes/federation.ts` -- API endpoints (peer handshake, relay, sync) + all inbound event processors + identity resolution functions
+- `packages/server/src/routes/federation.ts` -- **Barrel** for the federation route subsystem. Re-exports the public API (identity resolution, event processors, reconciliation, `validateOrigin`) so `from '.../routes/federation.js'` imports resolve unchanged, and composes the HTTP registrars into `federationRoutes()`. The implementation lives in `routes/federation/` (split out of the former single 7.6k-line file; see `docs/superpowers/specs/2026-07-10-federation-ts-split-design.md`):
+  - `routes/federation/rateLimits.ts` -- In-memory sliding-window rate limiters (accept/relay/lookup/ensure) + replay-nonce store + eviction timers
+  - `routes/federation/origin.ts` -- `validateOrigin`, `resolveLocalOrigin`, `sanitizePeer` (+ `SanitizedPeer` shape)
+  - `routes/federation/identity.ts` -- Federated identity resolution: `extractDomain`, `getOurIdentityDomain`, `verifyAttribution`, `resolveLocalUser`, `findFederatedUser`, `resolveOrCreateReplicatedUser`, `backfillHomeUserId`
+  - `routes/federation/dmChannels.ts` -- DM channel/message payload builders, `findOrCreateDmChannel`, `resolveLocalDmMessage`, `isUrlFromPeer`
+  - `routes/federation/profile.ts` -- Replicated-profile hydration + asset download, `processProfileUpdateEvent`, `backfillReplicatedProfileAssets`
+  - `routes/federation/reconciliation.ts` -- DM federated-id reconciliation + dead-incarnation artifact sweeps (worker-facing maintenance)
+  - `routes/federation/events/*.ts` -- Inbound relay event processors, grouped by domain: `dmMessages`, `membership`, `friends`, `calls`, `dmState` (presence/read-state/close/reopen/file-rejected), and `dispatch` (`processRelayEvents`, the fan-out entry point shared by the HTTP relay handler and the initial-sync worker)
+  - `routes/federation/handlers/*.ts` -- Fastify route registrars, grouped by endpoint concern: `peerHandshake` (initiate/accept/ensure/rotate/denied), `peerAdmin` (peer list/CRUD/reset/recheck/rotate), `approvals` (approval queue + peering subscriptions/notifications + approve/deny helpers), `relay` (identity delete, relay, epoch, sync), `lookup` (user lookups), `attach` (verify-attach-proof, `/api/users/@me/reattach`)
 - `packages/server/src/utils/federationAuth.ts` -- HMAC signing, verification, header parsing, `getOurOrigin()`
 - `packages/server/src/utils/federationOutbox.ts` -- Event queuing, coalescing, relay payload construction, mutation log, participant/target resolution
 - `packages/server/src/utils/federationLookup.ts` -- HMAC-signed remote-user lookups: `lookupRemoteUser` (by username) and `lookupRemoteUserByHomeId` (reverse lookup, used by stub backfill)
