@@ -44,7 +44,7 @@ vi.mock('../ws/events.js', () => ({
 
 function applyMigrations(db: Database.Database): void {
   const migrationsDir = path.resolve(__dirname, '../../drizzle');
-  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  const files = fs.readdirSync(migrationsDir).filter((f: string) => f.endsWith('.sql')).sort();
   for (const f of files) {
     const sqlText = fs.readFileSync(path.join(migrationsDir, f), 'utf8');
     const statements = sqlText.split(/-->\s*statement-breakpoint/);
@@ -70,9 +70,9 @@ function seedInviteFixture(): void {
   ]).run();
   testDb.insert(schema.spaces).values({
     id: 'space-1',
-    name: 'Request Only',
+    name: 'Invite Test Space',
     ownerId: 'owner-1',
-    visibility: 'request',
+    visibility: 'public',
     createdAt: now,
   }).run();
   testDb.insert(schema.spaceMembers).values({
