@@ -465,16 +465,29 @@ briefly restarts the `backspace` container (clients reconnect automatically).
 
 ## Development
 
-Requirements: **Node.js 20 (LTS)** and **pnpm 10**, both pinned (`.nvmrc` plus
-the `packageManager` field), so `nvm use` and Corepack select the right versions
-automatically. Newer Node majors are untested; the Docker image always builds on
-Node 20 regardless of your host.
+Requirements: **Node.js 20 or newer** and **pnpm 10**. The `.nvmrc` file keeps
+Node 20 as the default development and production baseline, while newer Node
+majors are supported and exercised in CI. The Docker image continues to build
+on Node 20 regardless of your host.
 
 ```bash
 pnpm install
 cp .env.example .env          # set JWT_SECRET (openssl rand -hex 32)
 pnpm dev                       # API server on :3005, Vite dev server on :5173
 ```
+
+On Windows PowerShell, confirm Node 20 or newer and use the native copy command:
+
+```powershell
+node --version
+pnpm install
+Copy-Item .env.example .env
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Paste the generated value after `JWT_SECRET=` in `.env`, then start both
+development servers with `pnpm dev`. Use `node --version` to confirm the active
+version if pnpm reports an engine warning.
 
 > **Server/web only?** `pnpm install` also builds the desktop app's native
 > keyboard-hook module (`uiohook-napi`), which needs a C++ toolchain
@@ -604,7 +617,7 @@ packages/
 
 | Layer        | Technology |
 |--------------|------------|
-| Server       | Node.js 20 (LTS), Fastify 4, TypeScript (strict) |
+| Server       | Node.js 20+, Fastify 4, TypeScript (strict) |
 | Database     | SQLite (better-sqlite3) + Drizzle ORM |
 | Auth         | JWT + bcrypt |
 | Frontend     | React 18, Vite 6, Tailwind CSS 3, Zustand 5 |

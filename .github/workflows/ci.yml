@@ -22,8 +22,13 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & test
+    name: Build & test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 24]
 
     steps:
       - name: Checkout
@@ -33,15 +38,10 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: 10.34.3
-
-      # Node 20 is the project's supported runtime (package.json engines pins
-      # >=20 <21, .nvmrc says 20). Running the matrix on 20 also means the fresh
-      # install below pulls better-sqlite3's prebuilt binary for the correct ABI,
-      # which is what makes the server suite runnable in CI.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       # The desktop postinstall tries to rebuild the native uiohook-napi module.

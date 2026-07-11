@@ -13,7 +13,7 @@
   "scripts": {
     "dev:server": "pnpm --filter @backspace/server dev",
     "dev:web": "pnpm --filter @backspace/web dev",
-    "dev": "pnpm --filter @backspace/server dev & pnpm --filter @backspace/web dev",
+    "dev": "pnpm --parallel --filter @backspace/server --filter @backspace/web dev",
     "build:shared": "pnpm --filter @backspace/shared build",
     "build:server": "pnpm --filter @backspace/server build",
     "build:web": "pnpm --filter @backspace/web build",
@@ -42,7 +42,7 @@
   },
   "packageManager": "pnpm@10.34.3",
   "engines": {
-    "node": ">=20.0.0 <21.0.0",
+    "node": ">=20.0.0",
     "pnpm": ">=10.0.0"
   }
 }
