@@ -466,9 +466,9 @@ briefly restarts the `backspace` container (clients reconnect automatically).
 ## Development
 
 Requirements: **Node.js 20 or newer** and **pnpm 10**. The `.nvmrc` file keeps
-Node 20 as the default development and production baseline, while newer Node
-majors are supported and exercised in CI. The Docker image continues to build
-on Node 20 regardless of your host.
+Node 20 as the default development and production baseline; CI additionally
+exercises Node 24, and newer majors generally work but are not part of the test
+matrix. The Docker image continues to build on Node 20 regardless of your host.
 
 ```bash
 pnpm install
@@ -487,7 +487,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Paste the generated value after `JWT_SECRET=` in `.env`, then start both
 development servers with `pnpm dev`. Use `node --version` to confirm the active
-version if pnpm reports an engine warning.
+version if pnpm reports an engine warning. This covers the server and web dev
+servers; building the Electron desktop app still expects a POSIX shell (macOS or
+Linux).
 
 > **Server/web only?** `pnpm install` also builds the desktop app's native
 > keyboard-hook module (`uiohook-napi`), which needs a C++ toolchain

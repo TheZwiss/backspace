@@ -65,3 +65,23 @@ jobs:
       # Runs every package's `test` script (server, web, desktop) via vitest.
       - name: Test
         run: pnpm -r test
+
+  # Aggregate gate reporting a single, matrix-independent "Build & test" status.
+  # Branch protection on main requires the "Build & test" context, but the matrix
+  # job above reports per-version contexts ("Build & test (Node 20/24)"). This job
+  # keeps the stable required context alive and fails unless every matrix leg
+  # succeeded (if: always() so a matrix failure still reports a definitive result
+  # instead of leaving the required check pending forever).
+  build-and-test-required:
+    name: Build & test
+    if: always()
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify matrix result
+        run: |
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            echo "Matrix build-and-test did not succeed: ${{ needs.build-and-test.result }}"
+            exit 1
+          fi
+          echo "All matrix legs passed."
