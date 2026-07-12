@@ -102,26 +102,24 @@ ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "--import", "tsx/esm", "src/index.ts"]
 ```
 
-- [ ] **Step 4: Build BOTH arches and confirm neither needs the toolchain**
+- [ ] **Step 4: Build the native (arm64) image + confirm neither arch needs the toolchain**
 
-The runtime stage runs its own `pnpm install --prod` (Dockerfile:61), so better-sqlite3 is installed **per arch** — and the arm64 install runs under QEMU at publish time, the one path that can hard-fail a release. Verify both arches locally before committing.
-
-Run amd64 (loaded, for the boot test in Step 5):
+The runtime stage runs its own `pnpm install --prod` (Dockerfile:61), so better-sqlite3/sharp install **per arch**. This host is Apple Silicon (arm64), which is ALSO the Raspberry Pi's arch — the main self-host target — so build the real image **natively for arm64** (fast; a `--platform linux/amd64` build here would emulate the whole Vite build via Rosetta and likely time out). This build both produces the image for the Step 5 boot test AND exercises the arm64 runtime install:
 ```bash
-docker buildx build --platform linux/amd64 --load -t backspace:hardening-test --build-arg BACKSPACE_COMMIT=test .
+docker buildx build --platform linux/arm64 --load -t backspace:hardening-test --build-arg BACKSPACE_COMMIT=test .
 ```
-For arm64, do NOT do a full image build — the builder stage runs the Vite build under QEMU emulation, which is minutes-long and can exceed the shell timeout / OOM. The actual arm64 risk is narrow: whether `better-sqlite3` (and `sharp`) install from a **prebuilt binary** on the arm64 runtime base **without the toolchain**. Test exactly that, cheaply, by reproducing the runtime install on `node:20-slim` arm64 with NO toolchain present. First get the locked version so the test is faithful:
+Watch the better-sqlite3 output: it must use a prebuilt binary (`prebuild-install`), NOT `node-gyp`/compilation. This build may take a few minutes (pnpm install + Vite) — give it an ample timeout or run it in the background so it isn't killed mid-build.
+
+Then verify the OTHER arch (amd64) toolchain drop with a lightweight, emulated native-module check (no Vite build, so it's quick even under emulation) on `node:20-slim` amd64, which — like the hardened runtime stage — has no `python3/make/g++`:
 ```bash
 BSQL=$(grep -A1 'better-sqlite3@' pnpm-lock.yaml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1); echo "testing better-sqlite3@$BSQL"
-docker run --rm --platform linux/arm64 node:20-slim sh -c "
+docker run --rm --platform linux/amd64 node:20-slim sh -c "
   cd /tmp && npm init -y >/dev/null 2>&1 &&
   npm install --no-audit --no-fund better-sqlite3@$BSQL sharp@0.33.5 2>&1 | grep -iE 'prebuild-install|prebuilt|node-gyp|gyp ERR|rebuild' | head -20;
-  node -e \"require('better-sqlite3')(':memory:').close(); require('sharp'); console.log('arm64 native modules OK (no toolchain)')\"
+  node -e \"require('better-sqlite3')(':memory:').close(); require('sharp'); console.log('amd64 native modules OK (no toolchain)')\"
 "
 ```
-Expected: BOTH the amd64 image build AND the arm64 native-module test succeed. **Watch the better-sqlite3/sharp output on each:** it should use a prebuilt binary (`prebuild-install` / prebuilt package), NOT `node-gyp`/compilation. The arm64 test prints `arm64 native modules OK (no toolchain)` — proving the modules load on arm64 glibc without the C toolchain (the arm64 `node:20-slim` used here has no `python3/make/g++`, exactly like the hardened runtime stage). If EITHER arch tries to compile, or the arm64 test errors, STOP — apply the fallback (re-add the toolchain to the runtime apt-get line, OR build the module in the builder stage and `COPY --from=builder`) and report which arch failed, which fallback you used, and why. Do not proceed on a one-arch pass.
-
-Note: the amd64 `docker buildx ... --load` build runs pnpm install + the Vite build and may take a few minutes — run it with an ample timeout (or in the background) so it isn't killed mid-build.
+Expected: the native arm64 image builds (better-sqlite3 prebuilt), AND the amd64 test prints `amd64 native modules OK (no toolchain)`. If EITHER arch tries to compile, or the amd64 test errors, STOP — apply the fallback (re-add the toolchain to the runtime apt-get line, OR build the module in the builder stage and `COPY --from=builder`) and report which arch failed, which fallback you used, and why. Do not proceed on a one-arch pass.
 
 - [ ] **Step 5: Boot the container and verify non-root + data volume + DB**
 
@@ -255,9 +253,9 @@ Expected: `All actions pinned to SHA`.
 
 - [ ] **Step 4: Locally reproduce the build→load→scan path**
 
-This proves the new scan logic works without publishing anything (requires Docker daemon + local Trivy: `brew install trivy` if absent):
+This proves the new build→load→scan logic works without publishing anything (requires Docker daemon + local Trivy: `brew install trivy` if absent). Build native (arm64) here to avoid emulation — the scan mechanism is arch-independent; CI scans the amd64 image natively on GitHub's runners:
 ```bash
-docker buildx build --platform linux/amd64 --load -t backspace:scan --build-arg BACKSPACE_COMMIT=test .
+docker buildx build --platform linux/arm64 --load -t backspace:scan --build-arg BACKSPACE_COMMIT=test .
 trivy image --severity HIGH,CRITICAL --ignore-unfixed backspace:scan | tail -25
 docker rmi backspace:scan
 ```
