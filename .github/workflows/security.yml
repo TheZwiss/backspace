@@ -24,15 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
       - name: Checkout (full history)
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0 # gitleaks scans the whole git history, not just the diff
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         continue-on-error: true # report-only; enforcement flipped on in Plan E
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,13 +45,13 @@ jobs:
       security-events: write # upload SARIF to code scanning
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Run OSV-Scanner
-        uses: google/osv-scanner-action@v2
+        uses: google/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
         continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
           scan-args: |-
@@ -60,7 +60,7 @@ jobs:
             --output=osv-results.sarif
       - name: Upload OSV SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
         with:
           sarif_file: osv-results.sarif
           category: osv-scanner
@@ -73,13 +73,13 @@ jobs:
       security-events: write
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Trivy config scan (Dockerfile + docker-compose)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
         continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
           scan-type: config
@@ -88,7 +88,7 @@ jobs:
           output: trivy-config.sarif
       - name: Upload Trivy config SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
@@ -101,13 +101,13 @@ jobs:
       security-events: write
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@v2
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - name: Trivy license scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
         continue-on-error: true # report-only; enforcement flipped on in Plan E
         with:
           scan-type: fs
@@ -117,7 +117,7 @@ jobs:
           output: trivy-license.sarif
       - name: Upload Trivy license SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
         with:
           sarif_file: trivy-license.sarif
           category: trivy-license
