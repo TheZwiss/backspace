@@ -47,8 +47,9 @@ read -rp "Continue? [y/N] " yn
 echo "[1/3] Stopping backspace container..."
 docker compose stop backspace
 
-# data/backspace.db and data/backups/ are container-owned (root). The host user cannot
-# cp/rm them directly, so do the swap inside a throwaway root container that mounts data/.
+# data/backspace.db and data/backups/ are container-owned (uid 1000, the non-root runtime
+# user). The host user cannot cp/rm them directly, so do the swap inside a throwaway root
+# container that mounts data/ (root can rewrite the uid-1000-owned files).
 # (youruser is in the docker group on both boxes — no sudo prompt.)
 TS="$(date -u +%Y%m%dT%H%M%S)"
 echo "[2/3] Swapping DB inside a root container (pre-restore copy + WAL clear + install)..."

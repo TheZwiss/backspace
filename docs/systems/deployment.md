@@ -62,7 +62,7 @@ One installer, three modes, recorded as `DEPLOY_MODE` in `.env`. `install.sh` au
 `Dockerfile` has two stages:
 
 1. **`builder`** (`node:20-slim`) — enables pnpm via corepack, installs the full workspace with `pnpm install --frozen-lockfile`, copies `shared`/`server`/`web` source, and runs `pnpm --filter @backspace/web build` to produce the static frontend (`packages/web/dist`).
-2. **`runtime`** (`node:20-slim`) — installs the native toolchain for `better-sqlite3` plus `ffmpeg` (`python3 make g++ ffmpeg`), installs production-only deps with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency), copies `shared` + `server` source and the prebuilt `web/dist`, creates `/app/data/uploads`, and starts the server with `node --import tsx/esm src/index.ts` from `/app/packages/server`.
+2. **`runtime`** (`node:20-slim`) — installs `ffmpeg` (media) + `gosu` (privilege drop) only — **no C toolchain**, since `better-sqlite3`/`sharp` load prebuilt binaries — installs production-only deps with `pnpm install --prod --frozen-lockfile` (`tsx` is a server runtime dependency), copies `shared` + `server` source and the prebuilt `web/dist`, creates `/app/data/uploads`, and runs the server **as the non-root `node` user** via `docker-entrypoint.sh` (which chowns `/app/data` as root, then `exec gosu node`) with `node --import tsx/esm src/index.ts` from `/app/packages/server`.
 
 The server is run through `tsx` (no separate transpile step); TypeScript is executed directly at runtime.
 
@@ -94,8 +94,11 @@ manifests. New installs via `install.sh` (get.docker.com) are fine.
 
 **Upgrade note for existing self-hosters:** on the first start of the hardened
 image, the contents of your host `./data` directory are chowned to uid 1000. This
-is expected and idempotent. If you previously accessed `./data` on the host as a
-different user, adjust host-side access accordingly. `./restore.sh` continues to
+is expected and idempotent. On an instance with a large `uploads/` tree on slow
+storage (e.g. a Pi on SD), the **first** restart after upgrade may take noticeably
+longer as this one-time chown runs before the server starts; subsequent boots only
+touch not-yet-node-owned entries and are near-instant. If you previously accessed
+`./data` on the host as a different user, adjust host-side access accordingly. `./restore.sh` continues to
 work — it swaps files inside a throwaway root container, and root can rewrite the
 now uid-1000-owned files.
 
@@ -200,7 +203,7 @@ Behavior (`packages/server/src/scripts/remediate-seed-admin.ts`):
 - **Targets only the local seed admin** — `username = 'admin'` with `home_instance IS NULL` and `is_admin = 1`. Replicated/federated users are never touched.
 - **Rotates only `admin123`.** It verifies the current hash against `admin123`; if the password has already been changed, it is a **no-op** ("nothing to do"). It is fully idempotent — safe to run repeatedly.
 - **Never deletes** the account (the default-space ownership constraint above).
-- On rotation it generates a 24-character random password, updates the hash, prints the new password to stdout, **and** writes it to `data/seed-admin-rotated.txt` (mode `0600`, owned by the container's runtime user uid 1000 via the bind-mount). **Store the password somewhere safe, then delete `data/seed-admin-rotated.txt`.**
+- On rotation it generates a 24-character random password, updates the hash, prints the new password to stdout, **and** writes it to `data/seed-admin-rotated.txt` (mode `0600`, **root-owned** — the script runs via `docker exec`, which bypasses the entrypoint's gosu drop and runs as root, so this file is uid 0 until the next container restart re-chowns it). **Store the password somewhere safe, then delete `data/seed-admin-rotated.txt`** (a non-root host user may need `sudo`).
 
 > **Note — sessions are not invalidated.** Rotation changes the stored password hash only; it does **not** revoke existing JWTs. An already-logged-in admin session survives until the token expires (`JWT_EXPIRES_IN`, default 30 days). Rotation closes off *future* logins with the old password; it does not eject a currently active session. If you must terminate live sessions immediately, rotate `JWT_SECRET` (which invalidates **all** tokens instance-wide) and restart.
 
