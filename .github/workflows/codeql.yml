@@ -1,0 +1,48 @@
+name: CodeQL
+
+# Static application security testing for all TS/JS. Uses build-mode: none — no
+# compile needed, which sidesteps the monorepo/native-module build entirely.
+# Default (code-scanning) query suite; security-extended is deferred (triage tax).
+# CodeQL uploads alerts to the Security tab but does NOT fail the PR by itself —
+# blocking is a repo setting (code-scanning merge protection), documented in the
+# maintainer checklist in docs/systems/security-scanning.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '27 3 * * 1' # weekly Monday 03:27 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+      actions: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          build-mode: none
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
