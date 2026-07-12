@@ -73,6 +73,32 @@ The server is run through `tsx` (no separate transpile step); TypeScript is exec
 
 Empty/unset → `config.commit` is `null` (local dev, tarball install, or git unavailable). The source URL itself is `config.sourceCodeUrl` (env `BACKSPACE_SOURCE_URL`, default upstream) — operators running a modified build MUST set it to their fork.
 
+### Container hardening (non-root)
+
+The runtime image runs as the unprivileged `node` user (uid 1000), not root. On
+container start, `docker-entrypoint.sh` runs as root only long enough to `chown`
+the `./data` bind mount to `node` (only entries not already node-owned, so it is
+near-instant after the first boot), then drops privileges via `gosu` and execs the
+server. The build toolchain (`python3`/`make`/`g++`) is not installed in the
+runtime stage — `better-sqlite3` and `sharp` load from prebuilt binaries — which
+shrinks the runtime attack surface. `ffmpeg` remains (a real runtime dependency).
+
+The published image carries an SBOM and SLSA provenance attestation, and the
+amd64 image is scanned by Trivy before publish (report-only). Note: only the
+amd64 image is scanned; the arm64 image is published unscanned.
+
+**Minimum Docker version:** the attestation-bearing multi-arch image requires a
+reasonably modern Docker to `pull` cleanly (Docker Engine 24+ recommended).
+Very old daemons (≤ 20.10) may mishandle the `unknown/unknown` attestation
+manifests. New installs via `install.sh` (get.docker.com) are fine.
+
+**Upgrade note for existing self-hosters:** on the first start of the hardened
+image, the contents of your host `./data` directory are chowned to uid 1000. This
+is expected and idempotent. If you previously accessed `./data` on the host as a
+different user, adjust host-side access accordingly. `./restore.sh` continues to
+work — it swaps files inside a throwaway root container, and root can rewrite the
+now uid-1000-owned files.
+
 ### Run: `docker compose up -d --build`
 
 `docker-compose.yml` defines:
@@ -167,7 +193,7 @@ Behavior (`packages/server/src/scripts/remediate-seed-admin.ts`):
 - **Targets only the local seed admin** — `username = 'admin'` with `home_instance IS NULL` and `is_admin = 1`. Replicated/federated users are never touched.
 - **Rotates only `admin123`.** It verifies the current hash against `admin123`; if the password has already been changed, it is a **no-op** ("nothing to do"). It is fully idempotent — safe to run repeatedly.
 - **Never deletes** the account (the default-space ownership constraint above).
-- On rotation it generates a 24-character random password, updates the hash, prints the new password to stdout, **and** writes it to `data/seed-admin-rotated.txt` (mode `0600`, root-owned via the bind-mount). **Store the password somewhere safe, then delete `data/seed-admin-rotated.txt`.**
+- On rotation it generates a 24-character random password, updates the hash, prints the new password to stdout, **and** writes it to `data/seed-admin-rotated.txt` (mode `0600`, owned by the container's runtime user uid 1000 via the bind-mount). **Store the password somewhere safe, then delete `data/seed-admin-rotated.txt`.**
 
 > **Note — sessions are not invalidated.** Rotation changes the stored password hash only; it does **not** revoke existing JWTs. An already-logged-in admin session survives until the token expires (`JWT_EXPIRES_IN`, default 30 days). Rotation closes off *future* logins with the old password; it does not eject a currently active session. If you must terminate live sessions immediately, rotate `JWT_SECRET` (which invalidates **all** tokens instance-wide) and restart.
 
@@ -250,7 +276,7 @@ They do **not** protect against **hardware loss** (disk failure, the box being d
 
 ## 4. Restore
 
-Restores are driven by `./restore.sh` from the host. Because `data/` (including `backspace.db` and `data/backups/`) is **container-owned (root)** via the bind-mount, the host user cannot rewrite those files directly — so the actual swap runs inside a throwaway root `alpine` container that mounts `data/`.
+Restores are driven by `./restore.sh` from the host. Because `data/` (including `backspace.db` and `data/backups/`) is **container-owned (uid 1000)** via the bind-mount, the host user cannot rewrite those files directly — so the actual swap runs inside a throwaway root `alpine` container that mounts `data/`.
 
 ### List snapshots
 
