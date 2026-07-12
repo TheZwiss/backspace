@@ -561,6 +561,12 @@ export async function spaceRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (!hasPermission(request.userId, id, PermissionBits.CREATE_INVITE)) {
+      // Owners and instance admins always pass hasPermission, so anyone who lands
+      // here is either a non-member or a member without CREATE_INVITE. Give the
+      // non-member a clearer "go join first" message instead of a permission error.
+      if (!isMember(id, request.userId)) {
+        return reply.code(403).send({ error: 'Space membership required', statusCode: 403 });
+      }
       return reply.code(403).send({ error: 'Missing CREATE_INVITE permission', statusCode: 403 });
     }
 
