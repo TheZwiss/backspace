@@ -13,7 +13,11 @@ later change once the remediation pass has cleared the backlog.
 | `.github/dependabot.yml` | Dependency + action + base-image update PRs | weekly | PRs |
 | `.github/workflows/codeql.yml` | CodeQL SAST (`javascript-typescript`, build-mode none) | PR + push main + weekly | Security tab |
 | `.github/workflows/security.yml` | gitleaks (secrets, full history), OSV-Scanner (deps), Trivy config (IaC), Trivy license | PR + push main + weekly | Security tab |
-| `.github/workflows/scorecard.yml` | OpenSSF Scorecard (repo posture) | push main + weekly | Security tab + public badge |
+| `.github/workflows/scorecard.yml` | OpenSSF Scorecard (repo posture) | push main + weekly + on branch-protection change | Security tab + public badge |
+
+> **gitleaks findings** surface in the workflow's job log and PR summary — the
+> `gitleaks` job does not upload SARIF, so secret hits do **not** appear under
+> Security → Code scanning (unlike the OSV / Trivy / CodeQL / Scorecard jobs).
 
 ## Tiered policy (target, enforced in a later change)
 
@@ -32,8 +36,8 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
   tag-move attacks and satisfies Scorecard's Pinned-Dependencies check.
 - `step-security/harden-runner` (egress-policy `audit`) on Linux jobs.
 - Least-privilege `permissions:` per workflow/job.
-- SBOM + SLSA provenance are attached to the published container image (added with
-  the image-scan work).
+- SBOM + SLSA provenance **will be** attached to the published container image
+  (added with the container-image-scan work in a later plan — not yet live).
 
 ## Maintainer checklist (one-time GitHub settings — NOT code)
 
