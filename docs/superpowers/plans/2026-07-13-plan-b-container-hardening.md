@@ -110,11 +110,18 @@ Run amd64 (loaded, for the boot test in Step 5):
 ```bash
 docker buildx build --platform linux/amd64 --load -t backspace:hardening-test --build-arg BACKSPACE_COMMIT=test .
 ```
-Run arm64 (QEMU; no `--load` since a foreign-arch image can't load into the daemon — building it still exercises the arm64 `pnpm install --prod`):
+For arm64, do NOT do a full image build — the builder stage runs the Vite build under QEMU emulation, which is minutes-long and can exceed the shell timeout / OOM. The actual arm64 risk is narrow: whether `better-sqlite3` (and `sharp`) install from a **prebuilt binary** on the arm64 runtime base **without the toolchain**. Test exactly that, cheaply, by reproducing the runtime install on `node:20-slim` arm64 with NO toolchain present. First get the locked version so the test is faithful:
 ```bash
-docker buildx build --platform linux/arm64 --build-arg BACKSPACE_COMMIT=test -t backspace:arm64-test .
+BSQL=$(grep -A1 'better-sqlite3@' pnpm-lock.yaml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1); echo "testing better-sqlite3@$BSQL"
+docker run --rm --platform linux/arm64 node:20-slim sh -c "
+  cd /tmp && npm init -y >/dev/null 2>&1 &&
+  npm install --no-audit --no-fund better-sqlite3@$BSQL sharp@0.33.5 2>&1 | grep -iE 'prebuild-install|prebuilt|node-gyp|gyp ERR|rebuild' | head -20;
+  node -e \"require('better-sqlite3')(':memory:').close(); require('sharp'); console.log('arm64 native modules OK (no toolchain)')\"
+"
 ```
-Expected: BOTH builds succeed. **Watch the `pnpm install --prod` output for better-sqlite3 on each arch:** it should download a prebuilt binary (a `prebuild-install` line), NOT run `node-gyp`/compilation. If EITHER arch tries to compile and fails (no toolchain), STOP — apply the fallback (re-add the toolchain to the runtime apt-get line, OR build better-sqlite3 in the builder stage and `COPY --from=builder` its compiled module) and report which arch failed, which fallback you used, and why. Do not proceed on a one-arch pass.
+Expected: BOTH the amd64 image build AND the arm64 native-module test succeed. **Watch the better-sqlite3/sharp output on each:** it should use a prebuilt binary (`prebuild-install` / prebuilt package), NOT `node-gyp`/compilation. The arm64 test prints `arm64 native modules OK (no toolchain)` — proving the modules load on arm64 glibc without the C toolchain (the arm64 `node:20-slim` used here has no `python3/make/g++`, exactly like the hardened runtime stage). If EITHER arch tries to compile, or the arm64 test errors, STOP — apply the fallback (re-add the toolchain to the runtime apt-get line, OR build the module in the builder stage and `COPY --from=builder`) and report which arch failed, which fallback you used, and why. Do not proceed on a one-arch pass.
+
+Note: the amd64 `docker buildx ... --load` build runs pnpm install + the Vite build and may take a few minutes — run it with an ample timeout (or in the background) so it isn't killed mid-build.
 
 - [ ] **Step 5: Boot the container and verify non-root + data volume + DB**
 
@@ -141,7 +148,7 @@ Expected: `/api/health` returns ok; `Uid:` line shows `1000 1000 1000 1000` (ser
 Run:
 ```bash
 docker rm -f bkspace-htest; rm -rf /tmp/bkspace-data
-docker rmi backspace:hardening-test backspace:arm64-test 2>/dev/null || true
+docker rmi backspace:hardening-test 2>/dev/null || true
 ```
 
 - [ ] **Step 7: Commit**
