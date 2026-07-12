@@ -99,6 +99,13 @@ different user, adjust host-side access accordingly. `./restore.sh` continues to
 work — it swaps files inside a throwaway root container, and root can rewrite the
 now uid-1000-owned files.
 
+**Release-gate (maintainer):** before the first `v*` tag that ships this image,
+do a real `docker compose pull && docker compose up -d` on both an amd64 host and
+the arm64 Pi to confirm the attestation-bearing image pulls cleanly on the actual
+deployment Docker versions, and that the container boots non-root with a writable
+`./data` on real Linux (the macOS Docker Desktop bind-mount ownership display is
+not representative of Linux behaviour).
+
 ### Run: `docker compose up -d --build`
 
 `docker-compose.yml` defines:
