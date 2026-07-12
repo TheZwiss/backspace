@@ -22,8 +22,13 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build & test
+    name: Build & test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 24]
 
     steps:
       - name: Checkout
@@ -33,15 +38,10 @@ jobs:
         uses: pnpm/action-setup@v5
         with:
           version: 10.34.3
-
-      # Node 20 is the project's supported runtime (package.json engines pins
-      # >=20 <21, .nvmrc says 20). Running the matrix on 20 also means the fresh
-      # install below pulls better-sqlite3's prebuilt binary for the correct ABI,
-      # which is what makes the server suite runnable in CI.
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       # The desktop postinstall tries to rebuild the native uiohook-napi module.
@@ -65,3 +65,23 @@ jobs:
       # Runs every package's `test` script (server, web, desktop) via vitest.
       - name: Test
         run: pnpm -r test
+
+  # Aggregate gate reporting a single, matrix-independent "Build & test" status.
+  # Branch protection on main requires the "Build & test" context, but the matrix
+  # job above reports per-version contexts ("Build & test (Node 20/24)"). This job
+  # keeps the stable required context alive and fails unless every matrix leg
+  # succeeded (if: always() so a matrix failure still reports a definitive result
+  # instead of leaving the required check pending forever).
+  build-and-test-required:
+    name: Build & test
+    if: always()
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify matrix result
+        run: |
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            echo "Matrix build-and-test did not succeed: ${{ needs.build-and-test.result }}"
+            exit 1
+          fi
+          echo "All matrix legs passed."
