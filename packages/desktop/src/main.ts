@@ -14,6 +14,7 @@ import {
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { pathToFileURL } from 'url';
 import { startActivityDetection, stopActivityDetection, getCurrentActivity } from './activityDetector';
 import { KeybindManager } from './keybindManager';
 import { deriveStartMinimizedFromArgs, parseExecPathFromDesktopFile, shouldReapplyAppImage } from './autoLaunch';
@@ -38,6 +39,7 @@ import {
   type RecoveryState,
 } from './recovery';
 import { migrateUserData } from './userDataMigration';
+import { isNavigationAllowed } from './navigationPolicy';
 
 // Override Electron's package.json-derived app name so userData lives at
 // "<appData>/Backspace" instead of leaking the monorepo's "@backspace/desktop"
@@ -467,6 +469,24 @@ function createWindow(): void {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+
+  // Deny foreign top-level navigations. See navigationPolicy.ts for the
+  // mechanism note on why this is safe for the initial instance load, the
+  // file:// picker, and cross-instance switching (none of them are
+  // `will-navigate` events). setWindowOpenHandler above is unaffected — this
+  // only covers same-window top-level navigation, not new-window/tab opens.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = isNavigationAllowed({
+      targetUrl: url,
+      currentUrl: mainWindow?.webContents.getURL() ?? null,
+      pickerFileUrl: pathToFileURL(getPickerPath()).href,
+      knownInstanceOrigins,
+    });
+    if (!allowed) {
+      console.warn(`[main] Blocked will-navigate to disallowed target: ${url}`);
+      event.preventDefault();
+    }
   });
 }
 
