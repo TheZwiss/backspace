@@ -6,7 +6,7 @@
   "author": "Jannis Braun",
   "type": "module",
   "scripts": {
-    "dev": "PORT=3005 tsx watch src/index.ts",
+    "dev": "cross-env PORT=3005 tsx watch src/index.ts",
     "start": "node --import tsx/esm src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -41,6 +41,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.0",
     "@types/ws": "^8.18.1",
+    "cross-env": "^7.0.3",
     "drizzle-kit": "^0.24.0",
     "typescript": "^5.4.0",
     "vitest": "^4.0.18",
