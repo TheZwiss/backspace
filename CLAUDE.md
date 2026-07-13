@@ -160,6 +160,7 @@ Before modifying any subsystem, read its spec from `docs/systems/`. After making
 | [message-list.md](docs/systems/message-list.md) | Auto-scroll model, position memory (session-only), embed renderer dimension contract, known limitations | Touching MessageList.tsx, scroll behavior, embed renderers, position restore |
 | [deployment.md](docs/systems/deployment.md) | Hosting pipeline: Docker/Caddy build, admin bootstrap, DB backup/restore, image pinning, env vars | Any deploy, backup/restore, or hosting change |
 | [activity-presence.md](docs/systems/activity-presence.md) | Presence states, rich activities, activity types/priorities, broadcast pipeline, visibility control, ActivityCard/Panel | Presence, rich activities, activity display, status management |
+| [security-scanning.md](docs/systems/security-scanning.md) | CI security pipeline: Dependabot, CodeQL SAST, gitleaks, OSV-Scanner, Trivy (config/license; image scan in a later plan), OpenSSF Scorecard, SHA-pinning, harden-runner, tiered enforcement policy, maintainer settings checklist | Any CI security work, adding/changing scanners, enabling enforcement, supply-chain hardening |
 
 ---
 

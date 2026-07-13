@@ -1,0 +1,44 @@
+# Dependabot keeps dependencies and CI actions patched. Three ecosystems:
+#   - npm      → the pnpm workspace (Dependabot reads pnpm-lock.yaml v9)
+#   - github-actions → action version bumps (feeds the SHA-pin comments)
+#   - docker   → the Dockerfile base image (FROM node:20-slim)
+#
+# NOTE (intentional): there is NO docker entry for docker-compose.yml. It sits
+# at the same "/" directory (a second docker entry would collide on
+# ecosystem+directory), and Dependabot's docker ecosystem parses Dockerfiles,
+# not `image:` refs in compose. The pinned caddy / livekit-server compose images
+# are updated MANUALLY — see the maintainer checklist in
+# docs/systems/security-scanning.md.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One grouped PR for routine minor/patch bumps to cut PR noise.
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # uiohook-napi is pinned by an exact-version pnpm patch
+      # (patches/uiohook-napi@1.5.5.patch). A bump makes the patch path stop
+      # matching, breaking `pnpm install --frozen-lockfile` in CI and both
+      # Docker stages until the patch is regenerated. Bump it by hand.
+      - dependency-name: uiohook-napi
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
