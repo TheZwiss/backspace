@@ -3,7 +3,7 @@
 # ============================================================
 
 # Stage 1: Install dependencies and build frontend
-FROM node:20-slim AS builder
+FROM node:26-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
@@ -34,7 +34,7 @@ RUN pnpm --filter @backspace/web build
 
 # ============================================================
 # Stage 2: Production runtime
-FROM node:20-slim AS runtime
+FROM node:26-slim AS runtime
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
