@@ -27,6 +27,7 @@ on:
 permissions:
   contents: read
   packages: write
+  security-events: write
 
 jobs:
   build-and-push:
@@ -76,6 +77,45 @@ jobs:
             org.opencontainers.image.licenses=AGPL-3.0-only
             org.opencontainers.image.revision=${{ github.sha }}
 
+      # Build a single-arch amd64 image and LOAD it into the runner's docker
+      # daemon so Trivy can scan the exact artifact before anything is published.
+      # A multi-arch manifest cannot be --load'ed, so scanning must happen on a
+      # single-arch build first; the multi-arch push below reuses these layers
+      # from the buildx cache, so this is cheap.
+      - name: Build amd64 image for scanning
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: backspace:scan
+          build-args: |
+            BACKSPACE_COMMIT=${{ steps.meta_commit.outputs.commit }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan (report-only)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true # report-only; enforcement flipped on in Plan E
+        with:
+          scan-type: image
+          image-ref: backspace:scan
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        continue-on-error: true # a scanner/SARIF-emit flake must never skip the publish below
+        uses: github/codeql-action/upload-sarif@02c5e83432fe5497fd85b873b6c9f16a8578e1d9 # v3.37.0
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      # Publish the multi-arch image. Reuses the amd64 layers built above via the
+      # gha cache. Attaches an SBOM and SLSA provenance attestation to the image.
       - name: Build and push (linux/amd64, linux/arm64)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
@@ -86,6 +126,8 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           build-args: |
             BACKSPACE_COMMIT=${{ steps.meta_commit.outputs.commit }}
+          sbom: true
+          provenance: true
           # Cache multi-arch layers across runs via the GitHub Actions cache to
           # keep the ~1.6 GB build from re-running cold every release.
           cache-from: type=gha

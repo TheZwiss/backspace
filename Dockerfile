@@ -38,9 +38,10 @@ FROM node:20-slim AS runtime
 
 RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 
-# Install build dependencies for better-sqlite3 native module
+# Runtime deps only: ffmpeg (media processing) + gosu (drop to non-root in the
+# entrypoint). No C toolchain — better-sqlite3 and sharp load prebuilt binaries.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg gosu && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -72,6 +73,11 @@ COPY --from=builder /app/packages/web/dist packages/web/dist
 # Create data directories
 RUN mkdir -p /app/data/uploads
 
+# Non-root hardening: copy the privilege-dropping entrypoint. It chowns the
+# data volume as root, then execs the CMD as the unprivileged `node` user.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Set environment defaults
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -94,4 +100,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
 
 # Run the server using tsx from the server package directory
 WORKDIR /app/packages/server
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "--import", "tsx/esm", "src/index.ts"]
