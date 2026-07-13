@@ -25,6 +25,7 @@
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^3.7.1",
     "electron": "^40.0.0",
     "electron-builder": "^25.1.8",
