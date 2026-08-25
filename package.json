@@ -25,7 +25,7 @@
     "gen-icons": "node scripts/gen-icons.mjs"
   },
   "devDependencies": {
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "png-to-ico": "^2.1.8",
     "png2icons": "^2.0.1"
   },
