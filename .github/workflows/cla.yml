@@ -2,8 +2,16 @@ name: CLA Assistant
 
 # Requires every contributor to sign the project Contributor License Agreement
 # (CLA.md) before their pull request can be merged. Signatures are stored in
-# this repository at signatures/cla.json — no external service or database is
-# used. A contributor signs by commenting the exact sentence configured below.
+# this repository at signatures/cla.json on the `cla-signatures` branch — no
+# external service or database is used. A contributor signs by commenting the
+# exact sentence configured below.
+#
+# Why not `main`: the action appends each signature as a direct commit, which
+# the "Require CI on main" ruleset rejects ("Repository rule violations found"),
+# leaving the signature unrecorded and the check permanently red. Keeping the
+# store on its own branch lets the bot append without granting any actor a
+# bypass on main. That branch has its own ruleset blocking deletion and
+# force-pushes, so the record cannot be rewritten.
 
 on:
   issue_comment:
@@ -37,7 +45,7 @@ jobs:
           path-to-signatures: 'signatures/cla.json'
           # The CLA document contributors are agreeing to.
           path-to-document: 'https://github.com/TheZwiss/backspace/blob/main/CLA.md'
-          branch: 'main'
+          branch: 'cla-signatures'
           # Accounts that never need to sign (maintainer + automation).
           allowlist: 'TheZwiss,dependabot[bot],github-actions[bot]'
           # The exact phrase a contributor comments to sign.
