@@ -21,7 +21,9 @@ Closes #
 - [ ] Tests pass where applicable (`pnpm test`)
 - [ ] I updated the relevant `docs/systems/` spec if this changed schema, API routes, WebSocket events, the federation protocol, permissions, or the design system
 - [ ] This change resolves the correct federated identity where it compares IDs, checks permissions, or talks to remote servers (no assumption of a single global user ID)
-- [ ] I have read and agree to the [CLA](../CLA.md)
+- [ ] I have read and agree to the [CLA](../CLA.md) — ticking this box is not the
+      signature. After opening this PR, post a separate comment containing exactly:
+      `I have read the CLA Document and I hereby sign the CLA`
 
 ## Notes for reviewers
 
