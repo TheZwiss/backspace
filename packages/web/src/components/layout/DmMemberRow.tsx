@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import type { User } from '@backspace/shared';
-import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { Username } from '../ui/Username';
 import { Tooltip } from '../ui/Tooltip';
 import { parseFederatedUsername, isFederationGlobeApplicable } from '../../utils/identity';
@@ -104,14 +104,11 @@ export function DmMemberRow({
       label: 'View Profile',
       onClick: () => {
         // Anchor the popout to this row's bounding rect — matches the
-        // MemberSidebar pattern (see MemberSidebar.tsx:158-165). On mobile
-        // the position arg is ignored by the store (full-screen push).
+        // MemberSidebar pattern (see MemberSidebar.tsx). On mobile the anchor
+        // is ignored by the store (full-screen push).
         const rect = rowRef.current?.getBoundingClientRect();
         if (rect) {
-          useUIStore.getState().openUserProfile(canonical, {
-            top: Math.min(rect.top, window.innerHeight - 450),
-            left: rect.left - 316,
-          });
+          useUIStore.getState().openUserProfile(canonical, rect, 'left');
         } else {
           // Fallback: defer to the consumer if we can't compute a rect
           // (shouldn't happen in practice, but keeps the contract intact).
@@ -183,12 +180,13 @@ export function DmMemberRow({
       className="group flex items-center gap-2.5 px-2 py-1.5 rounded-[6px] hover:bg-interactive-hover transition-colors select-none"
     >
       <div className="flex-shrink-0">
-        <Avatar
+        <ProfileAvatar
           src={canonical.avatar}
           name={displayName}
           size={32}
           status={isOffline ? null : canonical.status}
           user={canonical}
+          placement="left"
         />
       </div>
 

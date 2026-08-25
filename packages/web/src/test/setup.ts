@@ -112,3 +112,20 @@ const OriginalResponse = globalThis.Response;
     return b;
   }
 };
+
+// jsdom does not implement ResizeObserver. Floating surfaces (tooltips,
+// popovers, the profile card) observe their own box so they can re-place
+// themselves when their content grows. Provide an inert stub — tests drive
+// layout explicitly by stubbing getBoundingClientRect.
+if (!('ResizeObserver' in globalThis)) {
+  class NoopResizeObserver implements ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    value: NoopResizeObserver,
+    configurable: true,
+    writable: true,
+  });
+}

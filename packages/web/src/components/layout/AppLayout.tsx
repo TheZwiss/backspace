@@ -463,7 +463,7 @@ export function AppLayout() {
       <UpdateToast />
 
       {/* User Profile Popout */}
-      {userProfilePopout.user && userProfilePopout.position && (
+      {userProfilePopout.user && userProfilePopout.anchor && (
         <>
           <div
             className="fixed inset-0 z-[145]"
@@ -472,7 +472,8 @@ export function AppLayout() {
           <UserProfilePopout
             user={userProfilePopout.user}
             onClose={closeUserProfile}
-            position={userProfilePopout.position}
+            anchor={userProfilePopout.anchor}
+            placement={userProfilePopout.placement}
           />
         </>
       )}

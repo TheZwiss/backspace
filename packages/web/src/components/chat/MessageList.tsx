@@ -14,6 +14,7 @@ import {
   type PendingBubble,
 } from '../../stores/pendingMessageStore';
 import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { AvatarStack } from '../ui/AvatarStack';
 import { useUIStore } from '../../stores/uiStore';
 import { hasPermissionBit, PermissionBits } from '../../utils/permissions';
@@ -832,11 +833,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
 
       const handleOwnerClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (!ownerMember) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        openUserProfile(ownerMember, {
-          top: Math.min(rect.bottom + 8, window.innerHeight - 450),
-          left: rect.left,
-        });
+        openUserProfile(ownerMember, e.currentTarget.getBoundingClientRect(), 'bottom');
       };
 
       return (
@@ -896,7 +893,7 @@ function WelcomeHeader({ channelId }: { channelId: string }) {
     return (
       <div className="px-4 pt-8 pb-4">
         <div className="mb-2">
-          <Avatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} />
+          <ProfileAvatar src={otherUser?.avatar} name={displayName} size={80} user={otherUser ?? undefined} />
         </div>
         <h3 className="text-[32px] leading-10 font-bold text-txt-primary">{displayName}</h3>
         <p className="text-txt-secondary text-[14px] mt-1">

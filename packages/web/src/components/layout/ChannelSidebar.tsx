@@ -9,7 +9,7 @@ import { useInstanceStore } from '../../stores/instanceStore';
 import { VoiceChannel } from '../voice/VoiceChannel';
 import { VoiceControls } from '../voice/VoiceControls';
 import { useVoiceStore } from '../../stores/voiceStore';
-import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { Mascot } from '../ui/Mascot';
 import { wsSend } from '../../hooks/useWebSocket';
 import { AudioManager } from '../../audio/AudioManager';
@@ -1135,7 +1135,7 @@ function UserAreaPanel({
       <div className="h-[52px] px-2 flex items-center select-none">
         {/* Avatar + name */}
         <div className="p-1 hover:bg-interactive-hover rounded-[4px] flex items-center gap-2 flex-1 min-w-0 cursor-pointer transition-colors group">
-          <Avatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={user.status as any} user={user} />
+          <ProfileAvatar src={user.avatar} name={user.displayName ?? user.username} size={34} status={user.status} user={user} />
           <div className="flex-1 min-w-0">
             <div className="text-[13.5px] font-semibold text-txt-primary truncate leading-tight">{user.displayName ?? user.username}</div>
             <div className="text-[11px] text-txt-tertiary truncate leading-tight group-hover:text-txt-secondary">@{user.username}</div>

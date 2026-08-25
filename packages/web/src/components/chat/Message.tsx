@@ -4,6 +4,7 @@ import type { MessageWithUser, Embed, User } from '@backspace/shared';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { MentionBadge } from './MentionBadge';
 import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useContextMenuStore } from '../../stores/contextMenuStore';
 import { buildMessageMenuItems } from './messageMenuItems';
 import { useAuthStore } from '../../stores/authStore';
@@ -266,11 +267,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
   const handleUsernameClick = (e: React.MouseEvent) => {
     if (!message.user) return;
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    openUserProfile(message.user, {
-      top: Math.min(rect.top, window.innerHeight - 450),
-      left: rect.right + 16,
-    });
+    openUserProfile(message.user, e.currentTarget.getBoundingClientRect());
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -417,7 +414,7 @@ export function Message({ message, isCompact, isFirstInGroup, previousMessageId 
       <div className="w-10 flex-shrink-0 flex items-start justify-start">
         {isFirstInGroup || message.replyTo ? (
           <div className="mt-0.5">
-            <Avatar
+            <ProfileAvatar
               src={displayIdentity.avatar}
               name={displayName}
               size={40}

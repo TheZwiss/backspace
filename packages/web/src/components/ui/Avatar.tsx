@@ -1,6 +1,5 @@
 import React from 'react';
 import type { User } from '@backspace/shared';
-import { useUIStore } from '../../stores/uiStore';
 import { getAvatarGradient } from '../../utils/gradients';
 
 interface AvatarProps {
@@ -56,26 +55,12 @@ function getDotMetrics(avatarSize: number, ringWidth: number = 0) {
 }
 
 export function Avatar({ src, name, size = 40, status, className = '', onClick, user, userId, ring, avatarColor }: AvatarProps) {
-  const openUserProfile = useUIStore((s) => s.openUserProfile);
   const initials = name.charAt(0).toUpperCase();
   const fontPx = Math.round(size * 0.4);
   const gradient = getAvatarGradient(userId ?? user?.homeUserId ?? user?.id, name, avatarColor ?? user?.avatarColor);
 
   const ringWidth = ring?.width ?? 0;
   const outerSize = size + ringWidth * 2;
-
-  const handleClick = (e: React.MouseEvent) => {
-    if (onClick) {
-      onClick(e);
-    } else if (user) {
-      e.stopPropagation();
-      const rect = e.currentTarget.getBoundingClientRect();
-      openUserProfile(user, {
-        top: Math.min(rect.top, window.innerHeight - 450),
-        left: rect.right + 16,
-      });
-    }
-  };
 
   // Only compute mask when status dot is visible
   const cutoutMask = status ? buildCutoutMask(size, ringWidth) : undefined;
@@ -88,9 +73,9 @@ export function Avatar({ src, name, size = 40, status, className = '', onClick, 
   return (
     <div
       data-avatar
-      className={`relative inline-flex flex-shrink-0 ${(onClick || user) ? 'cursor-pointer' : ''} ${className}`}
+      className={`relative inline-flex flex-shrink-0 ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: outerSize, height: outerSize }}
-      onClick={handleClick}
+      onClick={onClick}
     >
       {/* Inner masked circle — ring background + avatar content */}
       <div

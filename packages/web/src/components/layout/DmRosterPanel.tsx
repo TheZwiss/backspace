@@ -9,6 +9,7 @@ import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { api } from '../../api/client';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { DmMemberRow, type DmMemberRowAction } from './DmMemberRow';
+import { pointAnchor } from '../../hooks/useFloatingPosition';
 
 /**
  * Right-side roster for group DMs. Mirrors `MemberSidebar`'s layout language
@@ -93,7 +94,7 @@ export function DmRosterPanel() {
       // MemberSidebar pattern). This branch only fires on the unlikely
       // fallback path where the row couldn't compute its bounding rect —
       // in that case, anchor to the top-left of the roster column.
-      openUserProfile(member, { top: 100, left: 100 });
+      openUserProfile(member, pointAnchor(100, 100));
       return;
     }
     if (action === 'kick') {

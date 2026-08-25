@@ -199,6 +199,39 @@ interface AvatarStackProps {
 
 **Hooks-in-loop safety:** each rendered slot is its own `<AvatarTile>` component so `useCanonicalUserView` is called exactly once per slot, never inside a variable-length `.map()`.
 
+### Avatar vs ProfileAvatar
+
+Two components, one deliberate split:
+
+| Component | Role |
+|---|---|
+| `Avatar` (`ui/Avatar.tsx`) | Purely presentational. Takes `user` for the gradient, avatar colour, `homeUserId` and status dot. Clicking it does nothing unless the caller passes `onClick`. |
+| `ProfileAvatar` (`ui/ProfileAvatar.tsx`) | `Avatar` plus the profile card. Opens `UserProfilePopout` anchored to its own box, stops propagation so it wins over an enclosing row handler, and stays inert while `user` is undefined. |
+
+**Rule:** an avatar is only a profile trigger when it is a `ProfileAvatar`. Never re-add an implicit "open the profile if a `user` prop is present" branch to `Avatar` — passing `user` is how *every* avatar gets its colour, so that branch silently turns the picture inside the profile card, the settings preview, the avatar-upload button and every row in a modal into a trigger. It also made the card re-anchor to its own picture and walk across the screen on repeated clicks (issue #37).
+
+Use `ProfileAvatar` when the avatar is the primary way to reach that person's profile and nothing else owns the click. Use `Avatar` when an enclosing row, button or list item already handles clicks, or when the avatar depicts the surface it already sits on.
+
+**Escalation chain.** Clicking a face always moves one step deeper, never sideways and never nowhere:
+
+| Surface | Picture click |
+|---|---|
+| Member tile / row / message author | Opens the preview card (`UserProfilePopout`) |
+| Preview card | Opens the full profile modal (`UserProfileModal`) and closes the card |
+| Full profile modal | Nothing — this is the terminus |
+
+The middle step matters: an inert picture on the preview card is a dead end that forces the user down to the *View Full Profile* link. What it must never do is reopen the card itself — that is the drift bug from issue #37.
+
+### Floating placement
+
+Every floating surface places itself with `computeFloatingPosition` (`hooks/useFloatingPosition.ts`): preferred side → flip when it would overflow → clamp into the viewport, with an 8px viewport padding.
+
+- Components with a live anchor element use the `useFloatingPosition` hook (tooltips, mention/search popovers, voice popovers).
+- Components opened from a store keep the anchor's **rect** instead of an element — `uiStore.openUserProfile(user, anchor, placement)` stores `AnchorRect` + `Placement`, and `UserProfilePopout` measures itself and places off that. `pointAnchor(x, y)` builds a zero-size rect for the rare caller with no anchor element.
+- `align: 'start'` lines the surface's leading edge up with the anchor; the default centres it on the anchor.
+
+**Callers never compute coordinates.** A surface that is handed a finished `{ top, left }` cannot account for its own measured size, and any caller-side constant (an assumed card height, a hardcoded sidebar width) drifts the moment the content or the layout changes.
+
 **Tile geometry contract.** Each `AvatarTile` renders at `size × size` with a 2px border (`box-sizing: border-box` from Tailwind preflight), so its content area is `(size − 4) × (size − 4)`. The inner `Avatar` is sized to that content area (`size − 2 · TILE_BORDER_WIDTH`) and centered geometrically on the tile via `flex items-center justify-center`, **not** by inline-flow placement. Both corrections are required: sizing the Avatar to the outer dimensions overflows the padding box and gets clipped off-center (visible disc remains centered, but the avatar's contents — image crop, initials gradient + letter — anchor at the padding-edge top-left and visibly drift toward the lower-right of the visible disc); relying on `Avatar`'s `inline-flex` placement makes the Avatar drift vertically by whatever the inherited `line-height` adds, independent of border. `TILE_BORDER_WIDTH` is exported from `AvatarStack.tsx` as the single source of truth for the `border-2` width and must be updated in lockstep with any future change to that class.
 
 **Border tiers:** the surface tier the stack sits on determines the tile border color (so the tiles cleanly separate from the panel they overlap). `channel` → `border-surface-channel` (sidebar); `chat` → `border-surface-chat` (chat area / welcome header / chat header); `modal` → `border-surface-elevated` (modal hero, mobile info-screen hero — there is no `surface-modal` token in `tailwind.config.js`).

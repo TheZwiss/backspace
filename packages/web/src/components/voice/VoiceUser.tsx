@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Avatar } from '../ui/Avatar';
+import { ProfileAvatar } from '../ui/ProfileAvatar';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useContextMenuStore, type ContextMenuItem } from '../../stores/contextMenuStore';
 import { buildVoiceModMenuItems, VolumeSliderItem } from './voiceMenuItems';
@@ -160,7 +160,7 @@ export function VoiceUser({ tile, large }: VoiceUserProps) {
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center gap-3 bg-surface-channel">
           <div className="relative flex">
-            <Avatar
+            <ProfileAvatar
               src={avatar}
               name={displayName}
               size={large ? 100 : 64}

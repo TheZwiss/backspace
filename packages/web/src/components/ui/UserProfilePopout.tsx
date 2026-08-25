@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import type { User } from '@backspace/shared';
@@ -11,14 +11,20 @@ import { getAvatarGradient, adjustColor, mutedGradient } from '../../utils/gradi
 import { parseFederatedUsername } from '../../utils/identity';
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { loadFederatedMutuals } from '../../utils/mutuals';
+import { computeFloatingPosition, type AnchorRect, type Placement } from '../../hooks/useFloatingPosition';
+
+/** Gap between the card and the element it was opened from. */
+const ANCHOR_OFFSET = 8;
 
 interface UserProfilePopoutProps {
   user: User;
   onClose: () => void;
-  position?: { top: number; left: number };
+  /** Rect of the element the card was opened from. */
+  anchor: AnchorRect;
+  placement?: Placement;
 }
 
-export function UserProfilePopout({ user: propUser, onClose, position }: UserProfilePopoutProps) {
+export function UserProfilePopout({ user: propUser, onClose, anchor, placement = 'right' }: UserProfilePopoutProps) {
   const navigate = useNavigate();
   const addDmChannel = useSpaceStore((s) => s.addDmChannel);
   const openModal = useUIStore((s) => s.openModal);
@@ -43,12 +49,38 @@ export function UserProfilePopout({ user: propUser, onClose, position }: UserPro
       .catch(() => {});
   }, [user.id, user.homeUserId]);
 
-  const top = position
-    ? Math.min(Math.max(8, position.top), window.innerHeight - 460)
-    : undefined;
-  const left = position
-    ? Math.min(Math.max(8, position.left), window.innerWidth - 356)
-    : undefined;
+  // Placed off the card's *measured* size rather than a guessed height: the card
+  // grows with the bio, the custom status and the mutuals row, so any constant
+  // here would cut tall cards off at the bottom of the viewport.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [placed, setPlaced] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+
+    const place = () => {
+      const { width, height } = card.getBoundingClientRect();
+      // 'start': the card's top edge lines up with the row it came from, the
+      // way it always has — centring a tall card on a 32px avatar would drag it
+      // up over unrelated content.
+      const next = computeFloatingPosition(anchor, width, height, placement, ANCHOR_OFFSET, 'start');
+      setPlaced((prev) =>
+        prev && prev.top === next.top && prev.left === next.left
+          ? prev
+          : { top: next.top, left: next.left },
+      );
+    };
+
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(card);
+    window.addEventListener('resize', place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', place);
+    };
+  }, [anchor, placement]);
 
   const handleSendMessage = async () => {
     try {
@@ -78,6 +110,11 @@ export function UserProfilePopout({ user: propUser, onClose, position }: UserPro
     openModal('userProfile', { userId: user.id, user, origin });
   };
 
+  const handleAvatarClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    handleViewFullProfile();
+  };
+
   // Banner display
   const bannerSrc = user.banner
     ? (user.banner.startsWith('http') || user.banner.startsWith('/') ? user.banner : userApi.uploads.url(user.banner))
@@ -89,12 +126,17 @@ export function UserProfilePopout({ user: propUser, onClose, position }: UserPro
         return mutedGradient(g.from, g.to);
       })();
 
+  // Parked off-screen for the one layout pass before the card knows how tall it
+  // is; `useLayoutEffect` places it before the browser paints, so it never
+  // renders visibly in the wrong spot.
+  const cardStyle = placed ?? { top: -9999, left: -9999 };
+
   return (
     <div
+      ref={cardRef}
+      data-user-profile-popout
       className="fixed z-[200] w-[340px] rounded-[12px] overflow-hidden animate-fade-in select-none glass-modal"
-      style={position
-        ? { top, left }
-        : { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+      style={cardStyle}
     >
       {/* Banner */}
       <div
@@ -108,6 +150,9 @@ export function UserProfilePopout({ user: propUser, onClose, position }: UserPro
       {/* Body */}
       <div className="px-4 pb-4 relative">
         {/* Avatar */}
+        {/* The picture escalates to the full profile — the card is a preview, and
+            clicking the face is the obvious way to ask for the whole thing. It
+            deliberately does NOT reopen the card (see issue #37). */}
         <Avatar
           src={user.avatar}
           name={displayName}
@@ -115,6 +160,7 @@ export function UserProfilePopout({ user: propUser, onClose, position }: UserPro
           status={user.status as 'online' | 'idle' | 'dnd' | 'offline' | null}
           userId={user.homeUserId ?? user.id}
           user={user}
+          onClick={handleAvatarClick}
           ring={{ width: 4, color: 'rgba(20,20,26,0.85)' }}
           className="mt-[-44px] mb-3"
         />
