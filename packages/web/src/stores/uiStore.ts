@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { User } from '@backspace/shared';
+import type { AnchorRect, Placement } from '../hooks/useFloatingPosition';
 
 type ModalType =
   | 'createSpace'
@@ -40,7 +41,11 @@ interface UIState {
   imagePreviewUrl: string | null;
   userProfilePopout: {
     user: User | null;
-    position: { top: number; left: number } | null;
+    /** Rect of the element the card was opened from. The card places itself off
+     *  this rect once it knows its own measured size — callers never compute
+     *  coordinates, so no surface can drift by re-anchoring to itself. */
+    anchor: AnchorRect | null;
+    placement: Placement;
   };
   toasts: Toast[];
   toggleSidebar: () => void;
@@ -51,7 +56,7 @@ interface UIState {
   setShowDms: (show: boolean) => void;
   openImagePreview: (url: string) => void;
   closeImagePreview: () => void;
-  openUserProfile: (user: User, position: { top: number; left: number }) => void;
+  openUserProfile: (user: User, anchor: AnchorRect, placement?: Placement) => void;
   closeUserProfile: () => void;
   addToast: (message: string, type?: 'info' | 'warning' | 'success', duration?: number) => void;
   removeToast: (id: string) => void;
@@ -93,7 +98,8 @@ export const useUIStore = create<UIState>()(
       imagePreviewUrl: null,
       userProfilePopout: {
         user: null,
-        position: null,
+        anchor: null,
+        placement: 'right',
       },
       toasts: [],
 
@@ -120,7 +126,7 @@ export const useUIStore = create<UIState>()(
       openImagePreview: (url) => set({ activeModal: 'imagePreview', imagePreviewUrl: url }),
       closeImagePreview: () => set({ activeModal: null, imagePreviewUrl: null }),
 
-      openUserProfile: (user, position) => {
+      openUserProfile: (user, anchor, placement = 'right') => {
         if (get().isMobile) {
           // On mobile, push a full-screen user profile instead of a positioned popout
           set((state) => ({
@@ -128,11 +134,11 @@ export const useUIStore = create<UIState>()(
           }));
           history.pushState({ mobileScreen: 'user-profile' }, '');
         } else {
-          set({ userProfilePopout: { user, position } });
+          set({ userProfilePopout: { user, anchor, placement } });
         }
       },
       closeUserProfile: () => set({
-        userProfilePopout: { user: null, position: null }
+        userProfilePopout: { user: null, anchor: null, placement: 'right' }
       }),
 
       addToast: (message, type = 'info', duration = 5000) => {

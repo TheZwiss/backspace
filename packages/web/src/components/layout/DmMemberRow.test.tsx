@@ -285,43 +285,15 @@ describe('DmMemberRow — profile popout anchoring', () => {
     await user.click(profileBtn);
 
     expect(openUserProfileMock).toHaveBeenCalledTimes(1);
+    // The row hands over its rect and the side it wants; the card works out its
+    // own coordinates once it knows how tall it is (see UserProfilePopout).
     expect(openUserProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: member.id }),
-      // Math.min(200, 800 - 450) = 200; left = 1500 - 316 = 1184.
-      { top: 200, left: 1184 },
+      rect,
+      'left',
     );
     // The row no longer routes 'profile' through onMenuAction.
     expect(onMenuAction).not.toHaveBeenCalled();
-  });
-
-  it('clamps top to (innerHeight - 450) when the row sits near the bottom of the viewport', async () => {
-    const user = userEvent.setup();
-    const { container } = renderRow();
-    const row = container.querySelector('[data-dm-member-row]') as HTMLElement;
-
-    const rect: DOMRect = {
-      top: 700,
-      left: 1500,
-      right: 1740,
-      bottom: 740,
-      width: 240,
-      height: 40,
-      x: 1500,
-      y: 700,
-      toJSON: () => ({}),
-    } as DOMRect;
-    row.getBoundingClientRect = () => rect;
-
-    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-
-    openMenuByContextMenu(row);
-    await user.click(await screen.findByText('View Profile'));
-
-    // Math.min(700, 800 - 450 = 350) → top clamped to 350.
-    expect(openUserProfileMock).toHaveBeenCalledWith(
-      expect.anything(),
-      { top: 350, left: 1184 },
-    );
   });
 
   it('falls back to onMenuAction("profile", ...) when the row has no bounding rect', async () => {

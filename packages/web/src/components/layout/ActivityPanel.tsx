@@ -104,7 +104,6 @@ export function ActivityPanel() {
 
   const handleFriendClick = (e: React.MouseEvent, friend: Friend) => {
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
     openUserProfile(
       {
         id: friend.id,
@@ -123,10 +122,8 @@ export function ActivityPanel() {
         isAdmin: false,
         replicatedInstances: [],
       },
-      {
-        top: Math.min(rect.top, window.innerHeight - 450),
-        left: rect.left - 316,
-      }
+      e.currentTarget.getBoundingClientRect(),
+      'left',
     );
   };
 

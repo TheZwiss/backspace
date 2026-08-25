@@ -157,11 +157,7 @@ export function MemberSidebar() {
 
   const handleMemberClick = (e: React.MouseEvent, user: MemberWithUser['user']) => {
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    openUserProfile(user, {
-      top: Math.min(rect.top, window.innerHeight - 450),
-      left: rect.left - 316,
-    });
+    openUserProfile(user, e.currentTarget.getBoundingClientRect(), 'left');
   };
 
   const renderMember = (member: MemberWithUser, isOffline = false) => {

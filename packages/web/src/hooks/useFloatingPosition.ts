@@ -1,6 +1,23 @@
 import { type RefObject, type CSSProperties, useState, useLayoutEffect, useCallback } from 'react';
 
-type Placement = 'top' | 'bottom' | 'left' | 'right';
+export type Placement = 'top' | 'bottom' | 'left' | 'right';
+/** Cross-axis alignment: centred on the anchor, or flush with its leading edge. */
+export type Alignment = 'center' | 'start';
+
+/** The subset of DOMRect placement needs — lets callers pass a stored rect. */
+export interface AnchorRect {
+  top: number;
+  left: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/** A zero-size anchor at a viewport point, for callers with no anchor element. */
+export function pointAnchor(x: number, y: number): AnchorRect {
+  return { top: y, left: x, right: x, bottom: y, width: 0, height: 0 };
+}
 
 interface UseFloatingPositionOptions {
   placement: Placement;
@@ -22,12 +39,22 @@ const oppositePlacement: Record<Placement, Placement> = {
   right: 'left',
 };
 
-function computePosition(
-  anchorRect: DOMRect,
+/**
+ * Places a floating surface next to an anchor: preferred side first, flipping to
+ * the opposite side when it would overflow, then clamping into the viewport.
+ *
+ * Exported because not every floating surface has a live anchor element. The
+ * profile popout, for instance, is opened from a store and keeps only the
+ * anchor's rect — the row it came from may have re-rendered or scrolled away by
+ * the time the card mounts.
+ */
+export function computeFloatingPosition(
+  anchorRect: AnchorRect,
   floatingWidth: number,
   floatingHeight: number,
   placement: Placement,
   offset: number,
+  align: Alignment = 'center',
 ): { top: number; left: number; actualPlacement: Placement } {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -37,17 +64,24 @@ function computePosition(
   let actual = placement;
 
   // Compute initial position on primary axis
+  const crossLeft = align === 'start'
+    ? anchorRect.left
+    : anchorRect.left + anchorRect.width / 2 - floatingWidth / 2;
+  const crossTop = align === 'start'
+    ? anchorRect.top
+    : anchorRect.top + anchorRect.height / 2 - floatingHeight / 2;
+
   if (placement === 'top') {
     top = anchorRect.top - floatingHeight - offset;
-    left = anchorRect.left + anchorRect.width / 2 - floatingWidth / 2;
+    left = crossLeft;
   } else if (placement === 'bottom') {
     top = anchorRect.bottom + offset;
-    left = anchorRect.left + anchorRect.width / 2 - floatingWidth / 2;
+    left = crossLeft;
   } else if (placement === 'left') {
-    top = anchorRect.top + anchorRect.height / 2 - floatingHeight / 2;
+    top = crossTop;
     left = anchorRect.left - floatingWidth - offset;
   } else {
-    top = anchorRect.top + anchorRect.height / 2 - floatingHeight / 2;
+    top = crossTop;
     left = anchorRect.right + offset;
   }
 
@@ -113,7 +147,7 @@ export function useFloatingPosition(
     const anchorRect = anchor.getBoundingClientRect();
     const floatingRect = floating.getBoundingClientRect();
 
-    const pos = computePosition(
+    const pos = computeFloatingPosition(
       anchorRect,
       floatingRect.width,
       floatingRect.height,

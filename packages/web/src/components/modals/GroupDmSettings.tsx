@@ -13,6 +13,7 @@ import { api } from '../../api/client';
 import { isSelf, parseFederatedUsername } from '../../utils/identity';
 import { AvatarStack } from '../ui/AvatarStack';
 import { DmMemberRow, type DmMemberRowAction } from '../layout/DmMemberRow';
+import { pointAnchor } from '../../hooks/useFloatingPosition';
 
 const MAX_NAME_LENGTH = 50;
 const MAX_GROUP_MEMBERS = 10;
@@ -263,7 +264,7 @@ export function GroupDmSettings() {
       // Fallback path — DmMemberRow normally opens the profile itself via
       // its own bounding rect. If we reach this branch, just route to a
       // top-left anchor (matches DmRosterPanel's fallback).
-      useUIStore.getState().openUserProfile(member, { top: 100, left: 100 });
+      useUIStore.getState().openUserProfile(member, pointAnchor(100, 100));
       return;
     }
     if (action === 'kick') {
