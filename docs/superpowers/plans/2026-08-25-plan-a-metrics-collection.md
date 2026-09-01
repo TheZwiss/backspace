@@ -319,6 +319,18 @@ git commit -m "test(metrics): guard collector against runtime deps and unerasabl
 
 ## Task 3: CSV series — parse, format, upsert
 
+> **Amendment (2026-09-01, fix round 1 after task review).** The reference
+> `parseCsv` below splits the text on `'\n'` before parsing quote state, which
+> silently corrupts two inputs: CRLF files (a trailing `\r` contaminates the last
+> field and the last header key) and any quoted field containing an embedded
+> newline (one logical row becomes two malformed rows) — a case `quote()` below
+> deliberately writes. The shipped implementation parses quote state across the
+> whole text in a single pass instead, pads short rows with `''` so a column can
+> be added to a schema later, and throws on a row with more fields than the
+> header rather than silently dropping the excess. See the ledger ruling and
+> `.superpowers/sdd/2026-08-25-plan-a-metrics-collection/task-3-fix-brief.md`.
+> Read `scripts/metrics/src/series.ts` as the parser's authority, not the code below.
+
 **Files:**
 - Create: `scripts/metrics/src/series.ts`
 - Create: `scripts/metrics/src/series.test.ts`
