@@ -9,6 +9,27 @@ function sourceFiles(): string[] {
   return readdirSync(srcDir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
 }
 
+/**
+ * Strips block comments and whole-line `//` comments before scanning.
+ *
+ * The scanners below are regexes, not a parser, so without this they read
+ * JSDoc prose as if it were code: a doc comment that happens to contain a
+ * quoted phrase near the word `from` matches IMPORT_RE and fails the build
+ * for a dependency that does not exist. That cost a real implementer real
+ * time on this package, and every module here is heavily documented.
+ *
+ * Only two forms are stripped, both deliberately conservative. A real
+ * `import` statement can never begin with `//`, and the imports in these
+ * files all precede any code that could contain a stray `/*` inside a string
+ * literal — so stripping cannot hide an import from the scanners, which is
+ * the only direction that would turn a spurious failure into a missed
+ * defect. `stripComments keeps a real import that follows a comment` below
+ * pins that.
+ */
+export function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+}
+
 /** Matches the module specifier of any static import or re-export. */
 const IMPORT_RE = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s+['"]([^'"]+)['"]/g;
 
@@ -19,7 +40,8 @@ const SIDE_EFFECT_RE = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g;
  * Extract all import specifiers from a file, from both `from` imports and
  * side-effect imports. Used by both constraint tests.
  */
-function allSpecifiersInFile(text: string): Array<{ spec: string; statement: string }> {
+function allSpecifiersInFile(source: string): Array<{ spec: string; statement: string }> {
+  const text = stripComments(source);
   const specifiers: Array<{ spec: string; statement: string }> = [];
 
   for (const match of text.matchAll(IMPORT_RE)) {
@@ -87,5 +109,21 @@ describe('collector source constraints', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('ignores import-like prose inside comments', () => {
+    const source = [
+      '/**',
+      ' * Reads a value from \'somewhere\' and returns it.',
+      ' */',
+      "// import lodash from 'lodash';",
+      "import { parseCsv } from './series.ts';",
+    ].join('\n');
+    expect(allSpecifiersInFile(source).map((s) => s.spec)).toEqual(['./series.ts']);
+  });
+
+  it('stripComments keeps a real import that follows a comment', () => {
+    const source = ["/* a block comment */", "import { x } from 'node:fs';"].join('\n');
+    expect(stripComments(source)).toContain("import { x } from 'node:fs';");
   });
 });
