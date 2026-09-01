@@ -137,7 +137,7 @@ There are **two writers** of this file, one per outcome, never both in the same 
 1. **On success**, `collect()` (`collect.ts`) is the only writer. It writes `meta.json` last of all, once every other file for the run has landed — see §5's atomicity guarantee — and it is the only place `series_last_date` is ever advanced to a fresh date. Building that map is itself two steps: `collect()` first reads the *previous* `meta.json` via `store.readMeta()` (synchronously, as the write phase's first action — a corrupt existing `meta.json` therefore throws before any file changes this run, the same all-or-nothing guarantee a required-fetch failure already has) and seeds `series_last_date` from it, then overwrites only the keys for series actually written this run. A first-ever run (`readMeta()` returns `null`) seeds from `{}`. On a required-fetch failure, `collect()` throws before any of this, so this writer only ever records a genuine success.
 2. **On failure**, `recordFailure()` (`cli-support.ts`, invoked by `cli-record-failure.ts` from `metrics.yml`'s "Record failure" step, `if: failure()`) is the only writer. It reads whatever `meta.json` currently exists (or `null` — legitimate on a run that fails before `collect()` has ever written one), refreshes `last_run` to its own timestamp, and sets `error` to a description of what failed (currently `` `run failed: ${job.status}` ``, passed in via the `METRICS_RUN_OUTCOME` environment variable — never interpolated into the workflow's `run:` string). It leaves **`last_success` and `series_last_date` completely untouched** — not merged, not partially updated, byte-for-byte whatever `collect()` (or a previous failure record) last wrote — because `last_success` is this archive's "last known good" signal and a failure must never move it, and a failed run measured nothing, so it must never edit `series_last_date` either. A "Commit and push failure record" step, mirroring the success path's commit-and-push, then commits and pushes just `meta.json`, with a failed push swallowed to a `::warning::` annotation rather than failing the (already-failed) job.
 
-The practical upshot: a normal successful day produces **exactly one** commit on `metrics-data` (the data snapshot, `meta.json` included via that step's `git add -A`) — there is no second, redundant metadata commit on success anymore. A failed day produces at most one commit too (the failure record; there is no data commit to accompany it unless `collect()` itself succeeded but a later step, e.g. the push, failed — see §9). `error` is the field to check for "did last night's run actually work" — `last_run` alone updates even on failure.
+The practical upshot: a normal successful day produces **exactly one** commit on `metrics-data` (the data snapshot, `meta.json` included via that step's `git add -A`) — there is no second, redundant metadata commit on success anymore. A failed day produces at most one commit too (the failure record; there is no data commit to accompany it unless `collect()` itself succeeded but a later step, e.g. the push, failed — see §9). Check `error` **and** `last_run` together for "did last night's run actually work": `error` distinguishes a failed run from a successful one, but only a run that reached one of the two writers sets it at all. A cancelled or timed-out job sets neither, so a stale `last_run` is the signal that catches those. See §9.
 
 ---
 
@@ -271,6 +271,21 @@ This is not a defect in `backfill()` itself: reconstructing pre-collection histo
 ### Reading `meta.json`
 
 See §3.3 for the two-writer (one per outcome) mechanics. In short: fetch `meta.json` from the tip of `metrics-data` and check `error` — `null` means `collect()` itself last wrote this file, with `last_success` set to that run's timestamp; any other value is the string `run failed: <job status>` recorded by the failure path (`recordFailure()`/`cli-record-failure.ts`) for the most recent run that did not succeed, and `last_success`/`series_last_date` in that case still reflect whatever the last *successful* `collect()` run left them at — the failure path never touches either. `series_last_date` gives the newest date present in each `.csv` file as of the last run that actually wrote it (a written series advances to today; a skipped one keeps its previous entry — see §3.3), which is a faster way to spot a stalled series than diffing the files themselves.
+
+**`error` alone is not sufficient — always read it together with `last_run`.** The failure path runs
+under `if: failure()`, which does not cover a job that was **cancelled or hit its timeout**. Those runs
+leave `meta.json` completely untouched: `error` stays whatever it was, so a run that never happened can
+read as `null` — "last night succeeded" — when in fact nothing ran at all. The reliable check is
+`last_run` against the current date. If `last_run` is not from the most recent scheduled window, that
+run did not complete, regardless of what `error` says.
+
+A second case where `meta.json` cannot tell you what went wrong: if `meta.json` itself is corrupt, both
+writers refuse it. `collect()` reads it through the same validator before writing anything, and
+`recordFailure()` reads it the same way — so neither can record "meta.json is corrupt" *inside*
+`meta.json` without performing exactly the unvalidated rewrite this design exists to prevent. The
+symptom on the data branch is only that `last_run` stops advancing; the cause is visible in the Actions
+tab, where both steps go red every day. This is a deliberate consequence of failing loudly rather than
+fabricating a replacement, not an oversight.
 
 One case worth naming explicitly: `error` can be non-null while `last_success` is recent. That happens when `collect()` itself succeeds but a later step in the same job fails (e.g. the data commit/push, after all three retry attempts) — the failure path still runs and records `error`, but `last_success`/`series_last_date` correctly show that the measurement itself landed; only getting it committed and pushed did not.
 
