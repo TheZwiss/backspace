@@ -187,11 +187,14 @@ h1 {
   letter-spacing: 0.02em; padding: 7px 14px; border-radius: 9px; cursor: pointer;
   transition: background 0.16s ease, color 0.16s ease;
 }
-.range-btn:hover { color: var(--txt); background: rgba(255, 255, 255, 0.05); }
+.range-btn:hover:not(:disabled) { color: var(--txt); background: rgba(255, 255, 255, 0.05); }
+.range-btn:disabled { color: var(--txt4); cursor: not-allowed; }
+.rangectl[aria-disabled="true"] { opacity: 0.6; }
 .range-btn[aria-pressed="true"] {
   background: var(--primary); color: #fff;
 }
-.range-btn[aria-pressed="true"]:hover { background: var(--primary-hover); color: #fff; }
+.range-btn[aria-pressed="true"]:disabled { background: rgba(124, 108, 246, 0.35); color: rgba(255, 255, 255, 0.7); }
+.range-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--primary-hover); color: #fff; }
 .resolution {
   font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
   line-height: 1.6; max-width: 62ch;
@@ -229,6 +232,11 @@ h2 {
   border: 1px dashed var(--line); border-radius: 12px;
   padding: 18px 20px; background: rgba(255, 255, 255, 0.012);
 }
+.slot-note-error {
+  color: var(--txt2); border-style: solid; border-color: rgba(253, 164, 175, 0.28);
+  background: rgba(253, 164, 175, 0.05);
+}
+.slot-note-error strong { color: var(--rose); font-weight: 560; }
 /* Wide content (charts, tables) scrolls inside its own container, never the body. */
 .scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
@@ -280,6 +288,7 @@ footer a:hover { color: var(--txt); }
       <span><span class="k">traffic history</span> <span class="v" id="pv-since">checking</span></span>
       <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
       <span><span class="k">collector last ran</span> <span class="v" id="pv-lastrun">checking</span></span>
+      <span><span class="k">last successful run</span> <span class="v" id="pv-lastsuccess">checking</span></span>
     </p>
 
     <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
@@ -293,10 +302,10 @@ footer a:hover { color: var(--txt); }
     </div>
   </div>
 
-  <section class="panel" id="sec-header">
+  <section class="panel" id="at-a-glance">
     <div class="wrap">
-      <p class="ch-label ch-mint">header</p>
-      <h2>Header</h2>
+      <p class="ch-label ch-mint">at-a-glance</p>
+      <h2>At a glance</h2>
       <p class="sec-copy">
         Stars, forks, watchers, views and clones since collection began, contributors and total
         release downloads — each with a 30-day delta. A delta is only shown when the archive
@@ -377,11 +386,18 @@ footer a:hover { color: var(--txt); }
  * Everything here is deliberately framework-free and additive: later sections
  * register a renderer and are handed the validated bundle plus the current
  * range. See INSIGHTS.registerSection / INSIGHTS.onRangeChange at the bottom.
+ *
+ * One rule runs through the whole file: the page must never assert something it
+ * cannot support. That is why a renderer's exception is contained to its own
+ * slot instead of becoming a page-level claim about the archive, why the range
+ * control is inert until a validated bundle exists, and why anything that
+ * cannot be confirmed — a timestamp, a collector run — reads as a dash or as
+ * stale rather than as a number.
  */
 (function () {
   "use strict";
 
-  /* 48 hours, per spec §7: the collector runs daily, so two missed days is a fault. */
+  /* 48 hours, per spec 7: the collector runs daily, so two missed days is a fault. */
   var STALE_MS = 48 * 60 * 60 * 1000;
   /* A static same-origin file should never take this long. The timeout exists so
    * the "loading" state is guaranteed to resolve rather than hang forever. */
@@ -415,6 +431,7 @@ footer a:hover { color: var(--txt); }
     since: document.getElementById("pv-since"),
     generated: document.getElementById("pv-generated"),
     lastRun: document.getElementById("pv-lastrun"),
+    lastSuccess: document.getElementById("pv-lastsuccess"),
     status: document.getElementById("status-region"),
     rangectl: document.getElementById("rangectl"),
     resolution: document.getElementById("resolution")
@@ -439,9 +456,11 @@ footer a:hover { color: var(--txt); }
 
   /* Fixed UTC formatting rather than toLocaleString: the archive is UTC and a
    * visitor's locale must not silently shift a timestamp we are making claims
-   * about. */
+   * about. Anything that is not a finite epoch is a dash, never "NaN-NaN-NaN". */
   function formatInstant(ms) {
+    if (typeof ms !== "number" || !isFinite(ms)) return DASH;
     var d = new Date(ms);
+    if (isNaN(d.getTime())) return DASH;
     return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) +
       " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " UTC";
   }
@@ -461,27 +480,128 @@ footer a:hover { color: var(--txt); }
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
-  /* ------------------------------------------------------------- validation */
-
-  function hasSeriesShape(value, arrayKeys) {
-    if (!isPlainObject(value) || !Array.isArray(value.dates)) return false;
-    for (var i = 0; i < arrayKeys.length; i++) {
-      if (!Array.isArray(value[arrayKeys[i]])) return false;
-    }
-    return true;
+  /* A short, safe rendering of a value of unknown type, for diagnostics that end
+   * up in front of a reader. Never more than a clause. */
+  function describeValue(value) {
+    if (typeof value === "string") return '"' + value + '"';
+    if (value === null) return "null";
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) return "an array of " + value.length + " item(s)";
+    if (typeof value === "object") return "an object";
+    return typeof value;
   }
 
-  function hasDimensionShape(value) {
-    return isPlainObject(value) &&
-      Array.isArray(value.snapshots) &&
-      Array.isArray(value.latest) &&
-      Array.isArray(value.trajectories);
+  /* ------------------------------------------------------------- validation */
+
+  function isDateString(value) {
+    return typeof value === "string" && value !== "";
+  }
+
+  function isNumberOrNull(value) {
+    return value === null || (typeof value === "number" && isFinite(value));
+  }
+
+  /*
+   * Parallel-array series. `dates` carries the x-axis; every value array must be
+   * exactly as long, because Tasks 6-9 index them together. A ragged array is
+   * the failure mode that would silently shift a whole chart sideways, so it is
+   * rejected here rather than discovered by eye on the published page.
+   */
+  function checkSeries(value, name, valueKeys) {
+    if (!isPlainObject(value)) return name + " is missing";
+    if (!Array.isArray(value.dates)) return name + ".dates is not an array";
+    for (var d = 0; d < value.dates.length; d++) {
+      if (!isDateString(value.dates[d])) return name + ".dates[" + d + "] is not a date string";
+    }
+    for (var k = 0; k < valueKeys.length; k++) {
+      var key = valueKeys[k];
+      var column = value[key];
+      if (!Array.isArray(column)) return name + "." + key + " is not an array";
+      if (column.length !== value.dates.length) {
+        return name + "." + key + " has " + column.length + " values for " +
+          value.dates.length + " dates";
+      }
+      for (var i = 0; i < column.length; i++) {
+        if (!isNumberOrNull(column[i])) {
+          return name + "." + key + "[" + i + "] is neither a number nor null";
+        }
+      }
+    }
+    return null;
+  }
+
+  function checkReleases(value) {
+    if (!Array.isArray(value)) return "releases is not an array";
+    for (var i = 0; i < value.length; i++) {
+      var release = value[i];
+      if (!isPlainObject(release)) return "releases[" + i + "] is not an object";
+      if (!isDateString(release.date)) return "releases[" + i + "].date is not a date string";
+      if (typeof release.tag !== "string") return "releases[" + i + "].tag is not a string";
+      if (typeof release.name !== "string") return "releases[" + i + "].name is not a string";
+    }
+    return null;
+  }
+
+  function checkDimension(value, name) {
+    if (!isPlainObject(value)) return name + " is missing";
+    if (!Array.isArray(value.snapshots)) return name + ".snapshots is not an array";
+    for (var s = 0; s < value.snapshots.length; s++) {
+      if (!isDateString(value.snapshots[s])) {
+        return name + ".snapshots[" + s + "] is not a date string";
+      }
+    }
+    if (!Array.isArray(value.latest)) return name + ".latest is not an array";
+    for (var r = 0; r < value.latest.length; r++) {
+      var row = value.latest[r];
+      if (!isPlainObject(row)) return name + ".latest[" + r + "] is not an object";
+      if (typeof row.dimension !== "string") return name + ".latest[" + r + "].dimension is not a string";
+      if (typeof row.title !== "string") return name + ".latest[" + r + "].title is not a string";
+      if (typeof row.count !== "number" || !isFinite(row.count)) {
+        return name + ".latest[" + r + "].count is not a number";
+      }
+      if (typeof row.uniques !== "number" || !isFinite(row.uniques)) {
+        return name + ".latest[" + r + "].uniques is not a number";
+      }
+    }
+    if (!Array.isArray(value.trajectories)) return name + ".trajectories is not an array";
+    for (var t = 0; t < value.trajectories.length; t++) {
+      var trajectory = value.trajectories[t];
+      if (!isPlainObject(trajectory)) return name + ".trajectories[" + t + "] is not an object";
+      if (typeof trajectory.dimension !== "string") {
+        return name + ".trajectories[" + t + "].dimension is not a string";
+      }
+      if (!Array.isArray(trajectory.delta)) {
+        return name + ".trajectories[" + t + "].delta is not an array";
+      }
+      /* Index-aligned with `snapshots` by contract, and Task 9 plots them on that
+       * axis, so a length mismatch is a defect and not a rendering nuance. */
+      if (trajectory.delta.length !== value.snapshots.length) {
+        return name + ".trajectories[" + t + "].delta has " + trajectory.delta.length +
+          " values for " + value.snapshots.length + " snapshots";
+      }
+      for (var v = 0; v < trajectory.delta.length; v++) {
+        if (!isNumberOrNull(trajectory.delta[v])) {
+          return name + ".trajectories[" + t + "].delta[" + v + "] is neither a number nor null";
+        }
+      }
+    }
+    return null;
   }
 
   /*
    * Returns null when the payload matches the data contract, or a short reason
-   * why it does not. Later sections read these fields without re-checking them,
-   * so the guard has to cover every field the contract promises.
+   * why it does not.
+   *
+   * This is stricter than "does it have the right keys" on purpose. The page is
+   * the untested side of the contract, and Tasks 6-9 read these arrays by index
+   * without re-checking them, so every promise the contract makes that a later
+   * renderer relies on is checked here: element types, and length alignment
+   * between each value array and its `dates`/`snapshots` axis.
+   *
+   * Deliberately NOT checked: that `trajectories[].delta[0]` is null. That is a
+   * bundler invariant rather than something a renderer indexes into, and
+   * blanking the whole page over it would trade a cosmetic contract violation
+   * for a total outage.
    */
   function validateBundle(d) {
     if (!isPlainObject(d)) return "the bundle is not a JSON object";
@@ -493,32 +613,34 @@ footer a:hover { color: var(--txt); }
     if (typeof d.empty !== "boolean") return "empty is not a boolean";
     if (typeof d.downsampled !== "boolean") return "downsampled is not a boolean";
     if (!isPlainObject(d.series)) return "series is missing";
-    if (!hasSeriesShape(d.series.views, ["count", "uniques"])) return "series.views is malformed";
-    if (!hasSeriesShape(d.series.clones, ["count", "uniques"])) return "series.clones is malformed";
-    if (!hasSeriesShape(d.series.stars, ["total"])) return "series.stars is malformed";
-    if (!hasSeriesShape(d.series.forks, ["total"])) return "series.forks is malformed";
-    if (!hasSeriesShape(d.series.contributors, ["total"])) return "series.contributors is malformed";
-    if (!hasSeriesShape(d.series.repo, ["subscribers", "open_issues", "downloads_total"])) {
-      return "series.repo is malformed";
-    }
-    if (!Array.isArray(d.releases)) return "releases is not an array";
+
+    var problem =
+      checkSeries(d.series.views, "series.views", ["count", "uniques"]) ||
+      checkSeries(d.series.clones, "series.clones", ["count", "uniques"]) ||
+      checkSeries(d.series.stars, "series.stars", ["total"]) ||
+      checkSeries(d.series.forks, "series.forks", ["total"]) ||
+      checkSeries(d.series.contributors, "series.contributors", ["total"]) ||
+      checkSeries(d.series.repo, "series.repo", ["subscribers", "open_issues", "downloads_total"]) ||
+      checkReleases(d.releases);
+    if (problem !== null) return problem;
+
     if (!isPlainObject(d.dimensions)) return "dimensions is missing";
-    if (!hasDimensionShape(d.dimensions.referrers)) return "dimensions.referrers is malformed";
-    if (!hasDimensionShape(d.dimensions.paths)) return "dimensions.paths is malformed";
-    return null;
+    return checkDimension(d.dimensions.referrers, "dimensions.referrers") ||
+      checkDimension(d.dimensions.paths, "dimensions.paths");
   }
 
   /* ------------------------------------------------------------- freshness */
 
   /*
-   * Fails closed. A banner that stays silent because a timestamp could not be
-   * parsed is worse than no banner at all: the one situation it exists to catch
-   * is a collector that stopped writing sane values. So anything we cannot
-   * confirm counts as stale, and the reason says which.
+   * Fails closed. A banner that stays silent because a value could not be read
+   * is worse than no banner at all: the one situation it exists to catch is a
+   * collector that stopped writing sane values. So anything we cannot confirm
+   * counts as stale, and the reason says which.
    */
   function evaluateFreshness(data) {
     var reasons = [];
     var stale = false;
+    var failed = false;
 
     var referenceMs = parseInstant(data.generated_at);
     var referenceLabel;
@@ -541,9 +663,22 @@ footer a:hover { color: var(--txt); }
       };
     }
 
-    if (typeof data.meta.error === "string" && data.meta.error !== "") {
+    /* Any non-null `error` means the collector recorded a failure, whatever its
+     * type. Testing for a non-empty string would let `error: 500` — or an error
+     * object that survived serialisation — pass as healthy, which is the banner
+     * failing open in exactly the case it exists for. */
+    var recorded = data.meta.error;
+    if (recorded !== null && recorded !== undefined) {
       stale = true;
-      reasons.push("The last collection run reported an error: " + data.meta.error);
+      failed = true;
+      if (typeof recorded === "string" && recorded !== "") {
+        reasons.push("The last collection run reported an error: " + recorded);
+      } else if (recorded === "") {
+        reasons.push("The last collection run recorded a failure, but the message it stored is empty.");
+      } else {
+        reasons.push("The last collection run recorded a failure. The stored message is not readable text (" +
+          describeValue(recorded) + "), which is itself a fault in the collector.");
+      }
     }
 
     var lastRunMs = parseInstant(data.meta.last_run);
@@ -557,11 +692,22 @@ footer a:hover { color: var(--txt); }
         ". It is scheduled to run daily, so the figures below may be out of date.");
     }
 
-    var severity = (data.meta !== null && typeof data.meta.error === "string" && data.meta.error !== "")
-      ? "error"
-      : "warn";
+    /* last_success is the "last known good" signal: when the collector is
+     * failing, how old the newest trustworthy figures are is the thing a reader
+     * actually needs. */
+    if (stale) {
+      var lastSuccessMs = parseInstant(data.meta.last_success);
+      if (data.meta.last_success === null) {
+        reasons.push("No successful collection run has ever been recorded, so no figure here has a confirmed-good source.");
+      } else if (isNaN(lastSuccessMs)) {
+        reasons.push("The collector's last-success timestamp is missing or unreadable, so the age of the newest trustworthy figures is unknown.");
+      } else {
+        reasons.push("The last successful run was at " + formatInstant(lastSuccessMs) +
+          ". Figures newer than that have not been confirmed.");
+      }
+    }
 
-    return { stale: stale, severity: severity, reasons: reasons };
+    return { stale: stale, severity: failed ? "error" : "warn", reasons: reasons };
   }
 
   /* --------------------------------------------------------------- render */
@@ -573,6 +719,7 @@ footer a:hover { color: var(--txt); }
       dom.since.textContent = DASH;
       dom.generated.textContent = DASH;
       dom.lastRun.textContent = DASH;
+      dom.lastSuccess.textContent = DASH;
       return;
     }
 
@@ -585,21 +732,27 @@ footer a:hover { color: var(--txt); }
      */
     var startedMs = parseInstant(data.collection_started);
     dom.since.textContent = isNaN(startedMs) ? DASH : "since " + data.collection_started;
-    if (isNaN(startedMs)) {
-      dom.since.title = "No dated traffic measurement exists in the archive yet.";
-    } else {
-      dom.since.title = "Earliest dated measurement in the archive.";
-    }
+    dom.since.title = isNaN(startedMs)
+      ? "No dated traffic measurement exists in the archive yet."
+      : "Earliest dated measurement in the archive.";
 
-    var generatedMs = parseInstant(data.generated_at);
-    dom.generated.textContent = isNaN(generatedMs) ? DASH : formatInstant(generatedMs);
+    dom.generated.textContent = formatInstant(parseInstant(data.generated_at));
 
     if (data.meta === null) {
       dom.lastRun.textContent = DASH;
-    } else {
-      var lastRunMs = parseInstant(data.meta.last_run);
-      dom.lastRun.textContent = isNaN(lastRunMs) ? DASH : formatInstant(lastRunMs);
+      dom.lastRun.title = "The archive holds no collector status file.";
+      dom.lastSuccess.textContent = DASH;
+      dom.lastSuccess.title = "The archive holds no collector status file.";
+      return;
     }
+
+    dom.lastRun.textContent = formatInstant(parseInstant(data.meta.last_run));
+    dom.lastRun.title = "When the collector last attempted a run.";
+
+    dom.lastSuccess.textContent = formatInstant(parseInstant(data.meta.last_success));
+    dom.lastSuccess.title = data.meta.last_success === null
+      ? "No successful collection run has ever been recorded."
+      : "When the collector last completed without error.";
   }
 
   function renderBanner(freshness) {
@@ -626,9 +779,14 @@ footer a:hover { color: var(--txt); }
     dom.status.appendChild(box);
   }
 
+  function slotElement(slotId) {
+    return document.getElementById(slotId);
+  }
+
   function renderSlots(noteText) {
     for (var i = 0; i < SLOT_IDS.length; i++) {
-      var slot = document.getElementById(SLOT_IDS[i]);
+      var slot = slotElement(SLOT_IDS[i]);
+      if (slot === null) continue;
       clear(slot);
       if (noteText !== null) {
         slot.appendChild(element("p", "slot-note", noteText));
@@ -641,24 +799,35 @@ footer a:hover { color: var(--txt); }
    * weekly buckets, not just "all". There is no per-range breakdown in the data,
    * so the label has to say so once, for all of them. Later sections that need
    * the wording inline should call INSIGHTS.resolutionSuffix().
+   *
+   * The other statuses get their own line rather than a resolution claim: an
+   * archive with no rows has no resolution, and saying "daily" there would be
+   * asserting a property of data that does not exist.
    */
-  function resolutionLabel() {
-    if (state.data === null) return null;
-    if (state.data.downsampled) {
-      return "The bundle was downsampled to fit its size budget, so every range — including 30d — is drawn in weekly buckets, not daily points.";
+  function controlNote() {
+    if (state.status === "ok") {
+      if (state.data.downsampled) {
+        return "The bundle was downsampled to fit its size budget, so every range — including 30d — is drawn in weekly buckets, not daily points.";
+      }
+      return "Daily resolution. Every range is drawn from one point per measured day.";
     }
-    return "Daily resolution. Every range is drawn from one point per measured day.";
-  }
-
-  function resolutionSuffix() {
-    if (state.data !== null && state.data.downsampled) return " (weekly buckets)";
+    if (state.status === "empty") {
+      return "There are no measurements to select a range from yet.";
+    }
+    if (state.status === "unavailable") {
+      return "There is no data bundle to select a range from.";
+    }
     return "";
   }
 
-  function renderResolution() {
-    var label = resolutionLabel();
-    dom.resolution.textContent = label === null ? "" : label;
-    if (state.data !== null && state.data.downsampled) {
+  function resolutionSuffix() {
+    if (state.status === "ok" && state.data.downsampled) return " (weekly buckets)";
+    return "";
+  }
+
+  function renderControlNote() {
+    dom.resolution.textContent = controlNote();
+    if (state.status === "ok" && state.data.downsampled) {
       dom.resolution.classList.add("is-weekly");
     } else {
       dom.resolution.classList.remove("is-weekly");
@@ -667,25 +836,49 @@ footer a:hover { color: var(--txt); }
 
   /* ---------------------------------------------------------- range control */
 
-  function setRange(key) {
-    var known = false;
+  function knownRange(key) {
     for (var i = 0; i < RANGES.length; i++) {
-      if (RANGES[i].key === key) known = true;
+      if (RANGES[i].key === key) return true;
     }
-    if (!known || state.range === key) return;
+    return false;
+  }
+
+  /*
+   * The range only means anything once a validated, non-empty bundle exists, so
+   * a change is refused before then. The buttons are disabled in every other
+   * status too, because a control that visibly does nothing reads as a broken
+   * page rather than as an unavailable one.
+   */
+  function setRange(key) {
+    if (!knownRange(key) || state.status !== "ok" || state.range === key) return;
     state.range = key;
     syncRangeButtons();
-    for (var j = 0; j < rangeListeners.length; j++) {
-      rangeListeners[j](state.range, state.data);
-    }
+    notifyRangeListeners();
     renderSections();
   }
 
+  function notifyRangeListeners() {
+    for (var i = 0; i < rangeListeners.length; i++) {
+      /* One listener's failure must not strand the ones after it: a listener
+       * that never ran leaves its section rendering a range the control is no
+       * longer showing, which is a chart mislabelled with a range it is not
+       * displaying. */
+      try {
+        rangeListeners[i](state.range, state.data);
+      } catch (error) {
+        reportFailure("A range listener", error);
+      }
+    }
+  }
+
   function syncRangeButtons() {
+    var interactive = state.status === "ok";
+    dom.rangectl.setAttribute("aria-disabled", interactive ? "false" : "true");
     var buttons = dom.rangectl.querySelectorAll(".range-btn");
     for (var i = 0; i < buttons.length; i++) {
       var active = buttons[i].getAttribute("data-range") === state.range;
       buttons[i].setAttribute("aria-pressed", active ? "true" : "false");
+      buttons[i].disabled = !interactive;
     }
   }
 
@@ -697,10 +890,10 @@ footer a:hover { color: var(--txt); }
       button.setAttribute("data-range", range.key);
       button.setAttribute("title", range.title);
       button.setAttribute("aria-label", range.title);
-      button.setAttribute("aria-pressed", range.key === state.range ? "true" : "false");
       button.addEventListener("click", makeRangeHandler(range.key));
       dom.rangectl.appendChild(button);
     }
+    syncRangeButtons();
   }
 
   function makeRangeHandler(key) {
@@ -709,13 +902,70 @@ footer a:hover { color: var(--txt); }
 
   /* -------------------------------------------------------- section wiring */
 
+  /*
+   * A section's exception belongs to that section. Routing it into the page's
+   * status would make the page state a false claim about the archive -- "the
+   * archive is not available" when the archive is fine and one renderer has a
+   * bug -- and would wipe the sections that rendered correctly. So the failure
+   * is contained to its own slot, the real exception goes to the console for
+   * whoever is debugging, and the reader is told only that this one section
+   * failed.
+   */
+  function reportFailure(what, error) {
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("insights: " + what + " failed.", error);
+    }
+  }
+
+  function renderSectionFailure(slot, error) {
+    clear(slot);
+    var note = element("p", "slot-note slot-note-error");
+    note.appendChild(element("strong", null, "This section could not be rendered."));
+    note.appendChild(document.createTextNode(
+      " The rest of the page is unaffected, and the underlying data is unchanged — the fault is in this page's code. Details are in the browser console."));
+    slot.appendChild(note);
+    reportFailure("Section “" + slot.id + "”", error);
+  }
+
+  /* Give a section back its slot: tear down whatever it built (a uPlot instance
+   * holds listeners and a canvas, and dropping the DOM node alone leaks both),
+   * then empty the node. Called before every render, not only the first. */
+  function resetSection(section, slot) {
+    if (section.rendered && typeof section.teardown === "function") {
+      try {
+        section.teardown(slot);
+      } catch (error) {
+        reportFailure("Teardown for section “" + slot.id + "”", error);
+      }
+    }
+    section.rendered = false;
+    clear(slot);
+  }
+
+  function renderSection(section) {
+    var slot = slotElement(section.slotId);
+    if (slot === null) return;
+    resetSection(section, slot);
+    try {
+      section.render(slot, state.data, state.range);
+      section.rendered = true;
+    } catch (error) {
+      section.rendered = false;
+      renderSectionFailure(slot, error);
+    }
+  }
+
   function renderSections() {
     if (state.status !== "ok") return;
     for (var i = 0; i < sections.length; i++) {
-      var section = sections[i];
-      var slot = document.getElementById(section.slotId);
-      if (slot === null) continue;
-      section.render(slot, state.data, state.range);
+      renderSection(sections[i]);
+    }
+  }
+
+  function teardownSections() {
+    for (var i = 0; i < sections.length; i++) {
+      var slot = slotElement(sections[i].slotId);
+      if (slot !== null) resetSection(sections[i], slot);
     }
   }
 
@@ -724,9 +974,11 @@ footer a:hover { color: var(--txt); }
   function applyState() {
     clear(dom.status);
     renderProvenance();
-    renderResolution();
+    renderControlNote();
+    syncRangeButtons();
 
     if (state.status === "loading") {
+      teardownSections();
       renderSlots(null);
       return;
     }
@@ -734,6 +986,7 @@ footer a:hover { color: var(--txt); }
     if (state.status === "unavailable") {
       /* A missing data.json is the ordinary case, not a fault: the bundle is a
        * build artifact and is never committed. Say what is missing and why. */
+      teardownSections();
       renderNotice("no data bundle", "The archive is not available here", [
         state.detail,
         "This page is built from a bundle generated at deploy time out of the repository's metrics archive. When that archive or the deploy step is unavailable, there are no figures to show, and showing invented ones would be worse than showing none."
@@ -748,6 +1001,7 @@ footer a:hover { color: var(--txt); }
     if (state.status === "empty") {
       /* Distinct from a 404: the bundle loaded fine, the archive simply has no
        * rows in it yet. */
+      teardownSections();
       renderNotice("no measurements yet", "Collection has not produced any rows yet", [
         "The data bundle loaded, but the archive it was built from holds no measurements: no traffic, no growth snapshots, no releases.",
         "The collector runs once a day. Figures appear here after its first successful run, and the traffic series can only start from that day — GitHub does not expose traffic older than a rolling 14-day window, so earlier history is unrecoverable."
@@ -756,6 +1010,10 @@ footer a:hover { color: var(--txt); }
       return;
     }
 
+    /* Tear down before clearing: renderSlots removes DOM nodes, and a uPlot
+     * instance whose node is removed without destroy() keeps its listeners. The
+     * clear also empties any slot that has no registered renderer yet. */
+    teardownSections();
     renderSlots(null);
     renderSections();
   }
@@ -765,6 +1023,28 @@ footer a:hover { color: var(--txt); }
     state.detail = detail;
     state.data = null;
     applyState();
+  }
+
+  function accept(payload) {
+    var problem = validateBundle(payload);
+    if (problem !== null) {
+      fail("The data bundle was downloaded but could not be read: " + problem + ".");
+      return;
+    }
+    state.data = payload;
+    state.status = payload.empty ? "empty" : "ok";
+    state.detail = "";
+    applyState();
+  }
+
+  function describeFetchError(error) {
+    if (error && error.name === "AbortError") {
+      return "The data bundle did not arrive within " + (FETCH_TIMEOUT_MS / 1000) + " seconds.";
+    }
+    if (error && typeof error.message === "string" && error.message !== "") {
+      return error.message;
+    }
+    return "The data bundle could not be downloaded.";
   }
 
   function load() {
@@ -778,35 +1058,35 @@ footer a:hover { color: var(--txt); }
       timer = window.setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
     }
 
+    function done() {
+      if (timer !== null) window.clearTimeout(timer);
+    }
+
     /* Relative and same-origin on purpose: this page makes no cross-origin
-     * request of any kind. */
+     * request of any kind.
+     *
+     * The transport outcome is resolved into a plain value BEFORE any rendering
+     * runs. A single .then/.catch chain would route an exception thrown while
+     * rendering into the same handler as a network failure, and the page would
+     * announce "the archive is not available" on the strength of an internal
+     * bug -- a fabricated statement about the data, which is the one thing this
+     * page must never make. Here a rendering exception stays an exception. */
     fetch("data.json", options).then(function (response) {
       if (!response.ok) {
         throw new Error("The server answered HTTP " + response.status + " for data.json.");
       }
-      return response.json();
-    }).then(function (payload) {
-      if (timer !== null) window.clearTimeout(timer);
-      var problem = validateBundle(payload);
-      if (problem !== null) {
-        fail("The data bundle was downloaded but could not be read: " + problem + ".");
-        return;
-      }
-      state.data = payload;
-      state.status = payload.empty ? "empty" : "ok";
-      state.detail = "";
-      applyState();
-    }).catch(function (error) {
-      if (timer !== null) window.clearTimeout(timer);
-      var message;
-      if (error && error.name === "AbortError") {
-        message = "The data bundle did not arrive within " + (FETCH_TIMEOUT_MS / 1000) + " seconds.";
-      } else if (error && typeof error.message === "string" && error.message !== "") {
-        message = error.message;
-      } else {
-        message = "The data bundle could not be downloaded.";
-      }
-      fail(message);
+      /* Replace the parser's own message: it names a byte offset, which tells a
+       * reader nothing, and it is not a statement anyone should have to decode. */
+      return response.json()["catch"](function () {
+        throw new Error("The data bundle was downloaded but is not valid JSON.");
+      });
+    }).then(
+      function (payload) { return { ok: true, payload: payload }; },
+      function (error) { return { ok: false, error: error }; }
+    ).then(function (outcome) {
+      done();
+      if (outcome.ok) accept(outcome.payload);
+      else fail(describeFetchError(outcome.error));
     });
   }
 
@@ -818,20 +1098,59 @@ footer a:hover { color: var(--txt); }
     DASH: DASH,
     state: state,
     /*
-     * Register a section renderer. `render(slot, data, rangeKey)` is called once
-     * the bundle validates and is non-empty, and again on every range change.
-     * The slot is emptied by the shell before the first call; the renderer owns
-     * its contents from then on.
+     * Register a section renderer.
+     *
+     *   render(slot, data, rangeKey)
+     *     Called once the bundle validates and is non-empty, and again on every
+     *     range change. `data` has passed validateBundle. The slot is emptied
+     *     before every call, so a renderer always builds from scratch.
+     *     A throw is contained: it fails this slot only, leaves the page status
+     *     alone, and does not stop the other sections rendering.
+     *
+     *   teardown(slot)   (optional)
+     *     Called before a re-render and before the slot is emptied. Destroy
+     *     anything holding resources here -- a uPlot instance, a listener, an
+     *     observer -- because removing the DOM node does not release them.
+     *
+     * Returns true when the section was registered.
      */
-    registerSection: function (slotId, render) {
-      sections.push({ slotId: slotId, render: render });
-      if (state.status === "ok") {
-        var slot = document.getElementById(slotId);
-        if (slot !== null) render(slot, state.data, state.range);
+    registerSection: function (slotId, render, teardown) {
+      if (typeof render !== "function") {
+        reportFailure("registerSection(“" + slotId + "”)",
+          new Error("render must be a function"));
+        return false;
       }
+      if (slotElement(slotId) === null) {
+        reportFailure("registerSection(“" + slotId + "”)",
+          new Error("no element with that id exists in the page"));
+        return false;
+      }
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].slotId === slotId) {
+          reportFailure("registerSection(“" + slotId + "”)",
+            new Error("that slot already has a renderer; refusing to register a second one"));
+          return false;
+        }
+      }
+      var section = { slotId: slotId, render: render, teardown: teardown, rendered: false };
+      sections.push(section);
+      if (state.status === "ok") renderSection(section);
+      return true;
     },
-    /* Notified before section renderers run, for state that is shared between them. */
-    onRangeChange: function (listener) { rangeListeners.push(listener); },
+    /*
+     * Notified before the section renderers run, for state shared between them.
+     * Only ever invoked with a loaded, validated, non-empty bundle -- the same
+     * guarantee registerSection's renderers get -- because setRange refuses any
+     * change outside status "ok". A listener's throw is contained to itself.
+     */
+    onRangeChange: function (listener) {
+      if (typeof listener !== "function") {
+        reportFailure("onRangeChange", new Error("listener must be a function"));
+        return false;
+      }
+      rangeListeners.push(listener);
+      return true;
+    },
     setRange: setRange,
     resolutionSuffix: resolutionSuffix,
     formatInstant: formatInstant,
