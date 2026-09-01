@@ -56,3 +56,14 @@ merge-blocking, Dependabot alerts, and native secret-scanning are GitHub *settin
       `image:` pins — update `caddy` and `livekit/livekit-server` by hand when new
       releases ship. (Renovate, which parses compose, is an optional future
       alternative.)
+- [ ] Create a fine-grained PAT scoped to this repository only, with
+      **Administration: read** and **Contents: read**, and store it as the
+      `METRICS_TOKEN` repository secret. Traffic endpoints are unreachable
+      without it — there is no `administration` key in the Actions
+      `permissions:` vocabulary, so `GITHUB_TOKEN` cannot substitute. See
+      `docs/systems/metrics.md`.
+- [ ] Create a ruleset on the `metrics-data` branch blocking **deletion** and
+      **force-push**, with no bypass actors, matching the existing
+      `cla-signatures` ruleset. Do NOT require pull requests or status checks:
+      the collector commits directly. This branch holds the only irreplaceable
+      data in the repository.
