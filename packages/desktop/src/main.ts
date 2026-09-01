@@ -71,7 +71,7 @@ const knownInstanceOrigins = new Set<string>();
 
 // Flatpak deployments are immutable and are upgraded by Flatpak itself. Keep
 // electron-updater from downloading an AppImage/DEB that it cannot install.
-const IS_FLATPAK = typeof process.env.FLATPAK_ID === 'string';
+const IS_FLATPAK = Boolean(process.env.FLATPAK_ID);
 
 // ─── AGPL-3.0 § 13 source offer ─────────────────────────────────────────────
 // Upstream fallback for the "Source code" menu items and the About panel.
@@ -607,6 +607,8 @@ function registerIpcHandlers(): void {
 
   // Auto-launch settings
   ipcMain.handle('get-auto-launch-settings', (): { openAtLogin: boolean; startMinimized: boolean } => {
+    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
+
     if (process.platform === 'win32') {
       // Pass path/args so getLoginItemSettings can find the matching launchItems[] entry.
       // We can't know in advance whether the user's saved choice was minimized or not,
@@ -641,6 +643,8 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('set-auto-launch-settings', (_event, settings: { openAtLogin?: boolean; startMinimized?: boolean }) => {
+    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
+
     // Read current truth from the OS (not from disk) so a partial update preserves
     // whatever the user (or Task Manager / System Settings) most recently set.
     let currentOpenAtLogin: boolean;
@@ -1002,10 +1006,10 @@ if (!gotTheLock) {
 
     const applyMenusForState = (state: RecoveryState): void => {
       if (tray) {
-        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
+        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions, IS_FLATPAK)));
       }
       if (process.platform === 'darwin') {
-        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions)));
+        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions, IS_FLATPAK)));
       }
       // Mode-gated push to renderer (recovery.html subscribes to this).
       if (state.mode === 'recovery' && mainWindow && !mainWindow.isDestroyed()) {
@@ -1019,9 +1023,11 @@ if (!gotTheLock) {
     initAutoUpdater();
 
     // ─── Activity Detection ────────────────────────────────────────────────
-    startActivityDetection((activity) => {
-      mainWindow?.webContents.send('activity-detected', activity);
-    });
+    if (!IS_FLATPAK) {
+      startActivityDetection((activity) => {
+        mainWindow?.webContents.send('activity-detected', activity);
+      });
+    }
 
     ipcMain.handle('get-current-activity', () => getCurrentActivity());
 

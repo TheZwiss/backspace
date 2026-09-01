@@ -12,8 +12,8 @@ Install `flatpak-builder` and add Flathub, then run from the repository root:
 
 ```sh
 flatpak-builder --user --install-deps-from=flathub --install --force-clean \
-  build-flatpak com.backspace.desktop.yml
-flatpak run com.backspace.desktop
+  build-flatpak io.github.TheZwiss.backspace.yml
+flatpak run io.github.TheZwiss.backspace
 ```
 
 When `pnpm-lock.yaml` changes, regenerate the offline source list:
@@ -21,6 +21,7 @@ When `pnpm-lock.yaml` changes, regenerate the offline source list:
 ```sh
 flatpak run --filesystem="$PWD" --command=flatpak-node-generator \
   org.flatpak.Builder \
+  --electron-node-headers \
   --node-sdk-extension org.freedesktop.Sdk.Extension.node24//25.08 \
   -o "$PWD/flatpak/node-sources.json" pnpm "$PWD/pnpm-lock.yaml"
 ```
@@ -30,14 +31,16 @@ repository created by `flatpak-builder`:
 
 ```sh
 flatpak build-bundle ~/.local/share/flatpak/repo Backspace.flatpak \
-  com.backspace.desktop
+  io.github.TheZwiss.backspace
 ```
 
 The manifest intentionally does not expose the host home directory. Network,
 audio, camera/device, graphics, PipeWire screen capture, notifications, and the
 status notifier are enabled because they are core desktop-client features.
 Global keybind behavior is desktop-dependent: X11 supports the bundled native
-hook, while Wayland compositors may restrict global input observation. The
-Flatpak sandbox also prevents Electron's current start-at-login integration and
-host process scanning from working; use your desktop's autostart settings if
-needed, and expect activity presence to remain unavailable in this build.
+hook, which is rebuilt against the bundled Electron headers, while Wayland
+compositors may restrict global input observation. The Flatpak sandbox also
+prevents Electron's current start-at-login integration and host process scanning
+from working. The client hides those unsupported controls; use your desktop's
+autostart settings if needed, and expect activity presence to remain unavailable
+in this build.

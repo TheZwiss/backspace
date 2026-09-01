@@ -217,14 +217,18 @@
 
     function render(state) {
       const reasonCode = state.reason?.code ?? null;
-      $('hint').textContent = hintFor(reasonCode, state.updateState);
+      const managedByFlatpak = window.backspace?.packageFormat === 'flatpak';
+      $('hint').textContent = managedByFlatpak
+        ? "Try reloading the app or changing the connected instance. Updates are managed by Flatpak."
+        : hintFor(reasonCode, state.updateState);
 
       // Check for Updates button
       $('btn-check').textContent = checkButtonLabel(state.updateState);
       $('btn-check').disabled = !checkButtonEnabled(state.updateState);
+      $('btn-check').style.display = managedByFlatpak ? 'none' : '';
 
       // Restart visibility
-      $('btn-restart').style.display = state.updateState === 'downloaded' ? '' : 'none';
+      $('btn-restart').style.display = !managedByFlatpak && state.updateState === 'downloaded' ? '' : 'none';
 
       // Open Releases visibility
       $('btn-releases').style.display = state.updateState === 'error' ? '' : 'none';

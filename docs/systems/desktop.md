@@ -11,7 +11,7 @@ Source files:
 - `packages/web/src/platform/platform.ts` — `isElectron()` / `isElectronMac()` / `getElectronAPI()` helpers
 - `packages/desktop/electron-builder.yml` — Build config, protocol registration, afterPack hook
 - `packages/desktop/scripts/afterPack.js` — Cross-platform native module cleanup (critical for builds)
-- `com.backspace.desktop.yml` — Flatpak manifest (offline x86_64/aarch64 source build)
+- `io.github.TheZwiss.backspace.yml` — Flatpak manifest (offline x86_64/aarch64 source build)
 - `flatpak/` — Flatpak launcher, desktop entry, AppStream metadata, and build instructions
 - `packages/desktop/resources/games.json` — Bundled game dictionary seed (versioned)
 
@@ -1002,10 +1002,13 @@ Earlier builds wrote to `<appData>/@backspace/desktop/`. On first launch after t
 5. Create main window (with state restoration)
    - After the BrowserWindow is constructed, `setMainWindow(mainWindow)` and `attachRecoveryHandlers(mainWindow)` are called. The `closed` event handler calls `setMainWindow(null)`.
 6. Create tray icon
-7. Initialize auto-updater (10s delayed first check)
+7. Initialize auto-updater (10s delayed first check; skipped in Flatpak builds,
+   where the package manager owns updates)
 8. Wire recovery store subscriber (rebuilds tray + macOS menu on every state change; pushes `recovery-state-changed` to renderer when in recovery mode)
 9. `setOnQuitRequested(requestQuit)` so recovery's Quit button uses the same `isQuitting + app.quit()` pattern as the tray
-10. Start activity detection (immediate first poll, 15s interval, background remote sync)
+10. Start activity detection (immediate first poll, 15s interval, background
+    remote sync; skipped in Flatpak builds because host process scanning is not
+    available through the sandbox)
 11. Linux/AppImage path-refresh: re-apply autostart entry if `$APPIMAGE` path changed (conditional; no-op on Windows/macOS)
 12. Check for deep link in launch args
 

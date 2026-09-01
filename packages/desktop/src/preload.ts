@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('backspace', {
   // Platform info
   platform: process.platform,
+  packageFormat: process.env.FLATPAK_ID ? 'flatpak' : 'native',
 
   // Window controls
   minimize: () => {

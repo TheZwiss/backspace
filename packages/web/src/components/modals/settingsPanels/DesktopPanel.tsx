@@ -69,7 +69,7 @@ function AutoLaunchSettings() {
   );
 }
 
-function UpdateSettings() {
+function UpdateSettings({ managedByFlatpak }: { managedByFlatpak: boolean }) {
   const [version, setVersion] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -91,28 +91,34 @@ function UpdateSettings() {
           {version ? `Version ${version}` : 'Backspace Desktop'}
         </div>
         <div className="text-xs text-txt-tertiary mt-0.5">
-          Check for new versions of the desktop app
+          {managedByFlatpak
+            ? 'Updates are installed through your Flatpak software manager'
+            : 'Check for new versions of the desktop app'}
         </div>
       </div>
-      <button
-        onClick={handleCheck}
-        disabled={checking}
-        className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
-      >
-        {checking ? 'Checking...' : 'Check for Updates'}
-      </button>
+      {!managedByFlatpak && (
+        <button
+          onClick={handleCheck}
+          disabled={checking}
+          className="px-3 py-1.5 text-sm text-txt-secondary hover:text-txt-primary bg-white/[0.04] hover:bg-white/[0.08] rounded-lg transition-colors disabled:opacity-50"
+        >
+          {checking ? 'Checking...' : 'Check for Updates'}
+        </button>
+      )}
     </div>
   );
 }
 
 export function DesktopPanel() {
+  const managedByFlatpak = window.backspace?.packageFormat === 'flatpak';
+
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-semibold text-txt-primary mb-6">Desktop</h2>
 
       <div className="rounded-lg bg-white/[0.03] border border-white/[0.04] p-3.5 space-y-3">
-        <AutoLaunchSettings />
-        <UpdateSettings />
+        {!managedByFlatpak && <AutoLaunchSettings />}
+        <UpdateSettings managedByFlatpak={managedByFlatpak} />
 
         <div className="border-t border-white/[0.04]" />
 

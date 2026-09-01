@@ -1,4 +1,4 @@
-app-id: com.backspace.desktop
+app-id: io.github.TheZwiss.backspace
 base: org.electronjs.Electron2.BaseApp
 base-version: '25.08'
 runtime: org.freedesktop.Platform
@@ -18,11 +18,8 @@ finish-args:
   - --socket=pulseaudio
   # Camera access and hardware-accelerated video encoding/decoding.
   - --device=all
-  # PipeWire is used by the desktop capture portal on Wayland.
-  - --filesystem=xdg-run/pipewire-0:ro
-  # Native notifications and the Linux tray icon.
-  - --talk-name=org.freedesktop.Notifications
-  - --talk-name=org.gtk.Notifications
+  # The Linux tray icon uses the StatusNotifier protocol. Notifications and
+  # PipeWire screen capture go through XDG portals provided by the BaseApp.
   - --talk-name=org.kde.StatusNotifierWatcher
   # Keep pointer themes correctly scaled when Electron uses native Wayland.
   - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
@@ -58,10 +55,10 @@ modules:
         path: flatpak/build.sh
 
       - type: file
-        path: flatpak/com.backspace.desktop.desktop
+        path: flatpak/io.github.TheZwiss.backspace.desktop
 
       - type: file
-        path: flatpak/com.backspace.desktop.metainfo.xml
+        path: flatpak/io.github.TheZwiss.backspace.metainfo.xml
 
       - type: script
         dest-filename: backspace

@@ -1,50 +1,120 @@
 diff --git a/packages/desktop/package.json b/packages/desktop/package.json
+index 70c152fa..ee22ba5f 100644
 --- a/packages/desktop/package.json
 +++ b/packages/desktop/package.json
-@@ -11,6 +11,7 @@
-   },
-   "homepage": "https://github.com/TheZwiss/backspace",
-   "main": "dist/main.js",
-+  "desktopName": "com.backspace.desktop.desktop",
-   "scripts": {
-     "build:ts": "tsc",
-     "dev": "cp build/icon.icns $(find ../../node_modules -path '*/electron/dist/Electron.app/Contents/Resources/electron.icns' 2>/dev/null | head -1) 2>/dev/null; tsc && electron .",
+@@ -12,0 +13 @@
++  "desktopName": "io.github.TheZwiss.backspace.desktop",
+diff --git a/packages/desktop/resources/recovery.html b/packages/desktop/resources/recovery.html
+index 9697241a..e188e0f8 100644
+--- a/packages/desktop/resources/recovery.html
++++ b/packages/desktop/resources/recovery.html
+@@ -220 +220,4 @@
+-      $('hint').textContent = hintFor(reasonCode, state.updateState);
++      const managedByFlatpak = window.backspace?.packageFormat === 'flatpak';
++      $('hint').textContent = managedByFlatpak
++        ? "Try reloading the app or changing the connected instance. Updates are managed by Flatpak."
++        : hintFor(reasonCode, state.updateState);
+@@ -224,0 +228 @@
++      $('btn-check').style.display = managedByFlatpak ? 'none' : '';
+@@ -227 +231 @@
+-      $('btn-restart').style.display = state.updateState === 'downloaded' ? '' : 'none';
++      $('btn-restart').style.display = !managedByFlatpak && state.updateState === 'downloaded' ? '' : 'none';
 diff --git a/packages/desktop/src/main.ts b/packages/desktop/src/main.ts
+index 9029069d..9d8a1ad9 100644
 --- a/packages/desktop/src/main.ts
 +++ b/packages/desktop/src/main.ts
-@@ -69,6 +69,10 @@ let pendingDeepLink: string | null = null;
-
- const knownInstanceOrigins = new Set<string>();
-
+@@ -71,0 +72,4 @@ const knownInstanceOrigins = new Set<string>();
 +// Flatpak deployments are immutable and are upgraded by Flatpak itself. Keep
 +// electron-updater from downloading an AppImage/DEB that it cannot install.
-+const IS_FLATPAK = typeof process.env.FLATPAK_ID === 'string';
++const IS_FLATPAK = Boolean(process.env.FLATPAK_ID);
 +
- // ─── AGPL-3.0 § 13 source offer ─────────────────────────────────────────────
- // Upstream fallback for the "Source code" menu items and the About panel.
- // Used when the connected instance can't be reached or advertises no source URL.
-@@ -574,6 +578,7 @@ function registerIpcHandlers(): void {
-
-   // Auto-update IPC
-   ipcMain.on('install-update', () => {
+@@ -576,0 +581 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return;
-     try {
-       const { autoUpdater } = require('electron-updater');
-       autoUpdater.quitAndInstall();
-@@ -583,6 +588,7 @@ function registerIpcHandlers(): void {
-   });
-
-   ipcMain.on('check-for-updates', () => {
+@@ -585,0 +591 @@ function registerIpcHandlers(): void {
 +    if (IS_FLATPAK) return;
-     try {
-       const { autoUpdater } = require('electron-updater');
-       autoUpdater.checkForUpdates().catch(() => {});
-@@ -703,6 +709,8 @@ function registerIpcHandlers(): void {
- // ─── Auto-Update ────────────────────────────────────────────────────────────
-
- function initAutoUpdater(): void {
+@@ -603,0 +610,2 @@ function registerIpcHandlers(): void {
++    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
++
+@@ -637,0 +646,2 @@ function registerIpcHandlers(): void {
++    if (IS_FLATPAK) return { openAtLogin: false, startMinimized: false };
++
+@@ -705,0 +716,2 @@ function initAutoUpdater(): void {
 +  if (IS_FLATPAK) return;
 +
-   try {
-     const { autoUpdater } = require('electron-updater');
-     autoUpdater.autoDownload = true;
+@@ -997 +1009 @@ if (!gotTheLock) {
+-        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions)));
++        tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenuTemplate(state, trayActions, IS_FLATPAK)));
+@@ -1000 +1012 @@ if (!gotTheLock) {
+-        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions)));
++        Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(app.name, state, trayActions, IS_FLATPAK)));
+@@ -1014,3 +1026,5 @@ if (!gotTheLock) {
+-    startActivityDetection((activity) => {
+-      mainWindow?.webContents.send('activity-detected', activity);
+-    });
++    if (!IS_FLATPAK) {
++      startActivityDetection((activity) => {
++        mainWindow?.webContents.send('activity-detected', activity);
++      });
++    }
+diff --git a/packages/desktop/src/preload.ts b/packages/desktop/src/preload.ts
+index 35730519..6210456b 100644
+--- a/packages/desktop/src/preload.ts
++++ b/packages/desktop/src/preload.ts
+@@ -5,0 +6 @@ contextBridge.exposeInMainWorld('backspace', {
++  packageFormat: process.env.FLATPAK_ID ? 'flatpak' : 'native',
+diff --git a/packages/desktop/src/recovery.ts b/packages/desktop/src/recovery.ts
+index 511c0677..661efbbd 100644
+--- a/packages/desktop/src/recovery.ts
++++ b/packages/desktop/src/recovery.ts
+@@ -122,0 +123 @@ export function buildTrayMenuTemplate(
++  updatesManagedExternally = false,
+@@ -127,2 +127,0 @@ export function buildTrayMenuTemplate(
+-    { type: 'separator' },
+-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+@@ -131,7 +130,13 @@ export function buildTrayMenuTemplate(
+-  if (state.updateState === 'downloaded') {
+-    items.push({
+-      id: 'restart-to-install',
+-      label: 'Restart to Install Update',
+-      enabled: true,
+-      click: actions?.onRestartToInstall,
+-    });
++  if (!updatesManagedExternally) {
++    items.push(
++      { type: 'separator' },
++      checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
++    );
++    if (state.updateState === 'downloaded') {
++      items.push({
++        id: 'restart-to-install',
++        label: 'Restart to Install Update',
++        enabled: true,
++        click: actions?.onRestartToInstall,
++      });
++    }
+@@ -154,0 +160 @@ export function buildAppMenuTemplate(
++  updatesManagedExternally = false,
+@@ -159,2 +164,0 @@ export function buildAppMenuTemplate(
+-    { type: 'separator' },
+-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+@@ -163,7 +167,13 @@ export function buildAppMenuTemplate(
+-  if (state.updateState === 'downloaded') {
+-    appSubmenu.push({
+-      id: 'restart-to-install',
+-      label: 'Restart to Install Update',
+-      enabled: true,
+-      click: actions?.onRestartToInstall,
+-    });
++  if (!updatesManagedExternally) {
++    appSubmenu.push(
++      { type: 'separator' },
++      checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
++    );
++    if (state.updateState === 'downloaded') {
++      appSubmenu.push({
++        id: 'restart-to-install',
++        label: 'Restart to Install Update',
++        enabled: true,
++        click: actions?.onRestartToInstall,
++      });
++    }

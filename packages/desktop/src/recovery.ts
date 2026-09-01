@@ -120,21 +120,26 @@ function checkForUpdatesItem(state: RecoveryState, click: () => void): MenuItemC
 export function buildTrayMenuTemplate(
   state: RecoveryState,
   actions?: Partial<MenuActions>,
+  updatesManagedExternally = false,
 ): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [
     { label: 'Show Backspace', click: actions?.onShow },
     { label: 'Hide', click: actions?.onHide },
-    { type: 'separator' },
-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
 
-  if (state.updateState === 'downloaded') {
-    items.push({
-      id: 'restart-to-install',
-      label: 'Restart to Install Update',
-      enabled: true,
-      click: actions?.onRestartToInstall,
-    });
+  if (!updatesManagedExternally) {
+    items.push(
+      { type: 'separator' },
+      checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+    );
+    if (state.updateState === 'downloaded') {
+      items.push({
+        id: 'restart-to-install',
+        label: 'Restart to Install Update',
+        enabled: true,
+        click: actions?.onRestartToInstall,
+      });
+    }
   }
 
   items.push(
@@ -152,21 +157,26 @@ export function buildAppMenuTemplate(
   appName: string,
   state: RecoveryState,
   actions?: Partial<MenuActions>,
+  updatesManagedExternally = false,
 ): MenuItemConstructorOptions[] {
   const appSubmenu: MenuItemConstructorOptions[] = [
     { role: 'about' },
     { label: 'Source code (AGPL)', click: () => actions?.onOpenSource?.() },
-    { type: 'separator' },
-    checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
   ];
 
-  if (state.updateState === 'downloaded') {
-    appSubmenu.push({
-      id: 'restart-to-install',
-      label: 'Restart to Install Update',
-      enabled: true,
-      click: actions?.onRestartToInstall,
-    });
+  if (!updatesManagedExternally) {
+    appSubmenu.push(
+      { type: 'separator' },
+      checkForUpdatesItem(state, () => actions?.onCheckForUpdates?.()),
+    );
+    if (state.updateState === 'downloaded') {
+      appSubmenu.push({
+        id: 'restart-to-install',
+        label: 'Restart to Install Update',
+        enabled: true,
+        click: actions?.onRestartToInstall,
+      });
+    }
   }
 
   appSubmenu.push(

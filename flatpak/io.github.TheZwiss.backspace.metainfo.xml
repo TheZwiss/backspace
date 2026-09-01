@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.backspace.desktop</id>
+  <id>io.github.TheZwiss.backspace</id>
   <name>Backspace</name>
   <summary>Self-hosted text, voice, and video communication</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-only</project_license>
-  <developer id="com.backspace">
+  <developer id="io.github.thezwiss">
     <name>Jannis Braun</name>
   </developer>
 
@@ -17,13 +17,13 @@
       instances.
     </p>
     <p>
-      The desktop client adds native notifications, a system tray, global
-      push-to-talk keybinds, activity presence, and deep links to the web app's
-      complete chat and administration interface.
+      The desktop client adds native notifications, a system tray, deep links,
+      and global push-to-talk keybinds where supported by the desktop
+      environment.
     </p>
   </description>
 
-  <launchable type="desktop-id">com.backspace.desktop.desktop</launchable>
+  <launchable type="desktop-id">io.github.TheZwiss.backspace.desktop</launchable>
   <url type="homepage">https://github.com/TheZwiss/backspace</url>
   <url type="bugtracker">https://github.com/TheZwiss/backspace/issues</url>
   <url type="vcs-browser">https://github.com/TheZwiss/backspace</url>

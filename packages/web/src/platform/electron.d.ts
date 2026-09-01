@@ -30,6 +30,7 @@ interface ElectronScreenSource {
 interface BackspaceElectronAPI {
   // Platform info
   platform: NodeJS.Platform;
+  packageFormat: 'native' | 'flatpak';
 
   // Window controls
   minimize: () => void;

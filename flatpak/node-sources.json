@@ -160,6 +160,13 @@
         ]
     },
     {
+        "type": "archive",
+        "url": "https://www.electronjs.org/headers/v40.8.2/node-v40.8.2-headers.tar.gz",
+        "strip-components": 1,
+        "sha256": "e63f717b621acd1953d592bb89d1bf0457396c8a17d72a15f7b2e2e511e66043",
+        "dest": "flatpak-node/cache/node-gyp/40.8.2"
+    },
+    {
         "type": "file",
         "url": "https://codeload.github.com/electron/node-gyp/tar.gz/06b29aafb7708acef8b3669835c8a7857ebc92d2",
         "sha512": "3178339530c41277490774c16ef779b8540effc81a20da351df7a7f2f79fe6babf54754f781eb7baebffb8ee7ef0616c009feb6aebba5c1efd4ba2b8f9a5dcfb",
@@ -8938,6 +8945,12 @@
         "sha512": "6d7138711fe455984a657fd18cf11f94768a56151597ce67a14defe9bf1aa5f404735c7803ecc1c6367894df0ba8677a599ddd97df29638a3bd7b5459a83e9f8",
         "dest-filename": "zwitch-2.0.4.tgz",
         "dest": "flatpak-node/pnpm-tarballs"
+    },
+    {
+        "type": "inline",
+        "contents": "11",
+        "dest-filename": "installVersion",
+        "dest": "flatpak-node/cache/node-gyp/40.8.2"
     },
     {
         "type": "inline",
