@@ -1,4 +1,22 @@
-import type { DimensionRow, IsoDate } from './types.ts';
+import type { DimensionRow, IsoDate, ReleaseRow } from './types.ts';
+
+/**
+ * Plain UTF-16 code-unit comparison, deliberately NOT `String.prototype
+ * .localeCompare`. `localeCompare`'s collation is ICU-version dependent —
+ * the exact ordering it produces for a given pair of strings can change
+ * across Node versions with no code change on this side at all, which would
+ * silently reorder an entire committed file on the next run after a Node
+ * upgrade. That would destroy the one-line-per-day diff property the plain
+ * text format was chosen for in the first place. Every value ordered by
+ * this comparator in the codebase is an ISO date or similarly plain ASCII
+ * identifier, so byte ordering and locale ordering coincide today — the
+ * point of this function is that byte ordering also stays put tomorrow.
+ */
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
 
 /** Quotes a CSV field only when it contains a comma, quote, or newline. */
 function quote(value: string): string {
@@ -79,7 +97,18 @@ export function parseCsv(text: string): Record<string, string>[] {
   const header = rows.shift();
   if (header === undefined) return [];
   return rows.map((fields, index) => {
-    if (fields.length > header.length) {
+    // A row with a DIFFERENT field count than the header — too many OR too
+    // few — can only mean truncation or corruption: the header was derived
+    // from this same file, so a short row relative to its own header is not
+    // "a column was added later" (that case is handled entirely by
+    // `formatCsv`'s `row[key] ?? ''` and never reaches this parser at all).
+    // Padding a short row with `''` would silently convert a measured value
+    // into "not measured," permanently, with nothing in the log — the exact
+    // failure this archive exists to avoid. A row with the CORRECT field
+    // count and an empty value (e.g. a blank `downloads_total`) is a
+    // different shape entirely and is unaffected by this check: it has one
+    // fewer comma than a short row, not one fewer field.
+    if (fields.length !== header.length) {
       throw new Error(
         `parseCsv: row ${index + 1} has ${fields.length} fields but the header has ${header.length}`,
       );
@@ -99,7 +128,7 @@ export function formatCsv(
   const sortKey = header[0];
   if (sortKey === undefined) throw new Error('formatCsv requires at least one header column');
   const sorted = [...rows].sort((a, b) =>
-    String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? '')),
+    compareStrings(String(a[sortKey] ?? ''), String(b[sortKey] ?? '')),
   );
   const body = sorted.map((row) => header.map((key) => quote(String(row[key] ?? ''))).join(','));
   return [header.join(','), ...body].join('\n') + '\n';
@@ -128,7 +157,63 @@ export function upsertByDate<T extends { date: IsoDate }>(
     if (mode === 'if-absent' && byDate.has(row.date)) continue;
     byDate.set(row.date, row);
   }
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return [...byDate.values()].sort((a, b) => compareStrings(a.date, b.date));
+}
+
+/**
+ * Merges `incoming` into `existing` keyed by an explicit `key` selector
+ * rather than `date`, with the same `'overwrite' | 'if-absent'` modes as
+ * `upsertByDate` and the same meaning for each.
+ *
+ * Exists because not every series is a daily series: `releases.csv` can
+ * legitimately hold more than one row for the same UTC date (two releases
+ * published the same day), so keying its merge on `date` — as
+ * `upsertByDate` does — silently collapses them into one row and drops the
+ * other. A release's true row identity is its tag, which `upsertByDate` has
+ * no way to express. `upsertByDate` itself is left untouched for the
+ * genuinely daily series (`stars.csv`, `forks.csv`, `repo.csv`, traffic):
+ * this is a new function, not a generalisation that reshapes the old one's
+ * behaviour underneath its existing callers.
+ *
+ * `compare` orders the merged result explicitly, rather than deriving an
+ * order from `key` (which would sort releases by tag, not by date) or from
+ * Map iteration order (which is insertion order, and therefore differs
+ * between `collect.ts` and `backfill.ts` depending on which one merged the
+ * row first) — either alternative would make the final row order,
+ * regardless of source, an implementation detail rather than a fixed
+ * contract, and an unstable order rewrites the whole file on every commit.
+ */
+export function upsertByKey<T>(
+  existing: readonly T[],
+  incoming: readonly T[],
+  key: (row: T) => string,
+  mode: 'overwrite' | 'if-absent',
+  compare: (a: T, b: T) => number,
+): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of existing) byKey.set(key(row), row);
+  for (const row of incoming) {
+    const rowKey = key(row);
+    if (mode === 'if-absent' && byKey.has(rowKey)) continue;
+    byKey.set(rowKey, row);
+  }
+  return [...byKey.values()].sort(compare);
+}
+
+/**
+ * Total order for release rows: `date` ascending, then `tag` ascending as
+ * the tie-break. `releases.csv` is keyed on `tag` (see `upsertByKey` above),
+ * not `date`, specifically so two releases published on the same UTC day
+ * both survive as distinct rows — which means their relative order can no
+ * longer fall out of a date-keyed `Map`'s iteration order the way every
+ * other series' does. Both `collect.ts` and `backfill.ts` pass this exact
+ * comparator to `upsertByKey` rather than each deriving their own, so the
+ * two writers of `releases.csv` can never disagree on ordering the way they
+ * previously disagreed on which same-day release survived at all.
+ */
+export function compareReleaseRows(a: ReleaseRow, b: ReleaseRow): number {
+  if (a.date !== b.date) return compareStrings(a.date, b.date);
+  return compareStrings(a.tag, b.tag);
 }
 
 /**

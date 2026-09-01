@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv, formatCsv, upsertByDate, parseNdjson, formatNdjson, upsertDimensional } from './series.ts';
-import type { DimensionRow } from './types.ts';
+import {
+  parseCsv,
+  formatCsv,
+  upsertByDate,
+  upsertByKey,
+  compareReleaseRows,
+  parseNdjson,
+  formatNdjson,
+  upsertDimensional,
+} from './series.ts';
+import type { DimensionRow, ReleaseRow } from './types.ts';
 
 describe('parseCsv', () => {
   it('parses a header and rows into keyed records', () => {
@@ -70,9 +79,27 @@ describe('parseCsv', () => {
     expect(parseCsv(text)).toEqual([{ date: '2026-08-01', count: '10' }]);
   });
 
-  it('pads a short row (fewer fields than the header) with empty strings', () => {
+  it('throws on a short row (fewer fields than the header), naming the row number', () => {
+    // A short row relative to its own header can only mean truncation:
+    // parseCsv derives the header from the same file it is parsing, so
+    // there is no legitimate reason a data row would have fewer fields than
+    // that header. Silently padding it converts a measured value into
+    // "not measured" with nothing in the log — see formatCsv's blank-field
+    // round trip below for the case that must NOT throw.
     const text = 'date,count,uniques\n2026-08-01,10\n';
-    expect(parseCsv(text)).toEqual([{ date: '2026-08-01', count: '10', uniques: '' }]);
+    expect(() => parseCsv(text)).toThrow(/row 1/i);
+  });
+
+  it('round-trips a row with the correct field count but a blank value, without throwing', () => {
+    // A blank field is NOT a short row: the comma count still matches the
+    // header, so the field is present with an empty value. This is the
+    // shape `formatCsv` produces for `downloads_total` when the optional
+    // releases fetch failed (see collect.ts), and it must keep parsing
+    // cleanly even after the short-row check above starts throwing.
+    const text = 'date,subscribers,downloads_total\n2026-08-01,1,\n';
+    expect(parseCsv(text)).toEqual([
+      { date: '2026-08-01', subscribers: '1', downloads_total: '' },
+    ]);
   });
 
   it('throws on a long row (more fields than the header), naming the row number', () => {
@@ -167,6 +194,65 @@ describe('upsertByDate', () => {
       { date: '2026-08-01', total: 1 },
     ], 'overwrite');
     expect(result.map((r) => r.date)).toEqual(['2026-08-01', '2026-08-09']);
+  });
+});
+
+function release(date: string, tag: string, name = tag): ReleaseRow {
+  return { date, tag, name };
+}
+
+describe('upsertByKey', () => {
+  it('overwrite mode: the incoming row wins on a key collision', () => {
+    const existing = [release('2026-08-01', 'v1.0.0', 'old name')];
+    const result = upsertByKey(
+      existing,
+      [release('2026-08-01', 'v1.0.0', 'new name')],
+      (row) => row.tag,
+      'overwrite',
+      compareReleaseRows,
+    );
+    expect(result).toEqual([release('2026-08-01', 'v1.0.0', 'new name')]);
+  });
+
+  it('if-absent mode: never replaces a key that already has a row', () => {
+    const existing = [release('2026-08-01', 'v1.0.0', 'old name')];
+    const result = upsertByKey(
+      existing,
+      [release('2026-08-01', 'v1.0.0', 'new name')],
+      (row) => row.tag,
+      'if-absent',
+      compareReleaseRows,
+    );
+    expect(result).toEqual([release('2026-08-01', 'v1.0.0', 'old name')]);
+  });
+
+  it('keys on the selector, not on date: two releases on the same UTC day both survive', () => {
+    const result = upsertByKey(
+      [],
+      [release('2026-08-01', 'v1.0.0'), release('2026-08-01', 'v1.0.1')],
+      (row) => row.tag,
+      'overwrite',
+      compareReleaseRows,
+    );
+    expect(result.map((r) => r.tag)).toEqual(['v1.0.0', 'v1.0.1']);
+  });
+
+  it('is idempotent: re-running with identical input changes nothing', () => {
+    const rows = [release('2026-08-01', 'v1.0.0'), release('2026-08-01', 'v1.0.1')];
+    const once = upsertByKey([], rows, (row) => row.tag, 'overwrite', compareReleaseRows);
+    const twice = upsertByKey(once, rows, (row) => row.tag, 'overwrite', compareReleaseRows);
+    expect(twice).toEqual(once);
+  });
+
+  it('sorts by date then tag regardless of insertion order, for byte-stable output', () => {
+    const result = upsertByKey(
+      [release('2026-08-02', 'v2.0.0'), release('2026-08-01', 'v1.0.1')],
+      [release('2026-08-01', 'v1.0.0')],
+      (row) => row.tag,
+      'overwrite',
+      compareReleaseRows,
+    );
+    expect(result.map((r) => r.tag)).toEqual(['v1.0.0', 'v1.0.1', 'v2.0.0']);
   });
 });
 
