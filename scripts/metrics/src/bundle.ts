@@ -188,16 +188,31 @@ interface DatedRow {
  * no-op — but the page draws a line through these points in array order, and
  * a file that arrived out of order (a hand-edit, a merge resolved by hand on
  * the data branch) would render as a zig-zag that looks like data rather
- * than like damage. Sorting is not a repair that hides corruption: no value
- * is altered, dropped, or invented, only placed on the axis where its own
- * date says it belongs. The sort is stable, so rows sharing a date keep
- * their file order.
+ * than like damage. No value is altered, dropped, or invented: each point
+ * lands on the axis where its own date says it belongs. The sort is stable,
+ * so rows sharing a date keep their file order.
  *
  * A row with a missing or blank `date` throws. It cannot be placed on a
  * timeline at all, and the two alternatives are both worse: dropping it
  * silently loses a measurement from the only surviving copy of data GitHub
  * deletes after 14 days, and keeping it with an empty x-value corrupts every
  * index alignment downstream.
+ *
+ * Sorting and the ABSENCE of a `YYYY-MM-DD` shape check are coupled, not
+ * independent, and the coupling runs the uncomfortable way. Nothing in this
+ * package validates that shape — `store.ts` declines to, for the reason
+ * `parseMeta` documents — so a malformed but non-blank date (`2026-9-1`,
+ * `Sept 1`) is not left sitting where a reader would notice it next to its
+ * neighbours: it is RELOCATED to wherever byte comparison puts it, which for
+ * those two examples is after every zero-padded date and before every digit
+ * respectively. Sorting therefore makes the missing shape check more
+ * consequential, not less. It is still the right default — an out-of-order
+ * file is the failure that actually occurs, a hand-typed date is not, and
+ * refusing to sort would mis-draw the common case to leave the rare one
+ * marginally easier to spot — but the honest statement is that this function
+ * trusts the collector to write well-formed dates, and reorders on that
+ * assumption. If a shape check ever lands, it belongs at the write path,
+ * where every writer passes, not here in the single reader.
  */
 function readDatedRows(store: Store, file: string): DatedRow[] {
   const rows = store.readCsv(file);
@@ -314,9 +329,31 @@ function countKey(snapshotDate: string, dimension: string): string {
  * seen value reports a multi-snapshot change as if it were a single-step
  * one, and treating the missing value as 0 invents a jump the size of the
  * whole window.
+ *
+ * The absence test is `=== undefined`, never a falsy check, and the
+ * distinction is the mirror of the one `toNumberOrNull` protects: a
+ * dimension whose count did not move between two snapshots has a real,
+ * measured delta of 0, and `if (!previous)` would silently promote it to the
+ * same break a genuinely missing dimension produces. Null-never-zero and
+ * zero-never-null are the same rule read from both ends.
+ *
+ * A blank `snapshot_date` throws, for the same reason `readDatedRows`
+ * rejects a blank `date` — and with a sharper consequence here. The empty
+ * string sorts before every real date, so a blank one would not merely fail
+ * to place a row: it would insert a phantom leading snapshot into
+ * `snapshots`, shifting every trajectory index by one and landing element
+ * 0's structural null on a snapshot that never happened.
  */
 function readDimensionSeries(store: Store, file: string): DimensionSeries {
   const rows = store.readNdjson(file);
+  rows.forEach((row, index) => {
+    // `parseNdjson` guarantees the field is a string and present; only
+    // blankness is left to check, and `store.readNdjson` skips blank lines,
+    // so the index counts rows rather than file lines.
+    if (row.snapshot_date.trim() === '') {
+      throw new Error(`bundle: ${file} row ${index + 1} has an empty "snapshot_date"`);
+    }
+  });
   const snapshots = [...new Set(rows.map((row) => row.snapshot_date))].sort(compareStrings);
   const latestDate = snapshots[snapshots.length - 1];
   if (latestDate === undefined) {

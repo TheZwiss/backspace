@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
@@ -43,6 +43,43 @@ function writeMeta(): void {
     error: null,
     series_last_date: { 'traffic/views.csv': '2026-09-01' },
   });
+}
+
+/**
+ * Every file in the archive as `[relative path, exact bytes]`, sorted.
+ *
+ * Used to assert that a read-only pass leaves the tree untouched. Comparing
+ * the whole tree rather than probing one file also catches a stray temp
+ * artifact from the store's atomic write, which a targeted check would miss.
+ */
+function snapshotTree(): Array<[string, string]> {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry): [string, string] => {
+      const full = path.join(entry.parentPath, entry.name);
+      return [path.relative(dir, full), readFileSync(full, 'utf8')];
+    })
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+/**
+ * Every location in the tree holding `undefined`, as a path string.
+ *
+ * `JSON.stringify` deletes such a key outright, and `toEqual` treats an
+ * `undefined`-valued key as equal to an absent one — so without this an
+ * accidental `undefined` where a `null` belongs would survive both the
+ * round-trip assertion and the deep-equality one, and reach the page as a
+ * missing field.
+ */
+function undefinedPaths(value: unknown, at = '$'): string[] {
+  if (value === undefined) return [at];
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => undefinedPaths(item, `${at}[${index}]`));
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.entries(value).flatMap(([key, item]) => undefinedPaths(item, `${at}.${key}`));
+  }
+  return [];
 }
 
 function dimensionRow(
@@ -104,6 +141,58 @@ describe('buildDashboardData — the not-measured distinction', () => {
     writeRaw('stars.csv', 'date,total\n2026-09-01,fifty\n');
 
     expect(() => build()).toThrow(/not a finite number/);
+  });
+});
+
+describe('buildDashboardData — every file reaches its own series', () => {
+  it('routes every archive file to its own series slot', () => {
+    // Each file carries a value found in no other file, so a path constant
+    // pointing at the wrong file — or at a file that does not exist —
+    // surfaces as a wrong or empty series instead of passing unnoticed. A
+    // series read from a mistyped path renders as an honest "not measured"
+    // forever, which is the one failure this package cannot afford to ship
+    // silently.
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-09-01,11,1\n');
+    writeRaw('traffic/clones.csv', 'date,count,uniques\n2026-09-01,22,2\n');
+    writeRaw('stars.csv', 'date,total\n2026-09-01,33\n');
+    writeRaw('forks.csv', 'date,total\n2026-09-01,44\n');
+    writeRaw('contributors.csv', 'date,total\n2026-09-01,55\n');
+    writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-09-01,66,77,88\n');
+
+    const data = build();
+
+    expect(data.series.views.count).toEqual([11]);
+    expect(data.series.views.uniques).toEqual([1]);
+    expect(data.series.clones.count).toEqual([22]);
+    expect(data.series.clones.uniques).toEqual([2]);
+    expect(data.series.stars.total).toEqual([33]);
+    expect(data.series.forks.total).toEqual([44]);
+    expect(data.series.contributors.total).toEqual([55]);
+    expect(data.series.repo.subscribers).toEqual([66]);
+    expect(data.series.repo.open_issues).toEqual([77]);
+    expect(data.series.repo.downloads_total).toEqual([88]);
+  });
+
+  it('reads contributors.csv into the contributors series', () => {
+    writeRaw('contributors.csv', 'date,total\n2026-08-25,7\n2026-09-01,9\n');
+
+    const data = build();
+
+    expect(data.series.contributors).toEqual({
+      dates: ['2026-08-25', '2026-09-01'],
+      total: [7, 9],
+    });
+    expect(data.collection_started).toBe('2026-08-25');
+    expect(data.empty).toBe(false);
+  });
+
+  it('reads forks.csv into the forks series', () => {
+    writeRaw('forks.csv', 'date,total\n2026-08-25,2\n2026-09-01,3\n');
+
+    const data = build();
+
+    expect(data.series.forks).toEqual({ dates: ['2026-08-25', '2026-09-01'], total: [2, 3] });
+    expect(data.empty).toBe(false);
   });
 });
 
@@ -183,6 +272,19 @@ describe('buildDashboardData — absent vs. corrupt files', () => {
     writeRaw('traffic/views.csv', 'date,count,uniques\n,40,12\n');
 
     expect(() => build()).toThrow(/missing or empty "date"/);
+  });
+
+  it('throws on a blank snapshot_date rather than inventing a phantom snapshot', () => {
+    // The same corruption as a blank CSV date and the same treatment, with a
+    // sharper consequence: the empty string sorts before every real date, so
+    // accepting it would prepend a snapshot that never happened and shift
+    // every trajectory index by one.
+    writeRaw(
+      'traffic/referrers.ndjson',
+      '{"snapshot_date":"","dimension":"a.example","title":"a","count":5,"uniques":1}\n',
+    );
+
+    expect(() => build()).toThrow(/empty "snapshot_date"/);
   });
 });
 
@@ -325,6 +427,8 @@ describe('buildDashboardData — dimensions', () => {
     ]);
     // Only the latest snapshot's rows — yesterday's leader is not in it.
     expect(data.dimensions.referrers.latest).toHaveLength(2);
+    // And nothing leaks into the file that was never written.
+    expect(data.dimensions.paths).toEqual({ snapshots: [], latest: [], trajectories: [] });
   });
 
   it('differences trajectories and starts them with null', () => {
@@ -360,6 +464,36 @@ describe('buildDashboardData — dimensions', () => {
     expect(trajectory?.delta[2]).toBeNull();
     expect(trajectory?.delta[2]).not.toBe(0);
     expect(trajectory?.delta).toEqual([null, null, null]);
+  });
+
+  it('reports an unchanged dimension as a measured zero, never as a break', () => {
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-08-31', 'a.example', 100),
+      dimensionRow('2026-09-01', 'a.example', 100),
+    ]);
+
+    const delta = build().dimensions.referrers.trajectories[0]?.delta;
+
+    // The mirror image of null-never-zero. A count that did not move is a
+    // measurement of no change, not an absence, and a falsy check in place
+    // of `=== undefined` would fabricate a break out of it.
+    expect(delta).toEqual([null, 0]);
+    expect(delta?.[1]).toBe(0);
+    expect(delta?.[1]).not.toBeNull();
+  });
+
+  it('differences against a measured zero rather than treating it as absent', () => {
+    // `previous` is 0 here — falsy, present, and real. This is the case that
+    // separates `=== undefined` from `!previous` outright.
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-08-31', 'a.example', 0),
+      dimensionRow('2026-09-01', 'a.example', 7),
+    ]);
+
+    const delta = build().dimensions.referrers.trajectories[0]?.delta;
+
+    expect(delta).toEqual([null, 7]);
+    expect(delta?.[1]).not.toBeNull();
   });
 
   it('can report a negative delta when a dimension falls', () => {
@@ -449,19 +583,42 @@ describe('buildDashboardData — dimensions', () => {
   it('keeps referrers and paths independent', () => {
     const store = createStore(dir);
     store.writeNdjson('traffic/referrers.ndjson', [dimensionRow('2026-09-01', 'a.example', 5)]);
+    store.writeNdjson('traffic/paths.ndjson', [dimensionRow('2026-09-01', '/a', 9)]);
 
     const data = build();
 
-    expect(data.dimensions.referrers.latest).toHaveLength(1);
-    expect(data.dimensions.paths).toEqual({ snapshots: [], latest: [], trajectories: [] });
+    // Distinct counts crosswise: a swapped or mistyped pair of path
+    // constants shows up as the wrong numbers rather than as two
+    // plausible-looking series.
+    expect(data.dimensions.referrers.latest).toEqual([
+      { dimension: 'a.example', title: 'a.example', count: 5, uniques: 1 },
+    ]);
+    expect(data.dimensions.paths.latest).toEqual([
+      { dimension: '/a', title: '/a', count: 9, uniques: 1 },
+    ]);
   });
 });
 
 describe('buildDashboardData — purity and envelope', () => {
   it('passes generated_at through untouched and never reads the clock', () => {
     writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
+    writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-09-01,1,18,\n');
+    const store = createStore(dir);
 
-    expect(build().generated_at).toBe(GENERATED_AT);
+    // A value no clock could ever produce. If the function derived the
+    // timestamp itself — or validated it, or normalised it — this could not
+    // come back out unchanged.
+    const marker = 'not-a-timestamp-at-all';
+    const marked = buildDashboardData(store, marker);
+    expect(marked.generated_at).toBe(marker);
+
+    // And `generated_at` is the ONLY field the argument can reach: swap it
+    // for a wildly different timestamp and every other field is identical,
+    // so nothing downstream is silently derived from "now" — no "days since"
+    // count, no stale flag, no date filter.
+    const other = buildDashboardData(store, '1999-01-01T00:00:00.000Z');
+    expect(other.generated_at).toBe('1999-01-01T00:00:00.000Z');
+    expect({ ...other, generated_at: marker }).toEqual(marked);
   });
 
   it('reports downsampled false — it never downsamples', () => {
@@ -470,35 +627,72 @@ describe('buildDashboardData — purity and envelope', () => {
     expect(build().downsampled).toBe(false);
   });
 
-  it('returns the same object for the same archive on repeated calls', () => {
+  it('returns byte-identical output for the same archive on repeated calls', () => {
     writeRaw('traffic/views.csv', 'date,count,uniques\n2026-08-31,40,12\n');
+    writeRaw('releases.csv', 'date,tag,name\n2026-08-30,v1.0.1,Patch\n2026-08-30,v1.0.0,First\n');
     createStore(dir).writeNdjson('traffic/referrers.ndjson', [
-      dimensionRow('2026-08-31', 'a.example', 5),
+      dimensionRow('2026-08-30', 'a.example', 5),
+      dimensionRow('2026-08-30', 'b.example', 5),
+      dimensionRow('2026-08-31', 'b.example', 9),
+      dimensionRow('2026-08-31', 'a.example', 9),
     ]);
     writeMeta();
 
-    expect(build()).toEqual(build());
+    const first = build();
+    const second = build();
+
+    expect(second).toEqual(first);
+    // Byte equality, not just deep equality. This is what the published
+    // artefact actually is, and it pins key order and array order too — so a
+    // ranking that fell back on Map-iteration or file order, which deep
+    // equality forgives when the values happen to match, fails here. The
+    // fixture is built to make that reachable: two releases on one date and
+    // two referrers tied on count, both written in a different order than
+    // they must come out in.
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
   });
 
   it('writes nothing to the archive', () => {
     writeRaw('stars.csv', 'date,total\n2026-09-01,56\n');
+    writeRaw('traffic/views.csv', 'date,count,uniques\n2026-09-01,40,12\n');
+    createStore(dir).writeNdjson('traffic/referrers.ndjson', [
+      dimensionRow('2026-09-01', 'a.example', 5),
+    ]);
+    writeMeta();
+    const before = snapshotTree();
+    expect(before.length).toBe(4);
+
     build();
 
-    // A read-only pass must not have created meta.json or any other file.
-    expect(createStore(dir).readMeta()).toBeNull();
+    // Every file in the tree, path and bytes. Not "meta.json is still
+    // absent": that would pass while the pass rewrote, truncated, or
+    // reordered a series file, or left a `.tmp-` artifact from the store's
+    // atomic write sitting in the archive that gets committed to the data
+    // branch.
+    expect(snapshotTree()).toEqual(before);
   });
 
   it('round-trips through JSON unchanged', () => {
     writeRaw('repo.csv', 'date,subscribers,open_issues,downloads_total\n2026-09-01,1,18,\n');
     writeRaw('releases.csv', 'date,tag,name\n2026-08-01,v1.0.0,First\n');
     createStore(dir).writeNdjson('traffic/paths.ndjson', [dimensionRow('2026-09-01', '/a', 5)]);
+    // meta.json included so the check covers the whole envelope: without it
+    // `meta` is null and an `undefined` leaking out of the projection would
+    // never be reached by this test.
+    writeMeta();
 
     const data = build();
     const roundTripped: unknown = JSON.parse(JSON.stringify(data));
 
-    // `null` survives serialisation where `undefined` would silently vanish,
-    // taking the not-measured marker with it.
-    expect(roundTripped).toEqual(data);
+    // `toStrictEqual`, not `toEqual`: `toEqual` treats a key whose value is
+    // `undefined` as equal to that key being absent, which is exactly the
+    // difference `JSON.stringify` erases — so the weaker matcher would pass
+    // on the one defect this test exists to catch.
+    expect(roundTripped).toStrictEqual(data);
+    // And nothing in the tree is `undefined` in the first place. A
+    // not-measured marker must be an explicit `null` that reaches the page,
+    // not a field that quietly disappears in transit.
+    expect(undefinedPaths(data)).toEqual([]);
     expect(JSON.stringify(data)).toContain('"downloads_total":[null]');
   });
 });
