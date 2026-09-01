@@ -144,15 +144,23 @@ export function createStore(dataDir: string): Store {
    * Writes to a sibling temp file in the same directory and `renameSync`s it
    * over the target rather than calling `writeFileSync` on the target
    * directly. A direct write is not atomic: if the process is killed (OOM,
-   * `SIGKILL`, power loss) partway through, the target is left holding a
-   * truncated prefix of the new content, indistinguishable on the next run
-   * from a genuine (if malformed) file — `readCsv`/`readNdjson` would throw
-   * on it as corruption, but the ORIGINAL, previously-good content is gone
-   * either way, and for data GitHub has already deleted upstream that loss
-   * is permanent. A `rename` within the same directory (same filesystem) is
+   * `SIGKILL`) partway through, the target is left holding a truncated
+   * prefix of the new content, indistinguishable on the next run from a
+   * genuine (if malformed) file — `readCsv`/`readNdjson` would throw on it
+   * as corruption, but the ORIGINAL, previously-good content is gone either
+   * way, and for data GitHub has already deleted upstream that loss is
+   * permanent. A `rename` within the same directory (same filesystem) is
    * atomic on POSIX and on NTFS: the target either still holds the old
-   * complete content or holds the new complete content, never a mix, no
-   * matter when the process dies. The temp name includes random bytes so
+   * complete content or holds the new complete content, never a mix.
+   *
+   * The guarantee is against a TORN FILE, not against loss of the write.
+   * Without an `fsync` on the temp file and its directory, an unclean host
+   * power loss can still discard the rename itself on some filesystems. That
+   * is deliberately not defended against: a run that dies mid-write never
+   * reaches the step that commits its output, so the archive simply keeps
+   * yesterday's complete files and the next run refetches — GitHub's traffic
+   * window is 14 days wide, so a lost run is recoverable in a way a torn file
+   * is not. The temp name includes random bytes so
    * concurrent writes to different files (or a crash-and-rerun before
    * cleanup) never collide on one temp path. On failure, the temp file is
    * best-effort unlinked so a partial temp artifact doesn't accumulate next
@@ -172,7 +180,9 @@ export function createStore(dataDir: string): Store {
       } catch {
         // Best-effort cleanup only; the original error below is the one that matters.
       }
-      throw cause;
+      // Wrapped for the same reason the read path wraps: a bare ENOSPC or
+      // EACCES from deep in node:fs does not say which series failed to write.
+      throw new Error(`Store: failed to write "${file}"`, { cause });
     }
   }
 

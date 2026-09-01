@@ -229,6 +229,19 @@ describe('createStore', () => {
       expect(existsSync(outside)).toBe(false);
     });
 
+    it('throws on a sibling directory whose name merely starts with the data directory name', () => {
+      // The classic prefix bug: a naive `full.startsWith(root)` check accepts
+      // /x/data-evil/y for root /x/data, because the string does start with it.
+      // The guard must compare against root + separator, not root alone.
+      const store = createStore(dir);
+      const sibling = path.join('..', `${path.basename(dir)}-evil`, 'stolen.csv');
+      expect(() => store.readCsv(sibling)).toThrow();
+      expect(() =>
+        store.writeCsv(sibling, ['date', 'total'], [{ date: '2026-08-01', total: 1 }]),
+      ).toThrow();
+      expect(existsSync(path.resolve(dir, sibling))).toBe(false);
+    });
+
     it('allows a file argument that resolves exactly to a subpath of the data directory', () => {
       const store = createStore(dir);
       store.writeCsv('a/b/c.csv', ['date', 'total'], [{ date: '2026-08-01', total: 1 }]);
