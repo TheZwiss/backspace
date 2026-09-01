@@ -3,7 +3,7 @@
 Source files:
 - `scripts/metrics/src/types.ts` -- Shared row shapes (`TrafficPoint`, `CountPoint`, `ReleaseRow`, `RepoPoint`, `DimensionRow`)
 - `scripts/metrics/src/github.ts` -- GitHub API client: auth, pagination (`Link: rel="next"`), `/stats/*` 202 retry
-- `scripts/metrics/src/series.ts` -- CSV/NDJSON parse + format, date-keyed upsert, dimensional upsert
+- `scripts/metrics/src/series.ts` -- CSV/NDJSON parse + format, date-keyed upsert, explicit-key upsert (releases), dimensional upsert
 - `scripts/metrics/src/store.ts` -- Filesystem layer: atomic per-file writes (temp + rename), `meta.json` read/write, path containment
 - `scripts/metrics/src/collect.ts` -- Daily snapshot entrypoint (`collect()`)
 - `scripts/metrics/src/backfill.ts` -- One-shot historical reconstruction entrypoint (`backfill()`)
@@ -84,21 +84,25 @@ Both `metrics.yml` and `backfill.yml`:
 
 ## 3. Data schemas
 
-All files live at the root of the `metrics-data` branch. CSVs are sorted ascending on their first (date) column on every write; NDJSON files are sorted `(snapshot_date asc, count desc, dimension asc)`. Both orderings are fixed by `series.ts` (`formatCsv`, `compareDimensionRows`) so that re-running the collector against unchanged upstream data produces a byte-identical file — the property that keeps daily commits to one line of diff.
+All files live at the root of the `metrics-data` branch. CSVs are sorted ascending on their first (date) column on every write; NDJSON files are sorted `(snapshot_date asc, count desc, dimension asc)`. Both orderings are fixed by `series.ts` (`formatCsv`, `compareDimensionRows`) so that re-running the collector against unchanged upstream data produces a byte-identical file — the property that keeps daily commits to one line of diff. `releases.csv` additionally fixes a tie-break within a shared date, `tag` ascending (`compareReleaseRows`, applied by the `upsertByKey` merge described in §3.1's caveat below), since it is the one CSV where more than one row can share a date.
 
-### 3.1 Date-keyed series (CSV, header row, one row per UTC date)
+### 3.1 CSV series
 
 | File | Columns | One row means |
 |---|---|---|
 | `traffic/views.csv` | `date,count,uniques` | Total views and unique visitors on that UTC date |
 | `traffic/clones.csv` | `date,count,uniques` | Total clones and unique cloners on that UTC date |
-| `stars.csv` | `date,total` | The repo's live `stargazers_count` as read on that date (a point-in-time snapshot, not a delta) |
-| `forks.csv` | `date,total` | The repo's live `forks_count` as read on that date |
-| `releases.csv` | `date,tag,name` | A release published on that UTC date (`date` = `published_at`'s UTC day) |
-| `contributors.csv` | `date,total` | Cumulative distinct-contributor count, where a contributor counts from the UTC date of the start of their first commit week onward |
+| `stars.csv` | `date,total` | The repo's live `stargazers_count` as read on that date (a point-in-time snapshot, not a delta) — see the caveat below the table |
+| `forks.csv` | `date,total` | The repo's live `forks_count` as read on that date — see the caveat below the table |
+| `releases.csv` | `date,tag,name` | A release published on that UTC date (`date` = `published_at`'s UTC day) — see the caveat below the table |
+| `contributors.csv` | `date,total` | Cumulative distinct-contributor count, where a contributor counts from the UTC date of the start of their first commit week onward. Capped: see the note below the table |
 | `repo.csv` | `date,subscribers,open_issues,downloads_total` | The repo object's counters as read on that date, plus the sum of every release asset's `download_count` |
 
 `repo.csv.downloads_total` is a `number | null` in memory (`RepoPoint` in `types.ts`) and is written as a **blank CSV field**, never `0`, whenever the optional `/releases` fetch fails that run (see §5). `subscribers` and `open_issues` are never blank — they come from the required `/repos/{slug}` fetch, which has already succeeded by the time `repo.csv` is written.
+
+**`stars.csv`/`forks.csv` are one row per UTC date only for half of what writes them.** The daily collector (`collect.ts`) does write exactly one row per date — every run appends today's row from the repo object's live counter, so a run either produces that day's row or (on a required-fetch failure) writes nothing at all. `backfill()`, reconstructing the same files from `starred_at`/`created_at` timestamps, is **sparse by construction**: `cumulativeByDay` (`backfill.ts`) only emits a row for a UTC date on which at least one star/fork event actually happened, so a quiet day between two event days gets no row from backfill at all — the reader is expected to carry the previous row's `total` forward as "unchanged" rather than read absence as zero or as a gap. Nothing recorded on disk distinguishes which of the two writers produced a given row — both write through the same `upsertByDate`/CSV format, and a row looks identical regardless of its origin — so there is no way to tell, from the file alone, whether a given date's absence means "the collector never ran that far back" or "backfill correctly found no event that day."
+
+**`releases.csv` is keyed on `tag`, not `date`.** Unlike every other series in this table, more than one row can legitimately share a `date`: two releases published the same UTC day are two distinct rows, merged by `upsertByKey` (`series.ts`) keyed on `tag` and sorted `(date asc, tag asc)` for byte-stable output. Both `collect.ts` (`'overwrite'` mode — the day's live fetch is authoritative) and `backfill.ts` (`'if-absent'` mode — a reconstruction must never replace a value the collector already measured) merge through this same keyed function, so the two writers can no longer disagree about which same-day release survives.
 
 ### 3.2 Aggregate-window series (NDJSON, one JSON object per line)
 
@@ -145,7 +149,7 @@ Once the write phase starts, every `store.write*` call in it is synchronous with
 
 ### 4.2 Backfill is write-if-absent
 
-`backfill()` (`backfill.ts`) merges every series it touches with `upsertByDate(existing, incoming, 'if-absent')` — an existing row for a date is never replaced by a reconstructed one. This is a structural requirement, not a style choice: the daily collector writes `stars.csv`/`forks.csv` from the repo object's **live counters** (`stargazers_count`, `forks_count`), which correctly reflect someone who starred and later unstarred. Backfill reconstructs the same series from `/stargazers`' `starred_at` field, which lists only **current** stargazers — anyone who starred and later unstarred is permanently invisible to it. The two methods measure the same date differently by construction, and the collector's measured value is the one that was actually true on that date. Running backfill against an archive with months of collector-written history therefore changes nothing for any date the collector already covered; it only fills dates neither process has ever recorded. This is the one property `backfill.test.ts` exists to pin down.
+`backfill()` (`backfill.ts`) merges every series it touches in `'if-absent'` mode — an existing row is never replaced by a reconstructed one. `stars.csv`/`forks.csv` go through `upsertByDate(existing, incoming, 'if-absent')`, keyed on `date`; `releases.csv` goes through `upsertByKey(existing, incoming, (row) => row.tag, 'if-absent', compareReleaseRows)`, keyed on `tag` instead (see §3.1's caveat on why releases needs a different key). Both share the same `'if-absent'` guarantee regardless of key. This is a structural requirement, not a style choice: the daily collector writes `stars.csv`/`forks.csv` from the repo object's **live counters** (`stargazers_count`, `forks_count`), which correctly reflect someone who starred and later unstarred. Backfill reconstructs the same series from `/stargazers`' `starred_at` field, which lists only **current** stargazers — anyone who starred and later unstarred is permanently invisible to it. The two methods measure the same date differently by construction, and the collector's measured value is the one that was actually true on that date. Running backfill against an archive with months of collector-written history therefore changes nothing for any date (or, for `releases.csv`, any tag) the collector already covered; it only fills gaps neither process has ever recorded. This is the one property `backfill.test.ts` exists to pin down.
 
 `backfill()` is permitted to touch exactly `stars.csv`, `forks.csv`, and `releases.csv` (the `WRITABLE` constant in `backfill.ts`). It never opens `traffic/*` (no historical traffic API exists at all) or `repo.csv` (`subscribers` has no historical API either — a stray rewrite there would be a permanent, unrecoverable loss) or `contributors.csv` (the `/stats/contributors` weekly buckets the daily collector reads already cover all of history whenever that endpoint answers, so there is no gap for a one-shot backfill to fill).
 
@@ -168,6 +172,8 @@ The traffic window is 14 buckets wide, so any gap of **≤13 full days** without
 - In `collect()`, a `null` from `getStats()` causes `contributors.csv` to be skipped for that run, leaving whatever value the file already holds untouched. It is treated as optional for atomicity purposes (§4.1): a stats timeout must never abort the traffic write, since traffic is the irreplaceable series.
 
 GitHub's `/stats/*` cache is keyed by the default branch's current commit and is invalidated by every push to it — so on an actively-developed repo, hitting a `202` is routine, not an edge case, and every collection run should be expected to occasionally skip `contributors.csv` for a day.
+
+**`/stats/contributors` returns at most 100 contributors.** This is undocumented behavior of the GitHub endpoint itself, not of anything in this package: once a repo has more than 100 total contributors, the 101st and beyond simply never appear in the response, and `contributors.csv`'s cumulative count silently stops increasing at 100 forever — indistinguishable on the chart from a genuine plateau in new-contributor growth. There is no workaround; the endpoint has no pagination for this list.
 
 ---
 
@@ -241,7 +247,16 @@ Safe to run at any time, including repeatedly — every write is if-absent (§4.
 
 ### Recovering from a gap
 
-A gap of **13 days or fewer** in traffic data self-heals automatically the next time `collect()` succeeds — no action needed (§4.4). A gap of **14 days or more** in traffic is permanent; there is nothing to backfill it with. A gap in `stars.csv`/`forks.csv`/`releases.csv` (however it happened) can be recovered by dispatching `backfill.yml`, since those are the exact three files it reconstructs. A gap in `repo.csv` (`subscribers`) or `contributors.csv` cannot be backfilled at all — the next successful collection run simply resumes from wherever it left off, with no way to fill the missed dates retroactively.
+A gap of **13 days or fewer** in traffic data self-heals automatically the next time `collect()` succeeds — no action needed (§4.4). A gap of **14 days or more** in traffic is permanent; there is nothing to backfill it with.
+
+A gap in `releases.csv` (however it happened) can be recovered by dispatching `backfill.yml`: `published_at` is a permanent, immutable timestamp on every release, so reconstructing from `/releases` produces the exact same rows the collector would have written, for any date range.
+
+**A collector-era gap in `stars.csv`/`forks.csv` is *not* recoverable, and dispatching `backfill.yml` will not fill it correctly — despite `backfill.yml` being permitted to write both files.** Two separate problems make this true, and both are inherent to the reconstruction, not implementation bugs to be fixed later:
+
+- `cumulativeByDay` (`backfill.ts`) writes a row only on a UTC date on which a star/fork event actually happened. A gap that spans a quiet day — no stars, no forks — gets **no row at all** from backfill, so the gap is not filled, merely left exactly as absent as it was before the dispatch.
+- Where backfill *does* write a row, the value comes from `/stargazers`/`/forks`, which list only **currently** starred/forked state. Anyone who starred and later unstarred (or forked and later deleted the fork) is invisible to it. The collector's original row — lost in the gap — measured the live counter as it stood on that date, which can only be greater than or equal to what a reconstruction sees. A backfilled row for a gap date is therefore, at best, an undercount, and at worst a value that makes an otherwise-monotonic series dip on a chart — reading as genuinely measured history rather than as the reconstruction gap it actually is.
+
+This is not a defect in `backfill()` itself: reconstructing pre-collection history (seeding the archive before `collect()` ever ran) is exactly what it is for, and it does that correctly. The hazard is specifically in treating it as a generic gap-repair tool for `stars.csv`/`forks.csv` after the fact — it is not one, for either of the two reasons above. A gap in `repo.csv` (`subscribers`) or `contributors.csv` cannot be backfilled at all — the next successful collection run simply resumes from wherever it left off, with no way to fill the missed dates retroactively.
 
 ### What a rejected push means
 
