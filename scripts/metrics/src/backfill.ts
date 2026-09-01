@@ -111,6 +111,15 @@ function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
  * date it wrote itself on a previous run is "absent" to nothing on the next
  * one, so nothing changes.
  */
+/**
+ * The returned `written` lists the files backfill is PERMITTED to write —
+ * `WRITABLE` verbatim — not the files that gained a row on this run. Because
+ * every write is if-absent, a rerun legitimately writes nothing new while
+ * still reporting the same list. This differs deliberately from
+ * `CollectResult.written` in `collect.ts`, which lists only files that
+ * actually received a write, so do not compare the two fields as if they
+ * meant the same thing.
+ */
 export async function backfill(options: BackfillOptions): Promise<{ written: string[] }> {
   const { client, store, slug } = options;
   const repoPath = `/repos/${slug}`;
