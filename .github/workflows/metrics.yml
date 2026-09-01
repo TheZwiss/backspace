@@ -155,7 +155,13 @@ jobs:
         if: failure()
         env:
           METRICS_DATA_DIR: ${{ github.workspace }}/.metrics-data
-          METRICS_RUN_OUTCOME: ${{ job.status }}
+          # Interpolated here in `env:`, never into the `run:` string below.
+          # Carries the run URL because this string is the whole of what a
+          # maintainer reading meta.json gets: a bare "failure" tells them the
+          # archive stopped but not where to look.
+          METRICS_RUN_OUTCOME: >-
+            run ${{ job.status }} —
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/metrics/src/cli-record-failure.ts
 
       # Split from "Record failure" above rather than folded into one step:
