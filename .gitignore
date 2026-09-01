@@ -100,3 +100,6 @@ tests/reports/*
 
 # Metrics data branch, checked out into the workspace by .github/workflows/metrics.yml
 .metrics-data/
+# Scratch orphan-branch bootstrap worktree created (and normally removed) by the
+# same workflow's "Bootstrap the data branch if absent" step.
+.metrics-init/

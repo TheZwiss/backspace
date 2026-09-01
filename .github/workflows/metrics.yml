@@ -146,6 +146,15 @@ jobs:
           OUTCOME: ${{ job.status }}
         run: |
           set -euo pipefail
+          # This step runs on every path, including the failure path the
+          # "Commit and push" step above does NOT run on (it has no `if:` and
+          # so defaults to `if: success()`). Without its own identity here,
+          # the `git commit` below either fails outright on a failed run or
+          # commits under an auto-detected `runner@<vm>` identity inconsistent
+          # with every other commit on this branch — on exactly the runs this
+          # step exists to make visible.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Single-quoted on purpose: the ${...} below are JS template-literal
           # interpolations for `node -e`, not shell expansions, and must reach
           # node unexpanded.
@@ -170,17 +179,17 @@ jobs:
           git diff --cached --quiet || {
             git commit -m "chore(metrics): record run outcome"
             # This commit carries only run metadata; the data commit above has
-          # its own retry loop and hard-fails on its own. Swallow a failure
-          # here so a metadata push cannot mask a successful collection, but
-          # surface it — an unannotated `|| true` is how a real problem stays
-          # invisible for months.
-          git push origin metrics-data \
-            || echo "::warning::failed to push run metadata to metrics-data"
-
+            # its own retry loop and hard-fails on its own. Swallow a failure
+            # here so a metadata push cannot mask a successful collection, but
+            # surface it — an unannotated `|| true` is how a real problem stays
+            # invisible for months.
+            git push origin metrics-data \
+              || echo "::warning::failed to push run metadata to metrics-data"
           }
 
       - name: Keep the schedule alive
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow enable metrics.yml --repo "${{ github.repository }}" || true
+          REPO: ${{ github.repository }}
+        run: gh workflow enable metrics.yml --repo "$REPO" || true
