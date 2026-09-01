@@ -261,6 +261,14 @@ describe('upsertDimensional', () => {
     const existing = [row('2026-08-01', 'a.com', 1)];
     const result = upsertDimensional(existing, [row('2026-08-02', 'a.com', 2)]);
     expect(result).toHaveLength(2);
+    const untouched = result.find((r) => r.snapshot_date === '2026-08-01');
+    expect(untouched).toEqual({
+      snapshot_date: '2026-08-01',
+      dimension: 'a.com',
+      title: '',
+      count: 1,
+      uniques: 1,
+    });
   });
 
   it('does not resurrect a dimension that dropped out of the new snapshot', () => {
@@ -275,5 +283,64 @@ describe('upsertDimensional', () => {
     const once = upsertDimensional([], rows);
     const twice = upsertDimensional(once, rows);
     expect(formatNdjson(twice)).toBe(formatNdjson(once));
+  });
+
+  it('throws on a non-finite count, naming the dimension and not a line number', () => {
+    const existing = [row('2026-08-01', 'a.com', 1)];
+    const incoming: DimensionRow[] = [
+      { snapshot_date: '2026-08-01', dimension: 'a.com', title: '', count: Infinity, uniques: 1 },
+    ];
+    expect(() => upsertDimensional(existing, incoming)).toThrow(/2026-08-01.*a\.com/);
+    expect(() => upsertDimensional(existing, incoming)).toThrow(/count/);
+    try {
+      upsertDimensional(existing, incoming);
+      throw new Error('expected upsertDimensional to throw');
+    } catch (error) {
+      expect(String(error)).not.toMatch(/line/i);
+    }
+  });
+
+  it('does not round-trip through JSON: a title with an escapable character survives byte-exact', () => {
+    const existing: DimensionRow[] = [];
+    const withEscapableTitle: DimensionRow = {
+      ...row('2026-08-01', 'a.com', 1),
+      title: 'quote " and back\\slash',
+    };
+    const result = upsertDimensional(existing, [withEscapableTitle]);
+    expect(result[0]?.title).toBe('quote " and back\\slash');
+  });
+});
+
+describe('formatNdjson key order', () => {
+  it('produces byte-identical output for rows with identical values but different property insertion order', () => {
+    const canonical: DimensionRow = {
+      snapshot_date: '2026-08-01',
+      dimension: 'a.com',
+      title: 'Home',
+      count: 5,
+      uniques: 2,
+    };
+    const shuffled: DimensionRow = {
+      count: 5,
+      title: 'Home',
+      uniques: 2,
+      snapshot_date: '2026-08-01',
+      dimension: 'a.com',
+    };
+    expect(formatNdjson([shuffled])).toBe(formatNdjson([canonical]));
+  });
+
+  it('emits canonical snapshot_date,dimension,title,count,uniques key order in the JSON text', () => {
+    const shuffled: DimensionRow = {
+      uniques: 2,
+      count: 5,
+      dimension: 'a.com',
+      title: 'Home',
+      snapshot_date: '2026-08-01',
+    };
+    const text = formatNdjson([shuffled]);
+    expect(text).toBe(
+      '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"Home","count":5,"uniques":2}\n',
+    );
   });
 });

@@ -138,10 +138,13 @@ export function upsertByDate<T extends { date: IsoDate }>(
  * Unlike a CSV row, a JSON object's fields are named rather than positional,
  * so an unrecognised extra key cannot desynchronise the fields that follow
  * it the way an extra CSV column can — there is nothing for it to corrupt.
- * An extra key is therefore let through untouched (dropped by the return
- * shape, not rejected), which also gives a future field a forward-compatible
- * landing spot. A *missing* or *wrong-typed* known field is a different
- * story: this snapshot is the only surviving copy of data GitHub deletes
+ * An extra key is therefore accepted rather than rejected, but it is not
+ * preserved: this function returns a fixed 5-field object literal, so any
+ * unrecognised key is unconditionally dropped from the result. It is not a
+ * landing spot for a future field — adding a field means updating this
+ * validator, not relying on a key silently passing through. A *missing* or
+ * *wrong-typed* known field is a different story: this snapshot is the only
+ * surviving copy of data GitHub deletes
  * after 14 days, so a row that doesn't match the schema is corruption, not
  * schema evolution, and must fail loudly rather than be coerced (e.g. a
  * stringified count silently `Number()`-ed) into something plausible.
@@ -199,23 +202,79 @@ export function parseNdjson(text: string): DimensionRow[] {
 }
 
 /**
- * Serialises dimensional rows with a fixed total order: `snapshot_date`
- * ascending, then `count` descending, then `dimension` ascending as the
- * tie-break.
+ * Total order for dimensional rows: `snapshot_date` ascending, then `count`
+ * descending, then `dimension` ascending as the tie-break.
  *
  * The order is part of the storage contract, not a preference. Any unstable
  * ordering rewrites the whole file on every daily commit, which would defeat
- * the one-line-per-day diff that justified plain text over SQLite.
+ * the one-line-per-day diff that justified plain text over SQLite. Shared by
+ * `formatNdjson` and `upsertDimensional` so the two orderings can never drift
+ * apart.
+ *
+ * Rows tying on all three keys retain their relative input order, per
+ * `Array.prototype.sort`'s ES2019 stability guarantee. In practice this case
+ * cannot arise from `upsertDimensional`'s own output: its
+ * `(snapshot_date, dimension)` dedup means no two rows it produces ever share
+ * both keys, so a true three-key tie is unreachable there.
+ */
+function compareDimensionRows(a: DimensionRow, b: DimensionRow): number {
+  if (a.snapshot_date !== b.snapshot_date) {
+    return a.snapshot_date.localeCompare(b.snapshot_date);
+  }
+  if (a.count !== b.count) return b.count - a.count;
+  return a.dimension.localeCompare(b.dimension);
+}
+
+/**
+ * Serialises dimensional rows with the fixed total order defined by
+ * `compareDimensionRows`.
+ *
+ * Builds the stringify target explicitly in canonical field order rather
+ * than passing each row's own object through: `JSON.stringify` emits keys in
+ * an object's insertion order, so without this the byte output would depend
+ * on how the caller happened to construct the row. That guarantee belongs to
+ * this function, not to callers' construction habits — the file is committed
+ * to git daily, and a varying key order would rewrite every line on every
+ * commit, defeating the plain-text-over-database rationale this format
+ * exists for.
  */
 export function formatNdjson(rows: readonly DimensionRow[]): string {
-  const sorted = [...rows].sort((a, b) => {
-    if (a.snapshot_date !== b.snapshot_date) {
-      return a.snapshot_date.localeCompare(b.snapshot_date);
-    }
-    if (a.count !== b.count) return b.count - a.count;
-    return a.dimension.localeCompare(b.dimension);
-  });
-  return sorted.map((row) => JSON.stringify(row)).join('\n') + '\n';
+  const sorted = [...rows].sort(compareDimensionRows);
+  return (
+    sorted
+      .map((row) =>
+        JSON.stringify({
+          snapshot_date: row.snapshot_date,
+          dimension: row.dimension,
+          title: row.title,
+          count: row.count,
+          uniques: row.uniques,
+        }),
+      )
+      .join('\n') + '\n'
+  );
+}
+
+/**
+ * Rejects a `DimensionRow` whose `count` or `uniques` is non-finite
+ * (`NaN`/`Infinity`), which the plain `number` type on `DimensionRow`
+ * otherwise admits without complaint. Named for the merge that calls it —
+ * an in-memory operation, not a file parse — so the message identifies the
+ * offending `(snapshot_date, dimension)` pair and field directly, rather
+ * than borrowing `parseNdjson`'s "line N" phrasing, which would misdirect a
+ * corruption investigation toward a file read that never happened.
+ */
+function assertFiniteDimensionRow(row: DimensionRow): void {
+  if (!Number.isFinite(row.count)) {
+    throw new Error(
+      `upsertDimensional: row (${row.snapshot_date}, ${row.dimension}) has a non-finite "count"`,
+    );
+  }
+  if (!Number.isFinite(row.uniques)) {
+    throw new Error(
+      `upsertDimensional: row (${row.snapshot_date}, ${row.dimension}) has a non-finite "uniques"`,
+    );
+  }
 }
 
 /**
@@ -229,15 +288,34 @@ export function formatNdjson(rows: readonly DimensionRow[]): string {
  * only source of truth for this data, so overwrite is the only correct mode
  * — there is nothing else it could mean to merge two dimensional snapshots.
  *
- * Deliberately reuses `formatNdjson`'s comparator (via a format/parse round
- * trip) rather than duplicating the sort, so the two can never drift apart.
+ * Every row that enters the merge, existing or incoming, is validated with
+ * `assertFiniteDimensionRow` first — see there for why the message shape
+ * differs from `parseNdjson`'s.
+ *
+ * Sorts the merged rows directly with `compareDimensionRows` — the same
+ * comparator `formatNdjson` uses — rather than round-tripping through
+ * `formatNdjson`/`parseNdjson`. The round trip bought nothing but the cost
+ * of re-serialising and re-parsing the whole dataset on every merge, and it
+ * was also, incidentally, the only thing rejecting a non-finite count before
+ * `assertFiniteDimensionRow` took over that job explicitly.
+ *
+ * Keys on `` `${snapshot_date}\0${dimension}` `` rather than a
+ * space-joined string: a NUL byte cannot occur in either field, so the key
+ * cannot collide the way a space-joined key could if `snapshot_date` ever
+ * contained one.
  */
 export function upsertDimensional(
   existing: readonly DimensionRow[],
   incoming: readonly DimensionRow[],
 ): DimensionRow[] {
   const byKey = new Map<string, DimensionRow>();
-  for (const row of existing) byKey.set(`${row.snapshot_date} ${row.dimension}`, row);
-  for (const row of incoming) byKey.set(`${row.snapshot_date} ${row.dimension}`, row);
-  return parseNdjson(formatNdjson([...byKey.values()]));
+  for (const row of existing) {
+    assertFiniteDimensionRow(row);
+    byKey.set(`${row.snapshot_date}\0${row.dimension}`, row);
+  }
+  for (const row of incoming) {
+    assertFiniteDimensionRow(row);
+    byKey.set(`${row.snapshot_date}\0${row.dimension}`, row);
+  }
+  return [...byKey.values()].sort(compareDimensionRows);
 }
