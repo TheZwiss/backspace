@@ -9,7 +9,7 @@ import {
 } from './cli-support.ts';
 
 /**
- * Entrypoint invoked by `.github/workflows/metrics.yml` as
+ * Entrypoint invoked by `.github/workflows/backfill.yml` as
  * `node scripts/metrics/src/cli-backfill.ts`, a one-shot (or safely
  * re-runnable) job that seeds history `backfill.ts` can reconstruct from
  * GitHub's permanent per-item timestamps.
