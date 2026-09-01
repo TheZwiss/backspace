@@ -1,4 +1,4 @@
-import { upsertByDate, upsertByKey, compareReleaseRows } from './series.ts';
+import { upsertByDate, upsertByKey, compareReleaseRows, compareStrings } from './series.ts';
 import type { GitHubClient } from './github.ts';
 import type { Store } from './store.ts';
 import type { CountPoint, IsoDate, ReleaseRow } from './types.ts';
@@ -77,10 +77,10 @@ function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
   for (const date of dates) {
     perDay.set(date, (perDay.get(date) ?? 0) + 1);
   }
-  // Byte comparison, matching `series.ts`'s compareStrings — see its comment:
-  // localeCompare's collation is ICU-version dependent and can silently
-  // reorder a committed file after a Node upgrade.
-  const days = [...perDay.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // Shares `series.ts`'s comparator rather than inlining a second copy: the
+  // entire point of byte ordering here is that everything in the archive sorts
+  // the same way, which two independent implementations cannot promise.
+  const days = [...perDay.keys()].sort(compareStrings);
   let running = 0;
   return days.map((date) => {
     running += perDay.get(date) ?? 0;

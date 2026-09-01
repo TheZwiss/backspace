@@ -12,7 +12,7 @@ import type { DimensionRow, IsoDate, ReleaseRow } from './types.ts';
  * identifier, so byte ordering and locale ordering coincide today — the
  * point of this function is that byte ordering also stays put tomorrow.
  */
-function compareStrings(a: string, b: string): number {
+export function compareStrings(a: string, b: string): number {
   if (a < b) return -1;
   if (a > b) return 1;
   return 0;

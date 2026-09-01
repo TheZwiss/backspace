@@ -215,6 +215,12 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   // so this merges with `upsertByKey` keyed on `tag` instead, and sorts with
   // `compareReleaseRows` (date, then tag) so the output stays byte-stable
   // regardless of which same-day release the API happened to list first.
+  //
+  // That stability has a second, load-bearing half worth stating: `formatCsv`
+  // re-sorts by the header's first column (`date`) before writing, so the tag
+  // ordering established here survives only because `Array.prototype.sort` is
+  // stable (guaranteed since ES2019). Anyone changing either comparator has to
+  // keep both halves in mind, not just this one.
   function writeReleases(file: string, incoming: readonly ReleaseRow[]): void {
     const existing = store.readCsv(file) as unknown as ReleaseRow[];
     const merged = upsertByKey(existing, incoming, (row) => row.tag, 'overwrite', compareReleaseRows);
