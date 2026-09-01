@@ -4,8 +4,10 @@ import { useAuthStore } from '../../stores/authStore';
 import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { parseFederatedUsername } from '../../utils/identity';
+import { useTranslation } from 'react-i18next';
 
 export function MobileYouScreen() {
+  const { t } = useTranslation();
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -18,7 +20,7 @@ export function MobileYouScreen() {
 
   const actionRows = [
     {
-      label: 'Edit Profile',
+      label: t('mobile.editProfile'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -27,7 +29,7 @@ export function MobileYouScreen() {
       action: () => pushMobileScreen('settings-account'),
     },
     {
-      label: 'Friends',
+      label: t('common.friends'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
@@ -36,7 +38,7 @@ export function MobileYouScreen() {
       action: () => pushMobileScreen('friends'),
     },
     {
-      label: 'Connections',
+      label: t('common.connections'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-4.122a4.5 4.5 0 00-6.364-6.364L4.5 6.325a4.5 4.5 0 001.242 7.244" />
@@ -45,7 +47,7 @@ export function MobileYouScreen() {
       action: () => pushMobileScreen('settings-connections'),
     },
     {
-      label: 'Voice & Video',
+      label: t('common.voiceVideo'),
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
@@ -103,7 +105,7 @@ export function MobileYouScreen() {
           {(() => {
             const { domain } = parseFederatedUsername(user.username);
             if (!domain) return null;
-            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">Home instance: {domain}</div>;
+            return <div className="text-[10px] leading-[1.3] text-txt-tertiary opacity-60">{t('mobile.homeInstance', { domain })}</div>;
           })()}
           {user.customStatus && (
             <p className="text-sm text-txt-secondary mt-1">{user.customStatus}</p>
@@ -142,16 +144,16 @@ export function MobileYouScreen() {
           <svg className="w-5 h-5 text-accent-rose" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
           </svg>
-          <span className="text-sm text-accent-rose flex-1">Log Out</span>
+          <span className="text-sm text-accent-rose flex-1">{t('common.logOut')}</span>
         </button>
       </div>
 
       {showLogoutConfirm && (
         <ConfirmDialog
           isOpen={true}
-          title="Log Out"
-          description="Are you sure you want to log out?"
-          confirmLabel="Log Out"
+          title={t('common.logOut')}
+          description={t('mobile.logOutConfirm')}
+          confirmLabel={t('common.logOut')}
           onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
           onClose={() => setShowLogoutConfirm(false)}
           variant="danger"

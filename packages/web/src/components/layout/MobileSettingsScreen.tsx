@@ -7,21 +7,24 @@ import { ConnectionsPanel } from '../modals/settingsPanels/ConnectionsPanel';
 import { PrivacyPanel } from '../modals/settingsPanels/PrivacyPanel';
 import { KeybindsPanel } from '../modals/settingsPanels/KeybindsPanel';
 import { DesktopPanel } from '../modals/settingsPanels/DesktopPanel';
+import { LanguagePanel } from '../modals/settingsPanels/LanguagePanel';
 import { MobileScreenHeader } from './MobileScreenHeader';
 import { TransferIndicator } from './TransferIndicator';
 import { isElectron } from '../../platform/platform';
+import { useTranslation } from 'react-i18next';
 
 interface MobileSettingsScreenProps {
   initialPanel?: string;
 }
 
-const panelConfig: Record<string, { title: string; component: React.ReactNode }> = {
-  account: { title: 'Account', component: <AccountPanel /> },
-  voice: { title: 'Voice & Video', component: <VoicePanel /> },
-  privacy: { title: 'Privacy', component: <PrivacyPanel /> },
-  connections: { title: 'Connections', component: <ConnectionsPanel /> },
-  keybinds: { title: 'Keybinds', component: <KeybindsPanel /> },
-  desktop: { title: 'Desktop', component: <DesktopPanel /> },
+const panelConfig: Record<string, { titleKey: string; component: React.ReactNode }> = {
+  account: { titleKey: 'common.account', component: <AccountPanel /> },
+  voice: { titleKey: 'common.voiceVideo', component: <VoicePanel /> },
+  privacy: { titleKey: 'common.privacy', component: <PrivacyPanel /> },
+  connections: { titleKey: 'common.connections', component: <ConnectionsPanel /> },
+  language: { titleKey: 'language.label', component: <LanguagePanel /> },
+  keybinds: { titleKey: 'common.keybinds', component: <KeybindsPanel /> },
+  desktop: { titleKey: 'common.desktop', component: <DesktopPanel /> },
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -45,6 +48,11 @@ const sectionIcons: Record<string, React.ReactNode> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-4.122a4.5 4.5 0 00-6.364-6.364L4.5 6.325a4.5 4.5 0 001.242 7.244" />
     </svg>
   ),
+  language: (
+    <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.25h7.5M6.75 3v2.25m2.625 0C8.469 9.25 6 12 3 13.5m1.5-6c1.125 2.25 3 4.125 5.25 5.25" />
+    </svg>
+  ),
   instance: (
     <svg className="w-5 h-5 text-txt-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
@@ -63,6 +71,7 @@ const sectionIcons: Record<string, React.ReactNode> = {
 };
 
 export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps) {
+  const { t } = useTranslation();
   const pushMobileScreen = useUIStore((s) => s.pushMobileScreen);
   const isAdmin = useAuthStore((s) => s.user?.isAdmin);
 
@@ -74,7 +83,7 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
 
     return (
       <div className="flex flex-col h-full bg-surface-base">
-        <MobileScreenHeader title={panel.title} rightActions={<TransferIndicator />} />
+        <MobileScreenHeader title={t(panel.titleKey)} rightActions={<TransferIndicator />} />
         <div className="flex-1 overflow-y-auto p-4">
           {panel.component}
         </div>
@@ -89,17 +98,18 @@ export function MobileSettingsScreen({ initialPanel }: MobileSettingsScreenProps
   // since the panel's only-when-tab-focused web fallback isn't a useful
   // mobile feature (no global hooks, no recording flow on touch keyboards).
   const sections = [
-    { id: 'account', label: 'Account' },
-    { id: 'voice', label: 'Voice & Video' },
-    { id: 'privacy', label: 'Privacy' },
-    { id: 'connections', label: 'Connections' },
-    ...(isElectron() ? [{ id: 'keybinds', label: 'Keybinds' }, { id: 'desktop', label: 'Desktop' }] : []),
-    ...(isAdmin ? [{ id: 'instance', label: 'Instance' }] : []),
+    { id: 'account', label: t('common.account') },
+    { id: 'voice', label: t('common.voiceVideo') },
+    { id: 'privacy', label: t('common.privacy') },
+    { id: 'connections', label: t('common.connections') },
+    { id: 'language', label: t('language.label') },
+    ...(isElectron() ? [{ id: 'keybinds', label: t('common.keybinds') }, { id: 'desktop', label: t('common.desktop') }] : []),
+    ...(isAdmin ? [{ id: 'instance', label: t('common.instance') }] : []),
   ];
 
   return (
     <div className="flex flex-col h-full bg-surface-base">
-      <MobileScreenHeader title="Settings" rightActions={<TransferIndicator />} />
+      <MobileScreenHeader title={t('common.settings')} rightActions={<TransferIndicator />} />
       <div className="flex-1 overflow-y-auto">
         {sections.map((section) => (
           <button

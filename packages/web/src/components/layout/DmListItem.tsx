@@ -6,6 +6,7 @@ import { parseFederatedUsername, isSelf, isFederationGlobeApplicable } from '../
 import { useCanonicalUserView } from '../../utils/userViewLookup';
 import { formatDmTimestamp, formatDmSidebarPreview, formatDmHeaderName } from '../../utils/dmFormatters';
 import { getRejectedPeerOrigins, getAwaitingApprovalPeerOrigins } from '../../hooks/useWebSocket';
+import { useTranslation } from 'react-i18next';
 
 function isMemberUnreachable(homeInstance: string | null | undefined): boolean {
   if (!homeInstance) return false;
@@ -31,6 +32,7 @@ interface DmListItemProps {
 }
 
 export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, onLeave, onContextMenu }: DmListItemProps) {
+  const { t, i18n } = useTranslation();
   const otherMembers = dm.members.filter(m => !isSelf(m, user));
   const isGroup = !!dm.ownerId;
   if (otherMembers.length === 0 && !isGroup) return null;
@@ -181,7 +183,7 @@ export function DmListItem({ dm, isActive, isUnread, user, onSelect, onClose, on
           )}
           {dm.lastMessage && (
             <span className={timestampClass}>
-              {formatDmTimestamp(dm.lastMessage.createdAt)}
+              {formatDmTimestamp(dm.lastMessage.createdAt, i18n.resolvedLanguage, t('common.yesterday'))}
             </span>
           )}
         </div>

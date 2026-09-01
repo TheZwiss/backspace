@@ -10,6 +10,8 @@ import { api, RateLimitError } from '../../api/client';
 import { useTransferStore } from '../../stores/transferStore';
 import { waitForTransferAttachment } from '../../utils/waitForTransfer';
 import { SourceCodeLink } from '../ui/SourceCodeLink';
+import { LanguageSwitcher } from '../ui/LanguageSwitcher';
+import { useTranslation } from 'react-i18next';
 
 // Single-source regex for extracting a bare invite token from a pasted full URL.
 // Token format: 22 chars base64url ([A-Za-z0-9_-]).
@@ -18,6 +20,7 @@ const INVITE_URL_REGEX = /[?&]invite=([A-Za-z0-9_-]{22})/;
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid';
 
 export function RegisterPage() {
+  const { t } = useTranslation();
   // Step state
   const [step, setStep] = useState<1 | 2>(1);
   const [direction, setDirection] = useState<'forward' | 'back'>('forward');
@@ -187,18 +190,18 @@ export function RegisterPage() {
 
     if (trimmed.length < 3 || trimmed.length > 32) {
       setUsernameStatus(trimmed.length > 0 ? 'invalid' : 'idle');
-      setUsernameStatusMessage(trimmed.length > 0 ? 'Username must be between 3 and 32 characters' : '');
+      setUsernameStatusMessage(trimmed.length > 0 ? t('auth.usernameLength') : '');
       return;
     }
 
     if (!/^[a-z0-9_]+$/.test(trimmed)) {
       setUsernameStatus('invalid');
-      setUsernameStatusMessage('Username can only contain lowercase letters, numbers, and underscores');
+      setUsernameStatusMessage(t('auth.usernameCharacters'));
       return;
     }
 
     setUsernameStatus('checking');
-    setUsernameStatusMessage('Checking availability...');
+    setUsernameStatusMessage(t('auth.checkingAvailability'));
 
     usernameCheckTimerRef.current = setTimeout(async () => {
       const controller = new AbortController();
@@ -213,10 +216,10 @@ export function RegisterPage() {
           setUsernameStatusMessage(result.reason);
         } else if (result.available) {
           setUsernameStatus('available');
-          setUsernameStatusMessage('Username is available');
+          setUsernameStatusMessage(t('auth.usernameAvailable'));
         } else {
           setUsernameStatus('taken');
-          setUsernameStatusMessage('Username is already taken');
+          setUsernameStatusMessage(t('auth.usernameTaken'));
         }
       } catch {
         if (controller.signal.aborted) return;
@@ -265,30 +268,30 @@ export function RegisterPage() {
 
     const trimmed = username.trim();
     if (!trimmed) {
-      setError('Username is required');
+      setError(t('auth.usernameRequired'));
       return;
     }
     if (trimmed.length < 3 || trimmed.length > 32) {
-      setError('Username must be between 3 and 32 characters');
+      setError(t('auth.usernameLength'));
       return;
     }
     if (!/^[a-z0-9_]+$/.test(trimmed)) {
-      setError('Username can only contain lowercase letters, numbers, and underscores');
+      setError(t('auth.usernameCharacters'));
       return;
     }
     if (usernameStatus === 'taken' || usernameStatus === 'invalid') {
       return;
     }
     if (!password) {
-      setError('Password is required');
+      setError(t('auth.passwordRequired'));
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('auth.passwordLength'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
@@ -407,6 +410,9 @@ export function RegisterPage() {
     // uses `min-h-full` so short content still centers vertically.
     <div className="h-full overflow-y-auto bg-surface-base relative">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(124,108,246,0.06)_0%,transparent_50%)] pointer-events-none" />
+      <div className="fixed right-4 top-4 z-20">
+        <LanguageSwitcher compact />
+      </div>
       <div className="min-h-full flex items-center justify-center px-4 py-6 md:py-10 relative z-10">
         <div className="w-full max-w-[480px] bg-surface-elevated rounded-md p-6 md:p-8 shadow-elevation-high overflow-hidden">
         {/* Progress dots */}
@@ -418,7 +424,7 @@ export function RegisterPage() {
         {step === 1 ? (
           <div key="step1" className={`w-full${direction === 'back' ? ' animate-step-back' : ''}`}>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-txt-primary">Create an account</h1>
+              <h1 className="text-2xl font-bold text-txt-primary">{t('auth.createAccount')}</h1>
             </div>
 
             <form onSubmit={handleContinue}>
@@ -433,35 +439,35 @@ export function RegisterPage() {
               {showManualEntry && (
                 <div className="mb-4 p-3 rounded-lg bg-surface-elevated border border-surface-border space-y-2">
                   <div className="text-sm text-txt-secondary">
-                    Registration is invite-only on this instance. Paste your invite link or enter the code below.
+                    {t('auth.inviteOnly')}
                   </div>
                   <input
                     type="text"
                     value={manualInviteToken}
                     onChange={(e) => setManualInviteToken(e.target.value)}
-                    placeholder="Invite code or link"
+                    placeholder={t('auth.invitePlaceholder')}
                     // text-base on mobile prevents iOS Safari from auto-zooming
                     // when the field is focused (any <input> with font-size <16px triggers zoom).
                     className="input-standard w-full px-3 py-2 text-base md:text-sm"
-                    aria-label="Invite code or link"
+                    aria-label={t('auth.invitePlaceholder')}
                     autoComplete="off"
                   />
                   {inviteChecking && (
-                    <div className="text-xs text-txt-tertiary">Checking...</div>
+                    <div className="text-xs text-txt-tertiary">{t('auth.checking')}</div>
                   )}
                   {!inviteChecking && inviteCheck?.valid === true && (
                     <div className="text-xs text-status-online flex items-center gap-1">
                       <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      Valid invite: {inviteCheck.name}
+                      {t('auth.validInvite', { name: inviteCheck.name })}
                     </div>
                   )}
                   {!inviteChecking && inviteCheck?.valid === false && (
                     <div className="text-xs text-txt-danger">
-                      {inviteCheck.reason === 'expired' && 'This invite link has expired. Ask the admin for a new one.'}
-                      {inviteCheck.reason === 'exhausted' && 'This invite has reached its usage limit. Ask the admin to extend it.'}
-                      {inviteCheck.reason === 'invalid' && 'Invalid invite code.'}
+                      {inviteCheck.reason === 'expired' && t('auth.inviteExpired')}
+                      {inviteCheck.reason === 'exhausted' && t('auth.inviteExhausted')}
+                      {inviteCheck.reason === 'invalid' && t('auth.inviteInvalid')}
                     </div>
                   )}
                 </div>
@@ -480,31 +486,31 @@ export function RegisterPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      <span>Validating invite...</span>
+                      <span>{t('auth.validatingInvite')}</span>
                     </>
                   ) : inviteCheck?.valid === true ? (
                     <>
                       <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      <span className="break-all">Using invite: {inviteCheck.name}</span>
+                      <span className="break-all">{t('auth.usingInvite', { name: inviteCheck.name })}</span>
                     </>
                   ) : inviteCheck?.valid === false ? (
                     <>
                       <svg className="w-3 h-3 flex-shrink-0 mt-0.5 md:mt-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
-                      <span>Invalid invite link — please request a new one</span>
+                      <span>{t('auth.invalidInviteLink')}</span>
                     </>
                   ) : (
-                    <>Validating invite...</>
+                    <>{t('auth.validatingInvite')}</>
                   )}
                 </div>
               )}
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  Username <span className="text-txt-danger">*</span>
+                  {t('auth.username')} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="text"
@@ -544,7 +550,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  Password <span className="text-txt-danger">*</span>
+                  {t('auth.password')} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="password"
@@ -557,7 +563,7 @@ export function RegisterPage() {
 
               <div className="mb-5">
                 <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                  Confirm Password <span className="text-txt-danger">*</span>
+                  {t('auth.confirmPassword')} <span className="text-txt-danger">*</span>
                 </label>
                 <input
                   type="password"
@@ -575,20 +581,20 @@ export function RegisterPage() {
                 // tighter desktop look from before.
                 className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Continue
+                {t('auth.continue')}
               </button>
 
               {/* Helper text when invite is required but not yet entered */}
               {inviteRequired && !manualInviteToken.trim() && !urlInviteToken && (
                 <div className="text-xs text-txt-tertiary mt-2">
-                  An invite is required to register on this instance.
+                  {t('auth.inviteRequired')}
                 </div>
               )}
 
               <p className="mt-3 text-sm text-txt-tertiary">
-                Already have an account?{' '}
+                {t('auth.alreadyHaveAccount')}{' '}
                 <Link to={`/login${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="text-accent-primary hover:underline">
-                  Log In
+                  {t('auth.logIn')}
                 </Link>
               </p>
             </form>
@@ -596,14 +602,14 @@ export function RegisterPage() {
         ) : (
           <div key="step2" className={`w-full${direction === 'forward' ? ' animate-step-forward' : ''}`}>
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-txt-primary">Make it yours</h1>
-              <p className="text-txt-tertiary text-sm mt-1">Personalize your profile, or skip for now</p>
+              <h1 className="text-2xl font-bold text-txt-primary">{t('auth.makeItYours')}</h1>
+              <p className="text-txt-tertiary text-sm mt-1">{t('auth.personalize')}</p>
             </div>
 
             {retryAfter > 0 && (
               <div className="mb-4 p-3 bg-accent-amber/10 border border-accent-amber/30 rounded text-sm">
-                <p className="font-medium text-accent-amber">Too many attempts</p>
-                <p className="text-txt-secondary mt-0.5">Try again in {retryAfter}s</p>
+                <p className="font-medium text-accent-amber">{t('auth.tooManyAttemptsShort')}</p>
+                <p className="text-txt-secondary mt-0.5">{t('auth.tryAgainIn', { seconds: retryAfter })}</p>
               </div>
             )}
 
@@ -638,7 +644,7 @@ export function RegisterPage() {
                 onClick={() => avatarInputRef.current?.click()}
                 className="text-xs text-accent-primary hover:underline mt-2"
               >
-                Upload photo
+                {t('auth.uploadPhoto')}
               </button>
               <input
                 ref={avatarInputRef}
@@ -652,13 +658,13 @@ export function RegisterPage() {
             {/* Display Name */}
             <div className="mb-5">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                Display Name
+                {t('auth.displayName')}
               </label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={username.trim() || 'Display name'}
+                placeholder={username.trim() || t('auth.displayNamePlaceholder')}
                 className="input-standard w-full py-2.5 text-base md:text-sm"
                 autoComplete="name"
               />
@@ -667,7 +673,7 @@ export function RegisterPage() {
             {/* Avatar Color Picker */}
             <div className="mb-6">
               <label className="block text-xs font-bold text-txt-secondary uppercase mb-2">
-                Avatar Color
+                {t('auth.avatarColor')}
               </label>
               {/* Color swatch row: gap tightens on narrow viewports so the 7 swatches
                   fit inside a 360 px viewport (p-6 inner content area is ~280 px;
@@ -701,10 +707,10 @@ export function RegisterPage() {
               className="w-full py-3 md:py-2.5 bg-accent-primary hover:bg-accent-primary/80 text-white font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {retryAfter > 0
-                ? `Try again in ${retryAfter}s`
+                ? t('auth.tryAgainIn', { seconds: retryAfter })
                 : isRegistering
-                  ? 'Creating account...'
-                  : 'Get Started'}
+                  ? t('auth.creatingAccount')
+                  : t('auth.getStarted')}
             </button>
 
             <div className="flex items-center justify-between mt-3">
@@ -715,7 +721,7 @@ export function RegisterPage() {
                 // py-2 px-1 widens the tap area on mobile while keeping the visual link style.
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
-                Back
+                {t('common.back')}
               </button>
               <button
                 type="button"
@@ -723,7 +729,7 @@ export function RegisterPage() {
                 disabled={isDisabled}
                 className="text-sm text-txt-tertiary hover:text-txt-secondary transition-colors disabled:opacity-50 py-2 px-1 -mx-1"
               >
-                Skip for now
+                {t('auth.skipForNow')}
               </button>
             </div>
           </div>
@@ -745,7 +751,7 @@ export function RegisterPage() {
           onClose={() => setAvatarCropSrc(null)}
           imageSrc={avatarCropSrc}
           onCropComplete={handleAvatarCropComplete}
-          title="Crop Avatar"
+          title={t('auth.cropAvatar')}
           aspectRatio={1}
           cropShape="round"
           maxOutputDimension={256}

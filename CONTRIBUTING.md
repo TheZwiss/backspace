@@ -81,6 +81,8 @@ it.
   others are incompatible with `AGPL-3.0-only`.
 - **Complete implementations only.** No placeholder code, no `TODO` stubs, no
   partial components. Handle the error and edge cases.
+- **Localization.** Add user-facing web copy through the translation catalog and
+  update every shipped locale. See [`docs/systems/localization.md`](docs/systems/localization.md).
 
 ## Before you open a pull request
 

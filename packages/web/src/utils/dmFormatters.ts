@@ -223,7 +223,11 @@ export function formatDmSidebarPreview(
  * Today → time ("4:32 PM"), Yesterday → "Yesterday",
  * This year → "Mar 31", Older → "Dec 14, 2025"
  */
-export function formatDmTimestamp(createdAt: number): string {
+export function formatDmTimestamp(
+  createdAt: number,
+  locale = 'en-US',
+  yesterdayLabel = 'Yesterday',
+): string {
   const now = new Date();
   const date = new Date(createdAt);
 
@@ -233,20 +237,20 @@ export function formatDmTimestamp(createdAt: number): string {
 
   if (date >= startOfToday) {
     // Today — show time
-    return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return date.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
   }
 
   if (date >= startOfYesterday) {
-    return 'Yesterday';
+    return yesterdayLabel;
   }
 
   if (date.getFullYear() === now.getFullYear()) {
     // This year — "Mar 31"
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
   }
 
   // Previous year — "Dec 14, 2025"
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ─── DM Display Names ─────────────────────────────────────────────────────────

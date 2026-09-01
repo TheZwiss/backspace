@@ -35,6 +35,10 @@ for (const name of ['localStorage', 'sessionStorage'] as const) {
   });
 }
 
+// Components use react-i18next directly. Initialize the shared instance after
+// installing the Storage polyfill so component tests exercise the real fallback.
+await import('../i18n');
+
 // jsdom does not implement navigator.mediaDevices. Provide a default no-op stub
 // so components that enumerate devices or subscribe to `devicechange` (e.g.
 // MobileVoiceFullScreen) don't crash during render. Tests that need real device

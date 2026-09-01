@@ -55,6 +55,7 @@ const screenMap: Record<string, (params?: Record<string, string>) => React.React
   'settings-voice': () => <MobileSettingsScreen initialPanel="voice" />,
   'settings-privacy': () => <MobileSettingsScreen initialPanel="privacy" />,
   'settings-connections': () => <MobileSettingsScreen initialPanel="connections" />,
+  'settings-language': () => <MobileSettingsScreen initialPanel="language" />,
   'settings-keybinds': () => <MobileSettingsScreen initialPanel="keybinds" />,
   'settings-desktop': () => <MobileSettingsScreen initialPanel="desktop" />,
   'settings-instance': () => <MobileInstancePanel />,
