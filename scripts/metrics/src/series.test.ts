@@ -285,6 +285,20 @@ describe('upsertDimensional', () => {
     expect(formatNdjson(twice)).toBe(formatNdjson(once));
   });
 
+  it('throws on a corrupt existing row even when incoming would overwrite that key', () => {
+    // Deliberately stricter than the format->parse round trip this replaced:
+    // that only saw post-dedup survivors, so a corrupt existing row an
+    // incoming row happened to overwrite slipped through silently. Failing
+    // the merge is the safe direction for the only surviving copy of data
+    // GitHub has already deleted.
+    const existing: DimensionRow[] = [
+      { snapshot_date: '2026-08-01', dimension: 'a.com', title: '', count: NaN, uniques: 1 },
+    ];
+    const incoming = [row('2026-08-01', 'a.com', 5)];
+    expect(() => upsertDimensional(existing, incoming)).toThrow(/non-finite/);
+    expect(() => upsertDimensional(existing, incoming)).toThrow(/a\.com/);
+  });
+
   it('throws on a non-finite count, naming the dimension and not a line number', () => {
     const existing = [row('2026-08-01', 'a.com', 1)];
     const incoming: DimensionRow[] = [

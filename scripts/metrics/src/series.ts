@@ -290,7 +290,17 @@ function assertFiniteDimensionRow(row: DimensionRow): void {
  *
  * Every row that enters the merge, existing or incoming, is validated with
  * `assertFiniteDimensionRow` first — see there for why the message shape
- * differs from `parseNdjson`'s.
+ * differs from `parseNdjson`'s. Validating `existing` is deliberately
+ * STRICTER than the round trip this replaced, not equivalent to it: the
+ * round trip only ever saw post-dedup survivors, so a corrupt existing row
+ * that incoming happened to overwrite slipped through silently. It is safe
+ * to tighten because `existing` is loaded from disk through `parseNdjson`,
+ * which already rejects a non-finite count at parse time — so for the real
+ * pipeline the check can only fire on rows a caller built in memory. When
+ * it does fire, the whole merge fails rather than self-healing, matching
+ * `parseNdjson`, which aborts a whole file rather than skipping one bad
+ * line. For the only surviving copy of deleted data, refusing to proceed
+ * beats quietly papering over a value that should have been impossible.
  *
  * Sorts the merged rows directly with `compareDimensionRows` — the same
  * comparator `formatNdjson` uses — rather than round-tripping through
