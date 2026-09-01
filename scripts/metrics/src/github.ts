@@ -10,15 +10,19 @@ const API_ROOT = 'https://api.github.com';
 export class GitHubError extends Error {
   readonly status: number;
 
-  constructor(status: number, message: string) {
-    super(`GitHub API ${status}: ${message}`);
+  constructor(status: number, message: string, options?: { cause?: unknown }) {
+    super(`GitHub API ${status}: ${message}`, options);
     this.name = 'GitHubError';
     this.status = status;
   }
 }
 
 export interface GitHubClient {
-  /** Fetches one resource. Throws GitHubError on any non-2xx response. */
+  /**
+   * Fetches one resource. Throws GitHubError on any non-2xx response, and
+   * also on a 2xx response whose body cannot be parsed as JSON (e.g. a 204),
+   * so every failure this method can produce carries a status uniformly.
+   */
   get<T>(path: string, accept?: string): Promise<T>;
   /**
    * Fetches a `/stats/*` resource. GitHub computes these asynchronously and
@@ -36,6 +40,12 @@ export interface GitHubClient {
    * substitute a zero for it: a zero written for a metric GitHub never
    * finished computing is a permanent, silent lie in an archive that is the
    * only surviving copy of data GitHub deletes after 14 days.
+   *
+   * A 200 whose body is literally `null` also produces a `null` return here,
+   * indistinguishable to the caller from a persistent 202. That is safe, not
+   * an oversight: the contract above already requires every caller to treat
+   * `null` as "skip this metric today" regardless of why it came back, so no
+   * caller needs to tell the two cases apart to behave correctly.
    */
   getStats<T>(path: string): Promise<T | null>;
   /**
@@ -43,7 +53,9 @@ export interface GitHubClient {
    * `rel="next"` until it is absent, concatenating pages in order. Any
    * non-2xx response or unparseable page aborts the whole call by throwing
    * — there is no partial-result fallback, so a caller can never mistake a
-   * pagination failure partway through for a complete list.
+   * pagination failure partway through for a complete list. Also throws if a
+   * `rel="next"` URL repeats a URL already fetched in this call, rather than
+   * following a cycle forever.
    */
   paginate<T>(path: string, accept?: string): Promise<T[]>;
 }
@@ -107,10 +119,30 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
     throw new GitHubError(response.status, await response.text());
   }
 
+  /**
+   * Parses a 2xx response body as JSON, so every method that reaches this
+   * point returns either a real parsed value or a `GitHubError`. Without
+   * this wrapper, an empty body (a 204) or a body that isn't valid JSON
+   * would reach `response.json()` directly and throw a raw `SyntaxError` —
+   * the one failure path in this client that wouldn't carry a status and
+   * wouldn't be a `GitHubError`, forcing callers to handle it specially. The
+   * original `SyntaxError` is preserved as `cause` rather than discarded, so
+   * a maintainer diagnosing a parse failure still sees exactly what broke.
+   */
+  async function parseBody<T>(response: Response): Promise<T> {
+    try {
+      return (await response.json()) as T;
+    } catch (cause) {
+      throw new GitHubError(response.status, 'response body could not be parsed as JSON', {
+        cause,
+      });
+    }
+  }
+
   async function get<T>(path: string, accept?: string): Promise<T> {
     const response = await request(absolute(path), accept);
     if (!response.ok) return throwForStatus(response);
-    return (await response.json()) as T;
+    return parseBody<T>(response);
   }
 
   async function getStats<T>(path: string): Promise<T | null> {
@@ -127,7 +159,7 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
         continue;
       }
       if (!response.ok) return throwForStatus(response);
-      return (await response.json()) as T;
+      return parseBody<T>(response);
     }
     return null;
   }
@@ -136,10 +168,26 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
     const separator = path.includes('?') ? '&' : '?';
     let url: string | null = absolute(`${path}${separator}per_page=100`);
     const items: T[] = [];
+    // Tracks every URL already fetched in this call so a self-referential or
+    // looping `rel="next"` chain is caught and thrown on instead of followed
+    // forever. A scheduled workflow has no human watching it: an infinite
+    // loop here means a runner burning CPU until it's killed, and collection
+    // silently never finishing rather than failing loud. A fixed page cap
+    // was considered and rejected in favor of this: a cap invents an
+    // arbitrary ceiling that a legitimately long result set (e.g. paginated
+    // stargazers during backfill) could one day cross, while tracking actual
+    // repeats catches the real failure mode with no ceiling at all.
+    const seen = new Set<string>();
     while (url !== null) {
+      if (seen.has(url)) {
+        throw new Error(
+          `paginate: rel="next" returned ${url} a second time in the same call — the pagination sequence is cyclic and would loop forever`,
+        );
+      }
+      seen.add(url);
       const response: Response = await request(url, accept);
       if (!response.ok) return throwForStatus(response);
-      const page = (await response.json()) as unknown;
+      const page = await parseBody<unknown>(response);
       if (!Array.isArray(page)) {
         throw new Error(
           `paginate: expected an array from ${url} but got ${typeof page} — the pagination sequence is truncated or the endpoint does not return a list`,

@@ -77,6 +77,22 @@ describe('createClient.getStats', () => {
     expect(result).not.toEqual({});
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
+
+  it('sleeps between retries but skips the sleep after the final attempt', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}, { status: 202 }));
+    const sleep = vi.fn(async () => {});
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep,
+      statsAttempts: 4,
+    });
+    const result = await client.getStats('/stats/contributors');
+    expect(result).toBeNull();
+    // 4 attempts means 3 gaps between them; the 4th (final) attempt must not
+    // sleep afterward, since nothing will read the result of that sleep.
+    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(sleep.mock.calls).toEqual([[2000], [4000], [6000]]);
+  });
 });
 
 describe('createClient.paginate', () => {
@@ -106,5 +122,129 @@ describe('createClient.paginate', () => {
     await client.paginate('/x');
     const call = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(call[0]).toContain('per_page=100');
+  });
+
+  it('throws and names the URL when a page body is an object instead of an array', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ not: 'an array' }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/x')).rejects.toThrow(
+      'https://api.github.com/x?per_page=100',
+    );
+  });
+
+  it('throws and names the URL when a page body is a string instead of an array', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse('not an array'));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/y')).rejects.toThrow(
+      'https://api.github.com/y?per_page=100',
+    );
+  });
+
+  it('aborts and does not return partial results when a later page is non-2xx', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: 1 }], {
+          headers: { link: '<https://api.github.com/x?page=2>; rel="next"' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('server error', { status: 500 }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    let result: unknown;
+    let error: unknown;
+    try {
+      result = await client.paginate('/x');
+    } catch (caught) {
+      error = caught;
+    }
+    expect(result).toBeUndefined();
+    expect(error).toBeInstanceOf(GitHubError);
+    expect(error).toMatchObject({ status: 500 });
+  });
+
+  it('throws a descriptive error naming the URL when rel=next cycles back to an earlier page', async () => {
+    const page1 = (): Response =>
+      jsonResponse([{ id: 1 }], {
+        headers: { link: '<https://api.github.com/x?page=2>; rel="next"' },
+      });
+    const page2 = (): Response =>
+      jsonResponse([{ id: 2 }], {
+        // Points back at the very first URL this call fetched, forming a cycle.
+        headers: { link: '<https://api.github.com/x?per_page=100>; rel="next"' },
+      });
+    const fetchImpl = vi.fn(async (url: string) => (url.includes('page=2') ? page2() : page1()));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/x')).rejects.toThrow(
+      'https://api.github.com/x?per_page=100',
+    );
+    // The cycle must be caught before re-fetching the repeated URL a third
+    // time — otherwise this test would hang instead of asserting anything.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  }, 2000);
+});
+
+describe('unparseable 2xx response bodies', () => {
+  it('wraps a 204 empty body in a GitHubError carrying the status and the parse failure as cause', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 204 }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    let error: unknown;
+    try {
+      await client.get('/x');
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(GitHubError);
+    expect(error).toMatchObject({ status: 204 });
+    expect((error as GitHubError).cause).toBeInstanceOf(Error);
+  });
+
+  it('wraps a 200 with a non-JSON body in a GitHubError carrying the status', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not json', { status: 200 }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    let error: unknown;
+    try {
+      await client.get('/x');
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(GitHubError);
+    expect(error).toMatchObject({ status: 200 });
+    expect((error as GitHubError).cause).toBeInstanceOf(Error);
+  });
+
+  it('wraps an unparseable getStats success body in a GitHubError', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not json', { status: 200 }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.getStats('/stats/contributors')).rejects.toBeInstanceOf(GitHubError);
+  });
+
+  it('wraps an unparseable paginate page body in a GitHubError', async () => {
+    const fetchImpl = vi.fn(async () => new Response('not json', { status: 200 }));
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/x')).rejects.toBeInstanceOf(GitHubError);
   });
 });
