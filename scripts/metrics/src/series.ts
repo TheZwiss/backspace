@@ -304,10 +304,14 @@ export function parseNdjson(text: string): DimensionRow[] {
  */
 function compareDimensionRows(a: DimensionRow, b: DimensionRow): number {
   if (a.snapshot_date !== b.snapshot_date) {
-    return a.snapshot_date.localeCompare(b.snapshot_date);
+    return compareStrings(a.snapshot_date, b.snapshot_date);
   }
   if (a.count !== b.count) return b.count - a.count;
-  return a.dimension.localeCompare(b.dimension);
+  // `dimension` holds a referrer host or a repo path, so unlike every other
+  // value sorted here it can legitimately be non-ASCII. That makes byte
+  // ordering matter more, not less: an ICU update could reorder this file
+  // even though nothing about the data changed.
+  return compareStrings(a.dimension, b.dimension);
 }
 
 /**

@@ -77,7 +77,10 @@ function cumulativeByDay(dates: readonly IsoDate[]): CountPoint[] {
   for (const date of dates) {
     perDay.set(date, (perDay.get(date) ?? 0) + 1);
   }
-  const days = [...perDay.keys()].sort((a, b) => a.localeCompare(b));
+  // Byte comparison, matching `series.ts`'s compareStrings — see its comment:
+  // localeCompare's collation is ICU-version dependent and can silently
+  // reorder a committed file after a Node upgrade.
+  const days = [...perDay.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   let running = 0;
   return days.map((date) => {
     running += perDay.get(date) ?? 0;
