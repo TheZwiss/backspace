@@ -37,8 +37,23 @@ const IMPORT_RE = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s+['"]([^'"]+)['"]/g
 const SIDE_EFFECT_RE = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g;
 
 /**
- * Extract all import specifiers from a file, from both `from` imports and
- * side-effect imports. Used by both constraint tests.
+ * Matches a CommonJS `require('x')` call or a dynamic `import('x')`
+ * expression. Both are runtime escape hatches from the static forms above:
+ * `IMPORT_RE`/`SIDE_EFFECT_RE` only recognise `import`/`export ... from`
+ * statement syntax, so a `require('left-pad')` or `await import('left-pad')`
+ * sails straight through them and would silently reintroduce a runtime
+ * dependency in a package whose whole point is having none. This is
+ * deliberately still a regex, not an AST parse — a real parser is not worth
+ * a dependency in this package — so it only recognises the direct call form
+ * with a string literal argument, which is what every real instance of this
+ * escape hatch looks like.
+ */
+const REQUIRE_OR_DYNAMIC_IMPORT_RE = /\b(?:require|import)\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+/**
+ * Extract all import specifiers from a file, from `from` imports,
+ * side-effect imports, and `require()`/dynamic `import()` calls. Used by
+ * both constraint tests.
  */
 function allSpecifiersInFile(source: string): Array<{ spec: string; statement: string }> {
   const text = stripComments(source);
@@ -52,6 +67,13 @@ function allSpecifiersInFile(source: string): Array<{ spec: string; statement: s
   }
 
   for (const match of text.matchAll(SIDE_EFFECT_RE)) {
+    const spec = match[1];
+    if (spec !== undefined) {
+      specifiers.push({ spec, statement: match[0] });
+    }
+  }
+
+  for (const match of text.matchAll(REQUIRE_OR_DYNAMIC_IMPORT_RE)) {
     const spec = match[1];
     if (spec !== undefined) {
       specifiers.push({ spec, statement: match[0] });
@@ -125,5 +147,25 @@ describe('collector source constraints', () => {
   it('stripComments keeps a real import that follows a comment', () => {
     const source = ["/* a block comment */", "import { x } from 'node:fs';"].join('\n');
     expect(stripComments(source)).toContain("import { x } from 'node:fs';");
+  });
+
+  it('catches a require() call the same as a static import', () => {
+    const source = "const lodash = require('lodash');\n";
+    expect(allSpecifiersInFile(source).map((s) => s.spec)).toEqual(['lodash']);
+  });
+
+  it('catches a dynamic import() expression the same as a static import', () => {
+    const source = "async function f() {\n  const mod = await import('left-pad');\n  return mod;\n}\n";
+    expect(allSpecifiersInFile(source).map((s) => s.spec)).toEqual(['left-pad']);
+  });
+
+  it('flags a require()/dynamic import() of a disallowed specifier via the existing dependency check', () => {
+    const offenders: string[] = [];
+    const source = "const lodash = require('lodash');\nconst x = await import('left-pad');\n";
+    for (const { spec } of allSpecifiersInFile(source)) {
+      const ok = spec.startsWith('node:') || spec.startsWith('./') || spec.startsWith('../');
+      if (!ok) offenders.push(spec);
+    }
+    expect(offenders).toEqual(['lodash', 'left-pad']);
   });
 });
