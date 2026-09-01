@@ -1,6 +1,14 @@
 {
-  "last_run": "2026-09-01T21:54:47.628Z",
-  "last_success": null,
-  "error": "run failure — https://github.com/TheZwiss/backspace/actions/runs/33563551661",
-  "series_last_date": {}
+  "last_run": "2026-09-01T22:06:27.352Z",
+  "last_success": "2026-09-01T22:06:27.352Z",
+  "error": null,
+  "series_last_date": {
+    "traffic/views.csv": "2026-08-31",
+    "traffic/clones.csv": "2026-08-31",
+    "stars.csv": "2026-09-01",
+    "forks.csv": "2026-09-01",
+    "repo.csv": "2026-09-01",
+    "releases.csv": "2026-07-03",
+    "contributors.csv": "2026-08-23"
+  }
 }
