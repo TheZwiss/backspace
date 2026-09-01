@@ -61,6 +61,12 @@ function splitRows(text: string): string[][] {
       i++;
     }
   }
+  if (inQuotes) {
+    throw new Error(
+      'parseCsv: unterminated quoted field — the input ends while a quote is still open, ' +
+        'so the file is truncated or corrupt',
+    );
+  }
   if (rowHasContent) {
     fields.push(current);
     rows.push(fields);

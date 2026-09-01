@@ -83,6 +83,17 @@ describe('parseCsv', () => {
     const text = 'date,count\n2026-08-01,10\n2026-08-02,20,99\n';
     expect(() => parseCsv(text)).toThrow(/row 2/i);
   });
+
+  it('throws on an unterminated quote rather than swallowing the rest of the file', () => {
+    // Without this guard the open quote absorbs every following row into one
+    // field: two well-formed rows would vanish with no error raised.
+    const text = 'date,note\n2026-08-01,"oops\n2026-08-02,10\n2026-08-03,20\n';
+    expect(() => parseCsv(text)).toThrow(/unterminated/i);
+  });
+
+  it('still parses a file whose final row has no trailing newline', () => {
+    expect(parseCsv('date,count\n2026-08-01,10')).toEqual([{ date: '2026-08-01', count: '10' }]);
+  });
 });
 
 describe('formatCsv', () => {
