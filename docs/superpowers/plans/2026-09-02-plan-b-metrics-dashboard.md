@@ -132,7 +132,19 @@ interface DashboardData {
   meta: { last_run: string; last_success: string | null; error: string | null } | null;
   /** True when the archive is missing or holds no rows at all. The page renders its empty state. */
   empty: boolean;
-  /** Set when the `all` range was downsampled to weekly buckets to fit the budget. The page must label it. */
+  /**
+   * True when the whole payload was downsampled to weekly buckets to fit the budget.
+   *
+   * CORRECTED 2026-09-02 (controller ruling, Task 3 review): this originally read "the `all`
+   * range". That was wrong. Downsampling is WHOLESALE - one payload, one resolution - so when
+   * this is true EVERY range is weekly, and 30d renders as roughly four points. Tiered
+   * downsampling would have to ship daily and weekly resolutions side by side, costing more
+   * bytes and defeating the budget it exists to satisfy.
+   *
+   * The page MUST label every range, not just `all`. This is a single boolean with no per-range
+   * breakdown, so a page that labels only `all` is silently wrong and nothing in the data reveals
+   * it.
+   */
   downsampled: boolean;
   series: {
     views: TrafficSeries;
