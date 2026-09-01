@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Backspace insights: repository traffic and growth</title>
+<meta name="description" content="Traffic, growth and referral figures for the Backspace repository, collected daily into a public archive and rendered from a single static bundle." />
+<link rel="canonical" href="https://thezwiss.github.io/backspace/insights/" />
+<link rel="icon" type="image/png" href="../assets/logo.png" />
+<link rel="apple-touch-icon" href="../assets/logo.png" />
+<meta name="robots" content="index, follow" />
+
+<link rel="stylesheet" href="vendor/uplot.min.css" />
+
+<style>
+/* ================= Aether Drift tokens (verbatim from the landing page) ================= */
+@font-face {
+  font-family: "DM Sans";
+  src: url("../assets/dm-sans.woff2") format("woff2");
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --base: #0b0b10;
+  --chat: #13131a;
+  --channel: #1a1a23;
+  --elevated: #252530;
+  --input: #111118;
+  --txt: #efefef;
+  --txt2: #a0a0aa;
+  --txt3: #6d6d7c;
+  --txt4: #5c5c68;
+  --primary: #7c6cf6;
+  --primary-hover: #6b5ce0;
+  --mint: #86efac;
+  --peach: #fca5a5;
+  --lavender: #c4b5fd;
+  --sky: #7dd3fc;
+  --amber: #fcd34d;
+  --rose: #fda4af;
+  --coral: #fb923c;
+  --glass: rgba(20, 20, 26, 0.52);
+  --glass-hi: rgba(30, 30, 40, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.07);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: "DM Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--base);
+  color: var(--txt);
+  font-family: var(--sans);
+  font-optical-sizing: auto;
+  font-size: 16.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgba(124, 108, 246, 0.35); }
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--sky); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--sky);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+@media (max-width: 460px) { .wrap { padding: 0 16px; } }
+
+/* ================= Nav ================= */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40;
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  background: var(--glass);
+  border-bottom: 1px solid var(--glass-border);
+}
+.nav-in { display: flex; align-items: center; gap: 26px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 640; font-size: 17px; letter-spacing: -0.01em; color: var(--txt); margin-right: auto; }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; }
+.brand .brand-sub { color: var(--txt3); font-weight: 460; }
+.nav-link { color: var(--txt2); font-size: 14.5px; font-weight: 460; }
+.nav-link:hover { color: var(--txt); text-decoration: none; }
+@media (max-width: 900px) { .nav-link { display: none; } }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--sans); font-weight: 560; font-size: 15px;
+  padding: 11px 20px; border-radius: 12px; border: 1px solid transparent;
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-sm { padding: 8px 14px; font-size: 14px; border-radius: 10px; }
+
+/* ================= Page head ================= */
+main { padding-top: 60px; }
+.page-head { padding: 64px 0 8px; }
+h1 {
+  font-size: clamp(2rem, 4.6vw, 3rem);
+  font-weight: 630; line-height: 1.06; letter-spacing: -0.03em;
+  margin-bottom: 18px;
+  text-wrap: balance;
+}
+.lead {
+  color: var(--txt2); font-size: clamp(1rem, 1.7vw, 1.1rem);
+  max-width: 66ch; line-height: 1.65;
+}
+.provenance {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
+  margin-top: 18px; line-height: 1.8;
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+}
+.provenance .k { color: var(--txt3); }
+.provenance .v { color: var(--txt2); }
+
+/* ================= Status: banner + empty state ================= */
+.status-region { margin-top: 30px; display: grid; gap: 16px; }
+.status-region:empty { display: none; }
+
+.banner {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 12px;
+  background: var(--channel);
+  padding: 16px 20px;
+}
+.banner-warn { border-left-color: var(--amber); }
+.banner-error { border-left-color: var(--rose); }
+.banner-title {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.07em;
+  text-transform: uppercase; font-weight: 500; margin-bottom: 8px;
+}
+.banner-warn .banner-title { color: var(--amber); }
+.banner-error .banner-title { color: var(--rose); }
+.banner ul { list-style: none; display: grid; gap: 6px; }
+.banner li {
+  color: var(--txt2); font-size: 14.5px; line-height: 1.6;
+  padding-left: 16px; position: relative; overflow-wrap: anywhere;
+}
+.banner li::before { content: "\2022"; position: absolute; left: 0; color: var(--txt4); }
+
+.notice {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--chat);
+  padding: 24px 24px 26px;
+}
+.notice-eyebrow {
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.07em;
+  text-transform: uppercase; font-weight: 500; color: var(--txt3);
+  margin-bottom: 10px;
+}
+.notice-title { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 10px; }
+.notice p { color: var(--txt2); font-size: 15px; max-width: 70ch; }
+.notice p + p { margin-top: 10px; }
+
+/* ================= Range control ================= */
+.controls {
+  position: sticky; top: 60px; z-index: 30;
+  margin-top: 34px;
+  padding: 14px 0;
+  background: var(--base);
+  border-bottom: 1px solid var(--line);
+}
+.controls-in { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.rangectl {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px; border-radius: 12px;
+  background: var(--glass-hi);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(110%);
+  -webkit-backdrop-filter: blur(12px) saturate(110%);
+}
+.range-btn {
+  appearance: none; border: 1px solid transparent; background: transparent;
+  color: var(--txt2); font-family: var(--mono); font-size: 13px; font-weight: 500;
+  letter-spacing: 0.02em; padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+.range-btn:hover { color: var(--txt); background: rgba(255, 255, 255, 0.05); }
+.range-btn[aria-pressed="true"] {
+  background: var(--primary); color: #fff;
+}
+.range-btn[aria-pressed="true"]:hover { background: var(--primary-hover); color: #fff; }
+.resolution {
+  font-family: var(--mono); font-size: 12.5px; color: var(--txt4);
+  line-height: 1.6; max-width: 62ch;
+}
+.resolution.is-weekly { color: var(--amber); }
+.resolution:empty { display: none; }
+
+/* ================= Sections ================= */
+section.panel { padding: 60px 0 0; scroll-margin-top: 132px; }
+section.panel:last-of-type { padding-bottom: 96px; }
+.ch-label {
+  font-family: var(--mono); font-size: 13px; font-weight: 500;
+  color: var(--txt3); display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.ch-label::before { content: "#"; font-size: 15px; font-weight: 600; }
+.ch-mint::before { color: var(--mint); }
+.ch-lavender::before { color: var(--lavender); }
+.ch-sky::before { color: var(--sky); }
+.ch-peach::before { color: var(--peach); }
+.ch-amber::before { color: var(--amber); }
+h2 {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: 620; letter-spacing: -0.026em; line-height: 1.12;
+  margin-bottom: 14px;
+}
+.sec-copy { color: var(--txt2); max-width: 62ch; font-size: 15.5px; }
+.sec-copy strong { color: var(--txt); font-weight: 560; }
+
+/* The slot each later section renders into. Empty by design until filled. */
+.slot { margin-top: 26px; min-width: 0; }
+.slot:empty { margin-top: 0; }
+.slot-note {
+  color: var(--txt4); font-size: 14.5px;
+  border: 1px dashed var(--line); border-radius: 12px;
+  padding: 18px 20px; background: rgba(255, 255, 255, 0.012);
+}
+/* Wide content (charts, tables) scrolls inside its own container, never the body. */
+.scroll-x { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+/* ================= uPlot theme (tokens, so later charts inherit) ================= */
+.uplot { font-family: var(--sans); color: var(--txt2); width: 100%; }
+.u-title { color: var(--txt); font-size: 15px; font-weight: 600; }
+.u-legend { font-size: 13px; color: var(--txt2); text-align: left; }
+.u-legend th { font-weight: 560; color: var(--txt2); }
+.u-select { background: rgba(124, 108, 246, 0.18); }
+.u-hz .u-cursor-x, .u-vt .u-cursor-y { border-right: 1px dashed var(--txt4); }
+.u-hz .u-cursor-y, .u-vt .u-cursor-x { border-bottom: 1px dashed var(--txt4); }
+
+/* ================= Footer ================= */
+footer { border-top: 1px solid var(--line); padding: 34px 0 44px; }
+.foot-in { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; justify-content: space-between; color: var(--txt3); font-size: 13.5px; }
+.foot-in .fl { display: flex; gap: 22px; flex-wrap: wrap; }
+footer a { color: var(--txt2); }
+footer a:hover { color: var(--txt); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="../"><img src="../assets/logo.png" alt="" width="26" height="26" /> Backspace <span class="brand-sub">insights</span></a>
+    <a class="nav-link" href="#reach">Reach</a>
+    <a class="nav-link" href="#growth">Growth</a>
+    <a class="nav-link" href="#referrers">Referrers</a>
+    <a class="nav-link" href="#paths">Paths</a>
+    <a class="btn btn-primary btn-sm" href="https://github.com/TheZwiss/backspace">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <div class="wrap page-head">
+    <h1>Insights</h1>
+    <p class="lead">
+      Every number on this page comes from one archive: a scheduled job records the repository's
+      traffic, stars, forks, contributors and releases once a day and commits them to a public
+      data branch. The page reads a single bundle built from that archive at deploy time. Nothing
+      is estimated, and nothing is fetched from anywhere but this site.
+    </p>
+    <p class="provenance">
+      <span><span class="k">traffic history</span> <span class="v" id="pv-since">checking</span></span>
+      <span><span class="k">bundle built</span> <span class="v" id="pv-generated">checking</span></span>
+      <span><span class="k">collector last ran</span> <span class="v" id="pv-lastrun">checking</span></span>
+    </p>
+
+    <div class="status-region" id="status-region" role="status" aria-live="polite"></div>
+
+  </div>
+
+  <div class="controls">
+    <div class="wrap controls-in">
+      <div class="rangectl" id="rangectl" role="group" aria-label="Time range"></div>
+      <p class="resolution" id="resolution"></p>
+    </div>
+  </div>
+
+  <section class="panel" id="sec-header">
+    <div class="wrap">
+      <p class="ch-label ch-mint">header</p>
+      <h2>Header</h2>
+      <p class="sec-copy">
+        Stars, forks, watchers, views and clones since collection began, contributors and total
+        release downloads — each with a 30-day delta. A delta is only shown when the archive
+        actually covers the full 30 days; otherwise it reads as a dash.
+      </p>
+      <div class="slot" id="header-stats"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="reach">
+    <div class="wrap">
+      <p class="ch-label ch-sky">reach</p>
+      <h2>Reach</h2>
+      <p class="sec-copy">
+        Page views and repository clones with their unique-visitor counts. A gap in a line means
+        that day was never measured, not that it fell to zero.
+      </p>
+      <div class="slot" id="chart-reach"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="growth">
+    <div class="wrap">
+      <p class="ch-label ch-lavender">growth</p>
+      <h2>Growth</h2>
+      <p class="sec-copy">
+        Star and fork history with release tags marked on the time axis, so a jump can be read
+        against what shipped. Both are point-in-time totals, so an unmeasured day is a break in
+        the line rather than a drop.
+      </p>
+      <div class="slot" id="chart-growth"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="referrers">
+    <div class="wrap">
+      <p class="ch-label ch-peach">where-people-come-from</p>
+      <h2>Where people come from</h2>
+      <p class="sec-copy">
+        Referring sites, ranked. GitHub reports these only as a trailing 14-day aggregate, so
+        every figure here covers the two weeks up to its snapshot date — there is no daily
+        resolution to be had.
+      </p>
+      <div class="slot" id="ranked-referrers"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="paths">
+    <div class="wrap">
+      <p class="ch-label ch-amber">what-they-look-at</p>
+      <h2>What they look at</h2>
+      <p class="sec-copy">
+        The most-visited paths in the repository, ranked on the same trailing 14-day basis as the
+        referrers above.
+      </p>
+      <div class="slot" id="ranked-paths"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <span>Backspace is free software under the <a href="https://github.com/TheZwiss/backspace/blob/main/LICENSE">GNU AGPL-3.0</a>, with a commercial dual-license option.</span>
+    <span class="fl">
+      <a href="../">Home</a>
+      <a href="https://github.com/TheZwiss/backspace">GitHub</a>
+      <a href="https://github.com/TheZwiss/backspace/blob/main/CONTRIBUTING.md">Contributing</a>
+    </span>
+  </div>
+</footer>
+
+<script src="vendor/uplot.min.js"></script>
+<script>
+/*
+ * Dashboard shell.
+ *
+ * Everything here is deliberately framework-free and additive: later sections
+ * register a renderer and are handed the validated bundle plus the current
+ * range. See INSIGHTS.registerSection / INSIGHTS.onRangeChange at the bottom.
+ */
+(function () {
+  "use strict";
+
+  /* 48 hours, per spec §7: the collector runs daily, so two missed days is a fault. */
+  var STALE_MS = 48 * 60 * 60 * 1000;
+  /* A static same-origin file should never take this long. The timeout exists so
+   * the "loading" state is guaranteed to resolve rather than hang forever. */
+  var FETCH_TIMEOUT_MS = 15000;
+  var DASH = "—";
+
+  var RANGES = [
+    { key: "30d", label: "30d", days: 30, title: "Last 30 days" },
+    { key: "90d", label: "90d", days: 90, title: "Last 90 days" },
+    { key: "1y", label: "1y", days: 365, title: "Last 365 days" },
+    { key: "all", label: "all", days: null, title: "All recorded history" }
+  ];
+  /* "all" is the honest default while the archive is young: it never implies a
+   * window wider than what was actually measured. */
+  var DEFAULT_RANGE = "all";
+
+  var state = {
+    /* "loading" | "unavailable" | "empty" | "ok" */
+    status: "loading",
+    /* Human-readable explanation, set for "unavailable" only. */
+    detail: "",
+    /* The validated bundle for "empty" and "ok"; null otherwise. */
+    data: null,
+    range: DEFAULT_RANGE
+  };
+
+  var sections = [];
+  var rangeListeners = [];
+
+  var dom = {
+    since: document.getElementById("pv-since"),
+    generated: document.getElementById("pv-generated"),
+    lastRun: document.getElementById("pv-lastrun"),
+    status: document.getElementById("status-region"),
+    rangectl: document.getElementById("rangectl"),
+    resolution: document.getElementById("resolution")
+  };
+
+  var SLOT_IDS = ["header-stats", "chart-reach", "chart-growth", "ranked-referrers", "ranked-paths"];
+
+  /* ---------------------------------------------------------------- helpers */
+
+  function isPlainObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+
+  function parseInstant(value) {
+    if (typeof value !== "string" || value === "") return NaN;
+    return Date.parse(value);
+  }
+
+  function pad(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  /* Fixed UTC formatting rather than toLocaleString: the archive is UTC and a
+   * visitor's locale must not silently shift a timestamp we are making claims
+   * about. */
+  function formatInstant(ms) {
+    var d = new Date(ms);
+    return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) +
+      " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + " UTC";
+  }
+
+  function hoursBetween(aMs, bMs) {
+    return Math.round(Math.abs(aMs - bMs) / 3600000);
+  }
+
+  function element(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  /* ------------------------------------------------------------- validation */
+
+  function hasSeriesShape(value, arrayKeys) {
+    if (!isPlainObject(value) || !Array.isArray(value.dates)) return false;
+    for (var i = 0; i < arrayKeys.length; i++) {
+      if (!Array.isArray(value[arrayKeys[i]])) return false;
+    }
+    return true;
+  }
+
+  function hasDimensionShape(value) {
+    return isPlainObject(value) &&
+      Array.isArray(value.snapshots) &&
+      Array.isArray(value.latest) &&
+      Array.isArray(value.trajectories);
+  }
+
+  /*
+   * Returns null when the payload matches the data contract, or a short reason
+   * why it does not. Later sections read these fields without re-checking them,
+   * so the guard has to cover every field the contract promises.
+   */
+  function validateBundle(d) {
+    if (!isPlainObject(d)) return "the bundle is not a JSON object";
+    if (typeof d.generated_at !== "string") return "generated_at is missing";
+    if (d.collection_started !== null && typeof d.collection_started !== "string") {
+      return "collection_started is neither a string nor null";
+    }
+    if (d.meta !== null && !isPlainObject(d.meta)) return "meta is neither an object nor null";
+    if (typeof d.empty !== "boolean") return "empty is not a boolean";
+    if (typeof d.downsampled !== "boolean") return "downsampled is not a boolean";
+    if (!isPlainObject(d.series)) return "series is missing";
+    if (!hasSeriesShape(d.series.views, ["count", "uniques"])) return "series.views is malformed";
+    if (!hasSeriesShape(d.series.clones, ["count", "uniques"])) return "series.clones is malformed";
+    if (!hasSeriesShape(d.series.stars, ["total"])) return "series.stars is malformed";
+    if (!hasSeriesShape(d.series.forks, ["total"])) return "series.forks is malformed";
+    if (!hasSeriesShape(d.series.contributors, ["total"])) return "series.contributors is malformed";
+    if (!hasSeriesShape(d.series.repo, ["subscribers", "open_issues", "downloads_total"])) {
+      return "series.repo is malformed";
+    }
+    if (!Array.isArray(d.releases)) return "releases is not an array";
+    if (!isPlainObject(d.dimensions)) return "dimensions is missing";
+    if (!hasDimensionShape(d.dimensions.referrers)) return "dimensions.referrers is malformed";
+    if (!hasDimensionShape(d.dimensions.paths)) return "dimensions.paths is malformed";
+    return null;
+  }
+
+  /* ------------------------------------------------------------- freshness */
+
+  /*
+   * Fails closed. A banner that stays silent because a timestamp could not be
+   * parsed is worse than no banner at all: the one situation it exists to catch
+   * is a collector that stopped writing sane values. So anything we cannot
+   * confirm counts as stale, and the reason says which.
+   */
+  function evaluateFreshness(data) {
+    var reasons = [];
+    var stale = false;
+
+    var referenceMs = parseInstant(data.generated_at);
+    var referenceLabel;
+    if (isNaN(referenceMs)) {
+      stale = true;
+      referenceMs = Date.now();
+      referenceLabel = "the current time";
+      reasons.push("This page's bundle carries no readable build timestamp, so its freshness is measured against the current time instead.");
+    } else {
+      referenceLabel = formatInstant(referenceMs);
+    }
+
+    if (data.meta === null) {
+      return {
+        stale: true,
+        severity: "warn",
+        reasons: reasons.concat([
+          "The archive holds no collector status file, so there is no record of when the collector last ran or whether it succeeded."
+        ])
+      };
+    }
+
+    if (typeof data.meta.error === "string" && data.meta.error !== "") {
+      stale = true;
+      reasons.push("The last collection run reported an error: " + data.meta.error);
+    }
+
+    var lastRunMs = parseInstant(data.meta.last_run);
+    if (isNaN(lastRunMs)) {
+      stale = true;
+      reasons.push("The collector's last-run timestamp is missing or unreadable, so its freshness cannot be confirmed. Treating it as stale.");
+    } else if (referenceMs - lastRunMs > STALE_MS) {
+      stale = true;
+      reasons.push("The collector last ran at " + formatInstant(lastRunMs) + ", " +
+        hoursBetween(referenceMs, lastRunMs) + " hours before " + referenceLabel +
+        ". It is scheduled to run daily, so the figures below may be out of date.");
+    }
+
+    var severity = (data.meta !== null && typeof data.meta.error === "string" && data.meta.error !== "")
+      ? "error"
+      : "warn";
+
+    return { stale: stale, severity: severity, reasons: reasons };
+  }
+
+  /* --------------------------------------------------------------- render */
+
+  function renderProvenance() {
+    var data = state.data;
+
+    if (data === null) {
+      dom.since.textContent = DASH;
+      dom.generated.textContent = DASH;
+      dom.lastRun.textContent = DASH;
+      return;
+    }
+
+    /*
+     * collection_started is the earliest date in any measured series and is
+     * never back-dated, so with a downsampled bundle it can sit EARLIER than
+     * the first plotted bucket. It is the archive's start, not the chart's.
+     * It is also independent of `empty`: an archive holding only releases or
+     * only dimension snapshots is non-empty with no dated series at all.
+     */
+    var startedMs = parseInstant(data.collection_started);
+    dom.since.textContent = isNaN(startedMs) ? DASH : "since " + data.collection_started;
+    if (isNaN(startedMs)) {
+      dom.since.title = "No dated traffic measurement exists in the archive yet.";
+    } else {
+      dom.since.title = "Earliest dated measurement in the archive.";
+    }
+
+    var generatedMs = parseInstant(data.generated_at);
+    dom.generated.textContent = isNaN(generatedMs) ? DASH : formatInstant(generatedMs);
+
+    if (data.meta === null) {
+      dom.lastRun.textContent = DASH;
+    } else {
+      var lastRunMs = parseInstant(data.meta.last_run);
+      dom.lastRun.textContent = isNaN(lastRunMs) ? DASH : formatInstant(lastRunMs);
+    }
+  }
+
+  function renderBanner(freshness) {
+    if (!freshness.stale || freshness.reasons.length === 0) return;
+
+    var box = element("div", "banner " + (freshness.severity === "error" ? "banner-error" : "banner-warn"));
+    box.appendChild(element("p", "banner-title",
+      freshness.severity === "error" ? "Collector reported a failure" : "Collector status unconfirmed"));
+    var list = document.createElement("ul");
+    for (var i = 0; i < freshness.reasons.length; i++) {
+      list.appendChild(element("li", null, freshness.reasons[i]));
+    }
+    box.appendChild(list);
+    dom.status.appendChild(box);
+  }
+
+  function renderNotice(eyebrow, title, paragraphs) {
+    var box = element("div", "notice");
+    box.appendChild(element("p", "notice-eyebrow", eyebrow));
+    box.appendChild(element("p", "notice-title", title));
+    for (var i = 0; i < paragraphs.length; i++) {
+      box.appendChild(element("p", null, paragraphs[i]));
+    }
+    dom.status.appendChild(box);
+  }
+
+  function renderSlots(noteText) {
+    for (var i = 0; i < SLOT_IDS.length; i++) {
+      var slot = document.getElementById(SLOT_IDS[i]);
+      clear(slot);
+      if (noteText !== null) {
+        slot.appendChild(element("p", "slot-note", noteText));
+      }
+    }
+  }
+
+  /*
+   * `downsampled` is a single wholesale flag: when it is true EVERY range is in
+   * weekly buckets, not just "all". There is no per-range breakdown in the data,
+   * so the label has to say so once, for all of them. Later sections that need
+   * the wording inline should call INSIGHTS.resolutionSuffix().
+   */
+  function resolutionLabel() {
+    if (state.data === null) return null;
+    if (state.data.downsampled) {
+      return "The bundle was downsampled to fit its size budget, so every range — including 30d — is drawn in weekly buckets, not daily points.";
+    }
+    return "Daily resolution. Every range is drawn from one point per measured day.";
+  }
+
+  function resolutionSuffix() {
+    if (state.data !== null && state.data.downsampled) return " (weekly buckets)";
+    return "";
+  }
+
+  function renderResolution() {
+    var label = resolutionLabel();
+    dom.resolution.textContent = label === null ? "" : label;
+    if (state.data !== null && state.data.downsampled) {
+      dom.resolution.classList.add("is-weekly");
+    } else {
+      dom.resolution.classList.remove("is-weekly");
+    }
+  }
+
+  /* ---------------------------------------------------------- range control */
+
+  function setRange(key) {
+    var known = false;
+    for (var i = 0; i < RANGES.length; i++) {
+      if (RANGES[i].key === key) known = true;
+    }
+    if (!known || state.range === key) return;
+    state.range = key;
+    syncRangeButtons();
+    for (var j = 0; j < rangeListeners.length; j++) {
+      rangeListeners[j](state.range, state.data);
+    }
+    renderSections();
+  }
+
+  function syncRangeButtons() {
+    var buttons = dom.rangectl.querySelectorAll(".range-btn");
+    for (var i = 0; i < buttons.length; i++) {
+      var active = buttons[i].getAttribute("data-range") === state.range;
+      buttons[i].setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+
+  function buildRangeControl() {
+    for (var i = 0; i < RANGES.length; i++) {
+      var range = RANGES[i];
+      var button = element("button", "range-btn", range.label);
+      button.type = "button";
+      button.setAttribute("data-range", range.key);
+      button.setAttribute("title", range.title);
+      button.setAttribute("aria-label", range.title);
+      button.setAttribute("aria-pressed", range.key === state.range ? "true" : "false");
+      button.addEventListener("click", makeRangeHandler(range.key));
+      dom.rangectl.appendChild(button);
+    }
+  }
+
+  function makeRangeHandler(key) {
+    return function () { setRange(key); };
+  }
+
+  /* -------------------------------------------------------- section wiring */
+
+  function renderSections() {
+    if (state.status !== "ok") return;
+    for (var i = 0; i < sections.length; i++) {
+      var section = sections[i];
+      var slot = document.getElementById(section.slotId);
+      if (slot === null) continue;
+      section.render(slot, state.data, state.range);
+    }
+  }
+
+  /* ------------------------------------------------------------------ load */
+
+  function applyState() {
+    clear(dom.status);
+    renderProvenance();
+    renderResolution();
+
+    if (state.status === "loading") {
+      renderSlots(null);
+      return;
+    }
+
+    if (state.status === "unavailable") {
+      /* A missing data.json is the ordinary case, not a fault: the bundle is a
+       * build artifact and is never committed. Say what is missing and why. */
+      renderNotice("no data bundle", "The archive is not available here", [
+        state.detail,
+        "This page is built from a bundle generated at deploy time out of the repository's metrics archive. When that archive or the deploy step is unavailable, there are no figures to show, and showing invented ones would be worse than showing none."
+      ]);
+      renderSlots("No data to show — the archive is unavailable.");
+      return;
+    }
+
+    var freshness = evaluateFreshness(state.data);
+    renderBanner(freshness);
+
+    if (state.status === "empty") {
+      /* Distinct from a 404: the bundle loaded fine, the archive simply has no
+       * rows in it yet. */
+      renderNotice("no measurements yet", "Collection has not produced any rows yet", [
+        "The data bundle loaded, but the archive it was built from holds no measurements: no traffic, no growth snapshots, no releases.",
+        "The collector runs once a day. Figures appear here after its first successful run, and the traffic series can only start from that day — GitHub does not expose traffic older than a rolling 14-day window, so earlier history is unrecoverable."
+      ]);
+      renderSlots("No data to show yet — collection has not produced any rows.");
+      return;
+    }
+
+    renderSlots(null);
+    renderSections();
+  }
+
+  function fail(detail) {
+    state.status = "unavailable";
+    state.detail = detail;
+    state.data = null;
+    applyState();
+  }
+
+  function load() {
+    var controller = null;
+    var timer = null;
+    var options = {};
+
+    if (typeof AbortController === "function") {
+      controller = new AbortController();
+      options.signal = controller.signal;
+      timer = window.setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+    }
+
+    /* Relative and same-origin on purpose: this page makes no cross-origin
+     * request of any kind. */
+    fetch("data.json", options).then(function (response) {
+      if (!response.ok) {
+        throw new Error("The server answered HTTP " + response.status + " for data.json.");
+      }
+      return response.json();
+    }).then(function (payload) {
+      if (timer !== null) window.clearTimeout(timer);
+      var problem = validateBundle(payload);
+      if (problem !== null) {
+        fail("The data bundle was downloaded but could not be read: " + problem + ".");
+        return;
+      }
+      state.data = payload;
+      state.status = payload.empty ? "empty" : "ok";
+      state.detail = "";
+      applyState();
+    }).catch(function (error) {
+      if (timer !== null) window.clearTimeout(timer);
+      var message;
+      if (error && error.name === "AbortError") {
+        message = "The data bundle did not arrive within " + (FETCH_TIMEOUT_MS / 1000) + " seconds.";
+      } else if (error && typeof error.message === "string" && error.message !== "") {
+        message = error.message;
+      } else {
+        message = "The data bundle could not be downloaded.";
+      }
+      fail(message);
+    });
+  }
+
+  /* --------------------------------------------------------- public surface */
+
+  window.INSIGHTS = {
+    RANGES: RANGES,
+    STALE_MS: STALE_MS,
+    DASH: DASH,
+    state: state,
+    /*
+     * Register a section renderer. `render(slot, data, rangeKey)` is called once
+     * the bundle validates and is non-empty, and again on every range change.
+     * The slot is emptied by the shell before the first call; the renderer owns
+     * its contents from then on.
+     */
+    registerSection: function (slotId, render) {
+      sections.push({ slotId: slotId, render: render });
+      if (state.status === "ok") {
+        var slot = document.getElementById(slotId);
+        if (slot !== null) render(slot, state.data, state.range);
+      }
+    },
+    /* Notified before section renderers run, for state that is shared between them. */
+    onRangeChange: function (listener) { rangeListeners.push(listener); },
+    setRange: setRange,
+    resolutionSuffix: resolutionSuffix,
+    formatInstant: formatInstant,
+    parseInstant: parseInstant
+  };
+
+  buildRangeControl();
+  applyState();
+  load();
+})();
+</script>
+
+</body>
+</html>
