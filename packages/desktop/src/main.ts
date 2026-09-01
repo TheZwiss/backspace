@@ -69,6 +69,10 @@ let pendingDeepLink: string | null = null;
 
 const knownInstanceOrigins = new Set<string>();
 
+// Flatpak deployments are immutable and are upgraded by Flatpak itself. Keep
+// electron-updater from downloading an AppImage/DEB that it cannot install.
+const IS_FLATPAK = typeof process.env.FLATPAK_ID === 'string';
+
 // ─── AGPL-3.0 § 13 source offer ─────────────────────────────────────────────
 // Upstream fallback for the "Source code" menu items and the About panel.
 // Used when the connected instance can't be reached or advertises no source URL.
@@ -574,6 +578,7 @@ function registerIpcHandlers(): void {
 
   // Auto-update IPC
   ipcMain.on('install-update', () => {
+    if (IS_FLATPAK) return;
     try {
       const { autoUpdater } = require('electron-updater');
       autoUpdater.quitAndInstall();
@@ -583,6 +588,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.on('check-for-updates', () => {
+    if (IS_FLATPAK) return;
     try {
       const { autoUpdater } = require('electron-updater');
       autoUpdater.checkForUpdates().catch(() => {});
@@ -703,6 +709,8 @@ function registerIpcHandlers(): void {
 // ─── Auto-Update ────────────────────────────────────────────────────────────
 
 function initAutoUpdater(): void {
+  if (IS_FLATPAK) return;
+
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.autoDownload = true;

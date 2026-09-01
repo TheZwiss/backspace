@@ -11,6 +11,8 @@ Source files:
 - `packages/web/src/platform/platform.ts` — `isElectron()` / `isElectronMac()` / `getElectronAPI()` helpers
 - `packages/desktop/electron-builder.yml` — Build config, protocol registration, afterPack hook
 - `packages/desktop/scripts/afterPack.js` — Cross-platform native module cleanup (critical for builds)
+- `com.backspace.desktop.yml` — Flatpak manifest (offline x86_64/aarch64 source build)
+- `flatpak/` — Flatpak launcher, desktop entry, AppStream metadata, and build instructions
 - `packages/desktop/resources/games.json` — Bundled game dictionary seed (versioned)
 
 ---
@@ -251,6 +253,15 @@ Publish: GitHub (TheZwiss/backspace)
 - **Windows:** NSIS auto-update works unsigned; SmartScreen warns on first
   install only.
 - **Linux:** AppImage auto-update works unsigned.
+
+Flatpak builds are the exception to the updater flow: the runtime exposes
+`FLATPAK_ID`, `main.ts` skips `electron-updater`, and the manifest removes
+`app-update.yml`. Flatpak owns application updates because `/app` is immutable.
+The manifest checks out a pinned source commit, installs dependencies from a
+generated offline pnpm store, compiles TypeScript, and has electron-builder
+produce an unpacked Linux application inside the SDK. It then installs that
+output on the Electron BaseApp and uses `zypak-wrapper` for Chromium sandbox
+integration.
 
 CI publishes via `.github/workflows/release.yml` (tag `v*` on the public repo):
 native runners for mac (arm64+x64), win (x64+arm64), linux (x64, arm64), each

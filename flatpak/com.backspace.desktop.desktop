@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Backspace
+Comment=Self-hosted text, voice, and video communication
+Exec=backspace %U
+Terminal=false
+Type=Application
+Icon=com.backspace.desktop
+StartupWMClass=com.backspace.desktop
+Categories=Network;Chat;InstantMessaging;
+MimeType=x-scheme-handler/backspace;
+Keywords=chat;voice;video;federation;self-hosted;

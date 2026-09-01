@@ -1,0 +1,73 @@
+app-id: com.backspace.desktop
+base: org.electronjs.Electron2.BaseApp
+base-version: '25.08'
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node24
+command: backspace
+separate-locales: false
+
+finish-args:
+  # Chromium requires a shared IPC namespace for its multi-process model.
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  # Camera access and hardware-accelerated video encoding/decoding.
+  - --device=all
+  # PipeWire is used by the desktop capture portal on Wayland.
+  - --filesystem=xdg-run/pipewire-0:ro
+  # Native notifications and the Linux tray icon.
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.gtk.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Keep pointer themes correctly scaled when Electron uses native Wayland.
+  - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+
+modules:
+  - name: backspace
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node24/bin
+    sources:
+      # Application source and dependency lockfile. Keep this commit in sync
+      # with flatpak/node-sources.json when updating the package.
+      - type: git
+        url: https://github.com/TheZwiss/backspace.git
+        commit: 6c7cbee80886c58bcb7183aed9239c8c57aee055
+
+      # Offline pnpm store, Electron archives, native package prebuilts, and
+      # Node headers generated from the pinned pnpm-lock.yaml.
+      - flatpak/node-sources.json
+
+      # Corepack normally downloads pnpm on first use, which is forbidden in
+      # Flatpak's network-isolated build sandbox. Ship the pinned CLI instead.
+      - type: archive
+        url: https://registry.npmjs.org/pnpm/-/pnpm-10.34.3.tgz
+        sha256: 1c40544020a2e633068ed43a98eb5c0fed7d64a1c6d6f2382e43df91419dad62
+        strip-components: 1
+        dest: flatpak-pnpm
+
+      - type: patch
+        path: flatpak/flatpak-runtime.patch
+
+      - type: file
+        path: flatpak/build.sh
+
+      - type: file
+        path: flatpak/com.backspace.desktop.desktop
+
+      - type: file
+        path: flatpak/com.backspace.desktop.metainfo.xml
+
+      - type: script
+        dest-filename: backspace
+        commands:
+          - export TMPDIR="${XDG_RUNTIME_DIR}/app/${FLATPAK_ID}"
+          - exec zypak-wrapper /app/backspace/@backspacedesktop "$@"
+
+    build-commands:
+      - /bin/sh build.sh
