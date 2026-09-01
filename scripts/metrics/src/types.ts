@@ -21,12 +21,19 @@ export interface ReleaseRow {
   name: string;
 }
 
-/** One day of repo-object counters. */
+/**
+ * One day of repo-object counters. `downloads_total` is sourced from the
+ * optional `releases` fetch, unlike `subscribers`/`open_issues`, which are
+ * required; it is `null` when that fetch failed this run and no fresh sum
+ * could be measured. `null` renders as a blank CSV field (see `formatCsv`),
+ * distinguishing "not measured this run" from a genuine `0` — never collapse
+ * the two.
+ */
 export interface RepoPoint {
   date: IsoDate;
   subscribers: number;
   open_issues: number;
-  downloads_total: number;
+  downloads_total: number | null;
 }
 
 /**

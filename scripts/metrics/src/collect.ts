@@ -82,23 +82,6 @@ function toTraffic(buckets: TrafficBucket[]): TrafficPoint[] {
 }
 
 /**
- * Reads the most recently recorded `downloads_total` from `repo.csv`, or
- * `undefined` when there is no usable prior value (no row yet, or the last
- * row's value doesn't parse as a finite number).
- *
- * Backs the fallback path when the optional `releases` fetch fails: see the
- * long comment on `collect` for why this exists at all rather than the
- * simpler `releases === null ? 0 : sum(...)` this replaced.
- */
-function lastKnownDownloadsTotal(store: Store): number | undefined {
-  const rows = store.readCsv('repo.csv');
-  const last = rows[rows.length - 1];
-  if (last === undefined) return undefined;
-  const value = Number(last['downloads_total']);
-  return Number.isFinite(value) ? value : undefined;
-}
-
-/**
  * Runs the daily collection.
  *
  * Atomicity is the whole design of this function, constructed rather than
@@ -171,15 +154,18 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   // optional `releases` fetch. `releases === null ? 0 : sum(...)` — summing
   // to zero when the fetch failed — would write a permanent lie: a zero
   // recorded for a download count GitHub simply never returned this run,
-  // indistinguishable later from a genuine zero. When `releases` fetched
-  // cleanly the sum is authoritative and always wins. When it didn't, the
-  // last value this file actually recorded is carried forward instead of
-  // invented — mirroring the same "leave the previous value alone" contract
-  // `getStats`'s null already imposes on contributors — and if there is no
-  // prior value to carry (first run, or a fetch failure on day one), the
-  // whole `repo.csv` row is skipped rather than writing an undefined value
-  // as if it were measured.
-  let downloadsTotal: number | undefined;
+  // indistinguishable later from a genuine zero. Carrying the previous run's
+  // value forward under today's date is not a safer alternative: it writes a
+  // plausible, undetectable plateau, worse than the zero it would replace,
+  // since a zero at least self-flags as anomalous for a cumulative counter.
+  // When `releases` fetched cleanly the sum is authoritative and always
+  // wins. When it didn't, `downloads_total` is left `null` — rendered as a
+  // blank CSV field by `formatCsv` — rather than fabricated from history.
+  // `subscribers`/`open_issues` are unaffected either way: they come from
+  // the required repo-object fetch, which has already resolved successfully
+  // by the time this runs, so a `releases` failure never costs the row those
+  // two required fields.
+  let downloadsTotal: number | null;
   if (releases !== null) {
     downloadsTotal = releases.reduce(
       (sum, release) =>
@@ -187,8 +173,8 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
       0,
     );
   } else {
-    downloadsTotal = lastKnownDownloadsTotal(store);
-    if (downloadsTotal !== undefined) skipped.push('repo.csv:downloads_total');
+    downloadsTotal = null;
+    skipped.push('repo.csv:downloads_total');
   }
 
   const written: string[] = [];
@@ -254,24 +240,18 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   writeCsvSeries('stars.csv', ['date', 'total'], [stars]);
   writeCsvSeries('forks.csv', ['date', 'total'], [forks]);
 
-  if (downloadsTotal === undefined) {
-    // No fresh fetch and nothing on record to carry forward: writing a row
-    // here has no genuine value for `downloads_total` to put in it, so the
-    // whole row is skipped this run rather than inventing one.
-    skipped.push('repo.csv');
-  } else {
-    const repoPoint: RepoPoint = {
-      date: today,
-      subscribers: repo.subscribers_count,
-      open_issues: repo.open_issues_count,
-      downloads_total: downloadsTotal,
-    };
-    writeCsvSeries(
-      'repo.csv',
-      ['date', 'subscribers', 'open_issues', 'downloads_total'],
-      [repoPoint],
-    );
-  }
+  // Always written: `subscribers`/`open_issues` are required-fetch fields
+  // that have already resolved successfully by this point, so they are
+  // never held hostage to whether the unrelated optional `releases` fetch
+  // succeeded. `downloads_total` is `null` (blank on disk) exactly when it
+  // wasn't measured this run — see the comment above.
+  const repoPoint: RepoPoint = {
+    date: today,
+    subscribers: repo.subscribers_count,
+    open_issues: repo.open_issues_count,
+    downloads_total: downloadsTotal,
+  };
+  writeCsvSeries('repo.csv', ['date', 'subscribers', 'open_issues', 'downloads_total'], [repoPoint]);
 
   if (releases !== null) {
     const releaseRows: ReleaseRow[] = releases

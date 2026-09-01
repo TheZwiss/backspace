@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -209,11 +209,16 @@ describe('collect', () => {
   // optional-fetch field (downloads_total, from releases) into one row. The
   // naive `releases === null ? 0 : sum(...)` collapse writes a permanent lie
   // — a zero for a download count GitHub simply never returned this run —
-  // into a file that otherwise only ever holds measured values. These cases
-  // pin the corrected behavior: carry the last known value forward when one
-  // exists, and skip the whole row (never invent zero) when none does.
+  // into a file that otherwise only ever holds measured values. Carrying the
+  // last known value forward is not a fix either: it writes yesterday's
+  // measurement under today's date, an undetectable plateau indistinguishable
+  // from a genuinely quiet week. These cases pin the corrected behavior: the
+  // required fields are always written, and an unmeasured `downloads_total`
+  // is left blank — never fabricated, never used as an excuse to discard
+  // `subscribers`/`open_issues`, which were fetched successfully regardless
+  // of what `releases` did.
 
-  it('carries forward the previous downloads_total instead of writing a zero when releases fails', async () => {
+  it('leaves downloads_total blank rather than carrying the previous value forward when releases fails', async () => {
     const store = createStore(dir);
     store.writeCsv(
       'repo.csv',
@@ -222,20 +227,44 @@ describe('collect', () => {
     );
     const client = fakeClient({ '/repos/o/r/releases': new Error('502') });
     const result = await collect({ client, store, ...base });
-    expect(store.readCsv('repo.csv')).toEqual([
+    const rows = store.readCsv('repo.csv');
+    expect(rows).toEqual([
       { date: '2026-08-24', subscribers: '1', open_issues: '10', downloads_total: '25' },
-      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '25' },
+      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '' },
     ]);
+    expect(rows[1]?.downloads_total).toBe('');
+    expect(rows[1]?.subscribers).toBe('1');
+    expect(rows[1]?.open_issues).toBe('13');
     expect(result.skipped).toContain('repo.csv:downloads_total');
+    expect(result.written).toContain('repo.csv');
   });
 
-  it('skips writing repo.csv entirely when releases fails with no prior downloads_total on record', async () => {
+  it('still writes repo.csv with real subscribers/open_issues when releases fails on the very first run', async () => {
     const store = createStore(dir);
     const client = fakeClient({ '/repos/o/r/releases': new Error('502') });
     const result = await collect({ client, store, ...base });
-    expect(store.readCsv('repo.csv')).toEqual([]);
-    expect(result.skipped).toContain('repo.csv');
+    expect(store.readCsv('repo.csv')).toEqual([
+      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '' },
+    ]);
+    expect(result.skipped).toContain('repo.csv:downloads_total');
+    expect(result.skipped).not.toContain('repo.csv');
+    expect(result.written).toContain('repo.csv');
     expect(store.readCsv('stars.csv')).toEqual([{ date: '2026-08-25', total: '56' }]);
+  });
+
+  it('leaves a previously blank downloads_total untouched while the new day carries its real value', async () => {
+    const store = createStore(dir);
+    store.writeCsv(
+      'repo.csv',
+      ['date', 'subscribers', 'open_issues', 'downloads_total'],
+      [{ date: '2026-08-24', subscribers: 1, open_issues: 10, downloads_total: '' }],
+    );
+    const result = await collect({ client: fakeClient(), store, ...base });
+    expect(store.readCsv('repo.csv')).toEqual([
+      { date: '2026-08-24', subscribers: '1', open_issues: '10', downloads_total: '' },
+      { date: '2026-08-25', subscribers: '1', open_issues: '13', downloads_total: '37' },
+    ]);
+    expect(result.skipped).not.toContain('repo.csv:downloads_total');
   });
 
   it('computes a cumulative contributor count from each contributor first commit week', async () => {
