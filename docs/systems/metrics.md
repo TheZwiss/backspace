@@ -7,10 +7,11 @@ Source files:
 - `scripts/metrics/src/store.ts` -- Filesystem layer: atomic per-file writes (temp + rename), `meta.json` read/write, path containment
 - `scripts/metrics/src/collect.ts` -- Daily snapshot entrypoint (`collect()`)
 - `scripts/metrics/src/backfill.ts` -- One-shot historical reconstruction entrypoint (`backfill()`)
-- `scripts/metrics/src/cli-collect.ts` -- `process.env`/clock-reading wrapper invoked by `metrics.yml`
+- `scripts/metrics/src/cli-collect.ts` -- `process.env`/clock-reading wrapper invoked by `metrics.yml`'s "Collect" step
 - `scripts/metrics/src/cli-backfill.ts` -- `process.env`-reading wrapper invoked by `backfill.yml`
-- `scripts/metrics/src/cli-support.ts` -- Env validation, token safety check, timestamp derivation, log formatting
-- `.github/workflows/metrics.yml` -- Daily cron: collect, commit, push, `gh workflow enable`
+- `scripts/metrics/src/cli-record-failure.ts` -- `process.env`/clock-reading wrapper invoked by `metrics.yml`'s "Record failure" step (`if: failure()` only)
+- `scripts/metrics/src/cli-support.ts` -- Env validation, token safety check, timestamp derivation, failure recording, log formatting
+- `.github/workflows/metrics.yml` -- Daily cron: collect, commit, push; on failure, record and push the failure to `meta.json`; `gh workflow enable`
 - `.github/workflows/backfill.yml` -- `workflow_dispatch`-only backfill runner
 
 **Out of scope:** the public dashboard. Section 11 below explains why — it is a separate, not-yet-built workstream. This document covers only the collection pipeline: the `scripts/metrics` package, the two workflows, and the orphan `metrics-data` branch they write to.
@@ -52,8 +53,9 @@ scripts/metrics/                     @backspace/metrics (pnpm workspace package)
     store.ts           filesystem layer, meta.json
     collect.ts         daily snapshot
     backfill.ts         historical reconstruction
-    cli-collect.ts      env/clock wrapper for metrics.yml
+    cli-collect.ts      env/clock wrapper for metrics.yml's "Collect" step
     cli-backfill.ts     env wrapper for backfill.yml
+    cli-record-failure.ts  env/clock wrapper for metrics.yml's "Record failure" step
     cli-support.ts      shared CLI helpers
     *.test.ts           vitest, no network, no filesystem outside a per-test tmpdir
 
@@ -79,6 +81,8 @@ Both `metrics.yml` and `backfill.yml`:
 - Run `step-security/harden-runner` with `egress-policy: audit`, and pin every `uses:` to a full commit SHA with a trailing `# vX.Y.Z` comment, per this repo's standing CI convention (see `docs/systems/security-scanning.md`).
 
 `metrics.yml` runs `collect` (`node scripts/metrics/src/cli-collect.ts`); `backfill.yml` runs `backfill` (`node scripts/metrics/src/cli-backfill.ts`). Both jobs declare only `contents: write` (plus `actions: write` on `metrics.yml`, for the schedule-keepalive step in §9) — there is no separate deploy job in this codebase today, because there is no dashboard to deploy (§11).
+
+`metrics.yml` additionally runs a failure path that `backfill.yml` does not have: a "Record failure" step (`node scripts/metrics/src/cli-record-failure.ts`, `if: failure()`) followed by a "Commit and push failure record" step, both gated to run only when something earlier in the job failed. See §3.3 for what this writes and why `backfill.yml` doesn't need the equivalent — a failed backfill dispatch is visible in the Actions tab for whoever ran it, with no unattended schedule depending on it the way the daily cron does.
 
 ---
 
@@ -126,12 +130,14 @@ All files live at the root of the `metrics-data` branch. CSVs are sorted ascendi
 }
 ```
 
-`series_last_date` keys are exact file paths (only the `.csv` files collected this run are recorded; NDJSON files are not). There are **two independent writers** of this file, and reading it correctly means knowing both:
+`series_last_date` keys are exact file paths (only the `.csv` files collected this run are recorded; NDJSON files are not). **A key is added the first time a series is ever written and, from then on, is never removed** — a run that skips a series (an optional fetch failed, or the series simply wasn't touched) leaves that key exactly as the last successful run left it, so the field goes *stale* (a date that stops advancing) rather than *disappearing*. A vanished key would be far easier to miss than a date that stopped moving, which is the whole reason this field exists (see §9).
 
-1. `collect()` (`collect.ts`) writes it last, once every other file for the run has landed — see §5's atomicity guarantee. On a required-fetch failure, `collect()` throws before this write ever happens, so this internal write only ever records success.
-2. The workflow's own **"Record run outcome"** step (`metrics.yml`, `if: always()`) runs after the commit-and-push step regardless of whether `collect` succeeded. It reads whatever `meta.json` is currently on the branch, refreshes `last_run` to its own timestamp, and — if the job's overall status was not `success` — sets `error` to `` `run failed: ${job.status}` `` (leaving `last_success` and `series_last_date` untouched, since those describe the last run that actually completed). If the job did succeed, it sets `last_success` again (to a slightly later timestamp than `collect()`'s own write) and clears `error`. This step commits and pushes `meta.json` **on its own**, as a second commit, separate from the data commit — with a failure to push swallowed to a `::warning::` annotation rather than failing the job, so a metadata-push hiccup can never mask a successful collection.
+There are **two writers** of this file, one per outcome, never both in the same run:
 
-The practical upshot: a normal successful day produces **two** commits on `metrics-data` (the data snapshot, then the run-outcome record), and `error` is the field to check for "did last night's run actually work" — `last_run` alone updates even on failure.
+1. **On success**, `collect()` (`collect.ts`) is the only writer. It writes `meta.json` last of all, once every other file for the run has landed — see §5's atomicity guarantee — and it is the only place `series_last_date` is ever advanced to a fresh date. Building that map is itself two steps: `collect()` first reads the *previous* `meta.json` via `store.readMeta()` (synchronously, as the write phase's first action — a corrupt existing `meta.json` therefore throws before any file changes this run, the same all-or-nothing guarantee a required-fetch failure already has) and seeds `series_last_date` from it, then overwrites only the keys for series actually written this run. A first-ever run (`readMeta()` returns `null`) seeds from `{}`. On a required-fetch failure, `collect()` throws before any of this, so this writer only ever records a genuine success.
+2. **On failure**, `recordFailure()` (`cli-support.ts`, invoked by `cli-record-failure.ts` from `metrics.yml`'s "Record failure" step, `if: failure()`) is the only writer. It reads whatever `meta.json` currently exists (or `null` — legitimate on a run that fails before `collect()` has ever written one), refreshes `last_run` to its own timestamp, and sets `error` to a description of what failed (currently `` `run failed: ${job.status}` ``, passed in via the `METRICS_RUN_OUTCOME` environment variable — never interpolated into the workflow's `run:` string). It leaves **`last_success` and `series_last_date` completely untouched** — not merged, not partially updated, byte-for-byte whatever `collect()` (or a previous failure record) last wrote — because `last_success` is this archive's "last known good" signal and a failure must never move it, and a failed run measured nothing, so it must never edit `series_last_date` either. A "Commit and push failure record" step, mirroring the success path's commit-and-push, then commits and pushes just `meta.json`, with a failed push swallowed to a `::warning::` annotation rather than failing the (already-failed) job.
+
+The practical upshot: a normal successful day produces **exactly one** commit on `metrics-data` (the data snapshot, `meta.json` included via that step's `git add -A`) — there is no second, redundant metadata commit on success anymore. A failed day produces at most one commit too (the failure record; there is no data commit to accompany it unless `collect()` itself succeeded but a later step, e.g. the push, failed — see §9). `error` is the field to check for "did last night's run actually work" — `last_run` alone updates even on failure.
 
 ---
 
@@ -143,7 +149,7 @@ The practical upshot: a normal successful day produces **two** commits on `metri
 
 `collect()` fetches every **required** series (`views`, `clones`, `referrers`, `paths`, the repo object) via a single `Promise.all` before writing anything. If any of those rejects, the function throws before a single `store.write*` call happens — the data directory and `meta.json` are left completely untouched, and the next run treats the previous data as still authoritative. This is asserted directly by a test (`collect.test.ts`, "aborts the entire write when a required traffic fetch fails"), which checks that `traffic/views.csv`, `stars.csv`, and `meta.json` are all still empty/absent after a failed clones fetch.
 
-Once the write phase starts, every `store.write*` call in it is synchronous with no `await` between them, so there is no point where a second run (or anything else) could interleave. `meta.json` is written last of all, so its presence is a completion marker.
+Once the write phase starts, its very first action is a synchronous read, not a write: `store.readMeta()`, which seeds `series_last_date` from the previous run (§3.3). Placed there — before the first `store.write*` call — rather than later alongside the read-back-after-write calls that finish assembling `meta.json`, a corrupt existing `meta.json` throws before any file changes this run, extending the same all-or-nothing guarantee above to this failure mode too. `readMeta()` is `readFileSync` + `JSON.parse`, both synchronous, so it introduces no `await`. Every `store.write*` call that follows is likewise synchronous with no `await` between any of them, so there is no point where a second run (or anything else) could interleave. `meta.json` is written last of all, so its presence is a completion marker.
 
 **The honest limit on this guarantee:** it is atomicity within one process's happy path, not a transaction. A synchronous run of `writeFileSync`/`renameSync` calls still issues one OS syscall at a time — a hard kill (`SIGKILL`, OOM) or an OS-level error (`ENOSPC`, a permissions change) between two of those calls can leave some files updated to today and others holding yesterday's content, with `meta.json` never reaching its update in that case (so it still points at the last run that *did* complete). **This torn-cross-file state does not self-heal for `stars.csv`, `forks.csv`, or `repo.csv`.** Those three files only ever write **today's** row each run — there is no retry logic that revisits a skipped or partially-written prior date for them. `traffic/*` is different: because the API returns a rolling 14-day window, a gap in the traffic files left by a torn run is silently repaired the next time collection succeeds (see §4.4). A torn `stars.csv`/`forks.csv`/`repo.csv` is not repaired by anything except a future day's row simply continuing forward from wherever it was left.
 
@@ -264,23 +270,27 @@ This is not a defect in `backfill()` itself: reconstructing pre-collection histo
 
 ### Reading `meta.json`
 
-See §3.3 for the two-writer mechanics. In short: fetch `meta.json` from the tip of `metrics-data` and check `error` — `null` means the last run recorded there completed with `last_success` set to that run's timestamp; any other value is the string `run failed: <job status>` from the most recent run that did not succeed, and `last_success`/`series_last_date` still reflect the last run that *did*. `series_last_date` gives the newest date present in each `.csv` file at the end of that successful run, which is a faster way to spot a stalled series than diffing the files themselves.
+See §3.3 for the two-writer (one per outcome) mechanics. In short: fetch `meta.json` from the tip of `metrics-data` and check `error` — `null` means `collect()` itself last wrote this file, with `last_success` set to that run's timestamp; any other value is the string `run failed: <job status>` recorded by the failure path (`recordFailure()`/`cli-record-failure.ts`) for the most recent run that did not succeed, and `last_success`/`series_last_date` in that case still reflect whatever the last *successful* `collect()` run left them at — the failure path never touches either. `series_last_date` gives the newest date present in each `.csv` file as of the last run that actually wrote it (a written series advances to today; a skipped one keeps its previous entry — see §3.3), which is a faster way to spot a stalled series than diffing the files themselves.
+
+One case worth naming explicitly: `error` can be non-null while `last_success` is recent. That happens when `collect()` itself succeeds but a later step in the same job fails (e.g. the data commit/push, after all three retry attempts) — the failure path still runs and records `error`, but `last_success`/`series_last_date` correctly show that the measurement itself landed; only getting it committed and pushed did not.
 
 ---
 
 ## 10. Testing
 
-`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **141 tests across 7 files**, all passing:
+`scripts/metrics`'s `test` script is `tsc --noEmit && vitest run` — it runs through the existing root `pnpm -r test` step with no `ci.yml` change required, and covers both types and behavior in one script. All tests are fixture-driven and touch no network; filesystem tests use a per-test `mkdtempSync` directory, cleaned up in `afterEach`. As of this writing there are **168 tests across 7 files**, all passing:
 
 ```
-src/no-runtime-deps.test.ts   6
-src/series.test.ts           41
-src/cli-support.test.ts      28
-src/github.test.ts           16
+src/no-runtime-deps.test.ts   9
+src/series.test.ts           47
+src/cli-support.test.ts      35
+src/github.test.ts           17
 src/store.test.ts            23
-src/backfill.test.ts          9
-src/collect.test.ts          18
+src/backfill.test.ts         12
+src/collect.test.ts          25
 ```
+
+`cli-record-failure.ts` has no dedicated `.test.ts` of its own, matching `cli-collect.ts` and `cli-backfill.ts` — all three are thin `process.env`/clock-reading wrappers with no branching logic of their own to unit-test. Its testable core, `recordFailure()`, is covered in `cli-support.test.ts` alongside the module's other shared helpers; `collect.ts`'s corresponding `series_last_date`-seeding logic is covered in `collect.test.ts`.
 
 `no-runtime-deps.test.ts` is worth calling out specifically: it regex-scans every non-test source file in `src/` and fails if any import specifier is not a `node:` builtin or a relative path, if any relative import omits its `.ts` extension, or if any import of `types.ts` omits the `import type` keyword. This is the enforcement mechanism behind two of Node's type-stripping constraints (§12) — without `import type`, Node treats a type-only import as a value import and throws `SyntaxError` **at runtime**, which for this package means a red 03:00 cron rather than a red `tsc --noEmit`. `erasableSyntaxOnly` and `verbatimModuleSyntax` in `tsconfig.json` catch the same class of mistake at typecheck time for constructs `no-runtime-deps.test.ts` doesn't scan for (enums, namespaces with runtime code, parameter properties, decorators).
 

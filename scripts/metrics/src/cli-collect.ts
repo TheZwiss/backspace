@@ -13,11 +13,12 @@ import {
  * Entrypoint invoked by `.github/workflows/metrics.yml` as
  * `node scripts/metrics/src/cli-collect.ts`, once per scheduled run.
  *
- * This file and `cli-backfill.ts` are deliberately the only two files in
- * this package that read `process.env` or the system clock — every other
- * module takes those as injected values (see `CollectOptions` in
- * `collect.ts`), which is what makes the rest of the package testable
- * without touching the network, the filesystem, or real time.
+ * This file, `cli-backfill.ts`, and `cli-record-failure.ts` are
+ * deliberately the only three files in this package that read `process.env`
+ * or the system clock — every other module takes those as injected values
+ * (see `CollectOptions` in `collect.ts`), which is what makes the rest of
+ * the package testable without touching the network, the filesystem, or
+ * real time.
  */
 async function main(): Promise<void> {
   const token = requiredEnv(process.env, 'METRICS_TOKEN');

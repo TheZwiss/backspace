@@ -1,5 +1,6 @@
 import { GitHubError } from './github.ts';
 import type { CollectResult } from './collect.ts';
+import type { Meta, Store } from './store.ts';
 import type { IsoDate } from './types.ts';
 
 /**
@@ -108,6 +109,74 @@ export function formatCollectSummary(result: CollectResult): string[] {
  */
 export function formatBackfillSummary(result: { written: string[] }): string {
   return `backfill target files (write-if-absent, listed whether or not they changed this run): ${result.written.join(', ')}`;
+}
+
+/**
+ * Records that a run did not complete successfully, by reading the existing
+ * `meta.json` (through `store`) and writing a new one that reflects the
+ * failure.
+ *
+ * This is the testable core behind `cli-record-failure.ts`, which is
+ * invoked by `metrics.yml`'s "Record failure" step — the third and final
+ * writer this package needs, on the one path where `collect()`'s own
+ * atomic write never ran at all (a required fetch failed, or a later step
+ * such as the data commit/push failed after `collect()` succeeded).
+ *
+ * Two fields are refreshed to reflect THIS failure:
+ * - `last_run` becomes `now`, unconditionally — every invocation of this
+ *   package, successful or not, updates it.
+ * - `error` becomes `reason` — the caller's description of what failed.
+ *
+ * Two fields are carried forward from `previous` completely UNCHANGED,
+ * never merged or partially updated:
+ * - `last_success` is the archive's "last known good" signal (see
+ *   `collect.ts`, which is the only place that ever advances it). A failed
+ *   run did not succeed, so this function must never write a new value
+ *   into it, not even `now` — that would make a failure look like a
+ *   success to anything reading `meta.json`.
+ * - `series_last_date` records what was actually measured on the last
+ *   successful run. A failed run measured nothing, so it must not add,
+ *   remove, or alter a single key — doing so would fabricate a
+ *   measurement that never happened, exactly the "plausible-looking data"
+ *   this whole package's fail-loud contract exists to prevent.
+ *
+ * `previous === null` is the legitimate first-run-ever-fails case (a run
+ * can fail before `collect()` has ever written a `meta.json`, e.g. the very
+ * first scheduled run hits a required-fetch error): `last_success: null`
+ * ("nothing has ever succeeded") and `series_last_date: {}` ("nothing has
+ * ever been measured") are the correct initial values here, not
+ * placeholders standing in for a crash.
+ *
+ * A corrupt `meta.json` is NOT handled here — `store.readMeta()` throws
+ * before this function does anything else, and that throw is left to
+ * propagate rather than caught and papered over. Writing a fresh-looking
+ * `meta.json` over a corrupt one the moment this function can't make sense
+ * of it would be exactly the kind of "coerce bad input into something
+ * plausible" this package's fail-loud contract forbids — a corrupt
+ * `meta.json` needs a human, not a silent rewrite.
+ *
+ * Takes a `Store` rather than a `dataDir` string so this stays a pure,
+ * unit-testable function backed by a real per-test store (as every other
+ * store-touching test in this package does) — `cli-record-failure.ts` is
+ * the only place in this package allowed to construct that `Store` from
+ * `process.env`.
+ */
+export function recordFailure(store: Store, now: string, reason: string): Meta {
+  const previous = store.readMeta();
+  const meta: Meta = {
+    last_run: now,
+    last_success: previous?.last_success ?? null,
+    error: reason,
+    series_last_date: previous?.series_last_date ?? {},
+  };
+  store.writeMeta(meta);
+  return meta;
+}
+
+/** Formats `recordFailure`'s result as the line a maintainer reading the run log should see. */
+export function formatRecordFailureSummary(meta: Meta): string {
+  const lastSuccess = meta.last_success ?? 'never';
+  return `recorded failure: ${meta.error ?? ''} (last_success: ${lastSuccess})`;
 }
 
 /**

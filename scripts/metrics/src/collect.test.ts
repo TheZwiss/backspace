@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
@@ -389,5 +389,58 @@ describe('collect', () => {
     const result = await collect({ client, store, ...base });
     expect(store.readCsv('contributors.csv')).toEqual([]);
     expect(result.skipped).toContain('contributors.csv');
+  });
+
+  // --- series_last_date: seeded from the previous meta.json rather than
+  // built solely from `written` (this run's touched files). A skipped
+  // series then keeps its last real date instead of disappearing from the
+  // map entirely — the whole point of the field per
+  // docs/systems/metrics.md, since a disappearance is far harder to notice
+  // than a date that stopped advancing.
+
+  it('keeps a skipped series previous series_last_date entry instead of dropping it', async () => {
+    const store = createStore(dir);
+    store.writeMeta({
+      last_run: '2026-08-24T03:00:00Z',
+      last_success: '2026-08-24T03:00:00Z',
+      error: null,
+      series_last_date: { 'releases.csv': '2026-07-15' },
+    });
+    const client = fakeClient({ '/repos/o/r/releases': new Error('502') });
+    const result = await collect({ client, store, ...base });
+    expect(result.skipped).toContain('releases.csv');
+    expect(store.readMeta()?.series_last_date['releases.csv']).toBe('2026-07-15');
+  });
+
+  it('gives a written series a fresh series_last_date, overwriting any seeded value', async () => {
+    const store = createStore(dir);
+    store.writeMeta({
+      last_run: '2026-08-24T03:00:00Z',
+      last_success: '2026-08-24T03:00:00Z',
+      error: null,
+      series_last_date: { 'stars.csv': '2020-01-01' },
+    });
+    await collect({ client: fakeClient(), store, ...base });
+    expect(store.readMeta()?.series_last_date['stars.csv']).toBe('2026-08-25');
+  });
+
+  it('produces a well-formed series_last_date on the very first run with no prior meta.json', async () => {
+    const store = createStore(dir);
+    expect(store.readMeta()).toBeNull();
+    const result = await collect({ client: fakeClient(), store, ...base });
+    expect(result.written).toContain('stars.csv');
+    const meta = store.readMeta();
+    expect(meta?.series_last_date['stars.csv']).toBe('2026-08-25');
+    expect(meta?.series_last_date['traffic/views.csv']).toBe('2026-08-24');
+  });
+
+  it('throws before writing anything when the existing meta.json is corrupt', async () => {
+    const store = createStore(dir);
+    writeFileSync(path.join(dir, 'meta.json'), '{ not valid json', 'utf8');
+    const client = fakeClient();
+    await expect(collect({ client, store, ...base })).rejects.toThrow();
+    expect(store.readCsv('traffic/views.csv')).toEqual([]);
+    expect(store.readCsv('stars.csv')).toEqual([]);
+    expect(store.readCsv('repo.csv')).toEqual([]);
   });
 });

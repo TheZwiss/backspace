@@ -1,11 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { GitHubError } from './github.ts';
+import { createStore } from './store.ts';
 import {
   requiredEnv,
   assertHeaderSafeToken,
   deriveRunTimestamps,
   formatCollectSummary,
   formatBackfillSummary,
+  recordFailure,
+  formatRecordFailureSummary,
   describeFailure,
 } from './cli-support.ts';
 
@@ -146,6 +152,109 @@ describe('formatBackfillSummary', () => {
   it('does not use the word "wrote", so it cannot be misread the way collect\'s summary is read', () => {
     const line = formatBackfillSummary({ written: ['stars.csv'] });
     expect(line).not.toContain('wrote:');
+  });
+});
+
+describe('recordFailure', () => {
+  let dir = '';
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'metrics-record-failure-'));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('produces a valid initial Meta when no meta.json has ever been written', () => {
+    const store = createStore(dir);
+    expect(store.readMeta()).toBeNull();
+    const meta = recordFailure(store, '2026-08-25T03:00:41Z', 'run failed: failure');
+    expect(meta).toEqual({
+      last_run: '2026-08-25T03:00:41Z',
+      last_success: null,
+      error: 'run failed: failure',
+      series_last_date: {},
+    });
+    expect(store.readMeta()).toEqual(meta);
+  });
+
+  it('preserves last_success and series_last_date from an existing meta.json, refreshing last_run and setting error', () => {
+    const store = createStore(dir);
+    store.writeMeta({
+      last_run: '2026-08-24T03:00:00Z',
+      last_success: '2026-08-24T03:00:00Z',
+      error: null,
+      series_last_date: { 'traffic/views.csv': '2026-08-23', 'stars.csv': '2026-08-24' },
+    });
+    const meta = recordFailure(store, '2026-08-25T03:00:41Z', 'run failed: failure');
+    expect(meta.last_run).toBe('2026-08-25T03:00:41Z');
+    expect(meta.last_success).toBe('2026-08-24T03:00:00Z');
+    expect(meta.error).toBe('run failed: failure');
+    expect(meta.series_last_date).toEqual({
+      'traffic/views.csv': '2026-08-23',
+      'stars.csv': '2026-08-24',
+    });
+    expect(store.readMeta()).toEqual(meta);
+  });
+
+  it('never touches last_success — the "last known good" signal a failure must not move', () => {
+    const store = createStore(dir);
+    store.writeMeta({
+      last_run: '2026-08-20T03:00:00Z',
+      last_success: '2026-08-20T03:00:00Z',
+      error: null,
+      series_last_date: {},
+    });
+    recordFailure(store, '2026-08-21T03:00:00Z', 'run failed: failure');
+    recordFailure(store, '2026-08-22T03:00:00Z', 'run failed: failure');
+    const meta = store.readMeta();
+    expect(meta?.last_success).toBe('2026-08-20T03:00:00Z');
+    expect(meta?.last_run).toBe('2026-08-22T03:00:00Z');
+  });
+
+  it('never edits series_last_date — a failed run measured nothing', () => {
+    const store = createStore(dir);
+    store.writeMeta({
+      last_run: '2026-08-20T03:00:00Z',
+      last_success: '2026-08-20T03:00:00Z',
+      error: null,
+      series_last_date: { 'releases.csv': '2026-07-01' },
+    });
+    const meta = recordFailure(store, '2026-08-21T03:00:00Z', 'run failed: failure');
+    expect(meta.series_last_date).toEqual({ 'releases.csv': '2026-07-01' });
+  });
+
+  it('propagates the failure, and does not write, when the existing meta.json is corrupt', () => {
+    const store = createStore(dir);
+    writeFileSync(path.join(dir, 'meta.json'), '{ not valid json', 'utf8');
+    expect(() => recordFailure(store, '2026-08-25T03:00:41Z', 'run failed: failure')).toThrow();
+    // The corrupt file must be left exactly as it was — a failure to read
+    // must never be papered over by writing a fresh-looking meta.json in
+    // its place.
+    expect(() => store.readMeta()).toThrow();
+  });
+});
+
+describe('formatRecordFailureSummary', () => {
+  it('reports the failure reason and the last known-good timestamp', () => {
+    const line = formatRecordFailureSummary({
+      last_run: '2026-08-25T03:00:41Z',
+      last_success: '2026-08-24T03:00:12Z',
+      error: 'run failed: failure',
+      series_last_date: {},
+    });
+    expect(line).toBe('recorded failure: run failed: failure (last_success: 2026-08-24T03:00:12Z)');
+  });
+
+  it('renders "never" when nothing has ever succeeded', () => {
+    const line = formatRecordFailureSummary({
+      last_run: '2026-08-25T03:00:41Z',
+      last_success: null,
+      error: 'run failed: failure',
+      series_last_date: {},
+    });
+    expect(line).toBe('recorded failure: run failed: failure (last_success: never)');
   });
 });
 

@@ -118,6 +118,23 @@ function toTraffic(buckets: TrafficBucket[]): TrafficPoint[] {
  * never produce a file the next run treats as authoritative. Optional
  * series degrade to a skip instead, because releases and contributor stats
  * are reconstructable at any later date while traffic is not.
+ *
+ * The write phase's own first action is a synchronous read, not a write:
+ * `store.readMeta()`, seeding `series_last_date` from the previous run so a
+ * series this run skips keeps its last real date instead of losing its
+ * entry entirely (see the seeding comment inline, and
+ * docs/systems/metrics.md). Reading before the first `store.write*` call —
+ * rather than later, alongside the read-back-after-write calls that build
+ * the rest of `meta.json` — means a corrupt existing `meta.json` throws
+ * before any file changes this run, extending the same all-or-nothing
+ * guarantee described above to this failure mode too: this package's
+ * fail-loud contract says a corrupt `meta.json` must not be silently
+ * rewritten into something plausible, and failing before any write is
+ * strictly better than failing after several files are already updated to
+ * today while `meta.json` alone is left stale and unreadable. `readMeta()`
+ * is `readFileSync` + `JSON.parse`, both synchronous, so this read
+ * introduces no `await` and does not weaken the no-interleaving guarantee
+ * above.
  */
 export async function collect(options: CollectOptions): Promise<CollectResult> {
   const { client, store, slug, today, now } = options;
@@ -185,6 +202,34 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   }
 
   const written: string[] = [];
+
+  // Seeds `series_last_date` from the previous successful run's meta.json,
+  // rather than building it purely from `written` (the files this run
+  // actually touches, computed below). Without this seed, a skipped
+  // optional series (e.g. `releases.csv` when that fetch fails) has no
+  // entry in `written`, so its key would simply vanish from the map — a
+  // disappearance, which docs/systems/metrics.md documents as far harder
+  // for a maintainer to notice than a date that stopped advancing. Seeding
+  // first and only overwriting keys for files actually written this run
+  // (see the loop that builds `seriesLastDate` further down) makes a
+  // stalled series visibly stall instead.
+  //
+  // Read here — as the first action of the write phase, before the first
+  // `store.write*` call below — rather than folded into the final
+  // `meta.json`-assembly step alongside the read-back-after-write
+  // `lastDate` calls. Placed here, a corrupt existing `meta.json` throws
+  // before ANY file changes this run, preserving the same all-or-nothing
+  // guarantee a required-fetch failure already has (see this function's
+  // top-level doc comment): a corrupt `meta.json` is not fabricatable into
+  // something plausible, so this package's fail-loud contract says to
+  // abort rather than guess, and aborting cleanly (before any write) is
+  // strictly better than aborting after five files are already updated to
+  // today and `meta.json` alone is left stale. `store.readMeta()` is
+  // `readFileSync` + `JSON.parse`, both synchronous — it introduces no
+  // `await`, so it does not break the no-interleaving guarantee the rest
+  // of this write phase depends on.
+  const previousMeta = store.readMeta();
+  const seriesLastDate: Record<string, IsoDate> = { ...(previousMeta?.series_last_date ?? {}) };
 
   // Generic over `T` rather than typed directly to `Record<string, string |
   // number>` at the call boundary: `TrafficPoint`, `CountPoint`, `RepoPoint`
@@ -324,7 +369,10 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
     return rows[rows.length - 1]?.date;
   };
 
-  const seriesLastDate: Record<string, IsoDate> = {};
+  // Overwrites only the keys this run actually wrote, onto the map already
+  // seeded above from the previous meta.json. A file not in `written` this
+  // run (a skipped optional series) simply keeps whatever seeded value it
+  // already had — see the seeding comment above for why.
   for (const file of written) {
     if (!file.endsWith('.csv')) continue;
     const last = lastDate(file);
