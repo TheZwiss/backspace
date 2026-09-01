@@ -71,15 +71,13 @@ jobs:
       # placed after it could never run.
       #
       # Built as a `git worktree add --orphan` into a scratch directory rather
-      # than `git switch --orphan` in place: switching the primary checkout to
-      # an orphan branch leaves the previous HEAD's tree staged (an orphan
-      # branch has no parent to diff against, so the working tree and index
-      # are carried over unchanged), so `commit --allow-empty` would commit
-      # the *entire main branch source tree* as the archive's first commit,
-      # not an empty one — and it would require rm -rf'ing the primary
-      # checkout to fix, which the later "Collect" step still needs intact.
-      # A worktree keeps the primary checkout completely untouched and starts
-      # genuinely empty, so the init commit is empty as intended.
+      # than `git switch --orphan` in place. Both start genuinely empty —
+      # `git switch --orphan` removes all tracked files, and only the legacy
+      # `git checkout --orphan` carries the previous tree over into the index.
+      # The worktree is preferred because it never touches the primary
+      # checkout at all: the later "Collect" step runs the collector from the
+      # repository root and needs that tree intact, and a scratch worktree
+      # removes any way for this step to leave it modified on an early exit.
       - name: Bootstrap the data branch if absent
         run: |
           set -euo pipefail
@@ -171,7 +169,14 @@ jobs:
           git add meta.json
           git diff --cached --quiet || {
             git commit -m "chore(metrics): record run outcome"
-            git push origin metrics-data || true
+            # This commit carries only run metadata; the data commit above has
+          # its own retry loop and hard-fails on its own. Swallow a failure
+          # here so a metadata push cannot mask a successful collection, but
+          # surface it — an unannotated `|| true` is how a real problem stays
+          # invisible for months.
+          git push origin metrics-data \
+            || echo "::warning::failed to push run metadata to metrics-data"
+
           }
 
       - name: Keep the schedule alive
