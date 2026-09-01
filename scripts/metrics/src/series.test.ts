@@ -22,6 +22,67 @@ describe('parseCsv', () => {
       { snapshot_date: '2026-08-01', title: 'Backspace: chat, voice and "video"' },
     ]);
   });
+
+  it('parses CRLF input to clean keys and clean values', () => {
+    const text = 'date,count,uniques\r\n2026-08-01,10,4\r\n';
+    const rows = parseCsv(text);
+    expect(rows).toEqual([{ date: '2026-08-01', count: '10', uniques: '4' }]);
+    expect(rows[0]?.uniques).toBe('4');
+  });
+
+  it('parses a file with a mix of LF and CRLF line endings', () => {
+    const text = 'date,count\n2026-08-01,10\r\n2026-08-02,20\n';
+    expect(parseCsv(text)).toEqual([
+      { date: '2026-08-01', count: '10' },
+      { date: '2026-08-02', count: '20' },
+    ]);
+  });
+
+  it('round-trips a value containing an embedded newline as a single row', () => {
+    const rows = [{ date: '2026-08-01', note: 'line one\nline two' }];
+    const text = formatCsv(['date', 'note'], rows);
+    const parsed = parseCsv(text);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.note).toBe('line one\nline two');
+  });
+
+  it('round-trips a value containing an embedded CRLF', () => {
+    const rows = [{ date: '2026-08-01', note: 'line one\r\nline two' }];
+    const text = formatCsv(['date', 'note'], rows);
+    const parsed = parseCsv(text);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.note).toBe('line one\r\nline two');
+  });
+
+  it('round-trips a value containing a quote, a comma, and a newline together', () => {
+    const rows = [{ date: '2026-08-01', note: 'has "quote", a comma\nand a newline' }];
+    const text = formatCsv(['date', 'note'], rows);
+    const parsed = parseCsv(text);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0]?.note).toBe('has "quote", a comma\nand a newline');
+  });
+
+  it('returns [] for header-only input, empty string, and input with a trailing blank line', () => {
+    expect(parseCsv('date,count\n')).toEqual([]);
+    expect(parseCsv('')).toEqual([]);
+    const text = 'date,count\n2026-08-01,10\n\n';
+    expect(parseCsv(text)).toEqual([{ date: '2026-08-01', count: '10' }]);
+  });
+
+  it('pads a short row (fewer fields than the header) with empty strings', () => {
+    const text = 'date,count,uniques\n2026-08-01,10\n';
+    expect(parseCsv(text)).toEqual([{ date: '2026-08-01', count: '10', uniques: '' }]);
+  });
+
+  it('throws on a long row (more fields than the header), naming the row number', () => {
+    const text = 'date,count\n2026-08-01,10,4\n';
+    expect(() => parseCsv(text)).toThrow(/row 1/i);
+  });
+
+  it('throws naming the correct 1-based row number for a later offending row', () => {
+    const text = 'date,count\n2026-08-01,10\n2026-08-02,20,99\n';
+    expect(() => parseCsv(text)).toThrow(/row 2/i);
+  });
 });
 
 describe('formatCsv', () => {

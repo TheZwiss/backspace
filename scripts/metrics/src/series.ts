@@ -6,47 +6,81 @@ function quote(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-/** Splits one CSV line, honouring quoted fields and doubled escape quotes. */
-function splitLine(line: string): string[] {
-  const fields: string[] = [];
+/**
+ * Splits CSV text into rows of fields in a single pass, tracking quote state
+ * across newlines so that a row boundary (`\n` or `\r\n`) is only recognised
+ * when no quote is open. A `\n`, `\r\n`, or `,` inside quotes is literal field
+ * data. A doubled `""` inside quotes is one literal `"`. A trailing newline at
+ * end of input produces no phantom empty row, and a blank line outside quotes
+ * is skipped rather than parsed as an all-empty row.
+ */
+function splitRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let fields: string[] = [];
   let current = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+  let rowHasContent = false;
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
     if (inQuotes) {
       if (char === '"') {
-        if (line[i + 1] === '"') {
+        if (text[i + 1] === '"') {
           current += '"';
-          i++;
+          i += 2;
         } else {
           inQuotes = false;
+          i++;
         }
       } else {
         current += char ?? '';
+        i++;
       }
     } else if (char === '"') {
       inQuotes = true;
+      rowHasContent = true;
+      i++;
     } else if (char === ',') {
       fields.push(current);
       current = '';
+      rowHasContent = true;
+      i++;
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      i++;
+      if (rowHasContent) {
+        fields.push(current);
+        rows.push(fields);
+      }
+      fields = [];
+      current = '';
+      rowHasContent = false;
     } else {
       current += char ?? '';
+      rowHasContent = true;
+      i++;
     }
   }
-  fields.push(current);
-  return fields;
+  if (rowHasContent) {
+    fields.push(current);
+    rows.push(fields);
+  }
+  return rows;
 }
 
 export function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.split('\n').filter((line) => line.length > 0);
-  const headerLine = lines.shift();
-  if (headerLine === undefined) return [];
-  const header = splitLine(headerLine);
-  return lines.map((line) => {
-    const fields = splitLine(line);
+  const rows = splitRows(text);
+  const header = rows.shift();
+  if (header === undefined) return [];
+  return rows.map((fields, index) => {
+    if (fields.length > header.length) {
+      throw new Error(
+        `parseCsv: row ${index + 1} has ${fields.length} fields but the header has ${header.length}`,
+      );
+    }
     const row: Record<string, string> = {};
-    header.forEach((key, index) => {
-      row[key] = fields[index] ?? '';
+    header.forEach((key, fieldIndex) => {
+      row[key] = fields[fieldIndex] ?? '';
     });
     return row;
   });
