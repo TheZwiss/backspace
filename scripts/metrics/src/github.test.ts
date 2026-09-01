@@ -203,6 +203,21 @@ describe('createClient.paginate', () => {
     // time — otherwise this test would hang instead of asserting anything.
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   }, 2000);
+
+  it('refuses to follow a rel="next" URL whose origin is not the GitHub API, rather than sending the bearer token there', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse([{ id: 1 }], {
+        headers: { link: '<https://evil.example.com/steal>; rel="next"' },
+      }),
+    );
+    const client = createClient('t', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    });
+    await expect(client.paginate('/x')).rejects.toThrow('https://evil.example.com/steal');
+    // Exactly one fetch: the malicious next-URL must never be requested.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('unparseable 2xx response bodies', () => {

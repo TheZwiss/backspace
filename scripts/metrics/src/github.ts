@@ -86,6 +86,34 @@ function nextLink(header: string | null): string | null {
   return null;
 }
 
+/**
+ * Rejects a `rel="next"` URL whose origin is not the GitHub API.
+ *
+ * `paginate` attaches the bearer token to every request it makes,
+ * unconditionally — `request()` has no notion of "this URL doesn't get the
+ * token." `rel="next"` is server-supplied input: nothing on this side
+ * controls what a compromised, misconfigured, or malicious proxy in front
+ * of `api.github.com` puts in that header. Without this check, a `Link`
+ * header pointing anywhere else would have this client dutifully carry the
+ * token there on the very next loop iteration. Checked against a parsed
+ * `origin`, not a string prefix — `https://api.github.com.evil.example.com`
+ * or `https://evil.example.com/https://api.github.com` both start with (or
+ * contain) the right substring while being a different host entirely.
+ */
+function assertGitHubOrigin(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch (cause) {
+    throw new Error(`paginate: rel="next" URL ${url} could not be parsed as a URL`, { cause });
+  }
+  if (parsed.origin !== API_ROOT) {
+    throw new Error(
+      `paginate: rel="next" URL ${url} has origin ${parsed.origin}, not ${API_ROOT} — refusing to send the bearer token to an untrusted host`,
+    );
+  }
+}
+
 export function createClient(token: string, options: ClientOptions = {}): GitHubClient {
   const doFetch = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -194,7 +222,9 @@ export function createClient(token: string, options: ClientOptions = {}): GitHub
         );
       }
       items.push(...(page as T[]));
-      url = nextLink(response.headers.get('link'));
+      const next = nextLink(response.headers.get('link'));
+      if (next !== null) assertGitHubOrigin(next);
+      url = next;
     }
     return items;
   }
