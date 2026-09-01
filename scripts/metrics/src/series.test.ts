@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv, formatCsv, upsertByDate } from './series.ts';
+import { parseCsv, formatCsv, upsertByDate, parseNdjson, formatNdjson, upsertDimensional } from './series.ts';
+import type { DimensionRow } from './types.ts';
 
 describe('parseCsv', () => {
   it('parses a header and rows into keyed records', () => {
@@ -166,5 +167,113 @@ describe('upsertByDate', () => {
       { date: '2026-08-01', total: 1 },
     ], 'overwrite');
     expect(result.map((r) => r.date)).toEqual(['2026-08-01', '2026-08-09']);
+  });
+});
+
+function row(snapshot_date: string, dimension: string, count: number): DimensionRow {
+  return { snapshot_date, dimension, title: '', count, uniques: 1 };
+}
+
+describe('formatNdjson', () => {
+  it('sorts by snapshot_date asc, then count desc, then dimension asc', () => {
+    const text = formatNdjson([
+      row('2026-08-02', 'b.com', 5),
+      row('2026-08-01', 'z.com', 1),
+      row('2026-08-01', 'a.com', 9),
+      row('2026-08-01', 'm.com', 9),
+    ]);
+    const order = text
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const parsed = JSON.parse(line) as DimensionRow;
+        return `${parsed.snapshot_date}/${parsed.dimension}`;
+      });
+    expect(order).toEqual([
+      '2026-08-01/a.com',
+      '2026-08-01/m.com',
+      '2026-08-01/z.com',
+      '2026-08-02/b.com',
+    ]);
+  });
+
+  it('round-trips through parseNdjson', () => {
+    const rows = [row('2026-08-01', 'news.ycombinator.com', 118)];
+    expect(parseNdjson(formatNdjson(rows))).toEqual(rows);
+  });
+
+  it('ignores blank lines when parsing', () => {
+    expect(parseNdjson('\n\n')).toEqual([]);
+  });
+});
+
+describe('parseNdjson malformed input', () => {
+  it('throws naming the line number for invalid JSON syntax', () => {
+    const text = '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"","count":1,"uniques":1}\n{not json}\n';
+    expect(() => parseNdjson(text)).toThrow(/line 2/i);
+  });
+
+  it('throws when a line is valid JSON but not an object', () => {
+    expect(() => parseNdjson('[1,2,3]\n')).toThrow(/line 1/i);
+    expect(() => parseNdjson('"just a string"\n')).toThrow(/line 1/i);
+    expect(() => parseNdjson('42\n')).toThrow(/line 1/i);
+    expect(() => parseNdjson('null\n')).toThrow(/line 1/i);
+  });
+
+  it('throws naming the missing field when a required string field is absent', () => {
+    const text = '{"dimension":"a.com","title":"","count":1,"uniques":1}\n';
+    expect(() => parseNdjson(text)).toThrow(/snapshot_date/);
+  });
+
+  it('throws when a numeric field is the wrong type', () => {
+    const text = '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"","count":"1","uniques":1}\n';
+    expect(() => parseNdjson(text)).toThrow(/count/);
+  });
+
+  it('throws when a numeric field is not finite', () => {
+    // JSON has no NaN/Infinity literal, but a magnitude like 1e999 overflows
+    // to Infinity during JSON.parse itself; the parser must not wave a
+    // non-finite count through as if it were a real measured value.
+    const text = '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"","count":1e999,"uniques":1}\n';
+    expect(() => parseNdjson(text)).toThrow(/count/);
+  });
+
+  it('throws naming the line number for the second offending row, not the first', () => {
+    const text = '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"","count":1,"uniques":1}\n{"snapshot_date":"2026-08-02","dimension":"b.com","title":"","count":1}\n';
+    expect(() => parseNdjson(text)).toThrow(/line 2/i);
+  });
+
+  it('does not reject an object carrying an unrecognised extra key', () => {
+    const text = '{"snapshot_date":"2026-08-01","dimension":"a.com","title":"","count":1,"uniques":1,"extra":"future field"}\n';
+    expect(parseNdjson(text)).toEqual([row('2026-08-01', 'a.com', 1)]);
+  });
+});
+
+describe('upsertDimensional', () => {
+  it('replaces a row with the same (snapshot_date, dimension)', () => {
+    const existing = [row('2026-08-01', 'a.com', 1)];
+    const result = upsertDimensional(existing, [row('2026-08-01', 'a.com', 42)]);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.count).toBe(42);
+  });
+
+  it('keeps rows from other snapshots untouched', () => {
+    const existing = [row('2026-08-01', 'a.com', 1)];
+    const result = upsertDimensional(existing, [row('2026-08-02', 'a.com', 2)]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('does not resurrect a dimension that dropped out of the new snapshot', () => {
+    const existing = [row('2026-08-01', 'a.com', 1)];
+    const result = upsertDimensional(existing, [row('2026-08-02', 'b.com', 2)]);
+    const day2 = result.filter((r) => r.snapshot_date === '2026-08-02');
+    expect(day2.map((r) => r.dimension)).toEqual(['b.com']);
+  });
+
+  it('re-running with identical input is byte-identical', () => {
+    const rows = [row('2026-08-01', 'a.com', 1), row('2026-08-01', 'b.com', 2)];
+    const once = upsertDimensional([], rows);
+    const twice = upsertDimensional(once, rows);
+    expect(formatNdjson(twice)).toBe(formatNdjson(once));
   });
 });
