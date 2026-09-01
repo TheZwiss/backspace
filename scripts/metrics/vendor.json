@@ -1,0 +1,11 @@
+{
+  "uplot": {
+    "version": "1.6.32",
+    "source": "https://registry.npmjs.org/uplot/-/uplot-1.6.32.tgz",
+    "license": "MIT",
+    "files": {
+      "site/insights/vendor/uplot.min.js": "sha256-19c8d4c6ad88929a79f4ae49d6f7161566dfd0ba3d15cc495e974f787eb78f1f",
+      "site/insights/vendor/uplot.min.css": "sha256-df630c6a8d6f8eeaff264b50f73ce5b114f646ffd9a0bb74f049b0a00135fa04"
+    }
+  }
+}
