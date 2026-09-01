@@ -1,4 +1,4 @@
-import { upsertByDate, upsertDimensional } from './series.ts';
+import { upsertByDate, upsertByKey, upsertDimensional, compareReleaseRows } from './series.ts';
 import type { GitHubClient } from './github.ts';
 import type { Meta, Store } from './store.ts';
 import type {
@@ -134,9 +134,16 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
   ]);
 
   // --- Optional. A failure skips the series, never zeroes it. ---
+  // Paginated, matching backfill.ts: GitHub's default page size is 30, so a
+  // plain `client.get` here would sum asset downloads from only the 30 most
+  // recent releases. Past the 31st release that produces a cumulative
+  // counter that DECREASES on the day a new release ships, and from then on
+  // every run records a plausible-looking total that was never the true
+  // sum — with no error, ever, because a short list is not distinguishable
+  // from a complete one without paginating to find out.
   let releases: ReleaseResponse[] | null = null;
   try {
-    releases = await client.get<ReleaseResponse[]>(`${repoPath}/releases`);
+    releases = await client.paginate<ReleaseResponse>(`${repoPath}/releases`);
   } catch {
     skipped.push('releases.csv');
   }
@@ -201,6 +208,24 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
     written.push(file);
   }
 
+  // `releases.csv` cannot use `writeCsvSeries`/`upsertByDate`: a release
+  // series is not a daily series, and keying its merge on `date` would
+  // collapse two releases published on the same UTC day into one row,
+  // silently dropping the other. A release's true row identity is its tag,
+  // so this merges with `upsertByKey` keyed on `tag` instead, and sorts with
+  // `compareReleaseRows` (date, then tag) so the output stays byte-stable
+  // regardless of which same-day release the API happened to list first.
+  function writeReleases(file: string, incoming: readonly ReleaseRow[]): void {
+    const existing = store.readCsv(file) as unknown as ReleaseRow[];
+    const merged = upsertByKey(existing, incoming, (row) => row.tag, 'overwrite', compareReleaseRows);
+    store.writeCsv(
+      file,
+      ['date', 'tag', 'name'],
+      merged as unknown as Array<Record<string, string | number>>,
+    );
+    written.push(file);
+  }
+
   function writeDimensional(file: string, incoming: readonly DimensionRow[]): void {
     const merged = upsertDimensional(store.readNdjson(file), incoming);
     store.writeNdjson(file, merged);
@@ -261,7 +286,7 @@ export async function collect(options: CollectOptions): Promise<CollectResult> {
         tag: release.tag_name,
         name: release.name ?? release.tag_name,
       }));
-    writeCsvSeries('releases.csv', ['date', 'tag', 'name'], releaseRows);
+    writeReleases('releases.csv', releaseRows);
   }
 
   if (contributors !== null) {

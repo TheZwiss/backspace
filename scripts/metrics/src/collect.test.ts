@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createStore } from './store.ts';
 import { collect } from './collect.ts';
+import { createClient } from './github.ts';
 import type { GitHubClient } from './github.ts';
 
 let dir = '';
@@ -67,8 +68,20 @@ function fakeClient(overrides: Partial<Record<string, unknown>> = {}): GitHubCli
       if (p === '/repos/o/r/stats/contributors') return CONTRIBUTORS as T;
       return null;
     },
-    async paginate<T>(): Promise<T[]> {
-      throw new Error('collect must not paginate');
+    async paginate<T>(p: string): Promise<T[]> {
+      // Releases is the one endpoint collect.ts is required to paginate
+      // (GitHub's default page size of 30 would otherwise silently truncate
+      // the release list and undercount downloads_total) — every other
+      // required fetch still goes through plain `get`, and must keep doing
+      // so, so this fake still fails loudly if collect.ts ever starts
+      // paginating something it shouldn't.
+      if (p !== '/repos/o/r/releases') {
+        throw new Error(`collect must not paginate ${p}`);
+      }
+      const value = routes[p];
+      if (value instanceof Error) throw value;
+      if (value === undefined) throw new Error(`unexpected paginate ${p}`);
+      return value as T[];
     },
   };
 }
@@ -133,6 +146,98 @@ describe('collect', () => {
     expect(store.readCsv('releases.csv')).toEqual([
       { date: '2026-08-01', tag: 'v1.0.0', name: 'Backspace 1.0.0' },
     ]);
+  });
+
+  it('sums downloads across every page of a paginated /releases response', async () => {
+    // GitHub's default page size is 30, so a plain (unpaginated) fetch would
+    // silently sum only the 30 most recent releases. Wired through the real
+    // createClient (not the higher-level fakeClient above) so this actually
+    // exercises Link: rel="next" following, not just that collect.ts calls
+    // client.paginate.
+    const store = createStore(dir);
+    const routes: Record<string, unknown> = {
+      'https://api.github.com/repos/o/r/traffic/views': VIEWS,
+      'https://api.github.com/repos/o/r/traffic/clones': CLONES,
+      'https://api.github.com/repos/o/r/traffic/popular/referrers': REFERRERS,
+      'https://api.github.com/repos/o/r/traffic/popular/paths': PATHS,
+      'https://api.github.com/repos/o/r': REPO,
+    };
+    const page1 = [
+      { tag_name: 'v2.0.0', name: 'v2.0.0', published_at: '2026-08-10T00:00:00Z', assets: [{ download_count: 5 }] },
+    ];
+    const page2 = [
+      { tag_name: 'v1.0.0', name: 'v1.0.0', published_at: '2026-08-01T00:00:00Z', assets: [{ download_count: 7 }] },
+    ];
+    const fetchImpl = (async (url: string) => {
+      if (url === 'https://api.github.com/repos/o/r/releases?per_page=100') {
+        return new Response(JSON.stringify(page1), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            link: '<https://api.github.com/repos/o/r/releases?per_page=100&page=2>; rel="next"',
+          },
+        });
+      }
+      if (url === 'https://api.github.com/repos/o/r/releases?per_page=100&page=2') {
+        return new Response(JSON.stringify(page2), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://api.github.com/repos/o/r/stats/contributors') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const value = routes[url];
+      if (value === undefined) throw new Error(`unexpected fetch ${url}`);
+      return new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const client = createClient('tok', { fetchImpl, sleep: async () => {} });
+    await collect({ client, store, ...base });
+    const rows = store.readCsv('repo.csv');
+    expect(rows[0]?.downloads_total).toBe('12');
+    expect(store.readCsv('releases.csv')).toEqual([
+      { date: '2026-08-01', tag: 'v1.0.0', name: 'v1.0.0' },
+      { date: '2026-08-10', tag: 'v2.0.0', name: 'v2.0.0' },
+    ]);
+  });
+
+  it('keeps both releases when two are published on the same UTC day', async () => {
+    const store = createStore(dir);
+    const client = fakeClient({
+      '/repos/o/r/releases': [
+        {
+          tag_name: 'v1.0.1',
+          name: 'v1.0.1',
+          published_at: '2026-08-01T18:00:00Z',
+          assets: [],
+        },
+        {
+          tag_name: 'v1.0.0',
+          name: 'v1.0.0',
+          published_at: '2026-08-01T09:00:00Z',
+          assets: [],
+        },
+      ],
+    });
+    await collect({ client, store, ...base });
+    expect(store.readCsv('releases.csv')).toEqual([
+      { date: '2026-08-01', tag: 'v1.0.0', name: 'v1.0.0' },
+      { date: '2026-08-01', tag: 'v1.0.1', name: 'v1.0.1' },
+    ]);
+  });
+
+  it('is idempotent for releases.csv across repeated runs', async () => {
+    const store = createStore(dir);
+    await collect({ client: fakeClient(), store, ...base });
+    const first = store.readCsv('releases.csv');
+    await collect({ client: fakeClient(), store, ...base });
+    expect(store.readCsv('releases.csv')).toEqual(first);
   });
 
   it('aborts the entire write when a required traffic fetch fails', async () => {
